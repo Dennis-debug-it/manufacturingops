@@ -1,0 +1,1027 @@
+using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
+using Ecosys.Domain.Entities;
+using Ecosys.Infrastructure.Data;
+using Ecosys.Infrastructure.Services;
+using Ecosys.Shared.Auth;
+using Ecosys.Shared.Contracts.Integration;
+using Ecosys.Shared.Errors;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+
+namespace Ecosys.Api.Controllers;
+
+[ApiController]
+[Authorize]
+[Route("api/settings")]
+public sealed class SettingsController(
+    AppDbContext dbContext,
+    ITenantContext tenantContext,
+    IUserAccessService userAccessService,
+    IBranchAccessService branchAccessService,
+    IDocumentNumberingService documentNumberingService,
+    IAuditLogService auditLogService,
+    ISecretEncryptionService secretEncryptionService,
+    IEmailSender emailSender,
+    ILogger<SettingsController> logger) : TenantAwareControllerBase(tenantContext)
+{
+    private static readonly string[] RequiredNumberingDocumentTypes =
+    [
+        DocumentTypes.WorkOrder,
+        DocumentTypes.PreventiveMaintenance,
+        DocumentTypes.MaterialRequest,
+        DocumentTypes.Asset,
+        DocumentTypes.Site,
+        DocumentTypes.Contract,
+        DocumentTypes.Quotation,
+        DocumentTypes.ProformaInvoice,
+        DocumentTypes.Invoice,
+        DocumentTypes.CreditNote,
+        DocumentTypes.DebitNote,
+        DocumentTypes.Receipt,
+        DocumentTypes.Payment,
+        DocumentTypes.Expense
+    ];
+
+    [HttpGet("company")]
+    public async Task<ActionResult<CompanySettingsResponse>> GetCompany(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var tenant = await GetTenantAsync(cancellationToken);
+        return Ok(MapCompany(tenant));
+    }
+
+    [HttpPut("company")]
+    public async Task<ActionResult<CompanySettingsResponse>> UpdateCompany([FromBody] CompanySettingsRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var tenant = await GetTenantAsync(cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(request.CompanyName) ||
+            string.IsNullOrWhiteSpace(request.Email) ||
+            string.IsNullOrWhiteSpace(request.Country))
+        {
+            throw new BusinessRuleException("Company name, email, and country are required.");
+        }
+
+        tenant.CompanyName = request.CompanyName.Trim();
+        tenant.Email = request.Email.Trim().ToLowerInvariant();
+        tenant.Phone = NormalizeOptional(request.Phone);
+        tenant.Country = request.Country.Trim();
+        tenant.Industry = NormalizeOptional(request.Industry);
+        tenant.PrimaryColor = string.IsNullOrWhiteSpace(request.PrimaryColor) ? tenant.PrimaryColor : request.PrimaryColor.Trim();
+        tenant.SecondaryColor = string.IsNullOrWhiteSpace(request.SecondaryColor) ? tenant.SecondaryColor : request.SecondaryColor.Trim();
+        tenant.ShowPoweredByEcosys = request.ShowPoweredByEcosys;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(MapCompany(tenant));
+    }
+
+    [HttpGet("email")]
+    public async Task<ActionResult<EmailSettingsResponse>> GetEmail(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
+        return Ok(MapLegacyEmail(settings));
+    }
+
+    [HttpPut("email")]
+    public async Task<ActionResult<EmailSettingsResponse>> UpdateEmail([FromBody] EmailSettingsRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
+
+        ApplyEmailNotificationSettings(settings, new EmailNotificationSettingsRequest(
+            true,
+            EmailDeliveryMode.Smtp,
+            request.SenderName,
+            request.SenderAddress,
+            null,
+            request.Host,
+            request.Port,
+            request.UseSsl,
+            request.UseSsl ? EmailSecureMode.StartTls : EmailSecureMode.None,
+            request.Username,
+            request.Password,
+            null,
+            null,
+            null,
+            30,
+            0), preserveExistingSecretWhenMissing: false);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(MapLegacyEmail(settings));
+    }
+
+    [HttpGet("email-notifications")]
+    public async Task<ActionResult<EmailNotificationSettingsResponse>> GetEmailNotifications(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
+        return Ok(MapEmailNotification(settings));
+    }
+
+    [HttpPut("email-notifications")]
+    public async Task<ActionResult<EmailNotificationSettingsResponse>> UpdateEmailNotifications([FromBody] EmailNotificationSettingsRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        ValidateEmailNotificationRequest(request);
+
+        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
+        ApplyEmailNotificationSettings(settings, request, preserveExistingSecretWhenMissing: true);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await AuditSettingsChangeAsync("Email notifications updated", nameof(EmailSetting), settings.Id, cancellationToken);
+        return Ok(MapEmailNotification(settings));
+    }
+
+    [HttpPost("email-notifications/test")]
+    public async Task<ActionResult<EmailNotificationTestResponse>> TestEmailNotifications([FromBody] EmailNotificationTestRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
+        var recipient = string.IsNullOrWhiteSpace(request.TestRecipientEmail) ? settings.SenderAddress : request.TestRecipientEmail.Trim();
+
+        if (string.IsNullOrWhiteSpace(recipient))
+        {
+            throw new BusinessRuleException("A test recipient email is required.");
+        }
+
+        try
+        {
+            var delivery = CreateEmailDeliveryOptions(settings);
+            logger.LogInformation(
+                "Tenant email notification test requested. Mode {DeliveryMode}, host {Host}, port {Port}, secure mode {SecureMode}, sender {SenderEmail}.",
+                delivery.DeliveryMode,
+                delivery.SmtpHost,
+                delivery.SmtpPort,
+                delivery.SecureMode,
+                delivery.SenderEmail);
+            await emailSender.SendAsync(
+                new EmailMessage(
+                    recipient,
+                    "Ecosys ServiceOps email notification test",
+                    "This is a test email from the Ecosys ServiceOps notification settings page.",
+                    settings.SenderName,
+                    settings.SenderAddress,
+                    settings.ReplyToEmail),
+                delivery,
+                cancellationToken);
+
+            settings.LastTestedAt = DateTime.UtcNow;
+            settings.LastError = null;
+            settings.IsConfigured = HasConfiguredNotificationSecret(settings);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await AuditSettingsChangeAsync("Email notification test sent", nameof(EmailSetting), settings.Id, cancellationToken);
+            return Ok(new EmailNotificationTestResponse(true, settings.LastTestedAt, null));
+        }
+        catch (Exception ex)
+        {
+            settings.LastTestedAt = DateTime.UtcNow;
+            settings.LastError = ex is EmailDeliveryException deliveryException
+                ? deliveryException.ErrorCategory
+                : EmailErrorCategories.UnknownSmtpError;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogWarning(ex, "Tenant email notification test failed for tenant {TenantId}.", TenantId);
+            return Ok(new EmailNotificationTestResponse(false, settings.LastTestedAt, settings.LastError));
+        }
+    }
+
+    [HttpGet("email-intake")]
+    public async Task<ActionResult<EmailIntakeSettingsResponse>> GetEmailIntake(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
+        return Ok(MapEmailIntake(settings));
+    }
+
+    [HttpPut("email-intake")]
+    public async Task<ActionResult<EmailIntakeSettingsResponse>> UpdateEmailIntake([FromBody] EmailIntakeSettingsRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        ValidateEmailIntakeRequest(request);
+
+        var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
+        await ApplyEmailIntakeSettingsAsync(settings, request, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await AuditSettingsChangeAsync("Email intake updated", nameof(EmailIntakeSetting), settings.Id, cancellationToken);
+        return Ok(MapEmailIntake(settings));
+    }
+
+    [HttpPost("email-intake/test-connection")]
+    public async Task<ActionResult<EmailIntakeTestResponse>> TestEmailIntakeConnection([FromBody] EmailIntakeTestRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
+        var host = string.IsNullOrWhiteSpace(request.Host) ? settings.Host : request.Host.Trim();
+        var port = request.Port > 0 ? request.Port : settings.Port;
+
+        if (string.IsNullOrWhiteSpace(host) || port <= 0)
+        {
+            throw new BusinessRuleException("Host and port are required to test the connection.");
+        }
+
+        try
+        {
+            using var client = new TcpClient();
+            var connectTask = client.ConnectAsync(host, port, cancellationToken).AsTask();
+            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            var completedTask = await Task.WhenAny(connectTask, timeoutTask);
+            if (completedTask != connectTask || !client.Connected)
+            {
+                throw new TimeoutException("Connection timed out.");
+            }
+
+            settings.LastCheckedAt = DateTime.UtcNow;
+            settings.IsConnectionHealthy = true;
+            settings.LastError = null;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return Ok(new EmailIntakeTestResponse(true, settings.LastCheckedAt, null));
+        }
+        catch (Exception ex)
+        {
+            settings.LastCheckedAt = DateTime.UtcNow;
+            settings.IsConnectionHealthy = false;
+            settings.LastError = ex.Message;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return Ok(new EmailIntakeTestResponse(false, settings.LastCheckedAt, settings.LastError));
+        }
+    }
+
+    [HttpGet("monitoring-webhooks")]
+    public async Task<ActionResult<IReadOnlyCollection<MonitoringWebhookIntegrationResponse>>> GetMonitoringWebhooks(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+
+        var items = await dbContext.MonitoringWebhookIntegrations
+            .Where(x => x.TenantId == TenantId)
+            .OrderBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+        return Ok(items.Select(item => MapMonitoringWebhook(item) with { EndpointUrl = BuildWebhookEndpointUrl(item.EndpointSlug) }).ToList());
+    }
+
+    [HttpGet("monitoring-webhooks/{id:guid}")]
+    public async Task<ActionResult<MonitoringWebhookIntegrationResponse>> GetMonitoringWebhook(Guid id, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var item = await dbContext.MonitoringWebhookIntegrations
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Monitoring webhook integration was not found.");
+
+        return Ok(MapMonitoringWebhook(item) with { EndpointUrl = BuildWebhookEndpointUrl(item.EndpointSlug) });
+    }
+
+    [HttpPost("monitoring-webhooks")]
+    public async Task<ActionResult<MonitoringWebhookIntegrationResponse>> CreateMonitoringWebhook([FromBody] UpsertMonitoringWebhookIntegrationRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        ValidateMonitoringWebhookRequest(request);
+
+        var item = new MonitoringWebhookIntegration
+        {
+            TenantId = TenantId,
+            EndpointSlug = await GenerateUniqueEndpointSlugAsync(request.Name, cancellationToken)
+        };
+
+        await ApplyMonitoringWebhookAsync(item, request, cancellationToken);
+        var generatedSecret = GenerateWebhookSecret();
+        item.SecretHash = HashSecret(generatedSecret);
+
+        dbContext.MonitoringWebhookIntegrations.Add(item);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await AuditSettingsChangeAsync("Monitoring webhook created", nameof(MonitoringWebhookIntegration), item.Id, cancellationToken);
+        return CreatedAtAction(nameof(GetMonitoringWebhook), new { id = item.Id }, MapMonitoringWebhook(item, generatedSecret) with { EndpointUrl = BuildWebhookEndpointUrl(item.EndpointSlug) });
+    }
+
+    [HttpPut("monitoring-webhooks/{id:guid}")]
+    public async Task<ActionResult<MonitoringWebhookIntegrationResponse>> UpdateMonitoringWebhook(Guid id, [FromBody] UpsertMonitoringWebhookIntegrationRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        ValidateMonitoringWebhookRequest(request);
+
+        var item = await dbContext.MonitoringWebhookIntegrations
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Monitoring webhook integration was not found.");
+
+        await ApplyMonitoringWebhookAsync(item, request, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await AuditSettingsChangeAsync("Monitoring webhook updated", nameof(MonitoringWebhookIntegration), item.Id, cancellationToken);
+        return Ok(MapMonitoringWebhook(item) with { EndpointUrl = BuildWebhookEndpointUrl(item.EndpointSlug) });
+    }
+
+    [HttpDelete("monitoring-webhooks/{id:guid}")]
+    public async Task<IActionResult> DeleteMonitoringWebhook(Guid id, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var item = await dbContext.MonitoringWebhookIntegrations
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Monitoring webhook integration was not found.");
+
+        dbContext.MonitoringWebhookIntegrations.Remove(item);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await AuditSettingsChangeAsync("Monitoring webhook deleted", nameof(MonitoringWebhookIntegration), item.Id, cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPost("monitoring-webhooks/{id:guid}/rotate-secret")]
+    public async Task<ActionResult<MonitoringWebhookIntegrationResponse>> RotateMonitoringWebhookSecret(Guid id, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var item = await dbContext.MonitoringWebhookIntegrations
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Monitoring webhook integration was not found.");
+
+        var generatedSecret = GenerateWebhookSecret();
+        item.SecretHash = HashSecret(generatedSecret);
+        item.LastStatus = "Secret rotated";
+        item.LastError = null;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await AuditSettingsChangeAsync("Monitoring webhook secret rotated", nameof(MonitoringWebhookIntegration), item.Id, cancellationToken);
+        return Ok(MapMonitoringWebhook(item, generatedSecret) with { EndpointUrl = BuildWebhookEndpointUrl(item.EndpointSlug) });
+    }
+
+    [HttpPost("monitoring-webhooks/{id:guid}/test")]
+    public async Task<ActionResult<MonitoringWebhookTestResponse>> TestMonitoringWebhook(Guid id, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var item = await dbContext.MonitoringWebhookIntegrations
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Monitoring webhook integration was not found.");
+
+        item.LastStatus = "Test successful";
+        item.LastError = null;
+        item.LastReceivedAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new MonitoringWebhookTestResponse(true, item.LastReceivedAt, item.LastStatus, null));
+    }
+
+    [HttpGet("numbering")]
+    public async Task<ActionResult<IReadOnlyCollection<NumberingSettingsResponse>>> GetNumbering([FromQuery] Guid? branchId, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+        await EnsureDefaultNumberingRulesAsync(cancellationToken);
+
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
+        var query = dbContext.NumberingSettings.Where(x => x.TenantId == TenantId);
+
+        if (scope.RequestedBranchId.HasValue)
+        {
+            query = query.Where(x => x.BranchId == scope.RequestedBranchId || x.BranchId == null);
+        }
+        else if (!IsAdmin)
+        {
+            query = query.Where(x => x.BranchId == null || (x.BranchId.HasValue && scope.AccessibleBranchIds.Contains(x.BranchId.Value)));
+        }
+
+        var settings = await query
+            .Include(x => x.Branch)
+            .OrderBy(x => x.DocumentType)
+            .ThenBy(x => x.BranchId.HasValue ? 1 : 0)
+            .ToListAsync(cancellationToken);
+
+        return Ok(settings.Select(MapLegacyNumbering).ToList());
+    }
+
+    [HttpPut("numbering")]
+    public async Task<ActionResult<NumberingSettingsResponse>> UpdateNumbering([FromBody] NumberingSettingsRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        await ValidateBranchIdAsync(request.BranchId, cancellationToken);
+
+        var setting = await documentNumberingService.UpsertAsync(
+            TenantId,
+            request.BranchId,
+            request.DocumentType,
+            request.Prefix,
+            request.NextNumber,
+            request.PaddingLength,
+            request.ResetFrequency,
+            request.IncludeYear,
+            request.IncludeMonth,
+            request.IsActive,
+            cancellationToken);
+
+        if (setting.BranchId.HasValue)
+        {
+            await dbContext.Entry(setting).Reference(x => x.Branch).LoadAsync(cancellationToken);
+        }
+
+        return Ok(MapLegacyNumbering(setting));
+    }
+
+    [HttpGet("numbering-rules")]
+    public async Task<ActionResult<IReadOnlyCollection<NumberingRuleResponse>>> GetNumberingRules(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        await EnsureDefaultNumberingRulesAsync(cancellationToken);
+
+        var settings = await dbContext.NumberingSettings
+            .Include(x => x.Branch)
+            .Where(x => x.TenantId == TenantId && x.BranchId == null)
+            .OrderBy(x => x.DocumentType)
+            .ToListAsync(cancellationToken);
+
+        return Ok(settings.Select(MapNumberingRule).ToList());
+    }
+
+    [HttpPut("numbering-rules/{id:guid}")]
+    public async Task<ActionResult<NumberingRuleResponse>> UpdateNumberingRule(Guid id, [FromBody] UpdateNumberingRuleRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var setting = await dbContext.NumberingSettings
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Numbering rule was not found.");
+
+        var updated = await documentNumberingService.UpsertAsync(
+            TenantId,
+            setting.BranchId,
+            setting.DocumentType,
+            request.Prefix,
+            request.NextNumber,
+            request.PaddingLength,
+            request.ResetPeriod,
+            request.IncludeYear,
+            request.IncludeMonth,
+            request.IsActive,
+            cancellationToken,
+            request.Suffix,
+            request.YearFormat ?? "YYYY",
+            request.Separator ?? "-");
+
+        await AuditSettingsChangeAsync("Numbering rule updated", nameof(NumberingSetting), updated.Id, cancellationToken);
+        return Ok(MapNumberingRule(updated));
+    }
+
+    [HttpPost("numbering-rules/{id:guid}/reset")]
+    public async Task<ActionResult<NumberingRuleResponse>> ResetNumberingRuleSequence(Guid id, [FromBody] ResetNumberingRuleRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var setting = await dbContext.NumberingSettings
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Numbering rule was not found.");
+
+        if (request.StartFrom < 1)
+            throw new BusinessRuleException("Start value must be at least 1.");
+
+        var updated = await documentNumberingService.UpsertAsync(
+            TenantId,
+            setting.BranchId,
+            setting.DocumentType,
+            setting.Prefix,
+            request.StartFrom,
+            setting.PaddingLength,
+            setting.ResetFrequency,
+            setting.IncludeYear,
+            setting.IncludeMonth,
+            setting.IsActive,
+            cancellationToken,
+            setting.Suffix,
+            setting.YearFormat,
+            setting.Separator);
+
+        await AuditSettingsChangeAsync($"Numbering sequence reset to {request.StartFrom}", nameof(NumberingSetting), updated.Id, cancellationToken);
+        return Ok(MapNumberingRule(updated));
+    }
+
+    [HttpPost("numbering-rules/seed-defaults")]
+    public async Task<ActionResult<IReadOnlyCollection<NumberingRuleResponse>>> SeedDefaultNumberingRules(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        await EnsureDefaultNumberingRulesAsync(cancellationToken);
+
+        var settings = await dbContext.NumberingSettings
+            .Where(x => x.TenantId == TenantId && x.BranchId == null)
+            .OrderBy(x => x.DocumentType)
+            .ToListAsync(cancellationToken);
+
+        return Ok(settings.Select(MapNumberingRule).ToList());
+    }
+
+    [HttpPost("numbering-rules/preview")]
+    public async Task<ActionResult<NumberingPreviewResponse>> PreviewNumberingRule([FromBody] NumberingPreviewRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        await EnsureDefaultNumberingRulesAsync(cancellationToken);
+
+        NumberingSetting setting;
+        if (request.RuleId.HasValue)
+        {
+            setting = await dbContext.NumberingSettings
+                .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.RuleId.Value, cancellationToken)
+                ?? throw new NotFoundException("Numbering rule was not found.");
+        }
+        else
+        {
+            var documentType = NormalizeNumberingDocumentType(request.DocumentType);
+            setting = await dbContext.NumberingSettings
+                .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.BranchId == null && x.DocumentType == documentType, cancellationToken)
+                ?? throw new NotFoundException("Numbering rule was not found.");
+        }
+
+        return Ok(new NumberingPreviewResponse(setting.Id, setting.DocumentType, BuildPreview(setting)));
+    }
+
+    private async Task<Tenant> GetTenantAsync(CancellationToken cancellationToken) =>
+        await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
+        ?? throw new NotFoundException("Tenant settings were not found.");
+
+    private async Task<EmailSetting> GetOrCreateEmailNotificationSettingAsync(CancellationToken cancellationToken)
+    {
+        var settings = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
+        if (settings is not null)
+        {
+            return settings;
+        }
+
+        var tenant = await GetTenantAsync(cancellationToken);
+        settings = new EmailSetting
+        {
+            TenantId = TenantId,
+            UsePlatformDefaults = false,
+            OverrideSmtpSettings = true,
+            IsEnabled = true,
+            Provider = EmailDeliveryMode.Smtp.ToString(),
+            Host = "localhost",
+            Port = 25,
+            UseSsl = false,
+            SenderName = tenant.CompanyName,
+            SenderAddress = tenant.Email
+        };
+
+        dbContext.EmailSettings.Add(settings);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return settings;
+    }
+
+    private async Task<EmailIntakeSetting> GetOrCreateEmailIntakeSettingAsync(CancellationToken cancellationToken)
+    {
+        var settings = await dbContext.EmailIntakeSettings.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
+        if (settings is not null)
+        {
+            return settings;
+        }
+
+        settings = new EmailIntakeSetting
+        {
+            TenantId = TenantId,
+            MailboxProvider = "IMAP",
+            Host = string.Empty,
+            Port = 993,
+            UseSsl = true,
+            DefaultPriority = "Medium",
+            CreateWorkOrderFromUnknownSender = false
+        };
+
+        dbContext.EmailIntakeSettings.Add(settings);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return settings;
+    }
+
+    private static void ValidateEmailNotificationRequest(EmailNotificationSettingsRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.FromName) ||
+            string.IsNullOrWhiteSpace(request.FromEmail) ||
+            (request.IsEnabled && request.DeliveryMode == EmailDeliveryMode.Smtp && string.IsNullOrWhiteSpace(request.SmtpHost)))
+        {
+            throw new BusinessRuleException("From name, from email, and SMTP host are required when SMTP delivery is enabled.");
+        }
+
+        if (request.IsEnabled && request.DeliveryMode == EmailDeliveryMode.Smtp && request.SmtpPort <= 0)
+        {
+            throw new BusinessRuleException("SMTP port must be greater than zero.");
+        }
+    }
+
+    private static void ValidateEmailIntakeRequest(EmailIntakeSettingsRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.MailboxProvider))
+        {
+            throw new BusinessRuleException("Mailbox provider is required.");
+        }
+
+        if (request.IsEnabled && (string.IsNullOrWhiteSpace(request.Host) || request.Port <= 0))
+        {
+            throw new BusinessRuleException("Host and port are required when email intake is enabled.");
+        }
+    }
+
+    private void ApplyEmailNotificationSettings(EmailSetting settings, EmailNotificationSettingsRequest request, bool preserveExistingSecretWhenMissing)
+    {
+        settings.IsEnabled = request.IsEnabled;
+        settings.Provider = request.DeliveryMode.ToString();
+        settings.Host = string.IsNullOrWhiteSpace(request.SmtpHost) ? string.Empty : request.SmtpHost.Trim();
+        settings.Port = request.SmtpPort;
+        settings.UseSsl = request.SecureMode is EmailSecureMode.StartTls or EmailSecureMode.SslOnConnect || request.EnableSslTls;
+        settings.Username = NormalizeOptional(request.SmtpUsername);
+        settings.ReplyToEmail = NormalizeOptional(request.ReplyToEmail);
+        settings.SenderName = request.FromName.Trim();
+        settings.SenderAddress = request.FromEmail.Trim().ToLowerInvariant();
+
+        var encryptedSecret = secretEncryptionService.Encrypt(request.SmtpPasswordSecret ?? request.ApiKeySecret);
+        if (!string.IsNullOrWhiteSpace(encryptedSecret))
+        {
+            settings.EncryptedSecret = encryptedSecret;
+            settings.Password = null;
+        }
+        else if (!preserveExistingSecretWhenMissing)
+        {
+            settings.EncryptedSecret = null;
+            settings.Password = null;
+        }
+
+        settings.IsConfigured = HasConfiguredNotificationSecret(settings);
+    }
+
+    private async Task ApplyEmailIntakeSettingsAsync(EmailIntakeSetting settings, EmailIntakeSettingsRequest request, CancellationToken cancellationToken)
+    {
+        settings.IsEnabled = request.IsEnabled;
+        settings.IntakeEmailAddress = NormalizeOptional(request.IntakeEmailAddress);
+        settings.MailboxProvider = request.MailboxProvider.Trim();
+        settings.Host = NormalizeOptional(request.Host) ?? string.Empty;
+        settings.Port = request.Port;
+        settings.UseSsl = request.UseSsl;
+        settings.Username = NormalizeOptional(request.Username);
+        settings.DefaultClientId = await ValidateClientIdAsync(request.DefaultClientId, cancellationToken);
+        settings.DefaultBranchId = await ValidateBranchIdAsync(request.DefaultBranchId, cancellationToken);
+        settings.DefaultAssignmentGroupId = await ValidateAssignmentGroupIdAsync(request.DefaultAssignmentGroupId, cancellationToken);
+        settings.DefaultPriority = string.IsNullOrWhiteSpace(request.DefaultPriority) ? "Medium" : request.DefaultPriority.Trim();
+        settings.CreateWorkOrderFromUnknownSender = request.CreateWorkOrderFromUnknownSender;
+        settings.SubjectParsingRules = NormalizeOptional(request.SubjectParsingRules);
+        settings.AllowedSenderDomains = NormalizeOptional(request.AllowedSenderDomains);
+
+        var encryptedPassword = secretEncryptionService.Encrypt(request.Password);
+        if (!string.IsNullOrWhiteSpace(encryptedPassword))
+        {
+            settings.EncryptedPassword = encryptedPassword;
+        }
+    }
+
+    private static bool HasConfiguredNotificationSecret(EmailSetting settings) =>
+        !string.IsNullOrWhiteSpace(settings.EncryptedSecret) || !string.IsNullOrWhiteSpace(settings.Password);
+
+    private EmailDeliverySettings CreateEmailDeliveryOptions(EmailSetting settings)
+    {
+        var secret = secretEncryptionService.Decrypt(settings.EncryptedSecret) ?? settings.Password;
+        return new EmailDeliverySettings(
+            ParseDeliveryMode(settings.Provider),
+            settings.Host,
+            settings.Port,
+            settings.Username,
+            secret,
+            settings.SenderName,
+            settings.SenderAddress,
+            settings.ReplyToEmail,
+            settings.UseSsl,
+            EmailDeliveryModeResolver.ResolveSecureMode(settings.Port, settings.UseSsl),
+            null,
+            null,
+            null,
+            30,
+            0);
+    }
+
+    private async Task ApplyMonitoringWebhookAsync(MonitoringWebhookIntegration item, UpsertMonitoringWebhookIntegrationRequest request, CancellationToken cancellationToken)
+    {
+        item.Name = request.Name.Trim();
+        item.ToolType = request.ToolType.Trim();
+        item.IsActive = request.IsActive;
+        item.DefaultClientId = await ValidateClientIdAsync(request.DefaultClientId, cancellationToken);
+        item.DefaultAssetId = await ValidateAssetIdAsync(request.DefaultAssetId, cancellationToken);
+        item.DefaultBranchId = await ValidateBranchIdAsync(request.DefaultBranchId, cancellationToken);
+        item.DefaultAssignmentGroupId = await ValidateAssignmentGroupIdAsync(request.DefaultAssignmentGroupId, cancellationToken);
+        item.DefaultPriority = string.IsNullOrWhiteSpace(request.DefaultPriority) ? "Medium" : request.DefaultPriority.Trim();
+        item.CreateWorkOrderOnAlert = request.CreateWorkOrderOnAlert;
+        item.PayloadMappingJson = NormalizeOptional(request.PayloadMappingJson);
+    }
+
+    private static void ValidateMonitoringWebhookRequest(UpsertMonitoringWebhookIntegrationRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.ToolType))
+        {
+            throw new BusinessRuleException("Name and tool type are required.");
+        }
+    }
+
+    private async Task<Guid?> ValidateClientIdAsync(Guid? clientId, CancellationToken cancellationToken)
+    {
+        if (!clientId.HasValue)
+        {
+            return null;
+        }
+
+        var exists = await dbContext.Clients.AnyAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == clientId.Value, cancellationToken);
+        if (!exists)
+        {
+            throw new BusinessRuleException("Default client was not found for this tenant.");
+        }
+
+        return clientId.Value;
+    }
+
+    private async Task<Guid?> ValidateAssetIdAsync(Guid? assetId, CancellationToken cancellationToken)
+    {
+        if (!assetId.HasValue)
+        {
+            return null;
+        }
+
+        var exists = await dbContext.Assets.AnyAsync(x => x.TenantId == TenantId && x.Id == assetId.Value, cancellationToken);
+        if (!exists)
+        {
+            throw new BusinessRuleException("Default asset was not found for this tenant.");
+        }
+
+        return assetId.Value;
+    }
+
+    private async Task<Guid?> ValidateBranchIdAsync(Guid? branchId, CancellationToken cancellationToken)
+    {
+        if (!branchId.HasValue)
+        {
+            return null;
+        }
+
+        var exists = await dbContext.Branches.AnyAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == branchId.Value, cancellationToken);
+        if (!exists)
+        {
+            throw new BusinessRuleException("Branch was not found for this tenant.");
+        }
+
+        return branchId.Value;
+    }
+
+    private async Task<Guid?> ValidateAssignmentGroupIdAsync(Guid? assignmentGroupId, CancellationToken cancellationToken)
+    {
+        if (!assignmentGroupId.HasValue)
+        {
+            return null;
+        }
+
+        var exists = await dbContext.AssignmentGroups.AnyAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == assignmentGroupId.Value, cancellationToken);
+        if (!exists)
+        {
+            throw new BusinessRuleException("Assignment group was not found for this tenant.");
+        }
+
+        return assignmentGroupId.Value;
+    }
+
+    private async Task EnsureDefaultNumberingRulesAsync(CancellationToken cancellationToken)
+    {
+        foreach (var documentType in RequiredNumberingDocumentTypes)
+        {
+            var exists = await dbContext.NumberingSettings.AnyAsync(
+                x => x.TenantId == TenantId && x.BranchId == null && x.DocumentType == documentType,
+                cancellationToken);
+
+            if (exists)
+            {
+                continue;
+            }
+
+            await documentNumberingService.UpsertAsync(
+                TenantId,
+                null,
+                documentType,
+                DefaultPrefix(documentType),
+                1,
+                6,
+                NumberResetFrequencies.Never,
+                false,
+                false,
+                true,
+                cancellationToken);
+        }
+    }
+
+    private static string DefaultPrefix(string documentType) =>
+        documentType switch
+        {
+            DocumentTypes.WorkOrder => "WO",
+            DocumentTypes.PreventiveMaintenance => "PM",
+            DocumentTypes.MaterialRequest => "MR",
+            DocumentTypes.Asset => "ASSET",
+            DocumentTypes.Site => "SITE",
+            DocumentTypes.Contract => "CON",
+            DocumentTypes.Quotation => "QT",
+            DocumentTypes.ProformaInvoice => "PI",
+            DocumentTypes.Invoice => "INV",
+            DocumentTypes.CreditNote => "CN",
+            DocumentTypes.DebitNote => "DN",
+            DocumentTypes.Receipt => "REC",
+            DocumentTypes.Payment => "PAY",
+            DocumentTypes.Expense => "EXP",
+            _ => "DOC"
+        };
+
+    private static string BuildPreview(NumberingSetting setting)
+    {
+        var sep = string.IsNullOrEmpty(setting.Separator) ? "-" : setting.Separator;
+        var now = DateTime.UtcNow;
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(setting.Prefix))
+            parts.Add(setting.Prefix.Trim().ToUpperInvariant());
+        if (setting.IncludeYear)
+            parts.Add(string.Equals(setting.YearFormat, "YY", StringComparison.OrdinalIgnoreCase)
+                ? now.Year.ToString()[2..] : now.Year.ToString("0000"));
+        if (setting.IncludeMonth)
+            parts.Add(now.Month.ToString("00"));
+        parts.Add(setting.NextNumber.ToString().PadLeft(setting.PaddingLength, '0'));
+        if (!string.IsNullOrWhiteSpace(setting.Suffix))
+            parts.Add(setting.Suffix.Trim().ToUpperInvariant());
+        return string.Join(sep, parts);
+    }
+
+    private static string NormalizeNumberingDocumentType(string? documentType)
+    {
+        if (string.IsNullOrWhiteSpace(documentType))
+            throw new BusinessRuleException("Document type is required.");
+
+        return DocumentTypes.Normalize(documentType.Trim());
+    }
+
+    private async Task<string> GenerateUniqueEndpointSlugAsync(string name, CancellationToken cancellationToken)
+    {
+        var baseSlug = string.Concat(name.Trim().ToLowerInvariant().Select(character => char.IsLetterOrDigit(character) ? character : '-')).Trim('-');
+        if (string.IsNullOrWhiteSpace(baseSlug))
+        {
+            baseSlug = "webhook";
+        }
+
+        baseSlug = string.Join("-", baseSlug.Split('-', StringSplitOptions.RemoveEmptyEntries));
+        var slug = baseSlug;
+        var suffix = 1;
+
+        while (await dbContext.MonitoringWebhookIntegrations.AnyAsync(x => x.EndpointSlug == slug, cancellationToken))
+        {
+            suffix += 1;
+            slug = $"{baseSlug}-{suffix}";
+        }
+
+        return slug;
+    }
+
+    private static string GenerateWebhookSecret() =>
+        Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
+
+    private static string HashSecret(string secret) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secret.Trim())));
+
+    private string BuildWebhookEndpointUrl(string endpointSlug)
+    {
+        var origin = Request.Headers.Origin.FirstOrDefault();
+        var baseUrl = !string.IsNullOrWhiteSpace(origin)
+            ? origin.TrimEnd('/')
+            : $"{Request.Scheme}://{Request.Host.Value}".TrimEnd('/');
+
+        return $"{baseUrl}/api/integrations/webhooks/{endpointSlug}";
+    }
+
+    private async Task AuditSettingsChangeAsync(string action, string entityName, Guid entityId, CancellationToken cancellationToken)
+    {
+        await auditLogService.LogAsync(TenantId, UserId, action, entityName, entityId.ToString(), action, cancellationToken);
+    }
+
+    private static EmailDeliveryMode ParseDeliveryMode(string? value)
+    {
+        if (Enum.TryParse<EmailDeliveryMode>(value, true, out var parsed))
+        {
+            return parsed;
+        }
+
+        return EmailDeliveryMode.Smtp;
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static CompanySettingsResponse MapCompany(Tenant tenant) =>
+        new(
+            tenant.CompanyName,
+            tenant.Email,
+            tenant.Phone,
+            tenant.Country,
+            tenant.Industry,
+            tenant.PrimaryColor,
+            tenant.SecondaryColor,
+            tenant.ShowPoweredByEcosys);
+
+    private static EmailSettingsResponse MapLegacyEmail(EmailSetting settings) =>
+        new(settings.Host, settings.Port, settings.UseSsl, settings.Username, null, settings.SenderName, settings.SenderAddress);
+
+    private static EmailNotificationSettingsResponse MapEmailNotification(EmailSetting settings) =>
+        new(
+            settings.Id,
+            settings.TenantId,
+            settings.IsEnabled,
+            ParseDeliveryMode(settings.Provider),
+            settings.SenderName,
+            settings.SenderAddress,
+            settings.ReplyToEmail,
+            settings.Host,
+            settings.Port,
+            settings.UseSsl,
+            EmailDeliveryModeResolver.ResolveSecureMode(settings.Port, settings.UseSsl),
+            settings.Username,
+            null,
+            null,
+            null,
+            30,
+            0,
+            HasConfiguredNotificationSecret(settings),
+            settings.IsConfigured,
+            settings.LastTestedAt,
+            settings.LastError);
+
+    private static EmailIntakeSettingsResponse MapEmailIntake(EmailIntakeSetting settings) =>
+        new(
+            settings.Id,
+            settings.TenantId,
+            settings.IsEnabled,
+            settings.IntakeEmailAddress,
+            settings.MailboxProvider,
+            settings.Host,
+            settings.Port,
+            settings.UseSsl,
+            settings.Username,
+            !string.IsNullOrWhiteSpace(settings.EncryptedPassword),
+            settings.DefaultClientId,
+            settings.DefaultBranchId,
+            settings.DefaultAssignmentGroupId,
+            settings.DefaultPriority,
+            settings.CreateWorkOrderFromUnknownSender,
+            settings.SubjectParsingRules,
+            settings.AllowedSenderDomains,
+            settings.LastCheckedAt,
+            settings.IsConnectionHealthy,
+            settings.LastError);
+
+    private static MonitoringWebhookIntegrationResponse MapMonitoringWebhook(MonitoringWebhookIntegration item, string? generatedSecret = null) =>
+        new(
+            item.Id,
+            item.TenantId,
+            item.Name,
+            item.ToolType,
+            item.EndpointSlug,
+            item.IsActive,
+            item.DefaultClientId,
+            item.DefaultAssetId,
+            item.DefaultBranchId,
+            item.DefaultAssignmentGroupId,
+            item.DefaultPriority,
+            item.CreateWorkOrderOnAlert,
+            item.PayloadMappingJson,
+            item.LastReceivedAt,
+            item.LastStatus,
+            item.LastError,
+            item.CreatedAt,
+            item.UpdatedAt,
+            true,
+            generatedSecret);
+
+    private static NumberingSettingsResponse MapLegacyNumbering(NumberingSetting settings) =>
+        new(
+            settings.Id,
+            settings.BranchId,
+            settings.Branch?.Name,
+            settings.DocumentType,
+            settings.Prefix,
+            settings.Suffix,
+            settings.NextNumber,
+            settings.PaddingLength,
+            settings.ResetFrequency,
+            settings.IncludeYear,
+            settings.YearFormat,
+            settings.IncludeMonth,
+            settings.Separator,
+            settings.IsLocked,
+            settings.IsActive);
+
+    private static NumberingRuleResponse MapNumberingRule(NumberingSetting settings) =>
+        new(
+            settings.Id,
+            settings.DocumentType,
+            settings.Prefix,
+            settings.Suffix,
+            settings.NextNumber,
+            settings.PaddingLength,
+            settings.ResetFrequency,
+            settings.YearFormat,
+            settings.IncludeYear,
+            settings.IncludeMonth,
+            settings.Separator,
+            settings.IsLocked,
+            BuildPreview(settings),
+            settings.IsActive,
+            settings.CreatedAt,
+            settings.UpdatedAt);
+}

@@ -1,0 +1,42 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "types": ["vite/client"],
+    "skipLibCheck": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    /* Linting */
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"],
+  "exclude": [
+    "src/context/**/*",
+    "src/mock/**/*",
+    "src/modules/sla/**/*",
+    "src/pages/**/*",
+    "src/services/auditService.ts",
+    "src/services/inventoryService.ts",
+    "src/services/numberingService.ts",
+    "src/services/reportService.ts",
+    "src/services/slaService.ts",
+    "src/services/storage.ts",
+    "src/services/tenantService.ts",
+    "src/store/appStore.ts"
+  ]
+}

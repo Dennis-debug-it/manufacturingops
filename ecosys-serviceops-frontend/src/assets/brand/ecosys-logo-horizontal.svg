@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 180" role="img" aria-label="Ecosys logo horizontal" preserveAspectRatio="xMidYMid meet">
+  <title>Ecosys logo horizontal</title>
+  <g transform="translate(8 16)" fill="none" shape-rendering="geometricPrecision">
+    <path d="M44 12H92L102 28H54Z" fill="var(--ecosys-dark-teal,#0C2F33)"/>
+    <path d="M18 48L34 22H48L32 48Z" fill="var(--ecosys-teal,#127A78)"/>
+    <path d="M30 54H74L84 70H40Z" fill="var(--ecosys-teal,#127A78)"/>
+    <path d="M18 76H32L48 102H34Z" fill="var(--ecosys-teal,#127A78)"/>
+    <path d="M54 96H102L92 112H44Z" fill="var(--ecosys-dark-teal,#0C2F33)"/>
+    <path d="M80 42H102L114 62L102 82H80L68 62Z" fill="var(--ecosys-lime,#B7E26D)"/>
+    <path d="M91 42H102L114 62H91Z" fill="var(--ecosys-green,#11A67A)" opacity=".22"/>
+    <path d="M68 62H91L80 82Z" fill="var(--ecosys-green,#11A67A)" opacity=".18"/>
+    <path d="M91 62H114L102 82H91Z" fill="var(--ecosys-green,#11A67A)" opacity=".1"/>
+  </g>
+  <text x="178" y="92" fill="var(--ecosys-wordmark,#1A1F23)" font-family="Montserrat, Avenir Next, Segoe UI, Arial, sans-serif" font-size="78" font-weight="500" letter-spacing="10">ECOSYS</text>
+  <text x="182" y="136" fill="var(--ecosys-tagline,#0C2F33)" font-family="Montserrat, Avenir Next, Segoe UI, Arial, sans-serif" font-size="17" font-weight="600" letter-spacing="7.5">CONNECT</text>
+  <circle cx="315" cy="129" r="3.8" fill="var(--ecosys-lime,#B7E26D)"/>
+  <text x="338" y="136" fill="var(--ecosys-tagline,#0C2F33)" font-family="Montserrat, Avenir Next, Segoe UI, Arial, sans-serif" font-size="17" font-weight="600" letter-spacing="7.5">AUTOMATE</text>
+  <circle cx="517" cy="129" r="3.8" fill="var(--ecosys-lime,#B7E26D)"/>
+  <text x="540" y="136" fill="var(--ecosys-tagline,#0C2F33)" font-family="Montserrat, Avenir Next, Segoe UI, Arial, sans-serif" font-size="17" font-weight="600" letter-spacing="7.5">SCALE</text>
+  <circle cx="661" cy="129" r="3.8" fill="var(--ecosys-lime,#B7E26D)"/>
+  <text x="684" y="136" fill="var(--ecosys-tagline,#0C2F33)" font-family="Montserrat, Avenir Next, Segoe UI, Arial, sans-serif" font-size="17" font-weight="600" letter-spacing="7.5">RELY</text>
+</svg>

@@ -1,0 +1,49 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.7" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.7">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.7" />
+    <PackageReference Include="MailKit" Version="4.16.0" />
+    <PackageReference Include="MimeKit" Version="4.16.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
+    <PackageReference Include="QuestPDF" Version="2025.7.3" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.14.0" />
+    <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ecosys.Domain\Ecosys.Domain.csproj" />
+    <ProjectReference Include="..\Ecosys.Shared\Ecosys.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Hosted\**\*.cs" />
+    <Compile Remove="Migrations\20260425155039_InitialCreate.cs" />
+    <Compile Remove="Migrations\20260425155039_InitialCreate.Designer.cs" />
+    <Compile Remove="Migrations\20260426090839_ModularMultiTenantSaaS.cs" />
+    <Compile Remove="Migrations\20260426090839_ModularMultiTenantSaaS.Designer.cs" />
+    <Compile Remove="Migrations\EcosysDbContextModelSnapshot.cs" />
+    <Compile Remove="Persistence\EcosysDbContext.cs" />
+    <Compile Remove="Services\AuthService.cs" />
+    <Compile Remove="Services\PlatformServices.cs" />
+    <Compile Remove="Services\ServiceOpsCatalogServices.cs" />
+    <Compile Remove="Services\ServiceOpsWorkflowServices.cs" />
+    <Compile Remove="Services\WorkOrderApplicationService.cs" />
+  </ItemGroup>
+
+</Project>

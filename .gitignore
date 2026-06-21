@@ -1,0 +1,25 @@
+# .NET
+bin/
+obj/
+.dotnet/
+.vs/
+artifacts/
+tmp/
+
+# Node / React
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.production
+
+# Logs
+*.log
+
+# Windows/temp files
+~$*
+*.tmp
+
+# User secrets
+appsettings.Development.json

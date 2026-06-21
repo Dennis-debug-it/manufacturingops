@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Ecosys.Api/Ecosys.Api.csproj" />
+    <Project Path="src/Ecosys.Infrastructure/Ecosys.Infrastructure.csproj" />
+    <Project Path="src/Ecosys.Platform/Ecosys.Platform.csproj" />
+    <Project Path="src/Ecosys.ServiceOps/Ecosys.ServiceOps.csproj" />
+    <Project Path="src/Ecosys.Shared/Ecosys.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Ecosys.Tests/Ecosys.Tests.csproj" />
+  </Folder>
+</Solution>

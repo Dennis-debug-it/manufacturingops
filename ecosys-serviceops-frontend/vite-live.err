@@ -1,0 +1,380 @@
+[2m4:14:58 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:14:59 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mError[22m: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[39m > getRootForUpdatedFiber node_modules/react-dom/cjs/react-dom-client.development.js:4624:10
+ > enqueueConcurrentRenderForLane node_modules/react-dom/cjs/react-dom-client.development.js:4588:13
+ > forceStoreRerender node_modules/react-dom/cjs/react-dom-client.development.js:8261:17
+ > updateStoreInstance node_modules/react-dom/cjs/react-dom-client.development.js:8241:38
+ > Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:19
+ > runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:871:29
+ > commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:28
+ > commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:10
+ > commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:12
+ > recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:10
+
+[2m4:14:59 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mAn error occurred in the <DashboardPage> component.
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+
+[2m4:15:02 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:15:03 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mError[22m: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[39m > getRootForUpdatedFiber node_modules/react-dom/cjs/react-dom-client.development.js:4624:10
+ > enqueueConcurrentRenderForLane node_modules/react-dom/cjs/react-dom-client.development.js:4588:13
+ > forceStoreRerender node_modules/react-dom/cjs/react-dom-client.development.js:8261:17
+ > updateStoreInstance node_modules/react-dom/cjs/react-dom-client.development.js:8241:38
+ > Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:19
+ > runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:871:29
+ > commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:28
+ > commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:10
+ > commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:12
+ > recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:10
+
+[2m4:15:03 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mAn error occurred in the <DashboardPage> component.
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+
+[2m4:15:06 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:15:06 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mError[22m: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[39m > getRootForUpdatedFiber node_modules/react-dom/cjs/react-dom-client.development.js:4624:10
+ > enqueueConcurrentRenderForLane node_modules/react-dom/cjs/react-dom-client.development.js:4588:13
+ > forceStoreRerender node_modules/react-dom/cjs/react-dom-client.development.js:8261:17
+ > updateStoreInstance node_modules/react-dom/cjs/react-dom-client.development.js:8241:38
+ > Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:19
+ > runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:871:29
+ > commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:28
+ > commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:10
+ > commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:12
+ > recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:10
+
+[2m4:15:06 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mAn error occurred in the <DashboardPage> component.
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+
+[2m4:15:09 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:15:09 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mError[22m: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[39m > getRootForUpdatedFiber node_modules/react-dom/cjs/react-dom-client.development.js:4624:10
+ > enqueueConcurrentRenderForLane node_modules/react-dom/cjs/react-dom-client.development.js:4588:13
+ > forceStoreRerender node_modules/react-dom/cjs/react-dom-client.development.js:8261:17
+ > updateStoreInstance node_modules/react-dom/cjs/react-dom-client.development.js:8241:38
+ > Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:19
+ > runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:871:29
+ > commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:28
+ > commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:10
+ > commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:12
+ > recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:10
+
+[2m4:15:09 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mAn error occurred in the <DashboardPage> component.
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+
+[2m4:15:15 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:15:15 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mError[22m: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[39m > getRootForUpdatedFiber node_modules/react-dom/cjs/react-dom-client.development.js:4624:10
+ > enqueueConcurrentRenderForLane node_modules/react-dom/cjs/react-dom-client.development.js:4588:13
+ > forceStoreRerender node_modules/react-dom/cjs/react-dom-client.development.js:8261:17
+ > updateStoreInstance node_modules/react-dom/cjs/react-dom-client.development.js:8241:38
+ > Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:19
+ > runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:871:29
+ > commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:28
+ > commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:10
+ > commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:12
+ > recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:10
+
+[2m4:15:15 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mAn error occurred in the <DashboardPage> component.
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+
+[2m4:15:26 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:15:26 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mMaximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.
+[2m4:15:26 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mError[22m: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[39m > getRootForUpdatedFiber node_modules/react-dom/cjs/react-dom-client.development.js:4624:10
+ > enqueueConcurrentRenderForLane node_modules/react-dom/cjs/react-dom-client.development.js:4588:13
+ > forceStoreRerender node_modules/react-dom/cjs/react-dom-client.development.js:8261:17
+ > updateStoreInstance node_modules/react-dom/cjs/react-dom-client.development.js:8241:38
+ > Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:19
+ > runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:871:29
+ > commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:28
+ > commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:10
+ > commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:12
+ > recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:10
+
+[2m4:15:26 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mAn error occurred in the <DashboardPage> component.
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+
+[2m4:20:48 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mMaximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.
+[2m4:20:48 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mError[22m: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+[39m > getRootForUpdatedFiber node_modules/react-dom/cjs/react-dom-client.development.js:4624:10
+ > enqueueConcurrentRenderForLane node_modules/react-dom/cjs/react-dom-client.development.js:4588:13
+ > forceStoreRerender node_modules/react-dom/cjs/react-dom-client.development.js:8261:17
+ > updateStoreInstance node_modules/react-dom/cjs/react-dom-client.development.js:8241:38
+ > Object.react_stack_bottom_frame node_modules/react-dom/cjs/react-dom-client.development.js:25989:19
+ > runWithFiberInDEV node_modules/react-dom/cjs/react-dom-client.development.js:871:29
+ > commitHookEffectListMount node_modules/react-dom/cjs/react-dom-client.development.js:13249:28
+ > commitHookPassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:13336:10
+ > commitPassiveMountOnFiber node_modules/react-dom/cjs/react-dom-client.development.js:15484:12
+ > recursivelyTraversePassiveMountEffects node_modules/react-dom/cjs/react-dom-client.development.js:15439:10
+
+[2m4:20:48 AM[22m [33m[1m[vite][22m[39m [33m[2m(client)[22m[39m [2m[console.warn] [22mAn error occurred in the <DashboardPage> component.
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries.
+
+[2m4:21:51 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mError: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5)
+
+The above error occurred in the <DashboardPage> component.
+
+React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.
+
+[2m4:21:51 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mEcosys ServiceOps frontend error Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5) {"componentStack":"\n    at DashboardPage (http://localhost:5173/src/modules/dashboard/DashboardPage.tsx?t=1777339245600:15:19)\n    at DashboardRoute (http://localhost:5173/src/App.tsx?t=1777339307175:327:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppShell (http://localhost:5173/src/components/layout/AppShell.tsx?t=1777339245649:10:28)\n    at TenantLayout (http://localhost:5173/src/App.tsx?t=1777339307175:167:31)\n    at AuthenticatedLayout (http://localhost:5173/src/App.tsx?t=1777339307175:270:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at ProtectedRoute (http://localhost:5173/src/routes/ProtectedRoute.tsx?t=1777339245628:8:34)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Routes (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4642:19)\n    at Suspense (<anonymous>)\n    at AppRoutes (<anonymous>)\n    at Router (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4594:29)\n    at BrowserRouter (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:7019:26)\n    at ErrorBoundary (http://localhost:5173/src/components/ui/ErrorBoundary.tsx:5:8)\n    at AuthProvider (http://localhost:5173/src/context/AuthContext.tsx?t=1777339245600:32:32)\n    at ToastProvider (http://localhost:5173/src/components/ui/ToastProvider.tsx:9:33)\n    at ThemeProvider (http://localhost:5173/src/context/ThemeContext.tsx:16:33)\n    at App (<anonymous>)"}
+[2m4:22:37 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mError: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5)
+
+The above error occurred in the <DashboardPage> component.
+
+React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.
+
+[2m4:22:37 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mEcosys ServiceOps frontend error Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5) {"componentStack":"\n    at DashboardPage (http://localhost:5173/src/modules/dashboard/DashboardPage.tsx?t=1777339352409:16:19)\n    at DashboardRoute (http://localhost:5173/src/App.tsx?t=1777339307175:327:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppShell (http://localhost:5173/src/components/layout/AppShell.tsx?t=1777339245649:10:28)\n    at TenantLayout (http://localhost:5173/src/App.tsx?t=1777339307175:167:31)\n    at AuthenticatedLayout (http://localhost:5173/src/App.tsx?t=1777339307175:270:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at ProtectedRoute (http://localhost:5173/src/routes/ProtectedRoute.tsx?t=1777339245628:8:34)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Routes (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4642:19)\n    at Suspense (<anonymous>)\n    at AppRoutes (<anonymous>)\n    at Router (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4594:29)\n    at BrowserRouter (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:7019:26)\n    at ErrorBoundary (http://localhost:5173/src/components/ui/ErrorBoundary.tsx:5:8)\n    at AuthProvider (http://localhost:5173/src/context/AuthContext.tsx?t=1777339245600:32:32)\n    at ToastProvider (http://localhost:5173/src/components/ui/ToastProvider.tsx:9:33)\n    at ThemeProvider (http://localhost:5173/src/context/ThemeContext.tsx:16:33)\n    at App (<anonymous>)"}
+[2m4:22:59 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mError: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5)
+
+The above error occurred in the <DashboardPage> component.
+
+React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.
+
+[2m4:22:59 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mEcosys ServiceOps frontend error Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5) {"componentStack":"\n    at DashboardPage (http://localhost:5173/src/modules/dashboard/DashboardPage.tsx?t=1777339352409:16:19)\n    at DashboardRoute (http://localhost:5173/src/App.tsx?t=1777339307175:327:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppShell (http://localhost:5173/src/components/layout/AppShell.tsx?t=1777339245649:10:28)\n    at TenantLayout (http://localhost:5173/src/App.tsx?t=1777339307175:167:31)\n    at AuthenticatedLayout (http://localhost:5173/src/App.tsx?t=1777339307175:270:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at ProtectedRoute (http://localhost:5173/src/routes/ProtectedRoute.tsx?t=1777339245628:8:34)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Routes (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4642:19)\n    at Suspense (<anonymous>)\n    at AppRoutes (<anonymous>)\n    at Router (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4594:29)\n    at BrowserRouter (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:7019:26)\n    at ErrorBoundary (http://localhost:5173/src/components/ui/ErrorBoundary.tsx:5:8)\n    at AuthProvider (http://localhost:5173/src/context/AuthContext.tsx?t=1777339245600:32:32)\n    at ToastProvider (http://localhost:5173/src/components/ui/ToastProvider.tsx:9:33)\n    at ThemeProvider (http://localhost:5173/src/context/ThemeContext.tsx:16:33)\n    at App (<anonymous>)"}
+[2m4:26:53 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mError: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5)
+
+The above error occurred in the <DashboardPage> component.
+
+React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.
+
+[2m4:26:53 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mEcosys ServiceOps frontend error Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5) {"componentStack":"\n    at DashboardPage (http://localhost:5173/src/modules/dashboard/DashboardPage.tsx?t=1777339352409:16:19)\n    at DashboardRoute (http://localhost:5173/src/App.tsx?t=1777339569840:327:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppShell (http://localhost:5173/src/components/layout/AppShell.tsx?t=1777339563694:10:28)\n    at TenantLayout (http://localhost:5173/src/App.tsx?t=1777339569840:167:31)\n    at AuthenticatedLayout (http://localhost:5173/src/App.tsx?t=1777339569840:270:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at ProtectedRoute (http://localhost:5173/src/routes/ProtectedRoute.tsx?t=1777339245628:8:34)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Routes (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4642:19)\n    at Suspense (<anonymous>)\n    at AppRoutes (<anonymous>)\n    at Router (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4594:29)\n    at BrowserRouter (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:7019:26)\n    at ErrorBoundary (http://localhost:5173/src/components/ui/ErrorBoundary.tsx:5:8)\n    at AuthProvider (http://localhost:5173/src/context/AuthContext.tsx?t=1777339245600:32:32)\n    at ToastProvider (http://localhost:5173/src/components/ui/ToastProvider.tsx?t=1777339569840:9:33)\n    at ThemeProvider (http://localhost:5173/src/context/ThemeContext.tsx:16:33)\n    at App (<anonymous>)"}
+[2m4:26:59 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:27:00 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mMaximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.
+[2m4:27:00 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mError: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5)
+
+The above error occurred in the <DashboardPage> component.
+
+React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.
+
+[2m4:27:00 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mEcosys ServiceOps frontend error Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5) {"componentStack":"\n    at DashboardPage (http://localhost:5173/src/modules/dashboard/DashboardPage.tsx?t=1777339583788:16:19)\n    at DashboardRoute (http://localhost:5173/src/App.tsx?t=1777339583798:327:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppShell (http://localhost:5173/src/components/layout/AppShell.tsx?t=1777339563694:10:28)\n    at TenantLayout (http://localhost:5173/src/App.tsx?t=1777339583798:167:31)\n    at AuthenticatedLayout (http://localhost:5173/src/App.tsx?t=1777339583798:270:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at ProtectedRoute (http://localhost:5173/src/routes/ProtectedRoute.tsx?t=1777339245600:8:34)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Routes (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4642:19)\n    at Suspense (<anonymous>)\n    at AppRoutes (<anonymous>)\n    at Router (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4594:29)\n    at BrowserRouter (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:7019:26)\n    at ErrorBoundary (http://localhost:5173/src/components/ui/ErrorBoundary.tsx:5:8)\n    at AuthProvider (http://localhost:5173/src/context/AuthContext.tsx?t=1777339245600:32:32)\n    at ToastProvider (http://localhost:5173/src/components/ui/ToastProvider.tsx?t=1777339569840:9:33)\n    at ThemeProvider (http://localhost:5173/src/context/ThemeContext.tsx:16:33)\n    at App (<anonymous>)"}
+[2m4:30:06 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:30:08 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mMaximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.
+[2m4:30:08 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mError: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5)
+
+The above error occurred in the <DashboardPage> component.
+
+React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.
+
+[2m4:30:08 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mEcosys ServiceOps frontend error Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5) {"componentStack":"\n    at DashboardPage (http://localhost:5173/src/modules/dashboard/DashboardPage.tsx?t=1777339583788:16:19)\n    at DashboardRoute (http://localhost:5173/src/App.tsx?t=1777339634636:328:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppShell (http://localhost:5173/src/components/layout/AppShell.tsx?t=1777339563694:10:28)\n    at TenantLayout (http://localhost:5173/src/App.tsx?t=1777339634636:168:31)\n    at AuthenticatedLayout (http://localhost:5173/src/App.tsx?t=1777339634636:271:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at ProtectedRoute (http://localhost:5173/src/routes/ProtectedRoute.tsx?t=1777339245600:8:34)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Routes (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4642:19)\n    at Suspense (<anonymous>)\n    at AppRoutes (<anonymous>)\n    at Router (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4594:29)\n    at BrowserRouter (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:7019:26)\n    at ErrorBoundary (http://localhost:5173/src/components/ui/ErrorBoundary.tsx:5:8)\n    at AuthProvider (http://localhost:5173/src/context/AuthContext.tsx?t=1777339245600:32:32)\n    at ToastProvider (http://localhost:5173/src/components/ui/ToastProvider.tsx?t=1777339569840:9:33)\n    at ThemeProvider (http://localhost:5173/src/context/ThemeContext.tsx:16:33)\n    at App (<anonymous>)"}
+[2m4:30:24 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:30:24 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mMaximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.
+[2m4:30:24 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mError: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5)
+
+The above error occurred in the <DashboardPage> component.
+
+React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.
+
+[2m4:30:24 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mEcosys ServiceOps frontend error Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5) {"componentStack":"\n    at DashboardPage (http://localhost:5173/src/modules/dashboard/DashboardPage.tsx?t=1777339583788:16:19)\n    at DashboardRoute (http://localhost:5173/src/App.tsx?t=1777339634636:328:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppShell (http://localhost:5173/src/components/layout/AppShell.tsx?t=1777339563694:10:28)\n    at TenantLayout (http://localhost:5173/src/App.tsx?t=1777339634636:168:31)\n    at AuthenticatedLayout (http://localhost:5173/src/App.tsx?t=1777339634636:271:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at ProtectedRoute (http://localhost:5173/src/routes/ProtectedRoute.tsx?t=1777339245600:8:34)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Routes (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4642:19)\n    at Suspense (<anonymous>)\n    at AppRoutes (<anonymous>)\n    at Router (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4594:29)\n    at BrowserRouter (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:7019:26)\n    at ErrorBoundary (http://localhost:5173/src/components/ui/ErrorBoundary.tsx:5:8)\n    at AuthProvider (http://localhost:5173/src/context/AuthContext.tsx?t=1777339245600:32:32)\n    at ToastProvider (http://localhost:5173/src/components/ui/ToastProvider.tsx?t=1777339569840:9:33)\n    at ThemeProvider (http://localhost:5173/src/context/ThemeContext.tsx:16:33)\n    at App (<anonymous>)"}
+[2m4:30:25 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:30:27 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mMaximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.
+[2m4:30:27 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mError: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5)
+
+The above error occurred in the <DashboardPage> component.
+
+React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.
+
+[2m4:30:27 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mEcosys ServiceOps frontend error Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5) {"componentStack":"\n    at DashboardPage (http://localhost:5173/src/modules/dashboard/DashboardPage.tsx?t=1777339583788:16:19)\n    at DashboardRoute (http://localhost:5173/src/App.tsx?t=1777339634636:328:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppShell (http://localhost:5173/src/components/layout/AppShell.tsx?t=1777339563694:10:28)\n    at TenantLayout (http://localhost:5173/src/App.tsx?t=1777339634636:168:31)\n    at AuthenticatedLayout (http://localhost:5173/src/App.tsx?t=1777339634636:271:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at ProtectedRoute (http://localhost:5173/src/routes/ProtectedRoute.tsx?t=1777339245600:8:34)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Routes (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4642:19)\n    at Suspense (<anonymous>)\n    at AppRoutes (<anonymous>)\n    at Router (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4594:29)\n    at BrowserRouter (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:7019:26)\n    at ErrorBoundary (http://localhost:5173/src/components/ui/ErrorBoundary.tsx:5:8)\n    at AuthProvider (http://localhost:5173/src/context/AuthContext.tsx?t=1777339245600:32:32)\n    at ToastProvider (http://localhost:5173/src/components/ui/ToastProvider.tsx?t=1777339569840:9:33)\n    at ThemeProvider (http://localhost:5173/src/context/ThemeContext.tsx:16:33)\n    at App (<anonymous>)"}
+[2m4:32:21 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mThe result of getSnapshot should be cached to avoid an infinite loop
+[2m4:32:24 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mMaximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render.
+[2m4:32:24 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mError: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5)
+
+The above error occurred in the <DashboardPage> component.
+
+React will try to recreate this component tree from scratch using the error boundary you provided, ErrorBoundary.
+
+[2m4:32:24 AM[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [2m[console.error] [22mEcosys ServiceOps frontend error Error: Maximum update depth exceeded. This can happen when a component repeatedly calls setState inside componentWillUpdate or componentDidUpdate. React limits the number of nested updates to prevent infinite loops.
+    at getRootForUpdatedFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2632:166)
+    at enqueueConcurrentRenderForLane (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:2622:11)
+    at forceStoreRerender (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4580:15)
+    at updateStoreInstance (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:4562:36)
+    at Object.react_stack_bottom_frame (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:12903:13)
+    at runWithFiberInDEV (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:850:66)
+    at commitHookEffectListMount (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6616:153)
+    at commitHookPassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:6651:55)
+    at commitPassiveMountOnFiber (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7617:22)
+    at recursivelyTraversePassiveMountEffects (http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=36c3e00a:7605:5) {"componentStack":"\n    at DashboardPage (http://localhost:5173/src/modules/dashboard/DashboardPage.tsx?t=1777339583788:16:19)\n    at DashboardRoute (http://localhost:5173/src/App.tsx?t=1777339634636:328:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at main (<anonymous>)\n    at div (<anonymous>)\n    at div (<anonymous>)\n    at AppShell (http://localhost:5173/src/components/layout/AppShell.tsx?t=1777339563694:10:28)\n    at TenantLayout (http://localhost:5173/src/App.tsx?t=1777339634636:168:31)\n    at AuthenticatedLayout (http://localhost:5173/src/App.tsx?t=1777339634636:271:31)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Outlet (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4589:25)\n    at ProtectedRoute (http://localhost:5173/src/routes/ProtectedRoute.tsx?t=1777339245600:8:34)\n    at RenderedRoute (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4011:26)\n    at Routes (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4642:19)\n    at Suspense (<anonymous>)\n    at AppRoutes (<anonymous>)\n    at Router (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:4594:29)\n    at BrowserRouter (http://localhost:5173/node_modules/.vite/deps/react-router-dom.js?v=36c3e00a:7019:26)\n    at ErrorBoundary (http://localhost:5173/src/components/ui/ErrorBoundary.tsx:5:8)\n    at AuthProvider (http://localhost:5173/src/context/AuthContext.tsx?t=1777339245600:32:32)\n    at ToastProvider (http://localhost:5173/src/components/ui/ToastProvider.tsx?t=1777339569840:9:33)\n    at ThemeProvider (http://localhost:5173/src/context/ThemeContext.tsx:16:33)\n    at App (<anonymous>)"}

@@ -1,0 +1,293 @@
+using Ecosys.Domain.Entities;
+using Ecosys.Infrastructure.Data;
+using Ecosys.Shared.Auth;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace Ecosys.Infrastructure.Services;
+
+public sealed class PmSchedulerWorker(
+    IServiceScopeFactory serviceScopeFactory,
+    ILogger<PmSchedulerWorker> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        logger.LogInformation("PM scheduler worker started.");
+
+        // Wait until 06:00 UTC for first run, then every 24h
+        await WaitUntilNextRunTimeAsync(stoppingToken);
+
+        using var timer = new PeriodicTimer(TimeSpan.FromHours(24));
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await RunCycleAsync(stoppingToken);
+            await timer.WaitForNextTickAsync(stoppingToken);
+        }
+    }
+
+    private static async Task WaitUntilNextRunTimeAsync(CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var nextRun = now.Date.AddHours(6);
+        if (nextRun <= now)
+            nextRun = nextRun.AddDays(1);
+
+        var delay = nextRun - now;
+        if (delay > TimeSpan.Zero)
+            await Task.Delay(delay, ct).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+    }
+
+    private async Task RunCycleAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var scope = serviceScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var now = DateTime.UtcNow;
+
+            var activePlans = await db.PreventiveMaintenancePlans
+                .Include(x => x.Asset)
+                .Include(x => x.PmTemplate)
+                    .ThenInclude(t => t!.Questions)
+                    .ThenInclude(q => q.Section)
+                .Where(x => x.Status == "Active" && x.NextPmDate.HasValue)
+                .ToListAsync(ct);
+
+            var generated = 0;
+
+            foreach (var plan in activePlans)
+            {
+                try
+                {
+                    if (!ShouldGenerate(plan, now))
+                        continue;
+
+                    var hasOpenWo = await db.WorkOrders.AnyAsync(
+                        x => x.PreventiveMaintenancePlanId == plan.Id &&
+                             x.Status != "Completed" && x.Status != "Cancelled",
+                        ct);
+
+                    if (hasOpenWo)
+                        continue;
+
+                    var wo = await CreateWorkOrderAsync(db, plan, now, ct);
+                    plan.LastGeneratedAt = now;
+                    generated++;
+
+                    logger.LogInformation(
+                        "Generated PM work order {WoNumber} for plan {PlanId} on asset {AssetId}.",
+                        wo.WorkOrderNumber, plan.Id, plan.AssetId);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to generate PM work order for plan {PlanId}.", plan.Id);
+                }
+            }
+
+            if (generated > 0)
+            {
+                await db.SaveChangesAsync(ct);
+                logger.LogInformation("PM scheduler cycle complete. Generated {Count} work orders.", generated);
+            }
+
+            // Send overdue-by-DueDate notifications for open work orders that have passed their due date
+            await RunOverdueNotificationsAsync(db, scope.ServiceProvider, now, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "PM scheduler cycle failed.");
+        }
+    }
+
+    private async Task RunOverdueNotificationsAsync(AppDbContext db, IServiceProvider services, DateTime now, CancellationToken ct)
+    {
+        try
+        {
+            var emailOutbox = services.GetService<IEmailOutboxService>();
+            var emailTemplate = services.GetService<IEmailTemplateService>();
+            var emailSubjectRule = services.GetService<IEmailSubjectRuleService>();
+
+            if (emailOutbox is null || emailTemplate is null || emailSubjectRule is null)
+                return;
+
+            // Find open WOs that are past due date.
+            // Deduplication: skip any WO that already has an "OverdueNotified" event today.
+            var todayUtc = now.Date;
+            var alreadyNotifiedToday = await db.WorkOrderEvents
+                .Where(x => x.EventType == "OverdueNotified" && x.OccurredAt.Date >= todayUtc)
+                .Select(x => x.WorkOrderId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            var overdueWOs = await db.WorkOrders
+                .Where(x => x.DueDate.HasValue
+                    && x.DueDate.Value.Date < now.Date
+                    && x.Status != "Completed" && x.Status != "Closed"
+                    && x.Status != "Cancelled" && x.Status != "Acknowledged"
+                    && !alreadyNotifiedToday.Contains(x.Id))
+                .Include(x => x.AssignedTechnician)
+                .Include(x => x.Asset)
+                .ToListAsync(ct);
+
+            foreach (var wo in overdueWOs)
+            {
+                try
+                {
+                    var admins = await db.Users
+                        .Where(x => x.TenantId == wo.TenantId && x.IsActive
+                            && x.Role == AppRoles.Admin && x.Email != null)
+                        .Select(x => new { x.Email, x.FullName })
+                        .ToListAsync(ct);
+
+                    if (admins.Count == 0)
+                        continue;
+
+                    var template = await emailTemplate.RenderTenantTemplateAsync(
+                        wo.TenantId,
+                        "work-order.overdue",
+                        new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["WorkOrderNumber"] = wo.WorkOrderNumber,
+                            ["AssignedTo"] = wo.AssignedTechnician?.FullName ?? "Unassigned",
+                            ["Priority"] = wo.Priority ?? "Normal",
+                            ["DueDate"] = wo.DueDate?.ToString("yyyy-MM-dd") ?? "Not set",
+                            ["AssetName"] = wo.Asset?.AssetName ?? "N/A"
+                        },
+                        ct);
+
+                    if (!template.Enabled)
+                        continue;
+
+                    var subject = await emailSubjectRule.BuildFinalSubjectAsync(
+                        wo.TenantId, "work-order.overdue", template.Subject, cancellationToken: ct);
+
+                    foreach (var admin in admins)
+                    {
+                        await emailOutbox.QueueEmailAsync(
+                            new QueueEmailRequest(
+                                wo.TenantId, "work-order.overdue", "work-order-overdue",
+                                admin.Email!, admin.FullName,
+                                template.SenderNameOverride, null, null,
+                                subject, template.HtmlBody, template.TextBody, null),
+                            ct);
+                    }
+
+                    // Record a WorkOrderEvent so we don't re-send within the same day
+                    db.WorkOrderEvents.Add(new WorkOrderEvent
+                    {
+                        TenantId = wo.TenantId,
+                        WorkOrderId = wo.Id,
+                        EventType = "OverdueNotified",
+                        Status = wo.Status,
+                        Message = "Overdue notification email queued.",
+                        OccurredAt = now
+                    });
+                    logger.LogInformation("Queued overdue notification for work order {WoNumber}.", wo.WorkOrderNumber);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to queue overdue notification for work order {WorkOrderId}.", wo.Id);
+                }
+            }
+
+            if (overdueWOs.Count > 0)
+            {
+                await db.SaveChangesAsync(ct);
+                logger.LogInformation("Overdue notification sweep complete. Notified for {Count} work orders.", overdueWOs.Count);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Overdue notification sweep failed.");
+        }
+    }
+
+    private static bool ShouldGenerate(PreventiveMaintenancePlan plan, DateTime now)
+    {
+        if (!plan.NextPmDate.HasValue)
+            return false;
+
+        var generateByDate = plan.NextPmDate.Value.AddDays(-plan.DaysBeforeDue);
+        return now.Date >= generateByDate.Date;
+    }
+
+    private static async Task<WorkOrder> CreateWorkOrderAsync(
+        AppDbContext db,
+        PreventiveMaintenancePlan plan,
+        DateTime now,
+        CancellationToken ct)
+    {
+        var woNumber = await GenerateWoNumberAsync(db, plan.TenantId, ct);
+
+        var wo = new WorkOrder
+        {
+            TenantId = plan.TenantId,
+            BranchId = plan.BranchId,
+            ClientId = plan.Asset?.ClientId ?? Guid.Empty,
+            SiteId = plan.SiteId,
+            AssetId = plan.AssetId,
+            AssignmentGroupId = plan.DefaultAssignmentGroupId,
+            WorkOrderNumber = woNumber,
+            Title = $"PM – {plan.Asset?.AssetName ?? "Asset"}",
+            Priority = "Medium",
+            Status = "Open",
+            IsPreventiveMaintenance = true,
+            PreventiveMaintenancePlanId = plan.Id,
+            PmTemplateId = plan.PmTemplateId,
+            PmTemplateNameSnapshot = plan.PmTemplate?.Name,
+            PmTemplateVersionSnapshot = plan.PmTemplate?.Version,
+            DueDate = plan.NextPmDate
+        };
+        db.WorkOrders.Add(wo);
+
+        if (plan.PmTemplate?.Questions is { Count: > 0 } questions)
+        {
+            foreach (var q in questions.OrderBy(x => x.Section?.DisplayOrder ?? int.MaxValue).ThenBy(x => x.DisplayOrder))
+            {
+                db.WorkOrderChecklistItems.Add(new WorkOrderChecklistItem
+                {
+                    TenantId = plan.TenantId,
+                    WorkOrderId = wo.Id,
+                    PmTemplateQuestionId = q.Id,
+                    SectionName = q.SectionName,
+                    SectionOrder = q.Section?.DisplayOrder ?? 0,
+                    QuestionText = q.Prompt,
+                    HelperText = q.HelperText,
+                    InputType = q.ResponseType,
+                    QuestionType = q.ResponseType,
+                    Unit = q.Unit,
+                    DefaultValue = q.DefaultValue,
+                    MinValue = q.MinValue,
+                    MaxValue = q.MaxValue,
+                    IsRequired = q.IsRequired,
+                    EvidenceRequired = q.EvidenceRequired,
+                    TechnicianRemarksAllowed = q.TechnicianRemarksAllowed,
+                    RequiresNoteOnFail = q.RequiresNoteOnFail,
+                    SortOrder = q.DisplayOrder,
+                    ResponseValue = q.DefaultValue,
+                    OptionsJson = q.OptionsJson
+                });
+            }
+        }
+
+        return wo;
+    }
+
+    private static async Task<string> GenerateWoNumberAsync(AppDbContext db, Guid tenantId, CancellationToken ct)
+    {
+        var setting = await db.NumberingSettings
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.BranchId == null && x.DocumentType == "WorkOrder", ct);
+
+        var prefix = setting?.Prefix ?? "WO";
+        var next = setting?.NextNumber ?? 1;
+        var pad = setting?.PaddingLength ?? 6;
+
+        if (setting != null)
+            setting.NextNumber += 1;
+
+        return $"{prefix}-{next.ToString().PadLeft(pad, '0')}";
+    }
+}

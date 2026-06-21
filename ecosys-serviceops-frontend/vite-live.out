@@ -1,0 +1,39 @@
+
+> ecosys-serviceops-frontend@0.0.0 dev
+> vite
+
+
+  [32m[1mVITE[22m v8.0.10[39m  [2mready in [0m[1m483[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
+[2m4:20:45 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/context/AuthContext.tsx[22m
+[2m4:20:45 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/routes/ProtectedRoute.tsx[22m
+[2m4:20:45 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/routes/GuestRoute.tsx[22m
+[2m4:20:45 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/layout/AppShell.tsx[22m
+[2m4:20:45 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/ui/DataTable.tsx[22m
+[2m4:20:46 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/context/AuthContext.tsx[22m Could not Fast Refresh ("useAuth" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m4:20:46 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/components/layout/AppShell.tsx, /src/modules/auth/LoginPage.tsx, /src/modules/auth/SignupPage.tsx, /src/routes/GuestRoute.tsx, /src/routes/ProtectedRoute.tsx, /src/modules/assets/AssetsPage.tsx, /src/modules/clients/ClientsPage.tsx, /src/modules/field-operations/FieldOperationsPage.tsx, /src/modules/dashboard/DashboardPage.tsx, /src/modules/reports/ReportsPage.tsx, /src/modules/inventory/InventoryPage.tsx, /src/modules/settings/SettingsPage.tsx and 3 more[22m
+[2m4:20:46 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/components/layout/AppShell.tsx[22m Could not Fast Refresh ("useShellContext" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m4:20:46 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/modules/work-orders/WorkOrdersPage.tsx[22m
+[2m4:21:47 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
+[2m4:22:32 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/modules/dashboard/DashboardPage.tsx[22m
+[2m4:22:54 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/modules/work-orders/WorkOrdersPage.tsx[22m
+[2m4:23:06 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/modules/inventory/InventoryPage.tsx[22m
+[2m4:23:14 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/modules/reports/ReportsPage.tsx[22m
+[2m4:23:19 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/modules/assets/AssetsPage.tsx[22m
+[2m4:23:26 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/modules/command-centre/CommandCentrePage.tsx[22m
+[2m4:23:31 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/modules/sla/SLAManagementPage.tsx[22m
+[2m4:25:34 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/ServiceOpsLandingPage.jsx[22m
+[2m4:25:38 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/pages/ServiceOpsLandingPage.jsx[22m
+[2m4:26:03 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css[22m
+[2m4:26:03 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/layout/Topbar.tsx[22m
+[2m4:26:03 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/ui/Drawer.tsx[22m
+[2m4:26:03 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/layout/Sidebar.tsx[22m
+[2m4:26:03 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/modules/work-orders/WorkOrderDetailPage.tsx[22m
+[2m4:26:03 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/ui/Modal.tsx[22m
+[2m4:26:09 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/components/ui/ToastProvider.tsx[22m
+[2m4:26:10 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [33mhmr invalidate [39m[2m/src/components/ui/ToastProvider.tsx[22m Could not Fast Refresh ("useToast" export is incompatible). Learn more at https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#consistent-components-exports
+[2m4:26:10 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/modules/assets/AssetsPage.tsx, /src/modules/clients/ClientsPage.tsx, /src/modules/command-centre/CommandCentrePage.tsx, /src/modules/field-operations/FieldOperationsPage.tsx, /src/modules/inventory/InventoryPage.tsx, /src/modules/settings/SettingsPage.tsx, /src/modules/work-orders/WorkOrderDetailPage.tsx, /src/modules/sla/SLAManagementPage.tsx, /src/modules/work-orders/WorkOrdersPage.tsx[22m
+[2m4:26:23 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/modules/dashboard/DashboardWidgets.tsx[22m
+[2m4:26:23 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/index.css, /src/modules/work-orders/WorkOrdersPage.tsx[22m
+[2m4:27:14 AM[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.tsx, /src/index.css[22m
