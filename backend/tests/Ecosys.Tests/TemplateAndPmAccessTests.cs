@@ -578,6 +578,7 @@ public sealed class TemplateAndPmAccessTests
         public byte[] RenderWorkOrderReportPdf(string title, IReadOnlyCollection<string> sections) => [];
         public byte[] RenderWorkOrderReportPdf(WorkOrderReportPdfModel report) => [];
         public byte[] RenderInvoicePdf(InvoicePdfModel model) => [];
+        public byte[] RenderQuotationPdf(QuotationPdfModel model) => [];
         public byte[] RenderReceiptPdf(ReceiptPdfModel model) => [];
         public byte[] RenderClientStatementPdf(ClientStatementPdfModel model) => [];
     }

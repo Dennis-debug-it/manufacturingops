@@ -55,6 +55,13 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
                 page.Margin(28);
                 page.DefaultTextStyle(x => x.FontSize(10).FontFamily(font));
 
+                if (!string.IsNullOrWhiteSpace(cfg.WatermarkText))
+                {
+                    page.Background().AlignCenter().AlignMiddle()
+                        .Text(cfg.WatermarkText.ToUpperInvariant())
+                        .FontSize(64).SemiBold().FontColor(Colors.Grey.Lighten3);
+                }
+
                 page.Header().Column(header =>
                 {
                     // ── Company identity row ─────────────────────────────────
@@ -146,6 +153,16 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
 
                     if (On("signatures") && report.Signatures.Count > 0)
                         column.Item().Element(x => RenderSignatureSection(x, borderColor, report.Signatures));
+
+                    if (!string.IsNullOrWhiteSpace(cfg.ServiceReportDisclaimer))
+                    {
+                        column.Item().PaddingTop(4).Column(col =>
+                        {
+                            col.Spacing(3);
+                            col.Item().Text("Disclaimer").FontSize(9).SemiBold().FontColor(Colors.Grey.Darken2);
+                            col.Item().Text(cfg.ServiceReportDisclaimer).FontSize(8).Italic().FontColor(Colors.Grey.Darken1);
+                        });
+                    }
                 });
 
                 page.Footer().BorderTop(1).BorderColor(borderColor).PaddingTop(6).Row(row =>
@@ -579,6 +596,209 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
             .GeneratePdf();
     }
 
+    // ── Quotation PDF ────────────────────────────────────────────────────────
+
+    public byte[] RenderQuotationPdf(QuotationPdfModel model)
+    {
+        QuestPDF.Settings.License = LicenseType.Community;
+
+        var primary = model.PrimaryColor;
+        var altRow  = Colors.Grey.Lighten4;
+        var quoteFont = model.FontFamily is "Helvetica" or "Arial" or "Times New Roman"
+            ? model.FontFamily : "Helvetica";
+
+        return Document.Create(container =>
+            container.Page(page =>
+            {
+                page.Margin(32);
+                page.DefaultTextStyle(x => x.FontSize(10).FontFamily(quoteFont));
+
+                if (!string.IsNullOrWhiteSpace(model.WatermarkText))
+                {
+                    page.Background().AlignCenter().AlignMiddle()
+                        .Text(model.WatermarkText.ToUpperInvariant())
+                        .FontSize(64).SemiBold().FontColor(Colors.Grey.Lighten3);
+                }
+
+                page.Header().Column(header =>
+                {
+                    header.Item().Row(row =>
+                    {
+                        row.RelativeItem().Column(col =>
+                        {
+                            col.Item().Text(model.CompanyName).FontSize(18).SemiBold().FontColor(primary);
+                            var contactParts = new[] { model.CompanyPhone, model.CompanyAddress }
+                                .Where(x => !string.IsNullOrWhiteSpace(x));
+                            var contactLine = string.Join("  ·  ", contactParts);
+                            if (!string.IsNullOrWhiteSpace(contactLine))
+                                col.Item().Text(contactLine).FontSize(8).FontColor(Colors.Grey.Darken1);
+                        });
+                        row.AutoItem().AlignRight().Column(col =>
+                        {
+                            col.Item().Text("QUOTATION").FontSize(22).SemiBold().FontColor(primary);
+                            col.Item().Text(model.QuoteNumber).FontSize(11).FontColor(Colors.Grey.Darken2);
+                        });
+                    });
+                    header.Item().PaddingTop(8).BorderBottom(2).BorderColor(primary);
+                });
+
+                page.Content().PaddingTop(12).Column(column =>
+                {
+                    column.Spacing(14);
+
+                    column.Item().Row(row =>
+                    {
+                        row.RelativeItem().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(10).Column(col =>
+                        {
+                            col.Spacing(3);
+                            col.Item().Text("PREPARED FOR").FontSize(8).SemiBold().FontColor(Colors.Grey.Darken1);
+                            col.Item().Text(model.ClientName).SemiBold();
+                            if (!string.IsNullOrWhiteSpace(model.Subject))
+                                col.Item().Text(model.Subject).FontSize(9).FontColor(Colors.Grey.Darken1);
+                        });
+
+                        row.ConstantItem(16);
+
+                        row.RelativeItem().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(10).Column(col =>
+                        {
+                            col.Spacing(4);
+                            void DetailRow(string label, string value, bool highlight = false)
+                            {
+                                col.Item().Row(r =>
+                                {
+                                    r.RelativeItem().Text(label).FontSize(8).SemiBold().FontColor(Colors.Grey.Darken1);
+                                    var span = r.AutoItem().Text(value);
+                                    if (highlight) span.SemiBold().FontColor(primary);
+                                });
+                            }
+                            DetailRow("Quote Date", model.QuoteDate.ToString("dd MMM yyyy"));
+                            DetailRow("Valid Until", model.ValidUntil.ToString("dd MMM yyyy"), highlight: true);
+                            DetailRow("Status", model.Status);
+                            DetailRow("Currency", model.Currency);
+                        });
+                    });
+
+                    column.Item().Table(table =>
+                    {
+                        table.ColumnsDefinition(cols =>
+                        {
+                            cols.RelativeColumn(4);
+                            cols.RelativeColumn(1.2f);
+                            cols.RelativeColumn(1);
+                            cols.RelativeColumn(1.5f);
+                            cols.RelativeColumn(1);
+                            cols.RelativeColumn(1.5f);
+                        });
+
+                        IContainer HeaderCell(IContainer c) => c.Background(primary).Padding(6).AlignMiddle();
+
+                        table.Header(h =>
+                        {
+                            h.Cell().Element(HeaderCell).Text("Description").FontSize(9).SemiBold().FontColor(Colors.White);
+                            h.Cell().Element(HeaderCell).AlignRight().Text("Qty").FontSize(9).SemiBold().FontColor(Colors.White);
+                            h.Cell().Element(HeaderCell).Text("Unit").FontSize(9).SemiBold().FontColor(Colors.White);
+                            h.Cell().Element(HeaderCell).AlignRight().Text("Rate").FontSize(9).SemiBold().FontColor(Colors.White);
+                            h.Cell().Element(HeaderCell).AlignRight().Text("Tax %").FontSize(9).SemiBold().FontColor(Colors.White);
+                            h.Cell().Element(HeaderCell).AlignRight().Text("Total").FontSize(9).SemiBold().FontColor(Colors.White);
+                        });
+
+                        for (var i = 0; i < model.Lines.Count; i++)
+                        {
+                            var line = model.Lines[i];
+                            var bg = i % 2 == 0 ? Colors.White : altRow;
+
+                            IContainer DataCell(IContainer c) =>
+                                c.Background(bg).BorderBottom(1).BorderColor(Colors.Grey.Lighten3).Padding(6).AlignMiddle();
+
+                            table.Cell().Element(DataCell).Text(line.Description).FontSize(9);
+                            table.Cell().Element(DataCell).AlignRight().Text(line.Quantity.ToString("0.##")).FontSize(9);
+                            table.Cell().Element(DataCell).Text(line.Unit).FontSize(9);
+                            table.Cell().Element(DataCell).AlignRight().Text($"{line.UnitRate:N2}").FontSize(9);
+                            table.Cell().Element(DataCell).AlignRight().Text($"{line.TaxRate:0.##}%").FontSize(9);
+                            table.Cell().Element(DataCell).AlignRight().Text($"{line.GrandTotal:N2}").FontSize(9).SemiBold();
+                        }
+                    });
+
+                    column.Item().AlignRight().Width(240).Column(totals =>
+                    {
+                        void TotalRow(string label, string value, bool bold = false, bool highlight = false)
+                        {
+                            totals.Item()
+                                .Background(highlight ? primary : Colors.White)
+                                .BorderBottom(1).BorderColor(Colors.Grey.Lighten3)
+                                .Padding(6).Row(r =>
+                                {
+                                    var lbl = r.RelativeItem().Text(label).FontSize(9);
+                                    if (bold) lbl = lbl.SemiBold();
+                                    lbl.FontColor(highlight ? Colors.White : Colors.Grey.Darken2);
+
+                                    var val = r.AutoItem().Text(value).FontSize(9);
+                                    if (bold) val = val.SemiBold();
+                                    val.FontColor(highlight ? Colors.White : Colors.Black);
+                                });
+                        }
+
+                        TotalRow("Subtotal", $"{model.Currency} {model.Subtotal:N2}");
+                        TotalRow("Tax", $"{model.Currency} {model.TaxAmount:N2}");
+                        TotalRow("Total", $"{model.Currency} {model.TotalAmount:N2}", bold: true, highlight: true);
+                    });
+
+                    if (!string.IsNullOrWhiteSpace(model.Notes))
+                    {
+                        column.Item().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(10).Column(col =>
+                        {
+                            col.Spacing(4);
+                            col.Item().Text("Notes").FontSize(10).SemiBold();
+                            col.Item().Text(model.Notes).FontSize(9).FontColor(Colors.Grey.Darken1);
+                        });
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(model.BankDetails) || !string.IsNullOrWhiteSpace(model.PaymentInstructions))
+                    {
+                        column.Item().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(10).Column(col =>
+                        {
+                            col.Spacing(4);
+                            col.Item().Text("Payment Details").FontSize(10).SemiBold().FontColor(primary);
+                            if (!string.IsNullOrWhiteSpace(model.BankDetails))
+                                col.Item().Text(model.BankDetails).FontSize(9).FontColor(Colors.Grey.Darken2);
+                            if (!string.IsNullOrWhiteSpace(model.PaymentInstructions))
+                                col.Item().Text(model.PaymentInstructions).FontSize(9).FontColor(Colors.Grey.Darken1);
+                        });
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(model.TermsText))
+                    {
+                        column.Item().Column(col =>
+                        {
+                            col.Spacing(3);
+                            col.Item().Text("Terms & Conditions").FontSize(9).SemiBold().FontColor(Colors.Grey.Darken2);
+                            col.Item().Text(model.TermsText).FontSize(8).FontColor(Colors.Grey.Darken1);
+                        });
+                    }
+                });
+
+                page.Footer().BorderTop(1).BorderColor(Colors.Grey.Lighten2).PaddingTop(6).Column(footer =>
+                {
+                    footer.Item().Row(row =>
+                    {
+                        row.RelativeItem().Text(model.CompanyName).FontSize(8).FontColor(Colors.Grey.Darken2);
+                        row.AutoItem().AlignRight().Text(text =>
+                        {
+                            text.Span("Page ").FontSize(8).FontColor(Colors.Grey.Darken1);
+                            text.CurrentPageNumber().FontSize(8).FontColor(Colors.Grey.Darken1);
+                            text.Span(" of ").FontSize(8).FontColor(Colors.Grey.Darken1);
+                            text.TotalPages().FontSize(8).FontColor(Colors.Grey.Darken1);
+                        });
+                    });
+                    if (!string.IsNullOrWhiteSpace(model.FooterText))
+                    {
+                        footer.Item().PaddingTop(2).Text(model.FooterText).FontSize(8).FontColor(Colors.Grey.Darken1);
+                    }
+                });
+            }))
+            .GeneratePdf();
+    }
+
     // ── Receipt PDF ──────────────────────────────────────────────────────────
 
     public byte[] RenderReceiptPdf(ReceiptPdfModel model)
@@ -586,13 +806,22 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
         QuestPDF.Settings.License = LicenseType.Community;
 
         var primary = model.PrimaryColor;
+        var receiptFont = model.FontFamily is "Helvetica" or "Arial" or "Times New Roman"
+            ? model.FontFamily : "Helvetica";
 
         return Document.Create(container =>
             container.Page(page =>
             {
                 page.Size(PageSizes.A5);
                 page.Margin(32);
-                page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Helvetica"));
+                page.DefaultTextStyle(x => x.FontSize(10).FontFamily(receiptFont));
+
+                if (!string.IsNullOrWhiteSpace(model.WatermarkText))
+                {
+                    page.Background().AlignCenter().AlignMiddle()
+                        .Text(model.WatermarkText.ToUpperInvariant())
+                        .FontSize(44).SemiBold().FontColor(Colors.Grey.Lighten3);
+                }
 
                 // ── Header ────────────────────────────────────────────────
                 page.Header().Column(header =>
@@ -660,7 +889,9 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
                 // ── Footer ────────────────────────────────────────────────
                 page.Footer().BorderTop(1).BorderColor(Colors.Grey.Lighten2).PaddingTop(6)
                     .AlignCenter()
-                    .Text($"{model.CompanyName}  ·  Powered by Ecosys")
+                    .Text(string.IsNullOrWhiteSpace(model.FooterText)
+                        ? $"{model.CompanyName}  ·  Powered by Ecosys"
+                        : $"{model.CompanyName}  ·  {model.FooterText}")
                     .FontSize(8).FontColor(Colors.Grey.Darken1);
             }))
             .GeneratePdf();
@@ -675,12 +906,21 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
         var primary   = model.PrimaryColor;
         Color redRow  = "#FEF2F2";  // light red for overdue rows
         var altRow    = Colors.Grey.Lighten4;
+        var statementFont = model.FontFamily is "Helvetica" or "Arial" or "Times New Roman"
+            ? model.FontFamily : "Helvetica";
 
         return Document.Create(container =>
             container.Page(page =>
             {
                 page.Margin(32);
-                page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Helvetica"));
+                page.DefaultTextStyle(x => x.FontSize(10).FontFamily(statementFont));
+
+                if (!string.IsNullOrWhiteSpace(model.WatermarkText))
+                {
+                    page.Background().AlignCenter().AlignMiddle()
+                        .Text(model.WatermarkText.ToUpperInvariant())
+                        .FontSize(64).SemiBold().FontColor(Colors.Grey.Lighten3);
+                }
 
                 // ── Header ────────────────────────────────────────────────
                 page.Header().Column(header =>
@@ -873,7 +1113,9 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
                 // ── Footer ────────────────────────────────────────────────
                 page.Footer().BorderTop(1).BorderColor(Colors.Grey.Lighten2).PaddingTop(6).Column(footer =>
                 {
-                    footer.Item().Text("This is a statement of your account. Please contact us if you have any queries.")
+                    footer.Item().Text(string.IsNullOrWhiteSpace(model.FooterText)
+                            ? "This is a statement of your account. Please contact us if you have any queries."
+                            : model.FooterText)
                         .FontSize(8).Italic().FontColor(Colors.Grey.Darken1).AlignCenter();
                     footer.Item().PaddingTop(4).Row(r =>
                     {

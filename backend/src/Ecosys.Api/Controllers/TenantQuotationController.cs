@@ -267,24 +267,42 @@ public sealed class TenantQuotationController(
         userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceView);
         var quote = await LoadQuoteAsync(id, cancellationToken);
 
-        var sections = new List<string>
-        {
-            $"Quotation: {quote.QuoteNumber}",
-            $"Client: {quote.Client?.ClientName ?? "Unknown"}",
-            $"Subject: {quote.Subject ?? "N/A"}",
-            $"Date: {quote.QuoteDate:yyyy-MM-dd}   Valid Until: {quote.ValidUntil:yyyy-MM-dd}",
-            $"Status: {quote.Status}",
-            "",
-            "Lines:",
-        };
-        sections.AddRange(quote.Lines.Select(l =>
-            $"  {l.Description} | {l.Quantity} {l.Unit} × {quote.Currency} {l.UnitRate:N2} = {quote.Currency} {l.GrandTotal:N2}"));
-        sections.Add("");
-        sections.Add($"Subtotal: {quote.Currency} {quote.Subtotal:N2}");
-        sections.Add($"Tax: {quote.Currency} {quote.TaxAmount:N2}");
-        sections.Add($"Total: {quote.Currency} {quote.TotalAmount:N2}");
+        var tenant = await dbContext.Tenants
+            .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
 
-        var bytes = pdfRenderer.RenderWorkOrderReportPdf($"QUOTATION {quote.QuoteNumber}", sections);
+        var templateConfig = PdfTemplateHelper.Parse(tenant?.ReportTemplateConfigJson);
+        var termsText = templateConfig?.ShowTerms == true
+            ? templateConfig.QuoteTerms ?? templateConfig.DefaultTermsText
+            : null;
+
+        var model = new QuotationPdfModel(
+            QuoteNumber:    quote.QuoteNumber,
+            Status:         quote.Status,
+            QuoteDate:      quote.QuoteDate,
+            ValidUntil:     quote.ValidUntil,
+            Subject:        quote.Subject,
+            ClientName:     quote.Client?.ClientName ?? "Unknown",
+            Notes:          quote.Notes,
+            Lines:          quote.Lines.Select(l => new InvoiceLinePdfModel(
+                                l.Description, l.ItemType, l.Quantity, l.Unit,
+                                l.UnitRate, l.LineTotal, l.TaxRate, l.GrandTotal)).ToList(),
+            Subtotal:       quote.Subtotal,
+            TaxAmount:      quote.TaxAmount,
+            TotalAmount:    quote.TotalAmount,
+            Currency:       quote.Currency,
+            CompanyName:    tenant?.CompanyName ?? "Ecosys",
+            CompanyAddress: tenant?.Address,
+            CompanyPhone:   tenant?.Phone,
+            PrimaryColor:   templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
+            FontFamily:     templateConfig?.FontFamily ?? "Helvetica",
+            FooterText:     PdfTemplateHelper.ResolveFooterText(templateConfig),
+            WatermarkText:  templateConfig?.WatermarkText,
+            BankDetails:    PdfTemplateHelper.ComposeBankDetails(templateConfig),
+            PaymentInstructions: templateConfig?.ShowBankDetails == true ? templateConfig.PaymentInstructions : null,
+            TermsText:      termsText
+        );
+
+        var bytes = pdfRenderer.RenderQuotationPdf(model);
         return File(bytes, "application/pdf", $"Quotation-{quote.QuoteNumber}.pdf");
     }
 

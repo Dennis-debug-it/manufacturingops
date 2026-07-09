@@ -433,36 +433,8 @@ public sealed class TenantInvoiceController(
         var tenant = await dbContext.Tenants
             .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
 
-        ReportTemplateConfig? templateConfig = null;
-        if (!string.IsNullOrWhiteSpace(tenant?.ReportTemplateConfigJson))
-        {
-            try
-            {
-                templateConfig = System.Text.Json.JsonSerializer.Deserialize<ReportTemplateConfig>(
-                    tenant.ReportTemplateConfigJson,
-                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                templateConfig = null; // fall back to defaults on malformed stored config
-            }
-        }
-
-        string? bankDetails = null;
-        if (templateConfig?.ShowBankDetails == true)
-        {
-            var bankParts = new[]
-            {
-                string.IsNullOrWhiteSpace(templateConfig.BankName) ? null : $"Bank: {templateConfig.BankName}",
-                string.IsNullOrWhiteSpace(templateConfig.AccountName) ? null : $"Account Name: {templateConfig.AccountName}",
-                string.IsNullOrWhiteSpace(templateConfig.AccountNumber) ? null : $"Account No: {templateConfig.AccountNumber}",
-                string.IsNullOrWhiteSpace(templateConfig.Branch) ? null : $"Branch: {templateConfig.Branch}",
-                string.IsNullOrWhiteSpace(templateConfig.Swift) ? null : $"SWIFT: {templateConfig.Swift}",
-                string.IsNullOrWhiteSpace(templateConfig.Paybill) ? null : $"Paybill: {templateConfig.Paybill}",
-            }.Where(x => x is not null);
-            bankDetails = string.Join("\n", bankParts);
-            if (string.IsNullOrWhiteSpace(bankDetails)) bankDetails = null;
-        }
+        var templateConfig = PdfTemplateHelper.Parse(tenant?.ReportTemplateConfigJson);
+        var bankDetails = PdfTemplateHelper.ComposeBankDetails(templateConfig);
 
         var termsText = templateConfig?.ShowTerms == true
             ? (!string.IsNullOrWhiteSpace(invoice.TermsAndConditions)
@@ -494,7 +466,7 @@ public sealed class TenantInvoiceController(
             LogoUrl:        tenant?.LogoUrl,
             PrimaryColor:   templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
             FontFamily:     templateConfig?.FontFamily ?? "Helvetica",
-            FooterText:     templateConfig?.FooterText ?? templateConfig?.DefaultFooterNote,
+            FooterText:     PdfTemplateHelper.ResolveFooterText(templateConfig),
             WatermarkText:  templateConfig?.WatermarkText,
             BankDetails:    bankDetails,
             PaymentInstructions: templateConfig?.ShowBankDetails == true ? templateConfig.PaymentInstructions : null,
@@ -622,6 +594,7 @@ public sealed class TenantInvoiceController(
             .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
 
         var client = payment.Client ?? payment.Invoice?.Client;
+        var receiptTemplateConfig = PdfTemplateHelper.Parse(tenant?.ReportTemplateConfigJson);
 
         var model = new ReceiptPdfModel(
             ReceiptNumber:  payment.PaymentNumber,
@@ -634,7 +607,10 @@ public sealed class TenantInvoiceController(
             Reference:      payment.Reference,
             CompanyName:    tenant?.CompanyName ?? "Ecosys",
             LogoUrl:        tenant?.LogoUrl,
-            PrimaryColor:   tenant?.PrimaryColor ?? "#0F4C81"
+            PrimaryColor:   receiptTemplateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
+            FontFamily:     receiptTemplateConfig?.FontFamily ?? "Helvetica",
+            FooterText:     PdfTemplateHelper.ResolveFooterText(receiptTemplateConfig),
+            WatermarkText:  receiptTemplateConfig?.WatermarkText
         );
 
         var bytes = pdfRenderer.RenderReceiptPdf(model);

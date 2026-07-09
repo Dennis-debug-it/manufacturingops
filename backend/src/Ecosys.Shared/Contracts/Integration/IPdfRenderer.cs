@@ -5,9 +5,35 @@ public interface IPdfRenderer
     byte[] RenderWorkOrderReportPdf(string title, IReadOnlyCollection<string> sections);
     byte[] RenderWorkOrderReportPdf(WorkOrderReportPdfModel report);
     byte[] RenderInvoicePdf(InvoicePdfModel model);
+    byte[] RenderQuotationPdf(QuotationPdfModel model);
     byte[] RenderReceiptPdf(ReceiptPdfModel model);
     byte[] RenderClientStatementPdf(ClientStatementPdfModel model);
 }
+
+public sealed record QuotationPdfModel(
+    string QuoteNumber,
+    string Status,
+    DateTime QuoteDate,
+    DateTime ValidUntil,
+    string? Subject,
+    string ClientName,
+    string? Notes,
+    IReadOnlyList<InvoiceLinePdfModel> Lines,
+    decimal Subtotal,
+    decimal TaxAmount,
+    decimal TotalAmount,
+    string Currency,
+    string CompanyName,
+    string? CompanyAddress,
+    string? CompanyPhone,
+    string PrimaryColor,
+    string FontFamily = "Helvetica",
+    string? FooterText = null,
+    string? WatermarkText = null,
+    string? BankDetails = null,
+    string? PaymentInstructions = null,
+    string? TermsText = null
+);
 
 public sealed record InvoicePdfModel(
     string InvoiceNumber,
@@ -60,7 +86,10 @@ public sealed record ReceiptPdfModel(
     string? Reference,
     string CompanyName,
     string? LogoUrl,
-    string PrimaryColor
+    string PrimaryColor,
+    string FontFamily = "Helvetica",
+    string? FooterText = null,
+    string? WatermarkText = null
 );
 
 public sealed record ClientStatementPdfModel(
@@ -80,7 +109,10 @@ public sealed record ClientStatementPdfModel(
     string? CompanyAddress,
     string? CompanyPhone,
     string? LogoUrl,
-    string PrimaryColor
+    string PrimaryColor,
+    string FontFamily = "Helvetica",
+    string? FooterText = null,
+    string? WatermarkText = null
 );
 
 public sealed record StatementInvoiceRow(
