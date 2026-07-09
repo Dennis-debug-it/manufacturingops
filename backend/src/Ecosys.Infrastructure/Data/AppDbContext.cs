@@ -19,6 +19,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<ClientPortalUser> ClientPortalUsers => Set<ClientPortalUser>();
+    public DbSet<ClientPortalLoginToken> ClientPortalLoginTokens => Set<ClientPortalLoginToken>();
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<OperationalSystem> Systems => Set<OperationalSystem>();
     public DbSet<Asset> Assets => Set<Asset>();
@@ -154,6 +156,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.City).HasMaxLength(100);
             entity.Property(x => x.Address).HasMaxLength(500);
             entity.Property(x => x.TaxPin).HasMaxLength(100);
+            entity.Property(x => x.LegalName).HasMaxLength(200);
+            entity.Property(x => x.TradingName).HasMaxLength(200);
+            entity.Property(x => x.PostalAddress).HasMaxLength(500);
+            entity.Property(x => x.PhysicalAddress).HasMaxLength(500);
+            entity.Property(x => x.Website).HasMaxLength(300);
+            entity.Property(x => x.VatNumber).HasMaxLength(100);
+            entity.Property(x => x.RegistrationNumber).HasMaxLength(100);
             entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
             entity.Property(x => x.PlanName).HasMaxLength(100);
             entity.Property(x => x.LicenseStatus).HasMaxLength(50);
@@ -276,6 +285,40 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ClientPortalUser>(entity =>
+        {
+            entity.ToTable("client_portal_users");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Phone).HasMaxLength(50);
+            entity.HasIndex(x => x.Email).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.ClientId });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Client)
+                .WithMany(x => x.PortalUsers)
+                .HasForeignKey(x => x.ClientId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ClientPortalLoginToken>(entity =>
+        {
+            entity.ToTable("client_portal_login_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.RequestedIp).HasMaxLength(100);
+            entity.Property(x => x.UserAgent).HasMaxLength(1000);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.ClientPortalUserId, x.ExpiresAt });
+            entity.HasOne(x => x.ClientPortalUser)
+                .WithMany(x => x.LoginTokens)
+                .HasForeignKey(x => x.ClientPortalUserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -468,7 +511,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             {
                 tableBuilder.HasCheckConstraint("CK_work_orders_assignment_type", "\"AssignmentType\" IN ('Unassigned', 'IndividualTechnician', 'MultipleTechnicians', 'AssignmentGroup')");
                 tableBuilder.HasCheckConstraint("CK_work_orders_priority", "\"Priority\" IN ('Low', 'Medium', 'High', 'Critical')");
-                tableBuilder.HasCheckConstraint("CK_work_orders_status", "\"Status\" IN ('Open', 'Assigned', 'In Progress', 'On Hold', 'Completed', 'Closed', 'Cancelled')");
+                tableBuilder.HasCheckConstraint("CK_work_orders_status", "\"Status\" IN ('New', 'Open', 'Assigned', 'Scheduled', 'In Progress', 'On Hold', 'Completed', 'Client Accepted', 'Closed', 'Cancelled', 'Rejected', 'Reopened')");
                 tableBuilder.HasCheckConstraint("CK_work_orders_work_type", "\"WorkType\" IN ('NewInstallation', 'PreventiveMaintenance', 'CorrectiveMaintenance', 'InspectionAssessment')");
                 tableBuilder.HasCheckConstraint("CK_work_orders_hold_reason", "\"HoldReason\" IS NULL OR \"HoldReason\" IN ('Awaiting Materials', 'Awaiting Client', 'Awaiting Vendor', 'Awaiting Approval', 'Awaiting Site Access', 'Awaiting Spares', 'Other')");
             });
@@ -1999,6 +2042,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.IncludedServices).HasMaxLength(4000);
             entity.Property(x => x.ExcludedServices).HasMaxLength(4000);
             entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.Property(x => x.RenewalBehavior).HasMaxLength(40).IsRequired();
             entity.Property(x => x.TerminationReason).HasMaxLength(2000);
             entity.Property(x => x.SuspensionReason).HasMaxLength(2000);
             entity.Property(x => x.CancellationReason).HasMaxLength(2000);
@@ -2008,6 +2052,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.WorkingHoursPolicy).HasMaxLength(200);
             entity.Property(x => x.EscalationEmail).HasMaxLength(256);
             entity.Property(x => x.PriorityLevel).HasMaxLength(100);
+            entity.Property(x => x.GracePeriodPolicy).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.SlaMatrixJson).HasColumnType("text");
             entity.HasIndex(x => new { x.TenantId, x.ContractNumber }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.ClientId, x.Status, x.EndDate });
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
@@ -2402,6 +2448,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.ToTable("tenant_invoices");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.InvoiceNumber).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.DocumentType).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Notes).HasMaxLength(2000);
             entity.Property(x => x.TermsAndConditions).HasMaxLength(4000);
@@ -2416,6 +2463,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Client).WithMany(x => x.Invoices).HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.CreditTerm).WithMany(x => x.Invoices).HasForeignKey(x => x.CreditTermId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(x => new { x.TenantId, x.InvoiceNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.DocumentType });
             entity.HasIndex(x => new { x.TenantId, x.Status });
             entity.HasIndex(x => new { x.TenantId, x.ClientId });
         });

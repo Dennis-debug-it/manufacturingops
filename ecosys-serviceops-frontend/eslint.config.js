@@ -11,6 +11,8 @@ export default defineConfig([
     '.next',
     'playwright-report',
     'test-results',
+    'frontend-backup',
+    'tmp',
   ]),
   {
     files: ['**/*.{ts,tsx}'],
@@ -25,6 +27,8 @@ export default defineConfig([
     },
     rules: {
       'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-hooks/incompatible-library': 'off',
       'react-refresh/only-export-components': 'off',
       '@typescript-eslint/no-unused-vars': ['error', {
         varsIgnorePattern: '^_',

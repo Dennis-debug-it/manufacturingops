@@ -36,4 +36,5 @@ public sealed class Client : AuditableEntity, ITenantEntity
     public ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
     public ICollection<ClientPreferentialRate> PreferentialRates { get; set; } = new List<ClientPreferentialRate>();
     public ICollection<TenantInvoice> Invoices { get; set; } = new List<TenantInvoice>();
+    public ICollection<ClientPortalUser> PortalUsers { get; set; } = new List<ClientPortalUser>();
 }

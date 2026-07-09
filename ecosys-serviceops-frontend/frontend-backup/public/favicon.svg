@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Ecosys favicon">
+  <title>Ecosys favicon</title>
+  <rect width="64" height="64" rx="16" fill="#F7F8F6"/>
+  <g transform="translate(6 7)">
+    <polygon points="20 2 39 2 44 10 24 10" fill="#0C2F33"/>
+    <polygon points="8 17 17 2 22 10 13 25" fill="#127A78"/>
+    <polygon points="14 18 32 18 37 26 19 26" fill="#127A78"/>
+    <polygon points="8 31 13 24 22 39 17 47" fill="#127A78"/>
+    <polygon points="20 39 44 39 39 47 24 47 20 47 15 39" fill="#0C2F33"/>
+    <polygon points="34 15 43 15 49 23 43 31 34 31 29 23" fill="#B7E26D"/>
+    <polygon points="38.5 15 43 15 49 23 38.5 23" fill="#11A67A" opacity=".22"/>
+    <polygon points="29 23 38.5 23 34 31" fill="#11A67A" opacity=".18"/>
+  </g>
+</svg>

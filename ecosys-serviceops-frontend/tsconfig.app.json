@@ -9,6 +9,12 @@
     "paths": {
       "@/*": ["./src/*"]
     },
+    "strict": true,
+    "noImplicitAny": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "useUnknownInCatchVariables": true,
+    "resolveJsonModule": true,
 
     /* Bundler mode */
     "moduleResolution": "bundler",
@@ -25,18 +31,5 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": [
-    "src/context/**/*",
-    "src/mock/**/*",
-    "src/modules/sla/**/*",
-    "src/pages/**/*",
-    "src/services/auditService.ts",
-    "src/services/inventoryService.ts",
-    "src/services/numberingService.ts",
-    "src/services/reportService.ts",
-    "src/services/slaService.ts",
-    "src/services/storage.ts",
-    "src/services/tenantService.ts",
-    "src/store/appStore.ts"
-  ]
+  "exclude": []
 }

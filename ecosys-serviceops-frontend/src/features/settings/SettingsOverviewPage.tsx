@@ -1,0 +1,93 @@
+import { Link } from 'react-router-dom'
+import {
+  Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
+  Radio, MessageCircle, CreditCard, ShieldCheck, Users, Bell, Plug, LineChart,
+  UserCircle, ScrollText,
+} from 'lucide-react'
+import { PageHeader } from '../../shared/components/PageHeader'
+
+interface SettingsGroup {
+  title: string
+  items: Array<{ to: string; label: string; description: string; icon: typeof Building2 }>
+}
+
+const groups: SettingsGroup[] = [
+  {
+    title: 'Company & Branding',
+    items: [
+      { to: '/settings/company', label: 'Company Profile', description: 'Legal details, addresses, and contact info.', icon: Building2 },
+      { to: '/settings/branding', label: 'Branding', description: 'Logo and brand colours.', icon: Palette },
+      { to: '/settings/templates', label: 'Document Templates', description: 'Layout, sections, and boilerplate text.', icon: FileText },
+      { to: '/settings/email-templates', label: 'Email Templates', description: 'Transactional email content.', icon: Mail },
+    ],
+  },
+  {
+    title: 'Operations',
+    items: [
+      { to: '/settings/numbering', label: 'Numbering Rules', description: 'Document prefixes and sequences.', icon: Hash },
+      { to: '/settings/pm-templates', label: 'PM Templates', description: 'Preventive maintenance checklists.', icon: ClipboardList },
+      { to: '/settings/inventory', label: 'Inventory Settings', description: 'Stock alerts and deduction rules.', icon: Boxes },
+      { to: '/settings/time-attendance', label: 'Time & Attendance Settings', description: 'Work hours and leave policy.', icon: Clock },
+    ],
+  },
+  {
+    title: 'Intake & Integrations',
+    items: [
+      { to: '/settings/email-intake', label: 'Email Intake', description: 'Auto-create work orders from email.', icon: Inbox },
+      { to: '/settings/monitoring', label: 'Monitoring Intake', description: 'Alert webhook routing.', icon: Radio },
+      { to: '/settings/whatsapp', label: 'WhatsApp', description: 'WhatsApp Business integration.', icon: MessageCircle },
+      { to: '/settings/integrations', label: 'Integrations', description: 'API access and outbound webhooks.', icon: Plug },
+    ],
+  },
+  {
+    title: 'Finance',
+    items: [
+      { to: '/settings/payments', label: 'Payments', description: 'M-Pesa, Stripe, and bank transfer settings.', icon: CreditCard },
+      { to: '/settings/credit-control', label: 'Credit Control', description: 'Payment terms and credit limits.', icon: ShieldCheck },
+    ],
+  },
+  {
+    title: 'Access & Notifications',
+    items: [
+      { to: '/settings/portal', label: 'Portal', description: 'Client portal visibility controls.', icon: Users },
+      { to: '/settings/notifications', label: 'Notifications', description: 'Event notification matrix.', icon: Bell },
+      { to: '/settings/security', label: 'Security', description: 'Session and authentication policy.', icon: ShieldCheck },
+      { to: '/settings/executive-dashboard', label: 'Executive Dashboard Settings', description: 'Metric targets and thresholds.', icon: LineChart },
+    ],
+  },
+  {
+    title: 'Account',
+    items: [
+      { to: '/settings/account', label: 'Account', description: 'Subscription and plan details.', icon: UserCircle },
+      { to: '/settings/audit-logs', label: 'Audit Logs', description: 'Tenant administrative history.', icon: ScrollText },
+    ],
+  },
+]
+
+export function SettingsOverviewPage() {
+  return (
+    <div className="space-y-8">
+      <PageHeader title="Settings" subtitle="Company, branding, templates, integrations, and policies for this workspace." />
+      {groups.map((group) => (
+        <section key={group.title} className="space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{group.title}</h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {group.items.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow"
+              >
+                <item.icon className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
+                <div>
+                  <p className="text-sm font-medium text-slate-900">{item.label}</p>
+                  <p className="mt-1 text-xs text-slate-500">{item.description}</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}

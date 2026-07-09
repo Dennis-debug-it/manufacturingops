@@ -68,10 +68,18 @@ public sealed class SettingsController(
         }
 
         tenant.CompanyName = request.CompanyName.Trim();
+        tenant.LegalName = request.LegalName is null ? tenant.LegalName : NormalizeOptional(request.LegalName);
+        tenant.TradingName = request.TradingName is null ? tenant.TradingName : NormalizeOptional(request.TradingName);
+        tenant.PostalAddress = request.PostalAddress is null ? tenant.PostalAddress : NormalizeOptional(request.PostalAddress);
+        tenant.PhysicalAddress = request.PhysicalAddress is null ? tenant.PhysicalAddress : NormalizeOptional(request.PhysicalAddress);
+        tenant.Website = request.Website is null ? tenant.Website : NormalizeOptional(request.Website);
+        tenant.VatNumber = request.VatNumber is null ? tenant.VatNumber : NormalizeOptional(request.VatNumber);
+        tenant.RegistrationNumber = request.RegistrationNumber is null ? tenant.RegistrationNumber : NormalizeOptional(request.RegistrationNumber);
         tenant.Email = request.Email.Trim().ToLowerInvariant();
         tenant.Phone = NormalizeOptional(request.Phone);
         tenant.Country = request.Country.Trim();
         tenant.Industry = NormalizeOptional(request.Industry);
+        tenant.Address = request.Address is null ? tenant.Address : NormalizeOptional(request.Address);
         tenant.PrimaryColor = string.IsNullOrWhiteSpace(request.PrimaryColor) ? tenant.PrimaryColor : request.PrimaryColor.Trim();
         tenant.SecondaryColor = string.IsNullOrWhiteSpace(request.SecondaryColor) ? tenant.SecondaryColor : request.SecondaryColor.Trim();
         tenant.ShowPoweredByEcosys = request.ShowPoweredByEcosys;
@@ -907,10 +915,18 @@ public sealed class SettingsController(
     private static CompanySettingsResponse MapCompany(Tenant tenant) =>
         new(
             tenant.CompanyName,
+            tenant.LegalName,
+            tenant.TradingName,
+            tenant.PostalAddress,
+            tenant.PhysicalAddress,
+            tenant.Website,
+            tenant.VatNumber,
+            tenant.RegistrationNumber,
             tenant.Email,
             tenant.Phone,
             tenant.Country,
             tenant.Industry,
+            tenant.Address,
             tenant.PrimaryColor,
             tenant.SecondaryColor,
             tenant.ShowPoweredByEcosys);

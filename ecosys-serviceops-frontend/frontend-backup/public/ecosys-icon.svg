@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Ecosys icon" preserveAspectRatio="xMidYMid meet">
+  <title>Ecosys icon</title>
+  <g fill="none" shape-rendering="geometricPrecision">
+    <path d="M44 12H92L102 28H54Z" fill="#0C2F33"/>
+    <path d="M18 48L34 22H48L32 48Z" fill="#127A78"/>
+    <path d="M30 54H74L84 70H40Z" fill="#127A78"/>
+    <path d="M18 76H32L48 102H34Z" fill="#127A78"/>
+    <path d="M54 96H102L92 112H44Z" fill="#0C2F33"/>
+    <path d="M80 42H102L114 62L102 82H80L68 62Z" fill="#B7E26D"/>
+    <path d="M91 42H102L114 62H91Z" fill="#11A67A" opacity=".22"/>
+    <path d="M68 62H91L80 82Z" fill="#11A67A" opacity=".18"/>
+    <path d="M91 62H114L102 82H91Z" fill="#11A67A" opacity=".1"/>
+  </g>
+</svg>

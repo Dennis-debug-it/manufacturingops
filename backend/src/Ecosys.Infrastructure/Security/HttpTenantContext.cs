@@ -15,6 +15,8 @@ internal sealed class HttpTenantContext(IHttpContextAccessor httpContextAccessor
     public string? Email => User?.FindFirstValue(ClaimTypes.Email);
     public string? Role => User?.FindFirstValue(ClaimTypes.Role);
     public string? JobTitle => User?.FindFirstValue(TenantClaimTypes.JobTitle);
+    public Guid? ImpersonatedByUserId => TryGetGuid(TenantClaimTypes.ImpersonatedByUserId);
+    public string? ImpersonatedByName => User?.FindFirstValue(TenantClaimTypes.ImpersonatedByName);
     public bool IsAuthenticated => User?.Identity?.IsAuthenticated == true;
     public bool IsSuperAdmin =>
         HasRole(AppRoles.SuperAdmin)

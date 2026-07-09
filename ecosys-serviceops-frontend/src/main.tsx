@@ -1,15 +1,9 @@
 import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App'
-import { brand } from './config/brand'
+import './styles/globals.css'
+import { App } from './app/App'
+import { brand } from './shared/config/brand'
 
 document.title = brand.appName
 
-const faviconLink = document.querySelector("link[rel='icon']") as HTMLLinkElement | null
-if (faviconLink) {
-  faviconLink.href = brand.favicon
-}
-
-createRoot(document.getElementById('root')!).render(
-  <App />,
-)
+const root = createRoot(document.getElementById('root') as HTMLElement)
+root.render(<App />)

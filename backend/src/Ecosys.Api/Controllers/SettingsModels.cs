@@ -4,20 +4,36 @@ namespace Ecosys.Api.Controllers;
 
 public sealed record CompanySettingsRequest(
     string CompanyName,
+    string? LegalName,
+    string? TradingName,
+    string? PostalAddress,
+    string? PhysicalAddress,
+    string? Website,
+    string? VatNumber,
+    string? RegistrationNumber,
     string Email,
     string? Phone,
     string Country,
     string? Industry,
+    string? Address,
     string? PrimaryColor,
     string? SecondaryColor,
     bool ShowPoweredByEcosys);
 
 public sealed record CompanySettingsResponse(
     string CompanyName,
+    string? LegalName,
+    string? TradingName,
+    string? PostalAddress,
+    string? PhysicalAddress,
+    string? Website,
+    string? VatNumber,
+    string? RegistrationNumber,
     string Email,
     string? Phone,
     string Country,
     string? Industry,
+    string? Address,
     string PrimaryColor,
     string SecondaryColor,
     bool ShowPoweredByEcosys);

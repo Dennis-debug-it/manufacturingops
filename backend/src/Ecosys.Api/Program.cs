@@ -143,6 +143,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("PlatformReadOnlyAccess", policy => policy.RequireRole(AppRoles.SuperAdmin, AppRoles.PlatformOwner, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin, AppRoles.PlatformAdminRole, AppRoles.Auditor, AppRoles.ReadOnlyAuditor, AppRoles.Support, AppRoles.SupportAdmin, AppRoles.Finance, AppRoles.FinanceAdmin));
     options.AddPolicy("PlatformFinanceAccess", policy => policy.RequireRole(AppRoles.SuperAdmin, AppRoles.PlatformOwner, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin, AppRoles.PlatformAdminRole, AppRoles.Finance, AppRoles.FinanceAdmin));
     options.AddPolicy("PlatformSettingsAccess", policy => policy.RequireRole(AppRoles.SuperAdmin, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin));
+    options.AddPolicy("PortalAccess", policy => policy.RequireRole(AppRoles.PortalClient));
 });
 builder.Services.AddControllers()
     .AddJsonOptions(options =>

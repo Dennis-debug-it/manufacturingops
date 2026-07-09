@@ -1,0 +1,100 @@
+import type { ReactNode } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { cn } from '../../shared/utils/cn'
+import { brand } from '../../shared/config/brand'
+import { LayoutDashboard, ClipboardList, FileText, UserCircle2, LogOut } from 'lucide-react'
+import { usePortalAuth } from '../auth/PortalAuthContext'
+
+const portalNav = [
+  { label: 'Dashboard', to: '/portal/dashboard', icon: LayoutDashboard },
+  { label: 'Jobs', to: '/portal/requests', icon: ClipboardList },
+  { label: 'Invoices', to: '/portal/invoices', icon: FileText },
+  { label: 'Profile', to: '/portal/profile', icon: UserCircle2 },
+]
+
+export interface PortalShellProps {
+  children: ReactNode
+}
+
+export function PortalShell({ children }: PortalShellProps) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const { client, tenant, user, logout } = usePortalAuth()
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/portal/login', { replace: true })
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{tenant?.companyName ?? brand.appName}</div>
+            <div className="text-sm font-medium text-slate-900">{client?.clientName ?? 'Client Portal'}</div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <div className="text-xs font-medium text-slate-900">{user?.fullName}</div>
+              <div className="text-xs text-slate-500">{user?.email}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-700 hover:bg-slate-100"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sign out
+            </button>
+          </div>
+        </div>
+      </header>
+      <div className="mx-auto flex max-w-7xl gap-6 px-4 py-4 sm:px-6">
+        <aside className="hidden w-64 shrink-0 rounded-2xl border border-slate-200 bg-white p-3 lg:block">
+          <nav className="space-y-1">
+            {portalNav.map((item) => {
+              const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+              const Icon = item.icon
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={cn(
+                    'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
+                    active ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100',
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              )
+            })}
+          </nav>
+        </aside>
+        <main className="min-w-0 flex-1 pb-24 lg:pb-6">{children}</main>
+      </div>
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-2 py-2 lg:hidden">
+        <div className="grid grid-cols-4 gap-1">
+          {portalNav.map((item) => {
+            const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+            const Icon = item.icon
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  'flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium',
+                  active ? 'bg-slate-900 text-white' : 'text-slate-500',
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            )
+          })}
+        </div>
+      </nav>
+    </div>
+  )
+}

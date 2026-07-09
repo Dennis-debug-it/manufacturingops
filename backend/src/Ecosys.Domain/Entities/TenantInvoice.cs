@@ -7,6 +7,7 @@ public sealed class TenantInvoice : AuditableEntity, ITenantEntity
     public Guid TenantId { get; set; }
     public Guid ClientId { get; set; }
     public string InvoiceNumber { get; set; } = string.Empty;
+    public string DocumentType { get; set; } = "Invoice"; // Invoice|ProformaInvoice
     public string Status { get; set; } = "Draft"; // Draft|Sent|PartiallyPaid|Paid|Overdue|Void
     public DateTime InvoiceDate { get; set; }
     public DateTime DueDate { get; set; }
@@ -19,7 +20,6 @@ public sealed class TenantInvoice : AuditableEntity, ITenantEntity
     public decimal Balance { get; set; }
     public string Currency { get; set; } = "KES";
 
-    // Credit terms
     public Guid? CreditTermId { get; set; }
     public decimal? DepositAmount { get; set; }
     public bool DepositPaid { get; set; } = false;

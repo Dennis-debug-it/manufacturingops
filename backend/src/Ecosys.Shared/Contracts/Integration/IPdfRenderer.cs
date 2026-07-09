@@ -29,7 +29,13 @@ public sealed record InvoicePdfModel(
     string? CompanyAddress,
     string? CompanyPhone,
     string? LogoUrl,
-    string PrimaryColor
+    string PrimaryColor,
+    string FontFamily = "Helvetica",
+    string? FooterText = null,
+    string? WatermarkText = null,
+    string? BankDetails = null,
+    string? PaymentInstructions = null,
+    string? TermsText = null
 );
 
 public sealed record InvoiceLinePdfModel(

@@ -31,6 +31,7 @@ public sealed class TenantInvoiceController(
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<TenantInvoiceListItem>>> ListInvoices(
         [FromQuery] string? status,
+        [FromQuery] string? documentType,
         [FromQuery] Guid? clientId,
         [FromQuery] DateTime? dateFrom,
         [FromQuery] DateTime? dateTo,
@@ -45,6 +46,11 @@ public sealed class TenantInvoiceController(
 
         if (!string.IsNullOrWhiteSpace(status))
             query = query.Where(x => x.Status == status.Trim());
+        if (!string.IsNullOrWhiteSpace(documentType))
+        {
+            var normalizedDocumentType = DocumentTypes.Normalize(documentType.Trim());
+            query = query.Where(x => x.DocumentType == normalizedDocumentType);
+        }
         if (clientId.HasValue)
             query = query.Where(x => x.ClientId == clientId.Value);
         if (dateFrom.HasValue)
@@ -77,7 +83,8 @@ public sealed class TenantInvoiceController(
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Invoice not found.");
 
-        return Ok(MapDetail(invoice));
+        var sourceQuotations = await LoadSourceQuotationsAsync(invoice.Id, cancellationToken);
+        return Ok(MapDetail(invoice, sourceQuotations: sourceQuotations));
     }
 
     // ── Create ───────────────────────────────────────────────────────────────
@@ -114,6 +121,7 @@ public sealed class TenantInvoiceController(
             ClientId = request.ClientId,
             CreditTermId = creditTerm?.Id,
             InvoiceNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.Invoice, cancellationToken),
+            DocumentType = DocumentTypes.Invoice,
             Status = "Draft",
             InvoiceDate = invoiceDate,
             DueDate = dueDate,
@@ -164,12 +172,117 @@ public sealed class TenantInvoiceController(
 
         await dbContext.Entry(invoice).Reference(x => x.Client).LoadAsync(cancellationToken);
 
-        // Credit limit soft warning (not a hard block — just signals to UI)
+        // Credit limit soft warning (not a hard block - just signals to UI)
         var effectiveLimit = client.CreditLimit ?? creditTerm?.CreditLimit;
         var creditLimitWarning = effectiveLimit.HasValue && client.CurrentBalance > effectiveLimit.Value;
 
         return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id },
             MapDetail(invoice, creditLimitWarning, client.CurrentBalance, effectiveLimit));
+    }
+
+    [HttpPost("build-proforma-from-quotations")]
+    public async Task<ActionResult<TenantInvoiceDetailResponse>> BuildProformaFromQuotations(
+        [FromBody] BuildProformaInvoiceRequest request,
+        CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceManageBillableWork);
+
+        var quotationIds = request.QuotationIds?
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList() ?? [];
+
+        if (quotationIds.Count == 0)
+            throw new BusinessRuleException("Select at least one quotation to build a proforma invoice.");
+
+        var quotations = await dbContext.TenantQuotations
+            .Include(x => x.Client)
+            .Include(x => x.Lines)
+            .Where(x => x.TenantId == TenantId && quotationIds.Contains(x.Id))
+            .OrderBy(x => x.QuoteDate)
+            .ToListAsync(cancellationToken);
+
+        if (quotations.Count != quotationIds.Count)
+            throw new NotFoundException("One or more quotations could not be found.");
+
+        if (quotations.Any(x => x.Status != "Accepted"))
+            throw new BusinessRuleException("Only accepted quotations can be built into a proforma invoice.");
+
+        if (quotations.Any(x => x.ConvertedToInvoiceId.HasValue))
+            throw new BusinessRuleException("One or more selected quotations have already been converted.");
+
+        var clientId = quotations[0].ClientId;
+        var currency = quotations[0].Currency;
+        if (quotations.Any(x => x.ClientId != clientId))
+            throw new BusinessRuleException("Selected quotations must belong to the same client.");
+
+        if (quotations.Any(x => !string.Equals(x.Currency, currency, StringComparison.OrdinalIgnoreCase)))
+            throw new BusinessRuleException("Selected quotations must use the same currency.");
+
+        var invoiceDate = DateTime.SpecifyKind(request.InvoiceDate, DateTimeKind.Utc);
+        var dueDate = DateTime.SpecifyKind(request.DueDate, DateTimeKind.Utc);
+        var sourceQuoteNumbers = quotations.Select(x => x.QuoteNumber).ToList();
+
+        var invoice = new TenantInvoice
+        {
+            TenantId = TenantId,
+            ClientId = clientId,
+            InvoiceNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.ProformaInvoice, cancellationToken),
+            DocumentType = DocumentTypes.ProformaInvoice,
+            Status = "Draft",
+            InvoiceDate = invoiceDate,
+            DueDate = dueDate,
+            Notes = string.IsNullOrWhiteSpace(request.Notes)
+                ? $"Proforma invoice built from quotations {string.Join(", ", sourceQuoteNumbers)}"
+                : request.Notes.Trim(),
+            TermsAndConditions = request.TermsAndConditions?.Trim(),
+            Currency = string.IsNullOrWhiteSpace(request.Currency) ? currency : request.Currency.Trim().ToUpperInvariant(),
+        };
+
+        foreach (var quotation in quotations)
+        {
+            foreach (var line in quotation.Lines)
+            {
+                var taxAmount = line.LineTotal * (line.TaxRate / 100m);
+                invoice.Lines.Add(new TenantInvoiceLine
+                {
+                    Description = sourceQuoteNumbers.Count > 1
+                        ? $"[{quotation.QuoteNumber}] {line.Description}"
+                        : line.Description,
+                    ItemType = line.ItemType,
+                    Quantity = line.Quantity,
+                    Unit = line.Unit,
+                    UnitRate = line.UnitRate,
+                    LineTotal = line.LineTotal,
+                    TaxRate = line.TaxRate,
+                    TaxAmount = taxAmount,
+                    GrandTotal = line.GrandTotal,
+                });
+            }
+        }
+
+        RecalcTotals(invoice);
+        dbContext.TenantInvoices.Add(invoice);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (var quotation in quotations)
+        {
+            quotation.Status = "Converted";
+            quotation.ConvertedToInvoiceId = invoice.Id;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(
+            TenantId,
+            UserId,
+            "finance.proforma.created",
+            nameof(TenantInvoice),
+            invoice.Id.ToString(),
+            $"Built proforma invoice {invoice.InvoiceNumber} from quotations {string.Join(", ", sourceQuoteNumbers)}",
+            cancellationToken);
+
+        await dbContext.Entry(invoice).Reference(x => x.Client).LoadAsync(cancellationToken);
+        return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id }, MapDetail(invoice));
     }
 
     // ── Update ───────────────────────────────────────────────────────────────
@@ -254,6 +367,38 @@ public sealed class TenantInvoiceController(
         return Ok(MapDetail(invoice));
     }
 
+    [HttpPost("{id:guid}/convert-to-invoice")]
+    public async Task<ActionResult<TenantInvoiceDetailResponse>> ConvertProformaToInvoice(Guid id, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceManageBillableWork);
+        var invoice = await LoadInvoiceWithDetailsAsync(id, cancellationToken);
+
+        if (!string.Equals(invoice.DocumentType, DocumentTypes.ProformaInvoice, StringComparison.OrdinalIgnoreCase))
+            throw new BusinessRuleException("Only proforma invoices can be converted to final invoices.");
+
+        if (invoice.Status == "Void")
+            throw new BusinessRuleException("Void proforma invoices cannot be converted.");
+
+        if (invoice.AmountPaid > 0)
+            throw new BusinessRuleException("Remove recorded payments before converting this proforma invoice.");
+
+        invoice.DocumentType = DocumentTypes.Invoice;
+        invoice.InvoiceNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.Invoice, cancellationToken);
+        invoice.Status = "Draft";
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(
+            TenantId,
+            UserId,
+            "finance.proforma.converted",
+            nameof(TenantInvoice),
+            invoice.Id.ToString(),
+            $"Converted proforma to invoice {invoice.InvoiceNumber}",
+            cancellationToken);
+
+        return Ok(MapDetail(invoice));
+    }
+
     // ── Void ─────────────────────────────────────────────────────────────────
 
     [HttpPost("{id:guid}/void")]
@@ -288,6 +433,43 @@ public sealed class TenantInvoiceController(
         var tenant = await dbContext.Tenants
             .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
 
+        ReportTemplateConfig? templateConfig = null;
+        if (!string.IsNullOrWhiteSpace(tenant?.ReportTemplateConfigJson))
+        {
+            try
+            {
+                templateConfig = System.Text.Json.JsonSerializer.Deserialize<ReportTemplateConfig>(
+                    tenant.ReportTemplateConfigJson,
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                templateConfig = null; // fall back to defaults on malformed stored config
+            }
+        }
+
+        string? bankDetails = null;
+        if (templateConfig?.ShowBankDetails == true)
+        {
+            var bankParts = new[]
+            {
+                string.IsNullOrWhiteSpace(templateConfig.BankName) ? null : $"Bank: {templateConfig.BankName}",
+                string.IsNullOrWhiteSpace(templateConfig.AccountName) ? null : $"Account Name: {templateConfig.AccountName}",
+                string.IsNullOrWhiteSpace(templateConfig.AccountNumber) ? null : $"Account No: {templateConfig.AccountNumber}",
+                string.IsNullOrWhiteSpace(templateConfig.Branch) ? null : $"Branch: {templateConfig.Branch}",
+                string.IsNullOrWhiteSpace(templateConfig.Swift) ? null : $"SWIFT: {templateConfig.Swift}",
+                string.IsNullOrWhiteSpace(templateConfig.Paybill) ? null : $"Paybill: {templateConfig.Paybill}",
+            }.Where(x => x is not null);
+            bankDetails = string.Join("\n", bankParts);
+            if (string.IsNullOrWhiteSpace(bankDetails)) bankDetails = null;
+        }
+
+        var termsText = templateConfig?.ShowTerms == true
+            ? (!string.IsNullOrWhiteSpace(invoice.TermsAndConditions)
+                ? invoice.TermsAndConditions
+                : templateConfig.InvoiceTerms ?? templateConfig.DefaultTermsText)
+            : null;
+
         var model = new InvoicePdfModel(
             InvoiceNumber:  invoice.InvoiceNumber,
             Status:         invoice.Status,
@@ -310,7 +492,13 @@ public sealed class TenantInvoiceController(
             CompanyAddress: tenant?.Address,
             CompanyPhone:   tenant?.Phone,
             LogoUrl:        tenant?.LogoUrl,
-            PrimaryColor:   tenant?.PrimaryColor ?? "#0F4C81"
+            PrimaryColor:   templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
+            FontFamily:     templateConfig?.FontFamily ?? "Helvetica",
+            FooterText:     templateConfig?.FooterText ?? templateConfig?.DefaultFooterNote,
+            WatermarkText:  templateConfig?.WatermarkText,
+            BankDetails:    bankDetails,
+            PaymentInstructions: templateConfig?.ShowBankDetails == true ? templateConfig.PaymentInstructions : null,
+            TermsText:      termsText
         );
 
         var bytes = pdfRenderer.RenderInvoicePdf(model);
@@ -330,6 +518,39 @@ public sealed class TenantInvoiceController(
             .OrderByDescending(x => x.PaymentDate)
             .ToListAsync(cancellationToken);
         return Ok(payments.Select(MapPayment).ToList());
+    }
+
+    [HttpGet("/api/payments")]
+    public async Task<ActionResult<IReadOnlyCollection<TenantPaymentListItemResponse>>> ListAllPayments(
+        [FromQuery] Guid? clientId,
+        [FromQuery] DateTime? from,
+        [FromQuery] DateTime? to,
+        CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceView);
+
+        var query = dbContext.TenantPayments.Where(x => x.TenantId == TenantId);
+        if (clientId.HasValue)
+            query = query.Where(x => x.ClientId == clientId.Value);
+
+        var paymentsFrom = DateTimeNormalizationHelper.NormalizeNullableToUtc(from);
+        var paymentsTo = DateTimeNormalizationHelper.NormalizeNullableToUtc(to);
+        if (paymentsFrom.HasValue)
+            query = query.Where(x => x.PaymentDate >= paymentsFrom.Value);
+        if (paymentsTo.HasValue)
+            query = query.Where(x => x.PaymentDate <= paymentsTo.Value);
+
+        var rows = await query
+            .OrderByDescending(x => x.PaymentDate)
+            .Select(p => new TenantPaymentListItemResponse(
+                p.Id, p.TenantId, p.InvoiceId, p.ClientId, p.PaymentNumber,
+                p.Amount, p.PaymentDate, p.Method, p.Reference, p.Notes,
+                p.Status, p.CreatedAt,
+                dbContext.TenantInvoices.Where(i => i.Id == p.InvoiceId).Select(i => i.InvoiceNumber).FirstOrDefault(),
+                dbContext.Clients.Where(c => c.Id == p.ClientId).Select(c => c.ClientName).FirstOrDefault()))
+            .ToListAsync(cancellationToken);
+
+        return Ok(rows);
     }
 
     [HttpPost("{id:guid}/payments")]
@@ -448,6 +669,7 @@ public sealed class TenantInvoiceController(
             TenantId = TenantId,
             ClientId = workOrder.ClientId,
             InvoiceNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.Invoice, cancellationToken),
+            DocumentType = DocumentTypes.Invoice,
             Status = "Draft",
             InvoiceDate = DateTime.UtcNow,
             DueDate = DateTime.UtcNow.AddDays(30),
@@ -596,7 +818,7 @@ public sealed class TenantInvoiceController(
 
     private static TenantInvoiceListItem MapListItem(TenantInvoice inv) =>
         new(inv.Id, inv.TenantId, inv.ClientId, inv.Client?.ClientName,
-            inv.InvoiceNumber, inv.Status, inv.InvoiceDate, inv.DueDate,
+            inv.InvoiceNumber, inv.DocumentType, inv.Status, inv.InvoiceDate, inv.DueDate,
             inv.Subtotal, inv.TaxAmount, inv.TotalAmount, inv.AmountPaid,
             inv.Balance, inv.Currency, inv.CreatedAt);
 
@@ -604,9 +826,10 @@ public sealed class TenantInvoiceController(
         TenantInvoice inv,
         bool creditLimitWarning = false,
         decimal clientCurrentBalance = 0,
-        decimal? clientCreditLimit = null) =>
+        decimal? clientCreditLimit = null,
+        IReadOnlyCollection<TenantInvoiceSourceQuotationResponse>? sourceQuotations = null) =>
         new(inv.Id, inv.TenantId, inv.ClientId, inv.Client?.ClientName,
-            inv.InvoiceNumber, inv.Status, inv.InvoiceDate, inv.DueDate,
+            inv.InvoiceNumber, inv.DocumentType, inv.Status, inv.InvoiceDate, inv.DueDate,
             inv.Notes, inv.TermsAndConditions,
             inv.Subtotal, inv.TaxAmount, inv.TotalAmount, inv.AmountPaid,
             inv.Balance, inv.Currency, inv.CreatedAt,
@@ -619,7 +842,8 @@ public sealed class TenantInvoiceController(
             DepositDueDate: inv.DepositDueDate,
             CreditLimitWarning: creditLimitWarning,
             ClientCurrentBalance: clientCurrentBalance,
-            ClientCreditLimit: clientCreditLimit);
+            ClientCreditLimit: clientCreditLimit,
+            SourceQuotations: sourceQuotations ?? []);
 
     private static TenantInvoiceLineResponse MapLine(TenantInvoiceLine l) =>
         new(l.Id, l.InvoiceId, l.BillableItemId, l.WorkOrderId,
@@ -636,4 +860,20 @@ public sealed class TenantInvoiceController(
         "Cash" or "MPesa" or "BankTransfer" or "Cheque" or "Card" => value.Trim(),
         _ => throw new BusinessRuleException("Method must be Cash, MPesa, BankTransfer, Cheque, or Card.")
     };
+
+    private async Task<IReadOnlyCollection<TenantInvoiceSourceQuotationResponse>> LoadSourceQuotationsAsync(Guid invoiceId, CancellationToken cancellationToken)
+    {
+        return await dbContext.TenantQuotations
+            .Where(x => x.TenantId == TenantId && x.ConvertedToInvoiceId == invoiceId)
+            .OrderBy(x => x.QuoteDate)
+            .Select(x => new TenantInvoiceSourceQuotationResponse(
+                x.Id,
+                x.QuoteNumber,
+                x.Status,
+                x.Subject,
+                x.QuoteDate,
+                x.TotalAmount,
+                x.Currency))
+            .ToListAsync(cancellationToken);
+    }
 }

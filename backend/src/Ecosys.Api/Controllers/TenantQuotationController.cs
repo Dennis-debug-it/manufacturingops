@@ -402,7 +402,7 @@ public sealed class TenantQuotationController(
 
     private static TenantInvoiceDetailResponse MapInvoiceDetail(TenantInvoice inv) =>
         new(inv.Id, inv.TenantId, inv.ClientId, inv.Client?.ClientName,
-            inv.InvoiceNumber, inv.Status, inv.InvoiceDate, inv.DueDate,
+            inv.InvoiceNumber, inv.DocumentType, inv.Status, inv.InvoiceDate, inv.DueDate,
             inv.Notes, inv.TermsAndConditions,
             inv.Subtotal, inv.TaxAmount, inv.TotalAmount, inv.AmountPaid,
             inv.Balance, inv.Currency, inv.CreatedAt,

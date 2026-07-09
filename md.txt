@@ -1,0 +1,32 @@
+# Ecosys Coding Instructions
+
+Ecosys is an enterprise ServiceOps SaaS for contractors and internal maintenance teams.
+
+When improving frontend UI, use these repo skills:
+
+- ecosys-enterprise-serviceops-ui
+- design-system
+- ui-styling
+- brand
+
+General rules:
+
+- Preserve existing functionality.
+- Prefer compact enterprise UI.
+- Avoid vibe-coded SaaS styling.
+- Work module by module.
+- Start with Work Orders before changing the whole app.
+- Do not redesign everything at once.
+- Run frontend build and relevant tests after changes.
+- Keep backend contracts/API compatibility unless explicitly asked to change them.
+
+Priority UI modules:
+
+1. Work Orders
+2. Work Order Detail / Execution
+3. Clients / Sites / Assets
+4. Contracts
+5. Team Management
+6. Materials
+7. Settings
+8. Dashboard

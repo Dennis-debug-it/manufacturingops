@@ -1,13 +1,30 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-// PWA plugin disabled in sandbox build — re-enable on deploy
-// import { VitePWA } from 'vite-plugin-pwa'
+import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
-// https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      injectRegister: 'auto',
+      srcDir: 'src/pwa',
+      filename: 'sw.ts',
+      includeAssets: [],
+      manifest: {
+        name: 'ECOSYS',
+        short_name: 'Ecosys',
+        start_url: '/',
+        display: 'standalone',
+        orientation: 'portrait',
+        background_color: '#0F3B5E',
+        theme_color: '#0F3B5E',
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+      },
+    }),
   ],
   server: {
     host: '127.0.0.1',
@@ -24,37 +41,16 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (!id.includes('node_modules')) {
-            return
+            return undefined
           }
-
-          if (id.includes('react-router')) {
-            return 'router'
-          }
-
-          if (id.includes('recharts')) {
-            return 'charts'
-          }
-
-          if (id.includes('lucide-react')) {
-            return 'icons'
-          }
-
-          if (id.includes('axios')) {
-            return 'network'
-          }
-
-          if (id.includes('zustand')) {
-            return 'state'
-          }
-
-          if (id.includes('date-fns')) {
-            return 'date-utils'
-          }
-
-          if (id.includes('react') || id.includes('react-dom')) {
-            return 'react-vendor'
-          }
-
+          if (id.includes('react-router')) return 'router'
+          if (id.includes('@tanstack/react-query') || id.includes('@tanstack/react-virtual')) return 'query'
+          if (id.includes('lucide-react')) return 'icons'
+          if (id.includes('date-fns')) return 'date'
+          if (id.includes('axios')) return 'network'
+          if (id.includes('idb')) return 'offline'
+          if (id.includes('react-hook-form') || id.includes('zod') || id.includes('@hookform/resolvers')) return 'forms'
+          if (id.includes('react-hot-toast')) return 'toast'
           return 'vendor'
         },
       },

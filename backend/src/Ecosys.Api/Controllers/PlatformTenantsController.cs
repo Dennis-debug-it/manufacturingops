@@ -28,7 +28,8 @@ public sealed class PlatformTenantsController(
     IEmailOutboxService emailOutboxService,
     IPasswordHasher<User> passwordHasher,
     IUserPermissionTemplateService permissionTemplateService,
-    IUserCredentialDeliveryService credentialDeliveryService) : ControllerBase
+    IUserCredentialDeliveryService credentialDeliveryService,
+    IMvpAuthService authService) : ControllerBase
 {
     private const int TrialPeriodDays = 14;
     private const int TrialExpiringSoonDays = 3;
@@ -220,6 +221,25 @@ public sealed class PlatformTenantsController(
             cancellationToken);
 
         return Ok(await BuildDetailResponseAsync(tenant, cancellationToken));
+    }
+
+    [HttpPost("{tenantId:guid}/impersonate")]
+    [Authorize(Policy = "PlatformAdminAccess")]
+    public async Task<ActionResult<TenantImpersonationResponse>> Impersonate(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var actingUserId = tenantContext.GetRequiredUserId();
+        var actingUser = await dbContext.Users.SingleOrDefaultAsync(x => x.Id == actingUserId, cancellationToken)
+            ?? throw new NotFoundException("Acting platform user was not found.");
+
+        var result = await authService.ImpersonateTenantAdminAsync(tenantId, actingUserId, actingUser.FullName, cancellationToken);
+
+        return Ok(new TenantImpersonationResponse(
+            result.Token,
+            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, null, false, MapPermissions(result.Permissions)),
+            new LoginTenantDto(result.TenantId, result.CompanyName, result.Country, result.Industry, result.LogoUrl, result.ShowPoweredByEcosys),
+            result.ImpersonatedByUserId,
+            result.ImpersonatedByName,
+            result.StartedAt));
     }
 
     [HttpGet("{tenantId:guid}/audit-logs")]
@@ -1101,6 +1121,34 @@ public sealed class PlatformTenantsController(
     private static DateTime? EnsureUtc(DateTime? value) =>
         value.HasValue ? EnsureUtc(value.Value) : null;
 
+    private static PermissionResponse MapPermissions(UserPermissionsModel permissions) =>
+        new()
+        {
+            CanViewWorkOrders = permissions.CanViewWorkOrders,
+            CanCreateWorkOrders = permissions.CanCreateWorkOrders,
+            CanAssignWorkOrders = permissions.CanAssignWorkOrders,
+            CanCompleteWorkOrders = permissions.CanCompleteWorkOrders,
+            CanViewKnowledge = permissions.CanViewKnowledge,
+            CanManageKnowledge = permissions.CanManageKnowledge,
+            CanViewMaterials = permissions.CanViewMaterials,
+            CanRequestMaterials = permissions.CanRequestMaterials,
+            CanManageMaterials = permissions.CanManageMaterials,
+            CanApproveMaterials = permissions.CanApproveMaterials,
+            CanIssueMaterials = permissions.CanIssueMaterials,
+            CanManageAssets = permissions.CanManageAssets,
+            CanManageSettings = permissions.CanManageSettings,
+            CanViewReports = permissions.CanViewReports,
+            CanViewFinance = permissions.CanViewFinance,
+            CanManageFinance = permissions.CanManageFinance,
+            CanViewFinanceRates = permissions.CanViewFinanceRates,
+            CanManageFinanceRates = permissions.CanManageFinanceRates,
+            CanViewFinanceApprovals = permissions.CanViewFinanceApprovals,
+            CanManageFinanceApprovals = permissions.CanManageFinanceApprovals,
+            CanViewBillableWork = permissions.CanViewBillableWork,
+            CanManageBillableWork = permissions.CanManageBillableWork,
+            CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
+        };
+
     private static UserPermission ToEntity(UserPermissionsModel permissions) =>
         new()
         {
@@ -1266,6 +1314,14 @@ public sealed record PlatformTenantSummaryResponse(
     int WorkOrderCount,
     int ActiveUsersNow,
     DateTime? LastActivityAt);
+
+public sealed record TenantImpersonationResponse(
+    string Token,
+    LoginUserDto User,
+    LoginTenantDto Tenant,
+    Guid ImpersonatedByUserId,
+    string ImpersonatedByName,
+    DateTime StartedAt);
 
 public sealed record PlatformTenantAuditLogResponse(
     Guid Id,

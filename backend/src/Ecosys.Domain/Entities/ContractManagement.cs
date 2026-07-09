@@ -18,6 +18,7 @@ public sealed class Contract : AuditableEntity, ITenantEntity
     public string Currency { get; set; } = "KES";
     public decimal? ContractValue { get; set; }
     public int RenewalNoticeDays { get; set; } = 30;
+    public string RenewalBehavior { get; set; } = "ManualRenewalRequired";
     public string? Description { get; set; }
     public string? IncludedServices { get; set; }
     public string? ExcludedServices { get; set; }
@@ -44,6 +45,7 @@ public sealed class Contract : AuditableEntity, ITenantEntity
     public int GracePeriodDays { get; set; }
     public bool AllowPreferentialRatesDuringGracePeriod { get; set; }
     public bool AllowSlaDuringGracePeriod { get; set; }
+    public string GracePeriodPolicy { get; set; } = "None";
 
     public decimal? ResponseTimeHours { get; set; }
     public decimal? ResolutionTimeHours { get; set; }
@@ -52,6 +54,7 @@ public sealed class Contract : AuditableEntity, ITenantEntity
     public string? EscalationEmail { get; set; }
     public string? PriorityLevel { get; set; }
     public bool GracePeriodAllowsSla { get; set; }
+    public string? SlaMatrixJson { get; set; }
 
     public bool IsArchived { get; set; }
 

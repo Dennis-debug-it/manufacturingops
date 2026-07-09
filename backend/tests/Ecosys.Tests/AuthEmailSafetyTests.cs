@@ -863,7 +863,8 @@ public sealed class AuthEmailSafetyTests
             new EmailOutboxService(dbContext, new EmailDeliveryLogService(dbContext)),
             new PasswordHasher<User>(),
             new FakeUserPermissionTemplateService(),
-            deliveryService);
+            deliveryService,
+            CreateAuthService(dbContext));
 
         controller.ControllerContext = new ControllerContext
         {

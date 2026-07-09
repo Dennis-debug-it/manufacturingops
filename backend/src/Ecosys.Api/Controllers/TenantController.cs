@@ -49,10 +49,18 @@ public sealed class TenantController(
         }
 
         tenant.CompanyName = request.CompanyName.Trim();
+        tenant.LegalName = request.LegalName is null ? tenant.LegalName : NormalizeOptional(request.LegalName);
+        tenant.TradingName = request.TradingName is null ? tenant.TradingName : NormalizeOptional(request.TradingName);
+        tenant.PostalAddress = request.PostalAddress is null ? tenant.PostalAddress : NormalizeOptional(request.PostalAddress);
+        tenant.PhysicalAddress = request.PhysicalAddress is null ? tenant.PhysicalAddress : NormalizeOptional(request.PhysicalAddress);
+        tenant.Website = request.Website is null ? tenant.Website : NormalizeOptional(request.Website);
+        tenant.VatNumber = request.VatNumber is null ? tenant.VatNumber : NormalizeOptional(request.VatNumber);
+        tenant.RegistrationNumber = request.RegistrationNumber is null ? tenant.RegistrationNumber : NormalizeOptional(request.RegistrationNumber);
         tenant.Email = request.Email.Trim().ToLowerInvariant();
         tenant.Phone = request.Phone?.Trim();
         tenant.Country = request.Country.Trim();
         tenant.Industry = request.Industry?.Trim();
+        tenant.Address = request.Address is null ? tenant.Address : NormalizeOptional(request.Address);
         tenant.LogoUrl = request.LogoUrl?.Trim();
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -122,13 +130,24 @@ public sealed class TenantController(
         await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
         ?? throw new NotFoundException("Tenant profile was not found.");
 
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     private static TenantProfileResponse Map(Tenant tenant) =>
         new(
             tenant.CompanyName,
+            tenant.LegalName,
+            tenant.TradingName,
+            tenant.PostalAddress,
+            tenant.PhysicalAddress,
+            tenant.Website,
+            tenant.VatNumber,
+            tenant.RegistrationNumber,
             tenant.Email,
             tenant.Phone,
             tenant.Country,
             tenant.Industry,
+            tenant.Address,
             tenant.LogoUrl,
             tenant.PrimaryColor,
             tenant.SecondaryColor,
@@ -137,10 +156,18 @@ public sealed class TenantController(
 
 public sealed record TenantProfileResponse(
     string CompanyName,
+    string? LegalName,
+    string? TradingName,
+    string? PostalAddress,
+    string? PhysicalAddress,
+    string? Website,
+    string? VatNumber,
+    string? RegistrationNumber,
     string Email,
     string? Phone,
     string Country,
     string? Industry,
+    string? Address,
     string? LogoUrl,
     string PrimaryColor,
     string SecondaryColor,
@@ -148,10 +175,18 @@ public sealed record TenantProfileResponse(
 
 public sealed record UpdateTenantProfileRequest(
     string CompanyName,
+    string? LegalName,
+    string? TradingName,
+    string? PostalAddress,
+    string? PhysicalAddress,
+    string? Website,
+    string? VatNumber,
+    string? RegistrationNumber,
     string Email,
     string? Phone,
     string Country,
     string? Industry,
+    string? Address,
     string? LogoUrl,
     string? PrimaryColor,
     string? SecondaryColor,

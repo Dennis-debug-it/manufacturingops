@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { primeTenantSession } from './helpers/auth'
 import { gotoEmailIntake } from './helpers/navigation'
 
-test.describe('Email Intake', () => {
+test.describe('Email-to-Work Order', () => {
   test.describe.configure({ mode: 'serial' })
   let page: Page
 
@@ -31,7 +31,7 @@ test.describe('Email Intake', () => {
     await expect(page.getByTestId('email-intake-overview-panel')).toBeVisible()
     await expect(page.getByTestId('email-intake-workflow-summary')).toBeVisible()
 
-    await expect(page.getByText('Connect Mailbox')).toBeVisible()
+    await expect(page.getByTestId('email-intake-workflow-summary').getByText('Connect Mailbox')).toBeVisible()
     await expect(page.getByText('Define Intake Rules')).toBeVisible()
     await expect(page.getByText('Parse Incoming Email')).toBeVisible()
     await expect(page.getByText('Match Client / Site / Asset')).toBeVisible()

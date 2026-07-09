@@ -489,6 +489,49 @@ public sealed class TenantFinanceController(
         return Ok(rows);
     }
 
+    // ── Credit Summaries (batch) ─────────────────────────────────────────────
+
+    [HttpGet("credit-summaries")]
+    public async Task<ActionResult<IReadOnlyCollection<ClientCreditSummaryRow>>> GetCreditSummaries(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceView);
+
+        var clients = await dbContext.Clients
+            .Include(x => x.DefaultCreditTerm)
+            .Where(x => x.TenantId == TenantId && x.IsActive)
+            .OrderBy(x => x.ClientName)
+            .ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var openInvoices = await dbContext.TenantInvoices
+            .Where(x => x.TenantId == TenantId && x.Balance > 0 && x.Status != "Void" && x.Status != "Paid")
+            .Select(x => new { x.ClientId, x.Balance, x.DueDate, x.InvoiceDate })
+            .ToListAsync(cancellationToken);
+
+        var byClient = openInvoices.GroupBy(x => x.ClientId).ToDictionary(g => g.Key, g => g.ToList());
+
+        var rows = clients.Select(client =>
+        {
+            byClient.TryGetValue(client.Id, out var invoices);
+            var overdueAmount = invoices?.Where(x => x.DueDate < now).Sum(x => x.Balance) ?? 0m;
+            var oldestInvoice = invoices?.OrderBy(x => x.InvoiceDate).Select(x => (DateTime?)x.InvoiceDate).FirstOrDefault();
+            var effectiveLimit = client.CreditLimit ?? client.DefaultCreditTerm?.CreditLimit;
+            var availableCredit = effectiveLimit.HasValue ? effectiveLimit.Value - client.CurrentBalance : (decimal?)null;
+
+            return new ClientCreditSummaryRow(
+                client.Id,
+                client.ClientName,
+                client.CurrentBalance,
+                effectiveLimit,
+                availableCredit,
+                overdueAmount,
+                oldestInvoice?.ToString("yyyy-MM-dd"),
+                client.DefaultCreditTerm?.Name);
+        }).ToList();
+
+        return Ok(rows);
+    }
+
     // ── Aging Analysis ────────────────────────────────────────────────────────
 
     [HttpGet("reports/aging")]
@@ -952,3 +995,13 @@ public sealed record StatementEntry(
     decimal Debit,
     decimal Credit,
     string? Notes);
+
+public sealed record ClientCreditSummaryRow(
+    Guid ClientId,
+    string ClientName,
+    decimal CurrentBalance,
+    decimal? CreditLimit,
+    decimal? AvailableCredit,
+    decimal OverdueAmount,
+    string? OldestInvoiceDate,
+    string? TermName);

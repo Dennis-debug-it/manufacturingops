@@ -18,6 +18,13 @@ public sealed class Tenant : AuditableEntity
     public string? City { get; set; }
     public string? Address { get; set; }
     public string? TaxPin { get; set; }
+    public string? LegalName { get; set; }
+    public string? TradingName { get; set; }
+    public string? PostalAddress { get; set; }
+    public string? PhysicalAddress { get; set; }
+    public string? Website { get; set; }
+    public string? VatNumber { get; set; }
+    public string? RegistrationNumber { get; set; }
     public string Status { get; set; } = "Active";
     public string? PlanName { get; set; }
     public string? LicenseStatus { get; set; }

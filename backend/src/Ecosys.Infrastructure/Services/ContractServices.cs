@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Ecosys.Domain.Entities;
 using Ecosys.Domain.Enums;
@@ -395,20 +396,11 @@ internal sealed class ContractCoverageService(AppDbContext dbContext) : IContrac
             return CoverageFlags.None;
         }
 
-        var siteMatched = contract.Sites.Count == 0 || (siteId.HasValue && contract.Sites.Any(x => x.SiteId == siteId.Value));
-        if (!siteMatched && contract.Sites.Count > 0)
-        {
-            warnings.Add("Selected site is outside contract coverage.");
-        }
+        var siteMatched = siteId.HasValue && contract.Sites.Any(x => x.SiteId == siteId.Value);
 
         var assetMatched = assetId.HasValue && contract.Assets.Any(x => x.AssetId == assetId.Value);
         var categoryMatched = MatchesAssetCategory(contract, assetCategory);
-        var hasAssetDimension = contract.Assets.Count > 0 || contract.AssetCategories.Count > 0;
-        var assetDimensionMatched = !hasAssetDimension || assetMatched || categoryMatched;
-        if (!assetDimensionMatched)
-        {
-            warnings.Add("Selected asset is outside contract coverage.");
-        }
+        var coverageMatched = MatchesCoverageScope(contract, siteMatched, assetMatched, categoryMatched, warnings);
 
         var workTypeMatched = MatchesWorkOrderType(contract, workOrderType);
         if (!workTypeMatched && contract.WorkOrderTypes.Count > 0)
@@ -421,7 +413,9 @@ internal sealed class ContractCoverageService(AppDbContext dbContext) : IContrac
         {
             warnings.Add("Excluded service rules override normal contract coverage.");
         }
-        else if (!string.IsNullOrWhiteSpace(contract.IncludedServices) && !MatchesServiceList(contract.IncludedServices, serviceType ?? workOrderType))
+
+        var includedMatched = string.IsNullOrWhiteSpace(contract.IncludedServices) || MatchesServiceList(contract.IncludedServices, serviceType ?? workOrderType);
+        if (!includedMatched && !string.IsNullOrWhiteSpace(contract.IncludedServices))
         {
             warnings.Add("Requested service is not explicitly listed in included services.");
         }
@@ -433,8 +427,48 @@ internal sealed class ContractCoverageService(AppDbContext dbContext) : IContrac
             categoryMatched,
             workTypeMatched,
             excluded,
-            siteMatched && assetDimensionMatched && workTypeMatched,
-            siteMatched || assetDimensionMatched || workTypeMatched);
+            coverageMatched && workTypeMatched && !excluded && includedMatched,
+            coverageMatched && workTypeMatched);
+    }
+
+    private static bool MatchesCoverageScope(
+        Contract contract,
+        bool siteMatched,
+        bool assetMatched,
+        bool categoryMatched,
+        List<string> warnings)
+    {
+        if (contract.Assets.Count > 0)
+        {
+            if (!assetMatched)
+            {
+                warnings.Add("Selected asset is outside contract coverage.");
+            }
+
+            return assetMatched;
+        }
+
+        if (contract.AssetCategories.Count > 0)
+        {
+            if (!categoryMatched)
+            {
+                warnings.Add("Selected asset category is outside contract coverage.");
+            }
+
+            return categoryMatched;
+        }
+
+        if (contract.Sites.Count > 0)
+        {
+            if (!siteMatched)
+            {
+                warnings.Add("Selected site is outside contract coverage.");
+            }
+
+            return siteMatched;
+        }
+
+        return true;
     }
 
     private static bool MatchesAssetCategory(Contract contract, string? assetCategory)
@@ -518,11 +552,17 @@ internal sealed class ContractCoverageService(AppDbContext dbContext) : IContrac
     {
         if (graceApplied)
         {
-            return contract.AllowSlaDuringGracePeriod || contract.GracePeriodAllowsSla;
+            return IsGraceSlaEnabled(contract);
         }
 
         return contract.Status is ContractStatus.Active or ContractStatus.ExpiringSoon or ContractStatus.RenewalInProgress;
     }
+
+    private static bool IsGraceSlaEnabled(Contract contract) =>
+        string.Equals(contract.GracePeriodPolicy, "Sla", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(contract.GracePeriodPolicy, "Both", StringComparison.OrdinalIgnoreCase)
+        || contract.AllowSlaDuringGracePeriod
+        || contract.GracePeriodAllowsSla;
 
     private static DateTime NormalizeDateOnly(DateTime value) =>
         value.Kind == DateTimeKind.Utc
@@ -1158,7 +1198,7 @@ internal sealed class ContractLifecycleService(
             return;
         }
 
-        if (contract.AutoExpireEnabled && contract.EndDate.Date < DateTime.UtcNow.Date)
+        if (IsAutoExpireEnabled(contract) && contract.EndDate.Date < DateTime.UtcNow.Date)
         {
             contract.Status = ContractStatus.Expired;
             return;
@@ -1177,6 +1217,10 @@ internal sealed class ContractLifecycleService(
             throw new BusinessRuleException(message);
         }
     }
+
+    private static bool IsAutoExpireEnabled(Contract contract) =>
+        string.Equals(contract.RenewalBehavior, "AutoExpire", StringComparison.OrdinalIgnoreCase)
+        || contract.AutoExpireEnabled;
 }
 
 internal sealed class ContractOperationalService(
@@ -1211,6 +1255,7 @@ internal sealed class ContractOperationalService(
             true,
             cancellationToken);
 
+        var slaTarget = await ResolveContractSlaAsync(workOrder, coverage.ContractId, cancellationToken);
         workOrder.ContractId = coverage.ContractId;
         workOrder.RateCardId = pricing.ContractRateCardId;
         workOrder.CoverageStatus = coverage.CoverageStatus.ToString();
@@ -1222,16 +1267,16 @@ internal sealed class ContractOperationalService(
         workOrder.PricingNotes = pricing.Warnings.Count > 0 ? string.Join(" | ", pricing.Warnings) : null;
 
         var appliedContractSla = coverage.ContractId.HasValue
-            && coverage.ResponseTimeHours.HasValue
-            && coverage.ResolutionTimeHours.HasValue;
+            && slaTarget.ResponseTimeHours.HasValue
+            && slaTarget.ResolutionTimeHours.HasValue;
 
         if (appliedContractSla)
         {
-            workOrder.AppliedSlaSource = "Contract";
-            workOrder.AppliedResponseHours = coverage.ResponseTimeHours;
-            workOrder.AppliedResolutionHours = coverage.ResolutionTimeHours;
-            workOrder.SlaResponseDeadline = DateTime.UtcNow.AddHours((double)coverage.ResponseTimeHours.Value);
-            workOrder.SlaResolutionDeadline = DateTime.UtcNow.AddHours((double)coverage.ResolutionTimeHours.Value);
+            workOrder.AppliedSlaSource = slaTarget.Source;
+            workOrder.AppliedResponseHours = slaTarget.ResponseTimeHours;
+            workOrder.AppliedResolutionHours = slaTarget.ResolutionTimeHours;
+            workOrder.SlaResponseDeadline = DateTime.UtcNow.AddHours((double)slaTarget.ResponseTimeHours.Value);
+            workOrder.SlaResolutionDeadline = DateTime.UtcNow.AddHours((double)slaTarget.ResolutionTimeHours.Value);
             workOrder.SlaResponseBreached = false;
             workOrder.SlaResolutionBreached = false;
             workOrder.SlaResponseBreachedAt = null;
@@ -1305,6 +1350,71 @@ internal sealed class ContractOperationalService(
             workOrder.AppliedResponseHours,
             workOrder.AppliedResolutionHours);
     }
+
+    private async Task<(decimal? ResponseTimeHours, decimal? ResolutionTimeHours, string Source)> ResolveContractSlaAsync(
+        WorkOrder workOrder,
+        Guid? contractId,
+        CancellationToken cancellationToken)
+    {
+        if (!contractId.HasValue)
+        {
+            return (null, null, "TenantDefault");
+        }
+
+        var contract = await dbContext.Contracts
+            .Where(x => x.TenantId == workOrder.TenantId && x.Id == contractId.Value)
+            .Select(x => new { x.SlaMatrixJson, x.ResponseTimeHours, x.ResolutionTimeHours })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (contract is null)
+        {
+            return (null, null, "TenantDefault");
+        }
+
+        var slaRow = SelectSlaRow(contract.SlaMatrixJson, workOrder.Priority)
+            ?? new SlaRow(
+                "Standard",
+                contract.ResponseTimeHours,
+                contract.ResolutionTimeHours);
+
+        return (slaRow.ResponseTimeHours, slaRow.ResolutionTimeHours, "Contract");
+    }
+
+    private static SlaRow? SelectSlaRow(string? json, string? priority)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            var rows = JsonSerializer.Deserialize<List<SlaRow>>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            if (rows is null || rows.Count == 0)
+            {
+                return null;
+            }
+
+            var normalizedPriority = priority?.Trim();
+            if (!string.IsNullOrWhiteSpace(normalizedPriority))
+            {
+                var exact = rows.FirstOrDefault(x => string.Equals(x.Priority, normalizedPriority, StringComparison.OrdinalIgnoreCase));
+                if (exact is not null)
+                {
+                    return exact;
+                }
+            }
+
+            return rows.FirstOrDefault(x => string.Equals(x.Priority, "Standard", StringComparison.OrdinalIgnoreCase))
+                ?? rows[0];
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private sealed record SlaRow(string Priority, decimal? ResponseTimeHours, decimal? ResolutionTimeHours);
 
     public async Task<ContractOperationalSnapshot> RecalculateWorkOrderAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken = default)
     {
@@ -1440,7 +1550,9 @@ internal sealed class ContractReminderWorker(
                 contract.RenewalRisk = lifecycleService.CalculateRenewalRisk(contract.EndDate);
                 contract.ExpiryCheckedAt = DateTime.UtcNow;
 
-                if (contract.AutoExpireEnabled && daysToExpiry < 0 && contract.Status != ContractStatus.Expired)
+                if ((string.Equals(contract.RenewalBehavior, "AutoExpire", StringComparison.OrdinalIgnoreCase) || contract.AutoExpireEnabled)
+                    && daysToExpiry < 0
+                    && contract.Status != ContractStatus.Expired)
                 {
                     contract.Status = ContractStatus.Expired;
                     dbContext.ContractLifecycleEvents.Add(new ContractLifecycleEvent

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Ecosys.Domain.Entities;
 using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
@@ -74,15 +75,6 @@ public sealed class ContractsController(
             ContractNumber = string.IsNullOrWhiteSpace(request.ContractNumber) ? $"CNT-{DateTime.UtcNow:yyyyMMddHHmmss}" : request.ContractNumber.Trim(),
             ClientId = request.ClientId,
             Name = request.Name.Trim(),
-            ContractType = request.ContractType,
-            Status = request.Status,
-            StartDate = request.StartDate.Date,
-            EndDate = request.EndDate.Date,
-            DurationMonths = request.DurationMonths,
-            BillingModel = request.BillingModel,
-            Currency = request.Currency.Trim(),
-            ContractValue = request.ContractValue,
-            RenewalNoticeDays = request.RenewalNoticeDays,
             Description = request.Description?.Trim(),
             IncludedServices = request.IncludedServices?.Trim(),
             ExcludedServices = request.ExcludedServices?.Trim(),
@@ -90,18 +82,8 @@ public sealed class ContractsController(
             RenewalOwnerUserId = request.RenewalOwnerUserId,
             AccountManagerUserId = request.AccountManagerUserId,
             InternalApproverUserId = request.InternalApproverUserId,
-            AutoExpireEnabled = request.AutoExpireEnabled,
-            GracePeriodDays = request.GracePeriodDays,
-            AllowPreferentialRatesDuringGracePeriod = request.AllowPreferentialRatesDuringGracePeriod,
-            AllowSlaDuringGracePeriod = request.AllowSlaDuringGracePeriod,
-            ResponseTimeHours = request.ResponseTimeHours,
-            ResolutionTimeHours = request.ResolutionTimeHours,
-            WorkingHoursPolicy = request.WorkingHoursPolicy?.Trim(),
-            PauseSlaOnHold = request.PauseSlaOnHold,
-            EscalationEmail = request.EscalationEmail?.Trim(),
-            PriorityLevel = request.PriorityLevel?.Trim(),
-            GracePeriodAllowsSla = request.GracePeriodAllowsSla
         };
+        ApplyContractPolicy(contract, request);
         contract.RenewalRisk = contractLifecycleService.CalculateRenewalRisk(contract.EndDate);
 
         dbContext.Contracts.Add(contract);
@@ -136,15 +118,6 @@ public sealed class ContractsController(
         contract.ContractNumber = request.ContractNumber.Trim();
         contract.ClientId = request.ClientId;
         contract.Name = request.Name.Trim();
-        contract.ContractType = request.ContractType;
-        contract.Status = request.Status;
-        contract.StartDate = request.StartDate.Date;
-        contract.EndDate = request.EndDate.Date;
-        contract.DurationMonths = request.DurationMonths;
-        contract.BillingModel = request.BillingModel;
-        contract.Currency = request.Currency.Trim();
-        contract.ContractValue = request.ContractValue;
-        contract.RenewalNoticeDays = request.RenewalNoticeDays;
         contract.Description = request.Description?.Trim();
         contract.IncludedServices = request.IncludedServices?.Trim();
         contract.ExcludedServices = request.ExcludedServices?.Trim();
@@ -152,17 +125,7 @@ public sealed class ContractsController(
         contract.RenewalOwnerUserId = request.RenewalOwnerUserId;
         contract.AccountManagerUserId = request.AccountManagerUserId;
         contract.InternalApproverUserId = request.InternalApproverUserId;
-        contract.AutoExpireEnabled = request.AutoExpireEnabled;
-        contract.GracePeriodDays = request.GracePeriodDays;
-        contract.AllowPreferentialRatesDuringGracePeriod = request.AllowPreferentialRatesDuringGracePeriod;
-        contract.AllowSlaDuringGracePeriod = request.AllowSlaDuringGracePeriod;
-        contract.ResponseTimeHours = request.ResponseTimeHours;
-        contract.ResolutionTimeHours = request.ResolutionTimeHours;
-        contract.WorkingHoursPolicy = request.WorkingHoursPolicy?.Trim();
-        contract.PauseSlaOnHold = request.PauseSlaOnHold;
-        contract.EscalationEmail = request.EscalationEmail?.Trim();
-        contract.PriorityLevel = request.PriorityLevel?.Trim();
-        contract.GracePeriodAllowsSla = request.GracePeriodAllowsSla;
+        ApplyContractPolicy(contract, request);
         contract.RenewalRisk = contractLifecycleService.CalculateRenewalRisk(contract.EndDate);
 
         await SyncContractChildrenAsync(contract, request, cancellationToken);
@@ -546,6 +509,109 @@ public sealed class ContractsController(
             var count = await dbContext.Assets.CountAsync(x => x.TenantId == TenantId && x.ClientId == request.ClientId && request.AssetIds.Contains(x.Id), cancellationToken);
             if (count != request.AssetIds.Count) throw new BusinessRuleException("One or more covered assets are invalid for this client.");
         }
+
+        var categoryIds = request.AssetCategories.Where(x => x.AssetCategoryId.HasValue).Select(x => x.AssetCategoryId!.Value).Distinct().ToList();
+        if (categoryIds.Count > 0)
+        {
+            var count = await dbContext.AssetCategories.CountAsync(x => x.TenantId == TenantId && categoryIds.Contains(x.Id), cancellationToken);
+            if (count != categoryIds.Count) throw new BusinessRuleException("One or more covered asset categories are invalid.");
+        }
+    }
+
+    private void ApplyContractPolicy(Contract contract, UpsertContractRequest request)
+    {
+        contract.ContractType = request.ContractType;
+        contract.Status = request.Status;
+        contract.StartDate = request.StartDate.Date;
+        contract.EndDate = request.EndDate.Date;
+        contract.DurationMonths = request.DurationMonths;
+        contract.BillingModel = request.BillingModel;
+        contract.Currency = request.Currency.Trim();
+        contract.ContractValue = request.ContractValue;
+        contract.RenewalNoticeDays = request.RenewalNoticeDays;
+        contract.RenewalBehavior = NormalizeRenewalBehavior(request.RenewalBehavior, request.AutoExpireEnabled);
+        contract.AutoExpireEnabled = string.Equals(contract.RenewalBehavior, "AutoExpire", StringComparison.OrdinalIgnoreCase);
+        contract.GracePeriodPolicy = NormalizeGracePeriodPolicy(
+            request.GracePeriodPolicy,
+            request.AllowPreferentialRatesDuringGracePeriod,
+            request.AllowSlaDuringGracePeriod,
+            request.GracePeriodAllowsSla);
+        contract.GracePeriodDays = request.GracePeriodDays;
+        contract.AllowPreferentialRatesDuringGracePeriod = contract.GracePeriodPolicy is "PreferentialRates" or "Both";
+        contract.AllowSlaDuringGracePeriod = contract.GracePeriodPolicy is "Sla" or "Both";
+        contract.GracePeriodAllowsSla = contract.AllowSlaDuringGracePeriod;
+        contract.PauseSlaOnHold = request.PauseSlaOnHold;
+        contract.EscalationEmail = request.EscalationEmail?.Trim();
+        contract.WorkingHoursPolicy = request.WorkingHoursPolicy?.Trim();
+
+        var slaMatrix = BuildSlaMatrix(request);
+        contract.SlaMatrixJson = JsonSerializer.Serialize(slaMatrix, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var firstRow = slaMatrix.FirstOrDefault();
+        contract.PriorityLevel = firstRow?.Priority?.Trim();
+        contract.ResponseTimeHours = firstRow?.ResponseTimeHours;
+        contract.ResolutionTimeHours = firstRow?.ResolutionTimeHours;
+    }
+
+    private static string NormalizeRenewalBehavior(string? renewalBehavior, bool autoExpireEnabled)
+    {
+        if (!string.IsNullOrWhiteSpace(renewalBehavior))
+        {
+            return renewalBehavior.Trim();
+        }
+
+        return autoExpireEnabled ? "AutoExpire" : "ManualRenewalRequired";
+    }
+
+    private static string NormalizeGracePeriodPolicy(
+        string? gracePeriodPolicy,
+        bool allowPreferentialRatesDuringGracePeriod,
+        bool allowSlaDuringGracePeriod,
+        bool gracePeriodAllowsSla)
+    {
+        if (!string.IsNullOrWhiteSpace(gracePeriodPolicy))
+        {
+            return gracePeriodPolicy.Trim();
+        }
+
+        if (allowPreferentialRatesDuringGracePeriod && (allowSlaDuringGracePeriod || gracePeriodAllowsSla))
+        {
+            return "Both";
+        }
+
+        if (allowPreferentialRatesDuringGracePeriod)
+        {
+            return "PreferentialRates";
+        }
+
+        if (allowSlaDuringGracePeriod || gracePeriodAllowsSla)
+        {
+            return "Sla";
+        }
+
+        return "None";
+    }
+
+    private static List<ContractSlaRowRequest> BuildSlaMatrix(UpsertContractRequest request)
+    {
+        var rows = request.SlaMatrix?
+            .Select(row => new ContractSlaRowRequest(
+                row.Priority?.Trim() ?? "Standard",
+                row.ResponseTimeHours,
+                row.ResolutionTimeHours))
+            .Where(row => !string.IsNullOrWhiteSpace(row.Priority))
+            .ToList() ?? [];
+
+        if (rows.Count > 0)
+        {
+            return rows;
+        }
+
+        return [
+            new ContractSlaRowRequest(
+                string.IsNullOrWhiteSpace(request.PriorityLevel) ? "Standard" : request.PriorityLevel.Trim(),
+                request.ResponseTimeHours,
+                request.ResolutionTimeHours),
+        ];
     }
 
     private async Task SyncContractChildrenAsync(Contract contract, UpsertContractRequest request, CancellationToken cancellationToken)
@@ -555,6 +621,12 @@ public sealed class ContractsController(
         var categories = await dbContext.ContractAssetCategories.Where(x => x.TenantId == TenantId && x.ContractId == contract.Id).ToListAsync(cancellationToken);
         var workOrderTypes = await dbContext.ContractWorkOrderTypes.Where(x => x.TenantId == TenantId && x.ContractId == contract.Id).ToListAsync(cancellationToken);
         var entitlements = await dbContext.ContractPmEntitlements.Where(x => x.TenantId == TenantId && x.ContractId == contract.Id).ToListAsync(cancellationToken);
+        var assetCategoryIds = request.AssetCategories.Where(x => x.AssetCategoryId.HasValue).Select(x => x.AssetCategoryId!.Value).Distinct().ToList();
+        var assetCategoryLookup = assetCategoryIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await dbContext.AssetCategories
+                .Where(x => x.TenantId == TenantId && assetCategoryIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
 
         dbContext.ContractSites.RemoveRange(sites);
         dbContext.ContractAssets.RemoveRange(assets);
@@ -579,7 +651,9 @@ public sealed class ContractsController(
             TenantId = TenantId,
             ContractId = contract.Id,
             AssetCategoryId = item.AssetCategoryId,
-            AssetCategoryName = item.AssetCategoryName?.Trim()
+            AssetCategoryName = item.AssetCategoryId.HasValue
+                ? assetCategoryLookup.GetValueOrDefault(item.AssetCategoryId.Value, item.AssetCategoryName?.Trim() ?? string.Empty)
+                : item.AssetCategoryName?.Trim()
         }));
         dbContext.ContractWorkOrderTypes.AddRange(request.WorkOrderTypes.Select(item => new ContractWorkOrderType
         {
@@ -674,6 +748,7 @@ public sealed class ContractsController(
             contract.Currency,
             includePricing ? contract.ContractValue : null,
             contract.RenewalNoticeDays,
+            contract.RenewalBehavior,
             contract.Description,
             contract.IncludedServices,
             contract.ExcludedServices,
@@ -702,6 +777,7 @@ public sealed class ContractsController(
             contract.GracePeriodDays,
             contract.AllowPreferentialRatesDuringGracePeriod,
             contract.AllowSlaDuringGracePeriod,
+            contract.GracePeriodPolicy,
             contract.ResponseTimeHours,
             contract.ResolutionTimeHours,
             contract.WorkingHoursPolicy,
@@ -709,6 +785,7 @@ public sealed class ContractsController(
             contract.EscalationEmail,
             contract.PriorityLevel,
             contract.GracePeriodAllowsSla,
+            MapSlaMatrix(contract),
             contract.Sites.Select(x => new ContractSiteResponse(x.SiteId, x.Site?.SiteCode, x.Site?.SiteName)).ToList(),
             contract.Assets.Select(x => new ContractAssetResponse(x.AssetId, x.Asset?.AssetCode, x.Asset?.AssetName)).ToList(),
             contract.AssetCategories.Select(x => new ContractAssetCategoryResponse(x.AssetCategoryId, x.AssetCategory?.Name ?? x.AssetCategoryName)).ToList(),
@@ -750,6 +827,25 @@ public sealed class ContractsController(
 
     private static ContractPmEntitlementResponse MapPmEntitlement(ContractPmEntitlement item) =>
         new(item.Id, item.AssetId, item.Asset?.AssetName, item.AssetCategory, item.WorkOrderType, item.VisitsPerPeriod, item.PeriodType, item.IncludedVisits, item.UsedVisits, item.RemainingVisits, item.EffectiveFrom, item.EffectiveTo, item.IsActive, item.Notes);
+
+    private static IReadOnlyCollection<ContractSlaRowResponse> MapSlaMatrix(Contract contract)
+    {
+        if (string.IsNullOrWhiteSpace(contract.SlaMatrixJson))
+        {
+            var legacyRow = new ContractSlaRowResponse(contract.PriorityLevel ?? "Standard", contract.ResponseTimeHours, contract.ResolutionTimeHours);
+            return [legacyRow];
+        }
+
+        try
+        {
+            var rows = JsonSerializer.Deserialize<List<ContractSlaRowResponse>>(contract.SlaMatrixJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            return rows is { Count: > 0 } ? rows : [new ContractSlaRowResponse(contract.PriorityLevel ?? "Standard", contract.ResponseTimeHours, contract.ResolutionTimeHours)];
+        }
+        catch
+        {
+            return [new ContractSlaRowResponse(contract.PriorityLevel ?? "Standard", contract.ResponseTimeHours, contract.ResolutionTimeHours)];
+        }
+    }
 
     private static ContractLifecycleEventResponse MapLifecycleEvent(ContractLifecycleEvent item) =>
         new(item.Id, item.EventType, item.OldStatus, item.NewStatus, item.Note, item.Reason, item.CreatedByUserId, item.CreatedByUser?.FullName, item.CreatedAt);
@@ -832,6 +928,7 @@ public sealed record UpsertContractRequest(
     string Currency,
     decimal? ContractValue,
     int RenewalNoticeDays,
+    string? RenewalBehavior,
     string? Description,
     string? IncludedServices,
     string? ExcludedServices,
@@ -843,6 +940,7 @@ public sealed record UpsertContractRequest(
     int GracePeriodDays,
     bool AllowPreferentialRatesDuringGracePeriod,
     bool AllowSlaDuringGracePeriod,
+    string? GracePeriodPolicy,
     decimal? ResponseTimeHours,
     decimal? ResolutionTimeHours,
     string? WorkingHoursPolicy,
@@ -850,6 +948,7 @@ public sealed record UpsertContractRequest(
     string? EscalationEmail,
     string? PriorityLevel,
     bool GracePeriodAllowsSla,
+    IReadOnlyCollection<ContractSlaRowRequest>? SlaMatrix,
     IReadOnlyCollection<Guid> SiteIds,
     IReadOnlyCollection<Guid> AssetIds,
     IReadOnlyCollection<ContractAssetCategoryRequest> AssetCategories,
@@ -858,6 +957,7 @@ public sealed record UpsertContractRequest(
 
 public sealed record ContractAssetCategoryRequest(Guid? AssetCategoryId, string? AssetCategoryName);
 public sealed record ContractWorkOrderTypeRequest(Guid? WorkOrderTypeId, string? WorkOrderTypeName);
+public sealed record ContractSlaRowRequest(string Priority, decimal? ResponseTimeHours, decimal? ResolutionTimeHours);
 
 public sealed record UpsertContractPmEntitlementRequest(
     Guid? AssetId,
@@ -904,6 +1004,7 @@ public sealed record ContractDetailResponse(
     string Currency,
     decimal? ContractValue,
     int RenewalNoticeDays,
+    string RenewalBehavior,
     string? Description,
     string? IncludedServices,
     string? ExcludedServices,
@@ -932,6 +1033,7 @@ public sealed record ContractDetailResponse(
     int GracePeriodDays,
     bool AllowPreferentialRatesDuringGracePeriod,
     bool AllowSlaDuringGracePeriod,
+    string GracePeriodPolicy,
     decimal? ResponseTimeHours,
     decimal? ResolutionTimeHours,
     string? WorkingHoursPolicy,
@@ -939,6 +1041,7 @@ public sealed record ContractDetailResponse(
     string? EscalationEmail,
     string? PriorityLevel,
     bool GracePeriodAllowsSla,
+    IReadOnlyCollection<ContractSlaRowResponse> SlaMatrix,
     IReadOnlyCollection<ContractSiteResponse> Sites,
     IReadOnlyCollection<ContractAssetResponse> Assets,
     IReadOnlyCollection<ContractAssetCategoryResponse> AssetCategories,
@@ -954,6 +1057,7 @@ public sealed record ContractSiteResponse(Guid SiteId, string? SiteCode, string?
 public sealed record ContractAssetResponse(Guid AssetId, string? AssetCode, string? AssetName);
 public sealed record ContractAssetCategoryResponse(Guid? AssetCategoryId, string? AssetCategoryName);
 public sealed record ContractWorkOrderTypeResponse(Guid? WorkOrderTypeId, string? WorkOrderTypeName);
+public sealed record ContractSlaRowResponse(string Priority, decimal? ResponseTimeHours, decimal? ResolutionTimeHours);
 public sealed record ContractPmEntitlementResponse(Guid Id, Guid? AssetId, string? AssetName, string? AssetCategory, string WorkOrderType, int VisitsPerPeriod, PeriodType PeriodType, int IncludedVisits, int UsedVisits, int RemainingVisits, DateTime EffectiveFrom, DateTime EffectiveTo, bool IsActive, string? Notes);
 public sealed record ContractReminderRuleResponse(Guid Id, Guid? ContractId, int DaysBeforeExpiry, bool NotifyAccountManager, bool NotifyRenewalOwner, bool NotifySupervisor, bool NotifyFinance, bool NotifyTenantAdmin, bool EmailEnabled, bool InAppEnabled, bool EscalationEnabled, int? EscalationAfterDays, bool IsActive);
 public sealed record ContractRateCardResponse(Guid Id, Guid ContractId, string Name, string? Description, string Currency, bool IsDefault, DateTime? EffectiveFrom, DateTime? EffectiveTo, bool IsActive, IReadOnlyCollection<ContractRateRuleResponse> Rules);

@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddDataProtection();
         services.AddScoped<ITenantContext, HttpTenantContext>();
+        services.AddScoped<IPortalContext, HttpPortalContext>();
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
         services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
@@ -33,6 +34,7 @@ public static class DependencyInjection
             .AddDbContextCheck<AppDbContext>("postgres");
 
         services.AddScoped<IMvpAuthService, MvpAuthService>();
+        services.AddScoped<IPortalAuthService, PortalAuthService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<IDocumentNumberingService, DocumentNumberingService>();
         services.AddScoped<IKnowledgeDocumentProcessingService, KnowledgeDocumentProcessingService>();

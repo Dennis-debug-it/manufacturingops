@@ -6,6 +6,15 @@ namespace Ecosys.Shared.Contracts.Integration;
 /// </summary>
 public sealed class ReportTemplateConfig
 {
+    /// <summary>Selected document layout preset name.</summary>
+    public string LayoutStyle { get; set; } = "Modern";
+
+    /// <summary>Header layout style used by the document preview and renderer.</summary>
+    public string HeaderStyle { get; set; } = "Logo left, company details right";
+
+    /// <summary>Footer layout style used by the document preview and renderer.</summary>
+    public string FooterStyle { get; set; } = "Contact footer";
+
     /// <summary>Ordered list of section IDs to include; missing IDs use defaults.</summary>
     public List<ReportSection> Sections { get; set; } = DefaultSections();
 
@@ -32,6 +41,75 @@ public sealed class ReportTemplateConfig
 
     /// <summary>Whether to show company contact info (phone, email, address) in the header.</summary>
     public bool ShowCompanyContact { get; set; } = true;
+
+    /// <summary>Whether the logo should be shown in the document preview and rendered output.</summary>
+    public bool ShowLogo { get; set; } = true;
+
+    /// <summary>Whether to show a tax breakdown section in the document preview and rendered output.</summary>
+    public bool ShowTaxBreakdown { get; set; } = true;
+
+    /// <summary>Whether bank details should be shown in the document preview and rendered output.</summary>
+    public bool ShowBankDetails { get; set; }
+
+    /// <summary>Whether a signature block should be shown in the document preview and rendered output.</summary>
+    public bool ShowSignatureBlock { get; set; }
+
+    /// <summary>Whether terms and conditions should be shown in the document preview and rendered output.</summary>
+    public bool ShowTerms { get; set; } = true;
+
+    /// <summary>Default footer note used in the document preview.</summary>
+    public string? DefaultFooterNote { get; set; }
+
+    /// <summary>Default terms text used in the document preview.</summary>
+    public string? DefaultTermsText { get; set; }
+
+    /// <summary>Whether to reserve a stamp or seal area on generated documents.</summary>
+    public bool ShowStampArea { get; set; } = true;
+
+    /// <summary>Controls spacing density in the generated document preview.</summary>
+    public string PageDensity { get; set; } = "Comfortable";
+
+    /// <summary>Default quote terms text displayed in the document preview.</summary>
+    public string? QuoteTerms { get; set; }
+
+    /// <summary>Default invoice payment terms text displayed in the document preview.</summary>
+    public string? InvoiceTerms { get; set; }
+
+    /// <summary>Warranty note displayed in customer-facing document previews.</summary>
+    public string? WarrantyNote { get; set; }
+
+    /// <summary>Late payment note displayed in customer-facing document previews.</summary>
+    public string? LatePaymentNote { get; set; }
+
+    /// <summary>Service report disclaimer displayed in customer-facing document previews.</summary>
+    public string? ServiceReportDisclaimer { get; set; }
+
+    /// <summary>Footer legal text displayed in customer-facing document previews.</summary>
+    public string? FooterLegalText { get; set; }
+
+    /// <summary>Bank name shown in customer-facing document previews.</summary>
+    public string? BankName { get; set; }
+
+    /// <summary>Bank account name shown in customer-facing document previews.</summary>
+    public string? AccountName { get; set; }
+
+    /// <summary>Bank account number shown in customer-facing document previews.</summary>
+    public string? AccountNumber { get; set; }
+
+    /// <summary>Bank branch shown in customer-facing document previews.</summary>
+    public string? Branch { get; set; }
+
+    /// <summary>SWIFT/BIC shown in customer-facing document previews.</summary>
+    public string? Swift { get; set; }
+
+    /// <summary>Paybill or till number shown in customer-facing document previews.</summary>
+    public string? Paybill { get; set; }
+
+    /// <summary>Free-form payment instructions displayed in customer-facing document previews.</summary>
+    public string? PaymentInstructions { get; set; }
+
+    /// <summary>Default currency shown in the payment preview block.</summary>
+    public string DefaultCurrency { get; set; } = "KES";
 
     public static List<ReportSection> DefaultSections() =>
     [

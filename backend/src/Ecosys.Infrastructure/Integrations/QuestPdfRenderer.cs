@@ -349,12 +349,21 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
 
         var primary = model.PrimaryColor;
         var altRow  = Colors.Grey.Lighten4;
+        var invoiceFont = model.FontFamily is "Helvetica" or "Arial" or "Times New Roman"
+            ? model.FontFamily : "Helvetica";
 
         return Document.Create(container =>
             container.Page(page =>
             {
                 page.Margin(32);
-                page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Helvetica"));
+                page.DefaultTextStyle(x => x.FontSize(10).FontFamily(invoiceFont));
+
+                if (!string.IsNullOrWhiteSpace(model.WatermarkText))
+                {
+                    page.Background().AlignCenter().AlignMiddle()
+                        .Text(model.WatermarkText.ToUpperInvariant())
+                        .FontSize(64).SemiBold().FontColor(Colors.Grey.Lighten3);
+                }
 
                 // ── Header ────────────────────────────────────────────────
                 page.Header().Column(header =>
@@ -520,19 +529,51 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
                             col.Item().Text(model.Notes).FontSize(9).FontColor(Colors.Grey.Darken1);
                         });
                     }
+
+                    // Bank / payment details
+                    if (!string.IsNullOrWhiteSpace(model.BankDetails) || !string.IsNullOrWhiteSpace(model.PaymentInstructions))
+                    {
+                        column.Item().Border(1).BorderColor(Colors.Grey.Lighten2).Padding(10).Column(col =>
+                        {
+                            col.Spacing(4);
+                            col.Item().Text("Payment Details").FontSize(10).SemiBold().FontColor(primary);
+                            if (!string.IsNullOrWhiteSpace(model.BankDetails))
+                                col.Item().Text(model.BankDetails).FontSize(9).FontColor(Colors.Grey.Darken2);
+                            if (!string.IsNullOrWhiteSpace(model.PaymentInstructions))
+                                col.Item().Text(model.PaymentInstructions).FontSize(9).FontColor(Colors.Grey.Darken1);
+                        });
+                    }
+
+                    // Terms
+                    if (!string.IsNullOrWhiteSpace(model.TermsText))
+                    {
+                        column.Item().Column(col =>
+                        {
+                            col.Spacing(3);
+                            col.Item().Text("Terms & Conditions").FontSize(9).SemiBold().FontColor(Colors.Grey.Darken2);
+                            col.Item().Text(model.TermsText).FontSize(8).FontColor(Colors.Grey.Darken1);
+                        });
+                    }
                 });
 
                 // ── Footer ────────────────────────────────────────────────
-                page.Footer().BorderTop(1).BorderColor(Colors.Grey.Lighten2).PaddingTop(6).Row(row =>
+                page.Footer().BorderTop(1).BorderColor(Colors.Grey.Lighten2).PaddingTop(6).Column(footer =>
                 {
-                    row.RelativeItem().Text(model.CompanyName).FontSize(8).FontColor(Colors.Grey.Darken2);
-                    row.AutoItem().AlignRight().Text(text =>
+                    footer.Item().Row(row =>
                     {
-                        text.Span("Page ").FontSize(8).FontColor(Colors.Grey.Darken1);
-                        text.CurrentPageNumber().FontSize(8).FontColor(Colors.Grey.Darken1);
-                        text.Span(" of ").FontSize(8).FontColor(Colors.Grey.Darken1);
-                        text.TotalPages().FontSize(8).FontColor(Colors.Grey.Darken1);
+                        row.RelativeItem().Text(model.CompanyName).FontSize(8).FontColor(Colors.Grey.Darken2);
+                        row.AutoItem().AlignRight().Text(text =>
+                        {
+                            text.Span("Page ").FontSize(8).FontColor(Colors.Grey.Darken1);
+                            text.CurrentPageNumber().FontSize(8).FontColor(Colors.Grey.Darken1);
+                            text.Span(" of ").FontSize(8).FontColor(Colors.Grey.Darken1);
+                            text.TotalPages().FontSize(8).FontColor(Colors.Grey.Darken1);
+                        });
                     });
+                    if (!string.IsNullOrWhiteSpace(model.FooterText))
+                    {
+                        footer.Item().PaddingTop(2).Text(model.FooterText).FontSize(8).FontColor(Colors.Grey.Darken1);
+                    }
                 });
             }))
             .GeneratePdf();

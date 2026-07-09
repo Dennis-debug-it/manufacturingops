@@ -8,6 +8,8 @@ public interface ITenantContext
     string? Email { get; }
     string? Role { get; }
     string? JobTitle { get; }
+    Guid? ImpersonatedByUserId => null;
+    string? ImpersonatedByName => null;
     bool IsAuthenticated { get; }
     bool IsSuperAdmin { get; }
     bool IsAdmin { get; }

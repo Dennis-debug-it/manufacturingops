@@ -43,6 +43,7 @@ public sealed class ContractManagementFlowTests
             "KES",
             1250000m,
             30,
+            "ManualRenewalRequired",
             "Annual maintenance contract",
             "PM, inspection, emergency support",
             "Overhauls",
@@ -54,6 +55,7 @@ public sealed class ContractManagementFlowTests
             7,
             true,
             true,
+            "Both",
             4m,
             24m,
             "BusinessHours",
@@ -61,6 +63,7 @@ public sealed class ContractManagementFlowTests
             "renewals@acme.test",
             "High",
             true,
+            [new ContractSlaRowRequest("Standard", 4m, 24m)],
             [fixture.SiteId],
             [fixture.AssetId],
             [new ContractAssetCategoryRequest(null, "Generator")],
@@ -193,6 +196,70 @@ public sealed class ContractManagementFlowTests
         Assert.Equal("ContractRateRule", pricing.AppliedRateSource);
         Assert.Equal(2500m, pricing.LabourHourlyRate);
         Assert.Contains(pricing.Warnings, item => item.Contains("Preferential", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task CoverageService_UsesMostSpecificCoverageAndDoesNotFallBackToBroaderScopes()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var coverageService = CreateCoverageService(dbContext);
+
+        var specificAsset = new Asset
+        {
+            TenantId = fixture.TenantId,
+            ClientId = fixture.ClientId,
+            SiteId = fixture.SiteId,
+            AssetName = "Generator 2",
+            AssetCode = "GEN-02",
+            AssetType = "Generator",
+            Status = "Active"
+        };
+        dbContext.Assets.Add(specificAsset);
+        await dbContext.SaveChangesAsync();
+
+        var contract = new Contract
+        {
+            TenantId = fixture.TenantId,
+            ClientId = fixture.ClientId,
+            ContractNumber = $"CNT-{Guid.NewGuid():N}".Substring(0, 12),
+            Name = "Scope precedence",
+            ContractType = ContractType.ComprehensiveMaintenance,
+            Status = ContractStatus.Active,
+            StartDate = DateTime.UtcNow.Date.AddDays(-10),
+            EndDate = DateTime.UtcNow.Date.AddDays(30),
+            BillingModel = BillingModel.PreferentialRates,
+            Currency = "KES",
+            RenewalBehavior = "ManualRenewalRequired",
+            RenewalNoticeDays = 30,
+            GracePeriodPolicy = "None",
+            ResponseTimeHours = 4m,
+            ResolutionTimeHours = 24m,
+            PriorityLevel = "Standard",
+            SlaMatrixJson = "[{\"priority\":\"Standard\",\"responseTimeHours\":4,\"resolutionTimeHours\":24}]",
+            RenewalRisk = RenewalRisk.Low
+        };
+        dbContext.Contracts.Add(contract);
+        await dbContext.SaveChangesAsync();
+
+        dbContext.ContractSites.Add(new ContractSite { TenantId = fixture.TenantId, ContractId = contract.Id, SiteId = fixture.SiteId });
+        dbContext.ContractAssets.Add(new ContractAsset { TenantId = fixture.TenantId, ContractId = contract.Id, AssetId = specificAsset.Id });
+        dbContext.ContractAssetCategories.Add(new ContractAssetCategory { TenantId = fixture.TenantId, ContractId = contract.Id, AssetCategoryName = "Generator" });
+        await dbContext.SaveChangesAsync();
+
+        var coverage = await coverageService.EvaluateAsync(
+            fixture.TenantId,
+            fixture.ClientId,
+            fixture.SiteId,
+            fixture.AssetId,
+            WorkOrderTypes.PreventiveMaintenance,
+            WorkOrderTypes.PreventiveMaintenance,
+            DateTime.UtcNow,
+            true,
+            CancellationToken.None);
+
+        Assert.Equal(CoverageStatus.NotCovered, coverage.CoverageStatus);
+        Assert.Null(coverage.ContractId);
     }
 
     [Fact]
@@ -406,11 +473,15 @@ public sealed class ContractManagementFlowTests
             BillingModel = billingModel,
             Currency = "KES",
             RenewalNoticeDays = 30,
+            RenewalBehavior = "ManualRenewalRequired",
             AllowPreferentialRatesDuringGracePeriod = allowGraceRates,
             AllowSlaDuringGracePeriod = allowGraceSla,
+            GracePeriodPolicy = allowGraceRates && allowGraceSla ? "Both" : allowGraceRates ? "PreferentialRates" : allowGraceSla ? "Sla" : "None",
             ResponseTimeHours = 4m,
             ResolutionTimeHours = 24m,
+            PriorityLevel = "Standard",
             ActivatedAt = DateTime.UtcNow.AddDays(-10),
+            SlaMatrixJson = "[{\"priority\":\"Standard\",\"responseTimeHours\":4,\"resolutionTimeHours\":24}]",
             RenewalRisk = RenewalRisk.Low
         };
 

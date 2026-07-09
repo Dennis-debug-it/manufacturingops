@@ -45,7 +45,7 @@ export async function openFirstTenantDetails(page: Page) {
 
 export async function gotoEmailIntake(page: Page) {
   await page.goto('/settings')
-  await expect(page).toHaveURL(/\/settings\/company-profile/)
+  await expect(page.getByRole('heading', { name: /settings workspace/i })).toBeVisible()
   await page.locator('a[href="/settings/email-intake"]:visible').first().click()
   await expect(page).toHaveURL(/\/settings\/email-intake/)
   await expect(page.getByTestId('email-intake-page')).toBeVisible()

@@ -18,6 +18,7 @@ public interface IMvpAuthService
 {
     Task<SignupResult> SignupAsync(string fullName, string email, string password, string companyName, string? industry, string country, CancellationToken cancellationToken = default);
     Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default);
+    Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default);
 }
 
 public sealed record SignupResult(
@@ -45,6 +46,24 @@ public sealed record LoginResult(
     string? Industry,
     string? LogoUrl,
     bool ShowPoweredByEcosys);
+
+public sealed record ImpersonationResult(
+    string Token,
+    Guid TenantId,
+    Guid UserId,
+    string FullName,
+    string Email,
+    string Role,
+    string? JobTitle,
+    UserPermissionsModel Permissions,
+    string CompanyName,
+    string Country,
+    string? Industry,
+    string? LogoUrl,
+    bool ShowPoweredByEcosys,
+    Guid ImpersonatedByUserId,
+    string ImpersonatedByName,
+    DateTime StartedAt);
 
 internal sealed class MvpAuthService(
     AppDbContext dbContext,
@@ -246,6 +265,70 @@ internal sealed class MvpAuthService(
             user.Tenant.ShowPoweredByEcosys);
     }
 
+    public async Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default)
+    {
+        var tenant = await dbContext.Tenants
+            .SingleOrDefaultAsync(x => x.Id == tenantId && x.Id != PlatformConstants.RootTenantId, cancellationToken)
+            ?? throw new NotFoundException("Tenant was not found.");
+
+        if (!tenant.IsActive)
+        {
+            throw new BusinessRuleException("This tenant is not active. Reactivate it before starting an impersonation session.");
+        }
+
+        var targetUser = await dbContext.Users
+            .Include(x => x.Permission)
+            .Where(x => x.TenantId == tenantId && x.IsActive && x.Role == AppRoles.Admin)
+            .OrderBy(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("This tenant has no active admin user to impersonate.");
+
+        var permissions = ResolvePermissions(targetUser);
+        var jwtId = Guid.NewGuid().ToString("N");
+        var session = userSessionService.StartSession(targetUser, jwtId);
+        var startedAt = DateTime.UtcNow;
+        var token = CreateToken(targetUser, tenant, permissions, session.Id, jwtId, mustChangePassword: false, actingUserId, actingUserName);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditLogService.LogAsync(
+            tenantId,
+            actingUserId,
+            "impersonation.started",
+            nameof(User),
+            targetUser.Id.ToString(),
+            $"Platform admin '{actingUserName}' started an impersonation session as tenant admin '{targetUser.Email}'.",
+            severity: "Warning",
+            cancellationToken: cancellationToken);
+
+        await auditLogService.LogAsync(
+            PlatformConstants.RootTenantId,
+            actingUserId,
+            "platform.tenant.impersonation.started",
+            nameof(Tenant),
+            tenantId.ToString(),
+            $"Started impersonating '{targetUser.Email}' in tenant '{tenant.Name}'.",
+            severity: "Warning",
+            cancellationToken: cancellationToken);
+
+        return new ImpersonationResult(
+            token,
+            tenantId,
+            targetUser.Id,
+            targetUser.FullName,
+            targetUser.Email,
+            targetUser.Role,
+            targetUser.JobTitle,
+            permissions,
+            tenant.CompanyName,
+            tenant.Country,
+            tenant.Industry,
+            tenant.LogoUrl,
+            tenant.ShowPoweredByEcosys,
+            actingUserId,
+            actingUserName,
+            startedAt);
+    }
+
     private async Task RegisterFailedLoginAttemptAsync(User user, string reason, CancellationToken cancellationToken)
     {
         var utcNow = DateTime.UtcNow;
@@ -325,7 +408,15 @@ internal sealed class MvpAuthService(
         return token;
     }
 
-    private string CreateToken(User user, Tenant tenant, UserPermissionsModel permissions, Guid sessionId, string jwtId, bool mustChangePassword = false)
+    private string CreateToken(
+        User user,
+        Tenant tenant,
+        UserPermissionsModel permissions,
+        Guid sessionId,
+        string jwtId,
+        bool mustChangePassword = false,
+        Guid? impersonatedByUserId = null,
+        string? impersonatedByName = null)
     {
         var options = jwtOptions.Value;
         var expiresUtc = DateTime.UtcNow.AddMinutes(options.ExpiryMinutes);
@@ -354,6 +445,12 @@ internal sealed class MvpAuthService(
         if (mustChangePassword)
         {
             claims.Add(new Claim(TenantClaimTypes.Scope, "password_change_only"));
+        }
+
+        if (impersonatedByUserId.HasValue)
+        {
+            claims.Add(new Claim(TenantClaimTypes.ImpersonatedByUserId, impersonatedByUserId.Value.ToString()));
+            claims.Add(new Claim(TenantClaimTypes.ImpersonatedByName, impersonatedByName ?? string.Empty));
         }
 
         claims.AddRange(ToClaims(permissions));

@@ -24,6 +24,14 @@ public sealed record CreateInvoiceLineRequest(
 
 public sealed record VoidInvoiceRequest(string? Reason);
 
+public sealed record BuildProformaInvoiceRequest(
+    List<Guid>? QuotationIds,
+    DateTime InvoiceDate,
+    DateTime DueDate,
+    string? Notes,
+    string? TermsAndConditions,
+    string? Currency);
+
 public sealed record RecordPaymentRequest(
     decimal Amount,
     DateTime PaymentDate,
@@ -39,6 +47,7 @@ public sealed record TenantInvoiceListItem(
     Guid ClientId,
     string? ClientName,
     string InvoiceNumber,
+    string DocumentType,
     string Status,
     DateTime InvoiceDate,
     DateTime DueDate,
@@ -58,6 +67,7 @@ public sealed record TenantInvoiceDetailResponse(
     Guid ClientId,
     string? ClientName,
     string InvoiceNumber,
+    string DocumentType,
     string Status,
     DateTime InvoiceDate,
     DateTime DueDate,
@@ -79,7 +89,17 @@ public sealed record TenantInvoiceDetailResponse(
     DateTime? DepositDueDate = null,
     bool CreditLimitWarning = false,
     decimal ClientCurrentBalance = 0,
-    decimal? ClientCreditLimit = null);
+    decimal? ClientCreditLimit = null,
+    IReadOnlyCollection<TenantInvoiceSourceQuotationResponse>? SourceQuotations = null);
+
+public sealed record TenantInvoiceSourceQuotationResponse(
+    Guid Id,
+    string QuoteNumber,
+    string Status,
+    string? Subject,
+    DateTime QuoteDate,
+    decimal TotalAmount,
+    string Currency);
 
 public sealed record TenantInvoiceLineResponse(
     Guid Id,
@@ -95,6 +115,22 @@ public sealed record TenantInvoiceLineResponse(
     decimal TaxRate,
     decimal TaxAmount,
     decimal GrandTotal);
+
+public sealed record TenantPaymentListItemResponse(
+    Guid Id,
+    Guid TenantId,
+    Guid InvoiceId,
+    Guid ClientId,
+    string PaymentNumber,
+    decimal Amount,
+    DateTime PaymentDate,
+    string Method,
+    string? Reference,
+    string? Notes,
+    string Status,
+    DateTime CreatedAt,
+    string? InvoiceNumber,
+    string? ClientName);
 
 public sealed record TenantPaymentResponse(
     Guid Id,

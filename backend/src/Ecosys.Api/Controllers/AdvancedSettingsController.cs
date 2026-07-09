@@ -55,6 +55,51 @@ public sealed class AdvancedSettingsController(
         return Ok(MapBrandingResponse(tenant));
     }
 
+    [HttpGet("documents")]
+    public async Task<ActionResult<DocumentsSettingsResponse>> GetDocuments(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+
+        var tenant = await dbContext.Tenants
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
+            ?? throw new NotFoundException("Tenant not found.");
+
+        var template = LoadReportTemplate(tenant);
+        return Ok(new DocumentsSettingsResponse(
+            MapTenantProfileResponse(tenant),
+            MapBrandingResponse(tenant),
+            template));
+    }
+
+    [HttpPut("documents")]
+    public async Task<ActionResult<DocumentsSettingsResponse>> UpdateDocuments([FromBody] DocumentsSettingsRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+
+        var tenant = await dbContext.Tenants
+            .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
+            ?? throw new NotFoundException("Tenant not found.");
+
+        if (string.IsNullOrWhiteSpace(request.Profile.CompanyName) ||
+            string.IsNullOrWhiteSpace(request.Profile.Email) ||
+            string.IsNullOrWhiteSpace(request.Profile.Country))
+        {
+            throw new BusinessRuleException("Company name, email, and country are required.");
+        }
+
+        ApplyTenantProfile(tenant, request.Profile);
+        ApplyBranding(tenant, request.Branding);
+        tenant.ReportTemplateConfigJson = JsonSerializer.Serialize(NormalizeReportTemplate(request.Template));
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new DocumentsSettingsResponse(
+            MapTenantProfileResponse(tenant),
+            MapBrandingResponse(tenant),
+            LoadReportTemplate(tenant)));
+    }
+
     private static bool IsValidHexColor(string value) =>
         value.StartsWith('#') && (value.Length == 7 || value.Length == 4) &&
         value[1..].All(c => "0123456789abcdefABCDEF".Contains(c));
@@ -282,9 +327,10 @@ public sealed class AdvancedSettingsController(
         for (var i = 0; i < request.Sections.Count; i++)
             request.Sections[i].Order = i;
 
-        tenant.ReportTemplateConfigJson = JsonSerializer.Serialize(request);
+        var normalized = NormalizeReportTemplate(request);
+        tenant.ReportTemplateConfigJson = JsonSerializer.Serialize(normalized);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(request);
+        return Ok(normalized);
     }
 
     // ── License ───────────────────────────────────────────────────────────────
@@ -299,6 +345,95 @@ public sealed class AdvancedSettingsController(
     private async Task<Tenant> GetTenantAsync(CancellationToken cancellationToken) =>
         await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
         ?? throw new NotFoundException("Tenant was not found.");
+
+    private static TenantProfileResponse MapTenantProfileResponse(Tenant tenant) =>
+        new(
+            tenant.CompanyName,
+            tenant.LegalName,
+            tenant.TradingName,
+            tenant.PostalAddress,
+            tenant.PhysicalAddress,
+            tenant.Website,
+            tenant.VatNumber,
+            tenant.RegistrationNumber,
+            tenant.Email,
+            tenant.Phone,
+            tenant.Country,
+            tenant.Industry,
+            tenant.Address,
+            tenant.LogoUrl,
+            tenant.PrimaryColor,
+            tenant.SecondaryColor,
+            tenant.ShowPoweredByEcosys);
+
+    private static void ApplyTenantProfile(Tenant tenant, UpdateTenantProfileRequest request)
+    {
+        tenant.CompanyName = request.CompanyName.Trim();
+        tenant.LegalName = request.LegalName is null ? tenant.LegalName : NormalizeOptional(request.LegalName);
+        tenant.TradingName = request.TradingName is null ? tenant.TradingName : NormalizeOptional(request.TradingName);
+        tenant.PostalAddress = request.PostalAddress is null ? tenant.PostalAddress : NormalizeOptional(request.PostalAddress);
+        tenant.PhysicalAddress = request.PhysicalAddress is null ? tenant.PhysicalAddress : NormalizeOptional(request.PhysicalAddress);
+        tenant.Website = request.Website is null ? tenant.Website : NormalizeOptional(request.Website);
+        tenant.VatNumber = request.VatNumber is null ? tenant.VatNumber : NormalizeOptional(request.VatNumber);
+        tenant.RegistrationNumber = request.RegistrationNumber is null ? tenant.RegistrationNumber : NormalizeOptional(request.RegistrationNumber);
+        tenant.Email = request.Email.Trim().ToLowerInvariant();
+        tenant.Phone = request.Phone?.Trim();
+        tenant.Country = request.Country.Trim();
+        tenant.Industry = request.Industry?.Trim();
+        tenant.Address = request.Address is null ? tenant.Address : NormalizeOptional(request.Address);
+        tenant.LogoUrl = request.LogoUrl?.Trim();
+    }
+
+    private static void ApplyBranding(Tenant tenant, BrandingSettingsRequest request)
+    {
+        tenant.LogoUrl = string.IsNullOrWhiteSpace(request.LogoUrl) ? null : request.LogoUrl.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.PrimaryColor) && IsValidHexColor(request.PrimaryColor))
+            tenant.PrimaryColor = request.PrimaryColor.Trim();
+
+        if (!string.IsNullOrWhiteSpace(request.SecondaryColor) && IsValidHexColor(request.SecondaryColor))
+            tenant.SecondaryColor = request.SecondaryColor.Trim();
+
+        tenant.ShowPoweredByEcosys = request.ShowPoweredByEcosys;
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static ReportTemplateConfig LoadReportTemplate(Tenant tenant)
+    {
+        if (string.IsNullOrWhiteSpace(tenant.ReportTemplateConfigJson))
+            return new ReportTemplateConfig();
+
+        return JsonSerializer.Deserialize<ReportTemplateConfig>(tenant.ReportTemplateConfigJson, _jsonOpts)
+               ?? new ReportTemplateConfig();
+    }
+
+    private static ReportTemplateConfig NormalizeReportTemplate(ReportTemplateConfig request)
+    {
+        request.Sections ??= new List<ReportSection>();
+        request.PageDensity = string.IsNullOrWhiteSpace(request.PageDensity) ? "Comfortable" : request.PageDensity.Trim();
+        request.LayoutStyle = string.IsNullOrWhiteSpace(request.LayoutStyle) ? "Modern" : request.LayoutStyle.Trim();
+        request.HeaderStyle = string.IsNullOrWhiteSpace(request.HeaderStyle) ? "Logo left, company details right" : request.HeaderStyle.Trim();
+        request.FooterStyle = string.IsNullOrWhiteSpace(request.FooterStyle) ? "Contact footer" : request.FooterStyle.Trim();
+        request.FontFamily = string.IsNullOrWhiteSpace(request.FontFamily) ? "Helvetica" : request.FontFamily.Trim();
+        request.QuoteTerms = string.IsNullOrWhiteSpace(request.QuoteTerms) ? null : request.QuoteTerms.Trim();
+        request.InvoiceTerms = string.IsNullOrWhiteSpace(request.InvoiceTerms) ? null : request.InvoiceTerms.Trim();
+        request.WarrantyNote = string.IsNullOrWhiteSpace(request.WarrantyNote) ? null : request.WarrantyNote.Trim();
+        request.LatePaymentNote = string.IsNullOrWhiteSpace(request.LatePaymentNote) ? null : request.LatePaymentNote.Trim();
+        request.ServiceReportDisclaimer = string.IsNullOrWhiteSpace(request.ServiceReportDisclaimer) ? null : request.ServiceReportDisclaimer.Trim();
+        request.FooterLegalText = string.IsNullOrWhiteSpace(request.FooterLegalText) ? null : request.FooterLegalText.Trim();
+        request.BankName = string.IsNullOrWhiteSpace(request.BankName) ? null : request.BankName.Trim();
+        request.AccountName = string.IsNullOrWhiteSpace(request.AccountName) ? null : request.AccountName.Trim();
+        request.AccountNumber = string.IsNullOrWhiteSpace(request.AccountNumber) ? null : request.AccountNumber.Trim();
+        request.Branch = string.IsNullOrWhiteSpace(request.Branch) ? null : request.Branch.Trim();
+        request.Swift = string.IsNullOrWhiteSpace(request.Swift) ? null : request.Swift.Trim();
+        request.Paybill = string.IsNullOrWhiteSpace(request.Paybill) ? null : request.Paybill.Trim();
+        request.PaymentInstructions = string.IsNullOrWhiteSpace(request.PaymentInstructions) ? null : request.PaymentInstructions.Trim();
+        request.DefaultCurrency = string.IsNullOrWhiteSpace(request.DefaultCurrency) ? "KES" : request.DefaultCurrency.Trim().ToUpperInvariant();
+        request.ShowStampArea = request.ShowStampArea;
+        return request;
+    }
 
     private async Task SyncMembersAsync(AssignmentGroup group, IReadOnlyCollection<Guid> technicianIds, CancellationToken cancellationToken)
     {
@@ -318,6 +453,8 @@ public sealed class AdvancedSettingsController(
 
 public sealed record BrandingSettingsRequest(string? LogoUrl, string? PrimaryColor, string? SecondaryColor, bool ShowPoweredByEcosys);
 public sealed record BrandingSettingsResponse(string? LogoUrl, string PrimaryColor, string SecondaryColor, bool ShowPoweredByEcosys);
+public sealed record DocumentsSettingsRequest(UpdateTenantProfileRequest Profile, BrandingSettingsRequest Branding, ReportTemplateConfig Template);
+public sealed record DocumentsSettingsResponse(TenantProfileResponse Profile, BrandingSettingsResponse Branding, ReportTemplateConfig Template);
 public sealed record UpsertAssignmentGroupRequest(Guid? BranchId, string Name, string? Description, bool IsActive, IReadOnlyCollection<Guid> TechnicianIds);
 public sealed record AssignmentGroupResponse(Guid Id, Guid? BranchId, string? BranchName, string Name, string? Description, bool IsActive, IReadOnlyCollection<Guid> TechnicianIds);
 public sealed record TenantSecurityPolicyRequest(int MinPasswordLength, bool RequireUppercase, bool RequireLowercase, bool RequireDigit, bool RequireSpecialCharacter, int PasswordRotationDays, int SessionTimeoutMinutes, bool RequireMfa);

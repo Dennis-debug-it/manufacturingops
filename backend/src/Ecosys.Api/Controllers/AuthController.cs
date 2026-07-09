@@ -165,6 +165,9 @@ public sealed class AuthController(
             ?? throw new UnauthorizedAccessException("User context was not found.");
 
         var isPlatformUser = IsPlatformRole(user.Role);
+        var impersonation = tenantContext.ImpersonatedByUserId.HasValue
+            ? new ImpersonationInfoDto(tenantContext.ImpersonatedByUserId.Value, tenantContext.ImpersonatedByName ?? "Platform admin")
+            : null;
 
         if (isPlatformUser)
         {
@@ -188,7 +191,8 @@ public sealed class AuthController(
                     user.Tenant?.LogoUrl,
                     user.Tenant?.PrimaryColor ?? "#0F4C81",
                     user.Tenant?.SecondaryColor ?? "#F4B942"),
-                []));
+                [],
+                impersonation));
         }
 
         var branches = user.HasAllBranchAccess
@@ -223,7 +227,8 @@ public sealed class AuthController(
                 user.Tenant?.LogoUrl,
                 user.Tenant?.PrimaryColor ?? "#0F4C81",
                 user.Tenant?.SecondaryColor ?? "#F4B942"),
-            branches));
+            branches,
+            impersonation));
     }
 
     private static PermissionResponse MapPermissions(UserPermissionsModel permissions, bool isPlatformOwner) =>
@@ -378,7 +383,10 @@ public sealed record PermissionResponse
 public sealed record AuthenticatedContextResponse(
     AuthenticatedUserDto User,
     AuthenticatedTenantDto Tenant,
-    IReadOnlyCollection<AuthenticatedBranchDto> Branches);
+    IReadOnlyCollection<AuthenticatedBranchDto> Branches,
+    ImpersonationInfoDto? Impersonation = null);
+
+public sealed record ImpersonationInfoDto(Guid ImpersonatedByUserId, string ImpersonatedByName);
 
 public sealed record AuthenticatedUserDto(
     Guid UserId,
