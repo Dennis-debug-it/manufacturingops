@@ -25,6 +25,8 @@ public static class PermissionNames
     public const string FinanceViewBillableWork = "finance.view_billable_work";
     public const string FinanceManageBillableWork = "finance.manage_billable_work";
     public const string MaterialsOverrideStock = "materials.override_stock";
+    public const string AttendanceView = "attendance.view";
+    public const string AttendanceManage = "attendance.manage";
 
     public static readonly string[] All =
     [
@@ -50,6 +52,8 @@ public static class PermissionNames
         FinanceManageApprovals,
         FinanceViewBillableWork,
         FinanceManageBillableWork,
-        MaterialsOverrideStock
+        MaterialsOverrideStock,
+        AttendanceView,
+        AttendanceManage
     ];
 }

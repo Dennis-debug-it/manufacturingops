@@ -24,7 +24,6 @@ import {
   type TimesheetView,
 } from './timeAttendance/api'
 
-const backendGapNote = 'No TimeAttendanceController, TimesheetController, LeaveController, or ClockController exists in the current backend yet. This screen shows the full intended UI wired against typed stub data — no fake clock data is simulated. Actions here will not persist until a real Time & Attendance API is available.'
 
 export function LiveAttendancePage() {
   const { data, isLoading } = useAttendanceLive()
@@ -42,7 +41,6 @@ export function LiveAttendancePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Live Attendance" subtitle="Real-time clock status across the technician team." />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Clocked In" value={summary?.clockedIn ?? 0} icon={<CircleCheck className="h-5 w-5 text-emerald-500" />} tone="success" />
         <StatCard label="On Break" value={summary?.onBreak ?? 0} icon={<Coffee className="h-5 w-5 text-amber-500" />} tone="warning" />
@@ -54,7 +52,7 @@ export function LiveAttendancePage() {
         data={entries}
         loading={isLoading}
         emptyTitle="No technicians yet"
-        emptyDescription="Live clock-in status will appear here once the Time & Attendance API is connected."
+        emptyDescription="Technicians will appear here as they are added to the team."
       />
     </div>
   )
@@ -84,7 +82,6 @@ export function TimesheetsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Timesheets" subtitle="Week, month, and custom-range timesheet views per technician." />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         {viewOptions.map((option) => (
           <button
@@ -109,7 +106,7 @@ export function TimesheetsPage() {
         data={data ?? []}
         loading={isLoading}
         emptyTitle="No timesheets yet"
-        emptyDescription="Timesheet rollups will appear here once the Time & Attendance API is connected."
+        emptyDescription="Timesheets appear once technicians clock time or take approved leave in this period."
       />
     </div>
   )
@@ -126,9 +123,8 @@ export function TimesheetDetailPage() {
         subtitle="Daily breakdown and audit trail."
         breadcrumbs={[{ label: 'Timesheets', to: '/team/time-attendance/timesheets' }, { label: data?.periodLabel ?? 'Detail' }]}
       />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       {isLoading ? null : !data ? (
-        <EmptyState title="No timesheet detail yet" description="Daily clock in/out breakdown and audit trail will appear here once the Time & Attendance API is connected." />
+        <EmptyState title="No timesheet detail yet" description="No clock activity recorded for this technician in the selected period." />
       ) : (
         <>
           <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -218,7 +214,6 @@ export function LeavePage() {
           </button>
         }
       />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         {leaveStatusOptions.map((status) => (
           <button
@@ -236,7 +231,7 @@ export function LeavePage() {
         data={data ?? []}
         loading={isLoading}
         emptyTitle="No leave requests yet"
-        emptyDescription="Leave requests submitted by technicians will appear here once the Leave API is connected."
+        emptyDescription="Leave requests will appear here once submitted."
       />
 
       <FormDrawer open={showNewRequest} title="New Leave Request" onClose={() => setShowNewRequest(false)}>
@@ -327,7 +322,6 @@ export function TimeAttendanceReportsPage() {
           </button>
         }
       />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label={data?.periodLabel ?? 'This Month'} value={`${(data?.totalWorkedHours ?? 0).toFixed(0)}h worked`} />
         <StatCard label="Overtime Hours" value={(data?.totalOvertimeHours ?? 0).toFixed(0)} tone="warning" />
@@ -335,7 +329,7 @@ export function TimeAttendanceReportsPage() {
         <StatCard label="Scheduled Hours" value={(data?.totalScheduledHours ?? 0).toFixed(0)} />
         <StatCard label="Late Arrivals" value={data?.lateArrivals ?? 0} tone="danger" />
       </div>
-      <EmptyState title="Detailed export pending backend" description="Per-technician payroll exports and attendance trend charts will populate here once the Time & Attendance reporting API is connected." />
+      <EmptyState title="More reports coming soon" description="Per-technician payroll exports and attendance trend charts are planned for a future release." />
     </div>
   )
 }

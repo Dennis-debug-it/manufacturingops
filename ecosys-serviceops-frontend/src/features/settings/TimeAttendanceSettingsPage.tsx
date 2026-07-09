@@ -46,7 +46,7 @@ export function TimeAttendanceSettingsPage() {
       await save.mutateAsync(values)
       toast.success('Settings saved')
     } catch {
-      toast.error('Time & Attendance settings cannot be saved yet — no backend endpoint exists. Changes shown here are local-only.')
+      toast.error('Failed to save Time & Attendance settings.')
     }
   }
 
@@ -63,10 +63,6 @@ export function TimeAttendanceSettingsPage() {
           ) : undefined
         }
       />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        No Time & Attendance backend endpoint exists yet — this form is fully built out but changes are not persisted.
-      </div>
-
       <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Clock Rounding (minutes)</label>

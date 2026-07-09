@@ -1,11 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-
-// TODO(backend): No TimeAttendanceController / TimesheetController / LeaveController / ClockController
-// exists yet (confirmed against the 67-controller snapshot in FRONTEND_BUILD_PLAN.md §4.5).
-// WorkOrderBillingController's `time-logs` sub-resource is per-work-order billable time, not a
-// company-wide clock in/out + leave system, and must not be reused here.
-// Every hook below is a typed stub returning empty/default data — swap the queryFn/mutationFn
-// bodies for real `api.get`/`api.post` calls once a backend Time & Attendance API exists.
+import { api } from '../../../shared/api/apiClient'
 
 export type AttendanceStatus = 'ClockedIn' | 'OnBreak' | 'Travelling' | 'NotClockedIn'
 
@@ -34,11 +28,39 @@ export interface AttendanceLiveResponse {
 export function useAttendanceLive() {
   return useQuery({
     queryKey: ['team', 'time-attendance', 'live'],
-    queryFn: async (): Promise<AttendanceLiveResponse> => ({
-      summary: { clockedIn: 0, onBreak: 0, travelling: 0, notClockedIn: 0 },
-      entries: [],
-    }),
-    staleTime: Infinity,
+    queryFn: () => api.get<AttendanceLiveResponse>('/api/attendance/live'),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  })
+}
+
+export interface ClockActionPayload {
+  technicianId: string
+  location?: string | undefined
+}
+
+export function useClockIn() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: ClockActionPayload) => api.post<AttendanceLiveEntry>('/api/attendance/clock-in', payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team', 'time-attendance'] }),
+  })
+}
+
+export function useClockOut() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: ClockActionPayload) => api.post<void>('/api/attendance/clock-out', payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team', 'time-attendance'] }),
+  })
+}
+
+export function useSetAttendanceStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { technicianId: string; status: Exclude<AttendanceStatus, 'NotClockedIn'>; location?: string | undefined }) =>
+      api.post<void>('/api/attendance/status', payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team', 'time-attendance'] }),
   })
 }
 
@@ -57,11 +79,11 @@ export interface TimesheetListItem {
 
 export type TimesheetView = 'week' | 'month' | 'custom'
 
-export function useTimesheets(view: TimesheetView, _from?: string, _to?: string) {
+export function useTimesheets(view: TimesheetView, from?: string, to?: string) {
   return useQuery({
-    queryKey: ['team', 'time-attendance', 'timesheets', view, _from ?? '', _to ?? ''],
-    queryFn: async (): Promise<TimesheetListItem[]> => [],
-    staleTime: Infinity,
+    queryKey: ['team', 'time-attendance', 'timesheets', view, from ?? '', to ?? ''],
+    queryFn: () => api.get<TimesheetListItem[]>('/api/attendance/timesheets', { view, from, to }),
+    staleTime: 30_000,
   })
 }
 
@@ -88,9 +110,9 @@ export interface TimesheetDetail extends TimesheetListItem {
 export function useTimesheetDetail(id: string | undefined) {
   return useQuery({
     queryKey: ['team', 'time-attendance', 'timesheets', id],
-    queryFn: async (): Promise<TimesheetDetail | null> => null,
+    queryFn: () => api.get<TimesheetDetail>(`/api/attendance/timesheets/${id}`),
     enabled: Boolean(id),
-    staleTime: Infinity,
+    staleTime: 30_000,
   })
 }
 
@@ -112,8 +134,8 @@ export interface LeaveRequestItem {
 export function useLeaveRequests(status?: LeaveRequestStatus | 'All') {
   return useQuery({
     queryKey: ['team', 'time-attendance', 'leave', status ?? 'All'],
-    queryFn: async (): Promise<LeaveRequestItem[]> => [],
-    staleTime: Infinity,
+    queryFn: () => api.get<LeaveRequestItem[]>('/api/attendance/leave', { status: status ?? 'All' }),
+    staleTime: 30_000,
   })
 }
 
@@ -128,19 +150,16 @@ export interface CreateLeaveRequestPayload {
 export function useCreateLeaveRequest() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_payload: CreateLeaveRequestPayload): Promise<LeaveRequestItem> => {
-      throw new Error('Leave requests cannot be submitted yet — no backend LeaveController exists.')
-    },
+    mutationFn: (payload: CreateLeaveRequestPayload) => api.post<LeaveRequestItem>('/api/attendance/leave', payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team', 'time-attendance', 'leave'] }),
   })
 }
 
-export function useDecideLeaveRequest(_id: string) {
+export function useDecideLeaveRequest(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_decision: { approve: boolean; note?: string }): Promise<void> => {
-      throw new Error('Leave approvals cannot be persisted yet — no backend LeaveController exists.')
-    },
+    mutationFn: (decision: { approve: boolean; note?: string }) =>
+      api.post<void>(`/api/attendance/leave/${id}/decision`, decision),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team', 'time-attendance', 'leave'] }),
   })
 }
@@ -157,15 +176,8 @@ export interface AttendanceReportSummary {
 export function useAttendanceReportSummary() {
   return useQuery({
     queryKey: ['team', 'time-attendance', 'reports', 'summary'],
-    queryFn: async (): Promise<AttendanceReportSummary> => ({
-      periodLabel: 'This month',
-      totalScheduledHours: 0,
-      totalWorkedHours: 0,
-      totalOvertimeHours: 0,
-      leaveDaysTaken: 0,
-      lateArrivals: 0,
-    }),
-    staleTime: Infinity,
+    queryFn: () => api.get<AttendanceReportSummary>('/api/attendance/reports/summary'),
+    staleTime: 60_000,
   })
 }
 
@@ -177,32 +189,18 @@ export interface TimeAttendanceSettings {
   leaveTypes: Array<{ code: string; name: string; isPaid: boolean; annualAllowanceDays: number }>
 }
 
-const defaultTimeAttendanceSettings: TimeAttendanceSettings = {
-  roundingMinutes: 15,
-  overtimeThresholdHoursPerDay: 8,
-  graceMinutes: 10,
-  autoClockOutAfterHours: 12,
-  leaveTypes: [
-    { code: 'ANNUAL', name: 'Annual Leave', isPaid: true, annualAllowanceDays: 21 },
-    { code: 'SICK', name: 'Sick Leave', isPaid: true, annualAllowanceDays: 14 },
-    { code: 'UNPAID', name: 'Unpaid Leave', isPaid: false, annualAllowanceDays: 0 },
-  ],
-}
-
 export function useTimeAttendanceSettings() {
   return useQuery({
     queryKey: ['settings', 'time-attendance'],
-    queryFn: async (): Promise<TimeAttendanceSettings> => defaultTimeAttendanceSettings,
-    staleTime: Infinity,
+    queryFn: () => api.get<TimeAttendanceSettings>('/api/settings/time-attendance'),
+    staleTime: 60_000,
   })
 }
 
 export function useSaveTimeAttendanceSettings() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_settings: TimeAttendanceSettings): Promise<void> => {
-      throw new Error('Time & Attendance settings cannot be saved yet — no backend endpoint exists.')
-    },
+    mutationFn: (settings: TimeAttendanceSettings) => api.put<void>('/api/settings/time-attendance', settings),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings', 'time-attendance'] }),
   })
 }

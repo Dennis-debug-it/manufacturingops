@@ -25,6 +25,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<OperationalSystem> Systems => Set<OperationalSystem>();
     public DbSet<Asset> Assets => Set<Asset>();
     public DbSet<Technician> Technicians => Set<Technician>();
+    public DbSet<AttendanceEntry> AttendanceEntries => Set<AttendanceEntry>();
+    public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
+    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+    public DbSet<TimeAttendanceSetting> TimeAttendanceSettings => Set<TimeAttendanceSetting>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
     public DbSet<BranchMaterialStock> BranchMaterialStocks => Set<BranchMaterialStock>();
@@ -2591,6 +2595,84 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         });
         ApplyTenantFilter<ScheduledReport>(modelBuilder);
 
+        modelBuilder.Entity<AttendanceEntry>(entity =>
+        {
+            entity.ToTable("attendance_entries");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired().HasDefaultValue("ClockedIn");
+            entity.Property(x => x.LastLocation).HasMaxLength(300);
+            entity.Property(x => x.Note).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.TechnicianId, x.WorkDate });
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Technician)
+                .WithMany()
+                .HasForeignKey(x => x.TechnicianId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.CurrentWorkOrder)
+                .WithMany()
+                .HasForeignKey(x => x.CurrentWorkOrderId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<AttendanceEntry>(modelBuilder);
+
+        modelBuilder.Entity<LeaveType>(entity =>
+        {
+            entity.ToTable("leave_types");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.AnnualAllowanceDays).HasPrecision(6, 2);
+            entity.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<LeaveType>(modelBuilder);
+
+        modelBuilder.Entity<LeaveRequest>(entity =>
+        {
+            entity.ToTable("leave_requests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.LeaveTypeCode).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired().HasDefaultValue("Pending");
+            entity.Property(x => x.Reason).HasMaxLength(1000);
+            entity.Property(x => x.DecisionNote).HasMaxLength(1000);
+            entity.Property(x => x.TotalDays).HasPrecision(6, 2);
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasIndex(x => new { x.TenantId, x.TechnicianId });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Technician)
+                .WithMany()
+                .HasForeignKey(x => x.TechnicianId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.DecidedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.DecidedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<LeaveRequest>(modelBuilder);
+
+        modelBuilder.Entity<TimeAttendanceSetting>(entity =>
+        {
+            entity.ToTable("time_attendance_settings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OvertimeThresholdHoursPerDay).HasPrecision(5, 2);
+            entity.Property(x => x.AutoClockOutAfterHours).HasPrecision(5, 2);
+            entity.HasIndex(x => x.TenantId).IsUnique();
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<TimeAttendanceSetting>(modelBuilder);
     }
 
     private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder)
