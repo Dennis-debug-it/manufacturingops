@@ -8,6 +8,7 @@ public interface IPdfRenderer
     byte[] RenderQuotationPdf(QuotationPdfModel model);
     byte[] RenderReceiptPdf(ReceiptPdfModel model);
     byte[] RenderClientStatementPdf(ClientStatementPdfModel model);
+    byte[] RenderPurchaseOrderPdf(PurchaseOrderPdfModel model);
 }
 
 public sealed record QuotationPdfModel(
@@ -32,7 +33,8 @@ public sealed record QuotationPdfModel(
     string? WatermarkText = null,
     string? BankDetails = null,
     string? PaymentInstructions = null,
-    string? TermsText = null
+    string? TermsText = null,
+    ReportTemplateConfig? TemplateConfig = null
 );
 
 public sealed record InvoicePdfModel(
@@ -61,7 +63,8 @@ public sealed record InvoicePdfModel(
     string? WatermarkText = null,
     string? BankDetails = null,
     string? PaymentInstructions = null,
-    string? TermsText = null
+    string? TermsText = null,
+    ReportTemplateConfig? TemplateConfig = null
 );
 
 public sealed record InvoiceLinePdfModel(
@@ -89,7 +92,8 @@ public sealed record ReceiptPdfModel(
     string PrimaryColor,
     string FontFamily = "Helvetica",
     string? FooterText = null,
-    string? WatermarkText = null
+    string? WatermarkText = null,
+    ReportTemplateConfig? TemplateConfig = null
 );
 
 public sealed record ClientStatementPdfModel(
@@ -112,7 +116,8 @@ public sealed record ClientStatementPdfModel(
     string PrimaryColor,
     string FontFamily = "Helvetica",
     string? FooterText = null,
-    string? WatermarkText = null
+    string? WatermarkText = null,
+    ReportTemplateConfig? TemplateConfig = null
 );
 
 public sealed record StatementInvoiceRow(
@@ -163,6 +168,33 @@ public sealed record WorkOrderReportPdfModel(
     IReadOnlyCollection<WorkOrderReportPdfSignature> Signatures,
     /// <summary>Tenant report template config; null = use defaults.</summary>
     ReportTemplateConfig? TemplateConfig = null);
+
+public sealed record PurchaseOrderPdfModel(
+    string OrderNumber,
+    string Status,
+    DateTime OrderDate,
+    DateTime? ExpectedDate,
+    string SupplierName,
+    string? SupplierAddress,
+    string? SupplierEmail,
+    string? DeliverToLabel,
+    string? Notes,
+    IReadOnlyList<InvoiceLinePdfModel> Lines,
+    decimal Subtotal,
+    decimal TaxAmount,
+    decimal TotalAmount,
+    string Currency,
+    string CompanyName,
+    string? CompanyAddress,
+    string? CompanyPhone,
+    string? LogoUrl,
+    string PrimaryColor,
+    string FontFamily = "Helvetica",
+    string? FooterText = null,
+    string? WatermarkText = null,
+    string? TermsText = null,
+    ReportTemplateConfig? TemplateConfig = null
+);
 
 public sealed record WorkOrderReportPdfTimestamp(string Label, string? Value);
 public sealed record WorkOrderReportPdfChecklistSection(string SectionName, IReadOnlyCollection<WorkOrderReportPdfChecklistItem> Items);

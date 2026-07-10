@@ -29,6 +29,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
     public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
     public DbSet<TimeAttendanceSetting> TimeAttendanceSettings => Set<TimeAttendanceSetting>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+    public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
+    public DbSet<PurchaseOrderReceiptEvent> PurchaseOrderReceiptEvents => Set<PurchaseOrderReceiptEvent>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
     public DbSet<BranchMaterialStock> BranchMaterialStocks => Set<BranchMaterialStock>();
@@ -2673,6 +2677,90 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<TimeAttendanceSetting>(modelBuilder);
+
+        modelBuilder.Entity<Supplier>(entity =>
+        {
+            entity.ToTable("suppliers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SupplierName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ContactPerson).HasMaxLength(200);
+            entity.Property(x => x.Phone).HasMaxLength(50);
+            entity.Property(x => x.Email).HasMaxLength(256);
+            entity.Property(x => x.Address).HasMaxLength(500);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.SupplierName });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<Supplier>(modelBuilder);
+
+        modelBuilder.Entity<PurchaseOrder>(entity =>
+        {
+            entity.ToTable("purchase_orders");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PoNumber).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired().HasDefaultValue("Draft");
+            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired().HasDefaultValue("KES");
+            entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.PoNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Supplier)
+                .WithMany(x => x.PurchaseOrders)
+                .HasForeignKey(x => x.SupplierId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+        ApplyTenantFilter<PurchaseOrder>(modelBuilder);
+
+        modelBuilder.Entity<PurchaseOrderLine>(entity =>
+        {
+            entity.ToTable("purchase_order_lines");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ItemName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.QuantityOrdered).HasPrecision(14, 3);
+            entity.Property(x => x.QuantityReceived).HasPrecision(14, 3);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 2);
+            entity.Property(x => x.LineTotal).HasPrecision(18, 2);
+            entity.HasIndex(x => x.PurchaseOrderId);
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.PurchaseOrder)
+                .WithMany(x => x.Lines)
+                .HasForeignKey(x => x.PurchaseOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<PurchaseOrderLine>(modelBuilder);
+
+        modelBuilder.Entity<PurchaseOrderReceiptEvent>(entity =>
+        {
+            entity.ToTable("purchase_order_receipt_events");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ItemName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Quantity).HasPrecision(14, 3);
+            entity.Property(x => x.ReceivedByName).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => x.PurchaseOrderId);
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.PurchaseOrder)
+                .WithMany(x => x.ReceiptEvents)
+                .HasForeignKey(x => x.PurchaseOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.PurchaseOrderLine)
+                .WithMany()
+                .HasForeignKey(x => x.PurchaseOrderLineId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<PurchaseOrderReceiptEvent>(modelBuilder);
     }
 
     private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder)

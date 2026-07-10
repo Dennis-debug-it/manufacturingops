@@ -906,13 +906,10 @@ public sealed partial class WorkOrderExecutionController(
         // Fetch logo bytes so the renderer can embed the image without making outbound HTTP calls
         var logoBytes = await TryFetchLogoBytesAsync(tenant.LogoUrl, cancellationToken);
 
-        // Load the tenant's report template config (null = use defaults in the renderer)
-        ReportTemplateConfig? templateConfig = null;
-        if (!string.IsNullOrWhiteSpace(tenant.ReportTemplateConfigJson))
-        {
-            try { templateConfig = JsonSerializer.Deserialize<ReportTemplateConfig>(tenant.ReportTemplateConfigJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); }
-            catch { /* ignore malformed JSON — fall back to defaults */ }
-        }
+        // Resolve the service-report design config: the per-document-type override if present,
+        // otherwise the shared base config (null = use defaults in the renderer).
+        var templateConfig = PdfTemplateHelper.ResolveForDocument(
+            tenant.ReportTemplateConfigJson, tenant.DocumentDesignsJson, "service-report");
 
         return new WorkOrderReportPdfModel(
             string.IsNullOrWhiteSpace(tenant.CompanyName) ? tenant.Name : tenant.CompanyName,

@@ -270,7 +270,7 @@ public sealed class TenantQuotationController(
         var tenant = await dbContext.Tenants
             .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
 
-        var templateConfig = PdfTemplateHelper.Parse(tenant?.ReportTemplateConfigJson);
+        var templateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "quotation");
         var termsText = templateConfig?.ShowTerms == true
             ? templateConfig.QuoteTerms ?? templateConfig.DefaultTermsText
             : null;
@@ -299,7 +299,8 @@ public sealed class TenantQuotationController(
             WatermarkText:  templateConfig?.WatermarkText,
             BankDetails:    PdfTemplateHelper.ComposeBankDetails(templateConfig),
             PaymentInstructions: templateConfig?.ShowBankDetails == true ? templateConfig.PaymentInstructions : null,
-            TermsText:      termsText
+            TermsText:      termsText,
+            TemplateConfig: templateConfig
         );
 
         var bytes = pdfRenderer.RenderQuotationPdf(model);

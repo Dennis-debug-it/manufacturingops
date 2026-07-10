@@ -764,7 +764,7 @@ public sealed class TenantFinanceController(
         var tenantAddress = string.Join(", ", new[] { tenant?.Address, tenant?.City, tenant?.Country }
             .Where(x => !string.IsNullOrWhiteSpace(x)));
 
-        var templateConfig = PdfTemplateHelper.Parse(tenant?.ReportTemplateConfigJson);
+        var templateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "statement");
 
         var model = new ClientStatementPdfModel(
             client.ClientName,
@@ -786,7 +786,8 @@ public sealed class TenantFinanceController(
             templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
             FontFamily: templateConfig?.FontFamily ?? "Helvetica",
             FooterText: PdfTemplateHelper.ResolveFooterText(templateConfig),
-            WatermarkText: templateConfig?.WatermarkText
+            WatermarkText: templateConfig?.WatermarkText,
+            TemplateConfig: templateConfig
         );
 
         return (model, clientCode);

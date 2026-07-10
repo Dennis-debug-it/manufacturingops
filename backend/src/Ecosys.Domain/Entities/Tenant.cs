@@ -47,8 +47,10 @@ public sealed class Tenant : AuditableEntity
     public string PrimaryColor { get; set; } = "#0F4C81";
     public string SecondaryColor { get; set; } = "#F4B942";
     public bool ShowPoweredByEcosys { get; set; } = true;
-    /// <summary>JSON blob storing the tenant's report template configuration.</summary>
+    /// <summary>JSON blob storing the tenant's shared/base report template configuration.</summary>
     public string? ReportTemplateConfigJson { get; set; }
+    /// <summary>JSON map of per-document-type design overrides (keyed by document-type slug). Absent types fall back to the shared base config.</summary>
+    public string? DocumentDesignsJson { get; set; }
     public bool IsActive { get; set; } = true;
 
     public ICollection<Branch> Branches { get; set; } = new List<Branch>();

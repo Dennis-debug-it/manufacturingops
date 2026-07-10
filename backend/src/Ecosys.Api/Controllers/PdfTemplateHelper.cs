@@ -25,6 +25,36 @@ internal static class PdfTemplateHelper
         }
     }
 
+    /// <summary>Parses the per-document-type overrides map; returns an empty map on missing/malformed data.</summary>
+    public static Dictionary<string, ReportTemplateConfig> ParseDesigns(string? documentDesignsJson)
+    {
+        if (string.IsNullOrWhiteSpace(documentDesignsJson))
+            return new(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var map = JsonSerializer.Deserialize<Dictionary<string, ReportTemplateConfig>>(documentDesignsJson, JsonOptions);
+            return map is null
+                ? new(StringComparer.OrdinalIgnoreCase)
+                : new(map, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (JsonException)
+        {
+            return new(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// Resolves the effective config for a document type: the per-type override if present,
+    /// otherwise the shared/base config. Returns null only when neither is configured.
+    /// </summary>
+    public static ReportTemplateConfig? ResolveForDocument(string? sharedJson, string? documentDesignsJson, string documentTypeSlug)
+    {
+        var designs = ParseDesigns(documentDesignsJson);
+        if (designs.TryGetValue(documentTypeSlug, out var typeConfig) && typeConfig is not null)
+            return typeConfig;
+        return Parse(sharedJson);
+    }
+
     /// <summary>Composes the multi-line bank details block, or null when bank details are disabled or empty.</summary>
     public static string? ComposeBankDetails(ReportTemplateConfig? config)
     {

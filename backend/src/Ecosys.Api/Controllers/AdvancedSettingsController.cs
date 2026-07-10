@@ -18,7 +18,8 @@ public sealed class AdvancedSettingsController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     IUserAccessService userAccessService,
-    ILicenseGuardService licenseGuardService) : TenantAwareControllerBase(tenantContext)
+    ILicenseGuardService licenseGuardService,
+    IPdfRenderer pdfRenderer) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet("branding")]
     public async Task<ActionResult<BrandingSettingsResponse>> GetBranding(CancellationToken cancellationToken)
@@ -99,10 +100,6 @@ public sealed class AdvancedSettingsController(
             MapBrandingResponse(tenant),
             LoadReportTemplate(tenant)));
     }
-
-    private static bool IsValidHexColor(string value) =>
-        value.StartsWith('#') && (value.Length == 7 || value.Length == 4) &&
-        value[1..].All(c => "0123456789abcdefABCDEF".Contains(c));
 
     private static BrandingSettingsResponse MapBrandingResponse(Tenant tenant)
     {
@@ -432,7 +429,139 @@ public sealed class AdvancedSettingsController(
         request.PaymentInstructions = string.IsNullOrWhiteSpace(request.PaymentInstructions) ? null : request.PaymentInstructions.Trim();
         request.DefaultCurrency = string.IsNullOrWhiteSpace(request.DefaultCurrency) ? "KES" : request.DefaultCurrency.Trim().ToUpperInvariant();
         request.ShowStampArea = request.ShowStampArea;
+
+        // ── Design-system fields ────────────────────────────────────────────
+        request.LogoWidth = Math.Clamp(request.LogoWidth, 24, 160);
+        request.CompanyNameFontSize = Math.Clamp(request.CompanyNameFontSize, 10, 32);
+        request.HeaderBackgroundColor = IsValidHexColor(request.HeaderBackgroundColor) ? request.HeaderBackgroundColor!.Trim() : null;
+        request.BodyFontSize = Math.Clamp(request.BodyFontSize, 7, 14);
+        request.LineSpacing = Math.Clamp(request.LineSpacing, 1.0, 2.0);
+        request.HeaderLayout = NormalizeOption(request.HeaderLayout, ["Minimal", "Standard", "Corporate", "Custom"], "Standard");
+        request.IntroText = NormalizeOptional(request.IntroText);
+        request.WatermarkText = NormalizeOptional(request.WatermarkText);
+        request.WatermarkPosition = NormalizeOption(request.WatermarkPosition, ["Diagonal", "Top", "Bottom"], "Diagonal");
+        request.WatermarkOpacity = Math.Clamp(request.WatermarkOpacity, 5, 60);
+        request.WatermarkColor = IsValidHexColor(request.WatermarkColor) ? request.WatermarkColor!.Trim() : null;
+        request.PageNumberPosition = NormalizeOption(request.PageNumberPosition, ["Left", "Center", "Right"], "Right");
+        request.DateFormat = string.IsNullOrWhiteSpace(request.DateFormat) ? "dd MMM yyyy" : request.DateFormat.Trim();
+        request.CurrencyDisplay = NormalizeOption(request.CurrencyDisplay, ["Code", "Symbol"], "Code");
+        request.SignatureFields = (request.SignatureFields ?? [])
+            .Select(f => f?.Trim() ?? string.Empty)
+            .Where(f => f.Length > 0)
+            .Take(4)
+            .ToList();
+        if (request.SignatureFields.Count == 0)
+            request.SignatureFields = ["Authorised Signature"];
+        request.SignaturePosition = NormalizeOption(request.SignaturePosition, ["Left", "Center", "Right", "SpaceBetween"], "SpaceBetween");
+        request.PhotoLayout = NormalizeOption(request.PhotoLayout, ["Inline", "Appendix"], "Inline");
+        request.MaxPhotosPerPage = Math.Clamp(request.MaxPhotosPerPage, 1, 12);
         return request;
+    }
+
+    private static bool IsValidHexColor(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && value.StartsWith('#') && (value.Length == 7 || value.Length == 4) &&
+        value[1..].All(c => "0123456789abcdefABCDEF".Contains(c));
+
+    private static string NormalizeOption(string? value, string[] allowed, string fallback) =>
+        allowed.FirstOrDefault(a => string.Equals(a, value?.Trim(), StringComparison.OrdinalIgnoreCase)) ?? fallback;
+
+    // ── Per-document-type design system ─────────────────────────────────────────
+
+    private static readonly string[] DocumentTypeSlugs =
+        ["invoice", "quotation", "receipt", "statement", "service-report", "purchase-order"];
+
+    [HttpGet("document-designs")]
+    public async Task<ActionResult<DocumentDesignsResponse>> GetDocumentDesigns(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var tenant = await dbContext.Tenants.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
+            ?? throw new NotFoundException("Tenant was not found.");
+
+        var shared = LoadReportTemplate(tenant);
+        var overrides = PdfTemplateHelper.ParseDesigns(tenant.DocumentDesignsJson);
+
+        var documents = DocumentTypeSlugs.ToDictionary(
+            slug => slug,
+            slug => new DocumentDesignEntry(
+                overrides.ContainsKey(slug),
+                overrides.TryGetValue(slug, out var cfg) && cfg is not null ? cfg : shared),
+            StringComparer.OrdinalIgnoreCase);
+
+        return Ok(new DocumentDesignsResponse(shared, documents));
+    }
+
+    [HttpPut("document-designs/{documentType}")]
+    public async Task<ActionResult<DocumentDesignEntry>> UpdateDocumentDesign(
+        string documentType,
+        [FromBody] ReportTemplateConfig request,
+        CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var slug = ResolveSlug(documentType);
+
+        var tenant = await dbContext.Tenants
+            .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
+            ?? throw new NotFoundException("Tenant was not found.");
+
+        for (var i = 0; i < request.Sections.Count; i++)
+            request.Sections[i].Order = i;
+
+        var normalized = NormalizeReportTemplate(request);
+        var overrides = PdfTemplateHelper.ParseDesigns(tenant.DocumentDesignsJson);
+        overrides[slug] = normalized;
+        tenant.DocumentDesignsJson = JsonSerializer.Serialize(overrides);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new DocumentDesignEntry(true, normalized));
+    }
+
+    [HttpPost("document-designs/{documentType}/reset")]
+    public async Task<ActionResult<DocumentDesignEntry>> ResetDocumentDesign(
+        string documentType,
+        CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var slug = ResolveSlug(documentType);
+
+        var tenant = await dbContext.Tenants
+            .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
+            ?? throw new NotFoundException("Tenant was not found.");
+
+        var overrides = PdfTemplateHelper.ParseDesigns(tenant.DocumentDesignsJson);
+        if (overrides.Remove(slug))
+        {
+            tenant.DocumentDesignsJson = overrides.Count == 0 ? null : JsonSerializer.Serialize(overrides);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        // After reset the type falls back to the shared base config.
+        return Ok(new DocumentDesignEntry(false, LoadReportTemplate(tenant)));
+    }
+
+    [HttpGet("document-designs/{documentType}/sample-pdf")]
+    public async Task<IActionResult> GetDocumentDesignSample(
+        string documentType,
+        CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var slug = ResolveSlug(documentType);
+
+        var tenant = await dbContext.Tenants.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
+            ?? throw new NotFoundException("Tenant was not found.");
+
+        var config = PdfTemplateHelper.ResolveForDocument(tenant.ReportTemplateConfigJson, tenant.DocumentDesignsJson, slug)
+                     ?? new ReportTemplateConfig();
+
+        var bytes = SampleDocumentBuilder.Render(slug, tenant, config, pdfRenderer);
+        return File(bytes, "application/pdf", $"sample-{slug}.pdf");
+    }
+
+    private static string ResolveSlug(string documentType)
+    {
+        var slug = DocumentTypeSlugs.FirstOrDefault(s => string.Equals(s, documentType?.Trim(), StringComparison.OrdinalIgnoreCase));
+        return slug ?? throw new BusinessRuleException($"Unknown document type '{documentType}'.");
     }
 
     private async Task SyncMembersAsync(AssignmentGroup group, IReadOnlyCollection<Guid> technicianIds, CancellationToken cancellationToken)
@@ -455,6 +584,9 @@ public sealed record BrandingSettingsRequest(string? LogoUrl, string? PrimaryCol
 public sealed record BrandingSettingsResponse(string? LogoUrl, string PrimaryColor, string SecondaryColor, bool ShowPoweredByEcosys);
 public sealed record DocumentsSettingsRequest(UpdateTenantProfileRequest Profile, BrandingSettingsRequest Branding, ReportTemplateConfig Template);
 public sealed record DocumentsSettingsResponse(TenantProfileResponse Profile, BrandingSettingsResponse Branding, ReportTemplateConfig Template);
+/// <summary>One document type's effective config plus whether it has an explicit override (vs. inheriting the shared base).</summary>
+public sealed record DocumentDesignEntry(bool IsCustomised, ReportTemplateConfig Config);
+public sealed record DocumentDesignsResponse(ReportTemplateConfig Shared, Dictionary<string, DocumentDesignEntry> Documents);
 public sealed record UpsertAssignmentGroupRequest(Guid? BranchId, string Name, string? Description, bool IsActive, IReadOnlyCollection<Guid> TechnicianIds);
 public sealed record AssignmentGroupResponse(Guid Id, Guid? BranchId, string? BranchName, string Name, string? Description, bool IsActive, IReadOnlyCollection<Guid> TechnicianIds);
 public sealed record TenantSecurityPolicyRequest(int MinPasswordLength, bool RequireUppercase, bool RequireLowercase, bool RequireDigit, bool RequireSpecialCharacter, int PasswordRotationDays, int SessionTimeoutMinutes, bool RequireMfa);

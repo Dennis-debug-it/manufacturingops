@@ -779,6 +779,7 @@ public sealed class WorkOrderExecutionFlowTests
         public byte[] RenderQuotationPdf(QuotationPdfModel model) => Encoding.UTF8.GetBytes($"QUO:{model.QuoteNumber}");
         public byte[] RenderReceiptPdf(ReceiptPdfModel model) => Encoding.UTF8.GetBytes($"RCT:{model.ReceiptNumber}");
         public byte[] RenderClientStatementPdf(ClientStatementPdfModel model) => Encoding.UTF8.GetBytes($"STM:{model.ClientName}");
+        public byte[] RenderPurchaseOrderPdf(PurchaseOrderPdfModel model) => Encoding.UTF8.GetBytes($"PO:{model.OrderNumber}");
     }
 
     private sealed class FakeWorkOrderLifecycleService(AppDbContext dbContext) : IWorkOrderLifecycleService

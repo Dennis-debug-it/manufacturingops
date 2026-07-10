@@ -433,7 +433,7 @@ public sealed class TenantInvoiceController(
         var tenant = await dbContext.Tenants
             .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
 
-        var templateConfig = PdfTemplateHelper.Parse(tenant?.ReportTemplateConfigJson);
+        var templateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "invoice");
         var bankDetails = PdfTemplateHelper.ComposeBankDetails(templateConfig);
 
         var termsText = templateConfig?.ShowTerms == true
@@ -470,7 +470,8 @@ public sealed class TenantInvoiceController(
             WatermarkText:  templateConfig?.WatermarkText,
             BankDetails:    bankDetails,
             PaymentInstructions: templateConfig?.ShowBankDetails == true ? templateConfig.PaymentInstructions : null,
-            TermsText:      termsText
+            TermsText:      termsText,
+            TemplateConfig: templateConfig
         );
 
         var bytes = pdfRenderer.RenderInvoicePdf(model);
@@ -594,7 +595,7 @@ public sealed class TenantInvoiceController(
             .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
 
         var client = payment.Client ?? payment.Invoice?.Client;
-        var receiptTemplateConfig = PdfTemplateHelper.Parse(tenant?.ReportTemplateConfigJson);
+        var receiptTemplateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "receipt");
 
         var model = new ReceiptPdfModel(
             ReceiptNumber:  payment.PaymentNumber,
@@ -610,7 +611,8 @@ public sealed class TenantInvoiceController(
             PrimaryColor:   receiptTemplateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
             FontFamily:     receiptTemplateConfig?.FontFamily ?? "Helvetica",
             FooterText:     PdfTemplateHelper.ResolveFooterText(receiptTemplateConfig),
-            WatermarkText:  receiptTemplateConfig?.WatermarkText
+            WatermarkText:  receiptTemplateConfig?.WatermarkText,
+            TemplateConfig: receiptTemplateConfig
         );
 
         var bytes = pdfRenderer.RenderReceiptPdf(model);

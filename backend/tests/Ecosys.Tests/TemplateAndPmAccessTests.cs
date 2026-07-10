@@ -581,6 +581,7 @@ public sealed class TemplateAndPmAccessTests
         public byte[] RenderQuotationPdf(QuotationPdfModel model) => [];
         public byte[] RenderReceiptPdf(ReceiptPdfModel model) => [];
         public byte[] RenderClientStatementPdf(ClientStatementPdfModel model) => [];
+        public byte[] RenderPurchaseOrderPdf(PurchaseOrderPdfModel model) => [];
     }
 
     private sealed class NoOpLogger<T> : ILogger<T>

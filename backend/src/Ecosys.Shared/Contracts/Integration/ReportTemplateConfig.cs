@@ -111,6 +111,80 @@ public sealed class ReportTemplateConfig
     /// <summary>Default currency shown in the payment preview block.</summary>
     public string DefaultCurrency { get; set; } = "KES";
 
+    // ── Branding & typography ───────────────────────────────────────────────
+
+    /// <summary>Logo render width in points (24–160). Height scales proportionally.</summary>
+    public int LogoWidth { get; set; } = 64;
+
+    /// <summary>Font size (pt) for the company name in the header.</summary>
+    public int CompanyNameFontSize { get; set; } = 18;
+
+    /// <summary>Optional header block background colour (hex). Null = no fill.</summary>
+    public string? HeaderBackgroundColor { get; set; }
+
+    /// <summary>Body text font size in points.</summary>
+    public int BodyFontSize { get; set; } = 10;
+
+    /// <summary>Line height multiplier for body text (1.0 = single spacing).</summary>
+    public double LineSpacing { get; set; } = 1.15;
+
+    /// <summary>Header layout preset: Minimal, Standard, Corporate, or Custom.</summary>
+    public string HeaderLayout { get; set; } = "Standard";
+
+    /// <summary>Optional introduction paragraph shown above the document body.</summary>
+    public string? IntroText { get; set; }
+
+    // ── Watermark ───────────────────────────────────────────────────────────
+
+    /// <summary>Watermark placement: Diagonal, Top, or Bottom.</summary>
+    public string WatermarkPosition { get; set; } = "Diagonal";
+
+    /// <summary>Watermark opacity as a percentage (5–60). Higher = more visible.</summary>
+    public int WatermarkOpacity { get; set; } = 12;
+
+    /// <summary>Watermark colour (hex). Null = neutral grey.</summary>
+    public string? WatermarkColor { get; set; }
+
+    // ── Page numbering ──────────────────────────────────────────────────────
+
+    /// <summary>Whether to print page numbers in the footer.</summary>
+    public bool ShowPageNumbers { get; set; } = true;
+
+    /// <summary>Page number alignment: Left, Center, or Right.</summary>
+    public string PageNumberPosition { get; set; } = "Right";
+
+    // ── Formats ─────────────────────────────────────────────────────────────
+
+    /// <summary>.NET date format string used for all dates, e.g. "dd MMM yyyy".</summary>
+    public string DateFormat { get; set; } = "dd MMM yyyy";
+
+    /// <summary>How to display currency: "Code" (KES) or "Symbol" (KSh).</summary>
+    public string CurrencyDisplay { get; set; } = "Code";
+
+    // ── Signature block ─────────────────────────────────────────────────────
+
+    /// <summary>Signature field labels rendered in the sign-off block.</summary>
+    public List<string> SignatureFields { get; set; } = ["Authorised Signature"];
+
+    /// <summary>Signature block alignment: Left, Center, Right, or SpaceBetween.</summary>
+    public string SignaturePosition { get; set; } = "SpaceBetween";
+
+    // ── Evidence photos (service report) ────────────────────────────────────
+
+    /// <summary>Whether to include evidence photos in service reports.</summary>
+    public bool IncludePhotos { get; set; } = true;
+
+    /// <summary>Photo layout: Inline (within sections) or Appendix (grouped at end).</summary>
+    public string PhotoLayout { get; set; } = "Inline";
+
+    /// <summary>Maximum evidence photos rendered per page.</summary>
+    public int MaxPhotosPerPage { get; set; } = 4;
+
+    // ── Attribution ─────────────────────────────────────────────────────────
+
+    /// <summary>Whether to show the "Powered by Ecosys" attribution (plan-gated).</summary>
+    public bool ShowPoweredByEcosys { get; set; } = true;
+
     public static List<ReportSection> DefaultSections() =>
     [
         new("service-details",  "Service Details",       true, 0),
