@@ -13,6 +13,7 @@ import { formatDate, formatRelative } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
 import { useWorkOrders } from './api'
 import { NewWorkOrderForm } from './components/NewWorkOrderForm'
+import { ReportQueueTab } from './components/ReportQueueTab'
 
 export interface WorkOrderRow {
   id: string
@@ -154,17 +155,19 @@ export function WorkOrdersPage() {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          <Funnel className="h-4 w-4 text-slate-400" />
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search by WO number, client, site, or asset"
-            className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400"
-          />
-        </label>
-      </div>
+      {tab === 'all' ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <Funnel className="h-4 w-4 text-slate-400" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by WO number, client, site, or asset"
+              className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400"
+            />
+          </label>
+        </div>
+      ) : null}
 
       {tab === 'all' ? (
         <DataTable
@@ -176,10 +179,7 @@ export function WorkOrdersPage() {
           virtualise={rows.length > 100}
         />
       ) : (
-        <EmptyState
-          title="Report queue shell"
-          description="Report lifecycle data will appear once the backend queue endpoint is connected."
-        />
+        <ReportQueueTab />
       )}
     </div>
   )

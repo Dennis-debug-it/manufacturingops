@@ -44,6 +44,12 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public string? AcknowledgedByName { get; set; }
     public string? AcknowledgementComments { get; set; }
     public DateTime? AcknowledgementDate { get; set; }
+    // Service report lifecycle (report queue): null status = awaiting generation once the WO is completed.
+    public string? ReportStatus { get; set; } // Draft | UnderReview | Approved | Sent | Acknowledged
+    public string? ReportNumber { get; set; } // SR No
+    public DateTime? ReportGeneratedAt { get; set; }
+    public DateTime? ReportApprovedAt { get; set; }
+    public DateTime? ReportSentAt { get; set; }
     public bool IsPreventiveMaintenance { get; set; }
     public Guid? PreventiveMaintenancePlanId { get; set; }
     public Guid? PmTemplateId { get; set; }

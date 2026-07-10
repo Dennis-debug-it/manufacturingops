@@ -552,6 +552,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.JobCardNotes).HasMaxLength(4000);
             entity.Property(x => x.AcknowledgedByName).HasMaxLength(200);
             entity.Property(x => x.AcknowledgementComments).HasMaxLength(4000);
+            entity.Property(x => x.ReportStatus).HasMaxLength(30);
+            entity.Property(x => x.ReportNumber).HasMaxLength(50);
             entity.Property(x => x.PmTemplateNameSnapshot).HasMaxLength(150);
             entity.Property(x => x.AppliedSlaSource).HasMaxLength(80);
             entity.Property(x => x.AppliedRateSource).HasMaxLength(80);

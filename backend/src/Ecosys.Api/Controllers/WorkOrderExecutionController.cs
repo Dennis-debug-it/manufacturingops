@@ -26,6 +26,7 @@ public sealed partial class WorkOrderExecutionController(
     IWorkOrderAssignmentWorkflowService assignmentWorkflowService,
     IWorkOrderLifecycleService workOrderLifecycleService,
     IPdfRenderer pdfRenderer,
+    IDocumentNumberingService documentNumberingService,
     IHttpClientFactory httpClientFactory) : TenantAwareControllerBase(tenantContext)
 {
     private const string ProgressUpdateEventType = "ProgressUpdate";
@@ -546,6 +547,7 @@ public sealed partial class WorkOrderExecutionController(
     {
         userAccessService.EnsureTenantOperationalAccess();
         var workOrder = await LoadWorkOrderAsync(workOrderId, cancellationToken);
+        await EnsureReportGeneratedAsync(workOrder, cancellationToken);
         var preview = await BuildServiceReportPreviewAsync(workOrderId, cancellationToken);
 
         await auditLogService.LogAsync(
