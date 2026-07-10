@@ -11,8 +11,6 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { useCreateSupplier, useSupplier, useSuppliers, type SupplierListItem } from './purchaseOrdersApi'
 
-const backendGapNote = 'No SuppliersController exists in the current backend yet. This is the full intended list + detail UI wired against typed stub data — creating a supplier will not persist until a real endpoint is connected.'
-
 export function SuppliersPage() {
   const canEdit = usePermission('inventory.edit')
   const { data, isLoading } = useSuppliers()
@@ -24,13 +22,13 @@ export function SuppliersPage() {
   const [email, setEmail] = useState('')
 
   const submit = async () => {
-    try {
-      await createSupplier.mutateAsync({ supplierName, contactPerson: contactPerson || undefined, phone: phone || undefined, email: email || undefined })
-      toast.success('Supplier created')
-      setShowNewSupplier(false)
-    } catch {
-      toast.error('Suppliers are not yet backed by a live API — this is a UI stub.')
-    }
+    await createSupplier.mutateAsync({ supplierName, contactPerson: contactPerson || undefined, phone: phone || undefined, email: email || undefined })
+    toast.success('Supplier created')
+    setShowNewSupplier(false)
+    setSupplierName('')
+    setContactPerson('')
+    setPhone('')
+    setEmail('')
   }
 
   const columns: DataTableColumn<SupplierListItem>[] = [
@@ -55,13 +53,12 @@ export function SuppliersPage() {
           ) : undefined
         }
       />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       <DataTable
         columns={columns}
         data={data ?? []}
         loading={isLoading}
         emptyTitle="No suppliers yet"
-        emptyDescription="Suppliers used for purchase orders and parts sourcing will appear here once the backend endpoint is connected."
+        emptyDescription="Add a supplier to source parts and raise purchase orders."
       />
 
       <FormDrawer open={showNewSupplier} title="New Supplier" onClose={() => setShowNewSupplier(false)}>
@@ -108,9 +105,8 @@ export function SupplierDetailPage() {
         breadcrumbs={[{ label: 'Suppliers', to: '/inventory/suppliers' }, { label: data?.supplierName ?? 'Detail' }]}
         secondaryActions={data ? <StatusBadge status={data.status} /> : undefined}
       />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       {isLoading ? null : !data ? (
-        <EmptyState title="No supplier detail yet" description="Contact info, supplied parts, and purchase order history will appear here once the backend endpoint is connected." />
+        <EmptyState title="Supplier not found" description="This supplier may have been removed." />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">

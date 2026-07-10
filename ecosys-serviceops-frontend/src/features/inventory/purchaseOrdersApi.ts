@@ -1,9 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-
-// TODO(backend): No PurchaseOrdersController or SuppliersController exists yet (confirmed
-// against the 67-controller snapshot in FRONTEND_BUILD_PLAN.md §4.5 / backend-gap table).
-// Every hook below is a typed stub returning empty/default data — swap the queryFn/mutationFn
-// bodies for real `api.get`/`api.post` calls once dedicated backend endpoints exist.
+import { api } from '../../shared/api/apiClient'
 
 export type PurchaseOrderStatus = 'Draft' | 'Sent' | 'PartiallyReceived' | 'Received' | 'Cancelled'
 
@@ -21,8 +17,9 @@ export interface PurchaseOrderListItem {
 export function usePurchaseOrders(status?: PurchaseOrderStatus | 'All') {
   return useQuery({
     queryKey: ['inventory', 'purchase-orders', status ?? 'All'],
-    queryFn: async (): Promise<PurchaseOrderListItem[]> => [],
-    staleTime: Infinity,
+    queryFn: () =>
+      api.get<PurchaseOrderListItem[]>('/api/purchase-orders', status && status !== 'All' ? { status } : undefined),
+    staleTime: 30_000,
   })
 }
 
@@ -45,9 +42,9 @@ export interface PurchaseOrderDetail extends PurchaseOrderListItem {
 export function usePurchaseOrder(id: string | undefined) {
   return useQuery({
     queryKey: ['inventory', 'purchase-orders', id],
-    queryFn: async (): Promise<PurchaseOrderDetail | null> => null,
+    queryFn: () => api.get<PurchaseOrderDetail>(`/api/purchase-orders/${id}`),
     enabled: Boolean(id),
-    staleTime: Infinity,
+    staleTime: 30_000,
   })
 }
 
@@ -61,19 +58,26 @@ export interface CreatePurchaseOrderPayload {
 export function useCreatePurchaseOrder() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_payload: CreatePurchaseOrderPayload): Promise<PurchaseOrderDetail> => {
-      throw new Error('Purchase orders cannot be created yet — no backend PurchaseOrdersController exists.')
-    },
+    mutationFn: (payload: CreatePurchaseOrderPayload) =>
+      api.post<PurchaseOrderDetail>('/api/purchase-orders', payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] }),
   })
 }
 
-export function useReceivePurchaseOrderLine(_poId: string) {
+export function useSetPurchaseOrderStatus(poId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_payload: { lineId: string; quantity: number }): Promise<void> => {
-      throw new Error('Receiving cannot be recorded yet — no backend PurchaseOrdersController exists.')
-    },
+    mutationFn: (status: 'Sent' | 'Cancelled') =>
+      api.post<void>(`/api/purchase-orders/${poId}/status`, { status }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] }),
+  })
+}
+
+export function useReceivePurchaseOrderLine(poId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { lineId: string; quantity: number }) =>
+      api.post<void>(`/api/purchase-orders/${poId}/receive`, payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] }),
   })
 }
@@ -92,8 +96,8 @@ export interface SupplierListItem {
 export function useSuppliers() {
   return useQuery({
     queryKey: ['inventory', 'suppliers'],
-    queryFn: async (): Promise<SupplierListItem[]> => [],
-    staleTime: Infinity,
+    queryFn: () => api.get<SupplierListItem[]>('/api/suppliers'),
+    staleTime: 30_000,
   })
 }
 
@@ -107,9 +111,9 @@ export interface SupplierDetail extends SupplierListItem {
 export function useSupplier(id: string | undefined) {
   return useQuery({
     queryKey: ['inventory', 'suppliers', id],
-    queryFn: async (): Promise<SupplierDetail | null> => null,
+    queryFn: () => api.get<SupplierDetail>(`/api/suppliers/${id}`),
     enabled: Boolean(id),
-    staleTime: Infinity,
+    staleTime: 30_000,
   })
 }
 
@@ -124,9 +128,7 @@ export interface CreateSupplierPayload {
 export function useCreateSupplier() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_payload: CreateSupplierPayload): Promise<SupplierListItem> => {
-      throw new Error('Suppliers cannot be created yet — no backend SuppliersController exists.')
-    },
+    mutationFn: (payload: CreateSupplierPayload) => api.post<SupplierListItem>('/api/suppliers', payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
   })
 }

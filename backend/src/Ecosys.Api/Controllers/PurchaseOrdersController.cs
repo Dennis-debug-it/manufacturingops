@@ -141,9 +141,12 @@ public sealed class PurchaseOrdersController(
             .Select(x => x.FullName)
             .FirstOrDefaultAsync(cancellationToken) ?? "Unknown";
 
-        order.ReceiptEvents.Add(new PurchaseOrderReceiptEvent
+        // Add via the DbSet (not the tracked parent's collection) so EF reliably marks this
+        // client-keyed entity as Added rather than Modified.
+        dbContext.PurchaseOrderReceiptEvents.Add(new PurchaseOrderReceiptEvent
         {
             TenantId = TenantId,
+            PurchaseOrderId = order.Id,
             PurchaseOrderLineId = line.Id,
             ItemName = line.ItemName,
             Quantity = request.Quantity,
