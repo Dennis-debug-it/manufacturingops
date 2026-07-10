@@ -321,6 +321,7 @@ public sealed class TemplateAndPmAccessTests
             new NoOpAssignmentWorkflowService(),
             new NoOpWorkOrderLifecycleService(),
             new NoOpPdfRenderer(),
+            new NoOpDocumentNumberingService(),
             new StubHttpClientFactory());
 
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetExecutionBundle(workOrder.Id, CancellationToken.None));

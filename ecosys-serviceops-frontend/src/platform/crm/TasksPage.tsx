@@ -9,7 +9,6 @@ import { formatDate } from '../../shared/utils/dates'
 import { useCompleteCrmTask, useCreateCrmTask, useCrmTasks, type CrmTask, type CrmTaskPriority, type CrmTaskStatus } from './crmStubApi'
 import { CrmSubNav } from './CrmSubNav'
 
-const backendGapNote = 'No Tasks resource exists yet in the current backend. This is the full intended task-tracking UI wired against typed stub data until a backend Tasks endpoint is connected.'
 const statusOptions: Array<CrmTaskStatus | 'All'> = ['All', 'Open', 'InProgress', 'Done']
 
 export function TasksPage() {
@@ -22,13 +21,11 @@ export function TasksPage() {
   const [priority, setPriority] = useState<CrmTaskPriority>('Medium')
 
   const submit = async () => {
-    try {
-      await createTask.mutateAsync({ title, dueDate: dueDate || undefined, priority })
-      toast.success('Task created')
-      setShowNewTask(false)
-    } catch {
-      toast.error('CRM tasks are not yet backed by a live API — this is a UI stub.')
-    }
+    await createTask.mutateAsync({ title, dueDate: dueDate || undefined, priority })
+    toast.success('Task created')
+    setShowNewTask(false)
+    setTitle('')
+    setDueDate('')
   }
 
   const columns: DataTableColumn<CrmTask>[] = [
@@ -53,7 +50,6 @@ export function TasksPage() {
         }
       />
       <CrmSubNav />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         {statusOptions.map((status) => (
           <button
@@ -114,12 +110,8 @@ function TaskRowActions({ task }: { task: CrmTask }) {
   }
 
   const markDone = async () => {
-    try {
-      await complete.mutateAsync()
-      toast.success('Task marked done')
-    } catch {
-      toast.error('CRM tasks are not yet backed by a live API — this is a UI stub.')
-    }
+    await complete.mutateAsync()
+    toast.success('Task marked done')
   }
 
   return (

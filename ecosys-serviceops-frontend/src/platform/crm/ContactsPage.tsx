@@ -8,7 +8,6 @@ import { formatDate } from '../../shared/utils/dates'
 import { useCreateCrmContact, useCrmContacts, type CrmContact } from './crmStubApi'
 import { CrmSubNav } from './CrmSubNav'
 
-const backendGapNote = 'Only PlatformLeadsController exists for CRM today (leads/pipeline). No Contacts resource exists yet. This is the full intended UI wired against typed stub data until a backend Contacts endpoint is connected.'
 
 export function ContactsPage() {
   const { data, isLoading } = useCrmContacts()
@@ -21,13 +20,14 @@ export function ContactsPage() {
   const [role, setRole] = useState('')
 
   const submit = async () => {
-    try {
-      await createContact.mutateAsync({ fullName, companyName, email, phone: phone || undefined, role: role || undefined })
-      toast.success('Contact created')
-      setShowNewContact(false)
-    } catch {
-      toast.error('CRM contacts are not yet backed by a live API — this is a UI stub.')
-    }
+    await createContact.mutateAsync({ fullName, companyName, email, phone: phone || undefined, role: role || undefined })
+    toast.success('Contact created')
+    setShowNewContact(false)
+    setFullName('')
+    setCompanyName('')
+    setEmail('')
+    setPhone('')
+    setRole('')
   }
 
   const columns: DataTableColumn<CrmContact>[] = [
@@ -51,7 +51,6 @@ export function ContactsPage() {
         }
       />
       <CrmSubNav />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       <DataTable
         columns={columns}
         data={data ?? []}

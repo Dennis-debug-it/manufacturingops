@@ -1,9 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api } from '../../shared/api/apiClient'
 
-// TODO(backend): Only PlatformLeadsController exists for CRM today (leads/pipeline, real —
-// see ../api.ts useLeads/useLead). No Contacts, Activities, or Tasks resource exists yet
-// (confirmed against FRONTEND_BUILD_PLAN.md §12.1 backend-gap table). Typed stub hooks below
-// return empty data until dedicated backend endpoints exist.
+// Platform CRM: contacts, activities, and tasks — wired to the real
+// PlatformCrm* controllers (see backend/src/Ecosys.Api/Controllers/PlatformCrmController.cs).
 
 export interface CrmContact {
   id: string
@@ -17,7 +16,11 @@ export interface CrmContact {
 }
 
 export function useCrmContacts() {
-  return useQuery({ queryKey: ['platform', 'crm', 'contacts'], queryFn: async (): Promise<CrmContact[]> => [], staleTime: Infinity })
+  return useQuery({
+    queryKey: ['platform', 'crm', 'contacts'],
+    queryFn: () => api.get<CrmContact[]>('/api/platform/crm/contacts'),
+    staleTime: 30_000,
+  })
 }
 
 export interface CreateCrmContactPayload {
@@ -26,14 +29,13 @@ export interface CreateCrmContactPayload {
   email: string
   phone?: string | undefined
   role?: string | undefined
+  leadId?: string | undefined
 }
 
 export function useCreateCrmContact() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_payload: CreateCrmContactPayload): Promise<CrmContact> => {
-      throw new Error('CRM contacts cannot be created yet — no backend Contacts endpoint exists.')
-    },
+    mutationFn: (payload: CreateCrmContactPayload) => api.post<CrmContact>('/api/platform/crm/contacts', payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['platform', 'crm', 'contacts'] }),
   })
 }
@@ -50,7 +52,11 @@ export interface CrmActivity {
 }
 
 export function useCrmActivities() {
-  return useQuery({ queryKey: ['platform', 'crm', 'activities'], queryFn: async (): Promise<CrmActivity[]> => [], staleTime: Infinity })
+  return useQuery({
+    queryKey: ['platform', 'crm', 'activities'],
+    queryFn: () => api.get<CrmActivity[]>('/api/platform/crm/activities'),
+    staleTime: 30_000,
+  })
 }
 
 export interface LogCrmActivityPayload {
@@ -62,9 +68,7 @@ export interface LogCrmActivityPayload {
 export function useLogCrmActivity() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_payload: LogCrmActivityPayload): Promise<CrmActivity> => {
-      throw new Error('CRM activities cannot be logged yet — no backend Activities endpoint exists.')
-    },
+    mutationFn: (payload: LogCrmActivityPayload) => api.post<CrmActivity>('/api/platform/crm/activities', payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['platform', 'crm', 'activities'] }),
   })
 }
@@ -83,7 +87,11 @@ export interface CrmTask {
 }
 
 export function useCrmTasks(status?: CrmTaskStatus | 'All') {
-  return useQuery({ queryKey: ['platform', 'crm', 'tasks', status ?? 'All'], queryFn: async (): Promise<CrmTask[]> => [], staleTime: Infinity })
+  return useQuery({
+    queryKey: ['platform', 'crm', 'tasks', status ?? 'All'],
+    queryFn: () => api.get<CrmTask[]>('/api/platform/crm/tasks', status && status !== 'All' ? { status } : undefined),
+    staleTime: 30_000,
+  })
 }
 
 export interface CreateCrmTaskPayload {
@@ -95,19 +103,15 @@ export interface CreateCrmTaskPayload {
 export function useCreateCrmTask() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_payload: CreateCrmTaskPayload): Promise<CrmTask> => {
-      throw new Error('CRM tasks cannot be created yet — no backend Tasks endpoint exists.')
-    },
+    mutationFn: (payload: CreateCrmTaskPayload) => api.post<CrmTask>('/api/platform/crm/tasks', payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['platform', 'crm', 'tasks'] }),
   })
 }
 
-export function useCompleteCrmTask(_id: string) {
+export function useCompleteCrmTask(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (): Promise<void> => {
-      throw new Error('CRM tasks cannot be updated yet — no backend Tasks endpoint exists.')
-    },
+    mutationFn: () => api.put<CrmTask>(`/api/platform/crm/tasks/${id}/complete`, {}),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['platform', 'crm', 'tasks'] }),
   })
 }

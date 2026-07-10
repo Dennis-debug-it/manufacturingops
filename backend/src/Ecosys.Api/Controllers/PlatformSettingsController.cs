@@ -36,6 +36,8 @@ public sealed class PlatformSettingsController(
     private const string PlatformEmailFlagsCategory = "platform-email-flags";
     private const string PlatformNotificationPreferencesCategory = "platform-notification-preferences";
     private const string PlatformEmailSubjectRulesCategory = "platform-email-subject-rules";
+    private const string PlatformCrmCategory = "platform-crm";
+    private const string PlatformSupportCategory = "platform-support";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private static readonly IReadOnlyDictionary<string, string> NumberingDefaults = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -146,6 +148,55 @@ public sealed class PlatformSettingsController(
         await dbContext.SaveChangesAsync(cancellationToken);
         await AuditAsync("platform.settings.general.updated", nameof(Tenant), tenant.Id.ToString(), "Platform general settings were updated.", cancellationToken);
         return Ok((await GetGeneral(cancellationToken)).Value!);
+    }
+
+    // ── CRM settings ────────────────────────────────────────────────────────
+
+    [HttpGet("crm")]
+    public async Task<ActionResult<PlatformCrmSettingsRecord>> GetCrm(CancellationToken cancellationToken)
+    {
+        var setting = await dbContext.PlatformSettings.SingleOrDefaultAsync(x => x.Category == PlatformCrmCategory, cancellationToken);
+        var value = setting is null ? null : JsonSerializer.Deserialize<PlatformCrmSettingsRecord>(setting.JsonValue, JsonOptions);
+        return Ok(value ?? new PlatformCrmSettingsRecord(true, "sales@ecosys.io", 3, 14));
+    }
+
+    [HttpPut("crm")]
+    public async Task<ActionResult<PlatformCrmSettingsRecord>> UpdateCrm([FromBody] PlatformCrmSettingsRecord request, CancellationToken cancellationToken)
+    {
+        var normalized = new PlatformCrmSettingsRecord(
+            request.AutoAssignLeads,
+            NormalizeOptional(request.DefaultOwnerEmail) ?? "sales@ecosys.io",
+            Math.Clamp(request.FollowUpReminderDays, 0, 365),
+            Math.Clamp(request.StaleLeadDays, 0, 365));
+        await UpsertCategoryAsync(PlatformCrmCategory, normalized, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await AuditAsync("platform.settings.crm.updated", nameof(PlatformSetting), PlatformCrmCategory, "Platform CRM settings were updated.", cancellationToken);
+        return Ok(normalized);
+    }
+
+    // ── Support settings ────────────────────────────────────────────────────
+
+    [HttpGet("support")]
+    public async Task<ActionResult<PlatformSupportSettingsRecord>> GetSupport(CancellationToken cancellationToken)
+    {
+        var setting = await dbContext.PlatformSettings.SingleOrDefaultAsync(x => x.Category == PlatformSupportCategory, cancellationToken);
+        var value = setting is null ? null : JsonSerializer.Deserialize<PlatformSupportSettingsRecord>(setting.JsonValue, JsonOptions);
+        return Ok(value ?? new PlatformSupportSettingsRecord("support@ecosys.io", "+254700000000", "escalations@ecosys.io", 4, "Mon–Fri, 08:00–18:00 EAT"));
+    }
+
+    [HttpPut("support")]
+    public async Task<ActionResult<PlatformSupportSettingsRecord>> UpdateSupport([FromBody] PlatformSupportSettingsRecord request, CancellationToken cancellationToken)
+    {
+        var normalized = new PlatformSupportSettingsRecord(
+            NormalizeOptional(request.SupportEmail) ?? "support@ecosys.io",
+            NormalizeOptional(request.SupportPhone) ?? string.Empty,
+            NormalizeOptional(request.EscalationEmail) ?? string.Empty,
+            Math.Clamp(request.SlaResponseHours, 0, 240),
+            NormalizeOptional(request.BusinessHours) ?? string.Empty);
+        await UpsertCategoryAsync(PlatformSupportCategory, normalized, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await AuditAsync("platform.settings.support.updated", nameof(PlatformSetting), PlatformSupportCategory, "Platform support settings were updated.", cancellationToken);
+        return Ok(normalized);
     }
 
     [HttpGet("branding")]
@@ -1380,3 +1431,16 @@ public sealed record PlatformSystemPreferencesRequest(
     bool MaintenanceMode,
     bool ShowBetaModules,
     bool AllowTenantSelfRegistration);
+
+public sealed record PlatformCrmSettingsRecord(
+    bool AutoAssignLeads,
+    string DefaultOwnerEmail,
+    int FollowUpReminderDays,
+    int StaleLeadDays);
+
+public sealed record PlatformSupportSettingsRecord(
+    string SupportEmail,
+    string SupportPhone,
+    string EscalationEmail,
+    int SlaResponseHours,
+    string BusinessHours);

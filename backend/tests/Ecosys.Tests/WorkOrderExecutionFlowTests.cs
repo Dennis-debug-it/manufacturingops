@@ -596,6 +596,7 @@ public sealed class WorkOrderExecutionFlowTests
             new FakeAssignmentWorkflowService(),
             new FakeWorkOrderLifecycleService(dbContext),
             pdfRenderer ?? new FakePdfRenderer(),
+            new FakeDocumentNumberingService(),
             new StubHttpClientFactory());
 
         controller.ControllerContext = CreateControllerContext(fixture.User);

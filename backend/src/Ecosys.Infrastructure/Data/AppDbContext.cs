@@ -93,6 +93,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<PlatformDocumentTemplate> PlatformDocumentTemplates => Set<PlatformDocumentTemplate>();
     public DbSet<PlatformSetting> PlatformSettings => Set<PlatformSetting>();
     public DbSet<PlatformLead> PlatformLeads => Set<PlatformLead>();
+    public DbSet<CrmContact> CrmContacts => Set<CrmContact>();
+    public DbSet<CrmActivity> CrmActivities => Set<CrmActivity>();
+    public DbSet<CrmTask> CrmTasks => Set<CrmTask>();
+    public DbSet<PlatformAnnouncement> PlatformAnnouncements => Set<PlatformAnnouncement>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
     public DbSet<WorkOrderPhotoEvidence> WorkOrderPhotoEvidence => Set<WorkOrderPhotoEvidence>();
     public DbSet<WorkOrderSignature> WorkOrderSignatures => Set<WorkOrderSignature>();
@@ -1783,6 +1787,56 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.ConvertedLeads)
                 .HasForeignKey(x => x.ConvertedTenantId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<CrmContact>(entity =>
+        {
+            entity.ToTable("crm_contacts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.CompanyName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Phone).HasMaxLength(50);
+            entity.Property(x => x.Role).HasMaxLength(120);
+            entity.HasIndex(x => x.LeadId);
+            entity.HasOne(x => x.Lead).WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<CrmActivity>(entity =>
+        {
+            entity.ToTable("crm_activities");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Type).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Summary).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.LoggedByName).HasMaxLength(200);
+            entity.HasIndex(x => x.ContactId);
+            entity.HasIndex(x => x.LeadId);
+            entity.HasOne(x => x.Contact).WithMany().HasForeignKey(x => x.ContactId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Lead).WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<CrmTask>(entity =>
+        {
+            entity.ToTable("crm_tasks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Priority).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.AssignedToName).HasMaxLength(200);
+            entity.HasIndex(x => x.Status);
+            entity.HasOne(x => x.RelatedContact).WithMany().HasForeignKey(x => x.RelatedContactId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.RelatedLead).WithMany().HasForeignKey(x => x.RelatedLeadId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<PlatformAnnouncement>(entity =>
+        {
+            entity.ToTable("platform_announcements");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Body).HasMaxLength(8000).IsRequired();
+            entity.Property(x => x.Audience).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => x.Status);
         });
 
         modelBuilder.Entity<Attachment>(entity =>

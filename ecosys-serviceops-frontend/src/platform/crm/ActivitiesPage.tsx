@@ -6,13 +6,12 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { formatDateTime } from '../../shared/utils/dates'
-import { useCrmActivities, useLogCrmActivity, type CrmActivity, type CrmActivityType } from './crmStubApi'
+import { useCrmActivities, useCrmContacts, useLogCrmActivity, type CrmActivity, type CrmActivityType } from './crmStubApi'
 import { CrmSubNav } from './CrmSubNav'
-
-const backendGapNote = 'No Activities resource exists yet in the current backend. This is the full intended activity-log UI wired against typed stub data until a backend Activities endpoint is connected.'
 
 export function ActivitiesPage() {
   const { data, isLoading } = useCrmActivities()
+  const { data: contacts } = useCrmContacts()
   const logActivity = useLogCrmActivity()
   const [showNewActivity, setShowNewActivity] = useState(false)
   const [contactId, setContactId] = useState('')
@@ -20,13 +19,11 @@ export function ActivitiesPage() {
   const [summary, setSummary] = useState('')
 
   const submit = async () => {
-    try {
-      await logActivity.mutateAsync({ contactId, type, summary })
-      toast.success('Activity logged')
-      setShowNewActivity(false)
-    } catch {
-      toast.error('CRM activities are not yet backed by a live API — this is a UI stub.')
-    }
+    if (!contactId) return toast.error('Select a contact')
+    await logActivity.mutateAsync({ contactId, type, summary })
+    toast.success('Activity logged')
+    setShowNewActivity(false)
+    setSummary('')
   }
 
   const columns: DataTableColumn<CrmActivity>[] = [
@@ -49,7 +46,6 @@ export function ActivitiesPage() {
         }
       />
       <CrmSubNav />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       <DataTable
         columns={columns}
         data={data ?? []}
@@ -61,8 +57,12 @@ export function ActivitiesPage() {
       <FormDrawer open={showNewActivity} title="Log Activity" onClose={() => setShowNewActivity(false)}>
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Contact ID</label>
-            <input value={contactId} onChange={(event) => setContactId(event.target.value)} placeholder="Contact GUID" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Contact</label>
+            <select value={contactId} onChange={(event) => setContactId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+              <option value="">Select a contact…</option>
+              {(contacts ?? []).map((c) => <option key={c.id} value={c.id}>{c.fullName} — {c.companyName}</option>)}
+            </select>
+            {contacts && contacts.length === 0 ? <p className="mt-1 text-xs text-amber-600">No contacts yet — add one on the Contacts page first.</p> : null}
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Type</label>
