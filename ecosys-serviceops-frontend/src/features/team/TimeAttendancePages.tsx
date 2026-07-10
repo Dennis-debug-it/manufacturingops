@@ -23,6 +23,7 @@ import {
   type TimesheetListItem,
   type TimesheetView,
 } from './timeAttendance/api'
+import { useTechnicians } from './api'
 
 
 export function LiveAttendancePage() {
@@ -175,6 +176,7 @@ const leaveStatusOptions: Array<LeaveRequestStatus | 'All'> = ['All', 'Pending',
 export function LeavePage() {
   const [statusFilter, setStatusFilter] = useState<LeaveRequestStatus | 'All'>('All')
   const { data, isLoading } = useLeaveRequests(statusFilter)
+  const { data: technicians } = useTechnicians()
   const createLeave = useCreateLeaveRequest()
   const [showNewRequest, setShowNewRequest] = useState(false)
   const [technicianId, setTechnicianId] = useState('')
@@ -184,9 +186,14 @@ export function LeavePage() {
   const [reason, setReason] = useState('')
 
   const submitLeave = async () => {
+    if (!technicianId) return toast.error('Select a technician')
     await createLeave.mutateAsync({ technicianId, leaveType, startDate, endDate, reason: reason || undefined })
     toast.success('Leave request submitted')
     setShowNewRequest(false)
+    setTechnicianId('')
+    setStartDate('')
+    setEndDate('')
+    setReason('')
   }
 
   const columns: DataTableColumn<LeaveRequestItem>[] = [
@@ -233,8 +240,11 @@ export function LeavePage() {
       <FormDrawer open={showNewRequest} title="New Leave Request" onClose={() => setShowNewRequest(false)}>
         <div className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Technician ID</label>
-            <input value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} placeholder="Technician GUID" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Technician</label>
+            <select value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+              <option value="">Select a technician…</option>
+              {(technicians ?? []).map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+            </select>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Leave Type</label>

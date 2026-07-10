@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
-import { EmptyState } from '../../shared/components/EmptyState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { cn } from '../../shared/utils/cn'
 import { formatCurrency } from '../../shared/utils/format'
-import { formatDateTime } from '../../shared/utils/dates'
+import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { useMaterialIssues, useMaterials, useStockTransfers } from './api'
+import { usePurchaseOrders, type PurchaseOrderListItem } from './purchaseOrdersApi'
 import type { Material } from './types'
 
 const tabs = [
@@ -21,6 +21,17 @@ export function ReportsPage() {
   const { data: materials } = useMaterials({ status: 'active' })
   const { data: issues } = useMaterialIssues()
   const { data: transfers } = useStockTransfers()
+  const { data: purchaseOrders, isLoading: poLoading } = usePurchaseOrders('All')
+
+  const poColumns: DataTableColumn<PurchaseOrderListItem>[] = [
+    { key: 'poNumber', header: 'PO No', cell: (row) => <span className="font-mono text-xs text-slate-700">{row.poNumber}</span> },
+    { key: 'supplierName', header: 'Supplier', cell: (row) => row.supplierName },
+    { key: 'orderedAt', header: 'Ordered', cell: (row) => formatDate(row.orderedAt) },
+    { key: 'expectedAt', header: 'Expected', cell: (row) => (row.expectedAt ? formatDate(row.expectedAt) : '—') },
+    { key: 'totalAmount', header: 'Total', cell: (row) => formatCurrency(row.totalAmount) },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+  ]
+  const poTotal = (purchaseOrders ?? []).reduce((sum, po) => sum + po.totalAmount, 0)
 
   const valuationRows = useMemo(
     () => (materials ?? []).map((item) => ({ ...item, value: item.quantityOnHand * (item.unitCost ?? 0) })),
@@ -83,7 +94,10 @@ export function ReportsPage() {
       ) : null}
 
       {tab === 'po' ? (
-        <EmptyState title="Pending backend Purchase Orders endpoint" description="No PurchaseOrdersController exists yet — this report will populate once purchase orders are tracked server-side." />
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">Total committed spend: <span className="font-semibold text-slate-900">{formatCurrency(poTotal)}</span> across {(purchaseOrders ?? []).length} order(s)</div>
+          <DataTable columns={poColumns} data={purchaseOrders ?? []} loading={poLoading} emptyTitle="No purchase orders" emptyDescription="Purchase orders raised against suppliers will appear here." />
+        </div>
       ) : null}
 
       {tab === 'movement' ? (

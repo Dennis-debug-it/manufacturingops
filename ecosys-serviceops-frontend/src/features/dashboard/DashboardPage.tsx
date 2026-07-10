@@ -22,6 +22,8 @@ import { SectionHeader } from '../../shared/components/SectionHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { formatNumber } from '../../shared/utils/format'
+import { formatRelative } from '../../shared/utils/dates'
+import { useWhatsAppConversations } from '../whatsapp/api'
 import type { DashboardGroupMetric, DashboardSummary, DashboardTechnicianWorkload } from './types'
 
 interface StatCardDef {
@@ -171,15 +173,7 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-5">
-        <div className="flex items-center gap-3">
-          <MessageCircle className="h-5 w-5 text-slate-400" />
-          <div>
-            <div className="text-sm font-medium text-slate-700">WhatsApp Alerts</div>
-            <p className="text-sm text-slate-500">Pending backend WhatsApp integration — this widget will populate once a WhatsApp controller is available.</p>
-          </div>
-        </div>
-      </section>
+      <WhatsAppAlertsWidget />
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap gap-4 text-sm text-slate-600">
@@ -191,5 +185,44 @@ export function DashboardPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+function WhatsAppAlertsWidget() {
+  const { data: conversations, isLoading } = useWhatsAppConversations()
+  const recent = (conversations ?? []).slice(0, 4)
+  const totalUnread = (conversations ?? []).reduce((sum, c) => sum + (c.unreadCount ?? 0), 0)
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <MessageCircle className="h-5 w-5 text-emerald-600" />
+          <div className="text-sm font-medium text-slate-700">WhatsApp Alerts</div>
+          {totalUnread > 0 ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">{totalUnread} unread</span> : null}
+        </div>
+        <Link to="/whatsapp" className="text-xs font-medium text-slate-500 underline underline-offset-2 hover:text-slate-900">Open inbox</Link>
+      </div>
+      {isLoading ? (
+        <p className="mt-3 text-sm text-slate-400">Loading conversations…</p>
+      ) : recent.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-500">No WhatsApp conversations yet. Start one from the inbox.</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-slate-100">
+          {recent.map((c) => (
+            <li key={c.id} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                  <span className="truncate">{c.contactName}</span>
+                  {c.unreadCount > 0 ? <span className="rounded-full bg-emerald-500 px-1.5 text-[10px] font-semibold text-white">{c.unreadCount}</span> : null}
+                </div>
+                <div className="truncate text-xs text-slate-500">{c.lastMessagePreview}</div>
+              </div>
+              <span className="shrink-0 text-xs text-slate-400">{formatRelative(c.lastMessageAt)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }

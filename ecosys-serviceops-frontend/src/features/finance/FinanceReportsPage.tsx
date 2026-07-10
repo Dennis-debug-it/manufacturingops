@@ -6,7 +6,9 @@ import { Spinner } from '../../shared/components/Spinner'
 import { StatCard } from '../../shared/components/StatCard'
 import { cn } from '../../shared/utils/cn'
 import { formatCurrency } from '../../shared/utils/format'
+import { formatDate } from '../../shared/utils/dates'
 import { useAgingReport, useFinanceDashboard, useRevenueReport, type RevenueReportRow } from './api'
+import { usePayables, type PayableListItem } from './expensesPayablesApi'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 
 const tabs = [
@@ -17,6 +19,14 @@ const tabs = [
   { id: 'contract-pnl', label: 'Contract P&L' },
   { id: 'payables-aging', label: 'Payables Aging' },
 ] as const
+
+function agingBucket(payable: PayableListItem) {
+  const days = Math.floor((Date.now() - new Date(payable.dueDate).getTime()) / 86_400_000)
+  if (days <= 0) return 'Current'
+  if (days <= 30) return '1–30 days'
+  if (days <= 60) return '31–60 days'
+  return '60+ days'
+}
 
 function monthLabel(group: string) {
   const [year, month] = group.split('-')
@@ -94,6 +104,18 @@ export function FinanceReportsPage() {
   const { data: aging } = useAgingReport()
   const monthlyRevenue = useRevenueReport({ groupBy: 'month' })
   const clientRevenue = useRevenueReport({ groupBy: 'client' })
+  const { data: payables, isLoading: payablesLoading } = usePayables('All')
+
+  const payableColumns: DataTableColumn<PayableListItem>[] = [
+    { key: 'billNumber', header: 'Bill No', cell: (row) => <span className="font-mono text-xs text-slate-700">{row.billNumber}</span> },
+    { key: 'supplierName', header: 'Supplier', cell: (row) => row.supplierName },
+    { key: 'dueDate', header: 'Due Date', cell: (row) => formatDate(row.dueDate) },
+    { key: 'outstanding', header: 'Outstanding', cell: (row) => formatCurrency(row.amount - row.amountPaid) },
+    { key: 'bucket', header: 'Age', cell: (row) => agingBucket(row) },
+    { key: 'status', header: 'Status', cell: (row) => row.status },
+  ]
+  const outstandingPayables = (payables ?? []).filter((p) => p.amount - p.amountPaid > 0.005)
+  const payablesTotal = outstandingPayables.reduce((sum, p) => sum + (p.amount - p.amountPaid), 0)
 
   const monthColumns: DataTableColumn<RevenueReportRow & { id: string }>[] = [
     { key: 'group', header: 'Month', cell: (row) => monthLabel(row.group) },
@@ -183,7 +205,16 @@ export function FinanceReportsPage() {
       ) : null}
 
       {tab === 'payables-aging' ? (
-        <EmptyState title="Pending backend Payables endpoint" description="No tenant-level Payables controller exists yet, so a payables aging report cannot be built against real data." />
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {(['Current', '1–30 days', '31–60 days', '60+ days'] as const).map((bucket) => {
+              const total = outstandingPayables.filter((p) => agingBucket(p) === bucket).reduce((sum, p) => sum + (p.amount - p.amountPaid), 0)
+              return <StatCard key={bucket} label={bucket} value={formatCurrency(total)} tone={bucket === '60+ days' && total > 0 ? 'danger' : 'default'} />
+            })}
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">Total outstanding: <span className="font-semibold text-slate-900">{formatCurrency(payablesTotal)}</span> across {outstandingPayables.length} bill(s)</div>
+          <DataTable columns={payableColumns} data={outstandingPayables} loading={payablesLoading} emptyTitle="No outstanding payables" emptyDescription="Unpaid supplier bills will appear here." />
+        </div>
       ) : null}
     </div>
   )
