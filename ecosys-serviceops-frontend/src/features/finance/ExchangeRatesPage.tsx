@@ -7,11 +7,9 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
+import { api } from '../../shared/api/apiClient'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 
-// TODO(backend): No exchange-rate controller exists in the current backend yet
-// (confirmed against FRONTEND_BUILD_PLAN.md §12.1). Typed stub hooks return empty data
-// until a real endpoint is available.
 interface ExchangeRateItem {
   id: string
   baseCurrency: string
@@ -22,15 +20,18 @@ interface ExchangeRateItem {
 }
 
 function useExchangeRates() {
-  return useQuery({ queryKey: ['finance', 'exchange-rates'], queryFn: async (): Promise<ExchangeRateItem[]> => [], staleTime: Infinity })
+  return useQuery({
+    queryKey: ['finance', 'exchange-rates'],
+    queryFn: () => api.get<ExchangeRateItem[]>('/api/exchange-rates'),
+    staleTime: 30_000,
+  })
 }
 
 function useCreateExchangeRate() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_payload: { baseCurrency: string; quoteCurrency: string; rate: number }): Promise<void> => {
-      throw new Error('Exchange rates cannot be saved yet — no backend exchange-rate controller exists.')
-    },
+    mutationFn: (payload: { baseCurrency: string; quoteCurrency: string; rate: number }) =>
+      api.post<ExchangeRateItem>('/api/exchange-rates', payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['finance', 'exchange-rates'] }),
   })
 }
@@ -45,13 +46,10 @@ export function ExchangeRatesPage() {
   const [rate, setRate] = useState('')
 
   const submit = async () => {
-    try {
-      await createRate.mutateAsync({ baseCurrency, quoteCurrency, rate: Number(rate) })
-      toast.success('Exchange rate saved')
-      setShowNewRate(false)
-    } catch {
-      toast.error('Exchange rates are not yet backed by a live API — this is a UI stub.')
-    }
+    await createRate.mutateAsync({ baseCurrency, quoteCurrency, rate: Number(rate) })
+    toast.success('Exchange rate saved')
+    setShowNewRate(false)
+    setRate('')
   }
 
   const columns: DataTableColumn<ExchangeRateItem>[] = [
@@ -75,15 +73,12 @@ export function ExchangeRatesPage() {
         }
       />
       <FinanceWorkspaceNav />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        No exchange-rate controller exists in the current backend yet — this is the full intended UI wired against typed stub data until a real endpoint is connected.
-      </div>
       <DataTable
         columns={columns}
         data={data ?? []}
         loading={isLoading}
         emptyTitle="No exchange rates configured"
-        emptyDescription="Manual currency pair rates will appear here once the backend endpoint is connected."
+        emptyDescription="Add a currency pair rate for multi-currency invoicing."
       />
 
       <FormDrawer open={showNewRate} title="Add Exchange Rate" onClose={() => setShowNewRate(false)}>

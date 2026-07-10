@@ -33,6 +33,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
     public DbSet<PurchaseOrderReceiptEvent> PurchaseOrderReceiptEvents => Set<PurchaseOrderReceiptEvent>();
+    public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
     public DbSet<BranchMaterialStock> BranchMaterialStocks => Set<BranchMaterialStock>();
@@ -2761,6 +2762,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<PurchaseOrderReceiptEvent>(modelBuilder);
+
+        modelBuilder.Entity<ExchangeRate>(entity =>
+        {
+            entity.ToTable("exchange_rates");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.BaseCurrency).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.QuoteCurrency).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.Rate).HasPrecision(18, 6);
+            entity.Property(x => x.UpdatedByName).HasMaxLength(200);
+            entity.HasIndex(x => new { x.TenantId, x.BaseCurrency, x.QuoteCurrency, x.EffectiveFrom });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ExchangeRate>(modelBuilder);
     }
 
     private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder)
