@@ -1,9 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-
-// TODO(backend): No WhatsAppController exists yet (confirmed against the 67-controller snapshot
-// in FRONTEND_BUILD_PLAN.md §4.5 / backend-gap table). Every hook below is a typed stub returning
-// empty/default data — swap the queryFn/mutationFn bodies for real `api.get`/`api.post` calls once
-// a backend WhatsApp Business API integration exists.
+import { api } from '../../shared/api/apiClient'
 
 export type WhatsAppMessageDirection = 'Inbound' | 'Outbound'
 export type WhatsAppMessageStatus = 'Sent' | 'Delivered' | 'Read' | 'Failed'
@@ -21,8 +17,23 @@ export interface WhatsAppConversationListItem {
 export function useWhatsAppConversations() {
   return useQuery({
     queryKey: ['whatsapp', 'conversations'],
-    queryFn: async (): Promise<WhatsAppConversationListItem[]> => [],
-    staleTime: Infinity,
+    queryFn: () => api.get<WhatsAppConversationListItem[]>('/api/whatsapp/conversations'),
+    staleTime: 15_000,
+  })
+}
+
+export interface CreateWhatsAppConversationPayload {
+  contactName: string
+  contactPhone: string
+  clientId?: string | undefined
+}
+
+export function useCreateWhatsAppConversation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreateWhatsAppConversationPayload) =>
+      api.post<WhatsAppConversationListItem>('/api/whatsapp/conversations', payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['whatsapp', 'conversations'] }),
   })
 }
 
@@ -46,19 +57,21 @@ export interface WhatsAppConversationDetail {
 export function useWhatsAppConversation(id: string | undefined) {
   return useQuery({
     queryKey: ['whatsapp', 'conversations', id],
-    queryFn: async (): Promise<WhatsAppConversationDetail | null> => null,
+    queryFn: () => api.get<WhatsAppConversationDetail>(`/api/whatsapp/conversations/${id}`),
     enabled: Boolean(id),
-    staleTime: Infinity,
+    staleTime: 10_000,
   })
 }
 
-export function useSendWhatsAppMessage(_conversationId: string) {
+export function useSendWhatsAppMessage(conversationId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_body: string): Promise<void> => {
-      throw new Error('WhatsApp messages cannot be sent yet — no backend WhatsAppController exists.')
+    mutationFn: (body: string) =>
+      api.post<WhatsAppTimelineMessage>(`/api/whatsapp/conversations/${conversationId}/messages`, { body }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['whatsapp', 'conversations', conversationId] })
+      void queryClient.invalidateQueries({ queryKey: ['whatsapp', 'conversations'] })
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['whatsapp', 'conversations'] }),
   })
 }
 
@@ -73,31 +86,18 @@ export interface WhatsAppSettings {
   autoReplyMessage: string
 }
 
-const defaultWhatsAppSettings: WhatsAppSettings = {
-  businessAccountId: '',
-  phoneNumberId: '',
-  accessToken: '',
-  webhookVerifyToken: '',
-  webhookUrl: '',
-  isEnabled: false,
-  autoReplyEnabled: false,
-  autoReplyMessage: 'Thanks for reaching out — a member of our team will respond shortly.',
-}
-
 export function useWhatsAppSettings() {
   return useQuery({
     queryKey: ['settings', 'whatsapp'],
-    queryFn: async (): Promise<WhatsAppSettings> => defaultWhatsAppSettings,
-    staleTime: Infinity,
+    queryFn: () => api.get<WhatsAppSettings>('/api/whatsapp/settings'),
+    staleTime: 30_000,
   })
 }
 
 export function useSaveWhatsAppSettings() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_settings: WhatsAppSettings): Promise<void> => {
-      throw new Error('WhatsApp settings cannot be saved yet — no backend endpoint exists.')
-    },
+    mutationFn: (settings: WhatsAppSettings) => api.put<WhatsAppSettings>('/api/whatsapp/settings', settings),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings', 'whatsapp'] }),
   })
 }
@@ -114,7 +114,7 @@ export interface WhatsAppTemplate {
 export function useWhatsAppTemplates() {
   return useQuery({
     queryKey: ['whatsapp', 'templates'],
-    queryFn: async (): Promise<WhatsAppTemplate[]> => [],
-    staleTime: Infinity,
+    queryFn: () => api.get<WhatsAppTemplate[]>('/api/whatsapp/templates'),
+    staleTime: 30_000,
   })
 }

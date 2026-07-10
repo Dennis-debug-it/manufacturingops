@@ -37,6 +37,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<SupplierBill> SupplierBills => Set<SupplierBill>();
     public DbSet<SupplierBillPayment> SupplierBillPayments => Set<SupplierBillPayment>();
+    public DbSet<WhatsAppSetting> WhatsAppSettings => Set<WhatsAppSetting>();
+    public DbSet<WhatsAppConversation> WhatsAppConversations => Set<WhatsAppConversation>();
+    public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
+    public DbSet<WhatsAppTemplate> WhatsAppTemplates => Set<WhatsAppTemplate>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
     public DbSet<BranchMaterialStock> BranchMaterialStocks => Set<BranchMaterialStock>();
@@ -2827,6 +2831,60 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.SupplierBill).WithMany(x => x.Payments).HasForeignKey(x => x.SupplierBillId).OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<SupplierBillPayment>(modelBuilder);
+
+        modelBuilder.Entity<WhatsAppSetting>(entity =>
+        {
+            entity.ToTable("whatsapp_settings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.BusinessAccountId).HasMaxLength(120);
+            entity.Property(x => x.PhoneNumberId).HasMaxLength(120);
+            entity.Property(x => x.AccessToken).HasMaxLength(500);
+            entity.Property(x => x.WebhookVerifyToken).HasMaxLength(200);
+            entity.Property(x => x.AutoReplyMessage).HasMaxLength(1000);
+            entity.HasIndex(x => x.TenantId).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<WhatsAppSetting>(modelBuilder);
+
+        modelBuilder.Entity<WhatsAppConversation>(entity =>
+        {
+            entity.ToTable("whatsapp_conversations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ContactName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ContactPhone).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.LastMessagePreview).HasMaxLength(500);
+            entity.HasIndex(x => new { x.TenantId, x.LastMessageAt });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<WhatsAppConversation>(modelBuilder);
+
+        modelBuilder.Entity<WhatsAppMessage>(entity =>
+        {
+            entity.ToTable("whatsapp_messages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Direction).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Body).HasMaxLength(4000).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.TemplateName).HasMaxLength(200);
+            entity.HasIndex(x => x.ConversationId);
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Conversation).WithMany(x => x.Messages).HasForeignKey(x => x.ConversationId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<WhatsAppMessage>(modelBuilder);
+
+        modelBuilder.Entity<WhatsAppTemplate>(entity =>
+        {
+            entity.ToTable("whatsapp_templates");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Category).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Language).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.BodyPreview).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.Name });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<WhatsAppTemplate>(modelBuilder);
     }
 
     private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder)

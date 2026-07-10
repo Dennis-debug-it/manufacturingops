@@ -1,33 +1,49 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Send, MessageCircle } from 'lucide-react'
+import { Send, MessageCircle, Plus } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
+import { FormDrawer } from '../../shared/components/FormDrawer'
 import { formatDateTime } from '../../shared/utils/dates'
-import { useSendWhatsAppMessage, useWhatsAppConversation, useWhatsAppConversations } from './api'
-
-const backendGapNote = 'No WhatsAppController exists in the current backend yet. This is the full intended inbox UI wired against typed stub data — messages will not send until a real WhatsApp Business API integration is connected.'
+import { useCreateWhatsAppConversation, useSendWhatsAppMessage, useWhatsAppConversation, useWhatsAppConversations } from './api'
 
 export function WhatsAppInboxPage() {
   const { data: conversations, isLoading } = useWhatsAppConversations()
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined)
   const { data: detail } = useWhatsAppConversation(selectedId)
   const sendMessage = useSendWhatsAppMessage(selectedId ?? '')
+  const createConversation = useCreateWhatsAppConversation()
   const [draft, setDraft] = useState('')
+  const [showNew, setShowNew] = useState(false)
+  const [contactName, setContactName] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
 
   const send = async () => {
-    try {
-      await sendMessage.mutateAsync(draft)
-      setDraft('')
-    } catch {
-      toast.error('WhatsApp sending is not yet backed by a live API — this is a UI stub.')
-    }
+    await sendMessage.mutateAsync(draft)
+    setDraft('')
+  }
+
+  const startConversation = async () => {
+    if (!contactPhone.trim()) return toast.error('Contact phone is required')
+    const created = await createConversation.mutateAsync({ contactName: contactName || contactPhone, contactPhone })
+    toast.success('Conversation started')
+    setShowNew(false)
+    setContactName('')
+    setContactPhone('')
+    setSelectedId(created.id)
   }
 
   return (
     <div className="space-y-6">
-      <PageHeader title="WhatsApp Inbox" subtitle="Two-way WhatsApp Business conversations with clients and technicians." />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
+      <PageHeader
+        title="WhatsApp Inbox"
+        subtitle="Two-way WhatsApp Business conversations with clients and technicians."
+        primaryAction={
+          <button type="button" onClick={() => setShowNew(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <Plus className="h-4 w-4" />New Conversation
+          </button>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -96,6 +112,27 @@ export function WhatsAppInboxPage() {
           )}
         </div>
       </div>
+
+      <FormDrawer open={showNew} title="New Conversation" onClose={() => setShowNew(false)}>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Contact Name</label>
+            <input value={contactName} onChange={(event) => setContactName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Contact Phone</label>
+            <input value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} placeholder="+2547…" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          </div>
+          <button
+            type="button"
+            disabled={!contactPhone.trim() || createConversation.isPending}
+            onClick={() => void startConversation()}
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {createConversation.isPending ? 'Starting…' : 'Start Conversation'}
+          </button>
+        </div>
+      </FormDrawer>
     </div>
   )
 }

@@ -27,12 +27,8 @@ export function WhatsAppSettingsPage() {
 
   const onSave = async () => {
     if (!values) return
-    try {
-      await save.mutateAsync(values)
-      toast.success('Settings saved')
-    } catch {
-      toast.error('WhatsApp settings cannot be saved yet — no backend endpoint exists. Changes shown here are local-only.')
-    }
+    await save.mutateAsync(values)
+    toast.success('Settings saved')
   }
 
   return (
@@ -48,9 +44,6 @@ export function WhatsAppSettingsPage() {
           ) : undefined
         }
       />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        No WhatsAppController exists yet — this form is fully built out but changes are not persisted.
-      </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
