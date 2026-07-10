@@ -34,6 +34,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
     public DbSet<PurchaseOrderReceiptEvent> PurchaseOrderReceiptEvents => Set<PurchaseOrderReceiptEvent>();
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
+    public DbSet<Expense> Expenses => Set<Expense>();
+    public DbSet<SupplierBill> SupplierBills => Set<SupplierBill>();
+    public DbSet<SupplierBillPayment> SupplierBillPayments => Set<SupplierBillPayment>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
     public DbSet<BranchMaterialStock> BranchMaterialStocks => Set<BranchMaterialStock>();
@@ -2778,6 +2781,52 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<ExchangeRate>(modelBuilder);
+
+        modelBuilder.Entity<Expense>(entity =>
+        {
+            entity.ToTable("expenses");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ClaimNumber).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.SubmittedByName).HasMaxLength(200);
+            entity.Property(x => x.Category).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired().HasDefaultValue("KES");
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired().HasDefaultValue("Submitted");
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.ApprovedByName).HasMaxLength(200);
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<Expense>(modelBuilder);
+
+        modelBuilder.Entity<SupplierBill>(entity =>
+        {
+            entity.ToTable("supplier_bills");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.BillNumber).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.AmountPaid).HasPrecision(18, 2);
+            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired().HasDefaultValue("KES");
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired().HasDefaultValue("Open");
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
+        });
+        ApplyTenantFilter<SupplierBill>(modelBuilder);
+
+        modelBuilder.Entity<SupplierBillPayment>(entity =>
+        {
+            entity.ToTable("supplier_bill_payments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Method).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Reference).HasMaxLength(120);
+            entity.HasIndex(x => x.SupplierBillId);
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.SupplierBill).WithMany(x => x.Payments).HasForeignKey(x => x.SupplierBillId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<SupplierBillPayment>(modelBuilder);
     }
 
     private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder)

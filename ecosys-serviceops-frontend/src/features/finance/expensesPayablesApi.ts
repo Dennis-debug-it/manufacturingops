@@ -1,9 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-
-// TODO(backend): Only a platform-admin-scoped expenses endpoint exists (PlatformFinanceController.expenses).
-// It is NOT tenant-scoped, and reusing it here would leak cross-tenant data, so tenant-level Expenses and
-// Payables stay UI-only stubs until a dedicated tenant-scoped endpoint exists (confirmed against
-// FRONTEND_BUILD_PLAN.md §12.1). Every hook below returns typed empty/default data.
+import { api } from '../../shared/api/apiClient'
 
 export type ExpenseStatus = 'Draft' | 'Submitted' | 'Approved' | 'Rejected' | 'Reimbursed'
 
@@ -21,8 +17,8 @@ export interface ExpenseListItem {
 export function useExpenses(status?: ExpenseStatus | 'All') {
   return useQuery({
     queryKey: ['finance', 'expenses', status ?? 'All'],
-    queryFn: async (): Promise<ExpenseListItem[]> => [],
-    staleTime: Infinity,
+    queryFn: () => api.get<ExpenseListItem[]>('/api/expenses', status && status !== 'All' ? { status } : undefined),
+    staleTime: 30_000,
   })
 }
 
@@ -36,9 +32,9 @@ export interface ExpenseDetail extends ExpenseListItem {
 export function useExpense(id: string | undefined) {
   return useQuery({
     queryKey: ['finance', 'expenses', id],
-    queryFn: async (): Promise<ExpenseDetail | null> => null,
+    queryFn: () => api.get<ExpenseDetail>(`/api/expenses/${id}`),
     enabled: Boolean(id),
-    staleTime: Infinity,
+    staleTime: 30_000,
   })
 }
 
@@ -52,19 +48,16 @@ export interface CreateExpensePayload {
 export function useCreateExpense() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_payload: CreateExpensePayload): Promise<ExpenseListItem> => {
-      throw new Error('Expense claims cannot be submitted yet — no tenant-scoped Expenses endpoint exists.')
-    },
+    mutationFn: (payload: CreateExpensePayload) => api.post<ExpenseListItem>('/api/expenses', payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] }),
   })
 }
 
-export function useDecideExpense(_id: string) {
+export function useDecideExpense(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_decision: { approve: boolean }): Promise<void> => {
-      throw new Error('Expense approvals cannot be persisted yet — no tenant-scoped Expenses endpoint exists.')
-    },
+    mutationFn: (decision: { approve: boolean }) =>
+      api.post<void>(`/api/expenses/${id}/decision`, decision),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['finance', 'expenses'] }),
   })
 }
@@ -85,8 +78,8 @@ export interface PayableListItem {
 export function usePayables(status?: PayableStatus | 'All') {
   return useQuery({
     queryKey: ['finance', 'payables', status ?? 'All'],
-    queryFn: async (): Promise<PayableListItem[]> => [],
-    staleTime: Infinity,
+    queryFn: () => api.get<PayableListItem[]>('/api/payables', status && status !== 'All' ? { status } : undefined),
+    staleTime: 30_000,
   })
 }
 
@@ -98,18 +91,32 @@ export interface PayableDetail extends PayableListItem {
 export function usePayable(id: string | undefined) {
   return useQuery({
     queryKey: ['finance', 'payables', id],
-    queryFn: async (): Promise<PayableDetail | null> => null,
+    queryFn: () => api.get<PayableDetail>(`/api/payables/${id}`),
     enabled: Boolean(id),
-    staleTime: Infinity,
+    staleTime: 30_000,
   })
 }
 
-export function useRecordPayablePayment(_id: string) {
+export interface CreatePayablePayload {
+  supplierId: string
+  amount: number
+  dueDate: string
+  notes?: string | undefined
+}
+
+export function useCreatePayable() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (_payload: { amount: number; method: string; reference?: string | undefined }): Promise<void> => {
-      throw new Error('Payments cannot be recorded yet — no tenant-scoped Payables endpoint exists.')
-    },
+    mutationFn: (payload: CreatePayablePayload) => api.post<PayableListItem>('/api/payables', payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['finance', 'payables'] }),
+  })
+}
+
+export function useRecordPayablePayment(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { amount: number; method: string; reference?: string | undefined }) =>
+      api.post<void>(`/api/payables/${id}/payments`, payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['finance', 'payables'] }),
   })
 }

@@ -11,7 +11,6 @@ import { formatDate } from '../../shared/utils/dates'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 import { useCreateExpense, useDecideExpense, useExpense, useExpenses, type ExpenseListItem, type ExpenseStatus } from './expensesPayablesApi'
 
-const backendGapNote = 'Only a platform-admin-scoped expenses endpoint exists (PlatformFinanceController.expenses) — it is not tenant-scoped, so reusing it here would leak cross-tenant data. This is the full intended tenant Expenses UI wired against typed stub data until a tenant-level endpoint exists.'
 const statusOptions: Array<ExpenseStatus | 'All'> = ['All', 'Draft', 'Submitted', 'Approved', 'Rejected', 'Reimbursed']
 
 export function ExpensesPage() {
@@ -25,13 +24,12 @@ export function ExpensesPage() {
   const [description, setDescription] = useState('')
 
   const submit = async () => {
-    try {
-      await createExpense.mutateAsync({ category, amount: Number(amount), incurredAt, description: description || undefined })
-      toast.success('Expense claim submitted')
-      setShowNewExpense(false)
-    } catch {
-      toast.error('Expense claims are not yet backed by a tenant-scoped API — this is a UI stub.')
-    }
+    await createExpense.mutateAsync({ category, amount: Number(amount), incurredAt, description: description || undefined })
+    toast.success('Expense claim submitted')
+    setShowNewExpense(false)
+    setAmount('')
+    setIncurredAt('')
+    setDescription('')
   }
 
   const columns: DataTableColumn<ExpenseListItem>[] = [
@@ -55,7 +53,6 @@ export function ExpensesPage() {
         }
       />
       <FinanceWorkspaceNav />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         {statusOptions.map((status) => (
           <button
@@ -73,7 +70,7 @@ export function ExpensesPage() {
         data={data ?? []}
         loading={isLoading}
         emptyTitle="No expense claims yet"
-        emptyDescription="Expense claims and reimbursements will appear here once a tenant-scoped Expenses endpoint is connected."
+        emptyDescription="Submit a claim to start the approval workflow."
       />
 
       <FormDrawer open={showNewExpense} title="New Expense Claim" onClose={() => setShowNewExpense(false)}>
@@ -120,12 +117,8 @@ export function ExpenseDetailPage() {
   const decide = useDecideExpense(id ?? '')
 
   const respond = async (approve: boolean) => {
-    try {
-      await decide.mutateAsync({ approve })
-      toast.success(approve ? 'Expense approved' : 'Expense rejected')
-    } catch {
-      toast.error('Expense approvals are not yet backed by a tenant-scoped API — this is a UI stub.')
-    }
+    await decide.mutateAsync({ approve })
+    toast.success(approve ? 'Expense approved' : 'Expense rejected')
   }
 
   return (
@@ -144,9 +137,8 @@ export function ExpenseDetailPage() {
           ) : undefined
         }
       />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       {isLoading ? null : !data ? (
-        <EmptyState title="No expense detail yet" description="Expense claim detail, receipt, and approval history will appear here once a tenant-scoped Expenses endpoint is connected." />
+        <EmptyState title="Expense not found" description="This expense claim may have been removed." />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[

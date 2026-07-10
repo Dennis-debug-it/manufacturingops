@@ -1,21 +1,43 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { Plus } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
+import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
-import { usePayable, usePayables, useRecordPayablePayment, type PayableListItem, type PayableStatus } from './expensesPayablesApi'
+import { useSuppliers } from '../inventory/purchaseOrdersApi'
+import { useCreatePayable, usePayable, usePayables, useRecordPayablePayment, type PayableListItem, type PayableStatus } from './expensesPayablesApi'
 
-const backendGapNote = 'No tenant-level Payables/supplier-bill controller exists in the current backend yet. This is the full intended list + detail UI wired against typed stub data — recording a payment will not persist until a real endpoint is connected.'
 const statusOptions: Array<PayableStatus | 'All'> = ['All', 'Open', 'PartiallyPaid', 'Paid', 'Overdue']
 
 export function PayablesPage() {
+  const canManage = usePermission('finance.manage')
   const [statusFilter, setStatusFilter] = useState<PayableStatus | 'All'>('All')
   const { data, isLoading } = usePayables(statusFilter)
+  const { data: suppliers } = useSuppliers()
+  const createPayable = useCreatePayable()
+  const [showNewBill, setShowNewBill] = useState(false)
+  const [supplierId, setSupplierId] = useState('')
+  const [amount, setAmount] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [notes, setNotes] = useState('')
+
+  const submit = async () => {
+    if (!supplierId) return toast.error('Select a supplier')
+    if (!amount || !dueDate) return toast.error('Amount and due date are required')
+    await createPayable.mutateAsync({ supplierId, amount: Number(amount), dueDate, notes: notes || undefined })
+    toast.success('Bill created')
+    setShowNewBill(false)
+    setSupplierId('')
+    setAmount('')
+    setDueDate('')
+    setNotes('')
+  }
 
   const columns: DataTableColumn<PayableListItem>[] = [
     { key: 'billNumber', header: 'Bill #', cell: (row) => <Link className="font-mono text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/finance/payables/${row.id}`}>{row.billNumber}</Link> },
@@ -28,9 +50,18 @@ export function PayablesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Payables" subtitle="Bills to pay and supplier invoices." />
+      <PageHeader
+        title="Payables"
+        subtitle="Bills to pay and supplier invoices."
+        primaryAction={
+          canManage ? (
+            <button type="button" onClick={() => setShowNewBill(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+              <Plus className="h-4 w-4" />New Bill
+            </button>
+          ) : undefined
+        }
+      />
       <FinanceWorkspaceNav />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         {statusOptions.map((status) => (
           <button
@@ -48,8 +79,41 @@ export function PayablesPage() {
         data={data ?? []}
         loading={isLoading}
         emptyTitle="No payables yet"
-        emptyDescription="Supplier bills and payables will appear here once a tenant-scoped Payables endpoint is connected."
+        emptyDescription="Record a supplier bill to track what you owe."
       />
+
+      <FormDrawer open={showNewBill} title="New Supplier Bill" onClose={() => setShowNewBill(false)}>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Supplier</label>
+            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+              <option value="">Select a supplier…</option>
+              {(suppliers ?? []).map((s) => <option key={s.id} value={s.id}>{s.supplierName}</option>)}
+            </select>
+            {suppliers && suppliers.length === 0 ? <p className="mt-1 text-xs text-amber-600">No suppliers yet — add one on the Suppliers page first.</p> : null}
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Amount (KES)</label>
+            <input type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Due Date</label>
+            <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Notes</label>
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+          </div>
+          <button
+            type="button"
+            disabled={!supplierId || !amount || !dueDate || createPayable.isPending}
+            onClick={() => void submit()}
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {createPayable.isPending ? 'Creating…' : 'Create Bill'}
+          </button>
+        </div>
+      </FormDrawer>
     </div>
   )
 }
@@ -64,13 +128,11 @@ export function PayableDetailPage() {
   const [reference, setReference] = useState('')
 
   const submitPayment = async () => {
-    try {
-      await recordPayment.mutateAsync({ amount: Number(amount), method, reference: reference || undefined })
-      toast.success('Payment recorded')
-      setShowPayment(false)
-    } catch {
-      toast.error('Payments are not yet backed by a tenant-scoped API — this is a UI stub.')
-    }
+    await recordPayment.mutateAsync({ amount: Number(amount), method, reference: reference || undefined })
+    toast.success('Payment recorded')
+    setShowPayment(false)
+    setAmount('')
+    setReference('')
   }
 
   return (
@@ -86,9 +148,8 @@ export function PayableDetailPage() {
           ) : undefined
         }
       />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{backendGapNote}</div>
       {isLoading ? null : !data ? (
-        <EmptyState title="No payable detail yet" description="Supplier bill detail and payment history will appear here once a tenant-scoped Payables endpoint is connected." />
+        <EmptyState title="Payable not found" description="This supplier bill may have been removed." />
       ) : (
         <>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
