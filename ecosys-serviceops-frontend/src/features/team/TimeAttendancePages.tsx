@@ -184,13 +184,9 @@ export function LeavePage() {
   const [reason, setReason] = useState('')
 
   const submitLeave = async () => {
-    try {
-      await createLeave.mutateAsync({ technicianId, leaveType, startDate, endDate, reason: reason || undefined })
-      toast.success('Leave request submitted')
-      setShowNewRequest(false)
-    } catch {
-      toast.error('Leave requests are not yet backed by a live API — this is a UI stub.')
-    }
+    await createLeave.mutateAsync({ technicianId, leaveType, startDate, endDate, reason: reason || undefined })
+    toast.success('Leave request submitted')
+    setShowNewRequest(false)
   }
 
   const columns: DataTableColumn<LeaveRequestItem>[] = [
@@ -284,12 +280,8 @@ function LeaveRowActions({ request }: { request: LeaveRequestItem }) {
   }
 
   const respond = async (approve: boolean) => {
-    try {
-      await decide.mutateAsync({ approve })
-      toast.success(approve ? 'Leave approved' : 'Leave rejected')
-    } catch {
-      toast.error('Leave approvals are not yet backed by a live API — this is a UI stub.')
-    }
+    await decide.mutateAsync({ approve })
+    toast.success(approve ? 'Leave approved' : 'Leave rejected')
   }
 
   return (
@@ -307,6 +299,25 @@ function LeaveRowActions({ request }: { request: LeaveRequestItem }) {
 export function TimeAttendanceReportsPage() {
   const { data } = useAttendanceReportSummary()
 
+  const exportCsv = () => {
+    if (!data) return toast.error('No report data to export yet')
+    const rows: Array<[string, string | number]> = [
+      ['Period', data.periodLabel],
+      ['Total Worked Hours', data.totalWorkedHours],
+      ['Total Overtime Hours', data.totalOvertimeHours],
+      ['Total Scheduled Hours', data.totalScheduledHours],
+      ['Leave Days Taken', data.leaveDaysTaken],
+      ['Late Arrivals', data.lateArrivals],
+    ]
+    const csv = ['Metric,Value', ...rows.map(([k, v]) => `"${k}",${v}`)].join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `attendance-report-${data.periodLabel.replace(/\s+/g, '-').toLowerCase()}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -315,7 +326,7 @@ export function TimeAttendanceReportsPage() {
         primaryAction={
           <button
             type="button"
-            onClick={() => toast.error('Report export is not yet available — no backend Time & Attendance API exists.')}
+            onClick={exportCsv}
             className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             <Download className="h-4 w-4" />Export

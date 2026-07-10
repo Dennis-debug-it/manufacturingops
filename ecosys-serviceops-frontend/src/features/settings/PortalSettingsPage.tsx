@@ -1,11 +1,13 @@
-import { StubSettingsForm } from './components/SettingsForm'
+import { SettingsForm } from './components/SettingsForm'
 
 export function PortalSettingsPage() {
   return (
-    <StubSettingsForm
+    <SettingsForm
       title="Client Portal"
       subtitle="Control what client portal contacts can see and do."
-      gapNote="No dedicated tenant-level Portal Settings endpoint exists yet — the portal auth and data API are real, but visibility toggles here are not yet persisted."
+      queryKey="module-portal"
+      fetchUrl="/api/settings/module/portal"
+      saveUrl="/api/settings/module/portal"
       defaultValues={{
         allowRequestSubmission: true,
         allowQuoteResponses: true,

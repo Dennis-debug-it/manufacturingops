@@ -23,6 +23,8 @@ export interface SettingsFormProps {
   saveUrl: string
   fields: SettingsField[]
   permissionAction?: string
+  /** Shown until the tenant has saved values (backend returns an empty object first time). */
+  defaultValues?: Record<string, unknown>
 }
 
 export interface StubSettingsFormProps {
@@ -124,7 +126,7 @@ export function StubSettingsForm({ title, subtitle, fields, defaultValues, gapNo
   )
 }
 
-export function SettingsForm({ title, subtitle, queryKey, fetchUrl, saveUrl, fields, permissionAction = 'settings.manage' }: SettingsFormProps) {
+export function SettingsForm({ title, subtitle, queryKey, fetchUrl, saveUrl, fields, permissionAction = 'settings.manage', defaultValues }: SettingsFormProps) {
   const canManage = usePermission(permissionAction)
   const queryClient = useQueryClient()
   const { data, isLoading, isError } = useQuery({
@@ -133,12 +135,13 @@ export function SettingsForm({ title, subtitle, queryKey, fetchUrl, saveUrl, fie
     staleTime: 30_000,
   })
 
-  const [values, setValues] = useState<Record<string, unknown>>({})
+  const [values, setValues] = useState<Record<string, unknown>>(defaultValues ?? {})
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (data) setValues(data)
-  }, [data])
+    // Merge stored values over the defaults so first-time (empty) responses still show sensible defaults.
+    if (data) setValues({ ...(defaultValues ?? {}), ...data })
+  }, [data, defaultValues])
 
   const setField = (key: string, value: unknown) => setValues((current) => ({ ...current, [key]: value }))
 

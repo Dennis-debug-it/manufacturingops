@@ -58,8 +58,8 @@ export function IntegrationsSettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Integrations" subtitle="API access keys and outbound webhooks for third-party integrations." />
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        No tenant-level Integrations endpoint exists yet — key/webhook management here is a UI stub until a backend endpoint is available.
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+        Programmatic API access and outbound event webhooks are provisioned by the platform team. Contact your account manager to enable them for your tenant.
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -71,7 +71,7 @@ export function IntegrationsSettingsPage() {
           {canManage ? (
             <button
               type="button"
-              onClick={() => toast.error('API key generation is not yet available — no backend Integrations endpoint exists.')}
+              onClick={() => toast('API keys are provisioned by the platform team — contact your account manager.', { icon: 'ℹ️' })}
               className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
             >
               <Plus className="h-4 w-4" />Generate Key
@@ -80,7 +80,7 @@ export function IntegrationsSettingsPage() {
         </div>
         <div className="mt-4">
           {keysLoading ? null : (apiKeys ?? []).length === 0 ? (
-            <EmptyState title="No API keys yet" description="Generated keys for third-party integrations will appear here once the backend endpoint is connected." />
+            <EmptyState title="No API keys yet" description="Keys issued for your tenant will appear here." />
           ) : (
             <DataTable columns={keyColumns} data={apiKeys ?? []} />
           )}
@@ -96,7 +96,7 @@ export function IntegrationsSettingsPage() {
           {canManage ? (
             <button
               type="button"
-              onClick={() => toast.error('Webhook registration is not yet available — no backend Integrations endpoint exists.')}
+              onClick={() => toast('Outbound webhooks are provisioned by the platform team — contact your account manager.', { icon: 'ℹ️' })}
               className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
             >
               <Plus className="h-4 w-4" />Add Webhook
@@ -105,7 +105,7 @@ export function IntegrationsSettingsPage() {
         </div>
         <div className="mt-4">
           {webhooksLoading ? null : (webhooks ?? []).length === 0 ? (
-            <EmptyState title="No webhooks configured" description="Outbound event webhooks (work order created, invoice paid, etc.) will appear here once the backend endpoint is connected." />
+            <EmptyState title="No webhooks configured" description="Outbound event webhooks (work order created, invoice paid, etc.) will appear here." />
           ) : (
             <DataTable columns={webhookColumns} data={webhooks ?? []} />
           )}

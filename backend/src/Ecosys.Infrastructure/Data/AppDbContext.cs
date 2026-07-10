@@ -41,6 +41,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<WhatsAppConversation> WhatsAppConversations => Set<WhatsAppConversation>();
     public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
     public DbSet<WhatsAppTemplate> WhatsAppTemplates => Set<WhatsAppTemplate>();
+    public DbSet<TenantModuleSetting> TenantModuleSettings => Set<TenantModuleSetting>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
     public DbSet<BranchMaterialStock> BranchMaterialStocks => Set<BranchMaterialStock>();
@@ -2885,6 +2886,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<WhatsAppTemplate>(modelBuilder);
+
+        modelBuilder.Entity<TenantModuleSetting>(entity =>
+        {
+            entity.ToTable("tenant_module_settings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ModuleKey).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.ValueJson).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.ModuleKey }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<TenantModuleSetting>(modelBuilder);
     }
 
     private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder)

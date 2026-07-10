@@ -1,11 +1,13 @@
-import { StubSettingsForm } from './components/SettingsForm'
+import { SettingsForm } from './components/SettingsForm'
 
 export function InventorySettingsPage() {
   return (
-    <StubSettingsForm
+    <SettingsForm
       title="Inventory Settings"
       subtitle="Stock alert thresholds and automatic deduction rules."
-      gapNote="No dedicated tenant-level Inventory Settings endpoint exists yet — this form is fully built out but changes are not persisted."
+      queryKey="module-inventory"
+      fetchUrl="/api/settings/module/inventory"
+      saveUrl="/api/settings/module/inventory"
       defaultValues={{
         lowStockThresholdPercent: 20,
         autoDeductOnWorkOrderComplete: true,

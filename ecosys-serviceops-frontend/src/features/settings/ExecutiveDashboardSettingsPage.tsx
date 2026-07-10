@@ -1,11 +1,13 @@
-import { StubSettingsForm } from './components/SettingsForm'
+import { SettingsForm } from './components/SettingsForm'
 
 export function ExecutiveDashboardSettingsPage() {
   return (
-    <StubSettingsForm
+    <SettingsForm
       title="Executive Dashboard Settings"
       subtitle="Metric targets and thresholds shown on the Executive Dashboard."
-      gapNote="No dedicated tenant-level Executive Dashboard target-configuration endpoint exists yet — this form is fully built out but changes are not persisted."
+      queryKey="module-executive-dashboard"
+      fetchUrl="/api/settings/module/executive-dashboard"
+      saveUrl="/api/settings/module/executive-dashboard"
       defaultValues={{
         slaComplianceTargetPercent: 95,
         firstTimeFixTargetPercent: 85,

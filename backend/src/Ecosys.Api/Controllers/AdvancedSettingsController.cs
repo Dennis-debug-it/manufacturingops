@@ -330,6 +330,63 @@ public sealed class AdvancedSettingsController(
         return Ok(normalized);
     }
 
+    // ── Generic per-module settings (key-value JSON) ────────────────────────────
+
+    private static readonly HashSet<string> ModuleSettingKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "executive-dashboard", "inventory", "payments", "portal", "integrations",
+    };
+
+    [HttpGet("module/{moduleKey}")]
+    public async Task<ActionResult<Dictionary<string, object?>>> GetModuleSettings(string moduleKey, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var key = ResolveModuleKey(moduleKey);
+
+        var setting = await dbContext.TenantModuleSettings.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.ModuleKey == key, cancellationToken);
+
+        if (setting is null || string.IsNullOrWhiteSpace(setting.ValueJson))
+            return Ok(new Dictionary<string, object?>());
+
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, object?>>(setting.ValueJson, _jsonOpts);
+            return Ok(parsed ?? new Dictionary<string, object?>());
+        }
+        catch (JsonException)
+        {
+            return Ok(new Dictionary<string, object?>());
+        }
+    }
+
+    [HttpPut("module/{moduleKey}")]
+    public async Task<ActionResult<Dictionary<string, object?>>> SaveModuleSettings(
+        string moduleKey, [FromBody] Dictionary<string, object?> values, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var key = ResolveModuleKey(moduleKey);
+
+        var setting = await dbContext.TenantModuleSettings
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.ModuleKey == key, cancellationToken);
+        if (setting is null)
+        {
+            setting = new TenantModuleSetting { TenantId = TenantId, ModuleKey = key };
+            dbContext.TenantModuleSettings.Add(setting);
+        }
+
+        setting.ValueJson = JsonSerializer.Serialize(values ?? new Dictionary<string, object?>());
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(values ?? new Dictionary<string, object?>());
+    }
+
+    private static string ResolveModuleKey(string moduleKey)
+    {
+        var key = ModuleSettingKeys.FirstOrDefault(k => string.Equals(k, moduleKey?.Trim(), StringComparison.OrdinalIgnoreCase));
+        return key ?? throw new BusinessRuleException($"Unknown settings module '{moduleKey}'.");
+    }
+
     // ── License ───────────────────────────────────────────────────────────────
 
     [HttpGet("license")]

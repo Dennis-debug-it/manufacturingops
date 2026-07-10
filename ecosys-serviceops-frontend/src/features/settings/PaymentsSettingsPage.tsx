@@ -1,11 +1,13 @@
-import { StubSettingsForm } from './components/SettingsForm'
+import { SettingsForm } from './components/SettingsForm'
 
 export function PaymentsSettingsPage() {
   return (
-    <StubSettingsForm
+    <SettingsForm
       title="Payments"
       subtitle="M-Pesa, Stripe, and bank transfer collection settings."
-      gapNote="No tenant-level Payments provider endpoint exists yet — this form is fully built out but changes are not persisted."
+      queryKey="module-payments"
+      fetchUrl="/api/settings/module/payments"
+      saveUrl="/api/settings/module/payments"
       defaultValues={{
         mpesaEnabled: false,
         mpesaShortcode: '',

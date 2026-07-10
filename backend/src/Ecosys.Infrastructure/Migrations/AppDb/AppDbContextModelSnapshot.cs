@@ -6241,6 +6241,38 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("tenant_licenses", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.TenantModuleSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ModuleKey")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ValueJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ModuleKey")
+                        .IsUnique();
+
+                    b.ToTable("tenant_module_settings", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantNotificationRecipient", b =>
                 {
                     b.Property<Guid>("Id")
@@ -10202,6 +10234,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired();
 
                     b.Navigation("LicensePlan");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.TenantModuleSetting", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Tenant");
                 });
