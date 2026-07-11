@@ -26,14 +26,14 @@ export function RequestDemoPage() {
   })
 
   return (
-    <div className="min-h-screen bg-slate-950 px-4 py-8 text-white sm:px-6 lg:px-10">
+    <div className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900 sm:px-6 lg:px-10">
       <div className="mx-auto max-w-3xl">
         <PageHeader
           title="Request a Demo"
           subtitle="See ECOSYS in action for your service operation."
         />
         <form
-          className="mt-8 space-y-4 rounded-3xl border border-white/10 bg-white/5 p-6 shadow-2xl"
+          className="mt-8 space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
           onSubmit={handleSubmit(async (values) => {
             setSubmitError(null)
             try {
@@ -52,7 +52,7 @@ export function RequestDemoPage() {
           })}
         >
           {submitError ? (
-            <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">{submitError}</div>
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{submitError}</div>
           ) : null}
           {[
             ['Company name', 'companyName'],
@@ -62,22 +62,22 @@ export function RequestDemoPage() {
             ['Country', 'country'],
           ].map(([label, key]) => (
             <div key={key}>
-              <label className="mb-2 block text-sm font-medium text-slate-200">{label}</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">{label}</label>
               <input
-                className="h-12 w-full rounded-xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none focus:border-white/30"
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-slate-900"
                 {...register(key as keyof DemoFormValues)}
               />
-              {errors[key as keyof DemoFormValues] ? <p className="mt-2 text-sm text-rose-300">{errors[key as keyof DemoFormValues]?.message}</p> : null}
+              {errors[key as keyof DemoFormValues] ? <p className="mt-2 text-sm text-rose-600">{errors[key as keyof DemoFormValues]?.message}</p> : null}
             </div>
           ))}
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-200">Additional notes</label>
-            <textarea className="min-h-32 w-full rounded-xl border border-white/10 bg-white/10 px-4 py-3 text-sm text-white outline-none focus:border-white/30" {...register('notes')} />
+            <label className="mb-2 block text-sm font-medium text-slate-700">Additional notes</label>
+            <textarea className="min-h-32 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-900" {...register('notes')} />
           </div>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="inline-flex h-12 items-center justify-center rounded-xl bg-white px-4 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 disabled:opacity-60"
+            className="inline-flex h-12 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
           >
             Submit request
           </button>

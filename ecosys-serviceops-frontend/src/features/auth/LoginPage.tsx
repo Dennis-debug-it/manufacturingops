@@ -49,72 +49,82 @@ export function LoginPage() {
   })
 
   return (
-    <div className="grid min-h-screen bg-slate-950 lg:grid-cols-[1.1fr_0.9fr]">
+    <div className="grid min-h-screen bg-white lg:grid-cols-[1fr_1fr]">
       <div className="flex items-center justify-center px-6 py-12 lg:px-12">
-        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 text-white shadow-2xl backdrop-blur">
+        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-950">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
               <Building2 className="h-6 w-6" />
             </div>
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">{brand.appName}</div>
-              <h1 className="text-2xl font-semibold tracking-tight">{brand.tagline}</h1>
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{brand.appName}</div>
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{brand.tagline}</h1>
             </div>
           </div>
 
           <form className="mt-8 space-y-4" onSubmit={onSubmit}>
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-200">Email</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Email</label>
               <input
                 type="email"
                 autoComplete="email"
-                className="h-12 w-full rounded-xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none placeholder:text-slate-400 focus:border-white/30"
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900"
                 {...register('email')}
               />
-              {errors.email ? <p className="mt-2 text-sm text-rose-300">{errors.email.message}</p> : null}
+              {errors.email ? <p className="mt-2 text-sm text-rose-600">{errors.email.message}</p> : null}
             </div>
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <label className="block text-sm font-medium text-slate-200">Password</label>
-                <Link to="/forgot-password" className="text-sm font-medium text-slate-300 hover:text-white">
+                <label className="block text-sm font-medium text-slate-700">Password</label>
+                <Link to="/forgot-password" className="text-sm font-medium text-slate-500 hover:text-slate-900">
                   Forgot password?
                 </Link>
               </div>
               <input
                 type="password"
                 autoComplete="current-password"
-                className="h-12 w-full rounded-xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none placeholder:text-slate-400 focus:border-white/30"
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900"
                 {...register('password')}
               />
-              {errors.password ? <p className="mt-2 text-sm text-rose-300">{errors.password.message}</p> : null}
+              {errors.password ? <p className="mt-2 text-sm text-rose-600">{errors.password.message}</p> : null}
             </div>
             {submitError ? (
-              <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {submitError}
               </div>
             ) : null}
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold text-slate-950 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Sign in
             </button>
-            <p className="text-center text-sm text-slate-400">
+            <p className="text-center text-sm text-slate-500">
               New to {brand.appName}?{' '}
-              <Link to="/request-demo" className="font-medium text-white hover:underline">
+              <Link to="/request-demo" className="font-medium text-slate-900 hover:underline">
                 Request a demo
               </Link>
             </p>
           </form>
         </div>
       </div>
-      <div className="hidden lg:flex lg:flex-col lg:justify-between lg:bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.18),_transparent_35%),linear-gradient(180deg,#0F3B5E_0%,#0B1620_100%)] lg:p-12">
-        <div />
-        <div className="max-w-xl text-white">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">Operational control</p>
-          <h2 className="mt-4 text-4xl font-semibold tracking-tight">Command field service, finance, and platform operations from one system.</h2>
+
+      {/* Operational control — real technicians photo with tagline overlay */}
+      <div className="relative hidden overflow-hidden bg-gradient-to-br from-slate-800 to-slate-950 lg:block">
+        <img
+          src="/ecosys-technicians.jpg"
+          alt="ECOSYS technicians reviewing operations on a tablet"
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={(event) => { event.currentTarget.style.display = 'none' }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/30 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-12">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">Operational control</p>
+          <h2 className="mt-4 max-w-xl text-4xl font-semibold tracking-tight text-white">
+            Command field service, finance, and platform operations from one system.
+          </h2>
         </div>
       </div>
     </div>
