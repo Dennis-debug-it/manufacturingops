@@ -299,6 +299,37 @@ public sealed class PortalController(
         return Ok(new PortalProfileResponse(portalUser.FullName, portalUser.Email, portalUser.Phone, portalUser.Client?.ClientName ?? "—", portalUser.LastLoginAt));
     }
 
+    [HttpPut("profile")]
+    public async Task<ActionResult<PortalProfileResponse>> UpdateProfile([FromBody] PortalUpdateProfileRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.FullName))
+        {
+            throw new BusinessRuleException("Full name is required.");
+        }
+
+        var portalUserId = portalContext.GetRequiredPortalUserId();
+        var portalUser = await dbContext.ClientPortalUsers
+            .Include(x => x.Client)
+            .SingleOrDefaultAsync(x => x.Id == portalUserId, cancellationToken)
+            ?? throw new NotFoundException("Portal profile was not found.");
+
+        portalUser.FullName = request.FullName.Trim();
+        portalUser.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditLogService.LogAsync(
+            TenantId,
+            null,
+            "portal.profile.updated",
+            nameof(ClientPortalUser),
+            portalUser.Id.ToString(),
+            $"Client portal contact '{portalUser.FullName}' updated their profile.",
+            actorName: portalUser.FullName,
+            cancellationToken: cancellationToken);
+
+        return Ok(new PortalProfileResponse(portalUser.FullName, portalUser.Email, portalUser.Phone, portalUser.Client?.ClientName ?? "—", portalUser.LastLoginAt));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private async Task<TenantQuotation> LoadQuotationAsync(Guid id, CancellationToken cancellationToken) =>
@@ -345,3 +376,4 @@ public sealed record PortalRejectQuotationRequest(string? Reason);
 public sealed record PortalContractListItem(Guid Id, string ContractNumber, string Name, string Status, string ContractType, DateTime StartDate, DateTime EndDate);
 
 public sealed record PortalProfileResponse(string FullName, string Email, string? Phone, string ClientName, DateTime? LastLoginAt);
+public sealed record PortalUpdateProfileRequest(string FullName, string? Phone);

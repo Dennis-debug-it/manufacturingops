@@ -1,15 +1,15 @@
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Plus, KeyRound, Webhook } from 'lucide-react'
+import { Plus, KeyRound, Webhook, Trash2, Copy } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
-import { EmptyState } from '../../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
+import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDateTime } from '../../shared/utils/dates'
+import { api } from '../../shared/api/apiClient'
 
-// TODO(backend): No tenant-level Integrations endpoint (API keys, outbound webhooks) exists yet.
-// These hooks return typed empty data until a real endpoint is available.
 interface ApiKeyItem {
   id: string
   label: string
@@ -17,6 +17,10 @@ interface ApiKeyItem {
   createdAt: string
   lastUsedAt: string | null
   status: 'Active' | 'Revoked'
+}
+
+interface ApiKeyCreated extends ApiKeyItem {
+  apiKey: string
 }
 
 interface WebhookItem {
@@ -27,18 +31,105 @@ interface WebhookItem {
   createdAt: string
 }
 
+interface WebhookCreated extends WebhookItem {
+  secret: string
+}
+
+const WEBHOOK_EVENTS = ['work_order.created', 'work_order.completed', 'invoice.issued', 'invoice.paid', 'quotation.accepted']
+
 function useApiKeys() {
-  return useQuery({ queryKey: ['settings', 'integrations', 'api-keys'], queryFn: async (): Promise<ApiKeyItem[]> => [], staleTime: Infinity })
+  return useQuery({ queryKey: ['settings', 'integrations', 'api-keys'], queryFn: () => api.get<ApiKeyItem[]>('/api/settings/api-keys'), staleTime: 30_000 })
+}
+
+function useCreateApiKey() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (label: string) => api.post<ApiKeyCreated>('/api/settings/api-keys', { label }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings', 'integrations', 'api-keys'] }),
+  })
+}
+
+function useRevokeApiKey() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/settings/api-keys/${id}`),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings', 'integrations', 'api-keys'] }),
+  })
 }
 
 function useWebhooks() {
-  return useQuery({ queryKey: ['settings', 'integrations', 'webhooks'], queryFn: async (): Promise<WebhookItem[]> => [], staleTime: Infinity })
+  return useQuery({ queryKey: ['settings', 'integrations', 'webhooks'], queryFn: () => api.get<WebhookItem[]>('/api/settings/webhooks'), staleTime: 30_000 })
+}
+
+function useCreateWebhook() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { url: string; events: string[] }) => api.post<WebhookCreated>('/api/settings/webhooks', payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings', 'integrations', 'webhooks'] }),
+  })
+}
+
+function useDeleteWebhook() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/settings/webhooks/${id}`),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings', 'integrations', 'webhooks'] }),
+  })
+}
+
+function copyToClipboard(value: string) {
+  void navigator.clipboard.writeText(value)
+  toast.success('Copied to clipboard')
 }
 
 export function IntegrationsSettingsPage() {
   const canManage = usePermission('settings.manage')
-  const { data: apiKeys, isLoading: keysLoading } = useApiKeys()
-  const { data: webhooks, isLoading: webhooksLoading } = useWebhooks()
+  const { data: apiKeys, isLoading: keysLoading, isError: keysError } = useApiKeys()
+  const { data: webhooks, isLoading: webhooksLoading, isError: webhooksError } = useWebhooks()
+  const createApiKey = useCreateApiKey()
+  const revokeApiKey = useRevokeApiKey()
+  const createWebhook = useCreateWebhook()
+  const deleteWebhook = useDeleteWebhook()
+
+  const [showNewKey, setShowNewKey] = useState(false)
+  const [keyLabel, setKeyLabel] = useState('')
+  const [revealedKey, setRevealedKey] = useState<string | null>(null)
+
+  const [showNewWebhook, setShowNewWebhook] = useState(false)
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [webhookEvents, setWebhookEvents] = useState<string[]>([])
+  const [revealedSecret, setRevealedSecret] = useState<string | null>(null)
+
+  const submitNewKey = async () => {
+    const created = await createApiKey.mutateAsync(keyLabel.trim())
+    toast.success('API key generated')
+    setShowNewKey(false)
+    setKeyLabel('')
+    setRevealedKey(created.apiKey)
+  }
+
+  const revoke = async (id: string) => {
+    await revokeApiKey.mutateAsync(id)
+    toast.success('API key revoked')
+  }
+
+  const toggleEvent = (event: string) => {
+    setWebhookEvents((current) => (current.includes(event) ? current.filter((e) => e !== event) : [...current, event]))
+  }
+
+  const submitNewWebhook = async () => {
+    const created = await createWebhook.mutateAsync({ url: webhookUrl.trim(), events: webhookEvents })
+    toast.success('Webhook added')
+    setShowNewWebhook(false)
+    setWebhookUrl('')
+    setWebhookEvents([])
+    setRevealedSecret(created.secret)
+  }
+
+  const removeWebhook = async (id: string) => {
+    await deleteWebhook.mutateAsync(id)
+    toast.success('Webhook removed')
+  }
 
   const keyColumns: DataTableColumn<ApiKeyItem>[] = [
     { key: 'label', header: 'Label', cell: (row) => <span className="font-medium text-slate-900">{row.label}</span> },
@@ -46,6 +137,15 @@ export function IntegrationsSettingsPage() {
     { key: 'createdAt', header: 'Created', cell: (row) => formatDateTime(row.createdAt) },
     { key: 'lastUsedAt', header: 'Last Used', cell: (row) => (row.lastUsedAt ? formatDateTime(row.lastUsedAt) : 'Never') },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+    {
+      key: 'actions',
+      header: '',
+      cell: (row) => (canManage && row.status === 'Active' ? (
+        <button type="button" disabled={revokeApiKey.isPending} onClick={() => void revoke(row.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60">
+          <Trash2 className="h-3.5 w-3.5" />Revoke
+        </button>
+      ) : null),
+    },
   ]
 
   const webhookColumns: DataTableColumn<WebhookItem>[] = [
@@ -53,14 +153,46 @@ export function IntegrationsSettingsPage() {
     { key: 'events', header: 'Events', cell: (row) => row.events.join(', ') },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     { key: 'createdAt', header: 'Created', cell: (row) => formatDateTime(row.createdAt) },
+    {
+      key: 'actions',
+      header: '',
+      cell: (row) => (canManage ? (
+        <button type="button" disabled={deleteWebhook.isPending} onClick={() => void removeWebhook(row.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60">
+          <Trash2 className="h-3.5 w-3.5" />Delete
+        </button>
+      ) : null),
+    },
   ]
 
   return (
     <div className="space-y-6">
       <PageHeader title="Integrations" subtitle="API access keys and outbound webhooks for third-party integrations." />
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-        Programmatic API access and outbound event webhooks are provisioned by the platform team. Contact your account manager to enable them for your tenant.
-      </div>
+
+      {revealedKey ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div>
+            <p className="font-medium">Copy this key now — it won't be shown again.</p>
+            <p className="mt-1 font-mono text-xs">{revealedKey}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" onClick={() => copyToClipboard(revealedKey)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800"><Copy className="h-3.5 w-3.5" />Copy</button>
+            <button type="button" onClick={() => setRevealedKey(null)} className="text-xs font-medium text-amber-900 hover:underline">Dismiss</button>
+          </div>
+        </div>
+      ) : null}
+
+      {revealedSecret ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div>
+            <p className="font-medium">Copy this signing secret now — it won't be shown again.</p>
+            <p className="mt-1 font-mono text-xs">{revealedSecret}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" onClick={() => copyToClipboard(revealedSecret)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800"><Copy className="h-3.5 w-3.5" />Copy</button>
+            <button type="button" onClick={() => setRevealedSecret(null)} className="text-xs font-medium text-amber-900 hover:underline">Dismiss</button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">
@@ -69,21 +201,13 @@ export function IntegrationsSettingsPage() {
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">API Keys</h2>
           </div>
           {canManage ? (
-            <button
-              type="button"
-              onClick={() => toast('API keys are provisioned by the platform team — contact your account manager.', { icon: 'ℹ️' })}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
-            >
+            <button type="button" onClick={() => setShowNewKey(true)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800">
               <Plus className="h-4 w-4" />Generate Key
             </button>
           ) : null}
         </div>
         <div className="mt-4">
-          {keysLoading ? null : (apiKeys ?? []).length === 0 ? (
-            <EmptyState title="No API keys yet" description="Keys issued for your tenant will appear here." />
-          ) : (
-            <DataTable columns={keyColumns} data={apiKeys ?? []} />
-          )}
+          <DataTable columns={keyColumns} data={apiKeys ?? []} loading={keysLoading} emptyTitle={keysError ? 'Could not load API keys' : 'No API keys yet'} emptyDescription={keysError ? 'Something went wrong loading keys — try refreshing.' : 'Keys issued for your tenant will appear here.'} />
         </div>
       </div>
 
@@ -94,23 +218,46 @@ export function IntegrationsSettingsPage() {
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Outbound Webhooks</h2>
           </div>
           {canManage ? (
-            <button
-              type="button"
-              onClick={() => toast('Outbound webhooks are provisioned by the platform team — contact your account manager.', { icon: 'ℹ️' })}
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800"
-            >
+            <button type="button" onClick={() => setShowNewWebhook(true)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800">
               <Plus className="h-4 w-4" />Add Webhook
             </button>
           ) : null}
         </div>
         <div className="mt-4">
-          {webhooksLoading ? null : (webhooks ?? []).length === 0 ? (
-            <EmptyState title="No webhooks configured" description="Outbound event webhooks (work order created, invoice paid, etc.) will appear here." />
-          ) : (
-            <DataTable columns={webhookColumns} data={webhooks ?? []} />
-          )}
+          <DataTable columns={webhookColumns} data={webhooks ?? []} loading={webhooksLoading} emptyTitle={webhooksError ? 'Could not load webhooks' : 'No webhooks configured'} emptyDescription={webhooksError ? 'Something went wrong loading webhooks — try refreshing.' : 'Outbound event webhooks (work order created, invoice paid, etc.) will appear here.'} />
         </div>
       </div>
+
+      <FormDrawer open={showNewKey} title="Generate API Key" onClose={() => setShowNewKey(false)}>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Label</label>
+            <input value={keyLabel} onChange={(event) => setKeyLabel(event.target.value)} placeholder="e.g. Zapier integration" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          </div>
+          <button type="button" disabled={!keyLabel.trim() || createApiKey.isPending} onClick={() => void submitNewKey()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">Generate Key</button>
+        </div>
+      </FormDrawer>
+
+      <FormDrawer open={showNewWebhook} title="Add Webhook" onClose={() => setShowNewWebhook(false)}>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Endpoint URL</label>
+            <input value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} placeholder="https://example.com/webhooks/ecosys" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Events</label>
+            <div className="space-y-2">
+              {WEBHOOK_EVENTS.map((event) => (
+                <label key={event} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={webhookEvents.includes(event)} onChange={() => toggleEvent(event)} className="h-4 w-4 rounded border-slate-300" />
+                  {event}
+                </label>
+              ))}
+            </div>
+          </div>
+          <button type="button" disabled={!webhookUrl.trim() || webhookEvents.length === 0 || createWebhook.isPending} onClick={() => void submitNewWebhook()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">Add Webhook</button>
+        </div>
+      </FormDrawer>
     </div>
   )
 }

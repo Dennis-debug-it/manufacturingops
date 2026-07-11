@@ -83,6 +83,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<IntakeProtocol> IntakeProtocols => Set<IntakeProtocol>();
     public DbSet<MonitoringSetting> MonitoringSettings => Set<MonitoringSetting>();
     public DbSet<MonitoringWebhookIntegration> MonitoringWebhookIntegrations => Set<MonitoringWebhookIntegration>();
+    public DbSet<TenantApiKey> TenantApiKeys => Set<TenantApiKey>();
+    public DbSet<TenantWebhook> TenantWebhooks => Set<TenantWebhook>();
     public DbSet<NotificationSetting> NotificationSettings => Set<NotificationSetting>();
     public DbSet<PlatformQuotation> PlatformQuotations => Set<PlatformQuotation>();
     public DbSet<PlatformQuotationLine> PlatformQuotationLines => Set<PlatformQuotationLine>();
@@ -1515,6 +1517,34 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.MonitoringSettings)
                 .HasForeignKey(x => x.DefaultBranchId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<TenantApiKey>(entity =>
+        {
+            entity.ToTable("tenant_api_keys");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Label).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.KeyPrefix).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.KeyHash).HasMaxLength(512).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.Label });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TenantWebhook>(entity =>
+        {
+            entity.ToTable("tenant_webhooks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Url).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.EventsJson).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.SecretHash).HasMaxLength(512).IsRequired();
+            entity.HasIndex(x => x.TenantId);
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<MonitoringWebhookIntegration>(entity =>

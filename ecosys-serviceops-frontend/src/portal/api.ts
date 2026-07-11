@@ -231,3 +231,16 @@ export interface PortalProfile {
 export function usePortalProfile() {
   return useQuery({ queryKey: ['portal', 'profile'], queryFn: () => portalApi.get<PortalProfile>(endpoints.portal.profile), staleTime: 60_000 })
 }
+
+export interface UpdatePortalProfilePayload {
+  fullName: string
+  phone?: string | undefined
+}
+
+export function useUpdatePortalProfile() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpdatePortalProfilePayload) => portalApi.put<PortalProfile>(endpoints.portal.profile, payload),
+    onSuccess: (data) => void queryClient.setQueryData(['portal', 'profile'], data),
+  })
+}
