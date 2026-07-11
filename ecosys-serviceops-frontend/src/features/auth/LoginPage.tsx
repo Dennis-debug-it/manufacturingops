@@ -113,10 +113,7 @@ export function LoginPage() {
 
       {/* Operational control — real technicians photo (chamfered) with tagline overlay */}
       <div className="relative hidden bg-white p-6 lg:block">
-        <div
-          className="relative h-full w-full bg-gradient-to-br from-slate-800 to-slate-950"
-          style={{ clipPath: 'polygon(36px 0, calc(100% - 36px) 0, 100% 36px, 100% calc(100% - 36px), calc(100% - 36px) 100%, 36px 100%, 0 calc(100% - 36px), 0 36px)' }}
-        >
+        <div className="relative h-full w-full overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-800 to-slate-950">
           <img
             src="/ecosys-technicians.jpg"
             alt="ECOSYS technicians reviewing operations on a tablet"
