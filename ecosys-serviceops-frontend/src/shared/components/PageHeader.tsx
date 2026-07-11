@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import { cn } from '../utils/cn'
 
 export interface BreadcrumbItem {
@@ -17,10 +18,31 @@ export interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, breadcrumbs, primaryAction, secondaryActions, className }: PageHeaderProps) {
+  const navigate = useNavigate()
+  const parentCrumb = breadcrumbs?.slice().reverse().find((crumb) => crumb.to)
+
+  const goBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1)
+    } else if (parentCrumb?.to) {
+      navigate(parentCrumb.to)
+    }
+  }
+
   return (
     <header className={cn('space-y-4', className)}>
       {breadcrumbs && breadcrumbs.length > 0 ? (
         <nav className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <button
+            type="button"
+            onClick={goBack}
+            className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 font-medium text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <span className="text-slate-300">|</span>
           {breadcrumbs.map((crumb, index) => (
             <span key={`${crumb.label}-${index}`} className="flex items-center gap-2">
               {crumb.to ? (

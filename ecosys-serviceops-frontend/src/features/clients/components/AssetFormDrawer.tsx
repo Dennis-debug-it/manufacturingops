@@ -1,9 +1,11 @@
+import { useEffect } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
-import { useCreateAsset, useClients, useSites } from '../api'
+import { useCreateAsset, useUpdateAsset, useClients, useSites } from '../api'
 import { assetSchema, type AssetFormValues } from '../schemas'
+import type { Asset } from '../types'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -14,29 +16,46 @@ export interface AssetFormDrawerProps {
   onClose: () => void
   defaultClientId?: string
   defaultSiteId?: string
+  asset?: Asset
 }
 
-export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId }: AssetFormDrawerProps) {
+function toDateInput(value: string | null | undefined) {
+  return value ? value.slice(0, 10) : ''
+}
+
+function toFormValues(asset: Asset | undefined, defaultClientId?: string, defaultSiteId?: string): AssetFormValues {
+  return {
+    clientId: asset?.clientId ?? defaultClientId ?? '',
+    siteId: asset?.siteId ?? defaultSiteId ?? '',
+    assetName: asset?.assetName ?? '',
+    assetType: asset?.assetType ?? '',
+    location: asset?.location ?? '',
+    serialNumber: asset?.serialNumber ?? '',
+    manufacturer: asset?.manufacturer ?? '',
+    model: asset?.model ?? '',
+    installationDate: toDateInput(asset?.installationDate),
+    warrantyExpiryDate: toDateInput(asset?.warrantyExpiryDate),
+    notes: asset?.notes ?? '',
+  }
+}
+
+export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId, asset }: AssetFormDrawerProps) {
+  const isEdit = Boolean(asset)
   const { control, register, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<AssetFormValues>({
     resolver: zodResolver(assetSchema),
-    defaultValues: {
-      clientId: defaultClientId ?? '',
-      siteId: defaultSiteId ?? '',
-      assetName: '',
-      assetType: '',
-      location: '',
-      serialNumber: '',
-      manufacturer: '',
-      model: '',
-      installationDate: '',
-      warrantyExpiryDate: '',
-      notes: '',
-    },
+    defaultValues: toFormValues(asset, defaultClientId, defaultSiteId),
   })
   const clientId = watch('clientId')
   const { data: clients } = useClients()
   const { data: sites } = useSites(clientId || undefined)
   const createAsset = useCreateAsset()
+  const updateAsset = useUpdateAsset(asset?.id ?? '')
+
+  useEffect(() => {
+    if (open) {
+      reset(toFormValues(asset, defaultClientId, defaultSiteId))
+    }
+  }, [open, asset, defaultClientId, defaultSiteId, reset])
 
   const close = () => {
     reset()
@@ -44,21 +63,27 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId 
   }
 
   const onSubmit = handleSubmit(async (values) => {
+    const payload = {
+      clientId: values.clientId,
+      siteId: values.siteId || null,
+      assetName: values.assetName.trim(),
+      assetType: values.assetType?.trim() || null,
+      location: values.location?.trim() || null,
+      serialNumber: values.serialNumber?.trim() || null,
+      manufacturer: values.manufacturer?.trim() || null,
+      model: values.model?.trim() || null,
+      installationDate: values.installationDate ? new Date(values.installationDate).toISOString() : null,
+      warrantyExpiryDate: values.warrantyExpiryDate ? new Date(values.warrantyExpiryDate).toISOString() : null,
+      notes: values.notes?.trim() || null,
+    }
     try {
-      const created = await createAsset.mutateAsync({
-        clientId: values.clientId,
-        siteId: values.siteId || null,
-        assetName: values.assetName.trim(),
-        assetType: values.assetType?.trim() || null,
-        location: values.location?.trim() || null,
-        serialNumber: values.serialNumber?.trim() || null,
-        manufacturer: values.manufacturer?.trim() || null,
-        model: values.model?.trim() || null,
-        installationDate: values.installationDate ? new Date(values.installationDate).toISOString() : null,
-        warrantyExpiryDate: values.warrantyExpiryDate ? new Date(values.warrantyExpiryDate).toISOString() : null,
-        notes: values.notes?.trim() || null,
-      })
-      toast.success(`Asset "${created.assetName}" created`)
+      if (isEdit) {
+        const updated = await updateAsset.mutateAsync(payload)
+        toast.success(`Asset "${updated.assetName}" updated`)
+      } else {
+        const created = await createAsset.mutateAsync(payload)
+        toast.success(`Asset "${created.assetName}" created`)
+      }
       close()
     } catch {
       // interceptor surfaces the error toast
@@ -68,13 +93,13 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId 
   return (
     <FormDrawer
       open={open}
-      title="New Asset"
+      title={isEdit ? 'Edit Asset' : 'New Asset'}
       onClose={close}
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={close} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
           <button type="submit" form="asset-form" disabled={isSubmitting} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
-            {isSubmitting ? 'Creating…' : 'Create Asset'}
+            {isSubmitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Asset'}
           </button>
         </div>
       }

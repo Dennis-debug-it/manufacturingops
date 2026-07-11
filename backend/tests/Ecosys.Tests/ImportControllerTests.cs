@@ -139,7 +139,8 @@ public sealed class ImportControllerTests
             new FakePermissionTemplateService(),
             new PasswordHasher<User>(),
             deliveryService,
-            passwordService);
+            passwordService,
+            new FakeDocumentNumberingService());
 
     private static IFormFile CreateCsvFile(string csv)
     {
@@ -153,6 +154,17 @@ public sealed class ImportControllerTests
     }
 
     private sealed record FixtureData(Tenant Tenant, Branch Branch, User Actor);
+
+    private sealed class FakeDocumentNumberingService : IDocumentNumberingService
+    {
+        private int _next;
+
+        public Task<string> GenerateAsync(Guid tenantId, Guid? branchId, string documentType, CancellationToken cancellationToken = default) =>
+            Task.FromResult($"{documentType.ToUpperInvariant()}-{Interlocked.Increment(ref _next):D6}");
+
+        public Task<NumberingSetting> UpsertAsync(Guid tenantId, Guid? branchId, string documentType, string prefix, long nextNumber, int paddingLength, string resetFrequency, bool includeYear, bool includeMonth, bool isActive, CancellationToken cancellationToken = default, string? suffix = null, string yearFormat = "YYYY", string separator = "-", bool isLocked = false) =>
+            Task.FromResult(new NumberingSetting { TenantId = tenantId, BranchId = branchId, DocumentType = documentType, Prefix = prefix, NextNumber = nextNumber, PaddingLength = paddingLength, ResetFrequency = resetFrequency, IncludeYear = includeYear, IncludeMonth = includeMonth, IsActive = isActive });
+    }
 
     private sealed class FakeTenantContext(Guid tenantId, Guid userId, string email) : ITenantContext
     {

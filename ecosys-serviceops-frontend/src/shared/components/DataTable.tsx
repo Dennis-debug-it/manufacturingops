@@ -63,13 +63,40 @@ export function DataTable<T extends { id?: string }>({
     enabled: canUseVirtualizer,
   })
 
+  // Pagination is on by default so long lists never render unbounded; passing the
+  // `pagination` prop switches to external (e.g. server-side) control.
+  const [internalPage, setInternalPage] = useState(1)
+  const [internalPageSize, setInternalPageSize] = useState(20)
+
+  const effectivePagination: DataTablePagination | null = useMemo(() => {
+    if (pagination) {
+      return pagination
+    }
+    if (canUseVirtualizer) {
+      return null
+    }
+    const totalPages = Math.max(1, Math.ceil(data.length / internalPageSize))
+    return {
+      page: Math.min(internalPage, totalPages),
+      pageSize: internalPageSize,
+      total: data.length,
+      onPageChange: setInternalPage,
+      onPageSizeChange: (pageSize: number) => {
+        setInternalPageSize(pageSize)
+        setInternalPage(1)
+      },
+    }
+  }, [pagination, canUseVirtualizer, data.length, internalPage, internalPageSize])
+
   const paginatedData = useMemo(() => {
-    if (!pagination) {
+    if (!effectivePagination) {
       return data
     }
-    const start = (pagination.page - 1) * pagination.pageSize
-    return data.slice(start, start + pagination.pageSize)
-  }, [data, pagination])
+    const start = (effectivePagination.page - 1) * effectivePagination.pageSize
+    return data.slice(start, start + effectivePagination.pageSize)
+  }, [data, effectivePagination])
+
+  const showPaginationFooter = effectivePagination !== null && (Boolean(pagination) || effectivePagination.total > effectivePagination.pageSize)
 
   const allIds = paginatedData.flatMap((row) => (typeof row.id === 'string' ? [row.id] : [])).filter((id): id is string => typeof id === 'string')
   const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.includes(id))
@@ -223,16 +250,16 @@ export function DataTable<T extends { id?: string }>({
         )}
       </div>
 
-      {pagination ? (
+      {showPaginationFooter && effectivePagination ? (
         <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <span>Rows per page</span>
             <select
-              value={pagination.pageSize}
-              onChange={(event) => pagination.onPageSizeChange(Number(event.target.value))}
+              value={effectivePagination.pageSize}
+              onChange={(event) => effectivePagination.onPageSizeChange(Number(event.target.value))}
               className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900"
             >
-              {[10, 25, 50].map((pageSize) => (
+              {[10, 20, 50, 100].map((pageSize) => (
                 <option key={pageSize} value={pageSize}>
                   {pageSize}
                 </option>
@@ -241,12 +268,12 @@ export function DataTable<T extends { id?: string }>({
           </div>
           <div className="flex items-center gap-2">
             <span>
-              Page {pagination.page} of {Math.max(1, Math.ceil(pagination.total / pagination.pageSize))}
+              Page {effectivePagination.page} of {Math.max(1, Math.ceil(effectivePagination.total / effectivePagination.pageSize))}
             </span>
             <button
               type="button"
-              disabled={pagination.page <= 1}
-              onClick={() => pagination.onPageChange(Math.max(1, pagination.page - 1))}
+              disabled={effectivePagination.page <= 1}
+              onClick={() => effectivePagination.onPageChange(Math.max(1, effectivePagination.page - 1))}
               className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -254,8 +281,8 @@ export function DataTable<T extends { id?: string }>({
             </button>
             <button
               type="button"
-              disabled={pagination.page >= Math.ceil(pagination.total / pagination.pageSize)}
-              onClick={() => pagination.onPageChange(Math.min(Math.ceil(pagination.total / pagination.pageSize), pagination.page + 1))}
+              disabled={effectivePagination.page >= Math.ceil(effectivePagination.total / effectivePagination.pageSize)}
+              onClick={() => effectivePagination.onPageChange(Math.min(Math.ceil(effectivePagination.total / effectivePagination.pageSize), effectivePagination.page + 1))}
               className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Next

@@ -17,7 +17,7 @@
     {
       "name": "backend-api",
       "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "set Jwt__SigningKey=local-dev-only-signing-key-not-for-production-use-32chars && dotnet run --project backend/src/Ecosys.Api --urls http://localhost:5072"],
+      "runtimeArgs": ["/c", "set \"ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=ecosys_serviceops;Username=postgres;Password=postgres\" && set \"Jwt__SigningKey=local-dev-only-signing-key-not-for-production-use-32chars\" && set \"PlatformAdmin__Email=platform.owner@ecosys.dev\" && set \"PlatformAdmin__Password=DevPlatform#2026\" && set \"ASPNETCORE_ENVIRONMENT=Development\" && dotnet run --project backend/src/Ecosys.Api --urls http://localhost:5072"],
       "port": 5072
     }
   ]

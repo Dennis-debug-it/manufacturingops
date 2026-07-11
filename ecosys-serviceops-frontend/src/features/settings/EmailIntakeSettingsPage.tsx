@@ -1,10 +1,12 @@
 import { SettingsForm } from './components/SettingsForm'
+import { IntakeRulesSection } from './components/IntakeRulesSection'
 
 export function EmailIntakeSettingsPage() {
   return (
+    <div className="space-y-6">
     <SettingsForm
       title="Email Intake"
-      subtitle="Forward client emails to this mailbox to auto-create work orders."
+      subtitle="Mailbox connection settings. Matching rules are configured below — you can have as many as you need."
       queryKey="email-intake"
       fetchUrl="/api/settings/email-intake"
       saveUrl="/api/settings/email-intake"
@@ -22,5 +24,7 @@ export function EmailIntakeSettingsPage() {
         { key: 'allowedSenderDomains', label: 'Allowed Sender Domains (comma-separated)', type: 'text' },
       ]}
     />
+    <IntakeRulesSection />
+    </div>
   )
 }

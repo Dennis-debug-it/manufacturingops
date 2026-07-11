@@ -175,6 +175,17 @@ export function useCreateAsset() {
   })
 }
 
+export function useUpdateAsset(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpsertAssetPayload) => api.put<Asset>(endpoints.assets.update(id), payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assets'] })
+      void queryClient.invalidateQueries({ queryKey: ['assets', id] })
+    },
+  })
+}
+
 // ── Client Portal Contacts ───────────────────────────────────────────────────
 
 export interface ClientPortalContact {

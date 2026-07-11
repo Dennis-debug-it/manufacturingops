@@ -198,6 +198,9 @@ export const endpoints = {
     clientTemplate: '/api/import/templates/clients',
     previewClients: '/api/import/clients/preview',
     commitClients: '/api/import/clients/commit',
+    siteTemplate: '/api/import/templates/sites',
+    previewSites: '/api/import/sites/preview',
+    commitSites: '/api/import/sites/commit',
   },
   starterPacks: {
     list: '/api/starter-packs',

@@ -22,7 +22,8 @@ public sealed class ImportController(
     IUserPermissionTemplateService permissionTemplateService,
     IPasswordHasher<User> passwordHasher,
     IUserCredentialDeliveryService credentialDeliveryService,
-    ITemporaryPasswordService temporaryPasswordService) : TenantAwareControllerBase(tenantContext)
+    ITemporaryPasswordService temporaryPasswordService,
+    IDocumentNumberingService documentNumberingService) : TenantAwareControllerBase(tenantContext)
 {
     private static readonly string[] ClientHeaders =
     [
@@ -96,6 +97,25 @@ public sealed class ImportController(
         "Branch"
     ];
 
+    private static readonly string[] SiteHeaders =
+    [
+        "ClientName",
+        "ClientId",
+        "SiteName",
+        "SiteType",
+        "Country",
+        "County",
+        "City",
+        "Address",
+        "ContactPerson",
+        "ContactPhone",
+        "ContactEmail",
+        "Status"
+    ];
+
+    private static readonly string[] AllowedImportSiteTypes = ["Branch", "HQ", "Data Centre", "Warehouse", "Factory", "Other"];
+    private static readonly string[] AllowedImportSiteStatuses = ["Active", "Inactive", "Closed"];
+
     [HttpGet("templates/clients")]
     public async Task<IActionResult> DownloadClientTemplate(CancellationToken cancellationToken)
     {
@@ -131,6 +151,13 @@ public sealed class ImportController(
         return BuildTemplateFile(MaterialHeaders, ["Generator Oil", "MAT-001", "Consumables", "Litres", "20", "5", "1200", "Head Office"], "materials_import_template.csv");
     }
 
+    [HttpGet("templates/sites")]
+    public async Task<IActionResult> DownloadSiteTemplate(CancellationToken cancellationToken)
+    {
+        await LogTemplateDownloadAsync("sites", cancellationToken);
+        return BuildTemplateFile(SiteHeaders, ["ABC Factory", "", "Main Campus", "Branch", "Kenya", "Nairobi", "Nairobi", "Industrial Area", "Jane Wanjiku", "+254700000000", "jane@abcfactory.co.ke", "Active"], "sites_import_template.csv");
+    }
+
     [HttpPost("clients/preview")]
     public async Task<ActionResult<ImportPreviewResponse>> PreviewClients([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
@@ -164,6 +191,89 @@ public sealed class ImportController(
     {
         var rows = await BuildMaterialPreviewAsync(request.File, cancellationToken);
         return Ok(new ImportPreviewResponse("Materials", rows.Count, rows));
+    }
+
+    [HttpPost("sites/preview")]
+    public async Task<ActionResult<ImportPreviewResponse>> PreviewSites([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
+    {
+        var rows = await BuildSitePreviewAsync(request.File, cancellationToken);
+        return Ok(new ImportPreviewResponse("Sites", rows.Count, rows));
+    }
+
+    [HttpPost("sites/commit")]
+    public async Task<ActionResult<ImportCommitResponse>> CommitSites([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
+    {
+        var rows = await BuildSitePreviewAsync(request.File, cancellationToken);
+        var successful = 0;
+        var failed = 0;
+        var rowErrors = new List<ImportCommitRowErrorResponse>();
+
+        var clients = await dbContext.Clients
+            .Where(x => x.TenantId == TenantId && x.IsActive)
+            .ToListAsync(cancellationToken);
+        var clientById = clients.ToDictionary(x => x.Id.ToString().ToLower(), x => x, StringComparer.OrdinalIgnoreCase);
+        var clientByName = clients.ToDictionary(x => x.ClientName.ToLower(), x => x, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var row in rows)
+        {
+            if (!row.IsValid)
+            {
+                failed++;
+                rowErrors.Add(new ImportCommitRowErrorResponse(row.RowNumber, row.Errors.ToArray()));
+                continue;
+            }
+
+            var client = ResolveImportClient(row.RawValues, clientById, clientByName);
+            if (client is null)
+            {
+                failed++;
+                rowErrors.Add(new ImportCommitRowErrorResponse(row.RowNumber, ["Client could not be resolved."]));
+                continue;
+            }
+
+            var siteCode = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.Site, cancellationToken);
+            dbContext.Sites.Add(new Site
+            {
+                TenantId = TenantId,
+                ClientId = client.Id,
+                SiteCode = siteCode,
+                SiteName = GetValue(row.RawValues, "SiteName")!,
+                SiteType = NormalizeImportSiteType(GetValue(row.RawValues, "SiteType")),
+                Status = NormalizeImportSiteStatus(GetValue(row.RawValues, "Status")),
+                Country = GetValue(row.RawValues, "Country"),
+                County = GetValue(row.RawValues, "County"),
+                TownCity = GetValue(row.RawValues, "City"),
+                StreetAddress = GetValue(row.RawValues, "Address"),
+                ContactPerson = GetValue(row.RawValues, "ContactPerson"),
+                ContactPhone = GetValue(row.RawValues, "ContactPhone"),
+                ContactEmail = GetValue(row.RawValues, "ContactEmail")
+            });
+            successful++;
+        }
+
+        dbContext.ImportBatches.Add(new ImportBatch
+        {
+            TenantId = TenantId,
+            ImportType = "Sites",
+            FileName = request.File.FileName,
+            TotalRows = rows.Count,
+            SuccessfulRows = successful,
+            FailedRows = failed,
+            Status = failed == 0 ? "Completed" : "CompletedWithErrors"
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditLogService.LogAsync(
+            TenantId,
+            UserId,
+            "Import completed",
+            nameof(ImportBatch),
+            "sites",
+            $"Completed site import with {successful} successful rows and {failed} failed rows.",
+            cancellationToken);
+
+        return Ok(new ImportCommitResponse(rows.Count, successful, failed, failed, rowErrors));
     }
 
     [HttpPost("clients/commit")]
@@ -655,6 +765,91 @@ public sealed class ImportController(
 
         return results;
     }
+
+    private async Task<List<ImportPreviewRowResponse>> BuildSitePreviewAsync(IFormFile file, CancellationToken cancellationToken)
+    {
+        var records = await ReadCsvAsync(file, SiteHeaders.Length, cancellationToken);
+        var clients = await dbContext.Clients
+            .Where(x => x.TenantId == TenantId && x.IsActive)
+            .ToListAsync(cancellationToken);
+        var clientById = clients.ToDictionary(x => x.Id.ToString().ToLower(), x => x, StringComparer.OrdinalIgnoreCase);
+        var clientByName = clients.ToDictionary(x => x.ClientName.ToLower(), x => x, StringComparer.OrdinalIgnoreCase);
+        var existingSiteKeys = new HashSet<string>(await dbContext.Sites
+            .Where(x => x.TenantId == TenantId && x.Status != "Closed")
+            .Select(x => x.ClientId.ToString().ToLower() + "|" + x.SiteName.ToLower())
+            .ToListAsync(cancellationToken));
+
+        var results = new List<ImportPreviewRowResponse>();
+        foreach (var record in records)
+        {
+            var rawValues = ToDictionary(SiteHeaders, record.Values);
+            var errors = new List<string>();
+
+            var siteName = GetValue(rawValues, "SiteName");
+            if (string.IsNullOrWhiteSpace(siteName))
+            {
+                errors.Add("Site Name is required.");
+            }
+
+            var client = ResolveImportClient(rawValues, clientById, clientByName);
+            if (client is null)
+            {
+                errors.Add("Client Name or Client Id must match an existing active client.");
+            }
+
+            var siteType = GetValue(rawValues, "SiteType");
+            if (!string.IsNullOrWhiteSpace(siteType) && !AllowedImportSiteTypes.Contains(siteType, StringComparer.OrdinalIgnoreCase))
+            {
+                errors.Add("Site type must be Branch, HQ, Data Centre, Warehouse, Factory, or Other.");
+            }
+
+            var status = GetValue(rawValues, "Status");
+            if (!string.IsNullOrWhiteSpace(status) && !AllowedImportSiteStatuses.Contains(status, StringComparer.OrdinalIgnoreCase))
+            {
+                errors.Add("Status must be Active, Inactive, or Closed.");
+            }
+
+            if (client is not null && !string.IsNullOrWhiteSpace(siteName)
+                && !existingSiteKeys.Add(client.Id.ToString().ToLower() + "|" + siteName.ToLowerInvariant()))
+            {
+                errors.Add("Duplicate site name for this client.");
+            }
+
+            results.Add(new ImportPreviewRowResponse(record.RowNumber, rawValues, errors.Count == 0, errors));
+        }
+
+        return results;
+    }
+
+    private static Client? ResolveImportClient(
+        IReadOnlyDictionary<string, string?> rawValues,
+        IReadOnlyDictionary<string, Client> clientById,
+        IReadOnlyDictionary<string, Client> clientByName)
+    {
+        var clientId = GetValue(rawValues, "ClientId");
+        if (!string.IsNullOrWhiteSpace(clientId) && clientById.TryGetValue(clientId.ToLowerInvariant(), out var byId))
+        {
+            return byId;
+        }
+
+        var clientName = GetValue(rawValues, "ClientName");
+        if (!string.IsNullOrWhiteSpace(clientName) && clientByName.TryGetValue(clientName.ToLowerInvariant(), out var byName))
+        {
+            return byName;
+        }
+
+        return null;
+    }
+
+    private static string NormalizeImportSiteType(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? "Branch"
+            : AllowedImportSiteTypes.Single(item => string.Equals(item, value.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private static string NormalizeImportSiteStatus(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? "Active"
+            : AllowedImportSiteStatuses.Single(item => string.Equals(item, value.Trim(), StringComparison.OrdinalIgnoreCase));
 
     private async Task<List<ImportPreviewRowResponse>> BuildAssetPreviewAsync(IFormFile file, CancellationToken cancellationToken)
     {

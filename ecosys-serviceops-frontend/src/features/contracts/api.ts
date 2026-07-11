@@ -49,6 +49,8 @@ export interface UpsertContractPayload {
   resolutionTimeHours?: number | null
   siteIds: string[]
   assetIds: string[]
+  assetCategories?: Array<{ assetCategoryId: string | null; assetCategoryName: string | null }>
+  slaMatrix?: Array<{ priority: string; responseTimeHours: number | null; resolutionTimeHours: number | null }>
 }
 
 export function useCreateContract() {

@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { differenceInDays } from 'date-fns'
 import { Link, useParams } from 'react-router-dom'
+import { Pencil } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
@@ -8,9 +9,11 @@ import { DetailLayout } from '../../shared/components/DetailLayout'
 import { DataTable } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { SummarySection } from '../../shared/pages/ModulePage'
+import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
 import { useAsset } from './api'
+import { AssetFormDrawer } from './components/AssetFormDrawer'
 
 function warrantyBadge(expiry: string | null) {
   if (!expiry) {
@@ -28,8 +31,10 @@ function warrantyBadge(expiry: string | null) {
 
 export function AssetDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const canEdit = usePermission('clients.edit')
   const { data: asset, isLoading, isError } = useAsset(id)
   const { data: workOrders } = useWorkOrders()
+  const [showEditForm, setShowEditForm] = useState(false)
 
   const assetWorkOrders = useMemo(
     () => (workOrders ?? []).filter((wo) => wo.assetId === id),
@@ -56,12 +61,18 @@ export function AssetDetailPage() {
         <div className="flex items-center gap-2">
           <StatusBadge status={asset.status ?? 'Active'} />
           {warrantyBadge(asset.warrantyExpiryDate)}
+          {canEdit ? (
+            <button type="button" onClick={() => setShowEditForm(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+              <Pencil className="h-3.5 w-3.5" />Edit
+            </button>
+          ) : null}
         </div>
       }
     />
   )
 
   return (
+    <>
     <DetailLayout
       header={header}
       tabs={[
@@ -140,5 +151,7 @@ export function AssetDetailPage() {
         },
       ]}
     />
+    <AssetFormDrawer open={showEditForm} onClose={() => setShowEditForm(false)} asset={asset} />
+    </>
   )
 }

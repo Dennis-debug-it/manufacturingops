@@ -1,19 +1,23 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { Search } from 'lucide-react'
+import { Search, Upload } from 'lucide-react'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useDebounce } from '../../shared/hooks/useDebounce'
+import { usePermission } from '../../shared/hooks/usePermission'
 import { useClients } from './api'
 import { TriTabNav } from './components/TriTabNav'
+import { SiteBulkImportDrawer } from './components/SiteBulkImportDrawer'
 import type { Site } from './types'
 
 export function SitesPage() {
+  const canEdit = usePermission('clients.edit')
   const [search, setSearch] = useState('')
+  const [showImport, setShowImport] = useState(false)
   const debouncedSearch = useDebounce(search, 300)
   const { data: clients } = useClients()
 
@@ -37,7 +41,17 @@ export function SitesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Sites" subtitle="Sites across all clients with search and filters." />
+      <PageHeader
+        title="Sites"
+        subtitle="Sites across all clients with search and filters."
+        secondaryActions={
+          canEdit ? (
+            <button type="button" onClick={() => setShowImport(true)} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+              <Upload className="h-4 w-4" />Bulk Import
+            </button>
+          ) : undefined
+        }
+      />
       <TriTabNav />
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -54,6 +68,8 @@ export function SitesPage() {
         emptyTitle={isError ? 'Sites unavailable' : 'No sites found'}
         emptyDescription={isError ? 'The site list could not be loaded.' : 'Create a site from a client’s detail page to get started.'}
       />
+
+      <SiteBulkImportDrawer open={showImport} onClose={() => setShowImport(false)} />
     </div>
   )
 }

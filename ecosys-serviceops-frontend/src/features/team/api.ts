@@ -166,11 +166,42 @@ export function useCreateAssignmentGroup() {
   })
 }
 
+export function useUpdateAssignmentGroup(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpsertAssignmentGroupPayload) => api.put<AssignmentGroup>(endpoints.assignmentGroups.detail(id), payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment-groups'] })
+      void queryClient.invalidateQueries({ queryKey: ['assignment-groups', id] })
+    },
+  })
+}
+
+export function useDeleteAssignmentGroup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.delete(endpoints.assignmentGroups.detail(id)),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['assignment-groups'] }),
+  })
+}
+
 export function useAddAssignmentGroupMember(groupId: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (payload: { userId?: string | null; technicianId?: string | null; isLead: boolean }) =>
       api.post(endpoints.assignmentGroups.members(groupId), payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment-groups'] })
+      void queryClient.invalidateQueries({ queryKey: ['assignment-groups', groupId] })
+    },
+  })
+}
+
+export function useRemoveAssignmentGroupMember(groupId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (memberUserOrTechnicianId: string) =>
+      api.delete(`${endpoints.assignmentGroups.members(groupId)}/${memberUserOrTechnicianId}`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['assignment-groups'] })
       void queryClient.invalidateQueries({ queryKey: ['assignment-groups', groupId] })

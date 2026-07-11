@@ -11,6 +11,7 @@ import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
+import { useContracts } from '../contracts/api'
 import { useClientSummary } from './api'
 import { SiteFormDrawer } from './components/SiteFormDrawer'
 import { AssetFormDrawer } from './components/AssetFormDrawer'
@@ -22,6 +23,7 @@ export function ClientDetailPage() {
   const canEdit = usePermission('clients.edit')
   const { data, isLoading, isError } = useClientSummary(id)
   const { data: workOrders } = useWorkOrders()
+  const { data: contracts } = useContracts(id ? { clientId: id } : undefined)
   const [showSiteForm, setShowSiteForm] = useState(false)
   const [showAssetForm, setShowAssetForm] = useState(false)
 
@@ -150,7 +152,21 @@ export function ClientDetailPage() {
           {
             id: 'contracts',
             label: 'Contracts',
-            content: <EmptyState title="Contracts module pending" description="This tab will populate once the Contracts module is wired (Phase 3)." />,
+            content: (
+              <DataTable
+                columns={[
+                  { key: 'contractNumber', header: 'Contract No', cell: (row) => <Link className="font-mono text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/contracts/${row.id}`}>{row.contractNumber}</Link> },
+                  { key: 'name', header: 'Name', cell: (row) => row.name },
+                  { key: 'contractType', header: 'Type', cell: (row) => row.contractType },
+                  { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+                  { key: 'endDate', header: 'Expires', cell: (row) => formatDate(row.endDate) },
+                  { key: 'renewalRisk', header: 'Renewal Risk', cell: (row) => <StatusBadge status={row.renewalRisk} /> },
+                ]}
+                data={contracts ?? []}
+                emptyTitle="No contracts"
+                emptyDescription="Contracts covering this client will appear here once created in the Contracts module."
+              />
+            ),
           },
           {
             id: 'documents',
