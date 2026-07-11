@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { brand } from '../../shared/config/brand'
+import { TechniciansHeroArt } from './TechniciansHeroArt'
 
 type IconType = ComponentType<{ className?: string }>
 
@@ -74,12 +75,12 @@ const securityItems: [IconType, string][] = [
 function Wordmark() {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-950">
+      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
         <Building2 className="h-6 w-6" />
       </div>
       <div className="leading-tight">
-        <div className="text-lg font-black tracking-tight text-white">{brand.appName}</div>
-        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">Field Operations Command Centre</div>
+        <div className="text-lg font-black tracking-tight text-slate-900">{brand.appName}</div>
+        <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-500">Field Operations Command Centre</div>
       </div>
     </div>
   )
@@ -87,11 +88,8 @@ function Wordmark() {
 
 function Badge({ children }: { children: ReactNode }) {
   return (
-    <span
-      className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium shadow-sm"
-      style={{ border: '1px solid rgba(105, 201, 178, 0.3)', background: 'rgba(14, 124, 102, 0.12)', color: '#bfeee3' }}
-    >
-      <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: '#F5C542' }} />
+    <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 shadow-sm">
+      <span className="inline-block h-2.5 w-2.5 rounded-full bg-amber-400" />
       {children}
     </span>
   )
@@ -100,12 +98,12 @@ function Badge({ children }: { children: ReactNode }) {
 function StatCard({ item }: { item: { label: string; value: string; icon: IconType } }) {
   const Icon = item.icon
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 shadow-lg transition-colors hover:bg-white/[0.09]">
-      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
         <Icon className="h-5 w-5" />
       </div>
-      <div className="text-3xl font-black tracking-tight text-white">{item.value}</div>
-      <div className="mt-1 text-sm text-slate-400">{item.label}</div>
+      <div className="text-3xl font-black tracking-tight text-slate-900">{item.value}</div>
+      <div className="mt-1 text-sm text-slate-500">{item.label}</div>
     </div>
   )
 }
@@ -113,69 +111,67 @@ function StatCard({ item }: { item: { label: string; value: string; icon: IconTy
 function FeatureCard({ feature }: { feature: { icon: IconType; title: string; text: string } }) {
   const Icon = feature.icon
   return (
-    <div className="group rounded-3xl border border-white/10 bg-white/[0.05] p-7 shadow-sm transition-colors hover:bg-white/[0.08]">
-      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+    <div className="group rounded-3xl border border-slate-200 bg-white p-7 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md">
+      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-emerald-300">
         <Icon className="h-6 w-6" />
       </div>
-      <h3 className="text-lg font-bold text-white">{feature.title}</h3>
-      <p className="mt-3 leading-7 text-slate-300">{feature.text}</p>
+      <h3 className="text-lg font-bold text-slate-900">{feature.title}</h3>
+      <p className="mt-3 leading-7 text-slate-600">{feature.text}</p>
     </div>
   )
 }
 
 export function LandingPage() {
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
-      <header className="sticky top-0 z-50 border-b border-white/10 bg-slate-950/92 backdrop-blur">
+    <main className="min-h-screen bg-white text-slate-900">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/85 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8">
           <Wordmark />
 
-          <nav className="hidden items-center gap-8 text-sm font-medium text-slate-300 md:flex">
-            <a href="#features" className="hover:text-white">Features</a>
-            <a href="#workflow" className="hover:text-white">Workflow</a>
-            <a href="#industries" className="hover:text-white">Industries</a>
-            <a href="#security" className="hover:text-white">Security</a>
+          <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
+            <a href="#features" className="hover:text-slate-900">Features</a>
+            <a href="#workflow" className="hover:text-slate-900">Workflow</a>
+            <a href="#industries" className="hover:text-slate-900">Industries</a>
+            <a href="#security" className="hover:text-slate-900">Security</a>
           </nav>
 
           <div className="flex items-center gap-3">
-            <Link to="/login" className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-white/10">
+            <Link to="/login" className="rounded-full border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-slate-50">
               Login
             </Link>
-            <Link to="/request-demo" className="rounded-full px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:brightness-105" style={{ background: '#F5C542' }}>
+            <Link to="/request-demo" className="rounded-full bg-amber-400 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300">
               Get Started
             </Link>
           </div>
         </div>
       </header>
 
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(16,185,129,0.14),transparent_30%),linear-gradient(225deg,rgba(59,130,246,0.12),transparent_28%)]" />
-
-        <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-6 py-20 lg:grid-cols-2 lg:px-8 lg:py-28">
+      <section className="relative overflow-hidden bg-gradient-to-br from-emerald-50 via-white to-amber-50">
+        <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-6 py-16 lg:grid-cols-2 lg:px-8 lg:py-24">
           <div>
             <Badge>Built for factories, facilities, field teams, and enterprise maintenance</Badge>
 
-            <h1 className="mt-8 max-w-3xl text-5xl font-black leading-tight tracking-tight md:text-6xl lg:text-7xl">
+            <h1 className="mt-8 max-w-3xl text-5xl font-black leading-tight tracking-tight md:text-6xl">
               End Downtime. Control Every Job. Run Operations Like a Command Centre.
             </h1>
 
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300 md:text-xl">
+            <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-600">
               {brand.appName} helps maintenance teams manage work orders, technicians, SLAs, preventive maintenance, materials, reports, and client accountability from one operational platform.
             </p>
 
             <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-              <Link to="/login" className="inline-flex items-center justify-center gap-2 rounded-full px-7 py-4 font-bold text-slate-950 shadow-lg transition hover:brightness-105" style={{ background: '#F5C542', boxShadow: '0 18px 40px rgba(14, 124, 102, 0.18)' }}>
+              <Link to="/login" className="inline-flex items-center justify-center gap-2 rounded-full bg-amber-400 px-7 py-4 font-bold text-slate-950 shadow-lg shadow-amber-400/25 transition hover:bg-amber-300">
                 Login <ArrowRight className="h-5 w-5" />
               </Link>
-              <Link to="/request-demo" className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-7 py-4 font-bold text-white transition hover:bg-white/10">
+              <Link to="/request-demo" className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-7 py-4 font-bold text-slate-900 transition hover:bg-slate-50">
                 Get Started
               </Link>
             </div>
 
-            <div className="mt-10 grid max-w-xl grid-cols-2 gap-4 text-sm text-slate-300 sm:grid-cols-3">
+            <div className="mt-10 grid max-w-xl grid-cols-2 gap-4 text-sm text-slate-600 sm:grid-cols-3">
               {heroHighlights.map((item) => (
                 <div key={item} className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4" style={{ color: '#F5C542' }} />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                   {item}
                 </div>
               ))}
@@ -183,70 +179,39 @@ export function LandingPage() {
           </div>
 
           <div className="relative">
-            <div className="absolute inset-0 rounded-[2rem] border border-emerald-400/20" />
-            <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-900 p-5 shadow-xl">
-              <div className="mb-5 flex items-center justify-between border-b border-white/10 pb-4">
-                <div>
-                  <div className="text-sm text-slate-400">Command Centre</div>
-                  <div className="text-xl font-black">Live Operations</div>
-                </div>
-                <div className="rounded-full px-3 py-1 text-xs font-bold" style={{ background: 'rgba(14, 124, 102, 0.15)', color: '#9EE2D4' }}>LIVE</div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {stats.map((item) => (
-                  <StatCard key={item.label} item={item} />
-                ))}
-              </div>
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <div className="font-bold">Work Order Timeline</div>
-                  <div className="text-xs text-slate-400">WO-2026-00128</div>
-                </div>
-
-                <div className="space-y-4">
-                  {workflow.map((step, index) => (
-                    <div key={step} className="flex items-center gap-4">
-                      <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ${index < 4 ? 'bg-emerald-400 text-slate-950' : 'bg-white/10 text-slate-400'}`}>
-                        {index + 1}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <span className={index < 4 ? 'text-white' : 'text-slate-500'}>{step}</span>
-                          <span className="text-xs text-slate-500">{index < 4 ? 'Done' : 'Pending'}</span>
-                        </div>
-                        <div className="mt-2 h-1.5 rounded-full bg-white/10">
-                          <div className={`h-1.5 rounded-full ${index < 4 ? 'w-full bg-emerald-400' : 'w-1/4 bg-white/20'}`} />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <TechniciansHeroArt className="w-full drop-shadow-xl" />
           </div>
         </div>
       </section>
 
-      <section className="bg-slate-950 py-20 text-white">
+      <section className="border-y border-slate-200 bg-white py-14">
+        <div className="mx-auto max-w-7xl px-6 lg:px-8">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {stats.map((item) => (
+              <StatCard key={item.label} item={item} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-slate-50 py-20">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <div>
-              <p className="font-bold uppercase tracking-[0.2em] text-emerald-300">The Problem</p>
+              <p className="font-bold uppercase tracking-[0.2em] text-emerald-600">The Problem</p>
               <h2 className="mt-4 text-4xl font-black tracking-tight md:text-5xl">
                 Most field operations fail quietly before they fail publicly.
               </h2>
-              <p className="mt-5 text-lg leading-8 text-slate-300">
+              <p className="mt-5 text-lg leading-8 text-slate-600">
                 Manual job cards, WhatsApp updates, Excel trackers, missing signatures, uncontrolled spares, and delayed reports create blind spots. {brand.appName} turns every job into a traceable workflow.
               </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               {problemCards.map(([title, text]) => (
-                <div key={title} className="rounded-3xl border border-white/10 bg-white/[0.05] p-6">
-                  <h3 className="font-black">{title}</h3>
-                  <p className="mt-2 leading-7 text-slate-300">{text}</p>
+                <div key={title} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="font-black text-slate-900">{title}</h3>
+                  <p className="mt-2 leading-7 text-slate-600">{text}</p>
                 </div>
               ))}
             </div>
@@ -254,14 +219,14 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="features" className="scroll-mt-24 bg-slate-900 py-20 text-white">
+      <section id="features" className="scroll-mt-24 bg-white py-20">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="mx-auto max-w-3xl text-center">
-            <p className="font-bold uppercase tracking-[0.2em] text-emerald-300">Core Platform</p>
+            <p className="font-bold uppercase tracking-[0.2em] text-emerald-600">Core Platform</p>
             <h2 className="mt-4 text-4xl font-black tracking-tight md:text-5xl">
               Everything needed to run technical operations professionally.
             </h2>
-            <p className="mt-5 text-lg leading-8 text-slate-300">
+            <p className="mt-5 text-lg leading-8 text-slate-600">
               Built for accountability, visibility, reporting, and operational control across clients, branches, teams, and assets.
             </p>
           </div>
@@ -274,32 +239,32 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="workflow" className="scroll-mt-24 bg-slate-950 py-20 text-white">
+      <section id="workflow" className="scroll-mt-24 bg-slate-50 py-20">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
             <div>
-              <p className="font-bold uppercase tracking-[0.2em] text-emerald-300">Workflow Engine</p>
+              <p className="font-bold uppercase tracking-[0.2em] text-emerald-600">Workflow Engine</p>
               <h2 className="mt-4 text-4xl font-black tracking-tight md:text-5xl">
                 From request to report, every step is controlled.
               </h2>
-              <p className="mt-5 text-lg leading-8 text-slate-300">
+              <p className="mt-5 text-lg leading-8 text-slate-600">
                 {brand.appName} gives teams a repeatable operating model: job logging, assignment, arrival, diagnosis, material usage, completion, acknowledgement, and report generation.
               </p>
             </div>
 
-            <div className="rounded-[2rem] border border-white/10 bg-white/[0.05] p-6 shadow-sm">
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
               <div className="space-y-5">
                 {workflow.map((step, index) => (
                   <div key={step} className="flex gap-4">
                     <div className="flex flex-col items-center">
-                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-400/15 font-black text-emerald-300">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 font-black text-emerald-300">
                         {index + 1}
                       </div>
-                      {index !== workflow.length - 1 && <div className="h-10 w-px bg-white/15" />}
+                      {index !== workflow.length - 1 && <div className="h-10 w-px bg-slate-200" />}
                     </div>
                     <div className="pt-2">
-                      <div className="font-black">{step}</div>
-                      <p className="mt-1 text-sm leading-6 text-slate-300">
+                      <div className="font-black text-slate-900">{step}</div>
+                      <p className="mt-1 text-sm leading-6 text-slate-600">
                         {index === 0 && 'Capture client, asset, priority, issue type, branch, and SLA.'}
                         {index === 1 && 'Assign to technician, team, department, or assignment group.'}
                         {index === 2 && 'Track arrival time, departure time, and site attendance.'}
@@ -316,28 +281,28 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="industries" className="scroll-mt-24 bg-slate-950 py-20 text-white">
+      <section id="industries" className="scroll-mt-24 bg-emerald-50 py-20">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
           <div className="grid gap-12 lg:grid-cols-[0.85fr_1.15fr] lg:items-center">
             <div>
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-400 text-slate-950">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500 text-white">
                 <Factory className="h-7 w-7" />
               </div>
               <h2 className="mt-6 text-4xl font-black tracking-tight md:text-5xl">
                 Designed for serious operations, not generic task management.
               </h2>
-              <p className="mt-5 text-lg leading-8 text-slate-300">
+              <p className="mt-5 text-lg leading-8 text-slate-600">
                 The platform fits environments where downtime, delays, missed reports, and uncontrolled maintenance costs have real business impact.
               </p>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               {industries.map((industry) => (
-                <div key={industry} className="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.06] p-5">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+                <div key={industry} className="flex items-center gap-4 rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                     <Layers3 className="h-5 w-5" />
                   </div>
-                  <span className="font-bold">{industry}</span>
+                  <span className="font-bold text-slate-900">{industry}</span>
                 </div>
               ))}
             </div>
@@ -345,27 +310,27 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section id="security" className="scroll-mt-24 bg-slate-950 py-20 text-white">
+      <section id="security" className="scroll-mt-24 bg-white py-20">
         <div className="mx-auto max-w-7xl px-6 lg:px-8">
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.05] p-8 shadow-sm md:p-12">
+          <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-8 shadow-sm md:p-12">
             <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
               <div>
-                <p className="font-bold uppercase tracking-[0.2em] text-emerald-300">Enterprise Ready</p>
+                <p className="font-bold uppercase tracking-[0.2em] text-emerald-600">Enterprise Ready</p>
                 <h2 className="mt-4 text-4xl font-black tracking-tight md:text-5xl">
                   Built with SaaS control, client isolation, and operational trust.
                 </h2>
-                <p className="mt-5 text-lg leading-8 text-slate-300">
+                <p className="mt-5 text-lg leading-8 text-slate-600">
                   Platform owners manage tenants from the command centre, while each organization runs its own users, branches, settings, workflows, and data boundaries.
                 </p>
               </div>
 
               <div className="grid gap-4">
                 {securityItems.map(([Icon, text]) => (
-                  <div key={text} className="flex items-center gap-4 rounded-2xl bg-slate-900 p-5 shadow-sm">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300">
+                  <div key={text} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-emerald-300">
                       <Icon className="h-5 w-5" />
                     </div>
-                    <span className="font-bold">{text}</span>
+                    <span className="font-bold text-slate-900">{text}</span>
                   </div>
                 ))}
               </div>
@@ -374,8 +339,8 @@ export function LandingPage() {
         </div>
       </section>
 
-      <section className="relative overflow-hidden bg-slate-950 py-20 text-white">
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(16,185,129,0.08),transparent_35%)]" />
+      <section className="relative overflow-hidden bg-slate-900 py-20 text-white">
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(16,185,129,0.16),transparent_45%)]" />
         <div className="relative mx-auto max-w-4xl px-6 text-center lg:px-8">
           <h2 className="text-4xl font-black tracking-tight md:text-6xl">
             Stop managing operations blindly.
@@ -384,19 +349,19 @@ export function LandingPage() {
             Give your clients a modern field operations system that improves accountability, reduces downtime, and produces professional reports automatically.
           </p>
           <div className="mt-9 flex flex-col justify-center gap-4 sm:flex-row">
-            <Link to="/login" className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-400 px-8 py-4 font-black text-slate-950 shadow-lg shadow-emerald-400/15 transition hover:bg-emerald-300">
+            <Link to="/login" className="inline-flex items-center justify-center gap-2 rounded-full bg-amber-400 px-8 py-4 font-black text-slate-950 shadow-lg shadow-amber-400/20 transition hover:bg-amber-300">
               Login <ArrowRight className="h-5 w-5" />
             </Link>
-            <Link to="/request-demo" className="inline-flex items-center justify-center gap-2 rounded-full border border-white/15 px-8 py-4 font-black text-white transition hover:bg-white/10">
+            <Link to="/request-demo" className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 px-8 py-4 font-black text-white transition hover:bg-white/10">
               Get Started
             </Link>
           </div>
         </div>
       </section>
 
-      <footer className="border-t border-white/10 bg-slate-950 px-6 py-8 text-center text-sm text-slate-500">
+      <footer className="border-t border-slate-200 bg-white px-6 py-8 text-center text-sm text-slate-500">
         <div className="flex flex-col items-center justify-center gap-2">
-          <span className="font-semibold tracking-[0.18em] text-slate-400">{brand.appName}</span>
+          <span className="font-semibold tracking-[0.18em] text-slate-600">{brand.appName}</span>
           <span>© 2026 {brand.appName} ServiceOps. Built for operational control.</span>
         </div>
       </footer>

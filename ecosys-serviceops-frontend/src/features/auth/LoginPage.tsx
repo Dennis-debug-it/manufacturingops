@@ -115,9 +115,6 @@ export function LoginPage() {
         <div className="max-w-xl text-white">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">Operational control</p>
           <h2 className="mt-4 text-4xl font-semibold tracking-tight">Command field service, finance, and platform operations from one system.</h2>
-          <p className="mt-4 text-base leading-7 text-slate-200">
-            Fresh shell, strict role awareness, offline-capable technician flows, and a dedicated platform admin console.
-          </p>
         </div>
       </div>
     </div>
