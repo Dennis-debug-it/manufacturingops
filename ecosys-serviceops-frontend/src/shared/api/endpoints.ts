@@ -184,6 +184,9 @@ export const endpoints = {
     materialTemplate: '/api/import/templates/materials',
     previewMaterials: '/api/import/materials/preview',
     commitMaterials: '/api/import/materials/commit',
+    clientTemplate: '/api/import/templates/clients',
+    previewClients: '/api/import/clients/preview',
+    commitClients: '/api/import/clients/commit',
   },
   starterPacks: {
     list: '/api/starter-packs',

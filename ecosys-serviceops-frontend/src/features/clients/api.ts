@@ -75,6 +75,16 @@ export function useSetClientActive(id: string) {
   })
 }
 
+/** Toggle activation for an arbitrary client (id supplied per-call), for list-row actions. */
+export function useToggleClientActive() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      active ? api.patch<Client>(endpoints.clients.activate(id)) : api.patch<Client>(endpoints.clients.deactivateAction(id)),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['clients'] }),
+  })
+}
+
 // Sites
 export function useSites(clientId: string | undefined) {
   return useQuery({

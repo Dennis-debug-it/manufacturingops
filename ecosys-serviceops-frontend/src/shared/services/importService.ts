@@ -33,4 +33,16 @@ export const importService = {
   commitMaterials(file: File) {
     return apiClient.post<ImportCommitResponse>(endpoints.imports.commitMaterials, buildFormData(file)).then((response) => response.data)
   },
+  async downloadClientTemplate() {
+    const response = await apiClient.get(endpoints.imports.clientTemplate, {
+      responseType: 'blob',
+    })
+    triggerDownload(response.data as Blob, 'clients_import_template.csv')
+  },
+  previewClients(file: File) {
+    return apiClient.post<ImportPreviewResponse>(endpoints.imports.previewClients, buildFormData(file)).then((response) => response.data)
+  },
+  commitClients(file: File) {
+    return apiClient.post<ImportCommitResponse>(endpoints.imports.commitClients, buildFormData(file)).then((response) => response.data)
+  },
 }
