@@ -3,6 +3,7 @@ using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
@@ -11,6 +12,7 @@ namespace Ecosys.Api.Controllers;
 
 [ApiController]
 [AllowAnonymous]
+[EnableRateLimiting("PublicEndpoints")]
 [Route("api/intake")]
 public sealed class IntakeController(
     AppDbContext dbContext,
@@ -49,7 +51,7 @@ public sealed class IntakeController(
             throw new ForbiddenException("Webhook secret is invalid.");
         }
 
-        if (!string.Equals(HashSecret(secret), integration.SecretHash, StringComparison.Ordinal))
+        if (!FixedTimeEquals(HashSecret(secret), integration.SecretHash))
         {
             throw new ForbiddenException("Webhook secret is invalid.");
         }
@@ -99,11 +101,14 @@ public sealed class IntakeController(
         var settings = await dbContext.MonitoringSettings.SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken)
             ?? throw new ForbiddenException("Monitoring intake is not configured.");
 
-        if (string.IsNullOrWhiteSpace(settings.WebhookSecret) || !string.Equals(settings.WebhookSecret, secret, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(settings.WebhookSecret) || !FixedTimeEquals(settings.WebhookSecret, secret))
         {
             throw new ForbiddenException("Webhook secret is invalid.");
         }
     }
+
+    private static bool FixedTimeEquals(string expected, string actual) =>
+        CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(expected), Encoding.UTF8.GetBytes(actual));
 
     private async Task<Domain.Entities.WorkOrder> CreateWorkOrderAsync(Guid tenantId, Guid? branchId, Guid clientId, Guid? assetId, string title, string? description, string? priority, CancellationToken cancellationToken)
     {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import DOMPurify from 'dompurify'
 import toast from 'react-hot-toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Mail } from 'lucide-react'
@@ -137,7 +138,7 @@ function TemplateEditor({ eventKey, onClose }: { eventKey: string; onClose: () =
               <p className="text-xs font-medium text-slate-500">Rendered Subject</p>
               <p className="text-sm text-slate-900">{preview.subject}</p>
               <p className="mt-3 text-xs font-medium text-slate-500">Rendered Body</p>
-              <div className="mt-1 max-h-64 overflow-auto rounded border border-slate-100 p-3 text-xs" dangerouslySetInnerHTML={{ __html: preview.htmlBody }} />
+              <div className="mt-1 max-h-64 overflow-auto rounded border border-slate-100 p-3 text-xs" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(preview.htmlBody) }} />
             </div>
           ) : null}
         </div>

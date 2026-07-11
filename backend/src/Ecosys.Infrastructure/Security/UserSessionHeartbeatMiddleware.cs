@@ -24,7 +24,11 @@ public sealed class UserSessionHeartbeatMiddleware(RequestDelegate next)
             }
             catch (Exception ex)
             {
+                // Fail closed: if session validity cannot be confirmed, a revoked token
+                // must not slip through on an infrastructure error.
                 logger.LogWarning(ex, "Failed to update user session heartbeat for session {SessionId}.", tenantContext.SessionId);
+                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                return;
             }
         }
 

@@ -10,6 +10,7 @@ internal static class StartupSecurityValidation
     private static readonly HashSet<string> DisallowedJwtSigningKeys = new(StringComparer.OrdinalIgnoreCase)
     {
         "ChangeThisSigningKeyForProductionOnly123!",
+        "EcosysDevelopmentSigningKey-ReplaceInProduction-1234567890",
         "SET_IN_ENV",
         "changeme",
         "change-me",

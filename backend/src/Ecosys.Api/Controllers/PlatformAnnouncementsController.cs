@@ -6,6 +6,7 @@ using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Api.Controllers;
@@ -32,6 +33,7 @@ public sealed class PlatformAnnouncementsController(
 
     /// <summary>Currently-published announcements (used by tenant workspaces).</summary>
     [AllowAnonymous]
+    [EnableRateLimiting("PublicEndpoints")]
     [HttpGet("/api/announcements/active")]
     public async Task<ActionResult<IReadOnlyCollection<AnnouncementResponse>>> Active(CancellationToken cancellationToken)
     {

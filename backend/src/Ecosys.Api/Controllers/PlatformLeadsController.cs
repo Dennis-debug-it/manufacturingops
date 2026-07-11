@@ -8,6 +8,7 @@ using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Api.Controllers;
@@ -40,6 +41,7 @@ public sealed class PlatformLeadsController(
     ];
 
     [AllowAnonymous]
+    [EnableRateLimiting("PublicEndpoints")]
     [HttpPost("api/public/leads")]
     public async Task<ActionResult<PublicLeadSubmissionResponse>> CreatePublicLead([FromBody] CreatePlatformLeadRequest request, CancellationToken cancellationToken)
     {

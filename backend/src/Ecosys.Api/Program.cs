@@ -117,6 +117,22 @@ builder.Services.AddRateLimiter(options =>
         }, cancellationToken);
     };
 
+    options.AddPolicy("PublicEndpoints", httpContext =>
+    {
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+        return RateLimitPartition.GetFixedWindowLimiter(
+            $"public:{clientIp}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromSeconds(60),
+                QueueLimit = 0,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                AutoReplenishment = true
+            });
+    });
+
     options.AddPolicy("AuthEndpoints", httpContext =>
     {
         var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -164,6 +180,11 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
     };
 });
 builder.Services.AddProblemDetails();
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(180);
+    options.IncludeSubDomains = true;
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -187,6 +208,16 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["X-Frame-Options"] = "DENY";
+    headers["Referrer-Policy"] = "no-referrer";
+    headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    await next();
+});
 
 app.Use(async (context, next) =>
 {
@@ -324,10 +355,31 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+};
+
+// Defaults trust loopback only; a reverse proxy on another host must be listed in
+// ECOSYS_KNOWN_PROXIES (comma-separated IPs) or client IPs collapse to the proxy IP
+// and every user shares one auth rate-limit bucket.
+var knownProxiesEnv = Environment.GetEnvironmentVariable("ECOSYS_KNOWN_PROXIES");
+if (!string.IsNullOrWhiteSpace(knownProxiesEnv))
+{
+    foreach (var entry in knownProxiesEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+    {
+        if (System.Net.IPAddress.TryParse(entry, out var proxyAddress))
+        {
+            forwardedHeadersOptions.KnownProxies.Add(proxyAddress);
+        }
+    }
+}
+
+app.UseForwardedHeaders(forwardedHeadersOptions);
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 
