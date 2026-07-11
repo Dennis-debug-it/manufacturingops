@@ -260,5 +260,14 @@ public sealed class SecurityHardeningTests
 
         public Task<Domain.Entities.StockMovement> RecordTransferInAsync(Domain.Entities.MaterialItem material, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) =>
             Task.FromException<Domain.Entities.StockMovement>(new NotSupportedException());
+
+        public Task RecordVanLoadAsync(Domain.Entities.MaterialItem material, Guid fromBranchId, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) =>
+            Task.FromException(new NotSupportedException());
+
+        public Task RecordVanReturnAsync(Domain.Entities.MaterialItem material, Guid vanId, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) =>
+            Task.FromException(new NotSupportedException());
+
+        public Task<Domain.Entities.StockMovement> RecordVanConsumeAsync(Domain.Entities.MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default) =>
+            Task.FromException<Domain.Entities.StockMovement>(new NotSupportedException());
     }
 }

@@ -45,6 +45,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
     public DbSet<BranchMaterialStock> BranchMaterialStocks => Set<BranchMaterialStock>();
+    public DbSet<VanMaterialStock> VanMaterialStocks => Set<VanMaterialStock>();
+    public DbSet<Van> Vans => Set<Van>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
     public DbSet<MaterialRequest> MaterialRequests => Set<MaterialRequest>();
@@ -740,6 +742,49 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<Van>(entity =>
+        {
+            entity.ToTable("vans");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.RegistrationNumber).HasMaxLength(50);
+            entity.HasIndex(x => new { x.TenantId, x.Name });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Technician)
+                .WithMany()
+                .HasForeignKey(x => x.TechnicianId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.HomeBranch)
+                .WithMany()
+                .HasForeignKey(x => x.HomeBranchId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<VanMaterialStock>(entity =>
+        {
+            entity.ToTable("van_material_stocks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.QuantityOnHand).HasPrecision(18, 2);
+            entity.Property(x => x.ReorderLevel).HasPrecision(18, 2);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 2);
+            entity.HasIndex(x => new { x.TenantId, x.VanId, x.MaterialId }).IsUnique();
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Van)
+                .WithMany(x => x.MaterialStocks)
+                .HasForeignKey(x => x.VanId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Material)
+                .WithMany(x => x.VanStocks)
+                .HasForeignKey(x => x.MaterialId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<StockMovement>(entity =>
         {
             entity.ToTable("stock_movements");
@@ -757,6 +802,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Branch)
                 .WithMany(x => x.StockMovements)
                 .HasForeignKey(x => x.BranchId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Van)
+                .WithMany()
+                .HasForeignKey(x => x.VanId)
                 .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.Material)
                 .WithMany(x => x.StockMovements)

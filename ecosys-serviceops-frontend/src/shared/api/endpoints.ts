@@ -180,6 +180,17 @@ export const endpoints = {
   branches: {
     list: '/api/branches',
   },
+  vans: {
+    list: '/api/vans',
+    detail: (id: string) => `/api/vans/${id}`,
+    create: '/api/vans',
+    update: (id: string) => `/api/vans/${id}`,
+    deactivate: (id: string) => `/api/vans/${id}`,
+    stock: (id: string) => `/api/vans/${id}/stock`,
+    load: (id: string) => `/api/vans/${id}/load`,
+    return: (id: string) => `/api/vans/${id}/return`,
+    consume: (id: string) => `/api/vans/${id}/consume`,
+  },
   imports: {
     materialTemplate: '/api/import/templates/materials',
     previewMaterials: '/api/import/materials/preview',

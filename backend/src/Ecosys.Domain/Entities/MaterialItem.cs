@@ -16,6 +16,7 @@ public sealed class MaterialItem : AuditableEntity, ITenantEntity
 
     public Tenant? Tenant { get; set; }
     public ICollection<BranchMaterialStock> BranchStocks { get; set; } = new List<BranchMaterialStock>();
+    public ICollection<VanMaterialStock> VanStocks { get; set; } = new List<VanMaterialStock>();
     public ICollection<MaterialRequestLine> MaterialRequestLines { get; set; } = new List<MaterialRequestLine>();
     public ICollection<StockMovement> StockMovements { get; set; } = new List<StockMovement>();
     public ICollection<StockTransfer> StockTransfers { get; set; } = new List<StockTransfer>();

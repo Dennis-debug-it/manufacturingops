@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Truck } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatCard } from '../../shared/components/StatCard'
@@ -8,13 +9,16 @@ import { Spinner } from '../../shared/components/Spinner'
 import { cn } from '../../shared/utils/cn'
 import { formatCurrency } from '../../shared/utils/format'
 import { useMaterials } from './api'
+import { useVans } from './vansApi'
 import type { Material } from './types'
 
 export function StockPage() {
   const [view, setView] = useState<'all' | 'by-branch'>('all')
   const { data, isLoading } = useMaterials({ status: 'active' })
+  const { data: vans } = useVans()
 
   const materials = data ?? []
+  const activeVans = vans ?? []
 
   const stats = useMemo(() => {
     const totalValue = materials.reduce((sum, item) => sum + item.quantityOnHand * (item.unitCost ?? 0), 0)
@@ -69,10 +73,13 @@ export function StockPage() {
         }
       />
 
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-        The backend models stock per material-and-branch, not per van or per technician — so this view groups by branch only.
-        Van/technician-level stock splits aren't tracked as a distinct backend concept yet.
-      </div>
+      <Link to="/inventory/vans" className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+        <span className="flex items-center gap-2">
+          <Truck className="h-4 w-4 text-slate-400" />
+          Stock is also held on <strong className="font-semibold text-slate-900">{activeVans.length}</strong> van{activeVans.length === 1 ? '' : 's'}. Load parts from a branch, consume on jobs, and return the rest.
+        </span>
+        <span className="shrink-0 font-medium text-slate-900">Manage vans →</span>
+      </Link>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Total Items" value={stats.totalItems} />

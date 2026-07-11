@@ -6,6 +6,7 @@ public sealed class StockMovement : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
     public Guid? BranchId { get; set; }
+    public Guid? VanId { get; set; }
     public Guid MaterialId { get; set; }
     public Guid? WorkOrderId { get; set; }
     public Guid? MaterialRequestId { get; set; }
@@ -18,6 +19,7 @@ public sealed class StockMovement : AuditableEntity, ITenantEntity
 
     public Tenant? Tenant { get; set; }
     public Branch? Branch { get; set; }
+    public Van? Van { get; set; }
     public MaterialItem? Material { get; set; }
     public WorkOrder? WorkOrder { get; set; }
     public MaterialRequest? MaterialRequest { get; set; }
