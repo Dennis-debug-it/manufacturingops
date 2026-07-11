@@ -3,6 +3,7 @@ import { cn } from '../../shared/utils/cn'
 
 const items = [
   { to: '/platform/leads', label: 'Leads' },
+  { to: '/platform/crm/pipeline', label: 'Pipeline' },
   { to: '/platform/crm/contacts', label: 'Contacts' },
   { to: '/platform/crm/activities', label: 'Activities' },
   { to: '/platform/crm/tasks', label: 'Tasks' },

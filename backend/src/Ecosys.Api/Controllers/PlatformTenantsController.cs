@@ -263,6 +263,86 @@ public sealed class PlatformTenantsController(
         return Ok(auditLogs);
     }
 
+    [HttpGet("{tenantId:guid}/branding")]
+    public async Task<ActionResult<PlatformTenantBrandingResponse>> GetBranding(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
+        return Ok(new PlatformTenantBrandingResponse(tenant.CompanyName, tenant.LogoUrl, tenant.PrimaryColor, tenant.SecondaryColor, tenant.ShowPoweredByEcosys));
+    }
+
+    [HttpGet("{tenantId:guid}/users")]
+    public async Task<ActionResult<IReadOnlyCollection<PlatformTenantUserResponse>>> GetUsers(Guid tenantId, CancellationToken cancellationToken)
+    {
+        _ = await LoadManagedTenantAsync(tenantId, cancellationToken);
+
+        var users = await dbContext.Users
+            .Where(x => x.TenantId == tenantId && x.Role != AppRoles.SuperAdmin)
+            .OrderBy(x => x.FullName)
+            .Select(x => new PlatformTenantUserResponse(x.Id, x.FullName, x.Email, x.Role, x.IsActive, x.JobTitle, x.CreatedAt, x.LockedOutUntil))
+            .ToListAsync(cancellationToken);
+
+        return Ok(users);
+    }
+
+    [HttpGet("{tenantId:guid}/numbering")]
+    public async Task<ActionResult<IReadOnlyCollection<PlatformTenantNumberingResponse>>> GetNumbering(Guid tenantId, CancellationToken cancellationToken)
+    {
+        _ = await LoadManagedTenantAsync(tenantId, cancellationToken);
+
+        var rules = await dbContext.NumberingSettings
+            .Where(x => x.TenantId == tenantId && x.BranchId == null)
+            .OrderBy(x => x.DocumentType)
+            .Select(x => new PlatformTenantNumberingResponse(x.Id, x.DocumentType, x.Prefix, x.Suffix, x.NextNumber, x.PaddingLength, x.ResetFrequency, x.IsActive, x.LastResetAt))
+            .ToListAsync(cancellationToken);
+
+        return Ok(rules);
+    }
+
+    [HttpGet("{tenantId:guid}/document-designs")]
+    public async Task<ActionResult<IReadOnlyCollection<PlatformTenantDocumentDesignResponse>>> GetDocumentDesigns(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
+        var overrides = PdfTemplateHelper.ParseDesigns(tenant.DocumentDesignsJson);
+
+        var entries = overrides.Keys
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .Select(documentType => new PlatformTenantDocumentDesignResponse(documentType, true))
+            .ToList();
+
+        return Ok(entries);
+    }
+
+    [HttpGet("{tenantId:guid}/finance-summary")]
+    public async Task<ActionResult<PlatformTenantFinanceSummaryResponse>> GetFinanceSummary(Guid tenantId, CancellationToken cancellationToken)
+    {
+        _ = await LoadManagedTenantAsync(tenantId, cancellationToken);
+
+        var invoices = await dbContext.TenantInvoices
+            .Where(x => x.TenantId == tenantId && x.Status != "Void")
+            .ToListAsync(cancellationToken);
+
+        var totalInvoiced = invoices.Sum(x => x.TotalAmount);
+        var totalPaid = invoices.Sum(x => x.AmountPaid);
+        var outstandingBalance = invoices.Sum(x => x.Balance);
+        var overdueCount = invoices.Count(x => x.Balance > 0 && x.DueDate < DateTime.UtcNow);
+
+        return Ok(new PlatformTenantFinanceSummaryResponse(invoices.Count, totalInvoiced, totalPaid, outstandingBalance, overdueCount));
+    }
+
+    [HttpGet("{tenantId:guid}/module-settings")]
+    public async Task<ActionResult<IReadOnlyCollection<PlatformTenantModuleSettingResponse>>> GetModuleSettings(Guid tenantId, CancellationToken cancellationToken)
+    {
+        _ = await LoadManagedTenantAsync(tenantId, cancellationToken);
+
+        var settings = await dbContext.TenantModuleSettings
+            .Where(x => x.TenantId == tenantId)
+            .OrderBy(x => x.ModuleKey)
+            .Select(x => new PlatformTenantModuleSettingResponse(x.ModuleKey, x.UpdatedAt ?? x.CreatedAt))
+            .ToListAsync(cancellationToken);
+
+        return Ok(settings);
+    }
+
     private async Task<Tenant> LoadManagedTenantAsync(Guid tenantId, CancellationToken cancellationToken) =>
         await dbContext.Tenants
             .Include(x => x.TenantLicenses)
@@ -1329,6 +1409,18 @@ public sealed record PlatformTenantAuditLogResponse(
     string Actor,
     string? Details,
     DateTime CreatedAt);
+
+public sealed record PlatformTenantBrandingResponse(string CompanyName, string? LogoUrl, string PrimaryColor, string SecondaryColor, bool ShowPoweredByEcosys);
+
+public sealed record PlatformTenantUserResponse(Guid Id, string FullName, string Email, string Role, bool IsActive, string? JobTitle, DateTime CreatedAt, DateTime? LockedOutUntil);
+
+public sealed record PlatformTenantNumberingResponse(Guid Id, string DocumentType, string Prefix, string? Suffix, long NextNumber, int PaddingLength, string ResetFrequency, bool IsActive, DateTime? LastResetAt);
+
+public sealed record PlatformTenantDocumentDesignResponse(string DocumentType, bool IsCustomised);
+
+public sealed record PlatformTenantFinanceSummaryResponse(int InvoiceCount, decimal TotalInvoiced, decimal TotalPaid, decimal OutstandingBalance, int OverdueCount);
+
+public sealed record PlatformTenantModuleSettingResponse(string ModuleKey, DateTime UpdatedAt);
 
 internal sealed record InitialAdminProfile(
     string FullName,

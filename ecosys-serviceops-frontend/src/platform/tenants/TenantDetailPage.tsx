@@ -9,6 +9,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { DetailLayout } from '../../shared/components/DetailLayout'
 import { formatDateTime } from '../../shared/utils/dates'
+import { formatCurrency } from '../../shared/utils/format'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import {
@@ -18,13 +19,21 @@ import {
   useImpersonateTenant,
   useSuspendTenant,
   useTenantAuditLogs,
+  useTenantBranding,
   useTenantCommunicationSettings,
   useTenantDetail,
+  useTenantDocumentDesigns,
+  useTenantFinanceSummary,
+  useTenantModuleSettings,
+  useTenantNumbering,
+  useTenantUsers,
   useUpdateTenantCommunicationSettings,
   useDeactivateTenant,
 } from '../api'
 import { Field, SectionTitle, licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
 import type { PlatformTenantAuditLog, TenantCommunicationSettings } from '../types'
+import { StatusBadge } from '../../shared/components/StatusBadge'
+import type { PlatformTenantNumbering, PlatformTenantUser } from '../api'
 
 type CommunicationForm = TenantCommunicationSettings
 
@@ -44,6 +53,12 @@ export function TenantDetailPage() {
   const navigate = useNavigate()
   const { data: tenant, isLoading, isError } = useTenantDetail(id)
   const { data: auditLogs } = useTenantAuditLogs(id)
+  const { data: branding, isLoading: brandingLoading } = useTenantBranding(id)
+  const { data: tenantUsers, isLoading: tenantUsersLoading } = useTenantUsers(id)
+  const { data: numbering, isLoading: numberingLoading, refetch: refetchNumbering } = useTenantNumbering(id)
+  const { data: documentDesigns, isLoading: documentDesignsLoading } = useTenantDocumentDesigns(id)
+  const { data: financeSummary, isLoading: financeSummaryLoading } = useTenantFinanceSummary(id)
+  const { data: moduleSettings, isLoading: moduleSettingsLoading } = useTenantModuleSettings(id)
   const { data: communication } = useTenantCommunicationSettings(id)
   const updateCommunication = useUpdateTenantCommunicationSettings(id ?? '')
   const activate = useActivateTenant(id ?? '')
@@ -124,6 +139,44 @@ export function TenantDetailPage() {
     }
   }
 
+  const tenantUserColumns: DataTableColumn<PlatformTenantUser>[] = [
+    { key: 'fullName', header: 'Name', cell: (row) => <span className="font-medium text-slate-900">{row.fullName}</span> },
+    { key: 'email', header: 'Email', cell: (row) => row.email },
+    { key: 'role', header: 'Role', cell: (row) => row.role },
+    { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? '—' },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
+    { key: 'createdAt', header: 'Joined', cell: (row) => formatDateTime(row.createdAt) },
+  ]
+
+  const resetNumbering = async (documentType: string) => {
+    if (!tenant) return
+    try {
+      await api.post(`/api/platform/support/tenants/${tenant.tenantId}/reset-numbering`, { documentType })
+      toast.success(`${documentType} numbering reset`)
+      void refetchNumbering()
+    } catch {
+      // handled by interceptor
+    }
+  }
+
+  const numberingColumns: DataTableColumn<PlatformTenantNumbering>[] = [
+    { key: 'documentType', header: 'Document Type', cell: (row) => <span className="font-medium text-slate-900">{row.documentType}</span> },
+    { key: 'format', header: 'Format', cell: (row) => <span className="font-mono text-xs">{row.prefix}{row.suffix ?? ''}-{'0'.repeat(row.paddingLength)}</span> },
+    { key: 'nextNumber', header: 'Next Number', cell: (row) => row.nextNumber },
+    { key: 'resetFrequency', header: 'Reset Frequency', cell: (row) => row.resetFrequency },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
+    { key: 'lastResetAt', header: 'Last Reset', cell: (row) => (row.lastResetAt ? formatDateTime(row.lastResetAt) : 'Never') },
+    {
+      key: 'actions',
+      header: '',
+      cell: (row) => (
+        <button type="button" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => void resetNumbering(row.documentType)}>
+          Reset to 1
+        </button>
+      ),
+    },
+  ]
+
   const tabs = [
     {
       id: 'overview',
@@ -165,13 +218,32 @@ export function TenantDetailPage() {
     {
       id: 'branding',
       label: 'Branding',
-      content: (
-          <UnsupportedTab
-          title="Branding"
-          description="Tenant branding is not currently exposed by a platform-scoped API. This should be added before we surface editable branding controls here."
-          linkLabel="Open platform branding settings"
-          onAction={() => navigate('/platform/settings/branding')}
-        />
+      content: brandingLoading ? (
+        <Spinner label="Loading branding" />
+      ) : branding ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <SectionTitle title="Tenant branding" description="Read-only view. Branding is edited from within the tenant's own workspace settings." />
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <InfoCard label="Company name" value={branding.companyName} />
+            <InfoCard label="Show 'Powered by Ecosys'" value={branding.showPoweredByEcosys ? 'Yes' : 'No'} />
+            <InfoCard
+              label="Primary color"
+              value={<span className="inline-flex items-center gap-2"><span className="h-4 w-4 rounded-full border border-slate-200" style={{ backgroundColor: branding.primaryColor }} />{branding.primaryColor}</span>}
+            />
+            <InfoCard
+              label="Secondary color"
+              value={<span className="inline-flex items-center gap-2"><span className="h-4 w-4 rounded-full border border-slate-200" style={{ backgroundColor: branding.secondaryColor }} />{branding.secondaryColor}</span>}
+            />
+          </div>
+          {branding.logoUrl ? (
+            <div className="mt-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Logo</div>
+              <img src={branding.logoUrl} alt={`${branding.companyName} logo`} className="mt-2 h-16 rounded-lg border border-slate-200 bg-slate-50 object-contain p-2" />
+            </div>
+          ) : null}
+        </section>
+      ) : (
+        <EmptyState title="Branding unavailable" description="Could not load this tenant's branding settings." />
       ),
     },
     {
@@ -188,12 +260,18 @@ export function TenantDetailPage() {
               <InfoCard label="Initial admin note" value={tenant.initialAdminInvitationMessage ?? '—'} />
             </div>
           </section>
-          <UnsupportedTab
-            title="Tenant admin list"
-            description="A platform-scoped endpoint for listing another tenant's users is not available in the current backend snapshot. Use impersonation or tenant workspace access for detailed user administration."
-            linkLabel="Open platform users"
-            onAction={() => navigate('/platform/users')}
-          />
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <SectionTitle title="Workspace user list" description="Read-only. Use impersonation or the tenant workspace for detailed user administration." />
+            <div className="mt-4">
+              <DataTable<PlatformTenantUser>
+                columns={tenantUserColumns}
+                data={tenantUsers ?? []}
+                loading={tenantUsersLoading}
+                emptyTitle="No users yet"
+                emptyDescription="This tenant has no workspace users."
+              />
+            </div>
+          </section>
         </div>
       ),
     },
@@ -201,12 +279,30 @@ export function TenantDetailPage() {
       id: 'modules',
       label: 'Modules',
       content: (
-        <UnsupportedTab
-          title="Module access"
-          description="Cross-tenant module toggles are not exposed by the current backend. Module entitlement is governed from licensing and tenant settings."
-          linkLabel="Open licensing"
-          onAction={() => navigate('/platform/licensing')}
-        />
+        <div className="space-y-5">
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <SectionTitle title="Configured module settings" description="Module-level configuration this tenant has saved (executive dashboard, inventory, payments, portal, integrations, etc). Full module enable/disable entitlement is governed by licensing, not a per-module toggle." />
+            <div className="mt-4">
+              {moduleSettingsLoading ? (
+                <Spinner label="Loading module settings" />
+              ) : (moduleSettings ?? []).length === 0 ? (
+                <EmptyState title="No module settings configured" description="This tenant has not customized any module-level settings yet." />
+              ) : (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {(moduleSettings ?? []).map((setting) => (
+                    <InfoCard key={setting.moduleKey} label={setting.moduleKey} value={formatDateTime(setting.updatedAt)} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+          <UnsupportedTab
+            title="Licensing & entitlement"
+            description="Max users, max branches, and plan-level feature gates are managed from Subscription / Licensing."
+            linkLabel="Open licensing"
+            onAction={() => navigate('/platform/licensing')}
+          />
+        </div>
       ),
     },
     {
@@ -325,17 +421,66 @@ export function TenantDetailPage() {
     {
       id: 'numbering',
       label: 'Numbering',
-      content: <UnsupportedTab title="Numbering" description="Tenant numbering settings are backend-scoped elsewhere and are not yet available in a platform-scoped tenant detail API." linkLabel="Open numbering defaults" onAction={() => navigate('/platform/settings')} />,
+      content: (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <SectionTitle title="Document numbering" description="Tenant-wide numbering sequences. Reset uses the same support tool available from Platform Support." />
+          <div className="mt-4">
+            <DataTable<PlatformTenantNumbering>
+              columns={numberingColumns}
+              data={numbering ?? []}
+              loading={numberingLoading}
+              emptyTitle="No numbering rules configured"
+              emptyDescription="This tenant has not set up any document numbering sequences yet."
+            />
+          </div>
+        </section>
+      ),
     },
     {
       id: 'templates',
       label: 'Templates',
-      content: <UnsupportedTab title="Templates" description="Tenant template editing is not currently exposed through the platform owner API. We can surface platform templates from settings instead." linkLabel="Open template settings" onAction={() => navigate('/platform/settings/templates')} />,
+      content: (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <SectionTitle title="Document designs" description="Which document types this tenant has customized via the Document Designer. Editing happens from within the tenant's own workspace." />
+          <div className="mt-4">
+            {documentDesignsLoading ? (
+              <Spinner label="Loading document designs" />
+            ) : (documentDesigns ?? []).length === 0 ? (
+              <EmptyState title="No customized document designs" description="This tenant is using the default document design for every document type." />
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {(documentDesigns ?? []).map((entry) => (
+                  <InfoCard key={entry.documentType} label={entry.documentType} value="Customized" />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      ),
     },
     {
       id: 'finance',
       label: 'Finance',
-      content: <UnsupportedTab title="Finance" description="Tenant-level invoices and billing live in the tenant workspace. The platform finance tab aggregates platform-wide records only." linkLabel="Open platform finance" onAction={() => navigate('/platform/finance')} />,
+      content: financeSummaryLoading ? (
+        <Spinner label="Loading finance summary" />
+      ) : financeSummary ? (
+        <section className="space-y-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <MiniStat label="Invoices" value={financeSummary.invoiceCount} />
+            <MiniStat label="Overdue" value={financeSummary.overdueCount} />
+            <InfoCard label="Total invoiced" value={formatCurrency(financeSummary.totalInvoiced)} />
+            <InfoCard label="Outstanding balance" value={formatCurrency(financeSummary.outstandingBalance)} />
+          </div>
+          <UnsupportedTab
+            title="Detailed invoices"
+            description="Tenant-level invoices and billing live in the tenant workspace. The platform finance tab aggregates platform-wide records only."
+            linkLabel="Open platform finance"
+            onAction={() => navigate('/platform/finance')}
+          />
+        </section>
+      ) : (
+        <EmptyState title="Finance summary unavailable" description="Could not load this tenant's finance summary." />
+      ),
     },
     {
       id: 'audit',

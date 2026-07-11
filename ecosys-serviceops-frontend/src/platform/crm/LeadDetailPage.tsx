@@ -79,26 +79,26 @@ export function LeadDetailPage() {
   }
 
   return (
-    <div className="space-y-6 text-white">
+    <div className="space-y-6">
       <PageHeader
         title={lead.companyName}
         subtitle={lead.contactPersonName}
-        breadcrumbs={[{ label: 'Leads', to: '/platform/crm/leads' }, { label: lead.companyName }]}
+        breadcrumbs={[{ label: 'Leads', to: '/platform/leads' }, { label: lead.companyName }]}
         secondaryActions={<StatusBadge status={lead.status} />}
         primaryAction={
           <div className="flex flex-wrap gap-2">
-            {lead.status !== 'Qualified' ? <button type="button" onClick={() => setPendingStatus('Qualified')} className="inline-flex h-11 items-center rounded-lg border border-white/20 bg-white/5 px-4 text-sm font-medium text-white hover:bg-white/10">Mark Qualified</button> : null}
-            {lead.status !== 'Not a Fit' ? <button type="button" onClick={() => setPendingStatus('Not a Fit')} className="inline-flex h-11 items-center rounded-lg border border-rose-400/40 bg-rose-500/10 px-4 text-sm font-medium text-rose-200 hover:bg-rose-500/20">Mark Not a Fit</button> : null}
+            {lead.status !== 'Qualified' ? <button type="button" onClick={() => setPendingStatus('Qualified')} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Mark Qualified</button> : null}
+            {lead.status !== 'Not a Fit' ? <button type="button" onClick={() => setPendingStatus('Not a Fit')} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 hover:bg-rose-100">Mark Not a Fit</button> : null}
             {lead.status !== 'Converted to Workspace' && !lead.convertedTenantId ? (
-              <button type="button" onClick={() => setConvertStep('confirm')} className="inline-flex h-11 items-center rounded-lg bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-100">Convert to Tenant</button>
+              <button type="button" onClick={() => setConvertStep('confirm')} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">Convert to Tenant</button>
             ) : null}
           </div>
         }
       />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-5">
-          <h3 className="text-sm font-semibold text-white">Contact Details</h3>
+        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900">Contact Details</h3>
           <dl className="space-y-2 text-sm">
             {[
               ['Email', lead.email],
@@ -109,26 +109,26 @@ export function LeadDetailPage() {
               ['Preferred Contact', lead.preferredContactMethod ?? '—'],
               ['Created', formatDateTime(lead.createdAt)],
             ].map(([label, value]) => (
-              <div key={label} className="flex justify-between border-b border-white/5 pb-2">
-                <dt className="text-slate-400">{label}</dt>
-                <dd className="text-white">{value}</dd>
+              <div key={label} className="flex justify-between border-b border-slate-100 pb-2 last:border-0">
+                <dt className="text-slate-500">{label}</dt>
+                <dd className="font-medium text-slate-900">{value}</dd>
               </div>
             ))}
           </dl>
           {lead.message ? (
-            <div className="mt-3 rounded-lg bg-white/5 p-3 text-sm text-slate-200">{lead.message}</div>
+            <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">{lead.message}</div>
           ) : null}
         </section>
 
-        <section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-5">
-          <h3 className="text-sm font-semibold text-white">Notes</h3>
+        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900">Notes</h3>
           <textarea
             defaultValue={lead.notes ?? ''}
             onChange={(event) => setNotes(event.target.value)}
             rows={8}
-            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-white/30"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900"
           />
-          <button type="button" onClick={saveNotes} disabled={updateNotes.isPending} className="inline-flex h-10 items-center rounded-lg bg-white px-4 text-sm font-medium text-slate-900 hover:bg-slate-100 disabled:opacity-60">
+          <button type="button" onClick={() => void saveNotes()} disabled={updateNotes.isPending} className="inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
             {updateNotes.isPending ? 'Saving…' : 'Save Notes'}
           </button>
         </section>
@@ -139,7 +139,7 @@ export function LeadDetailPage() {
         title={`Mark ${pendingStatus}`}
         message={`This will move ${lead.companyName} to "${pendingStatus}".`}
         onCancel={() => setPendingStatus(null)}
-        onConfirm={runStatusChange}
+        onConfirm={() => void runStatusChange()}
       />
 
       <ConfirmDialog

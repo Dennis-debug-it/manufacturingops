@@ -9,6 +9,8 @@ import { LeadsPage } from './crm/LeadsPage'
 import { ContactsPage } from './crm/ContactsPage'
 import { ActivitiesPage } from './crm/ActivitiesPage'
 import { TasksPage } from './crm/TasksPage'
+import { PipelinePage } from './crm/PipelinePage'
+import { LeadDetailPage } from './crm/LeadDetailPage'
 import { UsersPage } from './UsersPage'
 import { LicensingPage } from './LicensingPage'
 import { FinancePage } from './FinancePage'
@@ -42,6 +44,8 @@ export function PlatformApp() {
           <Route path="tenants/:id" element={<TenantDetailPage />} />
 
           <Route path="leads" element={<LeadsPage />} />
+          <Route path="crm/pipeline" element={<PipelinePage />} />
+          <Route path="crm/leads/:id" element={<LeadDetailPage />} />
           <Route path="crm/contacts" element={<ContactsPage />} />
           <Route path="crm/activities" element={<ActivitiesPage />} />
           <Route path="crm/tasks" element={<TasksPage />} />

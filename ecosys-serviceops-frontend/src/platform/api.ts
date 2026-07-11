@@ -66,6 +66,103 @@ export function useTenantAuditLogs(id: string | undefined) {
   })
 }
 
+export interface PlatformTenantBranding {
+  companyName: string
+  logoUrl: string | null
+  primaryColor: string
+  secondaryColor: string
+  showPoweredByEcosys: boolean
+}
+
+export function useTenantBranding(id: string | undefined) {
+  return useQuery({
+    queryKey: ['platform', 'tenants', id, 'branding'],
+    queryFn: () => api.get<PlatformTenantBranding>(endpoints.platform.tenantBranding(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export interface PlatformTenantUser {
+  id: string
+  fullName: string
+  email: string
+  role: string
+  isActive: boolean
+  jobTitle: string | null
+  createdAt: string
+  lockedOutUntil: string | null
+}
+
+export function useTenantUsers(id: string | undefined) {
+  return useQuery({
+    queryKey: ['platform', 'tenants', id, 'users'],
+    queryFn: () => api.get<PlatformTenantUser[]>(endpoints.platform.tenantUsers(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export interface PlatformTenantNumbering {
+  id: string
+  documentType: string
+  prefix: string
+  suffix: string | null
+  nextNumber: number
+  paddingLength: number
+  resetFrequency: string
+  isActive: boolean
+  lastResetAt: string | null
+}
+
+export function useTenantNumbering(id: string | undefined) {
+  return useQuery({
+    queryKey: ['platform', 'tenants', id, 'numbering'],
+    queryFn: () => api.get<PlatformTenantNumbering[]>(endpoints.platform.tenantNumbering(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export interface PlatformTenantDocumentDesign {
+  documentType: string
+  isCustomised: boolean
+}
+
+export function useTenantDocumentDesigns(id: string | undefined) {
+  return useQuery({
+    queryKey: ['platform', 'tenants', id, 'document-designs'],
+    queryFn: () => api.get<PlatformTenantDocumentDesign[]>(endpoints.platform.tenantDocumentDesigns(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export interface PlatformTenantFinanceSummary {
+  invoiceCount: number
+  totalInvoiced: number
+  totalPaid: number
+  outstandingBalance: number
+  overdueCount: number
+}
+
+export function useTenantFinanceSummary(id: string | undefined) {
+  return useQuery({
+    queryKey: ['platform', 'tenants', id, 'finance-summary'],
+    queryFn: () => api.get<PlatformTenantFinanceSummary>(endpoints.platform.tenantFinanceSummary(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export interface PlatformTenantModuleSetting {
+  moduleKey: string
+  updatedAt: string
+}
+
+export function useTenantModuleSettings(id: string | undefined) {
+  return useQuery({
+    queryKey: ['platform', 'tenants', id, 'module-settings'],
+    queryFn: () => api.get<PlatformTenantModuleSetting[]>(endpoints.platform.tenantModuleSettings(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
 export interface CreateTenantPayload {
   companyName: string
   slug?: string
