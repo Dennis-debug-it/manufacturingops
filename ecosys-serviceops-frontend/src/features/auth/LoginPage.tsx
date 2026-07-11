@@ -111,20 +111,25 @@ export function LoginPage() {
         </div>
       </div>
 
-      {/* Operational control — real technicians photo with tagline overlay */}
-      <div className="relative hidden overflow-hidden bg-gradient-to-br from-slate-800 to-slate-950 lg:block">
-        <img
-          src="/ecosys-technicians.jpg"
-          alt="ECOSYS technicians reviewing operations on a tablet"
-          className="absolute inset-0 h-full w-full object-cover"
-          onError={(event) => { event.currentTarget.style.display = 'none' }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/30 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-12">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">Operational control</p>
-          <h2 className="mt-4 max-w-xl text-4xl font-semibold tracking-tight text-white">
-            Command field service, finance, and platform operations from one system.
-          </h2>
+      {/* Operational control — real technicians photo (chamfered) with tagline overlay */}
+      <div className="relative hidden bg-white p-6 lg:block">
+        <div
+          className="relative h-full w-full bg-gradient-to-br from-slate-800 to-slate-950"
+          style={{ clipPath: 'polygon(36px 0, calc(100% - 36px) 0, 100% 36px, 100% calc(100% - 36px), calc(100% - 36px) 100%, 36px 100%, 0 calc(100% - 36px), 0 36px)' }}
+        >
+          <img
+            src="/ecosys-technicians.jpg"
+            alt="ECOSYS technicians reviewing operations on a tablet"
+            className="absolute inset-0 h-full w-full object-cover"
+            onError={(event) => { event.currentTarget.style.display = 'none' }}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/30 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 p-12">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">Operational control</p>
+            <h2 className="mt-4 max-w-xl text-4xl font-semibold tracking-tight text-white">
+              Command field service, finance, and platform operations from one system.
+            </h2>
+          </div>
         </div>
       </div>
     </div>
