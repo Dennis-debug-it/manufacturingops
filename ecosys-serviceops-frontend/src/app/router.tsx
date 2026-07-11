@@ -17,6 +17,7 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage'
 import { ImpersonationEntryPage } from '../features/auth/ImpersonationEntryPage'
+import { LandingPage } from '../features/public/LandingPage'
 import { RequestDemoPage } from '../features/public/RequestDemoPage'
 import { DemoConfirmationPage } from '../features/public/DemoConfirmationPage'
 import { ForbiddenPage } from '../features/public/ForbiddenPage'
@@ -212,7 +213,7 @@ function HomeRedirect() {
     return <Spinner label="Opening ECOSYS" />
   }
   if (!isAuthenticated || !user) {
-    return <Navigate to="/login" replace />
+    return <LandingPage />
   }
   if (user.role === 'super_admin' || user.role === 'platform_sales') {
     return <Navigate to="/platform/overview" replace />
