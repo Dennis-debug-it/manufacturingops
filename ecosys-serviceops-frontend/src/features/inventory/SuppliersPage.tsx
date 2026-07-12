@@ -10,6 +10,7 @@ import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { useCreateSupplier, useSupplier, useSuppliers, type SupplierListItem } from './purchaseOrdersApi'
+import { InventoryTabNav } from './components/InventoryTabNav'
 
 export function SuppliersPage() {
   const canEdit = usePermission('inventory.edit')
@@ -53,6 +54,7 @@ export function SuppliersPage() {
           ) : undefined
         }
       />
+      <InventoryTabNav />
       <DataTable
         columns={columns}
         data={data ?? []}

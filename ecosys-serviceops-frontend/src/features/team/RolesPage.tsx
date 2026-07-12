@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { cn } from '../../shared/utils/cn'
+import { TeamTabNav } from './components/TeamTabNav'
 
 const permissionLabels: Array<{ key: string; label: string }> = [
   { key: 'canViewWorkOrders', label: 'View Work Orders' },
@@ -32,6 +33,7 @@ export function RolesPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Roles" subtitle="System-defined roles and permissions summary." />
+      <TeamTabNav />
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         The backend's tenant user model is binary — a user's <code className="rounded bg-white/60 px-1 py-0.5 text-xs">Role</code> field

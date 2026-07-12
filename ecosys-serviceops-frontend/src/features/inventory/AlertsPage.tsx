@@ -7,6 +7,7 @@ import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useLowStockMaterials, useReplenishMaterial } from './api'
 import type { Material } from './types'
+import { InventoryTabNav } from './components/InventoryTabNav'
 
 function severity(material: Material): 'Critical' | 'Low' {
   return material.reorderLevel > 0 && material.quantityOnHand <= material.reorderLevel * 0.5 ? 'Critical' : 'Low'
@@ -77,6 +78,7 @@ export function AlertsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Stock Alerts" subtitle="Critical and low stock items with suggested replenishment." />
+      <InventoryTabNav />
       <DataTable columns={columns} data={rows} loading={isLoading} emptyTitle={isError ? 'Alerts unavailable' : 'No low stock items'} emptyDescription={isError ? 'Low-stock materials could not be loaded.' : 'All parts are above their reorder level.'} />
       {selected ? <ReplenishForm material={selected} onClose={() => setSelected(null)} /> : null}
     </div>

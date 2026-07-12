@@ -4,6 +4,7 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { formatDateTime } from '../../shared/utils/dates'
 import { useStockTransfers } from './api'
 import type { StockTransfer } from './types'
+import { InventoryTabNav } from './components/InventoryTabNav'
 
 export function MovementsPage() {
   const { data, isLoading, isError } = useStockTransfers()
@@ -23,6 +24,7 @@ export function MovementsPage() {
         title="Stock Movements"
         subtitle="Branch-to-branch stock transfers. Per-part movement history (receipts, adjustments, job usage) lives on each Part Detail page's Movement History tab — there is no single global movement feed on the backend, so this page shows the transfer log, which is the only tenant-wide movement resource."
       />
+      <InventoryTabNav />
       <DataTable columns={columns} data={data ?? []} loading={isLoading} emptyTitle={isError ? 'Movements unavailable' : 'No transfers'} emptyDescription={isError ? 'Stock transfers could not be loaded.' : 'Branch-to-branch stock transfers will appear here.'} />
     </div>
   )

@@ -11,6 +11,7 @@ import { formatCurrency } from '../../shared/utils/format'
 import { useMaterials } from './api'
 import { useVans } from './vansApi'
 import type { Material } from './types'
+import { InventoryTabNav } from './components/InventoryTabNav'
 
 export function StockPage() {
   const [view, setView] = useState<'all' | 'by-branch'>('all')
@@ -72,6 +73,7 @@ export function StockPage() {
           </div>
         }
       />
+      <InventoryTabNav />
 
       <Link to="/inventory/vans" className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
         <span className="flex items-center gap-2">

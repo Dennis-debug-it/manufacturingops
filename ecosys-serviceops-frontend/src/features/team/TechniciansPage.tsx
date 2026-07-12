@@ -7,6 +7,7 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { useTeamManagementOverview } from './api'
 import type { TeamManagementProfile } from './types'
+import { TeamTabNav } from './components/TeamTabNav'
 
 export function TechniciansPage() {
   const [search, setSearch] = useState('')
@@ -30,6 +31,7 @@ export function TechniciansPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Technicians" subtitle="Technician list, skills, and availability." />
+      <TeamTabNav />
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">

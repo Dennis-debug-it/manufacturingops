@@ -9,6 +9,7 @@ import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useCreateCertification, useDeleteCertification, useTeamManagementOverview } from './api'
 import type { CertificationDefinition } from './types'
+import { TeamTabNav } from './components/TeamTabNav'
 
 export function SkillsPage() {
   const canManage = usePermission('team.manage')
@@ -80,6 +81,7 @@ export function SkillsPage() {
           ) : undefined
         }
       />
+      <TeamTabNav />
 
       <DataTable columns={columns} data={data?.certifications ?? []} loading={isLoading} emptyTitle={isError ? 'Skills unavailable' : 'No skills yet'} emptyDescription={isError ? 'Certifications could not be loaded.' : 'Add your first skill or certification type.'} />
 

@@ -8,6 +8,7 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDateTime } from '../../shared/utils/dates'
 import { useApproveMaterialRequest, useCloseMaterialRequest, useIssueMaterialRequest, useMaterialRequests } from './api'
 import type { MaterialRequest } from './types'
+import { InventoryTabNav } from './components/InventoryTabNav'
 
 type PendingAction = { id: string; type: 'approve' | 'issue' | 'close' } | null
 
@@ -71,6 +72,7 @@ export function RestockRequestsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Restock Requests" subtitle="Approval workflow: Pending → Approved → Issued → Closed." />
+      <InventoryTabNav />
       <DataTable columns={columns} data={data ?? []} loading={isLoading} emptyTitle={isError ? 'Requests unavailable' : 'No restock requests'} emptyDescription={isError ? 'Material requests could not be loaded.' : 'Requests raised against work orders will appear here.'} />
     </div>
   )

@@ -8,6 +8,7 @@ import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { useMaterialIssues, useMaterials, useStockTransfers } from './api'
 import { usePurchaseOrders, type PurchaseOrderListItem } from './purchaseOrdersApi'
 import type { Material } from './types'
+import { InventoryTabNav } from './components/InventoryTabNav'
 
 const tabs = [
   { id: 'valuation', label: 'Stock Valuation' },
@@ -68,6 +69,7 @@ export function ReportsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Inventory Reports" subtitle="Stock valuation, usage, purchase order, and movement reports." />
+      <InventoryTabNav />
 
       <div className="flex flex-wrap gap-2">
         {tabs.map((option) => (

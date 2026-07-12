@@ -9,6 +9,7 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
+import { InventoryTabNav } from './components/InventoryTabNav'
 import {
   useCreatePurchaseOrder,
   usePurchaseOrder,
@@ -84,6 +85,7 @@ export function PurchaseOrdersPage() {
           ) : undefined
         }
       />
+      <InventoryTabNav />
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         {statusOptions.map((status) => (
           <button

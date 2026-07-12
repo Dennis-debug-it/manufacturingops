@@ -24,6 +24,8 @@ import {
   type TimesheetView,
 } from './timeAttendance/api'
 import { useTechnicians } from './api'
+import { usePermission } from '../../shared/hooks/usePermission'
+import { TeamTabNav } from './components/TeamTabNav'
 
 
 export function LiveAttendancePage() {
@@ -42,6 +44,7 @@ export function LiveAttendancePage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Live Attendance" subtitle="Real-time clock status across the technician team." />
+      <TeamTabNav />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Clocked In" value={summary?.clockedIn ?? 0} icon={<CircleCheck className="h-5 w-5 text-emerald-500" />} tone="success" />
         <StatCard label="On Break" value={summary?.onBreak ?? 0} icon={<Coffee className="h-5 w-5 text-amber-500" />} tone="warning" />
@@ -174,6 +177,7 @@ export function TimesheetDetailPage() {
 const leaveStatusOptions: Array<LeaveRequestStatus | 'All'> = ['All', 'Pending', 'Approved', 'Rejected']
 
 export function LeavePage() {
+  const canManage = usePermission('team.manage')
   const [statusFilter, setStatusFilter] = useState<LeaveRequestStatus | 'All'>('All')
   const { data, isLoading } = useLeaveRequests(statusFilter)
   const { data: technicians } = useTechnicians()
@@ -203,7 +207,9 @@ export function LeavePage() {
     { key: 'endDate', header: 'To', cell: (row) => formatDate(row.endDate) },
     { key: 'totalDays', header: 'Days', cell: (row) => row.totalDays },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
-    { key: 'actions', header: '', cell: (row) => <LeaveRowActions request={row} /> },
+    ...(canManage
+      ? [{ key: 'actions', header: '', cell: (row) => <LeaveRowActions request={row} /> } satisfies DataTableColumn<LeaveRequestItem>]
+      : []),
   ]
 
   return (
@@ -212,9 +218,11 @@ export function LeavePage() {
         title="Leave"
         subtitle="Leave requests, approvals, and balances."
         primaryAction={
-          <button type="button" onClick={() => setShowNewRequest(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
-            <Plus className="h-4 w-4" />New Leave Request
-          </button>
+          canManage ? (
+            <button type="button" onClick={() => setShowNewRequest(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+              <Plus className="h-4 w-4" />New Leave Request
+            </button>
+          ) : undefined
         }
       />
       <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">

@@ -17,6 +17,7 @@ import {
   useUpdateAssignmentGroup,
 } from './api'
 import type { AssignmentGroup } from './types'
+import { TeamTabNav } from './components/TeamTabNav'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -240,6 +241,7 @@ export function GroupsPage() {
           ) : undefined
         }
       />
+      <TeamTabNav />
 
       <DataTable columns={columns} data={data ?? []} loading={isLoading} emptyTitle={isError ? 'Groups unavailable' : 'No groups yet'} emptyDescription={isError ? 'Assignment groups could not be loaded.' : 'Create your first assignment group.'} />
 

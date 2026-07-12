@@ -11,6 +11,7 @@ import { useMaterials } from './api'
 import { MaterialBulkImportDrawer } from './components/MaterialBulkImportDrawer'
 import { PartFormDrawer } from './components/PartFormDrawer'
 import type { Material } from './types'
+import { InventoryTabNav } from './components/InventoryTabNav'
 
 export function PartsPage() {
   const canManage = usePermission('inventory.materials.manage')
@@ -52,6 +53,7 @@ export function PartsPage() {
           ) : undefined
         }
       />
+      <InventoryTabNav />
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">

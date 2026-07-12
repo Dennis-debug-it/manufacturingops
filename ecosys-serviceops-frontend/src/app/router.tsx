@@ -37,6 +37,7 @@ import { MovementsPage } from '../features/inventory/MovementsPage'
 import { PurchaseOrdersPage, PurchaseOrderDetailPage } from '../features/inventory/PurchaseOrdersPage'
 import { SuppliersPage, SupplierDetailPage } from '../features/inventory/SuppliersPage'
 import { RestockRequestsPage } from '../features/inventory/RestockRequestsPage'
+import { MaterialIssuesPage } from '../features/inventory/MaterialIssuesPage'
 import { VansPage } from '../features/inventory/VansPage'
 import { VanDetailPage } from '../features/inventory/VanDetailPage'
 import { AlertsPage as InventoryAlertsPageReal } from '../features/inventory/AlertsPage'
@@ -258,6 +259,7 @@ export function AppRouter() {
       ['/inventory/suppliers', InventorySuppliersPage],
       ['/inventory/suppliers/:id', InventorySupplierDetailPage],
       ['/inventory/restock-requests', InventoryRestockRequestsPage],
+      ['/inventory/issues', MaterialIssuesPage],
       ['/inventory/alerts', InventoryAlertsPage],
       ['/inventory/reports', InventoryReportsPage],
       ['/team', TeamUsersPage],

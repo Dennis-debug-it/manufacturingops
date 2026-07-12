@@ -9,6 +9,7 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { useTeamUsers } from './api'
 import { NewUserFormDrawer } from './components/NewUserFormDrawer'
 import type { TeamUser } from './types'
+import { TeamTabNav } from './components/TeamTabNav'
 
 export function UsersPage() {
   const canManage = usePermission('team.manage')
@@ -44,6 +45,7 @@ export function UsersPage() {
           ) : undefined
         }
       />
+      <TeamTabNav />
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">
