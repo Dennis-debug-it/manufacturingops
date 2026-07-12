@@ -87,6 +87,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<MonitoringWebhookIntegration> MonitoringWebhookIntegrations => Set<MonitoringWebhookIntegration>();
     public DbSet<TenantApiKey> TenantApiKeys => Set<TenantApiKey>();
     public DbSet<TenantWebhook> TenantWebhooks => Set<TenantWebhook>();
+    public DbSet<TenantWebhookDelivery> TenantWebhookDeliveries => Set<TenantWebhookDelivery>();
     public DbSet<NotificationSetting> NotificationSettings => Set<NotificationSetting>();
     public DbSet<PlatformQuotation> PlatformQuotations => Set<PlatformQuotation>();
     public DbSet<PlatformQuotationLine> PlatformQuotationLines => Set<PlatformQuotationLine>();
@@ -1593,6 +1594,24 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Tenant)
                 .WithMany()
                 .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TenantWebhookDelivery>(entity =>
+        {
+            entity.ToTable("tenant_webhook_deliveries");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Event).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ErrorMessage).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.WebhookId, x.AttemptedAt });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Webhook)
+                .WithMany()
+                .HasForeignKey(x => x.WebhookId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

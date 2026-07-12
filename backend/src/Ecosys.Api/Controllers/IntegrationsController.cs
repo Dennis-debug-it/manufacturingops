@@ -144,6 +144,62 @@ public sealed class IntegrationsController(
         return CreatedAtAction(nameof(GetWebhooks), new WebhookCreatedResponse(item.Id, item.Url, events, "Active", item.CreatedAt, rawSecret));
     }
 
+    [HttpPut("webhooks/{id:guid}")]
+    public async Task<ActionResult<WebhookResponse>> UpdateWebhook(Guid id, [FromBody] UpdateWebhookRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+
+        var item = await dbContext.TenantWebhooks
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Webhook was not found.");
+
+        if (string.IsNullOrWhiteSpace(request.Url) || !Uri.TryCreate(request.Url, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new BusinessRuleException("A valid https:// endpoint URL is required.");
+        }
+
+        var events = (request.Events ?? []).Select(e => e.Trim()).Where(e => e.Length > 0).Distinct().ToList();
+        if (events.Count == 0)
+        {
+            throw new BusinessRuleException("At least one event must be selected.");
+        }
+
+        var unknown = events.Where(e => !AllowedWebhookEvents.Contains(e)).ToList();
+        if (unknown.Count > 0)
+        {
+            throw new BusinessRuleException($"Unknown event(s): {string.Join(", ", unknown)}.");
+        }
+
+        item.Url = request.Url.Trim();
+        item.EventsJson = JsonSerializer.Serialize(events);
+        item.IsActive = request.IsActive;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditLogService.LogAsync(TenantId, UserId, "settings.webhook.updated", nameof(TenantWebhook), item.Id.ToString(), $"Webhook '{item.Url}' updated.", cancellationToken: cancellationToken);
+        return Ok(MapWebhook(item));
+    }
+
+    [HttpGet("webhooks/{id:guid}/delivery-log")]
+    public async Task<ActionResult<IReadOnlyCollection<WebhookDeliveryResponse>>> GetWebhookDeliveryLog(Guid id, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+
+        var exists = await dbContext.TenantWebhooks.AnyAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken);
+        if (!exists)
+        {
+            throw new NotFoundException("Webhook was not found.");
+        }
+
+        var deliveries = await dbContext.TenantWebhookDeliveries
+            .Where(x => x.TenantId == TenantId && x.WebhookId == id)
+            .OrderByDescending(x => x.AttemptedAt)
+            .Take(50)
+            .Select(x => new WebhookDeliveryResponse(x.Id, x.Event, x.Status, x.ResponseStatusCode, x.ErrorMessage, x.DurationMs, x.AttemptedAt))
+            .ToListAsync(cancellationToken);
+
+        return Ok(deliveries);
+    }
+
     [HttpDelete("webhooks/{id:guid}")]
     public async Task<IActionResult> DeleteWebhook(Guid id, CancellationToken cancellationToken)
     {
@@ -178,5 +234,7 @@ public sealed record ApiKeyResponse(Guid Id, string Label, string KeyPrefix, Dat
 public sealed record ApiKeyCreatedResponse(Guid Id, string Label, string KeyPrefix, DateTime CreatedAt, DateTime? LastUsedAt, string Status, string ApiKey);
 
 public sealed record CreateWebhookRequest(string Url, List<string>? Events);
+public sealed record UpdateWebhookRequest(string Url, List<string>? Events, bool IsActive);
 public sealed record WebhookResponse(Guid Id, string Url, IReadOnlyCollection<string> Events, string Status, DateTime CreatedAt);
 public sealed record WebhookCreatedResponse(Guid Id, string Url, IReadOnlyCollection<string> Events, string Status, DateTime CreatedAt, string Secret);
+public sealed record WebhookDeliveryResponse(Guid Id, string Event, string Status, int? ResponseStatusCode, string? ErrorMessage, int? DurationMs, DateTime AttemptedAt);

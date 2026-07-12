@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Plus, KeyRound, Webhook, Trash2, Copy } from 'lucide-react'
+import { Plus, KeyRound, Webhook, Trash2, Copy, Pencil, ScrollText } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
+import { Spinner } from '../../shared/components/Spinner'
+import { EmptyState } from '../../shared/components/EmptyState'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDateTime } from '../../shared/utils/dates'
 import { api } from '../../shared/api/apiClient'
@@ -33,6 +35,16 @@ interface WebhookItem {
 
 interface WebhookCreated extends WebhookItem {
   secret: string
+}
+
+interface WebhookDelivery {
+  id: string
+  event: string
+  status: string
+  responseStatusCode: number | null
+  errorMessage: string | null
+  durationMs: number | null
+  attemptedAt: string
 }
 
 const WEBHOOK_EVENTS = ['work_order.created', 'work_order.completed', 'invoice.issued', 'invoice.paid', 'quotation.accepted']
@@ -69,11 +81,28 @@ function useCreateWebhook() {
   })
 }
 
+function useUpdateWebhook() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...payload }: { id: string; url: string; events: string[]; isActive: boolean }) =>
+      api.put<WebhookItem>(`/api/settings/webhooks/${id}`, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings', 'integrations', 'webhooks'] }),
+  })
+}
+
 function useDeleteWebhook() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api.delete(`/api/settings/webhooks/${id}`),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings', 'integrations', 'webhooks'] }),
+  })
+}
+
+function useWebhookDeliveryLog(id: string | null) {
+  return useQuery({
+    queryKey: ['settings', 'integrations', 'webhooks', id, 'delivery-log'],
+    queryFn: () => api.get<WebhookDelivery[]>(`/api/settings/webhooks/${id}/delivery-log`),
+    enabled: Boolean(id),
   })
 }
 
@@ -89,16 +118,23 @@ export function IntegrationsSettingsPage() {
   const createApiKey = useCreateApiKey()
   const revokeApiKey = useRevokeApiKey()
   const createWebhook = useCreateWebhook()
+  const updateWebhook = useUpdateWebhook()
   const deleteWebhook = useDeleteWebhook()
 
   const [showNewKey, setShowNewKey] = useState(false)
   const [keyLabel, setKeyLabel] = useState('')
   const [revealedKey, setRevealedKey] = useState<string | null>(null)
 
-  const [showNewWebhook, setShowNewWebhook] = useState(false)
+  // webhook drawer doubles as create + edit
+  const [webhookDrawerOpen, setWebhookDrawerOpen] = useState(false)
+  const [editingWebhookId, setEditingWebhookId] = useState<string | null>(null)
   const [webhookUrl, setWebhookUrl] = useState('')
   const [webhookEvents, setWebhookEvents] = useState<string[]>([])
+  const [webhookActive, setWebhookActive] = useState(true)
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null)
+
+  const [logWebhookId, setLogWebhookId] = useState<string | null>(null)
+  const { data: deliveryLog, isLoading: logLoading, isError: logError } = useWebhookDeliveryLog(logWebhookId)
 
   const submitNewKey = async () => {
     const created = await createApiKey.mutateAsync(keyLabel.trim())
@@ -117,13 +153,37 @@ export function IntegrationsSettingsPage() {
     setWebhookEvents((current) => (current.includes(event) ? current.filter((e) => e !== event) : [...current, event]))
   }
 
-  const submitNewWebhook = async () => {
-    const created = await createWebhook.mutateAsync({ url: webhookUrl.trim(), events: webhookEvents })
-    toast.success('Webhook added')
-    setShowNewWebhook(false)
+  const openCreateWebhook = () => {
+    setEditingWebhookId(null)
     setWebhookUrl('')
     setWebhookEvents([])
-    setRevealedSecret(created.secret)
+    setWebhookActive(true)
+    setWebhookDrawerOpen(true)
+  }
+
+  const openEditWebhook = (webhook: WebhookItem) => {
+    setEditingWebhookId(webhook.id)
+    setWebhookUrl(webhook.url)
+    setWebhookEvents(webhook.events)
+    setWebhookActive(webhook.status === 'Active')
+    setWebhookDrawerOpen(true)
+  }
+
+  const submitWebhook = async () => {
+    try {
+      if (editingWebhookId) {
+        await updateWebhook.mutateAsync({ id: editingWebhookId, url: webhookUrl.trim(), events: webhookEvents, isActive: webhookActive })
+        toast.success('Webhook updated')
+        setWebhookDrawerOpen(false)
+      } else {
+        const created = await createWebhook.mutateAsync({ url: webhookUrl.trim(), events: webhookEvents })
+        toast.success('Webhook added')
+        setWebhookDrawerOpen(false)
+        setRevealedSecret(created.secret)
+      }
+    } catch {
+      // interceptor surfaces the error toast
+    }
   }
 
   const removeWebhook = async (id: string) => {
@@ -156,12 +216,33 @@ export function IntegrationsSettingsPage() {
     {
       key: 'actions',
       header: '',
-      cell: (row) => (canManage ? (
-        <button type="button" disabled={deleteWebhook.isPending} onClick={() => void removeWebhook(row.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60">
-          <Trash2 className="h-3.5 w-3.5" />Delete
-        </button>
-      ) : null),
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" onClick={() => setLogWebhookId(row.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+            <ScrollText className="h-3.5 w-3.5" />Log
+          </button>
+          {canManage ? (
+            <>
+              <button type="button" onClick={() => openEditWebhook(row)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                <Pencil className="h-3.5 w-3.5" />Edit
+              </button>
+              <button type="button" disabled={deleteWebhook.isPending} onClick={() => void removeWebhook(row.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60">
+                <Trash2 className="h-3.5 w-3.5" />Delete
+              </button>
+            </>
+          ) : null}
+        </div>
+      ),
     },
+  ]
+
+  const deliveryColumns: DataTableColumn<WebhookDelivery>[] = [
+    { key: 'attemptedAt', header: 'When', cell: (row) => formatDateTime(row.attemptedAt) },
+    { key: 'event', header: 'Event', cell: (row) => <span className="font-mono text-xs">{row.event}</span> },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+    { key: 'responseStatusCode', header: 'HTTP', cell: (row) => (row.responseStatusCode != null ? String(row.responseStatusCode) : '—') },
+    { key: 'durationMs', header: 'Duration', cell: (row) => (row.durationMs != null ? `${row.durationMs} ms` : '—') },
+    { key: 'errorMessage', header: 'Error', cell: (row) => row.errorMessage ?? '—' },
   ]
 
   return (
@@ -218,7 +299,7 @@ export function IntegrationsSettingsPage() {
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Outbound Webhooks</h2>
           </div>
           {canManage ? (
-            <button type="button" onClick={() => setShowNewWebhook(true)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800">
+            <button type="button" onClick={openCreateWebhook} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800">
               <Plus className="h-4 w-4" />Add Webhook
             </button>
           ) : null}
@@ -238,7 +319,7 @@ export function IntegrationsSettingsPage() {
         </div>
       </FormDrawer>
 
-      <FormDrawer open={showNewWebhook} title="Add Webhook" onClose={() => setShowNewWebhook(false)}>
+      <FormDrawer open={webhookDrawerOpen} title={editingWebhookId ? 'Edit Webhook' : 'Add Webhook'} onClose={() => setWebhookDrawerOpen(false)}>
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Endpoint URL</label>
@@ -255,8 +336,28 @@ export function IntegrationsSettingsPage() {
               ))}
             </div>
           </div>
-          <button type="button" disabled={!webhookUrl.trim() || webhookEvents.length === 0 || createWebhook.isPending} onClick={() => void submitNewWebhook()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">Add Webhook</button>
+          {editingWebhookId ? (
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={webhookActive} onChange={(event) => setWebhookActive(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+              Active
+            </label>
+          ) : null}
+          <button type="button" disabled={!webhookUrl.trim() || webhookEvents.length === 0 || createWebhook.isPending || updateWebhook.isPending} onClick={() => void submitWebhook()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
+            {editingWebhookId ? 'Save Changes' : 'Add Webhook'}
+          </button>
         </div>
+      </FormDrawer>
+
+      <FormDrawer open={logWebhookId !== null} title="Webhook Delivery Log" onClose={() => setLogWebhookId(null)}>
+        {logLoading ? (
+          <Spinner label="Loading delivery log" />
+        ) : logError ? (
+          <EmptyState title="Could not load delivery log" description="Something went wrong — try again." />
+        ) : (deliveryLog ?? []).length === 0 ? (
+          <EmptyState icon={ScrollText} title="No deliveries yet" description="Delivery attempts for this webhook will appear here once events fire." />
+        ) : (
+          <DataTable columns={deliveryColumns} data={deliveryLog ?? []} />
+        )}
       </FormDrawer>
     </div>
   )
