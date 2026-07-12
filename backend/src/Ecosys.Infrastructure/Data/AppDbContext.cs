@@ -19,6 +19,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<CsatSurvey> CsatSurveys => Set<CsatSurvey>();
     public DbSet<ClientPortalUser> ClientPortalUsers => Set<ClientPortalUser>();
     public DbSet<ClientPortalLoginToken> ClientPortalLoginTokens => Set<ClientPortalLoginToken>();
     public DbSet<Client> Clients => Set<Client>();
@@ -311,6 +312,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CsatSurvey>(entity =>
+        {
+            entity.ToTable("csat_surveys");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Comment).HasMaxLength(2000);
+            entity.Property(x => x.Channel).HasMaxLength(20);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.WorkOrderId }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.RespondedAt });
+            entity.HasOne(x => x.WorkOrder)
+                .WithMany()
+                .HasForeignKey(x => x.WorkOrderId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

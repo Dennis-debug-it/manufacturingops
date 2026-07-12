@@ -3,8 +3,12 @@ using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Errors;
+using Ecosys.Shared.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace Ecosys.Infrastructure.Services;
@@ -37,6 +41,7 @@ internal sealed class WorkOrderLifecycleService(
     IEmailSubjectRuleService emailSubjectRuleService,
     ISlaService slaService,
     IServiceOpsNotifier serviceOpsNotifier,
+    IOptions<PublicAppOptions> publicAppOptions,
     ILogger<WorkOrderLifecycleService> logger) : IWorkOrderLifecycleService
 {
     public string NormalizeStatus(string status) => WorkOrderStatuses.Normalize(status);
@@ -593,6 +598,7 @@ internal sealed class WorkOrderLifecycleService(
         await slaService.RefreshWorkOrderAsync(workOrder.Id, DateTime.UtcNow, cancellationToken);
         await TryQueueCompletionEmailAsync(tenantId, workOrder, cancellationToken);
         await TryQueueClientCompletedEmailAsync(tenantId, workOrder, cancellationToken);
+        await TryCreateCsatSurveyAsync(tenantId, workOrder, cancellationToken);
         await NotifySafeAsync(tenantId, workOrder.Id, cancellationToken);
         return workOrder;
     }
@@ -921,6 +927,70 @@ internal sealed class WorkOrderLifecycleService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to queue work-order.client.completed email for work order {WorkOrderId}.", workOrder.Id);
+        }
+    }
+
+    private async Task TryCreateCsatSurveyAsync(Guid tenantId, WorkOrder workOrder, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (!workOrder.NotifyClient) return;
+
+            var exists = await dbContext.CsatSurveys
+                .AnyAsync(x => x.TenantId == tenantId && x.WorkOrderId == workOrder.Id, cancellationToken);
+            if (exists) return;
+
+            var client = await dbContext.Clients
+                .Where(x => x.Id == workOrder.ClientId)
+                .Select(x => new { x.Email, x.ClientName })
+                .SingleOrDefaultAsync(cancellationToken);
+
+            var recipientEmail = workOrder.ClientContactEmail ?? client?.Email;
+            if (string.IsNullOrWhiteSpace(recipientEmail)) return;
+
+            var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+                .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+
+            dbContext.CsatSurveys.Add(new CsatSurvey
+            {
+                TenantId = tenantId,
+                WorkOrderId = workOrder.Id,
+                ClientId = workOrder.ClientId,
+                TechnicianId = workOrder.AssignedTechnicianId,
+                TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken))),
+                ExpiresAt = DateTime.UtcNow.AddDays(14),
+                SentAt = DateTime.UtcNow
+            });
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var surveyLink = $"{publicAppOptions.Value.PublicUrl.TrimEnd('/')}/csat/{rawToken}";
+            var template = await emailTemplateService.RenderTenantTemplateAsync(
+                tenantId,
+                "csat.survey",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["WorkOrderNumber"] = workOrder.WorkOrderNumber,
+                    ["ClientName"] = client?.ClientName ?? "Valued Client",
+                    ["SurveyLink"] = surveyLink
+                },
+                cancellationToken);
+
+            if (!template.Enabled) return;
+
+            var subject = await emailSubjectRuleService.BuildFinalSubjectAsync(
+                tenantId, "csat.survey", template.Subject, cancellationToken: cancellationToken);
+
+            await emailOutboxService.QueueEmailAsync(
+                new QueueEmailRequest(
+                    tenantId, "csat.survey", "csat-survey",
+                    recipientEmail, client?.ClientName,
+                    template.SenderNameOverride, null, null,
+                    subject, template.HtmlBody, template.TextBody, null),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to create CSAT survey for work order {WorkOrderId}.", workOrder.Id);
         }
     }
 

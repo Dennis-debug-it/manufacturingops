@@ -78,3 +78,23 @@ export function useAssetReliability(params: { from?: string; to?: string; client
     staleTime: 30_000,
   })
 }
+
+export interface CsatReport {
+  sentCount: number
+  responseCount: number
+  responseRate: number
+  averageScore: number | null
+  scoreDistribution: Array<{ score: number; count: number }>
+  monthlyTrend: Array<{ month: string; averageScore: number; responseCount: number }>
+  byTechnician: Array<{ technicianId: string; technicianName: string; averageScore: number; responseCount: number }>
+  byClient: Array<{ clientId: string; clientName: string; averageScore: number; responseCount: number }>
+  recentComments: Array<{ score: number; comment: string; respondedAt: string; clientName: string | null }>
+}
+
+export function useCsatReport(params: { from?: string; to?: string; clientId?: string }) {
+  return useQuery({
+    queryKey: ['reports', 'csat', params],
+    queryFn: () => api.get<CsatReport>(endpoints.reports.csat, params),
+    staleTime: 30_000,
+  })
+}

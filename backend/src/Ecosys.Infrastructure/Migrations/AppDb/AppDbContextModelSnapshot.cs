@@ -2028,6 +2028,70 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("crm_tasks", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.CsatSurvey", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Channel")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Score")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("TechnicianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("WorkOrderId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("WorkOrderId");
+
+                    b.HasIndex("TenantId", "RespondedAt");
+
+                    b.HasIndex("TenantId", "WorkOrderId")
+                        .IsUnique();
+
+                    b.ToTable("csat_surveys", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.EmailDeliveryLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -9438,6 +9502,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("RelatedContact");
 
                     b.Navigation("RelatedLead");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.CsatSurvey", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.WorkOrder", "WorkOrder")
+                        .WithMany()
+                        .HasForeignKey("WorkOrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("WorkOrder");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.EmailDeliveryLog", b =>

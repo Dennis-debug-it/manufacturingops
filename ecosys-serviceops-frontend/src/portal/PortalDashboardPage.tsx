@@ -5,6 +5,7 @@ import { Spinner } from '../shared/components/Spinner'
 import { StatCard } from '../shared/components/StatCard'
 import { usePortalAuth } from './auth/PortalAuthContext'
 import { usePortalDashboardSummary } from './api'
+import { PortalCsatPrompt } from './components/PortalCsatPrompt'
 
 export function PortalDashboardPage() {
   const { user } = usePortalAuth()
@@ -21,6 +22,7 @@ export function PortalDashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader title={`Welcome, ${user?.fullName ?? 'there'}`} subtitle="Here's what's happening across your account." />
+      <PortalCsatPrompt />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link to="/portal/requests"><StatCard label="Open Requests" value={data.openWorkOrders} icon={<Wrench className="h-4 w-4 text-slate-400" />} /></Link>
         <Link to="/portal/requests"><StatCard label="Overdue Requests" value={data.overdueWorkOrders} tone={data.overdueWorkOrders > 0 ? 'danger' : 'default'} icon={<AlertTriangle className="h-4 w-4 text-slate-400" />} /></Link>

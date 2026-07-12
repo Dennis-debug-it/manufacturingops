@@ -14,7 +14,7 @@ import { endpoints } from '../../shared/api/endpoints'
 import { useWorkOrders } from '../work-orders/api'
 import { useFinanceDashboard } from '../finance/api'
 import { usePmComplianceReport } from '../maintenance/api'
-import { useAssetReliability, useTechnicianProductivity, useWorkOrderPerformance } from './api'
+import { useAssetReliability, useCsatReport, useTechnicianProductivity, useWorkOrderPerformance } from './api'
 
 const tabs = [
   { id: 'wo-performance', label: 'Work Order' },
@@ -35,6 +35,7 @@ export function ReportsPage() {
   const { data: assetReliability } = useAssetReliability({ from, to })
   const { data: pmCompliance, isLoading: pmLoading } = usePmComplianceReport({ from, to })
   const { data: financeDashboard, isLoading: financeLoading } = useFinanceDashboard()
+  const { data: csat, isLoading: csatLoading } = useCsatReport({ from, to })
   const { data: workOrders } = useWorkOrders()
 
   const slaCounts = useMemo(() => {
@@ -171,7 +172,87 @@ export function ReportsPage() {
       ) : null}
 
       {tab === 'csat' ? (
-        <EmptyState title="Pending backend CSAT endpoint" description="No customer-satisfaction survey/CSAT controller exists in the current backend — this tab is a shell until one is available." />
+        csatLoading ? (
+          <Spinner label="Loading CSAT report" />
+        ) : !csat || csat.sentCount === 0 ? (
+          <EmptyState title="No surveys sent yet" description="CSAT surveys are emailed to clients automatically when work orders are completed. Results will appear here." />
+        ) : (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard label="Average Score" value={csat.averageScore != null ? `${csat.averageScore} / 5` : '—'} tone={csat.averageScore != null && csat.averageScore >= 4 ? 'success' : csat.averageScore != null && csat.averageScore < 3 ? 'warning' : 'default'} />
+              <StatCard label="Surveys Sent" value={csat.sentCount} />
+              <StatCard label="Responses" value={csat.responseCount} />
+              <StatCard label="Response Rate" value={`${csat.responseRate}%`} />
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Score Distribution</h3>
+                <div className="mt-4 space-y-2">
+                  {csat.scoreDistribution.slice().reverse().map((row) => {
+                    const max = Math.max(1, ...csat.scoreDistribution.map((r) => r.count))
+                    return (
+                      <div key={row.score} className="flex items-center gap-3 text-sm">
+                        <span className="w-14 shrink-0 text-slate-600">{row.score} star{row.score > 1 ? 's' : ''}</span>
+                        <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
+                          <div className="h-full rounded-full bg-amber-400" style={{ width: `${(row.count / max) * 100}%` }} />
+                        </div>
+                        <span className="w-8 shrink-0 text-right text-slate-700">{row.count}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Monthly Trend</h3>
+                <DataTable
+                  className="mt-4"
+                  columns={[
+                    { key: 'month', header: 'Month', cell: (row) => row.month },
+                    { key: 'averageScore', header: 'Avg Score', cell: (row) => `${row.averageScore} / 5` },
+                    { key: 'responseCount', header: 'Responses', cell: (row) => row.responseCount },
+                  ]}
+                  data={csat.monthlyTrend.map((row) => ({ id: row.month, ...row }))}
+                  emptyTitle="No responses yet"
+                  emptyDescription="Trend appears once clients start responding."
+                />
+              </section>
+            </div>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-900">By Technician</h3>
+              <DataTable
+                className="mt-4"
+                columns={[
+                  { key: 'technicianName', header: 'Technician', cell: (row) => row.technicianName },
+                  { key: 'averageScore', header: 'Avg Score', cell: (row) => `${row.averageScore} / 5` },
+                  { key: 'responseCount', header: 'Responses', cell: (row) => row.responseCount },
+                ]}
+                data={csat.byTechnician.map((row) => ({ id: row.technicianId, ...row }))}
+                emptyTitle="No technician ratings yet"
+                emptyDescription="Scores are attributed to the lead technician on each work order."
+              />
+            </section>
+
+            {csat.recentComments.length > 0 ? (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-sm font-semibold text-slate-900">Recent Comments</h3>
+                <ul className="mt-4 space-y-3">
+                  {csat.recentComments.map((row, index) => (
+                    <li key={index} className="rounded-xl border border-slate-200 px-4 py-3">
+                      <div className="flex items-center justify-between text-xs text-slate-500">
+                        <span>{row.clientName ?? 'Client'}</span>
+                        <span>{row.score} / 5</span>
+                      </div>
+                      <p className="mt-1 text-sm leading-6 text-slate-700">{row.comment}</p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </div>
+        )
       ) : null}
     </div>
   )

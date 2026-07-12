@@ -107,6 +107,7 @@ public sealed class WorkOrderLifecycleStateTests
             new StubEmailSubjectRuleService(),
             slaService ?? new NoOpSlaService(),
             new NoOpServiceOpsNotifier(),
+            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.PublicAppOptions()),
             NullLogger<WorkOrderLifecycleService>.Instance);
 
     private static SlaService CreateSlaService(AppDbContext dbContext) =>

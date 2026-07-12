@@ -25,6 +25,7 @@ public sealed class PreventiveMaintenanceFlowTests
             new StubEmailSubjectRuleService(),
             new NoOpSlaService(),
             new NoOpServiceOpsNotifier(),
+            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.PublicAppOptions()),
             NullLogger<WorkOrderLifecycleService>.Instance);
 
         var result = await service.CompleteAsync(

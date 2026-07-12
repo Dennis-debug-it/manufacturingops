@@ -215,6 +215,7 @@ export const endpoints = {
     assetReliabilityExport: '/api/reports/asset-reliability/export',
     pmCompliance: '/api/reports/pm-compliance',
     pmComplianceExport: '/api/reports/pm-compliance/export',
+    csat: '/api/reports/csat',
   },
   preventiveMaintenance: {
     list: '/api/preventive-maintenance',
