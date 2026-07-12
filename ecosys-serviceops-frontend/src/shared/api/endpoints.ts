@@ -202,6 +202,12 @@ export const endpoints = {
     previewSites: '/api/import/sites/preview',
     commitSites: '/api/import/sites/commit',
   },
+  approvals: {
+    matrices: '/api/settings/approval-matrices',
+    matrix: (documentType: string) => `/api/settings/approval-matrices/${documentType}`,
+    pending: '/api/approvals/pending',
+    decide: (requestId: string) => `/api/approvals/${requestId}/decision`,
+  },
   starterPacks: {
     list: '/api/starter-packs',
     install: (id: string) => `/api/starter-packs/${id}/install`,

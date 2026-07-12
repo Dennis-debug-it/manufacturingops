@@ -99,6 +99,8 @@ import { PaymentsSettingsPage as SettingsPaymentsPageReal } from '../features/se
 import { PortalSettingsPage as SettingsPortalPageReal } from '../features/settings/PortalSettingsPage'
 import { IntegrationsSettingsPage as SettingsIntegrationsPageReal } from '../features/settings/IntegrationsSettingsPage'
 import { ExecutiveDashboardSettingsPage as SettingsExecutiveDashboardPageReal } from '../features/settings/ExecutiveDashboardSettingsPage'
+import { ApprovalMatrixSettingsPage } from '../features/settings/ApprovalMatrixSettingsPage'
+import { MyApprovalsPage } from '../features/approvals/MyApprovalsPage'
 import { WhatsAppInboxPage } from '../features/whatsapp/WhatsAppInboxPage'
 import { PlatformApp } from '../platform/PlatformApp'
 import { PortalApp } from '../portal/PortalApp'
@@ -324,6 +326,8 @@ export function AppRouter() {
       ['/settings/executive-dashboard', SettingsExecutiveDashboardPage],
       ['/settings/account', SettingsAccountPage],
       ['/settings/audit-logs', SettingsAuditLogsPage],
+      ['/settings/approval-matrix', ApprovalMatrixSettingsPage],
+      ['/approvals', MyApprovalsPage],
       ['/onboarding', OnboardingPage],
     ] as const,
     [],

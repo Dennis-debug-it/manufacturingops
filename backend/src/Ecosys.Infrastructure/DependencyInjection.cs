@@ -72,12 +72,14 @@ public static class DependencyInjection
         services.AddScoped<IContractOperationalService, ContractOperationalService>();
         services.AddSingleton<IPdfRenderer, QuestPdfRenderer>();
         services.AddScoped<IScheduledReportService, ScheduledReportService>();
+        services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
         services.AddHostedService<EmailOutboxWorker>();
         services.AddHostedService<TrialLifecycleWorker>();
         services.AddHostedService<PmSchedulerWorker>();
         services.AddHostedService<SlaEnforcementWorker>();
         services.AddHostedService<ContractReminderWorker>();
         services.AddHostedService<ScheduledReportWorker>();
+        services.AddHostedService<ApprovalReminderWorker>();
 
         return services;
     }

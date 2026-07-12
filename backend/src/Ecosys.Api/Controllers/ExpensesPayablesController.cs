@@ -17,6 +17,7 @@ public sealed class ExpensesPayablesController(
     ITenantContext tenantContext,
     IDocumentNumberingService documentNumberingService,
     IAuditLogService auditLogService,
+    IApprovalWorkflowService approvalWorkflowService,
     IUserAccessService userAccessService) : TenantAwareControllerBase(tenantContext)
 {
     // ── Expense claims ─────────────────────────────────────────────────────────
@@ -76,6 +77,12 @@ public sealed class ExpensesPayablesController(
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "finance.expense.submitted", nameof(Expense), expense.Id.ToString(), $"Expense {expense.ClaimNumber} submitted ({expense.Currency} {expense.Amount:N2})", cancellationToken);
 
+        // If an approval matrix is configured for expenses, start the chain. Otherwise the
+        // existing single-decision flow (POST decision) continues to apply unchanged.
+        await approvalWorkflowService.StartAsync(
+            TenantId, ApprovalDocumentTypes.Expense, expense.Id, expense.ClaimNumber,
+            expense.Amount, expense.Currency, UserId, cancellationToken);
+
         return Ok(MapExpenseListItem(expense));
     }
 
@@ -83,11 +90,22 @@ public sealed class ExpensesPayablesController(
     public async Task<IActionResult> DecideExpense(
         Guid id, [FromBody] ExpenseDecisionRequest request, CancellationToken cancellationToken)
     {
-        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.FinanceManageApprovals, PermissionNames.FinanceManage);
         var expense = await LoadExpenseAsync(id, cancellationToken);
 
         if (expense.Status is not ("Submitted" or "Draft"))
             throw new BusinessRuleException($"A {expense.Status.ToLowerInvariant()} expense cannot be decided.");
+
+        // When an approval matrix governs this expense, route the decision through the
+        // workflow (which enforces the per-level approver rules and applies the outcome).
+        var activeRequest = await approvalWorkflowService.GetActiveForDocumentAsync(
+            TenantId, ApprovalDocumentTypes.Expense, expense.Id, cancellationToken);
+        if (activeRequest is not null)
+        {
+            await approvalWorkflowService.DecideAsync(TenantId, activeRequest.Id, request.Approve, null, cancellationToken);
+            return NoContent();
+        }
+
+        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.FinanceManageApprovals, PermissionNames.FinanceManage);
 
         var approverName = await dbContext.Users
             .Where(x => x.Id == UserId).Select(x => x.FullName).FirstOrDefaultAsync(cancellationToken) ?? "Unknown";

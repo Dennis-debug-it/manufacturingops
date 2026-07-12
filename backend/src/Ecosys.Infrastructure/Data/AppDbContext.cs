@@ -20,6 +20,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<CsatSurvey> CsatSurveys => Set<CsatSurvey>();
+    public DbSet<ApprovalMatrix> ApprovalMatrices => Set<ApprovalMatrix>();
+    public DbSet<ApprovalLevel> ApprovalLevels => Set<ApprovalLevel>();
+    public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
+    public DbSet<ApprovalRequestStep> ApprovalRequestSteps => Set<ApprovalRequestStep>();
     public DbSet<ClientPortalUser> ClientPortalUsers => Set<ClientPortalUser>();
     public DbSet<ClientPortalLoginToken> ClientPortalLoginTokens => Set<ClientPortalLoginToken>();
     public DbSet<Client> Clients => Set<Client>();
@@ -313,6 +317,63 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ApprovalMatrix>(entity =>
+        {
+            entity.ToTable("approval_matrices");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DocumentType).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Currency).HasMaxLength(8);
+            entity.HasIndex(x => new { x.TenantId, x.DocumentType }).IsUnique();
+            entity.HasMany(x => x.Levels)
+                .WithOne(x => x.Matrix)
+                .HasForeignKey(x => x.ApprovalMatrixId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ApprovalLevel>(entity =>
+        {
+            entity.ToTable("approval_levels");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.MinAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.MaxAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.ApproverType).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.RequiredPermission).HasMaxLength(128);
+            entity.Property(x => x.ApproverUserIdsCsv).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.ApprovalMatrixId, x.LevelOrder }).IsUnique();
+        });
+
+        modelBuilder.Entity<ApprovalRequest>(entity =>
+        {
+            entity.ToTable("approval_requests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DocumentType).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.DocumentNumber).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Currency).HasMaxLength(8);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.DocumentType, x.DocumentId });
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasMany(x => x.Steps)
+                .WithOne(x => x.Request)
+                .HasForeignKey(x => x.ApprovalRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ApprovalRequestStep>(entity =>
+        {
+            entity.ToTable("approval_request_steps");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.LevelName).HasMaxLength(120);
+            entity.Property(x => x.ApproverType).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.RequiredPermission).HasMaxLength(128);
+            entity.Property(x => x.ApproverUserIdsCsv).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.DecidedByName).HasMaxLength(200);
+            entity.Property(x => x.Note).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.Status });
         });
 
         modelBuilder.Entity<CsatSurvey>(entity =>

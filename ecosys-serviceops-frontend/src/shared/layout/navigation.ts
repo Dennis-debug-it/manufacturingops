@@ -1,5 +1,5 @@
 import type { AppRole } from '../types/auth'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -18,6 +18,7 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Team', to: '/team', roles: ['admin', 'manager', 'viewer'], permission: 'team.view', icon: Users },
   { label: 'Contracts', to: '/contracts', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'contracts.view', icon: FileText },
   { label: 'Finance', to: '/finance', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'finance.view', icon: Wallet },
+  { label: 'Approvals', to: '/approvals', roles: ['admin', 'manager', 'finance'], icon: CheckSquare },
   { label: 'Reports', to: '/reports', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'reports.view', icon: BarChart3 },
   { label: 'WhatsApp', to: '/whatsapp', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'whatsapp.view', icon: MessageCircle },
   { label: 'Settings', to: '/settings', roles: ['admin'], permission: 'settings.view', icon: Settings2 },

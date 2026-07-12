@@ -17,6 +17,7 @@ public sealed class PurchaseOrdersController(
     ITenantContext tenantContext,
     IDocumentNumberingService documentNumberingService,
     IAuditLogService auditLogService,
+    IApprovalWorkflowService approvalWorkflowService,
     IUserAccessService userAccessService) : TenantAwareControllerBase(tenantContext)
 {
     // ── Purchase orders ──────────────────────────────────────────────────────
@@ -90,6 +91,12 @@ public sealed class PurchaseOrdersController(
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "inventory.po.created", nameof(PurchaseOrder), order.Id.ToString(), $"Purchase order {order.PoNumber} created for {supplier.SupplierName}", cancellationToken);
 
+        // Start the approval chain if a matrix is configured; the PO then cannot be
+        // sent until fully approved. With no matrix, behavior is unchanged.
+        await approvalWorkflowService.StartAsync(
+            TenantId, ApprovalDocumentTypes.PurchaseOrder, order.Id, order.PoNumber,
+            order.TotalAmount, order.Currency, UserId, cancellationToken);
+
         order.Supplier = supplier;
         return Ok(MapDetail(order));
     }
@@ -106,6 +113,15 @@ public sealed class PurchaseOrdersController(
             throw new BusinessRuleException("Status can only be set to Sent or Cancelled.");
         if (order.Status is "Received" or "Cancelled")
             throw new BusinessRuleException($"A {order.Status.ToLowerInvariant()} purchase order cannot change status.");
+
+        // A PO under an active approval chain cannot be sent to the supplier until approved.
+        if (string.Equals(request.Status, "Sent", StringComparison.OrdinalIgnoreCase))
+        {
+            var pendingApproval = await approvalWorkflowService.GetActiveForDocumentAsync(
+                TenantId, ApprovalDocumentTypes.PurchaseOrder, order.Id, cancellationToken);
+            if (pendingApproval is not null)
+                throw new BusinessRuleException("This purchase order is awaiting approval and cannot be sent yet.");
+        }
 
         order.Status = request.Status;
         order.UpdatedAt = DateTime.UtcNow;

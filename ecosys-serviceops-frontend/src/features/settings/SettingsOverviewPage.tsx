@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
   Radio, MessageCircle, CreditCard, ShieldCheck, Users, Bell, Plug, LineChart,
-  UserCircle, ScrollText,
+  UserCircle, ScrollText, GitBranch,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 
@@ -44,6 +44,7 @@ const groups: SettingsGroup[] = [
     items: [
       { to: '/settings/payments', label: 'Payments', description: 'M-Pesa, Stripe, and bank transfer settings.', icon: CreditCard },
       { to: '/settings/credit-control', label: 'Credit Control', description: 'Payment terms and credit limits.', icon: ShieldCheck },
+      { to: '/settings/approval-matrix', label: 'Approval Matrix', description: 'Amount-based approval chains for POs and expenses.', icon: GitBranch },
     ],
   },
   {
