@@ -114,7 +114,7 @@ export const endpoints = {
     update: (id: string) => `/api/assets/${id}`,
   },
   assetCategories: {
-    list: '/api/asset-categories',
+    list: '/api/asset-templates',
   },
   technicians: {
     list: '/api/technicians',

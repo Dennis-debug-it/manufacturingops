@@ -109,7 +109,7 @@ export function TenantDetailPage() {
   const sendTestEmail = async () => {
     if (!tenant.tenantId) return
     try {
-      await api.post(`${endpoints.platform.tenant(tenant.tenantId)}/communication-settings/email-settings/test`, {
+      await api.post(`${endpoints.platform.tenant(tenant.tenantId)}/email-settings/test`, {
         testRecipientEmail: testRecipient.trim() || null,
       })
       toast.success('Test email queued')
@@ -121,7 +121,7 @@ export function TenantDetailPage() {
   const verifySmtp = async () => {
     if (!tenant.tenantId) return
     try {
-      await api.post(`${endpoints.platform.tenant(tenant.tenantId)}/communication-settings/email-settings/verify`)
+      await api.post(`${endpoints.platform.tenant(tenant.tenantId)}/email-settings/verify`)
       toast.success('SMTP verification completed')
     } catch {
       // handled by interceptor
@@ -131,7 +131,7 @@ export function TenantDetailPage() {
   const resetCommunication = async () => {
     if (!tenant.tenantId) return
     try {
-      const result = await api.post<TenantCommunicationSettings>(`${endpoints.platform.tenant(tenant.tenantId)}/communication-settings/email-settings/reset-to-defaults`)
+      const result = await api.post<TenantCommunicationSettings>(`${endpoints.platform.tenant(tenant.tenantId)}/email-settings/reset-to-defaults`)
       setCommunicationForm(result)
       toast.success('Communication settings reset to defaults')
     } catch {
