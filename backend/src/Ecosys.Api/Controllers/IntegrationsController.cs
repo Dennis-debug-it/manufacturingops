@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -19,7 +20,8 @@ public sealed class IntegrationsController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     IUserAccessService userAccessService,
-    IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
+    IAuditLogService auditLogService,
+    IHttpClientFactory httpClientFactory) : TenantAwareControllerBase(tenantContext)
 {
     private static readonly string[] AllowedWebhookEvents =
     [
@@ -177,6 +179,61 @@ public sealed class IntegrationsController(
 
         await auditLogService.LogAsync(TenantId, UserId, "settings.webhook.updated", nameof(TenantWebhook), item.Id.ToString(), $"Webhook '{item.Url}' updated.", cancellationToken: cancellationToken);
         return Ok(MapWebhook(item));
+    }
+
+    [HttpPost("webhooks/{id:guid}/test")]
+    public async Task<ActionResult<WebhookDeliveryResponse>> TestWebhook(Guid id, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+
+        var webhook = await dbContext.TenantWebhooks
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Webhook was not found.");
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            @event = "webhook.test",
+            sentAt = DateTime.UtcNow,
+            webhookId = webhook.Id,
+        });
+
+        var delivery = new TenantWebhookDelivery
+        {
+            TenantId = TenantId,
+            WebhookId = webhook.Id,
+            Event = "webhook.test",
+        };
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            using var client = httpClientFactory.CreateClient("WebhookDelivery");
+            client.Timeout = TimeSpan.FromSeconds(10);
+            using var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            var response = await client.PostAsync(webhook.Url, content, cancellationToken);
+            stopwatch.Stop();
+
+            delivery.ResponseStatusCode = (int)response.StatusCode;
+            delivery.DurationMs = (int)stopwatch.ElapsedMilliseconds;
+            delivery.Status = response.IsSuccessStatusCode ? "Success" : "Failed";
+            if (!response.IsSuccessStatusCode)
+            {
+                delivery.ErrorMessage = $"Endpoint responded with {(int)response.StatusCode} {response.StatusCode}.";
+            }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            stopwatch.Stop();
+            delivery.Status = "Failed";
+            delivery.DurationMs = (int)stopwatch.ElapsedMilliseconds;
+            delivery.ErrorMessage = ex is TaskCanceledException ? "Request timed out." : ex.Message;
+        }
+
+        dbContext.TenantWebhookDeliveries.Add(delivery);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "settings.webhook.tested", nameof(TenantWebhook), webhook.Id.ToString(), $"Test ping sent to webhook '{webhook.Url}' ({delivery.Status}).", cancellationToken: cancellationToken);
+
+        return Ok(new WebhookDeliveryResponse(delivery.Id, delivery.Event, delivery.Status, delivery.ResponseStatusCode, delivery.ErrorMessage, delivery.DurationMs, delivery.AttemptedAt));
     }
 
     [HttpGet("webhooks/{id:guid}/delivery-log")]

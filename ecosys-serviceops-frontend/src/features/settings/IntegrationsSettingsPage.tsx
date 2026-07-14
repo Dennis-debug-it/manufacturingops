@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Plus, KeyRound, Webhook, Trash2, Copy, Pencil, ScrollText } from 'lucide-react'
+import { Plus, KeyRound, Webhook, Trash2, Copy, Pencil, ScrollText, Send } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
@@ -98,6 +98,14 @@ function useDeleteWebhook() {
   })
 }
 
+function useTestWebhook() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.post<WebhookDelivery>(`/api/settings/webhooks/${id}/test`),
+    onSuccess: (_data, id) => void queryClient.invalidateQueries({ queryKey: ['settings', 'integrations', 'webhooks', id, 'delivery-log'] }),
+  })
+}
+
 function useWebhookDeliveryLog(id: string | null) {
   return useQuery({
     queryKey: ['settings', 'integrations', 'webhooks', id, 'delivery-log'],
@@ -120,6 +128,7 @@ export function IntegrationsSettingsPage() {
   const createWebhook = useCreateWebhook()
   const updateWebhook = useUpdateWebhook()
   const deleteWebhook = useDeleteWebhook()
+  const testWebhook = useTestWebhook()
 
   const [showNewKey, setShowNewKey] = useState(false)
   const [keyLabel, setKeyLabel] = useState('')
@@ -191,6 +200,19 @@ export function IntegrationsSettingsPage() {
     toast.success('Webhook removed')
   }
 
+  const sendTestPing = async (id: string) => {
+    try {
+      const delivery = await testWebhook.mutateAsync(id)
+      if (delivery.status === 'Success') {
+        toast.success('Test ping delivered')
+      } else {
+        toast.error(`Test ping failed: ${delivery.errorMessage ?? 'endpoint did not respond with success'}`)
+      }
+    } catch {
+      toast.error('Could not send test ping — please try again.')
+    }
+  }
+
   const keyColumns: DataTableColumn<ApiKeyItem>[] = [
     { key: 'label', header: 'Label', cell: (row) => <span className="font-medium text-slate-900">{row.label}</span> },
     { key: 'keyPrefix', header: 'Key', cell: (row) => <span className="font-mono text-xs">{row.keyPrefix}••••••••</span> },
@@ -223,6 +245,9 @@ export function IntegrationsSettingsPage() {
           </button>
           {canManage ? (
             <>
+              <button type="button" disabled={testWebhook.isPending} onClick={() => void sendTestPing(row.id)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+                <Send className="h-3.5 w-3.5" />Test
+              </button>
               <button type="button" onClick={() => openEditWebhook(row)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
                 <Pencil className="h-3.5 w-3.5" />Edit
               </button>
