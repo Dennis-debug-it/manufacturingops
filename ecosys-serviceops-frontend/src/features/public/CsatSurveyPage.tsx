@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Star } from 'lucide-react'
 import { api } from '../../shared/api/apiClient'
+import { resolveErrorMessage } from '../../shared/api/apiError'
 import { Spinner } from '../../shared/components/Spinner'
 import { cn } from '../../shared/utils/cn'
 
@@ -41,7 +42,7 @@ export function CsatSurveyPage() {
     mutationFn: () => api.post(`/api/public/csat/${token}`, { score, comment: comment.trim() || null }),
     onSuccess: () => setSubmitted(true),
     onError: (error: unknown) => {
-      setSubmitError(error instanceof Error ? error.message : 'The survey could not be submitted. Please try again.')
+      setSubmitError(resolveErrorMessage(error))
     },
   })
 

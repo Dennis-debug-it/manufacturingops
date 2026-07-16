@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
+import { resolveErrorMessage } from '../../shared/api/apiError'
 
 const demoSchema = z.object({
   companyName: z.string().min(2, 'Company name is required'),
@@ -47,7 +48,7 @@ export function RequestDemoPage() {
               })
               navigate('/demo-confirmation')
             } catch (error) {
-              setSubmitError(error instanceof Error ? error.message : 'Unable to submit your request. Please try again.')
+              setSubmitError(resolveErrorMessage(error))
             }
           })}
         >

@@ -6,6 +6,7 @@ import { Spinner } from '../../shared/components/Spinner'
 import { cn } from '../../shared/utils/cn'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
+import { getErrorStatus } from '../../shared/api/apiError'
 import { useBranches } from '../inventory/api'
 import { useTeamUsers } from '../team/api'
 import { useClients } from '../clients/api'
@@ -45,7 +46,7 @@ export function OnboardingPage() {
       await installPack.mutateAsync(pack.id)
       toast.success(`${pack.name} installed`)
     } catch (error) {
-      if (error && typeof error === 'object' && 'response' in error && (error as { response?: { status?: number } }).response?.status === 409) {
+      if (getErrorStatus(error) === 409) {
         toast.error(`${pack.name} is already installed`)
       }
     }
