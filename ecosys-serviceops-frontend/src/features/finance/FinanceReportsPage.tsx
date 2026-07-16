@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AlertTriangle, CheckCircle2, Clock, FileStack, FileText, Percent, Wallet } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { EmptyState } from '../../shared/components/EmptyState'
@@ -10,6 +11,7 @@ import { formatDate } from '../../shared/utils/dates'
 import { useAgingReport, useFinanceDashboard, useRevenueReport, type RevenueReportRow } from './api'
 import { usePayables, type PayableListItem } from './expensesPayablesApi'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
+import { StatIcon } from './components/StatIcon'
 
 const tabs = [
   { id: 'revenue', label: 'Revenue Summary' },
@@ -154,10 +156,10 @@ export function FinanceReportsPage() {
       {tab === 'revenue' ? (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Total Invoiced (YTD)" value={isLoading ? '—' : formatCurrency(dashboard?.totalInvoicedYtd ?? 0)} />
-            <StatCard label="Total Collected (YTD)" value={isLoading ? '—' : formatCurrency(dashboard?.totalCollectedYtd ?? 0)} tone="success" />
-            <StatCard label="Outstanding" value={isLoading ? '—' : formatCurrency(dashboard?.outstandingBalance ?? 0)} tone="warning" />
-            <StatCard label="Overdue" value={isLoading ? '—' : formatCurrency(dashboard?.overdueBalance ?? 0)} tone="danger" />
+            <StatCard label="Total Invoiced (YTD)" value={isLoading ? '—' : formatCurrency(dashboard?.totalInvoicedYtd ?? 0)} icon={<StatIcon tone="default"><FileText className="h-4 w-4" /></StatIcon>} />
+            <StatCard label="Total Collected (YTD)" value={isLoading ? '—' : formatCurrency(dashboard?.totalCollectedYtd ?? 0)} tone="success" icon={<StatIcon tone="success"><Wallet className="h-4 w-4" /></StatIcon>} />
+            <StatCard label="Outstanding" value={isLoading ? '—' : formatCurrency(dashboard?.outstandingBalance ?? 0)} tone="warning" icon={<StatIcon tone="warning"><Clock className="h-4 w-4" /></StatIcon>} />
+            <StatCard label="Overdue" value={isLoading ? '—' : formatCurrency(dashboard?.overdueBalance ?? 0)} tone="danger" icon={<StatIcon tone="danger"><AlertTriangle className="h-4 w-4" /></StatIcon>} />
           </div>
           {monthlyRevenue.isLoading ? <Spinner label="Loading revenue trend" /> : <RevenueTrendChart rows={monthlyRevenue.data ?? []} />}
           <DataTable
@@ -184,9 +186,9 @@ export function FinanceReportsPage() {
 
       {tab === 'collections' ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatCard label="Quotations" value={dashboard?.totalQuotations ?? 0} />
-          <StatCard label="Converted" value={dashboard?.convertedQuotations ?? 0} tone="success" />
-          <StatCard label="Conversion Rate" value={`${dashboard?.quoteConversionRate ?? 0}%`} />
+          <StatCard label="Quotations" value={dashboard?.totalQuotations ?? 0} icon={<StatIcon tone="default"><FileStack className="h-4 w-4" /></StatIcon>} />
+          <StatCard label="Converted" value={dashboard?.convertedQuotations ?? 0} tone="success" icon={<StatIcon tone="success"><CheckCircle2 className="h-4 w-4" /></StatIcon>} />
+          <StatCard label="Conversion Rate" value={`${dashboard?.quoteConversionRate ?? 0}%`} icon={<StatIcon tone="default"><Percent className="h-4 w-4" /></StatIcon>} />
         </div>
       ) : null}
 

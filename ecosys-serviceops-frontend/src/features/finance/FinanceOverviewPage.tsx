@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, FileText, Receipt, Wallet } from 'lucide-react'
+import { ArrowRight, Clock, FileText, Receipt, Wallet } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { EmptyState } from '../../shared/components/EmptyState'
@@ -10,6 +10,7 @@ import { formatDate } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { useAgingReport, useBillableWork, useFinanceDashboard, useInvoices, useQuotations } from './api'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
+import { StatIcon } from './components/StatIcon'
 import type { AgingRow, InvoiceListItem, QuotationListItem } from './types'
 
 function SectionLink({ to, label }: { to: string; label: string }) {
@@ -91,10 +92,10 @@ export function FinanceOverviewPage() {
       <FinanceWorkspaceNav />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Invoiced YTD" value={dashboardLoading ? '-' : formatCurrency(dashboard?.totalInvoicedYtd ?? 0, dashboard?.currency)} />
-        <StatCard label="Collected YTD" value={dashboardLoading ? '-' : formatCurrency(dashboard?.totalCollectedYtd ?? 0, dashboard?.currency)} tone="success" />
-        <StatCard label="Outstanding" value={invoicesLoading ? '-' : formatCurrency(outstandingBalance, invoiceCurrency)} tone={outstandingBalance > 0 ? 'warning' : 'success'} />
-        <StatCard label="Billable Work" value={billableLoading ? '-' : formatCurrency(dashboard?.estimatedBillableAmount ?? 0, billableCurrency)} />
+        <StatCard label="Invoiced YTD" value={dashboardLoading ? '-' : formatCurrency(dashboard?.totalInvoicedYtd ?? 0, dashboard?.currency)} icon={<StatIcon tone="default"><FileText className="h-4 w-4" /></StatIcon>} />
+        <StatCard label="Collected YTD" value={dashboardLoading ? '-' : formatCurrency(dashboard?.totalCollectedYtd ?? 0, dashboard?.currency)} tone="success" icon={<StatIcon tone="success"><Wallet className="h-4 w-4" /></StatIcon>} />
+        <StatCard label="Outstanding" value={invoicesLoading ? '-' : formatCurrency(outstandingBalance, invoiceCurrency)} tone={outstandingBalance > 0 ? 'warning' : 'success'} icon={<StatIcon tone={outstandingBalance > 0 ? 'warning' : 'success'}><Clock className="h-4 w-4" /></StatIcon>} />
+        <StatCard label="Billable Work" value={billableLoading ? '-' : formatCurrency(dashboard?.estimatedBillableAmount ?? 0, billableCurrency)} icon={<StatIcon tone="default"><Receipt className="h-4 w-4" /></StatIcon>} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">

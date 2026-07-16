@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import { Trash2 } from 'lucide-react'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
+import { formatCurrency } from '../../../shared/utils/format'
 import { useClients } from '../../clients/api'
 import { useUpdateInvoice } from '../api'
+import { RateCardAutocomplete } from './RateCardAutocomplete'
 import type { InvoiceDetail } from '../types'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
@@ -116,20 +119,54 @@ export function EditInvoiceDrawer({ open, invoice, onClose }: { open: boolean; i
         </div>
         <div>
           <label className={labelClass}>Line Items</label>
-          <div className="space-y-2">
-            {lines.map((line, index) => (
-              <div key={index} className="grid grid-cols-[1fr_4.5rem_5.5rem_4rem] gap-2">
-                <input placeholder="Description" value={line.description} onChange={(event) => updateLine(index, 'description', event.target.value)} className={fieldClass} />
-                <input type="number" placeholder="Qty" value={line.quantity} onChange={(event) => updateLine(index, 'quantity', event.target.value)} className={fieldClass} />
-                <input type="number" placeholder="Rate" value={line.unitRate} onChange={(event) => updateLine(index, 'unitRate', event.target.value)} className={fieldClass} />
-                <input type="number" placeholder="Tax %" value={line.taxRate} onChange={(event) => updateLine(index, 'taxRate', event.target.value)} className={fieldClass} />
-              </div>
-            ))}
+          <div className="space-y-3">
+            {lines.map((line, index) => {
+              const qty = Number(line.quantity) || 0
+              const rate = Number(line.unitRate) || 0
+              const tax = Number(line.taxRate) || 0
+              const lineTotal = qty * rate * (1 + tax / 100)
+              return (
+                <div key={index} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                  <RateCardAutocomplete
+                    value={line.description}
+                    onChange={(next) => updateLine(index, 'description', next)}
+                    onSelectRateCard={(card) => {
+                      updateLine(index, 'description', card.description?.trim() || card.name)
+                      if (!line.unitRate || Number(line.unitRate) === 0) updateLine(index, 'unitRate', String(card.unitRate))
+                      if (card.taxRate != null) updateLine(index, 'taxRate', String(card.taxRate))
+                    }}
+                    aria-label="Description"
+                    placeholder="Search or type a description…"
+                  />
+                  <div className="mt-2 flex items-end gap-2.5">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium text-slate-500">Qty</span>
+                      <input type="number" min="0" placeholder="0" value={line.quantity} onChange={(event) => updateLine(index, 'quantity', event.target.value)} aria-label="Quantity" className="h-10 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium text-slate-500">Rate</span>
+                      <input type="number" min="0" placeholder="0.00" value={line.unitRate} onChange={(event) => updateLine(index, 'unitRate', event.target.value)} aria-label="Unit rate" className="h-10 w-24 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs font-medium text-slate-500">Tax %</span>
+                      <input type="number" min="0" placeholder="0" value={line.taxRate} onChange={(event) => updateLine(index, 'taxRate', event.target.value)} aria-label="Tax percent" className="h-10 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                    </label>
+                    <div className="flex flex-1 flex-col gap-1 text-right">
+                      <span className="text-xs font-medium text-slate-500">Total</span>
+                      <span className="flex h-10 items-center justify-end px-1 text-sm font-semibold tabular-nums text-slate-900">{formatCurrency(lineTotal)}</span>
+                    </div>
+                    <button type="button" disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((_, i) => i !== index))} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-slate-50 disabled:opacity-30" aria-label="Remove line">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
           </div>
           <button
             type="button"
             onClick={() => setLines((current) => [...current, { description: '', quantity: '1', unitRate: '0', taxRate: '16', unit: 'unit', itemType: 'Service' }])}
-            className="mt-2 text-xs font-medium text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-slate-900"
+            className="mt-3 text-xs font-medium text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-slate-900"
           >
             + Add line
           </button>

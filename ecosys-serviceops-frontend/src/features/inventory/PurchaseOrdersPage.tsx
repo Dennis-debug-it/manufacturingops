@@ -10,6 +10,7 @@ import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { InventoryTabNav } from './components/InventoryTabNav'
+import { MaterialAutocomplete } from './components/MaterialAutocomplete'
 import {
   useCreatePurchaseOrder,
   usePurchaseOrder,
@@ -126,17 +127,51 @@ export function PurchaseOrdersPage() {
               <label className="text-sm font-medium text-slate-700">Line Items</label>
               <button type="button" onClick={() => setLines((prev) => [...prev, { ...emptyLine }])} className="text-xs font-medium text-slate-600 underline underline-offset-2 hover:text-slate-900">+ Add line</button>
             </div>
-            <div className="space-y-2">
-              {lines.map((line, index) => (
-                <div key={index} className="grid grid-cols-[1fr_64px_84px_auto] items-center gap-2">
-                  <input value={line.itemName} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, itemName: e.target.value } : l)))} placeholder="Item name" className="h-10 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
-                  <input value={line.quantityOrdered} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, quantityOrdered: e.target.value } : l)))} type="number" min="0" placeholder="Qty" className="h-10 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
-                  <input value={line.unitCost} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, unitCost: e.target.value } : l)))} type="number" min="0" placeholder="Cost" className="h-10 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
-                  <button type="button" disabled={lines.length === 1} onClick={() => setLines((prev) => prev.filter((_, i) => i !== index))} className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 disabled:opacity-30" aria-label="Remove line">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
+            <div className="space-y-3">
+              {lines.map((line, index) => {
+                const subtotal = (Number(line.quantityOrdered) || 0) * (Number(line.unitCost) || 0)
+                return (
+                  <div key={index} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                    <MaterialAutocomplete
+                      value={line.itemName}
+                      onChange={(next) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, itemName: next } : l)))}
+                      onSelectMaterial={(material) =>
+                        setLines((prev) =>
+                          prev.map((l, i) =>
+                            i === index
+                              ? {
+                                  ...l,
+                                  itemName: material.itemName,
+                                  // Auto-fill the unit cost when it hasn't been set yet.
+                                  unitCost: !l.unitCost || Number(l.unitCost) === 0 ? String(material.unitCost ?? l.unitCost) : l.unitCost,
+                                }
+                              : l,
+                          ),
+                        )
+                      }
+                      aria-label="Item description"
+                      placeholder="Search or type an item description…"
+                    />
+                    <div className="mt-2 flex items-end gap-3">
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-slate-500">Qty</span>
+                        <input value={line.quantityOrdered} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, quantityOrdered: e.target.value } : l)))} type="number" min="0" placeholder="0" aria-label="Quantity" className="h-10 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-xs font-medium text-slate-500">Unit Cost</span>
+                        <input value={line.unitCost} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, unitCost: e.target.value } : l)))} type="number" min="0" placeholder="0.00" aria-label="Unit cost" className="h-10 w-28 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      </label>
+                      <div className="flex flex-1 flex-col gap-1 text-right">
+                        <span className="text-xs font-medium text-slate-500">Subtotal</span>
+                        <span className="flex h-10 items-center justify-end px-1 text-sm font-semibold tabular-nums text-slate-900">{subtotal.toLocaleString()}</span>
+                      </div>
+                      <button type="button" disabled={lines.length === 1} onClick={() => setLines((prev) => prev.filter((_, i) => i !== index))} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-slate-50 disabled:opacity-30" aria-label="Remove line">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
 
