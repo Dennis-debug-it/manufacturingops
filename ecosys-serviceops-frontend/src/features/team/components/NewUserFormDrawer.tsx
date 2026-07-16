@@ -2,6 +2,7 @@ import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { useCreateTeamUser } from '../api'
+import type { TenantUserRole } from '../types'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -10,14 +11,14 @@ interface FormValues {
   fullName: string
   email: string
   phoneNumber: string
-  role: 'Admin' | 'User'
+  role: TenantUserRole
   jobTitle: string
   department: string
 }
 
 export function NewUserFormDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormValues>({
-    defaultValues: { fullName: '', email: '', phoneNumber: '', role: 'User', jobTitle: '', department: '' },
+    defaultValues: { fullName: '', email: '', phoneNumber: '', role: 'Viewer', jobTitle: '', department: '' },
   })
   const createUser = useCreateTeamUser()
 
@@ -74,9 +75,16 @@ export function NewUserFormDrawer({ open, onClose }: { open: boolean; onClose: (
         <div>
           <label className={labelClass} htmlFor="user-role">Role</label>
           <select id="user-role" {...register('role')} className={fieldClass}>
-            <option value="User">User</option>
+            <option value="Viewer">Viewer</option>
+            <option value="Technician">Technician</option>
+            <option value="Dispatcher">Dispatcher</option>
+            <option value="Manager">Manager</option>
+            <option value="finance">Finance</option>
             <option value="Admin">Admin</option>
           </select>
+          <p className="mt-1.5 text-xs text-slate-500">
+            The role decides what this user can do. Edit each role&apos;s capabilities on the Roles tab.
+          </p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

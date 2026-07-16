@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
-import type { AssignmentGroup, CertificationDefinition, TeamManagementOverview, TeamUser, Technician } from './types'
+import type { AssignmentGroup, CertificationDefinition, TeamManagementOverview, TeamUser, TenantUserRole, Technician } from './types'
 
 export function useTeamUsers() {
   return useQuery({
@@ -23,7 +23,7 @@ export interface CreateUserPayload {
   fullName: string
   email: string
   phoneNumber?: string | null
-  role: 'Admin' | 'User'
+  role: TenantUserRole
   jobTitle?: string | null
   department?: string | null
   isActive: boolean
