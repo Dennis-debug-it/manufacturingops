@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { cn } from '../utils/cn'
-import { brand } from '../config/brand'
+import { Logo } from '../components/Logo'
 
 export interface TopbarProps {
   syncingLabel?: string | null
@@ -16,8 +16,8 @@ export function Topbar({ syncingLabel }: TopbarProps) {
 
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur lg:px-6">
-      <div className="min-w-0">
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{brand.appName}</div>
+      <div className="flex min-w-0 items-center gap-3">
+        <Logo variant="mark" className="h-8 w-8 shrink-0 lg:hidden" />
         <div className="truncate text-sm font-medium text-slate-900">{tenant?.companyName ?? 'Ecosys'}</div>
       </div>
       <div className="flex items-center gap-2">

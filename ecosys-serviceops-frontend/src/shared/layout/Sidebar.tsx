@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '../utils/cn'
-import { brand } from '../config/brand'
+import { Logo } from '../components/Logo'
 import { tenantNavItems, type NavItem } from './navigation'
 import { useAuth } from '../hooks/useAuth'
 import { usePermission } from '../hooks/usePermission'
@@ -32,9 +32,8 @@ export function Sidebar() {
   return (
     <aside className="hidden h-screen w-72 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
       <div className="border-b border-slate-200 px-6 py-5">
-        <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{brand.appName}</div>
-        <div className="mt-1 text-sm font-medium text-slate-900">{tenant?.companyName ?? 'Tenant'}</div>
-        <p className="mt-2 text-xs leading-5 text-slate-500">{brand.tagline}</p>
+        <Logo className="h-9 w-auto" />
+        <div className="mt-3 text-sm font-medium text-slate-900">{tenant?.companyName ?? 'Tenant'}</div>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {tenantNavItems

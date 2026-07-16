@@ -3,9 +3,11 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from 'react-router-dom'
-import { Building2, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { brand } from '../../shared/config/brand'
+import { resolveErrorMessage } from '../../shared/api/apiError'
+import { Logo } from '../../shared/components/Logo'
 
 const loginSchema = z.object({
   email: z.string().email('Enter a valid email address'),
@@ -44,7 +46,7 @@ export function LoginPage() {
       const session = await login(values)
       navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : '/dashboard', { replace: true })
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Unable to sign in.')
+      setSubmitError(resolveErrorMessage(error))
     }
   })
 
@@ -52,15 +54,8 @@ export function LoginPage() {
     <div className="grid min-h-screen bg-white lg:grid-cols-[1fr_1fr]">
       <div className="flex items-center justify-center px-6 py-12 lg:px-12">
         <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900 text-white">
-              <Building2 className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{brand.appName}</div>
-              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{brand.tagline}</h1>
-            </div>
-          </div>
+          <Logo className="h-12 w-auto" />
+          <h1 className="mt-6 text-lg font-semibold tracking-tight text-slate-900">Sign in to your workspace</h1>
 
           <form className="mt-8 space-y-4" onSubmit={onSubmit}>
             <div>

@@ -3,10 +3,11 @@ import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Building2, CheckCircle2, Loader2 } from 'lucide-react'
+import { CheckCircle2, Loader2 } from 'lucide-react'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
-import { brand } from '../../shared/config/brand'
+import { Logo } from '../../shared/components/Logo'
+import { resolveErrorMessage } from '../../shared/api/apiError'
 
 const resetPasswordSchema = z
   .object({
@@ -48,7 +49,7 @@ export function ResetPasswordPage() {
       setSuccess(true)
       setTimeout(() => navigate('/login', { replace: true }), 2000)
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Unable to reset your password. Please try again.')
+      setSubmitError(resolveErrorMessage(error))
     }
   })
 
@@ -56,15 +57,8 @@ export function ResetPasswordPage() {
     <div className="grid min-h-screen bg-slate-950 lg:grid-cols-[1.1fr_0.9fr]">
       <div className="flex items-center justify-center px-6 py-12 lg:px-12">
         <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 text-white shadow-2xl backdrop-blur">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-950">
-              <Building2 className="h-6 w-6" />
-            </div>
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">{brand.appName}</div>
-              <h1 className="text-2xl font-semibold tracking-tight">{isInvite ? 'Set your password' : 'Choose a new password'}</h1>
-            </div>
-          </div>
+          <Logo tone="dark" className="h-12 w-auto" />
+          <h1 className="mt-6 text-lg font-semibold tracking-tight">{isInvite ? 'Set your password' : 'Choose a new password'}</h1>
 
           {!token ? (
             <div className="mt-8 space-y-4">

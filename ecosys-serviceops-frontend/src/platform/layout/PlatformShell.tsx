@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { LogOut, Menu, ShieldCheck, X } from 'lucide-react'
-import { brand } from '../../shared/config/brand'
+import { LogOut, Menu, X } from 'lucide-react'
+import { Logo } from '../../shared/components/Logo'
 import { cn } from '../../shared/utils/cn'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { platformNavItems } from '../../shared/layout/navigation'
@@ -52,14 +52,9 @@ export function PlatformShell({ children }: PlatformShellProps) {
       <div className="mx-auto flex min-h-screen max-w-[1900px]">
         <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
           <div className="border-b border-slate-200 px-6 py-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-900 text-white">
-                <ShieldCheck className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{brand.appName}</div>
-                <div className="text-sm font-semibold text-slate-900">Platform Owner</div>
-              </div>
+            <div>
+              <Logo className="h-8 w-auto" />
+              <div className="mt-1 text-sm font-semibold text-slate-900">Platform Owner</div>
             </div>
           </div>
           <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
@@ -89,14 +84,9 @@ export function PlatformShell({ children }: PlatformShellProps) {
             />
             <aside className="relative flex h-full w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white shadow-2xl">
               <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-white">
-                    <ShieldCheck className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{brand.appName}</div>
-                    <div className="text-sm font-semibold text-slate-900">Platform Owner</div>
-                  </div>
+                <div>
+                  <Logo className="h-8 w-auto" />
+                  <div className="mt-1 text-sm font-semibold text-slate-900">Platform Owner</div>
                 </div>
                 <button type="button" onClick={() => setMobileNavOpen(false)} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
                   <X className="h-4 w-4" />
@@ -132,8 +122,8 @@ export function PlatformShell({ children }: PlatformShellProps) {
                 >
                   <Menu className="h-4 w-4" />
                 </button>
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{brand.appName}</div>
+                <div className="flex items-center gap-3">
+                  <Logo variant="mark" className="h-8 w-8 shrink-0 lg:hidden" />
                   <div className="text-sm font-semibold text-slate-900">Command Centre</div>
                 </div>
               </div>

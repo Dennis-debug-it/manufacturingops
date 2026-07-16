@@ -18,8 +18,12 @@ export default defineConfig({
         start_url: '/',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#0F3B5E',
-        theme_color: '#0F3B5E',
+        background_color: '#F6F5EF',
+        theme_color: '#15806A',
+        icons: [
+          { src: '/ecosys-rosette.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/ecosys-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+        ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
