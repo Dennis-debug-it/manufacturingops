@@ -416,17 +416,18 @@ public sealed class UsersController(
             throw new ForbiddenException("Only SuperAdmin can create or manage SuperAdmin accounts.");
         }
 
-        if (string.Equals(normalizedRole, AppRoles.Admin, StringComparison.OrdinalIgnoreCase))
+        // Canonicalise against the tenant role list only. This is what stops a caller from
+        // assigning a platform role name (e.g. "Finance") and inheriting platform meaning:
+        // the value returned is always the tenant-side constant.
+        var match = AppRoles.TenantRoles
+            .FirstOrDefault(candidate => string.Equals(candidate, normalizedRole, StringComparison.OrdinalIgnoreCase));
+
+        if (match is not null)
         {
-            return AppRoles.Admin;
+            return match;
         }
 
-        if (string.Equals(normalizedRole, AppRoles.User, StringComparison.OrdinalIgnoreCase))
-        {
-            return AppRoles.User;
-        }
-
-        throw new BusinessRuleException("Role must be Admin or User.");
+        throw new BusinessRuleException($"Role must be one of: {string.Join(", ", AppRoles.TenantRoles)}.");
     }
 
     private static List<Guid> NormalizeBranchIds(IReadOnlyCollection<Guid>? branchIds) =>

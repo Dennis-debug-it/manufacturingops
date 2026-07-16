@@ -57,6 +57,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<MaterialRequest> MaterialRequests => Set<MaterialRequest>();
     public DbSet<MaterialRequestLine> MaterialRequestLines => Set<MaterialRequestLine>();
     public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<PreventiveMaintenancePlan> PreventiveMaintenancePlans => Set<PreventiveMaintenancePlan>();
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -992,6 +993,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.UserId).IsUnique();
         });
+
+        modelBuilder.Entity<RolePermission>(entity =>
+        {
+            entity.ToTable("role_permissions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Role).HasMaxLength(64).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.Role }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<RolePermission>(modelBuilder);
 
         modelBuilder.Entity<PreventiveMaintenancePlan>(entity =>
         {

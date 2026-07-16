@@ -15,6 +15,7 @@ using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Errors;
 using Ecosys.Shared.Options;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.StaticFiles;
@@ -153,12 +154,26 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("PlatformAccess", policy => policy.RequireRole(AppRoles.PlatformRoles));
-    options.AddPolicy("PlatformOwnerOnly", policy => policy.RequireRole(AppRoles.SuperAdmin, AppRoles.PlatformOwner));
-    options.AddPolicy("PlatformAdminAccess", policy => policy.RequireRole(AppRoles.SuperAdmin, AppRoles.PlatformOwner, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin, AppRoles.PlatformAdminRole));
-    options.AddPolicy("PlatformReadOnlyAccess", policy => policy.RequireRole(AppRoles.SuperAdmin, AppRoles.PlatformOwner, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin, AppRoles.PlatformAdminRole, AppRoles.Auditor, AppRoles.ReadOnlyAuditor, AppRoles.Support, AppRoles.SupportAdmin, AppRoles.Finance, AppRoles.FinanceAdmin));
-    options.AddPolicy("PlatformFinanceAccess", policy => policy.RequireRole(AppRoles.SuperAdmin, AppRoles.PlatformOwner, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin, AppRoles.PlatformAdminRole, AppRoles.Finance, AppRoles.FinanceAdmin));
-    options.AddPolicy("PlatformSettingsAccess", policy => policy.RequireRole(AppRoles.SuperAdmin, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin));
+    // Platform roles ("Finance", "Support", "Auditor", ...) share a string namespace with
+    // tenant roles. A role claim alone must therefore NEVER be enough to reach the platform:
+    // the caller must also belong to the platform root tenant. Without this, a tenant user
+    // whose role happened to be "finance" would satisfy the platform policies below.
+    static bool IsPlatformTenant(AuthorizationHandlerContext context) =>
+        Guid.TryParse(context.User.FindFirst(TenantClaimTypes.TenantId)?.Value, out var tenantId)
+        && tenantId == PlatformConstants.RootTenantId;
+
+    void AddPlatformPolicy(string name, params string[] roles) =>
+        options.AddPolicy(name, policy => policy
+            .RequireRole(roles)
+            .RequireAssertion(IsPlatformTenant));
+
+    AddPlatformPolicy("PlatformAccess", AppRoles.PlatformRoles);
+    AddPlatformPolicy("PlatformOwnerOnly", AppRoles.SuperAdmin, AppRoles.PlatformOwner);
+    AddPlatformPolicy("PlatformAdminAccess", AppRoles.SuperAdmin, AppRoles.PlatformOwner, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin, AppRoles.PlatformAdminRole);
+    AddPlatformPolicy("PlatformReadOnlyAccess", AppRoles.SuperAdmin, AppRoles.PlatformOwner, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin, AppRoles.PlatformAdminRole, AppRoles.Auditor, AppRoles.ReadOnlyAuditor, AppRoles.Support, AppRoles.SupportAdmin, AppRoles.Finance, AppRoles.FinanceAdmin);
+    AddPlatformPolicy("PlatformFinanceAccess", AppRoles.SuperAdmin, AppRoles.PlatformOwner, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin, AppRoles.PlatformAdminRole, AppRoles.Finance, AppRoles.FinanceAdmin);
+    AddPlatformPolicy("PlatformSettingsAccess", AppRoles.SuperAdmin, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin);
+
     options.AddPolicy("PortalAccess", policy => policy.RequireRole(AppRoles.PortalClient));
 });
 builder.Services.AddControllers()

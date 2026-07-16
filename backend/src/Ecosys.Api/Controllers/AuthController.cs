@@ -42,7 +42,7 @@ public sealed class AuthController(
             result.CompanyName,
             result.Role,
             result.JobTitle,
-            MapPermissions(result.Permissions, IsPlatformRole(result.Role))));
+            MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId))));
     }
 
     [HttpPost("login")]
@@ -52,7 +52,7 @@ public sealed class AuthController(
 
         return Ok(new LoginResponse(
             result.Token,
-            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformRole(result.Role))),
+            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId))),
             new LoginTenantDto(result.TenantId, result.CompanyName, result.Country, result.Industry, result.LogoUrl, result.ShowPoweredByEcosys)));
     }
 
@@ -164,7 +164,7 @@ public sealed class AuthController(
             .SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
             ?? throw new UnauthorizedAccessException("User context was not found.");
 
-        var isPlatformUser = IsPlatformRole(user.Role);
+        var isPlatformUser = IsPlatformUser(user.Role, user.TenantId);
         var impersonation = tenantContext.ImpersonatedByUserId.HasValue
             ? new ImpersonationInfoDto(tenantContext.ImpersonatedByUserId.Value, tenantContext.ImpersonatedByName ?? "Platform admin")
             : null;
@@ -306,8 +306,14 @@ public sealed class AuthController(
                 CanDeactivatePlatformTenants = isPlatformOwner
             };
 
-    private static bool IsPlatformRole(string role) =>
-        AppRoles.PlatformRoles.Contains(role, StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Platform and tenant roles share a string namespace (e.g. "Finance" exists in both),
+    /// so a role name alone is never sufficient — the user must also live in the platform
+    /// root tenant. Mirrors the Platform* authorization policies in Program.cs.
+    /// </summary>
+    private static bool IsPlatformUser(string role, Guid tenantId) =>
+        tenantId == PlatformConstants.RootTenantId
+        && AppRoles.PlatformRoles.Contains(role, StringComparer.OrdinalIgnoreCase);
 }
 
 public sealed record SignupRequest(

@@ -72,6 +72,7 @@ internal sealed class MvpAuthService(
     IOptions<AuthSecurityOptions> authSecurityOptions,
     IAuditLogService auditLogService,
     IUserPermissionTemplateService permissionTemplateService,
+    IRolePermissionService rolePermissionService,
     IUserSessionService userSessionService,
     ILicenseGuardService licenseGuardService,
     ITenantSecurityPolicyService tenantSecurityPolicyService) : IMvpAuthService
@@ -235,7 +236,7 @@ internal sealed class MvpAuthService(
         }
 
         ResetFailedLoginState(user);
-        var permissions = ResolvePermissions(user);
+        var permissions = await ResolvePermissionsAsync(user, cancellationToken);
         var token = await CreateTokenAsync(user, user.Tenant, permissions, cancellationToken, user.MustChangePassword);
 
         await auditLogService.LogAsync(
@@ -283,7 +284,7 @@ internal sealed class MvpAuthService(
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("This tenant has no active admin user to impersonate.");
 
-        var permissions = ResolvePermissions(targetUser);
+        var permissions = await ResolvePermissionsAsync(targetUser, cancellationToken);
         var jwtId = Guid.NewGuid().ToString("N");
         var session = userSessionService.StartSession(targetUser, jwtId);
         var startedAt = DateTime.UtcNow;
@@ -467,7 +468,12 @@ internal sealed class MvpAuthService(
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private UserPermissionsModel ResolvePermissions(User user)
+    /// <summary>
+    /// The tenant's role-permission matrix is the source of truth for what a user may do.
+    /// Admin is implicitly granted everything and has no matrix row; platform SuperAdmin is
+    /// handled separately. Legacy per-user permission rows are no longer consulted.
+    /// </summary>
+    private async Task<UserPermissionsModel> ResolvePermissionsAsync(User user, CancellationToken cancellationToken)
     {
         if (string.Equals(user.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase))
         {
@@ -479,9 +485,7 @@ internal sealed class MvpAuthService(
             return permissionTemplateService.GetSuperAdminPermissions();
         }
 
-        return user.Permission is null
-            ? permissionTemplateService.GetDefaultPermissions(user.Role, user.JobTitle)
-            : FromEntity(user.Permission);
+        return await rolePermissionService.ResolveAsync(user.TenantId, user.Role, cancellationToken);
     }
 
     private static UserPermission ToEntity(UserPermissionsModel permissions) =>

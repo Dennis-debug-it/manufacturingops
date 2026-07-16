@@ -42,6 +42,7 @@ public static class DependencyInjection
         services.AddScoped<IStarterPackService, StarterPackService>();
         services.AddScoped<IPmTemplateService, PmTemplateService>();
         services.AddScoped<IUserPermissionTemplateService, UserPermissionTemplateService>();
+        services.AddScoped<IRolePermissionService, RolePermissionService>();
         services.AddScoped<IUserAccessService, UserAccessService>();
         services.AddScoped<IBranchAccessService, BranchAccessService>();
         services.AddScoped<IStockLedgerService, StockLedgerService>();

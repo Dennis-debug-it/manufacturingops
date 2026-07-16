@@ -5582,6 +5582,103 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("rate_cards", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.RolePermission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("CanApproveMaterials")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanAssignWorkOrders")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanCompleteWorkOrders")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanCreateWorkOrders")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanIssueMaterials")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageAssets")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageBillableWork")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageFinance")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageFinanceApprovals")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageFinanceRates")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageKnowledge")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageMaterials")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanManageSettings")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanOverrideMaterialStock")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanRequestMaterials")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewBillableWork")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewFinance")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewFinanceApprovals")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewFinanceRates")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewKnowledge")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewMaterials")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewReports")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewWorkOrders")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Role")
+                        .IsUnique();
+
+                    b.ToTable("role_permissions", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.ScheduledReport", b =>
                 {
                     b.Property<Guid>("Id")
@@ -10738,6 +10835,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.RateCard", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.RolePermission", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
