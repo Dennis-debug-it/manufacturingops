@@ -119,7 +119,7 @@ public sealed record TenantInvoiceLineResponse(
 public sealed record TenantPaymentListItemResponse(
     Guid Id,
     Guid TenantId,
-    Guid InvoiceId,
+    Guid? InvoiceId,
     Guid ClientId,
     string PaymentNumber,
     decimal Amount,
@@ -130,12 +130,14 @@ public sealed record TenantPaymentListItemResponse(
     string Status,
     DateTime CreatedAt,
     string? InvoiceNumber,
-    string? ClientName);
+    string? ClientName,
+    decimal AmountAllocated = 0,
+    decimal UnallocatedAmount = 0);
 
 public sealed record TenantPaymentResponse(
     Guid Id,
     Guid TenantId,
-    Guid InvoiceId,
+    Guid? InvoiceId,
     Guid ClientId,
     string PaymentNumber,
     decimal Amount,
@@ -145,3 +147,27 @@ public sealed record TenantPaymentResponse(
     string? Notes,
     string Status,
     DateTime CreatedAt);
+
+// ── Payment allocation ───────────────────────────────────────────────────────
+
+public sealed record PaymentAllocationInput(Guid InvoiceId, decimal Amount);
+
+/// <summary>Receive a payment from a client and allocate it across one or more invoices.</summary>
+public sealed record ReceivePaymentRequest(
+    Guid ClientId,
+    decimal Amount,
+    DateTime PaymentDate,
+    string Method,
+    string? Reference,
+    string? Notes,
+    List<PaymentAllocationInput>? Allocations);
+
+/// <summary>Allocate (or top up allocations of) an existing payment across invoices.</summary>
+public sealed record AllocatePaymentRequest(List<PaymentAllocationInput> Allocations);
+
+public sealed record ClientCreditBalanceResponse(
+    Guid ClientId,
+    string? ClientName,
+    decimal CurrentBalance,
+    decimal AvailableCredit,
+    string Currency);

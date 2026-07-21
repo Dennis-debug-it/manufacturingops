@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { brand } from '../../shared/config/brand'
 import { resolveErrorMessage } from '../../shared/api/apiError'
@@ -20,6 +20,30 @@ export function LoginPage() {
   const { login, isAuthenticated, isReady } = useAuth()
   const navigate = useNavigate()
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
+  const passwordVisibilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const togglePasswordVisibility = () => {
+    if (passwordVisibilityTimer.current) {
+      clearTimeout(passwordVisibilityTimer.current)
+      passwordVisibilityTimer.current = null
+    }
+
+    if (showPassword) {
+      setShowPassword(false)
+      return
+    }
+
+    setShowPassword(true)
+    passwordVisibilityTimer.current = setTimeout(() => {
+      setShowPassword(false)
+      passwordVisibilityTimer.current = null
+    }, 5000)
+  }
+
+  useEffect(() => () => {
+    if (passwordVisibilityTimer.current) clearTimeout(passwordVisibilityTimer.current)
+  }, [])
 
   const {
     register,
@@ -59,8 +83,9 @@ export function LoginPage() {
 
           <form className="mt-8 space-y-4" onSubmit={onSubmit}>
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Email</label>
+              <label htmlFor="login-email" className="mb-2 block text-sm font-medium text-slate-700">Email</label>
               <input
+                id="login-email"
                 type="email"
                 autoComplete="email"
                 className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900"
@@ -70,17 +95,30 @@ export function LoginPage() {
             </div>
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <label className="block text-sm font-medium text-slate-700">Password</label>
+                <label htmlFor="login-password" className="block text-sm font-medium text-slate-700">Password</label>
                 <Link to="/forgot-password" className="text-sm font-medium text-slate-500 hover:text-slate-900">
                   Forgot password?
                 </Link>
               </div>
-              <input
-                type="password"
-                autoComplete="current-password"
-                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900"
-                {...register('password')}
-              />
+              <div className="relative">
+                <input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white py-0 pl-4 pr-12 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900"
+                  {...register('password')}
+                />
+                <button
+                  type="button"
+                  onClick={togglePasswordVisibility}
+                  aria-label={showPassword ? 'Conceal entered characters' : 'Reveal entered characters'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-slate-500 transition hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-slate-900"
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+                </button>
+              </div>
               {errors.password ? <p className="mt-2 text-sm text-rose-600">{errors.password.message}</p> : null}
             </div>
             {submitError ? (

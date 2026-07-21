@@ -26,6 +26,8 @@ public sealed class Site : AuditableEntity, ITenantEntity
     public string? OperatingHours { get; set; }
     public string? AccessNotes { get; set; }
     public string? SpecialInstructions { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
 
     public Tenant? Tenant { get; set; }
     public Client? Client { get; set; }

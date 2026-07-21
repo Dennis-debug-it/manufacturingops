@@ -14,9 +14,10 @@ export interface DetailLayoutProps {
   tabs: DetailTab[]
   defaultTabId?: string
   className?: string
+  sidebar?: ReactNode
 }
 
-export function DetailLayout({ header, tabs, defaultTabId, className }: DetailLayoutProps) {
+export function DetailLayout({ header, tabs, defaultTabId, className, sidebar }: DetailLayoutProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = searchParams.get('tab') ?? defaultTabId ?? tabs[0]?.id ?? ''
 
@@ -26,9 +27,8 @@ export function DetailLayout({ header, tabs, defaultTabId, className }: DetailLa
     return null
   }
 
-  return (
-    <div className={cn('space-y-6', className)}>
-      {header}
+  const body = (
+    <div className="min-w-0 flex-1 space-y-6">
       <div className="border-b border-slate-200">
         <nav className="flex flex-wrap gap-2">
           {tabs.map((tab) => {
@@ -52,6 +52,20 @@ export function DetailLayout({ header, tabs, defaultTabId, className }: DetailLa
         </nav>
       </div>
       <div>{currentTab.content}</div>
+    </div>
+  )
+
+  return (
+    <div className={cn('space-y-6', className)}>
+      {header}
+      {sidebar ? (
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+          {body}
+          <aside className="w-full shrink-0 space-y-4 lg:w-80">{sidebar}</aside>
+        </div>
+      ) : (
+        body
+      )}
     </div>
   )
 }

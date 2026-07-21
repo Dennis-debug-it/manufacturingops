@@ -31,6 +31,10 @@ public sealed class User : AuditableEntity, ITenantEntity
     public ICollection<UserCertification> Certifications { get; set; } = new List<UserCertification>();
     public ICollection<UserBranchAssignment> BranchAssignments { get; set; } = new List<UserBranchAssignment>();
     public ICollection<UserSession> Sessions { get; set; } = new List<UserSession>();
+    public ICollection<UserPermissionGroup> PermissionGroups { get; set; } = new List<UserPermissionGroup>();
+    public ICollection<UserPermissionOverride> PermissionOverrides { get; set; } = new List<UserPermissionOverride>();
+    public ICollection<AccessScope> AccessScopes { get; set; } = new List<AccessScope>();
+    public ICollection<PermissionThreshold> PermissionThresholds { get; set; } = new List<PermissionThreshold>();
     public ICollection<Contract> RenewalOwnedContracts { get; set; } = new List<Contract>();
     public ICollection<Contract> AccountManagedContracts { get; set; } = new List<Contract>();
     public ICollection<Contract> InternallyApprovedContracts { get; set; } = new List<Contract>();

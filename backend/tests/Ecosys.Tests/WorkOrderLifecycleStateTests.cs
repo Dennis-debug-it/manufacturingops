@@ -107,6 +107,7 @@ public sealed class WorkOrderLifecycleStateTests
             new StubEmailSubjectRuleService(),
             slaService ?? new NoOpSlaService(),
             new NoOpServiceOpsNotifier(),
+            new NoOpEtaNotificationService(),
             Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.PublicAppOptions()),
             NullLogger<WorkOrderLifecycleService>.Instance);
 
@@ -300,6 +301,11 @@ public sealed class WorkOrderLifecycleStateTests
     {
         public Task ApplyDefinitionAsync(WorkOrder workOrder, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<bool> RefreshWorkOrderAsync(Guid workOrderId, DateTime nowUtc, CancellationToken cancellationToken = default) => Task.FromResult(false);
+    }
+
+    private sealed class NoOpEtaNotificationService : IEtaNotificationService
+    {
+        public Task NotifyAsync(Guid tenantId, WorkOrder workOrder, string eventType, string? technicianName, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class NoOpServiceOpsNotifier : IServiceOpsNotifier

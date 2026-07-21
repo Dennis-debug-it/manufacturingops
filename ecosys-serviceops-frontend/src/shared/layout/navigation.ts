@@ -1,5 +1,5 @@
 import type { AppRole } from '../types/auth'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, BookOpen } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -12,10 +12,13 @@ export interface NavItem {
 export const tenantNavItems: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer'], permission: 'dashboard.view', icon: LayoutDashboard },
   { label: 'Work Orders', to: '/work-orders', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: ClipboardList },
+  { label: 'Scheduling Board', to: '/dispatch/board', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: CalendarClock },
+  { label: 'Live Map', to: '/dispatch/map', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: MapPin },
   { label: 'Maintenance', to: '/maintenance/calendar', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Wrench },
   { label: 'Clients', to: '/clients', roles: ['admin', 'manager', 'dispatcher', 'finance', 'viewer'], permission: 'clients.view', icon: Building2 },
   { label: 'Inventory', to: '/inventory', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer'], permission: 'inventory.view', icon: Package },
-  { label: 'Team', to: '/team', roles: ['admin', 'manager', 'viewer'], permission: 'team.view', icon: Users },
+  { label: 'Users & Access', to: '/team', roles: ['admin', 'manager', 'viewer'], permission: 'team.view', icon: Users },
+  { label: 'Knowledge', to: '/knowledge', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer'], permission: 'knowledge.view', icon: BookOpen },
   { label: 'Contracts', to: '/contracts', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'contracts.view', icon: FileText },
   { label: 'Finance', to: '/finance', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'finance.view', icon: Wallet },
   { label: 'Approvals', to: '/approvals', roles: ['admin', 'manager', 'finance'], icon: CheckSquare },

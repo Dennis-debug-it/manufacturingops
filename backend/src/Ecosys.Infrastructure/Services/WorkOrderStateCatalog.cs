@@ -12,6 +12,8 @@ public static class WorkOrderStatuses
     public const string Scheduled = "Scheduled";
     public const string InProgress = "In Progress";
     public const string OnHold = "On Hold";
+    public const string WaitingOnParts = "Waiting on Parts";
+    public const string WaitingOnClient = "Waiting on Client";
     public const string Completed = "Completed";
     public const string ClientAccepted = "Client Accepted";
     public const string Closed = "Closed";
@@ -27,6 +29,8 @@ public static class WorkOrderStatuses
         Scheduled,
         InProgress,
         OnHold,
+        WaitingOnParts,
+        WaitingOnClient,
         Completed,
         ClientAccepted,
         Closed,
@@ -37,6 +41,7 @@ public static class WorkOrderStatuses
 
     public static readonly string[] ClosedStatuses = [Closed, Cancelled, Rejected];
     public static readonly string[] TerminalStatuses = [Closed, Cancelled, Rejected];
+    public static readonly string[] HoldStatuses = [OnHold, WaitingOnParts, WaitingOnClient];
 
     public static WorkOrderStatus Parse(string? status)
     {
@@ -47,6 +52,8 @@ public static class WorkOrderStatuses
             "Pending Materials" or "Awaiting Materials" or "Awaiting Parts" or "Waiting for Spares" or "Awaiting Spares" => WorkOrderStatus.OnHold,
             "Pending Client" or "Awaiting User" or "Awaiting Client" or "Awaiting Approval" or "Awaiting Vendor" or "Waiting for Access" or "Awaiting Site Access" => WorkOrderStatus.OnHold,
             "Paused" or OnHold => WorkOrderStatus.OnHold,
+            WaitingOnParts => WorkOrderStatus.WaitingOnParts,
+            WaitingOnClient => WorkOrderStatus.WaitingOnClient,
             "Acknowledged" => WorkOrderStatus.ClientAccepted,
             "Ready to Close" => WorkOrderStatus.Completed,
             New => WorkOrderStatus.New,
@@ -71,7 +78,7 @@ public static class WorkOrderStatuses
         TerminalStatuses.Contains(Normalize(status), StringComparer.OrdinalIgnoreCase);
 
     public static bool IsHold(string? status) =>
-        string.Equals(Normalize(status), OnHold, StringComparison.OrdinalIgnoreCase);
+        HoldStatuses.Contains(Normalize(status), StringComparer.OrdinalIgnoreCase);
 
     public static bool IsOpen(string? status) =>
         !IsClosed(status)
@@ -86,6 +93,8 @@ public static class WorkOrderStatuses
         WorkOrderStatus.Scheduled => Scheduled,
         WorkOrderStatus.InProgress => InProgress,
         WorkOrderStatus.OnHold => OnHold,
+        WorkOrderStatus.WaitingOnParts => WaitingOnParts,
+        WorkOrderStatus.WaitingOnClient => WaitingOnClient,
         WorkOrderStatus.Completed => Completed,
         WorkOrderStatus.ClientAccepted => ClientAccepted,
         WorkOrderStatus.Closed => Closed,
@@ -103,10 +112,12 @@ public static class WorkOrderStatusTransitions
         {
             [WorkOrderStatuses.New] = [WorkOrderStatuses.Open, WorkOrderStatuses.Rejected, WorkOrderStatuses.Cancelled],
             [WorkOrderStatuses.Open] = [WorkOrderStatuses.Assigned, WorkOrderStatuses.Scheduled, WorkOrderStatuses.Cancelled],
-            [WorkOrderStatuses.Assigned] = [WorkOrderStatuses.Scheduled, WorkOrderStatuses.InProgress, WorkOrderStatuses.OnHold, WorkOrderStatuses.Cancelled],
-            [WorkOrderStatuses.Scheduled] = [WorkOrderStatuses.InProgress, WorkOrderStatuses.OnHold, WorkOrderStatuses.Cancelled],
-            [WorkOrderStatuses.InProgress] = [WorkOrderStatuses.OnHold, WorkOrderStatuses.Completed],
-            [WorkOrderStatuses.OnHold] = [WorkOrderStatuses.InProgress, WorkOrderStatuses.Cancelled],
+            [WorkOrderStatuses.Assigned] = [WorkOrderStatuses.Scheduled, WorkOrderStatuses.InProgress, WorkOrderStatuses.OnHold, WorkOrderStatuses.WaitingOnParts, WorkOrderStatuses.WaitingOnClient, WorkOrderStatuses.Cancelled],
+            [WorkOrderStatuses.Scheduled] = [WorkOrderStatuses.InProgress, WorkOrderStatuses.OnHold, WorkOrderStatuses.WaitingOnParts, WorkOrderStatuses.WaitingOnClient, WorkOrderStatuses.Cancelled],
+            [WorkOrderStatuses.InProgress] = [WorkOrderStatuses.OnHold, WorkOrderStatuses.WaitingOnParts, WorkOrderStatuses.WaitingOnClient, WorkOrderStatuses.Completed],
+            [WorkOrderStatuses.OnHold] = [WorkOrderStatuses.Assigned, WorkOrderStatuses.Scheduled, WorkOrderStatuses.InProgress, WorkOrderStatuses.Cancelled],
+            [WorkOrderStatuses.WaitingOnParts] = [WorkOrderStatuses.Assigned, WorkOrderStatuses.Scheduled, WorkOrderStatuses.InProgress, WorkOrderStatuses.Cancelled],
+            [WorkOrderStatuses.WaitingOnClient] = [WorkOrderStatuses.Assigned, WorkOrderStatuses.Scheduled, WorkOrderStatuses.InProgress, WorkOrderStatuses.Cancelled],
             [WorkOrderStatuses.Completed] = [WorkOrderStatuses.ClientAccepted, WorkOrderStatuses.Reopened, WorkOrderStatuses.Closed],
             [WorkOrderStatuses.ClientAccepted] = [WorkOrderStatuses.Closed, WorkOrderStatuses.Reopened],
             [WorkOrderStatuses.Closed] = [],
@@ -299,6 +310,49 @@ public static class WorkOrderHoldReasons
         }
 
         return (fallbackReason, null);
+    }
+}
+
+public static class WorkOrderHoldTypes
+{
+    public const string OnHold = "OnHold";
+    public const string WaitingOnParts = "WaitingOnParts";
+    public const string WaitingOnClient = "WaitingOnClient";
+
+    public static readonly IReadOnlyCollection<string> All = [OnHold, WaitingOnParts, WaitingOnClient];
+
+    public static string ToStatus(string? holdType)
+    {
+        var normalized = string.IsNullOrWhiteSpace(holdType) ? OnHold : holdType.Trim();
+        return normalized switch
+        {
+            OnHold => WorkOrderStatuses.OnHold,
+            WaitingOnParts => WorkOrderStatuses.WaitingOnParts,
+            WaitingOnClient => WorkOrderStatuses.WaitingOnClient,
+            _ => throw new BusinessRuleException("Invalid hold type. Use OnHold, WaitingOnParts, or WaitingOnClient.")
+        };
+    }
+
+    public static string ToHoldReason(string? holdType)
+    {
+        var normalized = string.IsNullOrWhiteSpace(holdType) ? OnHold : holdType.Trim();
+        return normalized switch
+        {
+            WaitingOnParts => WorkOrderHoldReasons.AwaitingMaterials,
+            WaitingOnClient => WorkOrderHoldReasons.AwaitingClient,
+            _ => WorkOrderHoldReasons.Other
+        };
+    }
+
+    public static string FromStatus(string? status)
+    {
+        var normalized = WorkOrderStatuses.Normalize(status);
+        return normalized switch
+        {
+            WorkOrderStatuses.WaitingOnParts => WaitingOnParts,
+            WorkOrderStatuses.WaitingOnClient => WaitingOnClient,
+            _ => OnHold
+        };
     }
 }
 

@@ -218,13 +218,56 @@ public sealed class KnowledgeController(
             TenantId = TenantId,
             Name = request.Name.Trim(),
             Description = request.Description?.Trim(),
+            Icon = request.Icon?.Trim(),
             DisplayOrder = request.DisplayOrder,
+            IsPublic = request.IsPublic,
             IsActive = true
         };
 
         dbContext.KnowledgeCategories.Add(category);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapCategory(category));
+    }
+
+    [HttpPut("categories/{id:guid}")]
+    public async Task<ActionResult<KnowledgeCategoryResponse>> UpdateCategory(Guid id, [FromBody] UpsertKnowledgeCategoryRequest request, CancellationToken cancellationToken)
+    {
+        EnsureKnowledgeManageAccess();
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            throw new BusinessRuleException("Category name is required.");
+        }
+
+        var category = await dbContext.KnowledgeCategories
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Knowledge category not found.");
+
+        category.Name = request.Name.Trim();
+        category.Description = request.Description?.Trim();
+        category.Icon = request.Icon?.Trim();
+        category.DisplayOrder = request.DisplayOrder;
+        category.IsPublic = request.IsPublic;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(MapCategory(category));
+    }
+
+    [HttpDelete("categories/{id:guid}")]
+    public async Task<IActionResult> DeleteCategory(Guid id, CancellationToken cancellationToken)
+    {
+        EnsureKnowledgeManageAccess();
+        var category = await dbContext.KnowledgeCategories
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Knowledge category not found.");
+
+        var hasArticles = await dbContext.KnowledgeArticles.AnyAsync(x => x.TenantId == TenantId && x.CategoryId == id, cancellationToken);
+        if (hasArticles)
+        {
+            throw new BusinessRuleException("Move or delete the articles in this category before deleting it.");
+        }
+
+        dbContext.KnowledgeCategories.Remove(category);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return NoContent();
     }
 
     [HttpGet("search")]
@@ -545,8 +588,8 @@ public sealed class KnowledgeController(
         var value = string.IsNullOrWhiteSpace(visibility) ? "Internal" : visibility.Trim();
         return value switch
         {
-            "Internal" or "TechnicianOnly" or "AdminOnly" => value,
-            _ => throw new BusinessRuleException("Knowledge visibility must be Internal, TechnicianOnly, or AdminOnly.")
+            "Internal" or "TechnicianOnly" or "AdminOnly" or "Public" => value,
+            _ => throw new BusinessRuleException("Knowledge visibility must be Internal, TechnicianOnly, AdminOnly, or Public.")
         };
     }
 
@@ -596,6 +639,9 @@ public sealed class KnowledgeController(
             article.UpdatedAt,
             article.PublishedAt,
             article.SourceWorkOrderId,
+            article.ViewCount,
+            article.HelpfulCount,
+            article.NotHelpfulCount,
             article.ArticleTags
                 .Where(x => x.Tag is not null)
                 .Select(x => x.Tag!.Name)
@@ -620,6 +666,9 @@ public sealed class KnowledgeController(
             article.Visibility,
             article.PublishedAt,
             article.UpdatedAt ?? article.CreatedAt,
+            article.ViewCount,
+            article.HelpfulCount,
+            article.NotHelpfulCount,
             article.ArticleTags
                 .Where(x => x.Tag is not null)
                 .Select(x => x.Tag!.Name)
@@ -627,7 +676,7 @@ public sealed class KnowledgeController(
                 .ToArray());
 
     private static KnowledgeCategoryResponse MapCategory(KnowledgeCategory category) =>
-        new(category.Id, category.Name, category.Description, category.DisplayOrder, category.IsActive);
+        new(category.Id, category.Name, category.Description, category.Icon, category.DisplayOrder, category.IsActive, category.IsPublic);
 
     private static string BuildDraftSummary(WorkOrder workOrder)
     {
@@ -696,9 +745,9 @@ public sealed record UpsertKnowledgeArticleRequest(
     string Visibility,
     IReadOnlyCollection<string>? Tags);
 
-public sealed record UpsertKnowledgeCategoryRequest(string Name, string? Description, int DisplayOrder);
+public sealed record UpsertKnowledgeCategoryRequest(string Name, string? Description, string? Icon, int DisplayOrder, bool IsPublic);
 
-public sealed record KnowledgeCategoryResponse(Guid Id, string Name, string? Description, int DisplayOrder, bool IsActive);
+public sealed record KnowledgeCategoryResponse(Guid Id, string Name, string? Description, string? Icon, int DisplayOrder, bool IsActive, bool IsPublic);
 
 public sealed record KnowledgeArticleListItemResponse(
     Guid Id,
@@ -711,6 +760,9 @@ public sealed record KnowledgeArticleListItemResponse(
     string Visibility,
     DateTime? PublishedAt,
     DateTime UpdatedAt,
+    int ViewCount,
+    int HelpfulCount,
+    int NotHelpfulCount,
     IReadOnlyCollection<string> Tags);
 
 public sealed record KnowledgeArticleVersionResponse(Guid Id, int VersionNumber, string Title, string Body, Guid? UpdatedByUserId, DateTime CreatedAt);
@@ -733,6 +785,9 @@ public sealed record KnowledgeArticleDetailResponse(
     DateTime? UpdatedAt,
     DateTime? PublishedAt,
     Guid? SourceWorkOrderId,
+    int ViewCount,
+    int HelpfulCount,
+    int NotHelpfulCount,
     IReadOnlyCollection<string> Tags,
     IReadOnlyCollection<KnowledgeArticleVersionResponse> Versions,
     IReadOnlyCollection<KnowledgeArticleListItemResponse> RelatedArticles);

@@ -6,6 +6,7 @@ const tabs = [
   { to: '/inventory/parts', label: 'Parts', match: ['/inventory/parts'] },
   { to: '/inventory/issues', label: 'Issues', match: ['/inventory/issues'] },
   { to: '/inventory/restock-requests', label: 'Restock Requests', match: ['/inventory/restock-requests'] },
+  { to: '/inventory/parts-requests', label: 'Parts Requests', match: ['/inventory/parts-requests'] },
   { to: '/inventory/purchase-orders', label: 'Purchase Orders', match: ['/inventory/purchase-orders'] },
   { to: '/inventory/suppliers', label: 'Suppliers', match: ['/inventory/suppliers'] },
   { to: '/inventory/movements', label: 'Movements', match: ['/inventory/movements'] },

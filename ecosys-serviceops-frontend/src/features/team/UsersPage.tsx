@@ -26,7 +26,7 @@ export function UsersPage() {
   const columns: DataTableColumn<TeamUser>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/team/users/${row.id}`}>{row.fullName}</Link> },
     { key: 'email', header: 'Email', cell: (row) => row.email },
-    { key: 'role', header: 'Role', cell: (row) => row.role },
+    { key: 'department', header: 'Department', cell: (row) => row.department ?? '—' },
     { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? '—' },
     { key: 'defaultBranchName', header: 'Branch', cell: (row) => row.defaultBranchName ?? (row.hasAllBranchAccess ? 'All Branches' : '—') },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
@@ -35,8 +35,8 @@ export function UsersPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Team Users"
-        subtitle="Invite and manage users."
+        title="Users & Access"
+        subtitle="Manage people, their capabilities, and where access applies."
         primaryAction={
           canManage ? (
             <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">

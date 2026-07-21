@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Send } from 'lucide-react'
+import { AlertTriangle, Send } from 'lucide-react'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Spinner } from '../../../shared/components/Spinner'
 import { usePermission } from '../../../shared/hooks/usePermission'
@@ -68,19 +68,28 @@ export function TimelineTab({ workOrderId }: { workOrderId: string }) {
         <EmptyState title="No timeline events yet" description="Status changes and updates for this work order will appear here." />
       ) : (
         <ol className="space-y-3">
-          {events.map((event) => (
-            <li key={event.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-sm font-medium text-slate-900">{event.eventType}</span>
-                <span className="text-xs text-slate-500">{formatDateTime(event.occurredAt)}</span>
-              </div>
-              {event.message ? <p className="mt-2 text-sm leading-6 text-slate-700">{event.message}</p> : null}
-              {event.oldStatus || event.newStatus ? (
-                <p className="mt-2 text-xs text-slate-500">{event.oldStatus ?? '—'} → {event.newStatus ?? '—'}</p>
-              ) : null}
-              <p className="mt-2 text-xs text-slate-500">{event.actorUserName ?? 'System'}</p>
-            </li>
-          ))}
+          {events.map((event) => {
+            const isEscalation = event.eventType === 'Escalation'
+            return (
+              <li
+                key={event.id}
+                className={`rounded-2xl border p-4 shadow-sm ${isEscalation ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className={`flex items-center gap-1.5 text-sm font-medium ${isEscalation ? 'text-amber-800' : 'text-slate-900'}`}>
+                    {isEscalation ? <AlertTriangle className="h-3.5 w-3.5" /> : null}
+                    {isEscalation ? 'Escalation' : event.eventType}
+                  </span>
+                  <span className="text-xs text-slate-500">{formatDateTime(event.occurredAt)}</span>
+                </div>
+                {event.message ? <p className="mt-2 text-sm leading-6 text-slate-700">{event.message}</p> : null}
+                {event.oldStatus || event.newStatus ? (
+                  <p className="mt-2 text-xs text-slate-500">{event.oldStatus ?? '—'} → {event.newStatus ?? '—'}</p>
+                ) : null}
+                <p className="mt-2 text-xs text-slate-500">{event.actorUserName ?? 'System'}</p>
+              </li>
+            )
+          })}
         </ol>
       )}
     </div>

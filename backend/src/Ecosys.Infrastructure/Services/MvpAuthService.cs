@@ -73,6 +73,7 @@ internal sealed class MvpAuthService(
     IAuditLogService auditLogService,
     IUserPermissionTemplateService permissionTemplateService,
     IRolePermissionService rolePermissionService,
+    IDynamicAccessService dynamicAccessService,
     IUserSessionService userSessionService,
     ILicenseGuardService licenseGuardService,
     ITenantSecurityPolicyService tenantSecurityPolicyService) : IMvpAuthService
@@ -485,7 +486,7 @@ internal sealed class MvpAuthService(
             return permissionTemplateService.GetSuperAdminPermissions();
         }
 
-        return await rolePermissionService.ResolveAsync(user.TenantId, user.Role, cancellationToken);
+        return await dynamicAccessService.ResolveLegacyClaimsAsync(user.TenantId, user.Id, cancellationToken);
     }
 
     private static UserPermission ToEntity(UserPermissionsModel permissions) =>

@@ -182,6 +182,17 @@ public sealed partial class WorkOrderExecutionController(
             UsedAt = request.UsedAt ?? DateTime.UtcNow
         });
 
+        dbContext.WorkOrderEvents.Add(new WorkOrderEvent
+        {
+            TenantId = TenantId,
+            WorkOrderId = workOrderId,
+            ActorUserId = UserId,
+            EventType = "PartUsed",
+            Status = WorkOrderStatuses.Normalize(workOrder.Status),
+            Message = $"Used {request.QuantityUsed} x {material.ItemName}.",
+            OccurredAt = DateTime.UtcNow
+        });
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
@@ -260,6 +271,17 @@ public sealed partial class WorkOrderExecutionController(
             IncludeInReport = includeInReport ?? true,
             UploadedByUserId = UserId,
             UploadedAt = DateTime.UtcNow
+        });
+
+        dbContext.WorkOrderEvents.Add(new WorkOrderEvent
+        {
+            TenantId = TenantId,
+            WorkOrderId = workOrderId,
+            ActorUserId = UserId,
+            EventType = "PhotoUploaded",
+            Status = WorkOrderStatuses.Normalize(workOrder.Status),
+            Message = $"Uploaded a {normalizedCategory} photo.",
+            OccurredAt = DateTime.UtcNow
         });
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -470,6 +492,17 @@ public sealed partial class WorkOrderExecutionController(
             checklistItem.CompletedAt = DateTime.UtcNow;
             checklistItem.ResponseValue = request.SignerName.Trim();
         }
+
+        dbContext.WorkOrderEvents.Add(new WorkOrderEvent
+        {
+            TenantId = TenantId,
+            WorkOrderId = workOrderId,
+            ActorUserId = UserId,
+            EventType = "SignatureCollected",
+            Status = WorkOrderStatuses.Normalize(workOrder.Status),
+            Message = $"Captured {request.SignatureType.ToLowerInvariant()} signature from {request.SignerName.Trim()}.",
+            OccurredAt = DateTime.UtcNow
+        });
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -1184,6 +1217,9 @@ public sealed partial class WorkOrderExecutionController(
             workOrder.Site?.OperatingHours,
             workOrder.Site?.AccessNotes,
             BuildSiteLocation(workOrder.Site),
+            workOrder.Site?.Latitude,
+            workOrder.Site?.Longitude,
+            workOrder.EstimatedLabourHours,
             workOrder.Asset?.AssetCode,
             workOrder.Asset?.AssetType,
             workOrder.Asset?.AssetCategory?.Name,

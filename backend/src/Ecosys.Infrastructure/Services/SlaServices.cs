@@ -25,16 +25,7 @@ internal sealed class SlaService(
 
     public async Task ApplyDefinitionAsync(WorkOrder workOrder, CancellationToken cancellationToken = default)
     {
-        var client = await dbContext.Clients
-            .Include(x => x.SlaDefinition)
-            .ThenInclude(x => x!.Rules)
-            .SingleOrDefaultAsync(
-                x => x.TenantId == workOrder.TenantId && x.Id == workOrder.ClientId,
-                cancellationToken);
-
-        var rule = client?.SlaDefinitionId is null || client.SlaDefinition is null || !client.SlaDefinition.IsActive
-            ? null
-            : client.SlaDefinition.Rules.FirstOrDefault(x => MatchesPriority(x.Priority, workOrder.Priority));
+        var rule = await ResolveRuleAsync(workOrder.TenantId, workOrder.ClientId, workOrder.Priority, cancellationToken);
 
         if (rule is null)
         {
@@ -42,12 +33,35 @@ internal sealed class SlaService(
             return;
         }
 
-        workOrder.SlaResponseDeadline = CalculateDeadline(workOrder.CreatedAt, rule.ResponseTargetHours, rule.BusinessHoursOnly);
-        workOrder.SlaResolutionDeadline = CalculateDeadline(workOrder.CreatedAt, rule.ResolutionTargetHours, rule.BusinessHoursOnly);
+        workOrder.SlaResponseDeadline = CalculateDeadline(workOrder.CreatedAt, rule.ResponseTargetHours, rule.BusinessHoursOnly, rule.BusinessHoursStart, rule.BusinessHoursEnd);
+        workOrder.SlaResolutionDeadline = CalculateDeadline(workOrder.CreatedAt, rule.ResolutionTargetHours, rule.BusinessHoursOnly, rule.BusinessHoursStart, rule.BusinessHoursEnd);
         workOrder.SlaResponseBreached = false;
         workOrder.SlaResolutionBreached = false;
         workOrder.SlaResponseBreachedAt = null;
         workOrder.SlaResolutionBreachedAt = null;
+    }
+
+    private async Task<SlaRule?> ResolveRuleAsync(Guid tenantId, Guid clientId, string priority, CancellationToken cancellationToken)
+    {
+        var client = await dbContext.Clients
+            .Include(x => x.SlaDefinition)
+            .ThenInclude(x => x!.Rules)
+            .ThenInclude(x => x.Escalations)
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == clientId, cancellationToken);
+
+        var definition = client?.SlaDefinitionId is not null && client.SlaDefinition is { IsActive: true }
+            ? client.SlaDefinition
+            : null;
+
+        if (definition is null)
+        {
+            definition = await dbContext.SlaDefinitions
+                .Include(x => x.Rules)
+                .ThenInclude(x => x.Escalations)
+                .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.IsDefault && x.IsActive, cancellationToken);
+        }
+
+        return definition?.Rules.FirstOrDefault(x => MatchesPriority(x.Priority, priority));
     }
 
     public async Task<bool> RefreshWorkOrderAsync(Guid workOrderId, DateTime utcNow, CancellationToken cancellationToken = default)
@@ -107,7 +121,10 @@ internal sealed class SlaService(
             }
         }
 
-        if (!changed)
+        var record = await UpsertRecordAsync(workOrder, utcNow, cancellationToken);
+        var escalationsFired = await ProcessEscalationsAsync(workOrder, record, effectiveResponseDeadline, effectiveResolutionDeadline, utcNow, cancellationToken);
+
+        if (!changed && !record.RecordChanged && !escalationsFired)
         {
             return false;
         }
@@ -124,7 +141,166 @@ internal sealed class SlaService(
             await TryQueueBreachNotificationsAsync(workOrder, "Resolution", workOrder.SlaResolutionDeadline, cancellationToken);
         }
 
-        return true;
+        return changed;
+    }
+
+    private async Task<(SlaRecord Record, bool RecordChanged)> UpsertRecordAsync(WorkOrder workOrder, DateTime utcNow, CancellationToken cancellationToken)
+    {
+        var record = await dbContext.SlaRecords
+            .Include(x => x.SlaRule)
+            .ThenInclude(x => x!.Escalations)
+            .SingleOrDefaultAsync(x => x.WorkOrderId == workOrder.Id, cancellationToken);
+
+        var recordChanged = false;
+        if (record is null)
+        {
+            var rule = await ResolveRuleAsync(workOrder.TenantId, workOrder.ClientId, workOrder.Priority, cancellationToken);
+            record = new SlaRecord { TenantId = workOrder.TenantId, WorkOrderId = workOrder.Id, SlaRuleId = rule?.Id };
+            dbContext.SlaRecords.Add(record);
+            record.SlaRule = rule;
+            recordChanged = true;
+        }
+
+        var isPaused = WorkOrderStatuses.IsHold(workOrder.Status) && workOrder.HoldStartedAt.HasValue;
+        if (record.IsPaused != isPaused)
+        {
+            record.IsPaused = isPaused;
+            recordChanged = true;
+        }
+
+        var pauseReason = isPaused ? workOrder.HoldReason : null;
+        if (record.PauseReason != pauseReason)
+        {
+            record.PauseReason = pauseReason;
+            recordChanged = true;
+        }
+
+        if (record.ResponseBreachedAt != workOrder.SlaResponseBreachedAt)
+        {
+            record.ResponseBreachedAt = workOrder.SlaResponseBreachedAt;
+            recordChanged = true;
+        }
+
+        if (record.ResolutionBreachedAt != workOrder.SlaResolutionBreachedAt)
+        {
+            record.ResolutionBreachedAt = workOrder.SlaResolutionBreachedAt;
+            recordChanged = true;
+        }
+
+        return (record, recordChanged);
+    }
+
+    private async Task<bool> ProcessEscalationsAsync(
+        WorkOrder workOrder,
+        (SlaRecord Record, bool RecordChanged) recordState,
+        DateTime? effectiveResponseDeadline,
+        DateTime? effectiveResolutionDeadline,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
+        var record = recordState.Record;
+        var rule = record.SlaRule;
+        if (rule is null || rule.Escalations.Count == 0)
+        {
+            return false;
+        }
+
+        var fired = false;
+
+        if (!workOrder.SlaResponseBreached && effectiveResponseDeadline.HasValue)
+        {
+            var percentElapsed = PercentElapsed(workOrder.CreatedAt, effectiveResponseDeadline.Value, utcNow);
+            var due = rule.Escalations
+                .Where(x => x.TriggerAtPercent <= percentElapsed && x.TriggerAtPercent > (record.LastResponseEscalationPercent ?? 0))
+                .OrderByDescending(x => x.TriggerAtPercent)
+                .ToList();
+
+            if (due.Count > 0)
+            {
+                await FireEscalationsAsync(workOrder, due, "Response", cancellationToken);
+                record.LastResponseEscalationPercent = due.Max(x => x.TriggerAtPercent);
+                fired = true;
+            }
+        }
+
+        if (!workOrder.SlaResolutionBreached && effectiveResolutionDeadline.HasValue)
+        {
+            var percentElapsed = PercentElapsed(workOrder.CreatedAt, effectiveResolutionDeadline.Value, utcNow);
+            var due = rule.Escalations
+                .Where(x => x.TriggerAtPercent <= percentElapsed && x.TriggerAtPercent > (record.LastResolutionEscalationPercent ?? 0))
+                .OrderByDescending(x => x.TriggerAtPercent)
+                .ToList();
+
+            if (due.Count > 0)
+            {
+                await FireEscalationsAsync(workOrder, due, "Resolution", cancellationToken);
+                record.LastResolutionEscalationPercent = due.Max(x => x.TriggerAtPercent);
+                fired = true;
+            }
+        }
+
+        return fired;
+    }
+
+    private static int PercentElapsed(DateTime startedAt, DateTime deadline, DateTime utcNow)
+    {
+        var totalMinutes = (deadline - startedAt).TotalMinutes;
+        if (totalMinutes <= 0)
+        {
+            return 100;
+        }
+
+        var elapsedMinutes = (utcNow - startedAt).TotalMinutes;
+        return (int)Math.Clamp(elapsedMinutes / totalMinutes * 100, 0, 100);
+    }
+
+    private async Task FireEscalationsAsync(WorkOrder workOrder, IReadOnlyCollection<SlaEscalation> escalations, string breachType, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var roleNames = escalations
+                .SelectMany(x => (x.NotifyRoles ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var escalateToUserIds = escalations
+                .Where(x => x.EscalateToUserId.HasValue)
+                .Select(x => x.EscalateToUserId!.Value)
+                .Distinct()
+                .ToList();
+
+            var recipients = await dbContext.Users
+                .Where(x => x.TenantId == workOrder.TenantId && x.IsActive && x.Email != null
+                    && (roleNames.Contains(x.Role) || escalateToUserIds.Contains(x.Id)))
+                .Select(x => new { x.Email, x.FullName })
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var maxPercent = escalations.Max(x => x.TriggerAtPercent);
+
+            foreach (var recipient in recipients)
+            {
+                await emailOutboxService.QueueEmailAsync(
+                    new QueueEmailRequest(
+                        workOrder.TenantId,
+                        "sla-escalation",
+                        "sla-escalation",
+                        recipient.Email!,
+                        recipient.FullName,
+                        "Ecosys ServiceOps",
+                        null,
+                        null,
+                        $"{breachType} SLA at {maxPercent}% for {workOrder.WorkOrderNumber}",
+                        $"<p>Work order <strong>{workOrder.WorkOrderNumber}</strong> has reached {maxPercent}% of its {breachType.ToLowerInvariant()} SLA target.</p>",
+                        $"Work order {workOrder.WorkOrderNumber} has reached {maxPercent}% of its {breachType.ToLowerInvariant()} SLA target.",
+                        null),
+                    cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to queue SLA escalation notifications for work order {WorkOrderId}.", workOrder.Id);
+        }
     }
 
     private async Task TryQueueBreachNotificationsAsync(WorkOrder workOrder, string breachType, DateTime? deadline, CancellationToken cancellationToken)
@@ -213,24 +389,27 @@ internal sealed class SlaService(
     private static bool MatchesPriority(string rulePriority, string workOrderPriority) =>
         string.Equals((rulePriority ?? string.Empty).Trim(), (workOrderPriority ?? string.Empty).Trim(), StringComparison.OrdinalIgnoreCase);
 
-    private static DateTime CalculateDeadline(DateTime createdAtUtc, decimal targetHours, bool businessHoursOnly)
+    private static DateTime CalculateDeadline(DateTime createdAtUtc, decimal targetHours, bool businessHoursOnly, TimeSpan? businessHoursStart = null, TimeSpan? businessHoursEnd = null)
     {
         if (!businessHoursOnly)
         {
             return createdAtUtc.AddHours((double)targetHours);
         }
 
+        var dayStart = businessHoursStart ?? BusinessDayStart;
+        var dayEnd = businessHoursEnd ?? BusinessDayEnd;
+
         var remainingMinutes = (double)targetHours * 60d;
-        var cursor = EnsureBusinessTime(createdAtUtc);
+        var cursor = EnsureBusinessTime(createdAtUtc, dayStart, dayEnd);
 
         while (remainingMinutes > 0.0001d)
         {
-            var dayEnd = cursor.Date + BusinessDayEnd;
-            var availableMinutes = Math.Max(0d, (dayEnd - cursor).TotalMinutes);
+            var boundary = cursor.Date + dayEnd;
+            var availableMinutes = Math.Max(0d, (boundary - cursor).TotalMinutes);
 
             if (availableMinutes <= 0.0001d)
             {
-                cursor = NextBusinessDay(cursor.Date.AddDays(1));
+                cursor = NextBusinessDay(cursor.Date.AddDays(1), dayStart);
                 continue;
             }
 
@@ -240,23 +419,23 @@ internal sealed class SlaService(
 
             if (remainingMinutes > 0.0001d)
             {
-                cursor = NextBusinessDay(cursor.Date.AddDays(1));
+                cursor = NextBusinessDay(cursor.Date.AddDays(1), dayStart);
             }
         }
 
         return cursor;
     }
 
-    private static DateTime EnsureBusinessTime(DateTime value)
+    private static DateTime EnsureBusinessTime(DateTime value, TimeSpan dayStart, TimeSpan dayEnd)
     {
         var cursor = value;
         if (IsWeekend(cursor))
         {
-            return NextBusinessDay(cursor.Date);
+            return NextBusinessDay(cursor.Date, dayStart);
         }
 
-        var start = cursor.Date + BusinessDayStart;
-        var end = cursor.Date + BusinessDayEnd;
+        var start = cursor.Date + dayStart;
+        var end = cursor.Date + dayEnd;
 
         if (cursor < start)
         {
@@ -265,18 +444,18 @@ internal sealed class SlaService(
 
         if (cursor >= end)
         {
-            return NextBusinessDay(cursor.Date.AddDays(1));
+            return NextBusinessDay(cursor.Date.AddDays(1), dayStart);
         }
 
         return cursor;
     }
 
-    private static DateTime NextBusinessDay(DateTime candidateDate)
+    private static DateTime NextBusinessDay(DateTime candidateDate, TimeSpan dayStart)
     {
-        var cursor = candidateDate.Date + BusinessDayStart;
+        var cursor = candidateDate.Date + dayStart;
         while (IsWeekend(cursor))
         {
-            cursor = cursor.AddDays(1).Date + BusinessDayStart;
+            cursor = cursor.AddDays(1).Date + dayStart;
         }
 
         return cursor;

@@ -30,17 +30,13 @@ public sealed class TenantFinanceController(
         var rates = await dbContext.ClientPreferentialRates.Where(x => x.TenantId == TenantId).ToListAsync(cancellationToken);
         var approvalRules = await dbContext.FinanceApprovalRules.Where(x => x.TenantId == TenantId && x.IsActive).ToListAsync(cancellationToken);
         var materialIssues = await dbContext.MaterialIssues.Where(x => x.TenantId == TenantId).ToListAsync(cancellationToken);
-        var billableWork = await BuildBillableWorkAsync(cancellationToken);
 
         return Ok(new TenantFinanceOverviewResponse(
             rates.Count,
             rates.Count(x => string.Equals(x.Status, "Active", StringComparison.OrdinalIgnoreCase)),
             approvalRules.Count,
             rates.Count(x => string.Equals(x.Status, "PendingApproval", StringComparison.OrdinalIgnoreCase)),
-            materialIssues.Count(x => string.Equals(x.IssueStatus, "pending_approval", StringComparison.OrdinalIgnoreCase)),
-            billableWork.Count,
-            billableWork.Sum(x => x.TotalAmount),
-            billableWork.FirstOrDefault()?.Currency ?? "KES"));
+            materialIssues.Count(x => string.Equals(x.IssueStatus, "pending_approval", StringComparison.OrdinalIgnoreCase))));
     }
 
     [HttpGet("summary")]
@@ -305,57 +301,7 @@ public sealed class TenantFinanceController(
         return Ok(card is null ? null : MapRateCard(card));
     }
 
-    // ── Billable Work ────────────────────────────────────────────────────────
-
-    [HttpGet("billable-work")]
-    public async Task<ActionResult<IReadOnlyCollection<TenantBillableWorkResponse>>> ListBillableWork(CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceViewBillableWork);
-        return Ok(await BuildBillableWorkAsync(cancellationToken));
-    }
-
     // ── Private helpers ──────────────────────────────────────────────────────
-
-    private async Task<List<TenantBillableWorkResponse>> BuildBillableWorkAsync(CancellationToken cancellationToken)
-    {
-        var usages = await dbContext.WorkOrderMaterialUsages
-            .Include(x => x.WorkOrder).ThenInclude(x => x!.Client)
-            .Include(x => x.MaterialItem)
-            .Where(x => x.TenantId == TenantId)
-            .OrderByDescending(x => x.UsedAt)
-            .ToListAsync(cancellationToken);
-
-        var rates = await dbContext.ClientPreferentialRates
-            .Where(x => x.TenantId == TenantId && x.Status == "Active")
-            .ToListAsync(cancellationToken);
-
-        return usages.Select(usage =>
-        {
-            var preferential = rates
-                .Where(x => x.ClientId == usage.WorkOrder!.ClientId && x.ItemType == "material")
-                .Where(x => x.EffectiveFrom <= usage.UsedAt && (!x.EffectiveTo.HasValue || x.EffectiveTo.Value >= usage.UsedAt))
-                .OrderByDescending(x => x.EffectiveFrom)
-                .FirstOrDefault();
-
-            var defaultRate = usage.UnitCost ?? usage.MaterialItem?.UnitCost ?? 0;
-            var appliedRate = preferential?.PreferentialRate ?? defaultRate;
-            return new TenantBillableWorkResponse(
-                usage.WorkOrderId,
-                usage.WorkOrder?.WorkOrderNumber,
-                usage.WorkOrder?.ClientId,
-                usage.WorkOrder?.Client?.ClientName,
-                "material",
-                usage.MaterialItem?.ItemName ?? "Material issue",
-                usage.QuantityUsed,
-                usage.MaterialItem?.UnitOfMeasure ?? "unit",
-                defaultRate,
-                appliedRate,
-                preferential?.Currency ?? "KES",
-                usage.QuantityUsed * appliedRate,
-                preferential is not null,
-                "work_order_material_usage");
-        }).ToList();
-    }
 
     private async Task<FinanceApprovalRule?> FindApplicableApprovalRuleAsync(string area, decimal amount, string currency, CancellationToken cancellationToken) =>
         await dbContext.FinanceApprovalRules
@@ -434,12 +380,10 @@ public sealed class TenantFinanceController(
         var convertedQuotations = await dbContext.TenantQuotations.CountAsync(x => x.TenantId == TenantId && x.Status == "Converted", cancellationToken);
         var conversionRate = totalQuotations > 0 ? Math.Round((decimal)convertedQuotations / totalQuotations * 100, 1) : 0;
 
-        var base1 = await BuildBillableWorkAsync(cancellationToken);
-
         return Ok(new FinanceDashboardResponse(
             totalInvoicedYtd, totalCollectedYtd, outstandingBalance, overdueBalance,
             conversionRate, totalQuotations, convertedQuotations,
-            base1.Count, base1.Sum(x => x.TotalAmount), base1.FirstOrDefault()?.Currency ?? "KES"));
+            ytdInvoices.FirstOrDefault()?.Currency ?? invoices.FirstOrDefault()?.Currency ?? "KES"));
     }
 
     // ── Revenue Report ───────────────────────────────────────────────────────
@@ -840,10 +784,7 @@ public sealed record TenantFinanceOverviewResponse(
     int ActivePreferentialRatesCount,
     int ApprovalRulesCount,
     int PendingRateApprovalsCount,
-    int PendingMaterialIssueApprovalsCount,
-    int BillableWorkItemsCount,
-    decimal EstimatedBillableAmount,
-    string Currency);
+    int PendingMaterialIssueApprovalsCount);
 
 public sealed record UpsertPreferentialRateRequest(
     Guid ClientId,
@@ -931,22 +872,6 @@ public sealed record RateCardResponse(
     bool IsActive,
     DateTime CreatedAt);
 
-public sealed record TenantBillableWorkResponse(
-    Guid WorkOrderId,
-    string? WorkOrderNumber,
-    Guid? ClientId,
-    string? ClientName,
-    string ItemType,
-    string Description,
-    decimal Quantity,
-    string Unit,
-    decimal DefaultRate,
-    decimal AppliedRate,
-    string Currency,
-    decimal TotalAmount,
-    bool PreferentialRateApplied,
-    string Source);
-
 public sealed record EmailClientStatementRequest(
     Guid ClientId,
     DateTime? From,
@@ -963,8 +888,6 @@ public sealed record FinanceDashboardResponse(
     decimal QuoteConversionRate,
     int TotalQuotations,
     int ConvertedQuotations,
-    int BillableWorkItemsCount,
-    decimal EstimatedBillableAmount,
     string Currency);
 
 public sealed record RevenueReportRow(

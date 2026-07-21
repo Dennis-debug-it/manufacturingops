@@ -8,6 +8,7 @@ import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDateTime } from '../../shared/utils/dates'
 import { useResendCredentials, useResetUserPassword, useSetUserStatus, useTeamUser } from './api'
+import { capabilityGroups } from './rolePermissionsApi'
 
 export function UserDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -57,8 +58,8 @@ export function UserDetailPage() {
     <div className="space-y-6">
       <PageHeader
         title={user.fullName}
-        subtitle={user.jobTitle ?? user.role}
-        breadcrumbs={[{ label: 'Team', to: '/team/users' }, { label: user.fullName }]}
+        subtitle={user.jobTitle ?? user.department ?? 'User'}
+        breadcrumbs={[{ label: 'Users & Access', to: '/team/users' }, { label: user.fullName }]}
         secondaryActions={<StatusBadge status={user.isActive ? 'Active' : 'Inactive'} />}
         primaryAction={
           canManage ? (
@@ -73,12 +74,11 @@ export function UserDetailPage() {
         }
       />
 
-      <SummarySection title="Profile" description="Contact, role, and access details.">
+      <SummarySection title="Profile" description="Contact and organization details.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[
             ['Email', user.email],
             ['Phone', user.phoneNumber ?? '—'],
-            ['Role', user.role],
             ['Department', user.department ?? '—'],
             ['Branch Access', user.hasAllBranchAccess ? 'All Branches' : (user.defaultBranchName ?? '—')],
             ['Must Change Password', user.mustChangePassword ? 'Yes' : 'No'],
@@ -90,6 +90,17 @@ export function UserDetailPage() {
               <div className="mt-2 text-sm text-slate-900">{value}</div>
             </div>
           ))}
+        </div>
+      </SummarySection>
+
+      <SummarySection title="Access & Permissions" description="This user’s current direct capabilities. Explicit denies take precedence over inherited group access.">
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Permission groups</div><div className="mt-1 text-sm font-medium text-slate-900">No groups assigned</div></div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Access scope</div><div className="mt-1 text-sm font-medium text-slate-900">{user.hasAllBranchAccess ? 'Entire organization' : (user.defaultBranchName ?? 'Restricted')}</div></div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Approval limits</div><div className="mt-1 text-sm font-medium text-slate-900">No monetary limits configured</div></div>
+        </div>
+        <div className="space-y-4">
+          {capabilityGroups.map((group) => <section key={group.group} className="overflow-hidden rounded-xl border border-slate-200"><h3 className="bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">{group.group}</h3><ul className="divide-y divide-slate-100">{group.items.map((item) => { const allowed = user.permissions[item.key]; return <li key={item.key} className="flex items-center justify-between gap-4 px-4 py-3"><span className="text-sm text-slate-700">{item.label}</span><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${allowed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{allowed ? 'Allowed · Direct' : 'Not granted'}</span></li> })}</ul></section>)}
         </div>
       </SummarySection>
 

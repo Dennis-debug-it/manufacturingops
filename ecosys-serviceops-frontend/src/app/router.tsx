@@ -20,6 +20,7 @@ import { ImpersonationEntryPage } from '../features/auth/ImpersonationEntryPage'
 import { RequestDemoPage } from '../features/public/RequestDemoPage'
 import { DemoConfirmationPage } from '../features/public/DemoConfirmationPage'
 import { CsatSurveyPage } from '../features/public/CsatSurveyPage'
+import { TrackJobPage } from '../features/portal/TrackJobPage'
 import { ForbiddenPage } from '../features/public/ForbiddenPage'
 import { NotFoundPage } from '../features/public/NotFoundPage'
 import { WorkOrdersPage } from '../features/work-orders/WorkOrdersPage'
@@ -38,6 +39,7 @@ import { MovementsPage } from '../features/inventory/MovementsPage'
 import { PurchaseOrdersPage, PurchaseOrderDetailPage } from '../features/inventory/PurchaseOrdersPage'
 import { SuppliersPage, SupplierDetailPage } from '../features/inventory/SuppliersPage'
 import { RestockRequestsPage } from '../features/inventory/RestockRequestsPage'
+import { PartsRequestsPage } from '../features/inventory/PartsRequestsPage'
 import { MaterialIssuesPage } from '../features/inventory/MaterialIssuesPage'
 import { VansPage } from '../features/inventory/VansPage'
 import { VanDetailPage } from '../features/inventory/VanDetailPage'
@@ -48,6 +50,7 @@ import { UserDetailPage as TeamUserDetailPageReal } from '../features/team/UserD
 import { TechniciansPage as TeamTechniciansPageReal } from '../features/team/TechniciansPage'
 import { TechnicianDetailPage } from '../features/team/TechnicianDetailPage'
 import { RolesPage as TeamRolesPageReal } from '../features/team/RolesPage'
+import { AccessSectionPage } from '../features/team/AccessSectionPage'
 import { SkillsPage as TeamSkillsPageReal } from '../features/team/SkillsPage'
 import { GroupsPage as TeamGroupsPageReal } from '../features/team/GroupsPage'
 import { LiveAttendancePage, TimesheetsPage, TimesheetDetailPage, LeavePage, TimeAttendanceReportsPage } from '../features/team/TimeAttendancePages'
@@ -59,10 +62,11 @@ import { InvoiceDetailPage } from '../features/finance/InvoiceDetailPage'
 import { FinanceOverviewPage } from '../features/finance/FinanceOverviewPage'
 import { QuotesPage } from '../features/finance/QuotesPage'
 import { QuoteDetailPage } from '../features/finance/QuoteDetailPage'
-import { BillableWorkPage } from '../features/finance/BillableWorkPage'
 import { AgingPage as FinanceAgingPageReal } from '../features/finance/AgingPage'
 import { CreditControlPage } from '../features/finance/CreditControlPage'
 import { ReceiptsPage } from '../features/finance/ReceiptsPage'
+import { CreditNotesPage } from '../features/finance/CreditNotesPage'
+import { CreditNoteDetailPage } from '../features/finance/CreditNoteDetailPage'
 import { ExpensesPage, ExpenseDetailPage } from '../features/finance/ExpensesPage'
 import { PayablesPage, PayableDetailPage } from '../features/finance/PayablesPage'
 import { InvoiceApprovalsPage } from '../features/finance/InvoiceApprovalsPage'
@@ -100,8 +104,17 @@ import { PortalSettingsPage as SettingsPortalPageReal } from '../features/settin
 import { IntegrationsSettingsPage as SettingsIntegrationsPageReal } from '../features/settings/IntegrationsSettingsPage'
 import { ExecutiveDashboardSettingsPage as SettingsExecutiveDashboardPageReal } from '../features/settings/ExecutiveDashboardSettingsPage'
 import { ApprovalMatrixSettingsPage } from '../features/settings/ApprovalMatrixSettingsPage'
+import { NotificationTemplatesPage } from '../features/settings/NotificationTemplatesPage'
+import { SlaPoliciesPage } from '../features/settings/SlaPoliciesPage'
+import { WorkflowsSettingsPage } from '../features/settings/WorkflowsSettingsPage'
+import { EscalationRulesSettingsPage } from '../features/settings/EscalationRulesSettingsPage'
+import { WOTemplatesSettingsPage } from '../features/settings/WOTemplatesSettingsPage'
 import { MyApprovalsPage } from '../features/approvals/MyApprovalsPage'
 import { WhatsAppInboxPage } from '../features/whatsapp/WhatsAppInboxPage'
+import { KnowledgeBasePage } from '../features/knowledge/KnowledgeBasePage'
+import { LiveMapPage } from '../features/dispatch/LiveMapPage'
+import { DailyRouteView } from '../features/dispatch/DailyRouteView'
+import { SchedulingBoardPage } from '../features/dispatch/SchedulingBoardPage'
 import { PlatformApp } from '../platform/PlatformApp'
 import { PortalApp } from '../portal/PortalApp'
 
@@ -130,6 +143,7 @@ const InventoryPurchaseOrderDetailPage = PurchaseOrderDetailPage
 const InventorySuppliersPage = SuppliersPage
 const InventorySupplierDetailPage = SupplierDetailPage
 const InventoryRestockRequestsPage = RestockRequestsPage
+const InventoryPartsRequestsPage = PartsRequestsPage
 const InventoryAlertsPage = InventoryAlertsPageReal
 const InventoryReportsPage = InventoryReportsPageReal
 
@@ -161,7 +175,6 @@ const FinancePayableDetailPage = PayableDetailPage
 const FinanceRateCardsPage = FinanceRateCardsPageReal
 const FinancePreferentialRatesPage = FinancePreferentialRatesPageReal
 const FinanceExchangeRatesPage = FinanceExchangeRatesPageReal
-const FinanceBillableWorkPage = BillableWorkPage
 const FinanceCreditControlPage = CreditControlPage
 const FinanceAgingPage = FinanceAgingPageReal
 const FinanceReportsPage = FinanceReportsPageReal
@@ -262,6 +275,7 @@ export function AppRouter() {
       ['/inventory/suppliers', InventorySuppliersPage],
       ['/inventory/suppliers/:id', InventorySupplierDetailPage],
       ['/inventory/restock-requests', InventoryRestockRequestsPage],
+      ['/inventory/parts-requests', InventoryPartsRequestsPage],
       ['/inventory/issues', MaterialIssuesPage],
       ['/inventory/alerts', InventoryAlertsPage],
       ['/inventory/reports', InventoryReportsPage],
@@ -271,6 +285,11 @@ export function AppRouter() {
       ['/team/technicians', TeamTechniciansPage],
       ['/team/technicians/:id', TeamTechnicianDetailPage],
       ['/team/roles', TeamRolesPage],
+      ['/team/capabilities', TeamRolesPage],
+      ['/team/permission-groups', () => <AccessSectionPage section="groups" />],
+      ['/team/access-scopes', () => <AccessSectionPage section="scopes" />],
+      ['/team/approval-limits', () => <AccessSectionPage section="limits" />],
+      ['/team/audit-history', () => <AccessSectionPage section="audit" />],
       ['/team/skills', TeamSkillsPage],
       ['/team/groups', TeamGroupsPage],
       ['/team/time-attendance', TimeAttendanceLivePage],
@@ -279,6 +298,7 @@ export function AppRouter() {
       ['/team/time-attendance/timesheets/:id', TimeAttendanceTimesheetDetailPage],
       ['/team/time-attendance/leave', TimeAttendanceLeavePage],
       ['/team/time-attendance/reports', TimeAttendanceReportsPage],
+      ['/knowledge', KnowledgeBasePage],
       ['/contracts', ContractsPage],
       ['/contracts/:id', ContractDetailPage],
       ['/finance', FinanceOverviewPage],
@@ -289,6 +309,8 @@ export function AppRouter() {
       ['/finance/invoices/:id', FinanceInvoiceDetailPage],
       ['/finance/invoice-approvals', FinanceInvoiceApprovalsPage],
       ['/finance/receipts', FinanceReceiptsPage],
+      ['/finance/credit-notes', CreditNotesPage],
+      ['/finance/credit-notes/:id', CreditNoteDetailPage],
       ['/finance/expenses', FinanceExpensesPage],
       ['/finance/expenses/:id', FinanceExpenseDetailPage],
       ['/finance/payables', FinancePayablesPage],
@@ -296,7 +318,6 @@ export function AppRouter() {
       ['/finance/rate-cards', FinanceRateCardsPage],
       ['/finance/preferential-rates', FinancePreferentialRatesPage],
       ['/finance/exchange-rates', FinanceExchangeRatesPage],
-      ['/finance/billable-work', FinanceBillableWorkPage],
       ['/finance/credit-control', FinanceCreditControlPage],
       ['/finance/aging', FinanceAgingPage],
       ['/finance/reports', FinanceReportsPage],
@@ -327,8 +348,16 @@ export function AppRouter() {
       ['/settings/account', SettingsAccountPage],
       ['/settings/audit-logs', SettingsAuditLogsPage],
       ['/settings/approval-matrix', ApprovalMatrixSettingsPage],
+      ['/settings/notification-templates', NotificationTemplatesPage],
+      ['/settings/sla-policies', SlaPoliciesPage],
+      ['/settings/workflows', WorkflowsSettingsPage],
+      ['/settings/escalation-rules', EscalationRulesSettingsPage],
+      ['/settings/wo-templates', WOTemplatesSettingsPage],
       ['/approvals', MyApprovalsPage],
       ['/onboarding', OnboardingPage],
+      ['/dispatch/map', LiveMapPage],
+      ['/dispatch/route/:technicianId', DailyRouteView],
+      ['/dispatch/board', SchedulingBoardPage],
     ] as const,
     [],
   )
@@ -344,6 +373,7 @@ export function AppRouter() {
         <Route path="/request-demo" element={<RequestDemoPage />} />
         <Route path="/demo-confirmation" element={<DemoConfirmationPage />} />
         <Route path="/csat/:token" element={<CsatSurveyPage />} />
+        <Route path="/track/:token" element={<TrackJobPage />} />
         <Route path="/403" element={<ForbiddenPage />} />
         <Route path="/404" element={<NotFoundPage />} />
 

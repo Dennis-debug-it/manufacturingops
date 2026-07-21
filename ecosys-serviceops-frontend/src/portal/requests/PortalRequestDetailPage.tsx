@@ -4,11 +4,12 @@ import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { formatDateTime } from '../../shared/utils/dates'
-import { usePortalWorkOrder } from '../api'
+import { usePortalWorkOrder, usePortalWorkOrderNotes } from '../api'
 
 export function PortalRequestDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data, isLoading, isError } = usePortalWorkOrder(id)
+  const { data: notes } = usePortalWorkOrderNotes(id)
 
   if (isLoading) {
     return <Spinner label="Loading request" />
@@ -57,6 +58,23 @@ export function PortalRequestDetailPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">Technician Notes</h2>
           <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{data.workDoneNotes}</p>
+        </div>
+      ) : null}
+
+      {notes && notes.length > 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-semibold text-slate-900">Updates</h2>
+          <ul className="mt-3 space-y-3">
+            {notes.map((note) => (
+              <li key={note.id} className="rounded-xl border border-slate-200 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                  <span>{note.createdByUserName ?? 'Service team'}</span>
+                  <span>{formatDateTime(note.createdAt)}</span>
+                </div>
+                <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{note.content}</p>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
     </div>

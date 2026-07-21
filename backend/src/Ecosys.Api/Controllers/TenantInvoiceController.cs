@@ -486,8 +486,16 @@ public sealed class TenantInvoiceController(
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceView);
         await EnsureInvoiceAccessAsync(id, cancellationToken);
+
+        // Payments touching this invoice: those directly linked (legacy) or actively allocated to it.
+        var allocatedPaymentIds = await dbContext.PaymentAllocations
+            .Where(a => a.TenantId == TenantId && a.InvoiceId == id
+                        && a.SourceType == AllocationSourceTypes.Payment && a.Status == "Active")
+            .Select(a => a.SourceId)
+            .ToListAsync(cancellationToken);
+
         var payments = await dbContext.TenantPayments
-            .Where(x => x.TenantId == TenantId && x.InvoiceId == id)
+            .Where(x => x.TenantId == TenantId && (x.InvoiceId == id || allocatedPaymentIds.Contains(x.Id)))
             .OrderByDescending(x => x.PaymentDate)
             .ToListAsync(cancellationToken);
         return Ok(payments.Select(MapPayment).ToList());
@@ -520,7 +528,13 @@ public sealed class TenantInvoiceController(
                 p.Amount, p.PaymentDate, p.Method, p.Reference, p.Notes,
                 p.Status, p.CreatedAt,
                 dbContext.TenantInvoices.Where(i => i.Id == p.InvoiceId).Select(i => i.InvoiceNumber).FirstOrDefault(),
-                dbContext.Clients.Where(c => c.Id == p.ClientId).Select(c => c.ClientName).FirstOrDefault()))
+                dbContext.Clients.Where(c => c.Id == p.ClientId).Select(c => c.ClientName).FirstOrDefault(),
+                dbContext.PaymentAllocations
+                    .Where(a => a.SourceType == "Payment" && a.SourceId == p.Id && a.Status == "Active")
+                    .Sum(a => (decimal?)a.Amount) ?? 0m,
+                p.Amount - (dbContext.PaymentAllocations
+                    .Where(a => a.SourceType == "Payment" && a.SourceId == p.Id && a.Status == "Active")
+                    .Sum(a => (decimal?)a.Amount) ?? 0m)))
             .ToListAsync(cancellationToken);
 
         return Ok(rows);
@@ -535,6 +549,8 @@ public sealed class TenantInvoiceController(
 
         if (invoice.Status == "Void")
             throw new BusinessRuleException("Cannot record payment on a voided invoice.");
+        if (request.Amount <= 0)
+            throw new BusinessRuleException("Payment amount must be greater than zero.");
 
         var payment = new TenantPayment
         {
@@ -551,11 +567,159 @@ public sealed class TenantInvoiceController(
         };
 
         dbContext.TenantPayments.Add(payment);
-        await RecalcInvoicePaymentStatusAsync(invoice, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // Apply against this invoice up to its outstanding balance; any excess is retained as
+        // customer credit (an unallocated payment) that can be applied to other invoices later.
+        var applyAmount = Math.Min(payment.Amount, Math.Max(invoice.Balance, 0m));
+        if (applyAmount > 0)
+        {
+            await InvoiceBalanceCalculator.ApplyAllocationsAsync(
+                dbContext, TenantId, AllocationSourceTypes.Payment, payment.Id,
+                new[] { (invoice, applyAmount) }, cancellationToken);
+        }
+
+        if (invoice.Client is not null)
+            await InvoiceBalanceCalculator.RecalcClientBalanceAsync(dbContext, invoice.Client, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         await auditLogService.LogAsync(TenantId, UserId, "finance.payment.recorded", nameof(TenantPayment), payment.Id.ToString(), $"Recorded payment {payment.PaymentNumber} for invoice {invoice.InvoiceNumber}", cancellationToken);
 
         return CreatedAtAction(nameof(ListPayments), new { id }, MapPayment(payment));
+    }
+
+    // ── Receive & allocate a payment across multiple invoices ────────────────
+
+    [HttpPost("/api/payments")]
+    public async Task<ActionResult<TenantPaymentResponse>> ReceivePayment(
+        [FromBody] ReceivePaymentRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceManageBillableWork);
+
+        if (request.Amount <= 0)
+            throw new BusinessRuleException("Payment amount must be greater than zero.");
+
+        var client = await dbContext.Clients
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.ClientId, cancellationToken)
+            ?? throw new NotFoundException("Client not found.");
+
+        var requested = (request.Allocations ?? [])
+            .Where(a => a.Amount > 0)
+            .ToList();
+        if (requested.Sum(a => a.Amount) > request.Amount)
+            throw new BusinessRuleException("Allocations exceed the payment amount.");
+
+        var payment = new TenantPayment
+        {
+            TenantId = TenantId,
+            InvoiceId = requested.Count == 1 ? requested[0].InvoiceId : null,
+            ClientId = client.Id,
+            PaymentNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.Receipt, cancellationToken),
+            Amount = request.Amount,
+            PaymentDate = DateTime.SpecifyKind(request.PaymentDate, DateTimeKind.Utc),
+            Method = NormalizePaymentMethod(request.Method),
+            Reference = request.Reference?.Trim(),
+            Notes = request.Notes?.Trim(),
+            Status = "Confirmed",
+        };
+        dbContext.TenantPayments.Add(payment);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var items = await ResolveAllocationItemsAsync(client.Id, requested, cancellationToken);
+        if (items.Count > 0)
+            await InvoiceBalanceCalculator.ApplyAllocationsAsync(
+                dbContext, TenantId, AllocationSourceTypes.Payment, payment.Id, items, cancellationToken);
+
+        await InvoiceBalanceCalculator.RecalcClientBalanceAsync(dbContext, client, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditLogService.LogAsync(TenantId, UserId, "finance.payment.received", nameof(TenantPayment), payment.Id.ToString(),
+            $"Received payment {payment.PaymentNumber} ({payment.Amount:N2}) for {client.ClientName}, allocated to {items.Count} invoice(s)", cancellationToken);
+
+        return Ok(MapPayment(payment));
+    }
+
+    [HttpPost("/api/payments/{paymentId:guid}/allocate")]
+    public async Task<ActionResult<TenantPaymentResponse>> AllocatePayment(
+        Guid paymentId, [FromBody] AllocatePaymentRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceManageBillableWork);
+
+        var payment = await dbContext.TenantPayments
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == paymentId, cancellationToken)
+            ?? throw new NotFoundException("Payment not found.");
+        if (payment.Status != "Confirmed")
+            throw new BusinessRuleException("Only confirmed payments can be allocated.");
+
+        var alreadyAllocated = await dbContext.PaymentAllocations
+            .Where(a => a.TenantId == TenantId && a.SourceType == AllocationSourceTypes.Payment
+                        && a.SourceId == payment.Id && a.Status == "Active")
+            .SumAsync(a => (decimal?)a.Amount, cancellationToken) ?? 0m;
+
+        var requested = request.Allocations.Where(a => a.Amount > 0).ToList();
+        if (alreadyAllocated + requested.Sum(a => a.Amount) > payment.Amount)
+            throw new BusinessRuleException("Allocations exceed the payment's unallocated balance.");
+
+        var items = await ResolveAllocationItemsAsync(payment.ClientId, requested, cancellationToken);
+        if (items.Count == 0)
+            throw new BusinessRuleException("Nothing to allocate.");
+
+        await InvoiceBalanceCalculator.ApplyAllocationsAsync(
+            dbContext, TenantId, AllocationSourceTypes.Payment, payment.Id, items, cancellationToken);
+
+        var client = await dbContext.Clients.SingleOrDefaultAsync(c => c.TenantId == TenantId && c.Id == payment.ClientId, cancellationToken);
+        if (client is not null)
+            await InvoiceBalanceCalculator.RecalcClientBalanceAsync(dbContext, client, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditLogService.LogAsync(TenantId, UserId, "finance.payment.allocated", nameof(TenantPayment), payment.Id.ToString(),
+            $"Allocated payment {payment.PaymentNumber} to {items.Count} invoice(s)", cancellationToken);
+        return Ok(MapPayment(payment));
+    }
+
+    [HttpGet("/api/clients/{clientId:guid}/credit-balance")]
+    public async Task<ActionResult<ClientCreditBalanceResponse>> GetClientCreditBalance(
+        Guid clientId, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceView);
+        var client = await dbContext.Clients
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == clientId, cancellationToken)
+            ?? throw new NotFoundException("Client not found.");
+
+        var available = await InvoiceBalanceCalculator.GetAvailableCreditAsync(dbContext, TenantId, clientId, cancellationToken);
+        return Ok(new ClientCreditBalanceResponse(client.Id, client.ClientName, client.CurrentBalance, available, "KES"));
+    }
+
+    /// <summary>
+    /// Validates requested allocations against the client's open invoices and caps each at the
+    /// invoice's outstanding balance. Returns (invoice, cappedAmount) pairs ready to allocate.
+    /// </summary>
+    private async Task<IReadOnlyList<(TenantInvoice Invoice, decimal Amount)>> ResolveAllocationItemsAsync(
+        Guid clientId, IReadOnlyList<PaymentAllocationInput> requested, CancellationToken cancellationToken)
+    {
+        if (requested.Count == 0)
+            return [];
+
+        var invoiceIds = requested.Select(a => a.InvoiceId).Distinct().ToList();
+        var invoices = await dbContext.TenantInvoices
+            .Where(i => i.TenantId == TenantId && invoiceIds.Contains(i.Id))
+            .ToListAsync(cancellationToken);
+
+        var items = new List<(TenantInvoice, decimal)>();
+        foreach (var input in requested)
+        {
+            var invoice = invoices.SingleOrDefault(i => i.Id == input.InvoiceId)
+                ?? throw new NotFoundException($"Invoice {input.InvoiceId} not found.");
+            if (invoice.ClientId != clientId)
+                throw new BusinessRuleException("All invoices must belong to the paying client.");
+            if (invoice.Status == "Void")
+                throw new BusinessRuleException($"Invoice {invoice.InvoiceNumber} is voided.");
+
+            var capped = Math.Min(input.Amount, Math.Max(invoice.Balance, 0m));
+            if (capped > 0)
+                items.Add((invoice, capped));
+        }
+        return items;
     }
 
     // ── Reverse Payment ───────────────────────────────────────────────────────
@@ -572,9 +736,21 @@ public sealed class TenantInvoiceController(
             throw new BusinessRuleException("Payment is already reversed.");
 
         payment.Status = "Reversed";
-        var invoice = await LoadInvoiceWithDetailsAsync(payment.InvoiceId, cancellationToken);
-        await RecalcInvoicePaymentStatusAsync(invoice, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // Reverse every allocation this payment made and recompute the invoices it touched.
+        var affected = await InvoiceBalanceCalculator.ReverseAllocationsForSourceAsync(
+            dbContext, TenantId, AllocationSourceTypes.Payment, payment.Id, cancellationToken);
+
+        var clientIds = affected.Select(i => i.ClientId).Append(payment.ClientId).Distinct().ToList();
+        var clients = await dbContext.Clients
+            .Where(c => c.TenantId == TenantId && clientIds.Contains(c.Id))
+            .ToListAsync(cancellationToken);
+        foreach (var client in clients)
+            await InvoiceBalanceCalculator.RecalcClientBalanceAsync(dbContext, client, cancellationToken);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "finance.payment.reversed", nameof(TenantPayment), payment.Id.ToString(), $"Reversed payment {payment.PaymentNumber}", cancellationToken);
         return NoContent();
     }
 
@@ -699,6 +875,18 @@ public sealed class TenantInvoiceController(
 
         // Update work order billing status
         workOrder.BillingStatus = "Billed";
+
+        dbContext.WorkOrderEvents.Add(new Ecosys.Domain.Entities.WorkOrderEvent
+        {
+            TenantId = TenantId,
+            WorkOrderId = workOrderId,
+            ActorUserId = UserId,
+            EventType = "InvoiceCreated",
+            Status = workOrder.Status,
+            Message = $"Invoice {invoice.InvoiceNumber} was generated.",
+            OccurredAt = DateTime.UtcNow
+        });
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(TenantId, UserId, "finance.invoice.generated_from_wo", nameof(TenantInvoice), invoice.Id.ToString(), $"Generated invoice {invoice.InvoiceNumber} from WO {workOrder.WorkOrderNumber}", cancellationToken);
@@ -766,24 +954,6 @@ public sealed class TenantInvoiceController(
     {
         var exists = await dbContext.TenantInvoices.AnyAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken);
         if (!exists) throw new NotFoundException("Invoice not found.");
-    }
-
-    private async Task RecalcInvoicePaymentStatusAsync(TenantInvoice invoice, CancellationToken cancellationToken)
-    {
-        var confirmedPayments = await dbContext.TenantPayments
-            .Where(x => x.InvoiceId == invoice.Id && x.Status == "Confirmed")
-            .SumAsync(x => x.Amount, cancellationToken);
-
-        invoice.AmountPaid = confirmedPayments;
-        invoice.Balance = invoice.TotalAmount - confirmedPayments;
-        if (invoice.TotalAmount > 0 && confirmedPayments >= invoice.TotalAmount)
-            invoice.Status = "Paid";
-        else if (confirmedPayments > 0)
-            invoice.Status = "PartiallyPaid";
-        else if (invoice.DueDate < DateTime.UtcNow && invoice.Status != "Draft")
-            invoice.Status = "Overdue";
-        else if (invoice.Status != "Draft")
-            invoice.Status = "Sent";
     }
 
     private static void RecalcTotals(TenantInvoice invoice)

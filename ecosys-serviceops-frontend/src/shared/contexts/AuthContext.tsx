@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { endpoints } from '../api/endpoints'
 import { api } from '../api/apiClient'
 import {
@@ -130,7 +130,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [])
 
-  const login = async (credentials: LoginRequest) => {
+  const login = useCallback(async (credentials: LoginRequest) => {
     const response = await api.post<LoginResponse>(endpoints.auth.login, credentials)
     const nextSession = toSession(response)
     setAuthToken(nextSession.token)
@@ -138,9 +138,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setStateSession(nextSession)
     setIsReady(true)
     return nextSession
-  }
+  }, [])
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     const wasImpersonating = Boolean(session?.impersonation)
     try {
       await api.post<void>(endpoints.auth.logout, {})
@@ -158,9 +158,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
         window.location.assign('/login')
       }
     }
-  }
+  }, [session])
 
-  const refreshSession = async () => {
+  const refreshSession = useCallback(async () => {
     const me = await api.get<MeResponse>(endpoints.auth.me)
     const nextSession = session ? mergeMeResponse(session, me) : toSession(me)
     if (session?.impersonation || nextSession.impersonation) {
@@ -169,7 +169,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setSession(nextSession)
     }
     setStateSession(nextSession)
-  }
+  }, [session])
 
   const value = useMemo<AuthContextValue>(() => ({
     user: session?.user ?? null,
@@ -183,7 +183,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     login,
     logout,
     refreshSession,
-  }), [isReady, session])
+  }), [isReady, login, logout, refreshSession, session])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

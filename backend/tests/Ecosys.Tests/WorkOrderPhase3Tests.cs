@@ -399,6 +399,7 @@ public sealed class WorkOrderPhase3Tests
             new NoOpEmailTemplateService(),
             new NoOpEmailSubjectRuleService(),
             new NoOpSlaService(),
+            new NoOpEtaNotificationService(),
             NullLogger<WorkOrderAssignmentWorkflowService>.Instance);
 
     private static WorkOrdersController CreateWorkOrdersController(AppDbContext dbContext, ControllerFixture fixture)
@@ -502,6 +503,11 @@ public sealed class WorkOrderPhase3Tests
     {
         public Task ApplyDefinitionAsync(WorkOrder workOrder, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<bool> RefreshWorkOrderAsync(Guid workOrderId, DateTime nowUtc, CancellationToken cancellationToken = default) => Task.FromResult(false);
+    }
+
+    private sealed class NoOpEtaNotificationService : IEtaNotificationService
+    {
+        public Task NotifyAsync(Guid tenantId, WorkOrder workOrder, string eventType, string? technicianName, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class NoOpUserAccessService : IUserAccessService

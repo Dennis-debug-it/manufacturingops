@@ -21,7 +21,9 @@ function MoreSheet({ items, onClose }: { items: Pick<NavItem, 'label' | 'to' | '
   const location = useLocation()
 
   return (
-    <div className="fixed inset-0 z-40 flex items-end lg:hidden">
+    // z-[1100]: Leaflet panes/controls (used by the Live Map and Work Orders Map views)
+    // default to z-index 1000, so this sheet must clear that to stay on top of the map.
+    <div className="fixed inset-0 z-[1100] flex items-end lg:hidden">
       <button type="button" aria-label="Close menu" className="absolute inset-0 bg-slate-900/40" onClick={onClose} />
       <div className="relative w-full rounded-t-2xl border-t border-slate-200 bg-white p-4 pb-24 shadow-2xl">
         <div className="flex items-center justify-between">

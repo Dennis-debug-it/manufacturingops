@@ -16,6 +16,9 @@ public sealed class KnowledgeArticle : AuditableEntity, ITenantEntity
     public Guid? UpdatedByUserId { get; set; }
     public DateTime? PublishedAt { get; set; }
     public Guid? SourceWorkOrderId { get; set; }
+    public int ViewCount { get; set; }
+    public int HelpfulCount { get; set; }
+    public int NotHelpfulCount { get; set; }
 
     public Tenant? Tenant { get; set; }
     public KnowledgeCategory? Category { get; set; }
@@ -24,4 +27,5 @@ public sealed class KnowledgeArticle : AuditableEntity, ITenantEntity
     public WorkOrder? SourceWorkOrder { get; set; }
     public ICollection<KnowledgeArticleVersion> Versions { get; set; } = new List<KnowledgeArticleVersion>();
     public ICollection<KnowledgeArticleTag> ArticleTags { get; set; } = new List<KnowledgeArticleTag>();
+    public ICollection<KnowledgeArticleFeedback> Feedback { get; set; } = new List<KnowledgeArticleFeedback>();
 }

@@ -1,3 +1,20 @@
+export interface WorkOrderSlaStatus {
+  workOrderId: string
+  priority: string
+  policyName: string | null
+  responseDeadline: string | null
+  resolutionDeadline: string | null
+  responseBreached: boolean
+  resolutionBreached: boolean
+  responseBreachedAt: string | null
+  resolutionBreachedAt: string | null
+  responseMinutesRemaining: number | null
+  resolutionMinutesRemaining: number | null
+  status: 'OnTrack' | 'AtRisk' | 'Breached' | 'NoSla'
+  isPaused: boolean
+  pauseReason: string | null
+}
+
 export interface WorkOrderChecklistItem {
   id: string
   pmTemplateQuestionId: string | null
@@ -109,6 +126,9 @@ export interface WorkOrder {
   siteOperatingHours: string | null
   siteAccessNotes: string | null
   siteLocation: string | null
+  siteLatitude: number | null
+  siteLongitude: number | null
+  estimatedLabourHours: number | null
   assetCode: string | null
   assetType: string | null
   assetCategoryName: string | null
@@ -121,6 +141,7 @@ export interface WorkOrder {
   assetNextPmDate: string | null
   assetWarrantyStatus: string | null
   availableTransitions: string[]
+  workflowStatusId: string | null
   contractId: string | null
   contractNumber: string | null
   contractStatus: string | null
@@ -134,6 +155,44 @@ export interface WorkOrder {
   finalCharge: number | null
   appliedSlaSource: string | null
   appliedRateSource: string | null
+  trackingToken: string | null
+  workOrderTemplateId: string | null
+  quoteId: string | null
+  quoteNumber: string | null
+  parentWorkOrderId: string | null
+  childWorkOrderCount: number
+  holdType: string | null
+  holdSince: string | null
+  plannedMaterials: PlannedMaterial[]
+  isRepeatVisit: boolean
+  repeatVisitCount: number
+}
+
+export interface PlannedMaterial {
+  materialId: string
+  materialName: string
+  quantity: number
+}
+
+export interface WorkOrderTemplateMaterial {
+  materialId: string
+  materialName: string | null
+  quantity: number
+}
+
+export interface WorkOrderTemplate {
+  id: string
+  name: string
+  jobType: string
+  description: string | null
+  estimatedDurationMins: number | null
+  defaultPriority: string
+  requiredSkills: string[]
+  checklistTemplateId: string | null
+  checklistTemplateName: string | null
+  defaultMaterials: WorkOrderTemplateMaterial[]
+  isActive: boolean
+  createdAt: string
 }
 
 export interface WorkOrderEvent {
@@ -150,6 +209,44 @@ export interface WorkOrderEvent {
   latitude: number | null
   longitude: number | null
   occurredAt: string
+  metadataJson: string | null
+}
+
+export interface WorkOrderNote {
+  id: string
+  workOrderId: string
+  content: string
+  isClientVisible: boolean
+  createdByUserId: string
+  createdByUserName: string | null
+  createdAt: string
+}
+
+export interface RelatedWorkOrder {
+  id: string
+  workOrderNumber: string
+  status: string
+  completedAt: string | null
+  description: string
+  technicianName: string | null
+}
+
+export interface RelatedWorkOrders {
+  sameSite: RelatedWorkOrder[]
+  sameAsset: RelatedWorkOrder[]
+}
+
+export interface WorkOrderDocument {
+  documentType: 'Quote' | 'ServiceReport' | 'Invoice' | 'MaterialRequest'
+  id: string
+  number: string
+  status: string
+  pdfUrl: string | null
+}
+
+export interface RepeatVisitCheck {
+  isRepeatVisit: boolean
+  repeatVisitCount: number
 }
 
 export interface WorkOrderAssignmentHistoryItem {

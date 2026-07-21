@@ -5,7 +5,11 @@ namespace Ecosys.Domain.Entities;
 public sealed class TenantPayment : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
-    public Guid InvoiceId { get; set; }
+    /// <summary>
+    /// Primary/originating invoice. Nullable: a payment may be received as unapplied customer credit
+    /// and allocated later. Authoritative application is via <see cref="PaymentAllocation"/> rows.
+    /// </summary>
+    public Guid? InvoiceId { get; set; }
     public Guid ClientId { get; set; }
     public string PaymentNumber { get; set; } = string.Empty; // RCT-2026-00001
     public decimal Amount { get; set; }

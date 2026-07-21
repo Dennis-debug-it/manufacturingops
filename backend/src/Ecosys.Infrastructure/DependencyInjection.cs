@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<IPmTemplateService, PmTemplateService>();
         services.AddScoped<IUserPermissionTemplateService, UserPermissionTemplateService>();
         services.AddScoped<IRolePermissionService, RolePermissionService>();
+        services.AddScoped<IDynamicAccessService, DynamicAccessService>();
         services.AddScoped<IUserAccessService, UserAccessService>();
         services.AddScoped<IBranchAccessService, BranchAccessService>();
         services.AddScoped<IStockLedgerService, StockLedgerService>();
@@ -66,6 +67,9 @@ public static class DependencyInjection
         services.AddScoped<IWorkOrderAssignmentWorkflowService, WorkOrderAssignmentWorkflowService>();
         services.AddScoped<IPmWorkOrderChecklistService, PmWorkOrderChecklistService>();
         services.AddScoped<ISlaService, SlaService>();
+        services.AddScoped<IWorkflowService, WorkflowService>();
+        services.AddScoped<IEscalationRuleService, EscalationRuleService>();
+        services.AddScoped<IEtaNotificationService, EtaNotificationService>();
         services.AddScoped<IContractAccessService, ContractAccessService>();
         services.AddScoped<IContractCoverageService, ContractCoverageService>();
         services.AddScoped<IContractPricingService, ContractPricingService>();
@@ -81,6 +85,7 @@ public static class DependencyInjection
         services.AddHostedService<ContractReminderWorker>();
         services.AddHostedService<ScheduledReportWorker>();
         services.AddHostedService<ApprovalReminderWorker>();
+        services.AddHostedService<EscalationRuleWorker>();
 
         return services;
     }

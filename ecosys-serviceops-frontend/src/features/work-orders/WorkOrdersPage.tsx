@@ -1,104 +1,128 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Funnel, Plus } from 'lucide-react'
+import { AlertTriangle, Funnel, Plus } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
 import { StatusBadge } from '../../shared/components/StatusBadge'
-import { useDebounce } from '../../shared/hooks/useDebounce'
+import { SlaBadge } from '../../shared/components/SlaBadge'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate, formatRelative } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
-import { useWorkOrders } from './api'
+import toast from 'react-hot-toast'
+import { useAssignWorkOrderById, useCompleteWorkOrderById, useStartWorkOrderById, useWorkOrders } from './api'
 import { NewWorkOrderForm } from './components/NewWorkOrderForm'
 import { ReportQueueTab } from './components/ReportQueueTab'
+import { ViewSwitcher } from './components/ViewSwitcher'
+import { FilterPanel } from './components/FilterPanel'
+import { KanbanView } from './components/KanbanView'
+import { CalendarView } from './components/CalendarView'
+import { MapView } from './components/MapView'
+import { BulkActionBar } from './components/BulkActionBar'
+import { QuickActionsMenu } from './components/QuickActionsMenu'
+import { AssignTechnicianDialog } from './components/AssignTechnicianDialog'
+import { CompleteWorkOrderDialog } from './components/CompleteWorkOrderDialog'
+import { useWorkOrderListState } from './hooks/useWorkOrderListState'
+import { filterWorkOrderRows, normalizeWorkOrders, type WorkOrderRow } from './listModel'
 
-export interface WorkOrderRow {
-  id: string
-  woNo: string
-  client: string
-  site: string
-  asset: string
-  type: string
-  priority: string
-  status: string
-  assignedTo: string
-  dueDate: string
-  lastUpdate: string
-}
-
-const asText = (value: unknown) => (typeof value === 'string' ? value : value == null ? '—' : String(value))
-
-const pick = (row: Record<string, unknown>, keys: string[]) => {
-  for (const key of keys) {
-    const value = row[key]
-    if (typeof value === 'string' && value.trim()) {
-      return value
-    }
-  }
-  return '—'
-}
-
-const normalizeWorkOrders = (payload: unknown): WorkOrderRow[] => {
-  const records = Array.isArray(payload)
-    ? payload
-    : payload && typeof payload === 'object'
-      ? (payload as { items?: unknown[]; data?: unknown[] }).items ?? (payload as { data?: unknown[] }).data ?? []
-      : []
-
-  return records
-    .filter((record): record is Record<string, unknown> => Boolean(record && typeof record === 'object'))
-    .map((row, index) => ({
-      id: asText(row.id ?? row.workOrderId ?? `${index}`),
-      woNo: pick(row, ['workOrderNumber', 'woNo', 'woNumber', 'workOrderNo', 'number', 'code']),
-      client: pick(row, ['clientName', 'client', 'customerName']),
-      site: pick(row, ['siteName', 'site']),
-      asset: pick(row, ['assetName', 'asset']),
-      type: pick(row, ['workType', 'type']),
-      priority: pick(row, ['priority']),
-      status: pick(row, ['status', 'state']),
-      assignedTo: pick(row, ['assignmentSummary', 'assignedTechnicianName', 'assignedTo', 'technicianName', 'assignee']),
-      dueDate: pick(row, ['dueDate', 'dueAt']),
-      lastUpdate: pick(row, ['updatedAt', 'lastUpdate', 'lastUpdatedAt']),
-    }))
-}
+export type { WorkOrderRow }
 
 export function WorkOrdersPage() {
   const { user } = useAuth()
   const canCreate = usePermission('work-orders.create')
-  const [search, setSearch] = useState('')
-  const debouncedSearch = useDebounce(search, 300)
   const [tab, setTab] = useState<'all' | 'queue'>('all')
   const [showNewForm, setShowNewForm] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [assignTarget, setAssignTarget] = useState<WorkOrderRow | null>(null)
+  const [completeTarget, setCompleteTarget] = useState<WorkOrderRow | null>(null)
+
+  const { state, update, setView, clearFilters, activeFilterCount } = useWorkOrderListState()
 
   const { data, isLoading, isError } = useWorkOrders()
+  const assignMutation = useAssignWorkOrderById()
+  const startMutation = useStartWorkOrderById()
+  const completeMutation = useCompleteWorkOrderById()
 
   const rows = useMemo(() => {
     const normalized = normalizeWorkOrders(data)
-    const query = debouncedSearch.trim().toLowerCase()
-    const filtered = normalized.filter((row) =>
-      [row.woNo, row.client, row.site, row.asset, row.type, row.assignedTo, row.status]
-        .some((value) => value.toLowerCase().includes(query)),
-    )
+    const filtered = filterWorkOrderRows(normalized, state)
     if (user?.role === 'technician') {
       return filtered.filter((row) => row.assignedTo === user.fullName || row.assignedTo === '—')
     }
     return filtered
-  }, [data, debouncedSearch, user])
+  }, [data, state, user])
+
+  const selectedRows = useMemo(() => rows.filter((row) => selectedIds.includes(row.id)), [rows, selectedIds])
 
   const columns: DataTableColumn<WorkOrderRow>[] = [
-    { key: 'woNo', header: 'WO No', cell: (row) => <Link className="font-mono text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/work-orders/${row.id}`}>{row.woNo}</Link> },
+    {
+      key: 'woNo',
+      header: 'WO No',
+      cell: (row) => (
+        <span className="inline-flex items-center gap-2">
+          <Link className="font-mono text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/work-orders/${row.id}`}>{row.woNo}</Link>
+          {row.childWorkOrderCount > 0 ? (
+            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600" title={`${row.childWorkOrderCount} sub-task(s)`}>
+              {row.childWorkOrderCount} sub-task{row.childWorkOrderCount > 1 ? 's' : ''}
+            </span>
+          ) : null}
+          {row.isRepeatVisit ? (
+            <span
+              className="inline-flex items-center rounded-full bg-amber-50 p-1 text-amber-600 ring-1 ring-inset ring-amber-200"
+              title={`Repeat visit — ${row.repeatVisitCount} jobs on this asset in the last 30 days`}
+            >
+              <AlertTriangle className="h-3 w-3" />
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
     { key: 'client', header: 'Client', cell: (row) => row.client },
     { key: 'site', header: 'Site', cell: (row) => row.site },
     { key: 'asset', header: 'Asset', cell: (row) => row.asset },
     { key: 'type', header: 'Type', cell: (row) => row.type },
     { key: 'priority', header: 'Priority', cell: (row) => <StatusBadge status={row.priority} /> },
-    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (row) => (
+        <span title={row.holdReason ? `${row.holdReason}${row.holdNote ? ` — ${row.holdNote}` : ''}` : undefined}>
+          <StatusBadge status={row.status} />
+        </span>
+      ),
+    },
+    {
+      key: 'sla',
+      header: 'SLA',
+      cell: (row) => (
+        <SlaBadge
+          deadline={row.slaResolutionDeadline}
+          breached={row.slaResponseBreached || row.slaResolutionBreached}
+        />
+      ),
+    },
     { key: 'assignedTo', header: 'Assigned To', cell: (row) => row.assignedTo },
     { key: 'dueDate', header: 'Due Date', cell: (row) => (row.dueDate && row.dueDate !== '—' ? formatDate(row.dueDate) : '—') },
     { key: 'lastUpdate', header: 'Last Update', cell: (row) => (row.lastUpdate && row.lastUpdate !== '—' ? formatRelative(row.lastUpdate) : '—') },
+    {
+      key: 'actions',
+      header: '',
+      className: 'w-10',
+      cell: (row) => (
+        <QuickActionsMenu
+          row={row}
+          onAssign={setAssignTarget}
+          onStart={(target) =>
+            startMutation.mutate(target.id, {
+              onSuccess: () => toast.success(`${target.woNo} started`),
+            })
+          }
+          onComplete={setCompleteTarget}
+        />
+      ),
+    },
   ]
 
   if (isLoading) {
@@ -156,31 +180,89 @@ export function WorkOrdersPage() {
       </div>
 
       {tab === 'all' ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <label className="flex items-center gap-2 text-sm text-slate-600">
-            <Funnel className="h-4 w-4 text-slate-400" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by WO number, client, site, or asset"
-              className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400"
-            />
-          </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="min-w-[16rem] flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <Funnel className="h-4 w-4 text-slate-400" />
+              <input
+                value={state.search}
+                onChange={(event) => update({ search: event.target.value })}
+                placeholder="Search by WO number, client, site, or asset"
+                className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400"
+              />
+            </label>
+          </div>
+          <ViewSwitcher value={state.view} onChange={setView} />
         </div>
       ) : null}
 
       {tab === 'all' ? (
-        <DataTable
-          columns={columns}
-          data={rows}
-          loading={isLoading}
-          emptyTitle="No work orders"
-          emptyDescription="Once the work order API is connected, records will show here."
-          virtualise={rows.length > 100}
-        />
+        <FilterPanel state={state} onChange={update} onClear={clearFilters} activeFilterCount={activeFilterCount} />
+      ) : null}
+
+      {tab === 'all' ? (
+        state.view === 'table' ? (
+          <>
+            <DataTable
+              columns={columns}
+              data={rows}
+              loading={isLoading}
+              emptyTitle="No work orders"
+              emptyDescription="Once the work order API is connected, records will show here."
+              virtualise={rows.length > 100}
+              batchSelect
+              onSelectionChange={setSelectedIds}
+            />
+            <BulkActionBar selectedRows={selectedRows} onClearSelection={() => setSelectedIds([])} />
+          </>
+        ) : state.view === 'kanban' ? (
+          <KanbanView rows={rows} />
+        ) : state.view === 'calendar' ? (
+          <CalendarView rows={rows} />
+        ) : (
+          <MapView rows={rows} />
+        )
       ) : (
         <ReportQueueTab />
       )}
+
+      <AssignTechnicianDialog
+        open={Boolean(assignTarget)}
+        title={assignTarget ? `Assign ${assignTarget.woNo}` : 'Assign technician'}
+        submitting={assignMutation.isPending}
+        onClose={() => setAssignTarget(null)}
+        onSubmit={(technicianId, notes) => {
+          if (!assignTarget) return
+          assignMutation.mutate(
+            { id: assignTarget.id, technicianId, notes },
+            {
+              onSuccess: () => {
+                toast.success(`${assignTarget.woNo} assigned`)
+                setAssignTarget(null)
+              },
+            },
+          )
+        }}
+      />
+
+      <CompleteWorkOrderDialog
+        open={Boolean(completeTarget)}
+        woNumber={completeTarget?.woNo}
+        submitting={completeMutation.isPending}
+        onClose={() => setCompleteTarget(null)}
+        onSubmit={(workDoneNotes) => {
+          if (!completeTarget) return
+          completeMutation.mutate(
+            { id: completeTarget.id, workDoneNotes },
+            {
+              onSuccess: () => {
+                toast.success(`${completeTarget.woNo} completed`)
+                setCompleteTarget(null)
+              },
+            },
+          )
+        }}
+      />
     </div>
   )
 }

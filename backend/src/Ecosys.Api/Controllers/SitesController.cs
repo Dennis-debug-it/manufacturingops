@@ -70,7 +70,9 @@ public sealed class SitesController(
             AlternateContact = NormalizeOptional(request.AlternateContact),
             OperatingHours = NormalizeOptional(request.OperatingHours),
             AccessNotes = NormalizeOptional(request.AccessNotes),
-            SpecialInstructions = NormalizeOptional(request.SpecialInstructions)
+            SpecialInstructions = NormalizeOptional(request.SpecialInstructions),
+            Latitude = request.Latitude,
+            Longitude = request.Longitude
         };
         dbContext.Sites.Add(site);
         await dbContext.SaveChangesAsync(ct);
@@ -189,6 +191,8 @@ public sealed class SitesController(
         site.OperatingHours = NormalizeOptional(request.OperatingHours);
         site.AccessNotes = NormalizeOptional(request.AccessNotes);
         site.SpecialInstructions = NormalizeOptional(request.SpecialInstructions);
+        site.Latitude = request.Latitude;
+        site.Longitude = request.Longitude;
 
         await dbContext.SaveChangesAsync(ct);
         return Ok(MapSite(site));
@@ -277,6 +281,8 @@ public sealed class SitesController(
         s.OperatingHours,
         s.AccessNotes,
         s.SpecialInstructions,
+        s.Latitude,
+        s.Longitude,
         s.CreatedAt,
         s.UpdatedAt
     };
@@ -298,7 +304,9 @@ public sealed record UpsertSiteRequest(
     string? AlternateContact,
     string? OperatingHours,
     string? AccessNotes,
-    string? SpecialInstructions);
+    string? SpecialInstructions,
+    decimal? Latitude = null,
+    decimal? Longitude = null);
 
 public sealed record SiteDetailResponse(
     object Site,

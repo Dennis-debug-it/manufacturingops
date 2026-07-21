@@ -75,6 +75,26 @@ public sealed class PortalController(
         return Ok(MapWorkOrderDetail(workOrder));
     }
 
+    [HttpGet("work-orders/{id:guid}/notes")]
+    public async Task<ActionResult<IReadOnlyCollection<PortalWorkOrderNoteResponse>>> GetWorkOrderNotes(Guid id, CancellationToken cancellationToken)
+    {
+        var workOrderExists = await dbContext.WorkOrders
+            .AnyAsync(x => x.TenantId == TenantId && x.ClientId == ClientId && x.Id == id, cancellationToken);
+        if (!workOrderExists)
+        {
+            throw new NotFoundException("Request was not found.");
+        }
+
+        var notes = await dbContext.WorkOrderNotes
+            .Include(x => x.CreatedByUser)
+            .Where(x => x.TenantId == TenantId && x.WorkOrderId == id && x.IsClientVisible)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return Ok(notes.Select(x => new PortalWorkOrderNoteResponse(
+            x.Id, x.Content, x.CreatedByUser != null ? x.CreatedByUser.FullName : null, x.CreatedAt)).ToList());
+    }
+
     [HttpPost("work-orders")]
     public async Task<ActionResult<PortalWorkOrderDetailResponse>> CreateWorkOrder([FromBody] PortalCreateWorkOrderRequest request, CancellationToken cancellationToken)
     {
@@ -358,6 +378,7 @@ public sealed record PortalDashboardSummaryResponse(int OpenWorkOrders, int Over
 public sealed record PortalWorkOrderListItem(Guid Id, string WorkOrderNumber, string Title, string Status, string Priority, string? SiteName, string? AssetName, DateTime? DueDate, DateTime CreatedAt);
 public sealed record PortalWorkOrderDetailResponse(Guid Id, string WorkOrderNumber, string Title, string? Description, string Status, string Priority, string WorkType, string? SiteName, string? AssetName, DateTime? DueDate, DateTime? ScheduledStartAt, DateTime? CompletedAt, string? WorkDoneNotes, DateTime CreatedAt);
 public sealed record PortalCreateWorkOrderRequest(string Title, string? Description, string? Priority, Guid? SiteId, Guid? AssetId);
+public sealed record PortalWorkOrderNoteResponse(Guid Id, string Content, string? CreatedByUserName, DateTime CreatedAt);
 
 public sealed record PortalAssetListItem(Guid Id, string AssetName, string AssetCode, string? AssetType, string? SiteName, string? Manufacturer, string? Model, string Status, DateTime? WarrantyExpiryDate, DateTime? NextPmDate);
 

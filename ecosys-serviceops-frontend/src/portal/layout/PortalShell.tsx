@@ -2,13 +2,14 @@ import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../../shared/utils/cn'
 import { brand } from '../../shared/config/brand'
-import { LayoutDashboard, ClipboardList, FileText, UserCircle2, LogOut } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, FileText, UserCircle2, LogOut, BookOpen } from 'lucide-react'
 import { usePortalAuth } from '../auth/PortalAuthContext'
 
 const portalNav = [
   { label: 'Dashboard', to: '/portal/dashboard', icon: LayoutDashboard },
   { label: 'Jobs', to: '/portal/requests', icon: ClipboardList },
   { label: 'Invoices', to: '/portal/invoices', icon: FileText },
+  { label: 'Help Center', to: '/portal/knowledge', icon: BookOpen },
   { label: 'Profile', to: '/portal/profile', icon: UserCircle2 },
 ]
 
@@ -75,7 +76,7 @@ export function PortalShell({ children }: PortalShellProps) {
         <main className="min-w-0 flex-1 pb-24 lg:pb-6">{children}</main>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-2 py-2 lg:hidden">
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-5 gap-1">
           {portalNav.map((item) => {
             const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
             const Icon = item.icon

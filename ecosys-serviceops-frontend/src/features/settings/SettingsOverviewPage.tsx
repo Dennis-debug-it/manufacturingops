@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
   Radio, MessageCircle, CreditCard, ShieldCheck, Users, Bell, Plug, LineChart,
-  UserCircle, ScrollText, GitBranch,
+  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 
@@ -28,6 +28,9 @@ const groups: SettingsGroup[] = [
       { to: '/settings/pm-templates', label: 'PM Templates', description: 'Preventive maintenance checklists.', icon: ClipboardList },
       { to: '/settings/inventory', label: 'Inventory Settings', description: 'Stock alerts and deduction rules.', icon: Boxes },
       { to: '/settings/time-attendance', label: 'Time & Attendance Settings', description: 'Work hours and leave policy.', icon: Clock },
+      { to: '/settings/sla-policies', label: 'SLA Policies', description: 'Response and resolution targets per priority.', icon: Timer },
+      { to: '/settings/workflows', label: 'Status Workflows', description: 'Custom work order status chains and transitions.', icon: Workflow },
+      { to: '/settings/escalation-rules', label: 'Escalation Rules', description: 'Automatic escalation for stuck or at-risk work orders.', icon: AlertTriangle },
     ],
   },
   {
@@ -52,6 +55,7 @@ const groups: SettingsGroup[] = [
     items: [
       { to: '/settings/portal', label: 'Portal', description: 'Client portal visibility controls.', icon: Users },
       { to: '/settings/notifications', label: 'Notifications', description: 'Event notification matrix.', icon: Bell },
+      { to: '/settings/notification-templates', label: 'Notification Templates', description: 'Client ETA emails for job milestones.', icon: MapPin },
       { to: '/settings/security', label: 'Security', description: 'Session and authentication policy.', icon: ShieldCheck },
       { to: '/settings/executive-dashboard', label: 'Executive Dashboard Settings', description: 'Metric targets and thresholds.', icon: LineChart },
     ],

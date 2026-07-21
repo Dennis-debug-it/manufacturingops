@@ -48,6 +48,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<WhatsAppTemplate> WhatsAppTemplates => Set<WhatsAppTemplate>();
     public DbSet<TenantModuleSetting> TenantModuleSettings => Set<TenantModuleSetting>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
+    public DbSet<WorkOrderTemplate> WorkOrderTemplates => Set<WorkOrderTemplate>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
     public DbSet<BranchMaterialStock> BranchMaterialStocks => Set<BranchMaterialStock>();
     public DbSet<VanMaterialStock> VanMaterialStocks => Set<VanMaterialStock>();
@@ -56,8 +57,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
     public DbSet<MaterialRequest> MaterialRequests => Set<MaterialRequest>();
     public DbSet<MaterialRequestLine> MaterialRequestLines => Set<MaterialRequestLine>();
+    public DbSet<PartsRequest> PartsRequests => Set<PartsRequest>();
+    public DbSet<PartsRequestItem> PartsRequestItems => Set<PartsRequestItem>();
     public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
     public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<PermissionGroup> PermissionGroups => Set<PermissionGroup>();
+    public DbSet<UserPermissionGroup> UserPermissionGroups => Set<UserPermissionGroup>();
+    public DbSet<GroupCapability> GroupCapabilities => Set<GroupCapability>();
+    public DbSet<UserPermissionOverride> UserPermissionOverrides => Set<UserPermissionOverride>();
+    public DbSet<AccessScope> AccessScopes => Set<AccessScope>();
+    public DbSet<PermissionThreshold> PermissionThresholds => Set<PermissionThreshold>();
     public DbSet<PreventiveMaintenancePlan> PreventiveMaintenancePlans => Set<PreventiveMaintenancePlan>();
     public DbSet<ImportBatch> ImportBatches => Set<ImportBatch>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
@@ -79,6 +88,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<WorkOrderTechnicianAssignment> WorkOrderTechnicianAssignments => Set<WorkOrderTechnicianAssignment>();
     public DbSet<WorkOrderAssignmentHistory> WorkOrderAssignmentHistories => Set<WorkOrderAssignmentHistory>();
     public DbSet<WorkOrderEvent> WorkOrderEvents => Set<WorkOrderEvent>();
+    public DbSet<WorkOrderNote> WorkOrderNotes => Set<WorkOrderNote>();
     public DbSet<WorkOrderChecklistItem> WorkOrderChecklistItems => Set<WorkOrderChecklistItem>();
     public DbSet<PmTemplate> PmTemplates => Set<PmTemplate>();
     public DbSet<PmTemplateQuestion> PmTemplateQuestions => Set<PmTemplateQuestion>();
@@ -119,6 +129,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<PmTemplateSection> PmTemplateSections => Set<PmTemplateSection>();
     public DbSet<SlaDefinition> SlaDefinitions => Set<SlaDefinition>();
     public DbSet<SlaRule> SlaRules => Set<SlaRule>();
+    public DbSet<WorkflowDefinition> WorkflowDefinitions => Set<WorkflowDefinition>();
+    public DbSet<WorkflowStatus> WorkflowStatuses => Set<WorkflowStatus>();
+    public DbSet<EscalationRule> EscalationRules => Set<EscalationRule>();
+    public DbSet<EscalationFired> EscalationFired => Set<EscalationFired>();
+    public DbSet<SlaEscalation> SlaEscalations => Set<SlaEscalation>();
+    public DbSet<SlaRecord> SlaRecords => Set<SlaRecord>();
+    public DbSet<EtaNotificationSettings> EtaNotificationSettings => Set<EtaNotificationSettings>();
     public DbSet<KnowledgeCategory> KnowledgeCategories => Set<KnowledgeCategory>();
     public DbSet<KnowledgeArticle> KnowledgeArticles => Set<KnowledgeArticle>();
     public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
@@ -126,6 +143,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<KnowledgeTag> KnowledgeTags => Set<KnowledgeTag>();
     public DbSet<KnowledgeArticleTag> KnowledgeArticleTags => Set<KnowledgeArticleTag>();
     public DbSet<KnowledgeArticleVersion> KnowledgeArticleVersions => Set<KnowledgeArticleVersion>();
+    public DbSet<KnowledgeArticleFeedback> KnowledgeArticleFeedback => Set<KnowledgeArticleFeedback>();
     public DbSet<ClientPreferentialRate> ClientPreferentialRates => Set<ClientPreferentialRate>();
     public DbSet<FinanceApprovalRule> FinanceApprovalRules => Set<FinanceApprovalRule>();
     public DbSet<MaterialIssue> MaterialIssues => Set<MaterialIssue>();
@@ -147,6 +165,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<TenantInvoice> TenantInvoices => Set<TenantInvoice>();
     public DbSet<TenantInvoiceLine> TenantInvoiceLines => Set<TenantInvoiceLine>();
     public DbSet<TenantPayment> TenantPayments => Set<TenantPayment>();
+    public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
+    public DbSet<CreditNote> CreditNotes => Set<CreditNote>();
+    public DbSet<CreditNoteLine> CreditNoteLines => Set<CreditNoteLine>();
     public DbSet<TenantQuotation> TenantQuotations => Set<TenantQuotation>();
     public DbSet<TenantQuotationLine> TenantQuotationLines => Set<TenantQuotationLine>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
@@ -616,7 +637,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             {
                 tableBuilder.HasCheckConstraint("CK_work_orders_assignment_type", "\"AssignmentType\" IN ('Unassigned', 'IndividualTechnician', 'MultipleTechnicians', 'AssignmentGroup')");
                 tableBuilder.HasCheckConstraint("CK_work_orders_priority", "\"Priority\" IN ('Low', 'Medium', 'High', 'Critical')");
-                tableBuilder.HasCheckConstraint("CK_work_orders_status", "\"Status\" IN ('New', 'Open', 'Assigned', 'Scheduled', 'In Progress', 'On Hold', 'Completed', 'Client Accepted', 'Closed', 'Cancelled', 'Rejected', 'Reopened')");
+                tableBuilder.HasCheckConstraint("CK_work_orders_status", "\"Status\" IN ('New', 'Open', 'Assigned', 'Scheduled', 'In Progress', 'On Hold', 'Waiting on Parts', 'Waiting on Client', 'Completed', 'Client Accepted', 'Closed', 'Cancelled', 'Rejected', 'Reopened')");
                 tableBuilder.HasCheckConstraint("CK_work_orders_work_type", "\"WorkType\" IN ('NewInstallation', 'PreventiveMaintenance', 'CorrectiveMaintenance', 'InspectionAssessment')");
                 tableBuilder.HasCheckConstraint("CK_work_orders_hold_reason", "\"HoldReason\" IS NULL OR \"HoldReason\" IN ('Awaiting Materials', 'Awaiting Client', 'Awaiting Vendor', 'Awaiting Approval', 'Awaiting Site Access', 'Awaiting Spares', 'Other')");
             });
@@ -664,7 +685,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.SlaResolutionBreached);
             entity.Property(x => x.SlaResponseBreachedAt);
             entity.Property(x => x.SlaResolutionBreachedAt);
+            entity.Property(x => x.TrackingToken).HasMaxLength(40);
+            entity.Property(x => x.IsRepeatVisit).HasDefaultValue(false);
+            entity.Property(x => x.RepeatVisitCount).HasDefaultValue(0);
+            entity.Property(x => x.PlannedMaterialsJson);
+            entity.Property(x => x.PreviousStatus).HasMaxLength(50);
             entity.HasIndex(x => new { x.TenantId, x.WorkOrderNumber }).IsUnique();
+            entity.HasIndex(x => x.TrackingToken).IsUnique().HasFilter("\"TrackingToken\" IS NOT NULL");
+            entity.HasIndex(x => x.QuoteId);
+            entity.HasIndex(x => x.ParentWorkOrderId);
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.WorkOrders)
                 .HasForeignKey(x => x.TenantId)
@@ -721,6 +750,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.WorkOrders)
                 .HasForeignKey(x => x.PmTemplateId)
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.WorkOrderTemplate)
+                .WithMany(x => x.WorkOrders)
+                .HasForeignKey(x => x.WorkOrderTemplateId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Quote)
+                .WithMany()
+                .HasForeignKey(x => x.QuoteId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.ParentWorkOrder)
+                .WithMany(x => x.ChildWorkOrders)
+                .HasForeignKey(x => x.ParentWorkOrderId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(x => x.Assignments)
                 .WithOne(x => x.WorkOrder)
                 .HasForeignKey(x => x.WorkOrderId)
@@ -749,6 +790,94 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithOne(x => x.WorkOrder)
                 .HasForeignKey(x => x.WorkOrderId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WorkflowStatus)
+                .WithMany(x => x.WorkOrders)
+                .HasForeignKey(x => x.WorkflowStatusId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<WorkOrderTemplate>(entity =>
+        {
+            entity.ToTable("work_order_templates");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.JobType).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.DefaultPriority).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.RequiredSkillsJson);
+            entity.Property(x => x.DefaultMaterialsJson);
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ChecklistTemplate)
+                .WithMany()
+                .HasForeignKey(x => x.ChecklistTemplateId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<WorkflowDefinition>(entity =>
+        {
+            entity.ToTable("workflow_definitions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<WorkflowStatus>(entity =>
+        {
+            entity.ToTable("workflow_statuses");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Color).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.AllowedNextStatusIdsJson).HasMaxLength(4000);
+            entity.HasIndex(x => new { x.WorkflowDefinitionId, x.Name }).IsUnique();
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WorkflowDefinition)
+                .WithMany(x => x.Statuses)
+                .HasForeignKey(x => x.WorkflowDefinitionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EscalationRule>(entity =>
+        {
+            entity.ToTable("escalation_rules");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.TriggerCondition).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Action).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.ActionValue).HasMaxLength(100);
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EscalationFired>(entity =>
+        {
+            entity.ToTable("escalation_fired");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.RuleId, x.WorkOrderId, x.FiredAt });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Rule)
+                .WithMany(x => x.FiredEvents)
+                .HasForeignKey(x => x.RuleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WorkOrder)
+                .WithMany()
+                .HasForeignKey(x => x.WorkOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SlaDefinition>(entity =>
@@ -768,6 +897,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("sla_rules");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100);
             entity.Property(x => x.Priority).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ResponseTargetHours).HasPrecision(10, 2);
             entity.Property(x => x.ResolutionTargetHours).HasPrecision(10, 2);
@@ -779,6 +909,59 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.SlaDefinition)
                 .WithMany(x => x.Rules)
                 .HasForeignKey(x => x.SlaDefinitionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SlaEscalation>(entity =>
+        {
+            entity.ToTable("sla_escalations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.NotifyRoles).HasMaxLength(400);
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.SlaRule)
+                .WithMany(x => x.Escalations)
+                .HasForeignKey(x => x.SlaRuleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.EscalateToUser)
+                .WithMany()
+                .HasForeignKey(x => x.EscalateToUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<SlaRecord>(entity =>
+        {
+            entity.ToTable("sla_records");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PauseReason).HasMaxLength(200);
+            entity.HasIndex(x => x.WorkOrderId).IsUnique();
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WorkOrder)
+                .WithMany()
+                .HasForeignKey(x => x.WorkOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.SlaRule)
+                .WithMany()
+                .HasForeignKey(x => x.SlaRuleId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<EtaNotificationSettings>(entity =>
+        {
+            entity.ToTable("eta_notification_settings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EventType).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.SubjectTemplate).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.BodyTemplate).HasMaxLength(4000).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.EventType }).IsUnique();
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -987,6 +1170,48 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<PartsRequest>(entity =>
+        {
+            entity.ToTable("parts_requests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.RejectionReason).HasMaxLength(2000);
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Branch)
+                .WithMany()
+                .HasForeignKey(x => x.BranchId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.WorkOrder)
+                .WithMany()
+                .HasForeignKey(x => x.WorkOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Technician)
+                .WithMany()
+                .HasForeignKey(x => x.TechnicianId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PartsRequestItem>(entity =>
+        {
+            entity.ToTable("parts_request_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.Property(x => x.QuantityRequested).HasPrecision(18, 2);
+            entity.Property(x => x.QuantityApproved).HasPrecision(18, 2);
+            entity.HasOne(x => x.PartsRequest)
+                .WithMany(x => x.Items)
+                .HasForeignKey(x => x.PartsRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.InventoryItem)
+                .WithMany()
+                .HasForeignKey(x => x.InventoryItemId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<UserPermission>(entity =>
         {
             entity.ToTable("user_permissions");
@@ -1003,6 +1228,57 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<RolePermission>(modelBuilder);
+
+        modelBuilder.Entity<PermissionGroup>(entity =>
+        {
+            entity.ToTable("permission_groups");
+            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+        });
+        modelBuilder.Entity<UserPermissionGroup>(entity =>
+        {
+            entity.ToTable("user_permission_groups");
+            entity.HasIndex(x => new { x.TenantId, x.UserId, x.PermissionGroupId }).IsUnique();
+            entity.HasOne(x => x.User).WithMany(x => x.PermissionGroups).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.PermissionGroup).WithMany(x => x.Users).HasForeignKey(x => x.PermissionGroupId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<GroupCapability>(entity =>
+        {
+            entity.ToTable("group_capabilities");
+            entity.Property(x => x.Capability).HasMaxLength(160).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.PermissionGroupId, x.Capability }).IsUnique();
+            entity.HasOne(x => x.PermissionGroup).WithMany(x => x.Capabilities).HasForeignKey(x => x.PermissionGroupId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<UserPermissionOverride>(entity =>
+        {
+            entity.ToTable("user_permission_overrides");
+            entity.Property(x => x.Capability).HasMaxLength(160).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.UserId, x.Capability }).IsUnique();
+            entity.HasOne(x => x.User).WithMany(x => x.PermissionOverrides).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<AccessScope>(entity =>
+        {
+            entity.ToTable("access_scopes");
+            entity.Property(x => x.Capability).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.ScopeType).HasMaxLength(64).IsRequired();
+            entity.HasOne(x => x.User).WithMany(x => x.AccessScopes).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.PermissionGroup).WithMany().HasForeignKey(x => x.PermissionGroupId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<PermissionThreshold>(entity =>
+        {
+            entity.ToTable("permission_thresholds");
+            entity.Property(x => x.Capability).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.MaximumAmount).HasPrecision(18, 2);
+            entity.HasOne(x => x.User).WithMany(x => x.PermissionThresholds).HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.PermissionGroup).WithMany().HasForeignKey(x => x.PermissionGroupId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<PermissionGroup>(modelBuilder);
+        ApplyTenantFilter<UserPermissionGroup>(modelBuilder);
+        ApplyTenantFilter<GroupCapability>(modelBuilder);
+        ApplyTenantFilter<UserPermissionOverride>(modelBuilder);
+        ApplyTenantFilter<AccessScope>(modelBuilder);
+        ApplyTenantFilter<PermissionThreshold>(modelBuilder);
 
         modelBuilder.Entity<PreventiveMaintenancePlan>(entity =>
         {
@@ -1423,6 +1699,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Message).HasMaxLength(2000).IsRequired();
             entity.Property(x => x.Latitude).HasPrecision(9, 6);
             entity.Property(x => x.Longitude).HasPrecision(9, 6);
+            entity.Property(x => x.MetadataJson);
             entity.HasIndex(x => new { x.TenantId, x.WorkOrderId, x.OccurredAt });
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.WorkOrderEvents)
@@ -1436,6 +1713,26 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany()
                 .HasForeignKey(x => x.ActorUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<WorkOrderNote>(entity =>
+        {
+            entity.ToTable("work_order_notes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Content).HasMaxLength(4000).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.WorkOrderId, x.CreatedAt });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WorkOrder)
+                .WithMany(x => x.Notes)
+                .HasForeignKey(x => x.WorkOrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PmTemplate>(entity =>
@@ -2276,6 +2573,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.OperatingHours).HasMaxLength(500);
             entity.Property(x => x.AccessNotes).HasMaxLength(2000);
             entity.Property(x => x.SpecialInstructions).HasMaxLength(2000);
+            entity.Property(x => x.Latitude).HasPrecision(9, 6);
+            entity.Property(x => x.Longitude).HasPrecision(9, 6);
             entity.HasIndex(x => new { x.TenantId, x.SiteCode });
             entity.HasOne(x => x.Tenant)
                 .WithMany()
@@ -2474,6 +2773,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.Icon).HasMaxLength(60);
             entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany()
@@ -2511,6 +2811,26 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.SourceWorkOrder)
                 .WithMany()
                 .HasForeignKey(x => x.SourceWorkOrderId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<KnowledgeArticleFeedback>(entity =>
+        {
+            entity.ToTable("knowledge_article_feedback");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Comment).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.ArticleId });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Article)
+                .WithMany(x => x.Feedback)
+                .HasForeignKey(x => x.ArticleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ClientPortalUser)
+                .WithMany()
+                .HasForeignKey(x => x.ClientPortalUserId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -2760,12 +3080,68 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Invoice).WithMany(x => x.Payments).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Invoice).WithMany(x => x.Payments).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.TenantId, x.PaymentNumber }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.InvoiceId });
         });
         ApplyTenantFilter<TenantPayment>(modelBuilder);
+
+        // ── PaymentAllocation ────────────────────────────────────────────────
+        modelBuilder.Entity<PaymentAllocation>(entity =>
+        {
+            entity.ToTable("payment_allocations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SourceType).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.TenantId, x.InvoiceId, x.Status });
+            entity.HasIndex(x => new { x.TenantId, x.SourceType, x.SourceId });
+        });
+        ApplyTenantFilter<PaymentAllocation>(modelBuilder);
+
+        // ── CreditNote ───────────────────────────────────────────────────────
+        modelBuilder.Entity<CreditNote>(entity =>
+        {
+            entity.ToTable("credit_notes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CreditNoteNumber).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.Subtotal).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.TaxAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.TotalAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.AmountApplied).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Balance).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.CreditNoteNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasIndex(x => new { x.TenantId, x.ClientId });
+        });
+        ApplyTenantFilter<CreditNote>(modelBuilder);
+
+        modelBuilder.Entity<CreditNoteLine>(entity =>
+        {
+            entity.ToTable("credit_note_lines");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.ItemType).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Quantity).HasColumnType("numeric(18,4)");
+            entity.Property(x => x.UnitRate).HasColumnType("numeric(18,4)");
+            entity.Property(x => x.LineTotal).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.TaxRate).HasColumnType("numeric(8,4)");
+            entity.Property(x => x.TaxAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.GrandTotal).HasColumnType("numeric(18,2)");
+            entity.HasOne(x => x.CreditNote).WithMany(x => x.Lines).HasForeignKey(x => x.CreditNoteId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.CreditNoteId);
+        });
 
         // ── TenantQuotation ──────────────────────────────────────────────────
         modelBuilder.Entity<TenantQuotation>(entity =>

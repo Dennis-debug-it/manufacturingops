@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
+import { Route as RouteIcon } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
@@ -29,7 +30,18 @@ export function TechnicianDetailPage() {
         title={technician.fullName}
         subtitle={technician.skillCategory ?? 'Technician'}
         breadcrumbs={[{ label: 'Technicians', to: '/team/technicians' }, { label: technician.fullName }]}
-        secondaryActions={<StatusBadge status={technician.isActive ? 'Active' : 'Inactive'} />}
+        secondaryActions={
+          <>
+            <Link
+              to={`/dispatch/route/${technician.id}`}
+              className="inline-flex items-center gap-2 rounded-control border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+            >
+              <RouteIcon className="h-4 w-4" />
+              Daily Route
+            </Link>
+            <StatusBadge status={technician.isActive ? 'Active' : 'Inactive'} />
+          </>
+        }
       />
 
       <SummarySection title="Profile" description="Contact and assignment details.">

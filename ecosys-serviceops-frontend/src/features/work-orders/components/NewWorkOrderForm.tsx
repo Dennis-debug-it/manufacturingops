@@ -1,12 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
+import { AlertTriangle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
 import { cn } from '../../../shared/utils/cn'
-import { useCreateWorkOrder } from '../api'
+import { useCreateWorkOrder, useRepeatVisitCheckForAsset } from '../api'
 import { useAssetOptions, useClientOptions, useSiteOptions, useTechnicianOptions } from '../pickerApi'
 import { newWorkOrderSchema, priorityOptions, workTypeOptions, type NewWorkOrderFormValues } from '../schemas'
 
@@ -17,9 +18,10 @@ const errorClass = 'mt-1 text-xs text-rose-600'
 export interface NewWorkOrderFormProps {
   open: boolean
   onClose: () => void
+  parentWorkOrderId?: string | null
 }
 
-export function NewWorkOrderForm({ open, onClose }: NewWorkOrderFormProps) {
+export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: NewWorkOrderFormProps) {
   const navigate = useNavigate()
   const [clientSearch, setClientSearch] = useState('')
   const debouncedClientSearch = useDebounce(clientSearch, 250)
@@ -46,13 +48,34 @@ export function NewWorkOrderForm({ open, onClose }: NewWorkOrderFormProps) {
     },
   })
 
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    reset({
+      clientId: '',
+      siteId: '',
+      assetId: '',
+      title: '',
+      workType: 'CorrectiveMaintenance',
+      priority: 'Medium',
+      dueDate: '',
+      description: '',
+      assignedTechnicianId: '',
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   const clientId = watch('clientId')
   const siteId = watch('siteId')
+  const assetId = watch('assetId')
 
   const { data: clients, isLoading: clientsLoading } = useClientOptions(debouncedClientSearch)
   const { data: sites, isLoading: sitesLoading } = useSiteOptions(clientId || undefined)
   const { data: assets, isLoading: assetsLoading } = useAssetOptions(clientId || undefined, siteId || undefined)
   const { data: technicians, isLoading: techniciansLoading } = useTechnicianOptions()
+  const { data: repeatVisitCheck } = useRepeatVisitCheckForAsset(assetId || undefined)
 
   const createWorkOrder = useCreateWorkOrder()
 
@@ -79,6 +102,7 @@ export function NewWorkOrderForm({ open, onClose }: NewWorkOrderFormProps) {
         assignedTechnicianId: values.assignedTechnicianId || null,
         assignmentType: values.assignedTechnicianId ? 'IndividualTechnician' : 'Unassigned',
         notifyClient: true,
+        parentWorkOrderId: parentWorkOrderId ?? null,
       })
       toast.success(`Work order ${created.workOrderNumber} created`)
       closeAndReset()
@@ -91,7 +115,7 @@ export function NewWorkOrderForm({ open, onClose }: NewWorkOrderFormProps) {
   return (
     <FormDrawer
       open={open}
-      title="New Work Order"
+      title={parentWorkOrderId ? 'New Sub-task' : 'New Work Order'}
       onClose={closeAndReset}
       footer={
         <div className="flex items-center justify-end gap-2">
@@ -170,6 +194,15 @@ export function NewWorkOrderForm({ open, onClose }: NewWorkOrderFormProps) {
             />
           </div>
         </div>
+
+        {repeatVisitCheck?.isRepeatVisit ? (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              This asset has had {repeatVisitCheck.repeatVisitCount} completed jobs in the last 30 days. Consider escalating the underlying fault.
+            </span>
+          </div>
+        ) : null}
 
         <div>
           <label className={labelClass} htmlFor="wo-title">Title</label>

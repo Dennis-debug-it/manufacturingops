@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AlertTriangle, MoreVertical } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
@@ -16,18 +17,34 @@ import {
   useCancelWorkOrder,
   useCloseWorkOrder,
   useCompleteWorkOrder,
-  usePauseWorkOrder,
-  useResumeWorkOrder,
+  useDuplicateWorkOrder,
+  useHoldWorkOrder,
+  usePatchWorkOrderWorkflowStatus,
+  useResumeFromHold,
   useStartWorkOrder,
   useWorkOrder,
 } from './api'
+import { useWorkflowStatuses } from '../settings/workflowsApi'
 import { TimelineTab } from './tabs/TimelineTab'
+import { ActivityTab } from './tabs/ActivityTab'
+import { NotesTab } from './tabs/NotesTab'
+import { DocumentsPanel } from './components/DocumentsPanel'
+import { RelatedWorkOrdersPanel } from './components/RelatedWorkOrdersPanel'
+import { TechnicianLocationPanel } from './components/TechnicianLocationPanel'
 import { AssignmentTab } from './tabs/AssignmentTab'
 import { ExecutionTab } from './tabs/ExecutionTab'
 import { EvidenceTab } from './tabs/EvidenceTab'
-import { MaterialsTab } from './tabs/MaterialsTab'
+import { PartsTab } from './tabs/PartsTab'
 import { SignaturesTab } from './tabs/SignaturesTab'
 import { ReportTab } from './tabs/ReportTab'
+import { SlaTab } from './tabs/SlaTab'
+import { SubtasksTab } from './tabs/SubtasksTab'
+
+const holdTypeOptions = [
+  { value: 'OnHold', label: 'On Hold (general)' },
+  { value: 'WaitingOnParts', label: 'Waiting on Parts' },
+  { value: 'WaitingOnClient', label: 'Waiting on Client' },
+] as const
 
 const summaryFields: Array<{ key: string; label: string; render?: (value: string) => string }> = [
   { key: 'workOrderNumber', label: 'WO Number' },
@@ -46,7 +63,10 @@ const summaryFields: Array<{ key: string; label: string; render?: (value: string
 
 export function WorkOrderDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const { data: workOrder, isLoading, isError } = useWorkOrder(id)
+  const { data: workflowStatuses } = useWorkflowStatuses()
+  const patchWorkflowStatus = usePatchWorkOrderWorkflowStatus()
 
   const canAssign = usePermission('work-orders.assign')
   const canStart = usePermission('work-orders.start')
@@ -54,18 +74,46 @@ export function WorkOrderDetailPage() {
   const canComplete = usePermission('work-orders.complete')
   const canClose = usePermission('work-orders.close')
   const canCancel = usePermission('work-orders.cancel')
+  const canCreate = usePermission('work-orders.create')
 
   const startWorkOrder = useStartWorkOrder(id ?? '')
-  const pauseWorkOrder = usePauseWorkOrder(id ?? '')
-  const resumeWorkOrder = useResumeWorkOrder(id ?? '')
+  const holdWorkOrder = useHoldWorkOrder(id ?? '')
+  const resumeFromHold = useResumeFromHold(id ?? '')
   const closeWorkOrder = useCloseWorkOrder(id ?? '')
   const cancelWorkOrder = useCancelWorkOrder(id ?? '')
   const completeWorkOrder = useCompleteWorkOrder(id ?? '')
+  const duplicateWorkOrder = useDuplicateWorkOrder(id ?? '')
 
   const [completeOpen, setCompleteOpen] = useState(false)
   const [workDoneNotes, setWorkDoneNotes] = useState('')
   const [reportSummary, setReportSummary] = useState('')
   const [confirmAction, setConfirmAction] = useState<'close' | 'cancel' | null>(null)
+  const [showActionsMenu, setShowActionsMenu] = useState(false)
+  const [holdOpen, setHoldOpen] = useState(false)
+  const [holdType, setHoldType] = useState<(typeof holdTypeOptions)[number]['value']>('OnHold')
+  const [holdReason, setHoldReason] = useState('')
+
+  const submitDuplicate = async () => {
+    try {
+      const duplicate = await duplicateWorkOrder.mutateAsync()
+      toast.success(`Work order ${duplicate.workOrderNumber} created`)
+      navigate(`/work-orders/${duplicate.id}`)
+    } catch {
+      // interceptor surfaces the error toast
+    }
+  }
+
+  const submitHold = async () => {
+    try {
+      await holdWorkOrder.mutateAsync({ holdType, reason: holdReason.trim() || null })
+      toast.success('Work order put on hold')
+      setHoldOpen(false)
+      setHoldReason('')
+      setHoldType('OnHold')
+    } catch {
+      // interceptor surfaces the error toast
+    }
+  }
 
   const runAction = async (label: string, mutateAsync: () => Promise<unknown>) => {
     try {
@@ -101,12 +149,32 @@ export function WorkOrderDetailPage() {
   }
 
   const status = workOrder.status
-  const canPause = canExecute && !['OnHold', 'Completed', 'Closed', 'Cancelled'].includes(status)
-  const canResume = canExecute && status === 'OnHold'
+  const holdStatuses = ['On Hold', 'Waiting on Parts', 'Waiting on Client']
+  const canPause = canExecute && !holdStatuses.includes(status) && !['Completed', 'Closed', 'Cancelled'].includes(status)
+  const canResume = canExecute && holdStatuses.includes(status)
   const canStartNow = canStart && ['Assigned', 'Scheduled', 'New', 'Open'].includes(status)
   const canCompleteNow = canComplete && !['Completed', 'Closed', 'Cancelled'].includes(status)
   const canCloseNow = canClose && status === 'Completed'
   const canCancelNow = canCancel && !['Completed', 'Closed', 'Cancelled'].includes(status)
+
+  const currentWorkflowStatus = workOrder.workflowStatusId
+    ? (workflowStatuses ?? []).find((s) => s.id === workOrder.workflowStatusId)
+    : undefined
+  const workflowStatusOptions = currentWorkflowStatus
+    ? (workflowStatuses ?? []).filter(
+        (s) => s.id === currentWorkflowStatus.id || currentWorkflowStatus.allowedNextStatusIds.includes(s.id),
+      )
+    : []
+
+  const changeWorkflowStatus = async (workflowStatusId: string) => {
+    if (!id || workflowStatusId === currentWorkflowStatus?.id) return
+    try {
+      await patchWorkflowStatus.mutateAsync({ id, workflowStatusId })
+      toast.success('Status updated')
+    } catch {
+      // interceptor surfaces the error toast
+    }
+  }
 
   const header = (
     <PageHeader
@@ -119,7 +187,32 @@ export function WorkOrderDetailPage() {
       secondaryActions={
         <div className="flex flex-wrap items-center gap-2">
           <Link to="/work-orders" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Back</Link>
-          <StatusBadge status={status} />
+          {currentWorkflowStatus && canCreate ? (
+            <select
+              value={currentWorkflowStatus.id}
+              onChange={(event) => void changeWorkflowStatus(event.target.value)}
+              disabled={patchWorkflowStatus.isPending || currentWorkflowStatus.isFinal}
+              className="h-9 rounded-full border-0 px-3 text-xs font-medium text-white outline-none disabled:opacity-70"
+              style={{ backgroundColor: currentWorkflowStatus.color }}
+              aria-label="Work order status"
+            >
+              {workflowStatusOptions.map((option) => (
+                <option key={option.id} value={option.id} className="bg-white text-slate-900">
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <StatusBadge status={status} />
+          )}
+          {workOrder.quoteId && workOrder.quoteNumber ? (
+            <Link
+              to={`/finance/quotes/${workOrder.quoteId}`}
+              className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200 transition hover:bg-sky-100"
+            >
+              Created from Quote #{workOrder.quoteNumber}
+            </Link>
+          ) : null}
         </div>
       }
       primaryAction={
@@ -128,10 +221,10 @@ export function WorkOrderDetailPage() {
             <button type="button" onClick={() => runAction('Work started', () => startWorkOrder.mutateAsync(undefined))} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Start Work</button>
           ) : null}
           {canPause ? (
-            <button type="button" onClick={() => runAction('Work order on hold', () => pauseWorkOrder.mutateAsync({ holdReason: 'Other', note: 'Paused from work order detail' }))} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Put On Hold</button>
+            <button type="button" onClick={() => setHoldOpen(true)} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Put On Hold</button>
           ) : null}
           {canResume ? (
-            <button type="button" onClick={() => runAction('Work resumed', () => resumeWorkOrder.mutateAsync(undefined))} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Resume</button>
+            <button type="button" onClick={() => runAction('Work resumed', () => resumeFromHold.mutateAsync())} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Resume</button>
           ) : null}
           {canCompleteNow ? (
             <button type="button" onClick={() => setCompleteOpen(true)} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">Complete</button>
@@ -142,6 +235,35 @@ export function WorkOrderDetailPage() {
           {canCancelNow ? (
             <button type="button" onClick={() => setConfirmAction('cancel')} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-white px-4 text-sm font-medium text-rose-600 transition hover:bg-rose-50">Cancel</button>
           ) : null}
+          {canCreate ? (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowActionsMenu((prev) => !prev)}
+                className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                aria-label="More actions"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </button>
+              {showActionsMenu ? (
+                <>
+                  <button type="button" aria-label="Close menu" className="fixed inset-0 z-10 cursor-default" onClick={() => setShowActionsMenu(false)} />
+                  <div className="absolute right-0 z-20 mt-2 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowActionsMenu(false)
+                        void submitDuplicate()
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                    >
+                      Duplicate
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       }
     />
@@ -149,8 +271,23 @@ export function WorkOrderDetailPage() {
 
   return (
     <>
+      {workOrder.isRepeatVisit ? (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            Repeat visit — this asset has had {workOrder.repeatVisitCount} jobs in the last 30 days. Consider escalating the underlying fault.
+          </span>
+        </div>
+      ) : null}
       <DetailLayout
         header={header}
+        sidebar={
+          <>
+            <TechnicianLocationPanel workOrder={workOrder} />
+            <DocumentsPanel workOrderId={id} />
+            <RelatedWorkOrdersPanel workOrderId={id} />
+          </>
+        }
         tabs={[
           {
             id: 'summary',
@@ -179,10 +316,14 @@ export function WorkOrderDetailPage() {
             ),
           },
           { id: 'timeline', label: 'Timeline', content: <TimelineTab workOrderId={id} /> },
+          { id: 'activity', label: 'Activity', content: <ActivityTab workOrderId={id} /> },
+          { id: 'notes', label: 'Notes', content: <NotesTab workOrderId={id} /> },
           { id: 'assignment', label: 'Assignment', content: <AssignmentTab workOrder={workOrder} /> },
+          { id: 'sla', label: 'SLA', content: <SlaTab workOrderId={id} /> },
           { id: 'execution', label: 'Work Execution', content: <ExecutionTab workOrderId={id} /> },
           { id: 'evidence', label: 'Evidence', content: <EvidenceTab workOrderId={id} /> },
-          { id: 'materials', label: 'Materials', content: <MaterialsTab workOrderId={id} /> },
+          { id: 'parts', label: 'Parts', content: <PartsTab workOrderId={id} /> },
+          { id: 'subtasks', label: 'Sub-tasks', content: <SubtasksTab workOrder={workOrder} /> },
           { id: 'signatures', label: 'Signatures', content: <SignaturesTab workOrderId={id} /> },
           { id: 'report', label: 'Report', content: <ReportTab workOrder={workOrder} /> },
         ]}
@@ -238,6 +379,35 @@ export function WorkOrderDetailPage() {
           setConfirmAction(null)
         }}
       />
+
+      <FormDrawer
+        open={holdOpen}
+        title="Put Work Order On Hold"
+        onClose={() => setHoldOpen(false)}
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setHoldOpen(false)} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
+            <button type="button" onClick={submitHold} disabled={holdWorkOrder.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+              {holdWorkOrder.isPending ? 'Saving…' : 'Put On Hold'}
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="hold-type">Hold Type</label>
+            <select id="hold-type" value={holdType} onChange={(event) => setHoldType(event.target.value as (typeof holdTypeOptions)[number]['value'])} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+              {holdTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="hold-reason">Reason</label>
+            <textarea id="hold-reason" value={holdReason} onChange={(event) => setHoldReason(event.target.value)} rows={4} placeholder="Add details about why this work order is on hold" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+          </div>
+        </div>
+      </FormDrawer>
     </>
   )
 }

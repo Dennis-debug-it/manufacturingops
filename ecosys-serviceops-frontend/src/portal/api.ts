@@ -51,6 +51,21 @@ export function usePortalWorkOrder(id: string | undefined) {
   })
 }
 
+export interface PortalWorkOrderNote {
+  id: string
+  content: string
+  createdByUserName: string | null
+  createdAt: string
+}
+
+export function usePortalWorkOrderNotes(id: string | undefined) {
+  return useQuery({
+    queryKey: ['portal', 'work-orders', id, 'notes'],
+    queryFn: () => portalApi.get<PortalWorkOrderNote[]>(endpoints.portal.workOrderNotes(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
 export interface CreatePortalWorkOrderPayload {
   title: string
   description?: string | undefined
@@ -242,5 +257,76 @@ export function useUpdatePortalProfile() {
   return useMutation({
     mutationFn: (payload: UpdatePortalProfilePayload) => portalApi.put<PortalProfile>(endpoints.portal.profile, payload),
     onSuccess: (data) => void queryClient.setQueryData(['portal', 'profile'], data),
+  })
+}
+
+export interface PortalKnowledgeCategory {
+  id: string
+  name: string
+  description: string | null
+  icon: string | null
+  articleCount: number
+}
+
+export function usePortalKnowledgeCategories() {
+  return useQuery({
+    queryKey: ['portal', 'knowledge', 'categories'],
+    queryFn: () => portalApi.get<PortalKnowledgeCategory[]>(endpoints.portal.knowledgeCategories),
+    staleTime: 60_000,
+  })
+}
+
+export interface PortalKnowledgeArticleListItem {
+  id: string
+  title: string
+  slug: string
+  summary: string | null
+  categoryId: string | null
+  categoryName: string | null
+  publishedAt: string | null
+  viewCount: number
+  helpfulCount: number
+  tags: string[]
+}
+
+export function usePortalKnowledgeArticles(filters?: { categoryId?: string | undefined; search?: string | undefined }) {
+  return useQuery({
+    queryKey: ['portal', 'knowledge', 'articles', filters?.categoryId ?? '', filters?.search ?? ''],
+    queryFn: () =>
+      portalApi.get<PortalKnowledgeArticleListItem[]>(endpoints.portal.knowledgeArticles, {
+        categoryId: filters?.categoryId,
+        search: filters?.search,
+      }),
+    staleTime: 30_000,
+  })
+}
+
+export interface PortalKnowledgeArticleDetail {
+  id: string
+  title: string
+  slug: string
+  summary: string | null
+  body: string
+  categoryId: string | null
+  categoryName: string | null
+  publishedAt: string | null
+  viewCount: number
+  helpfulCount: number
+  notHelpfulCount: number
+  tags: string[]
+}
+
+export function usePortalKnowledgeArticle(slug: string | undefined) {
+  return useQuery({
+    queryKey: ['portal', 'knowledge', 'article', slug],
+    queryFn: () => portalApi.get<PortalKnowledgeArticleDetail>(endpoints.portal.knowledgeArticle(slug ?? '')),
+    enabled: Boolean(slug),
+  })
+}
+
+export function useSubmitPortalKnowledgeFeedback(articleId: string) {
+  return useMutation({
+    mutationFn: (payload: { isHelpful: boolean; comment?: string }) =>
+      portalApi.post<{ message: string }>(endpoints.portal.knowledgeFeedback(articleId), payload),
   })
 }

@@ -73,18 +73,10 @@ export function NewUserFormDrawer({ open, onClose }: { open: boolean; onClose: (
           <input id="user-phone" {...register('phoneNumber')} className={fieldClass} />
         </div>
         <div>
-          <label className={labelClass} htmlFor="user-role">Role</label>
-          <select id="user-role" {...register('role')} className={fieldClass}>
-            <option value="Viewer">Viewer</option>
-            <option value="Technician">Technician</option>
-            <option value="Dispatcher">Dispatcher</option>
-            <option value="Manager">Manager</option>
-            <option value="finance">Finance</option>
-            <option value="Admin">Admin</option>
-          </select>
-          <p className="mt-1.5 text-xs text-slate-500">
-            The role decides what this user can do. Edit each role&apos;s capabilities on the Roles tab.
-          </p>
+          <input type="hidden" {...register('role')} />
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm leading-6 text-blue-900">
+            After inviting this user, open <strong>Access &amp; Permissions</strong> to assign capabilities. Users are not placed into a fixed role.
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

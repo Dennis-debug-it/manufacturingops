@@ -14,5 +14,7 @@ public enum WorkOrderStatus
     Closed = 10,
     Cancelled = 11,
     Rejected = 12,
-    Reopened = 13
+    Reopened = 13,
+    WaitingOnParts = 14,
+    WaitingOnClient = 15
 }

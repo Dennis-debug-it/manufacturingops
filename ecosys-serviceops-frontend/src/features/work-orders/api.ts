@@ -2,13 +2,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type {
+  RelatedWorkOrders,
+  RepeatVisitCheck,
   WorkOrder,
   WorkOrderAssignmentHistoryItem,
   WorkOrderChecklistItem,
+  WorkOrderDocument,
   WorkOrderEvent,
   WorkOrderExecutionBundle,
+  WorkOrderNote,
   WorkOrderServiceReportPreview,
   WorkOrderSignature,
+  WorkOrderSlaStatus,
+  WorkOrderTemplate,
 } from './types'
 
 export interface WorkOrderListFilters {
@@ -51,6 +57,15 @@ export function useWorkOrder(id: string | undefined) {
   })
 }
 
+export function useWorkOrderSla(id: string | undefined) {
+  return useQuery({
+    queryKey: ['work-orders', id, 'sla'],
+    queryFn: () => api.get<WorkOrderSlaStatus>(endpoints.workOrders.sla(id ?? '')),
+    enabled: Boolean(id),
+    staleTime: 15_000,
+  })
+}
+
 export interface CreateWorkOrderPayload {
   clientId: string
   branchId?: string | null
@@ -72,6 +87,8 @@ export interface CreateWorkOrderPayload {
   pmTemplateId?: string | null
   notifyClient?: boolean
   clientContactEmail?: string | null
+  templateId?: string | null
+  parentWorkOrderId?: string | null
 }
 
 function invalidateWorkOrders(queryClient: ReturnType<typeof useQueryClient>, id?: string) {
@@ -130,6 +147,7 @@ export function useWorkOrderEvents(id: string | undefined) {
     queryKey: ['work-orders', id, 'events'],
     queryFn: () => api.get<WorkOrderEvent[]>(endpoints.workOrders.events(id ?? '')),
     enabled: Boolean(id),
+    refetchInterval: 30_000,
   })
 }
 
@@ -140,6 +158,62 @@ export function useAddWorkOrderComment(id: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'events'] })
     },
+  })
+}
+
+// Notes (internal vs client-visible)
+export function useWorkOrderNotes(id: string | undefined) {
+  return useQuery({
+    queryKey: ['work-orders', id, 'notes'],
+    queryFn: () => api.get<WorkOrderNote[]>(endpoints.workOrders.notes(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export function useAddWorkOrderNote(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { content: string; isClientVisible: boolean }) =>
+      api.post<WorkOrderNote>(endpoints.workOrders.notes(id), payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'notes'] })
+      void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'events'] })
+    },
+  })
+}
+
+// Related work orders (same site / same asset)
+export function useRelatedWorkOrders(id: string | undefined) {
+  return useQuery({
+    queryKey: ['work-orders', id, 'related'],
+    queryFn: () => api.get<RelatedWorkOrders>(endpoints.workOrders.related(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+// Linked documents (quote, service report, invoices, material requests)
+export function useWorkOrderDocuments(id: string | undefined) {
+  return useQuery({
+    queryKey: ['work-orders', id, 'documents'],
+    queryFn: () => api.get<WorkOrderDocument[]>(endpoints.workOrders.documents(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+// Repeat visit check
+export function useRepeatVisitCheck(id: string | undefined) {
+  return useQuery({
+    queryKey: ['work-orders', id, 'repeat-visit-check'],
+    queryFn: () => api.get<RepeatVisitCheck>(endpoints.workOrders.repeatVisitCheck(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export function useRepeatVisitCheckForAsset(assetId: string | undefined) {
+  return useQuery({
+    queryKey: ['work-orders', 'repeat-visit-check', assetId],
+    queryFn: () => api.get<RepeatVisitCheck>(endpoints.workOrders.repeatVisitCheckForAsset, { assetId }),
+    enabled: Boolean(assetId),
   })
 }
 
@@ -207,15 +281,6 @@ export function useSaveExecutionNotes(id: string) {
   return useMutation({
     mutationFn: (payload: { findings?: string | null; workDone?: string | null; progressComment?: string | null }) =>
       api.post<WorkOrderExecutionBundle>(endpoints.workOrders.executionNotes(id), payload),
-    onSuccess: () => invalidateExecution(queryClient, id),
-  })
-}
-
-export function useAddMaterialUsage(id: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: { materialItemId: string; assetId?: string | null; quantityUsed: number; unitCost?: number | null; chargeable: boolean; notes?: string | null }) =>
-      api.post<WorkOrderExecutionBundle>(endpoints.workOrders.materialsUsed(id), payload),
     onSuccess: () => invalidateExecution(queryClient, id),
   })
 }
@@ -308,3 +373,208 @@ export const usePauseWorkOrder = (id: string) => useLifecycleAction(id, endpoint
 export const useResumeWorkOrder = (id: string) => useLifecycleAction(id, endpoints.workOrders.resume(id))
 export const useCloseWorkOrder = (id: string) => useLifecycleAction(id, endpoints.workOrders.close(id))
 export const useCancelWorkOrder = (id: string) => useLifecycleAction(id, endpoints.workOrders.cancel(id))
+
+// View-switcher (Kanban/Calendar/Map) and bulk-action support
+export function usePatchWorkOrderStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.patch<WorkOrder>(endpoints.workOrders.patchStatus(id), { status }),
+    onSuccess: (_data, variables) => invalidateWorkOrders(queryClient, variables.id),
+  })
+}
+
+export function usePatchWorkOrderWorkflowStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, workflowStatusId }: { id: string; workflowStatusId: string }) =>
+      api.patch<WorkOrder>(endpoints.workOrders.patchStatus(id), { workflowStatusId }),
+    onSuccess: (_data, variables) => invalidateWorkOrders(queryClient, variables.id),
+  })
+}
+
+export interface BulkOperationFailure {
+  workOrderId: string
+  reason: string
+}
+
+export interface BulkOperationResult {
+  succeeded: string[]
+  failed: BulkOperationFailure[]
+}
+
+export function useBulkAssignWorkOrders() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { workOrderIds: string[]; technicianId: string; notes?: string | null }) =>
+      api.post<BulkOperationResult>(endpoints.workOrders.bulkAssign, payload),
+    onSuccess: () => invalidateWorkOrders(queryClient),
+  })
+}
+
+export function useBulkCloseWorkOrders() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { workOrderIds: string[] }) =>
+      api.post<BulkOperationResult>(endpoints.workOrders.bulkClose, payload),
+    onSuccess: () => invalidateWorkOrders(queryClient),
+  })
+}
+
+// Id-agnostic lifecycle mutations for list-level views (Kanban cards, table row quick actions)
+// where the target work order isn't known until the user acts, so a fixed-id hook won't do.
+export function useAssignWorkOrderById() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, technicianId, notes }: { id: string; technicianId: string; notes?: string | null }) =>
+      api.post<WorkOrder>(endpoints.workOrders.assign(id), { technicianId, notes }),
+    onSuccess: (_data, variables) => invalidateWorkOrders(queryClient, variables.id),
+  })
+}
+
+export function useStartWorkOrderById() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.post<WorkOrder>(endpoints.workOrders.start(id)),
+    onSuccess: (_data, id) => invalidateWorkOrders(queryClient, id),
+  })
+}
+
+export function useCompleteWorkOrderById() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, workDoneNotes }: { id: string; workDoneNotes: string }) =>
+      api.post<WorkOrder>(endpoints.workOrders.complete(id), { workDoneNotes }),
+    onSuccess: (_data, variables) => invalidateWorkOrders(queryClient, variables.id),
+  })
+}
+
+export function useCloseWorkOrderById() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.post<WorkOrder>(endpoints.workOrders.close(id)),
+    onSuccess: (_data, id) => invalidateWorkOrders(queryClient, id),
+  })
+}
+
+// Duplicate
+export function useDuplicateWorkOrder(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post<WorkOrder>(endpoints.workOrders.duplicate(id)),
+    onSuccess: () => invalidateWorkOrders(queryClient),
+  })
+}
+
+// Convert quote -> work order
+export function useCreateWorkOrderFromQuote() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (quoteId: string) => api.post<WorkOrder>(endpoints.workOrders.fromQuote, { quoteId }),
+    onSuccess: () => invalidateWorkOrders(queryClient),
+  })
+}
+
+// Sub-tasks / child work orders
+export function useWorkOrderChildren(id: string | undefined) {
+  return useQuery({
+    queryKey: ['work-orders', id, 'children'],
+    queryFn: () => api.get<WorkOrder[]>(endpoints.workOrders.children(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export function useCreateSubtask(parentWorkOrderId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreateWorkOrderPayload) =>
+      api.post<WorkOrder>(endpoints.workOrders.create, { ...payload, parentWorkOrderId }),
+    onSuccess: () => {
+      invalidateWorkOrders(queryClient, parentWorkOrderId)
+      void queryClient.invalidateQueries({ queryKey: ['work-orders', parentWorkOrderId, 'children'] })
+    },
+  })
+}
+
+// Hold / resume (waiting states)
+export function useHoldWorkOrder(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { holdType: string; reason?: string | null }) =>
+      api.patch<WorkOrder>(endpoints.workOrders.hold(id), payload),
+    onSuccess: () => invalidateWorkOrders(queryClient, id),
+  })
+}
+
+export function useResumeFromHold(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.patch<WorkOrder>(endpoints.workOrders.resume(id)),
+    onSuccess: () => invalidateWorkOrders(queryClient, id),
+  })
+}
+
+// Work order templates
+export function useWorkOrderTemplates(params?: { jobType?: string; search?: string; activeOnly?: boolean }) {
+  return useQuery({
+    queryKey: ['work-order-templates', params ?? {}],
+    queryFn: () =>
+      api.get<WorkOrderTemplate[]>(endpoints.workOrderTemplates.list, {
+        jobType: params?.jobType,
+        search: params?.search,
+        activeOnly: params?.activeOnly,
+      }),
+    staleTime: 30_000,
+  })
+}
+
+export function useWorkOrderTemplate(id: string | undefined) {
+  return useQuery({
+    queryKey: ['work-order-templates', id],
+    queryFn: () => api.get<WorkOrderTemplate>(endpoints.workOrderTemplates.detail(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export interface UpsertWorkOrderTemplatePayload {
+  name: string
+  jobType: string
+  description?: string | null
+  estimatedDurationMins?: number | null
+  defaultPriority: string
+  requiredSkills?: string[] | null
+  checklistTemplateId?: string | null
+  defaultMaterials?: Array<{ materialId: string; quantity: number }> | null
+  isActive: boolean
+}
+
+function invalidateWorkOrderTemplates(queryClient: ReturnType<typeof useQueryClient>, id?: string) {
+  void queryClient.invalidateQueries({ queryKey: ['work-order-templates'] })
+  if (id) {
+    void queryClient.invalidateQueries({ queryKey: ['work-order-templates', id] })
+  }
+}
+
+export function useCreateWorkOrderTemplate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpsertWorkOrderTemplatePayload) => api.post<WorkOrderTemplate>(endpoints.workOrderTemplates.create, payload),
+    onSuccess: () => invalidateWorkOrderTemplates(queryClient),
+  })
+}
+
+export function useUpdateWorkOrderTemplate(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpsertWorkOrderTemplatePayload) => api.put<WorkOrderTemplate>(endpoints.workOrderTemplates.update(id), payload),
+    onSuccess: () => invalidateWorkOrderTemplates(queryClient, id),
+  })
+}
+
+export function useDeleteWorkOrderTemplate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.delete<void>(endpoints.workOrderTemplates.delete(id)),
+    onSuccess: () => invalidateWorkOrderTemplates(queryClient),
+  })
+}

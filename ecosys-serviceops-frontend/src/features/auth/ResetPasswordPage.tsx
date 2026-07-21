@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { CheckCircle2, Loader2 } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import { Logo } from '../../shared/components/Logo'
@@ -28,6 +28,37 @@ export function ResetPasswordPage() {
   const navigate = useNavigate()
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const newPasswordVisibilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const confirmPasswordVisibilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const toggleTemporaryVisibility = (
+    isVisible: boolean,
+    setIsVisible: (visible: boolean) => void,
+    timer: typeof newPasswordVisibilityTimer,
+  ) => {
+    if (timer.current) {
+      clearTimeout(timer.current)
+      timer.current = null
+    }
+
+    if (isVisible) {
+      setIsVisible(false)
+      return
+    }
+
+    setIsVisible(true)
+    timer.current = setTimeout(() => {
+      setIsVisible(false)
+      timer.current = null
+    }, 5000)
+  }
+
+  useEffect(() => () => {
+    if (newPasswordVisibilityTimer.current) clearTimeout(newPasswordVisibilityTimer.current)
+    if (confirmPasswordVisibilityTimer.current) clearTimeout(confirmPasswordVisibilityTimer.current)
+  }, [])
 
   const {
     register,
@@ -77,23 +108,49 @@ export function ResetPasswordPage() {
           ) : (
             <form className="mt-8 space-y-4" onSubmit={onSubmit}>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">New password</label>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  className="h-12 w-full rounded-xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none placeholder:text-slate-400 focus:border-white/30"
-                  {...register('newPassword')}
-                />
+                <label htmlFor="new-password" className="mb-2 block text-sm font-medium text-slate-200">New password</label>
+                <div className="relative">
+                  <input
+                    id="new-password"
+                    type={showNewPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    className="h-12 w-full rounded-xl border border-white/10 bg-white/10 py-0 pl-4 pr-12 text-sm text-white outline-none placeholder:text-slate-400 focus:border-white/30"
+                    {...register('newPassword')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleTemporaryVisibility(showNewPassword, setShowNewPassword, newPasswordVisibilityTimer)}
+                    aria-label={showNewPassword ? 'Conceal entered characters' : 'Reveal entered characters'}
+                    title={showNewPassword ? 'Hide new password' : 'Show new password'}
+                    aria-pressed={showNewPassword}
+                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-slate-300 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
+                  >
+                    {showNewPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+                  </button>
+                </div>
                 {errors.newPassword ? <p className="mt-2 text-sm text-rose-300">{errors.newPassword.message}</p> : null}
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">Confirm new password</label>
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  className="h-12 w-full rounded-xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none placeholder:text-slate-400 focus:border-white/30"
-                  {...register('confirmPassword')}
-                />
+                <label htmlFor="confirm-new-password" className="mb-2 block text-sm font-medium text-slate-200">Confirm password</label>
+                <div className="relative">
+                  <input
+                    id="confirm-new-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    className="h-12 w-full rounded-xl border border-white/10 bg-white/10 py-0 pl-4 pr-12 text-sm text-white outline-none placeholder:text-slate-400 focus:border-white/30"
+                    {...register('confirmPassword')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleTemporaryVisibility(showConfirmPassword, setShowConfirmPassword, confirmPasswordVisibilityTimer)}
+                    aria-label={showConfirmPassword ? 'Conceal entered characters' : 'Reveal entered characters'}
+                    title={showConfirmPassword ? 'Hide password confirmation' : 'Show password confirmation'}
+                    aria-pressed={showConfirmPassword}
+                    className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-slate-300 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white"
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
+                  </button>
+                </div>
                 {errors.confirmPassword ? <p className="mt-2 text-sm text-rose-300">{errors.confirmPassword.message}</p> : null}
               </div>
               {submitError ? (
@@ -116,10 +173,10 @@ export function ResetPasswordPage() {
           )}
         </div>
       </div>
-      <div className="hidden lg:flex lg:flex-col lg:justify-between lg:bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.18),_transparent_35%),linear-gradient(180deg,#0F3B5E_0%,#0B1620_100%)] lg:p-12">
+      <div className="hidden lg:flex lg:flex-col lg:justify-between lg:bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.18),_transparent_35%),linear-gradient(180deg,#15806A_0%,#0B1620_100%)] lg:p-12">
         <div />
         <div className="max-w-xl text-white">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">Account recovery</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">Account recovery</p>
           <h2 className="mt-4 text-4xl font-semibold tracking-tight">Almost there.</h2>
           <p className="mt-4 text-base leading-7 text-slate-200">
             Choosing a new password will sign you out of every other active session.

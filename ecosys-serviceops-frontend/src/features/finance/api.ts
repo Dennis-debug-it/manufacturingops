@@ -3,7 +3,6 @@ import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type {
   AgingRow,
-  BillableWorkItem,
   CreditTerm,
   FinanceApprovalRule,
   FinanceDashboard,
@@ -146,6 +145,66 @@ export function useReversePayment(invoiceId: string) {
 export interface PaymentListItem extends Payment {
   invoiceNumber: string | null
   clientName: string | null
+  amountAllocated: number
+  unallocatedAmount: number
+}
+
+export interface PaymentAllocationInput {
+  invoiceId: string
+  amount: number
+}
+
+export interface ReceivePaymentPayload {
+  clientId: string
+  amount: number
+  paymentDate: string
+  method: string
+  reference?: string | null
+  notes?: string | null
+  allocations?: PaymentAllocationInput[]
+}
+
+/** Receive a payment from a client and allocate it across one or more invoices. */
+export function useReceivePayment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: ReceivePaymentPayload) => api.post<Payment>(endpoints.finance.receivePayment, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      void queryClient.invalidateQueries({ queryKey: ['payments'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance'] })
+    },
+  })
+}
+
+/** Allocate (or top up) an existing payment's unallocated balance across invoices. */
+export function useAllocatePayment() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ paymentId, allocations }: { paymentId: string; allocations: PaymentAllocationInput[] }) =>
+      api.post<Payment>(endpoints.finance.allocatePayment(paymentId), { allocations }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      void queryClient.invalidateQueries({ queryKey: ['payments'] })
+      void queryClient.invalidateQueries({ queryKey: ['finance'] })
+    },
+  })
+}
+
+export interface ClientCreditBalance {
+  clientId: string
+  clientName: string | null
+  currentBalance: number
+  availableCredit: number
+  currency: string
+}
+
+export function useClientCreditBalance(clientId: string | undefined) {
+  return useQuery({
+    queryKey: ['finance', 'credit-balance', clientId],
+    queryFn: () => api.get<ClientCreditBalance>(endpoints.finance.clientCreditBalance(clientId ?? '')),
+    enabled: Boolean(clientId),
+  })
 }
 
 export function useAllPayments(params?: { clientId?: string; from?: string; to?: string }) {
@@ -291,18 +350,16 @@ export function useConvertQuotationToInvoice(id: string) {
 export function useConvertQuotationToWorkOrder(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => api.post<{ workOrderId: string; workOrderNumber: string }>(endpoints.quotations.convertToWorkOrder(id)),
+    mutationFn: async () => {
+      const workOrder = await api.post<{ id: string; workOrderNumber: string }>(endpoints.workOrders.fromQuote, { quoteId: id })
+      return { workOrderId: workOrder.id, workOrderNumber: workOrder.workOrderNumber }
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['quotations'] })
       void queryClient.invalidateQueries({ queryKey: ['quotations', id] })
       void queryClient.invalidateQueries({ queryKey: ['work-orders'] })
     },
   })
-}
-
-// Billable work
-export function useBillableWork() {
-  return useQuery({ queryKey: ['finance', 'billable-work'], queryFn: () => api.get<BillableWorkItem[]>(endpoints.finance.billableWork), staleTime: 30_000 })
 }
 
 // Aging

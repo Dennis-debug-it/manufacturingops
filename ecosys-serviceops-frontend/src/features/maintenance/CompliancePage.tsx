@@ -23,7 +23,7 @@ const periodOptions = [
 export function CompliancePage() {
   const [period, setPeriod] = useState('30')
   const from = useMemo(() => subDays(new Date(), Number(period)).toISOString(), [period])
-  const to = useMemo(() => new Date().toISOString(), [period])
+  const to = useMemo(() => new Date().toISOString(), [])
 
   const { data: compliance, isLoading } = usePmComplianceReport({ from, to })
   const { data: assetReliability } = useAssetReliability({ from, to })

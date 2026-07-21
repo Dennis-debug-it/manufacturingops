@@ -23,3 +23,8 @@ build/
 
 # User secrets
 appsettings.Development.json
+.claude/settings.local.json
+
+# Test/build artifacts
+ecosys-serviceops-frontend/playwright-report/
+ecosys-serviceops-frontend/test-results/

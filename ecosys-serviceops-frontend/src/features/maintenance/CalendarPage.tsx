@@ -61,7 +61,7 @@ export function CalendarPage() {
   const { data, isLoading, isError } = usePmPlans()
   const generateNow = useGenerateWorkOrderNow(selected?.id ?? '')
 
-  const plans = data ?? []
+  const plans = useMemo(() => data ?? [], [data])
 
   const days = useMemo(() => {
     if (view === 'week') {

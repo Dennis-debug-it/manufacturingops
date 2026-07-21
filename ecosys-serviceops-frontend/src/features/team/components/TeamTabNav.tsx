@@ -3,11 +3,11 @@ import { cn } from '../../../shared/utils/cn'
 
 const tabs = [
   { to: '/team/users', label: 'Users', match: ['/team', '/team/users'] },
-  { to: '/team/technicians', label: 'Technicians', match: ['/team/technicians'] },
-  { to: '/team/groups', label: 'Groups', match: ['/team/groups'] },
-  { to: '/team/skills', label: 'Skills', match: ['/team/skills'] },
-  { to: '/team/roles', label: 'Roles', match: ['/team/roles'] },
-  { to: '/team/time-attendance', label: 'Time & Attendance', match: ['/team/time-attendance'] },
+  { to: '/team/permission-groups', label: 'Permission Groups', match: ['/team/permission-groups'] },
+  { to: '/team/capabilities', label: 'Capabilities', match: ['/team/capabilities', '/team/roles'] },
+  { to: '/team/access-scopes', label: 'Access Scopes', match: ['/team/access-scopes'] },
+  { to: '/team/approval-limits', label: 'Approval Limits', match: ['/team/approval-limits'] },
+  { to: '/team/audit-history', label: 'Audit History', match: ['/team/audit-history'] },
 ]
 
 export function TeamTabNav() {

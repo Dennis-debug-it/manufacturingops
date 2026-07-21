@@ -8,7 +8,7 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
-import { useAgingReport, useBillableWork, useFinanceDashboard, useInvoices, useQuotations } from './api'
+import { useAgingReport, useFinanceDashboard, useInvoices, useQuotations } from './api'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 import { StatIcon } from './components/StatIcon'
 import type { AgingRow, InvoiceListItem, QuotationListItem } from './types'
@@ -28,16 +28,13 @@ export function FinanceOverviewPage() {
   const { data: invoices, isLoading: invoicesLoading, isError: invoicesError } = useInvoices()
   const { data: quotes, isLoading: quotesLoading, isError: quotesError } = useQuotations()
   const { data: aging, isLoading: agingLoading, isError: agingError } = useAgingReport()
-  const { data: billableWork, isLoading: billableLoading, isError: billableError } = useBillableWork()
 
   const invoiceRows = [...(invoices ?? [])].sort((left, right) => right.invoiceDate.localeCompare(left.invoiceDate)).slice(0, 5)
   const quoteRows = [...(quotes ?? [])].sort((left, right) => right.quoteDate.localeCompare(left.quoteDate)).slice(0, 5)
   const agingRows = [...(aging ?? [])].filter((row) => row.total > 0).sort((left, right) => right.days90Plus - left.days90Plus || right.total - left.total).slice(0, 5)
-  const billableRows = [...(billableWork ?? [])].sort((left, right) => right.totalAmount - left.totalAmount).slice(0, 5)
   const openBalances = (invoices ?? []).filter((invoice) => invoice.balance > 0 && invoice.status.toLowerCase() !== 'paid')
   const outstandingBalance = openBalances.reduce((sum, invoice) => sum + invoice.balance, 0)
   const invoiceCurrency = invoices?.[0]?.currency ?? dashboard?.currency ?? 'KES'
-  const billableCurrency = billableWork?.[0]?.currency ?? dashboard?.currency ?? 'KES'
 
   const invoiceColumns: DataTableColumn<InvoiceListItem>[] = [
     { key: 'invoiceNumber', header: 'Invoice', cell: (row) => <Link className="font-mono text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/finance/invoices/${row.id}`}>{row.invoiceNumber}</Link> },
@@ -59,13 +56,6 @@ export function FinanceOverviewPage() {
     { key: 'clientName', header: 'Client', cell: (row) => row.clientName },
     { key: 'days90Plus', header: '90+ Days', cell: (row) => <span className={row.days90Plus > 0 ? 'font-semibold text-rose-600' : 'text-slate-700'}>{formatCurrency(row.days90Plus)}</span> },
     { key: 'total', header: 'Total Outstanding', cell: (row) => <span className="font-semibold text-slate-900">{formatCurrency(row.total)}</span> },
-  ]
-
-  const billableColumns: DataTableColumn<(typeof billableRows)[number] & { id: string }>[] = [
-    { key: 'workOrderNumber', header: 'Work Order', cell: (row) => row.workOrderNumber ?? row.workOrderId },
-    { key: 'clientName', header: 'Client', cell: (row) => row.clientName ?? '-' },
-    { key: 'description', header: 'Description', cell: (row) => row.description },
-    { key: 'totalAmount', header: 'Total', cell: (row) => formatCurrency(row.totalAmount, row.currency) },
   ]
 
   return (
@@ -91,11 +81,10 @@ export function FinanceOverviewPage() {
 
       <FinanceWorkspaceNav />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard label="Invoiced YTD" value={dashboardLoading ? '-' : formatCurrency(dashboard?.totalInvoicedYtd ?? 0, dashboard?.currency)} icon={<StatIcon tone="default"><FileText className="h-4 w-4" /></StatIcon>} />
         <StatCard label="Collected YTD" value={dashboardLoading ? '-' : formatCurrency(dashboard?.totalCollectedYtd ?? 0, dashboard?.currency)} tone="success" icon={<StatIcon tone="success"><Wallet className="h-4 w-4" /></StatIcon>} />
         <StatCard label="Outstanding" value={invoicesLoading ? '-' : formatCurrency(outstandingBalance, invoiceCurrency)} tone={outstandingBalance > 0 ? 'warning' : 'success'} icon={<StatIcon tone={outstandingBalance > 0 ? 'warning' : 'success'}><Clock className="h-4 w-4" /></StatIcon>} />
-        <StatCard label="Billable Work" value={billableLoading ? '-' : formatCurrency(dashboard?.estimatedBillableAmount ?? 0, billableCurrency)} icon={<StatIcon tone="default"><Receipt className="h-4 w-4" /></StatIcon>} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
@@ -133,17 +122,6 @@ export function FinanceOverviewPage() {
               <SectionLink to="/finance/aging" label="Open aging" />
             </div>
             <DataTable columns={agingColumns} data={agingRows.map((row) => ({ ...row, id: row.clientId }))} loading={agingLoading} emptyTitle={agingError ? 'Aging unavailable' : 'No overdue balances'} emptyDescription={agingError ? 'Receivables aging could not be loaded.' : 'Outstanding client balances will appear here when invoices age.'} />
-          </section>
-
-          <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">Billable work queue</h2>
-                <p className="text-sm text-slate-600">The highest-value work still waiting to be converted into invoices.</p>
-              </div>
-              <SectionLink to="/finance/billable-work" label="Open queue" />
-            </div>
-            <DataTable columns={billableColumns} data={billableRows.map((row) => ({ ...row, id: `${row.workOrderId}-${row.description}` }))} loading={billableLoading} emptyTitle={billableError ? 'Billable work unavailable' : 'No billable work'} emptyDescription={billableError ? 'Billable work could not be loaded.' : 'Completed work orders ready for billing will appear here.'} />
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

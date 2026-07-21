@@ -18,7 +18,7 @@ export function StockPage() {
   const { data, isLoading } = useMaterials({ status: 'active' })
   const { data: vans } = useVans()
 
-  const materials = data ?? []
+  const materials = useMemo(() => data ?? [], [data])
   const activeVans = vans ?? []
 
   const stats = useMemo(() => {

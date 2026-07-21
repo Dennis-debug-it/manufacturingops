@@ -19,6 +19,7 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public string? Description { get; set; }
     public string Priority { get; set; } = "Medium";
     public string Status { get; set; } = "New";
+    public Guid? WorkflowStatusId { get; set; }
     public string WorkType { get; set; } = "CorrectiveMaintenance";
     public string? ServiceType { get; set; }
     public decimal? EstimatedDuration { get; set; }
@@ -55,6 +56,11 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public Guid? PmTemplateId { get; set; }
     public string? PmTemplateNameSnapshot { get; set; }
     public int? PmTemplateVersionSnapshot { get; set; }
+    public Guid? WorkOrderTemplateId { get; set; }
+    public string? PlannedMaterialsJson { get; set; }
+    public Guid? QuoteId { get; set; }
+    public Guid? ParentWorkOrderId { get; set; }
+    public string? PreviousStatus { get; set; }
     public DateTime? SlaResponseDeadline { get; set; }
     public DateTime? SlaResolutionDeadline { get; set; }
     public string? AppliedSlaSource { get; set; }
@@ -79,8 +85,14 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     // Client notifications
     public bool NotifyClient { get; set; } = true;
     public string? ClientContactEmail { get; set; }
+    public string? TrackingToken { get; set; }
+
+    // Repeat visit detection
+    public bool IsRepeatVisit { get; set; }
+    public int RepeatVisitCount { get; set; }
 
     public Tenant? Tenant { get; set; }
+    public WorkflowStatus? WorkflowStatus { get; set; }
     public Branch? Branch { get; set; }
     public Client? Client { get; set; }
     public Site? Site { get; set; }
@@ -94,8 +106,13 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public User? ClosedByUser { get; set; }
     public PreventiveMaintenancePlan? PreventiveMaintenancePlan { get; set; }
     public PmTemplate? PmTemplate { get; set; }
+    public WorkOrderTemplate? WorkOrderTemplate { get; set; }
+    public TenantQuotation? Quote { get; set; }
+    public WorkOrder? ParentWorkOrder { get; set; }
+    public ICollection<WorkOrder> ChildWorkOrders { get; set; } = new List<WorkOrder>();
     public ICollection<MaterialRequest> MaterialRequests { get; set; } = new List<MaterialRequest>();
     public ICollection<WorkOrderEvent> Events { get; set; } = new List<WorkOrderEvent>();
+    public ICollection<WorkOrderNote> Notes { get; set; } = new List<WorkOrderNote>();
     public ICollection<PmReport> PmReports { get; set; } = new List<PmReport>();
     public ICollection<WorkOrderAssignment> Assignments { get; set; } = new List<WorkOrderAssignment>();
     public ICollection<WorkOrderTechnicianAssignment> TechnicianAssignments { get; set; } = new List<WorkOrderTechnicianAssignment>();

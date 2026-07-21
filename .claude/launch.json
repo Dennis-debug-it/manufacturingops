@@ -16,6 +16,13 @@
       "autoPort": false
     },
     {
+      "name": "frontend-dev-verify",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "ecosys-serviceops-frontend", "run", "dev", "--", "--port", "5175"],
+      "port": 5175,
+      "autoPort": false
+    },
+    {
       "name": "backend-api",
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--project", "backend/src/Ecosys.Api", "--urls", "http://localhost:5072"],

@@ -37,7 +37,7 @@ export interface InvoiceLine {
 export interface Payment {
   id: string
   tenantId: string
-  invoiceId: string
+  invoiceId: string | null
   clientId: string
   paymentNumber: string
   amount: number
@@ -47,6 +47,59 @@ export interface Payment {
   notes: string | null
   status: string
   createdAt: string
+}
+
+export interface CreditNoteListItem {
+  id: string
+  clientId: string
+  clientName: string | null
+  creditNoteNumber: string
+  invoiceId: string | null
+  invoiceNumber: string | null
+  reason: string
+  status: string
+  issueDate: string
+  totalAmount: number
+  amountApplied: number
+  balance: number
+  currency: string
+  createdAt: string
+}
+
+export interface CreditNoteLine {
+  id: string
+  description: string
+  itemType: string
+  quantity: number
+  unit: string
+  unitRate: number
+  lineTotal: number
+  taxRate: number
+  taxAmount: number
+  grandTotal: number
+}
+
+export interface CreditNoteApplication {
+  invoiceId: string
+  invoiceNumber: string | null
+  amount: number
+  allocatedAt: string
+}
+
+export interface CreditNoteDetail extends CreditNoteListItem {
+  notes: string | null
+  subtotal: number
+  taxAmount: number
+  lines: CreditNoteLine[]
+  applications: CreditNoteApplication[]
+}
+
+export interface ClientCreditBalance {
+  clientId: string
+  clientName: string | null
+  currentBalance: number
+  availableCredit: number
+  currency: string
 }
 
 export interface InvoiceDetail extends InvoiceListItem {
@@ -108,23 +161,6 @@ export interface QuotationDetail extends QuotationListItem {
   notes: string | null
   rejectionReason: string | null
   lines: QuotationLine[]
-}
-
-export interface BillableWorkItem {
-  workOrderId: string
-  workOrderNumber: string | null
-  clientId: string | null
-  clientName: string | null
-  itemType: string
-  description: string
-  quantity: number
-  unit: string
-  defaultRate: number
-  appliedRate: number
-  currency: string
-  totalAmount: number
-  preferentialRateApplied: boolean
-  source: string
 }
 
 export interface AgingRow {
@@ -215,7 +251,5 @@ export interface FinanceDashboard {
   quoteConversionRate: number
   totalQuotations: number
   convertedQuotations: number
-  billableWorkItemsCount: number
-  estimatedBillableAmount: number
   currency: string
 }

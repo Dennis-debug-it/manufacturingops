@@ -23,6 +23,7 @@ const financeNavGroups: FinanceNavGroup[] = [
       { to: '/finance/documents', label: 'Documents' },
       { to: '/finance/quotes', label: 'Quotes' },
       { to: '/finance/invoices', label: 'Invoices' },
+      { to: '/finance/credit-notes', label: 'Credit Notes' },
       { to: '/finance/receipts', label: 'Receipts' },
     ],
   },
@@ -37,9 +38,8 @@ const financeNavGroups: FinanceNavGroup[] = [
   },
   {
     label: 'Control',
-    to: '/finance/billable-work',
+    to: '/finance/invoice-approvals',
     items: [
-      { to: '/finance/billable-work', label: 'Billable Work' },
       { to: '/finance/invoice-approvals', label: 'Approvals' },
       { to: '/finance/credit-control', label: 'Credit Control' },
       { to: '/finance/aging', label: 'Aging' },

@@ -30,6 +30,8 @@ public interface IWorkOrderLifecycleService
     Task<WorkOrder> ChangeStatusAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderStatusChangeRequest request, CancellationToken cancellationToken = default);
     Task<WorkOrder> CompleteAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderCompletionRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<WorkOrderEvent>> GetEventsAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken = default);
+    Task<WorkOrder> HoldAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, string? holdType, string? reason, CancellationToken cancellationToken = default);
+    Task<WorkOrder> ResumeAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default);
 }
 
 internal sealed class WorkOrderLifecycleService(
@@ -41,6 +43,7 @@ internal sealed class WorkOrderLifecycleService(
     IEmailSubjectRuleService emailSubjectRuleService,
     ISlaService slaService,
     IServiceOpsNotifier serviceOpsNotifier,
+    IEtaNotificationService etaNotificationService,
     IOptions<PublicAppOptions> publicAppOptions,
     ILogger<WorkOrderLifecycleService> logger) : IWorkOrderLifecycleService
 {
@@ -111,6 +114,7 @@ internal sealed class WorkOrderLifecycleService(
         if (technician is not null)
         {
             await TryQueueAssignedEmailAsync(tenantId, workOrder, technician, actorUserId, cancellationToken);
+            await etaNotificationService.NotifyAsync(tenantId, workOrder, EtaNotificationEventTypes.Assigned, technician.FullName, cancellationToken);
         }
 
         await NotifySafeAsync(tenantId, workOrder.Id, cancellationToken);
@@ -210,7 +214,7 @@ internal sealed class WorkOrderLifecycleService(
         await TransitionAsync(workOrder, actorUserId, normalizedStatus, request.Reason, request.Note, cancellationToken);
 
         // Notify admins when a work order is placed on hold
-        if (string.Equals(normalizedStatus, WorkOrderStatuses.OnHold, StringComparison.OrdinalIgnoreCase))
+        if (WorkOrderStatuses.IsHold(normalizedStatus))
         {
             await TryQueueHoldEmailAsync(tenantId, workOrder, cancellationToken);
             await TryQueueClientOnHoldEmailAsync(tenantId, workOrder, request.Reason ?? request.Note, cancellationToken);
@@ -225,6 +229,36 @@ internal sealed class WorkOrderLifecycleService(
             await TryQueueCancelledEmailAsync(tenantId, workOrder, request.Reason ?? request.Note, cancellationToken);
         }
 
+        await NotifySafeAsync(tenantId, workOrder.Id, cancellationToken);
+        return workOrder;
+    }
+
+    public async Task<WorkOrder> HoldAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, string? holdType, string? reason, CancellationToken cancellationToken = default)
+    {
+        var workOrder = await LoadWorkOrderAsync(tenantId, workOrderId, cancellationToken);
+        var targetStatus = WorkOrderHoldTypes.ToStatus(holdType);
+        var derivedHoldReason = WorkOrderHoldTypes.ToHoldReason(holdType);
+
+        await TransitionAsync(workOrder, actorUserId, targetStatus, derivedHoldReason, reason, cancellationToken);
+        await TryQueueHoldEmailAsync(tenantId, workOrder, cancellationToken);
+        await TryQueueClientOnHoldEmailAsync(tenantId, workOrder, reason ?? derivedHoldReason, cancellationToken);
+        await NotifySafeAsync(tenantId, workOrder.Id, cancellationToken);
+        return workOrder;
+    }
+
+    public async Task<WorkOrder> ResumeAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default)
+    {
+        var workOrder = await LoadWorkOrderAsync(tenantId, workOrderId, cancellationToken);
+        if (!WorkOrderStatuses.IsHold(workOrder.Status))
+        {
+            throw new BusinessRuleException("Work order is not currently on hold.");
+        }
+
+        var targetStatus = string.IsNullOrWhiteSpace(workOrder.PreviousStatus)
+            ? WorkOrderStatuses.InProgress
+            : WorkOrderStatuses.Normalize(workOrder.PreviousStatus);
+
+        await TransitionAsync(workOrder, actorUserId, targetStatus, "Resumed from hold", null, cancellationToken);
         await NotifySafeAsync(tenantId, workOrder.Id, cancellationToken);
         return workOrder;
     }
@@ -598,6 +632,7 @@ internal sealed class WorkOrderLifecycleService(
         await slaService.RefreshWorkOrderAsync(workOrder.Id, DateTime.UtcNow, cancellationToken);
         await TryQueueCompletionEmailAsync(tenantId, workOrder, cancellationToken);
         await TryQueueClientCompletedEmailAsync(tenantId, workOrder, cancellationToken);
+        await TryQueueEtaCompletedNotificationAsync(tenantId, workOrder, cancellationToken);
         await TryCreateCsatSurveyAsync(tenantId, workOrder, cancellationToken);
         await NotifySafeAsync(tenantId, workOrder.Id, cancellationToken);
         return workOrder;
@@ -930,6 +965,18 @@ internal sealed class WorkOrderLifecycleService(
         }
     }
 
+    private async Task TryQueueEtaCompletedNotificationAsync(Guid tenantId, WorkOrder workOrder, CancellationToken cancellationToken)
+    {
+        var technicianName = workOrder.AssignedTechnicianId.HasValue
+            ? await dbContext.Technicians
+                .Where(x => x.Id == workOrder.AssignedTechnicianId.Value)
+                .Select(x => x.FullName)
+                .SingleOrDefaultAsync(cancellationToken)
+            : null;
+
+        await etaNotificationService.NotifyAsync(tenantId, workOrder, EtaNotificationEventTypes.Completed, technicianName, cancellationToken);
+    }
+
     private async Task TryCreateCsatSurveyAsync(Guid tenantId, WorkOrder workOrder, CancellationToken cancellationToken)
     {
         try
@@ -1023,8 +1070,7 @@ internal sealed class WorkOrderLifecycleService(
             throw new BusinessRuleException($"Only administrators can transition work orders from '{currentStatus}' to '{targetStatus}'.");
         }
 
-        if (string.Equals(currentStatus, WorkOrderStatuses.OnHold, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(targetStatus, WorkOrderStatuses.OnHold, StringComparison.OrdinalIgnoreCase))
+        if (WorkOrderStatuses.IsHold(currentStatus) && !WorkOrderStatuses.IsHold(targetStatus))
         {
             if (workOrder.HoldStartedAt.HasValue)
             {
@@ -1044,18 +1090,24 @@ internal sealed class WorkOrderLifecycleService(
             }
 
             workOrder.HoldEndedAt = utcNow;
+            workOrder.PreviousStatus = null;
         }
 
         workOrder.Status = targetStatus;
 
-        if (string.Equals(targetStatus, WorkOrderStatuses.OnHold, StringComparison.OrdinalIgnoreCase))
+        if (WorkOrderStatuses.IsHold(targetStatus))
         {
+            if (!WorkOrderStatuses.IsHold(currentStatus))
+            {
+                workOrder.PreviousStatus = currentStatus;
+            }
+
             workOrder.HoldReason = WorkOrderHoldReasons.Normalize(reason);
             workOrder.HoldNote = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
             workOrder.HoldStartedAt = utcNow;
             workOrder.HoldEndedAt = null;
         }
-        else if (!string.Equals(currentStatus, WorkOrderStatuses.OnHold, StringComparison.OrdinalIgnoreCase))
+        else if (!WorkOrderStatuses.IsHold(currentStatus))
         {
             workOrder.HoldStartedAt = null;
             workOrder.HoldEndedAt = null;

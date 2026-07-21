@@ -36,6 +36,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
     IEmailTemplateService emailTemplateService,
     IEmailSubjectRuleService emailSubjectRuleService,
     ISlaService slaService,
+    IEtaNotificationService etaNotificationService,
     ILogger<WorkOrderAssignmentWorkflowService> logger) : IWorkOrderAssignmentWorkflowService
 {
     public async Task ApplyAssignmentsAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, WorkOrderAssignmentUpdateRequest request, bool isReassignment, CancellationToken cancellationToken = default)
@@ -261,6 +262,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         await AddEventAsync(tenantId, workOrderId, actorUserId, "InTransit", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} is in transit to site.", request.Latitude, request.Longitude, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await RefreshAssignmentStatusAsync(tenantId, workOrderId, cancellationToken);
+        await NotifyEtaAsync(tenantId, workOrderId, EtaNotificationEventTypes.EnRoute, assignment.Technician?.FullName, cancellationToken);
     }
 
     public async Task RecordArrivalAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, TechnicianArrivalRequest request, CancellationToken cancellationToken = default)
@@ -277,6 +279,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         await AddEventAsync(tenantId, workOrderId, actorUserId, "Arrival", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} arrived on site.", request.Latitude, request.Longitude, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await RefreshAssignmentStatusAsync(tenantId, workOrderId, cancellationToken);
+        await NotifyEtaAsync(tenantId, workOrderId, EtaNotificationEventTypes.Arrived, assignment.Technician?.FullName, cancellationToken);
     }
 
     public async Task RecordDepartureAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, TechnicianDepartureRequest request, CancellationToken cancellationToken = default)
@@ -312,6 +315,14 @@ internal sealed class WorkOrderAssignmentWorkflowService(
 
     public Task<bool> HasArrivalAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken = default) =>
         dbContext.WorkOrderTechnicianAssignments.AnyAsync(x => x.TenantId == tenantId && x.WorkOrderId == workOrderId && x.ArrivalAt.HasValue, cancellationToken);
+
+    private async Task NotifyEtaAsync(Guid tenantId, Guid workOrderId, string eventType, string? technicianName, CancellationToken cancellationToken)
+    {
+        var workOrder = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == workOrderId, cancellationToken);
+        if (workOrder is null) return;
+
+        await etaNotificationService.NotifyAsync(tenantId, workOrder, eventType, technicianName, cancellationToken);
+    }
 
     private async Task<WorkOrder> LoadWorkOrderAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken) =>
         await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == workOrderId, cancellationToken)

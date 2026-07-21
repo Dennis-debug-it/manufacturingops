@@ -88,10 +88,10 @@ export function ForgotPasswordPage() {
           )}
         </div>
       </div>
-      <div className="hidden lg:flex lg:flex-col lg:justify-between lg:bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.18),_transparent_35%),linear-gradient(180deg,#0F3B5E_0%,#0B1620_100%)] lg:p-12">
+      <div className="hidden lg:flex lg:flex-col lg:justify-between lg:bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.18),_transparent_35%),linear-gradient(180deg,#15806A_0%,#0B1620_100%)] lg:p-12">
         <div />
         <div className="max-w-xl text-white">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300">Account recovery</p>
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">Account recovery</p>
           <h2 className="mt-4 text-4xl font-semibold tracking-tight">We'll get you back in.</h2>
           <p className="mt-4 text-base leading-7 text-slate-200">
             Reset links expire after 45 minutes and any active sessions are revoked once your password is changed.

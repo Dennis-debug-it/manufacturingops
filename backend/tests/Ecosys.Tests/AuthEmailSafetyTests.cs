@@ -907,6 +907,7 @@ public sealed class AuthEmailSafetyTests
             }),
             new NoOpAuditLogService(),
             new FakeUserPermissionTemplateService(),
+            new FakeRolePermissionService(),
             new FakeUserSessionService(dbContext),
             new NoOpLicenseGuardService(dbContext),
             new FakeTenantSecurityPolicyService());
@@ -1115,6 +1116,18 @@ public sealed class AuthEmailSafetyTests
         public void EnsureAdminOrPermission(string permissionName) { }
         public void EnsureAdminOrAnyPermission(params string[] permissionNames) { }
         public void EnsureTenantOperationalAccess() { }
+    }
+
+    private sealed class FakeRolePermissionService : IRolePermissionService
+    {
+        public Task<IReadOnlyList<RolePermissionEntry>> GetMatrixAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<RolePermissionEntry>>([]);
+
+        public Task SaveMatrixAsync(Guid tenantId, IReadOnlyDictionary<string, UserPermissionsModel> updates, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<UserPermissionsModel> ResolveAsync(Guid tenantId, string role, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new FakeUserPermissionTemplateService().GetDefaultPermissions(role, null));
     }
 
     private sealed class FakeUserPermissionTemplateService : IUserPermissionTemplateService

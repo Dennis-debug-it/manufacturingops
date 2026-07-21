@@ -41,6 +41,7 @@ const rolePermissions: Record<AppRole, string[]> = {
     'maintenance.manage',
     'maintenance.trigger',
     'whatsapp.view',
+    'dispatch.view',
   ],
   dispatcher: [
     'dashboard.view',
@@ -54,6 +55,7 @@ const rolePermissions: Record<AppRole, string[]> = {
     'maintenance.trigger',
     'team.view',
     'whatsapp.view',
+    'dispatch.view',
   ],
   technician: [
     'dashboard.view',
@@ -98,6 +100,8 @@ const permissionSetLookup: Partial<Record<string, keyof PermissionSet>> = {
   'work-orders.assign': 'canAssignWorkOrders',
   'work-orders.start': 'canCompleteWorkOrders',
   'work-orders.complete': 'canCompleteWorkOrders',
+  'knowledge.view': 'canViewKnowledge',
+  'knowledge.manage': 'canManageKnowledge',
   'materials.view': 'canViewMaterials',
   'materials.request': 'canRequestMaterials',
   'materials.manage': 'canManageMaterials',
@@ -121,6 +125,9 @@ const permissionSetLookup: Partial<Record<string, keyof PermissionSet>> = {
   'platform.tenants.deactivate': 'canDeactivatePlatformTenants',
   'inventory.requests.approve': 'canApproveMaterials',
   'inventory.requests.issue': 'canIssueMaterials',
+  'parts-requests.create': 'canRequestMaterials',
+  'parts-requests.approve': 'canApproveMaterials',
+  'parts-requests.dispatch': 'canIssueMaterials',
   'inventory.issues.approve': 'canApproveMaterials',
   'inventory.issues.issue': 'canIssueMaterials',
   'inventory.transfers.manage': 'canManageMaterials',
@@ -148,6 +155,7 @@ const executeActions = new Set([
   'work-orders.signatures.capture',
   'work-orders.materials.log',
   'work-orders.report.generate',
+  'parts-requests.deliver',
 ])
 
 export function usePermission(action: string): boolean {

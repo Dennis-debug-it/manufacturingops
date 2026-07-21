@@ -7,6 +7,7 @@ import { Spinner } from '../../../shared/components/Spinner'
 import { usePermission } from '../../../shared/hooks/usePermission'
 import { formatDateTime } from '../../../shared/utils/dates'
 import { useExecutionBundle, useUpdatePhoto, useUploadPhoto } from '../api'
+import { PhotoAnnotationCanvas } from '../components/PhotoAnnotationCanvas'
 import type { WorkOrderPhoto } from '../types'
 
 const photoCategories = ['Before', 'During', 'After', 'Defect', 'Completion', 'Spare Part', 'Client Sign-off', 'Other']
@@ -65,13 +66,20 @@ export function EvidenceTab({ workOrderId }: { workOrderId: string }) {
   const uploadPhoto = useUploadPhoto(workOrderId)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [preview, setPreview] = useState<WorkOrderPhoto | null>(null)
+  const [annotating, setAnnotating] = useState<File | null>(null)
 
-  const onFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+  const onFileSelected = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    setAnnotating(file)
+  }
+
+  const onAnnotationDone = async (blob: Blob) => {
+    setAnnotating(null)
+    const annotatedFile = new File([blob], 'annotated-photo.png', { type: 'image/png' })
     try {
-      await uploadPhoto.mutateAsync({ file, category: 'Other' })
+      await uploadPhoto.mutateAsync({ file: annotatedFile, category: 'Other' })
       toast.success('Photo uploaded')
     } catch {
       // interceptor surfaces the error toast
@@ -125,6 +133,10 @@ export function EvidenceTab({ workOrderId }: { workOrderId: string }) {
             className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain"
           />
         </div>
+      ) : null}
+
+      {annotating ? (
+        <PhotoAnnotationCanvas file={annotating} onCancel={() => setAnnotating(null)} onDone={onAnnotationDone} />
       ) : null}
     </div>
   )

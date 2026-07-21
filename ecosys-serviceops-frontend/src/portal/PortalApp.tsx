@@ -19,6 +19,9 @@ import { PortalQuoteDetailPage } from './finance/PortalQuoteDetailPage'
 import { PortalContractsPage } from './PortalContractsPage'
 import { PortalReportsPage } from './PortalReportsPage'
 import { PortalProfilePage } from './PortalProfilePage'
+import { PortalKnowledgeHomePage } from './knowledge/PortalKnowledgeHomePage'
+import { PortalKnowledgeBrowsePage } from './knowledge/PortalKnowledgeBrowsePage'
+import { PortalKnowledgeArticlePage } from './knowledge/PortalKnowledgeArticlePage'
 
 function PortalShellRoute({ children }: { children: React.ReactNode }) {
   return (
@@ -48,6 +51,9 @@ export function PortalApp() {
           <Route path="quotes" element={<PortalShellRoute><PortalQuotesPage /></PortalShellRoute>} />
           <Route path="quotes/:id" element={<PortalShellRoute><PortalQuoteDetailPage /></PortalShellRoute>} />
           <Route path="contracts" element={<PortalShellRoute><PortalContractsPage /></PortalShellRoute>} />
+          <Route path="knowledge" element={<PortalShellRoute><PortalKnowledgeHomePage /></PortalShellRoute>} />
+          <Route path="knowledge/browse" element={<PortalShellRoute><PortalKnowledgeBrowsePage /></PortalShellRoute>} />
+          <Route path="knowledge/articles/:slug" element={<PortalShellRoute><PortalKnowledgeArticlePage /></PortalShellRoute>} />
           <Route path="profile" element={<PortalShellRoute><PortalProfilePage /></PortalShellRoute>} />
           <Route path="*" element={<Navigate to="dashboard" replace />} />
         </Routes>
