@@ -1,0 +1,22 @@
+# Build outputs
+**/bin/
+**/obj/
+**/objverify/
+**/binverify/
+
+# Tests are not needed in the API image
+tests/
+
+# Logs and local artifacts
+*.log
+*.err
+*.out
+*.pdf
+page1.pdf
+
+# EF/dev-only
+**/appsettings.Development.json
+
+# VCS / IDE
+.vs/
+.git/

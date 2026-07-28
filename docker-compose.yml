@@ -1,0 +1,77 @@
+# Ecosys ServiceOps — production-shaped Docker stack.
+#   1. cp .env.example .env   and fill in the secrets
+#   2. docker compose build
+#   3. docker compose up -d
+# Migrations run automatically at API startup; the API aborts if they fail.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ecosys}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ecosys}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ecosys} -d ${POSTGRES_DB:-ecosys}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5000
+      # Composed from the Postgres vars above — points at the `db` service.
+      ECOSYS_DB_CONNECTION: "Host=db;Port=5432;Database=${POSTGRES_DB:-ecosys};Username=${POSTGRES_USER:-ecosys};Password=${POSTGRES_PASSWORD}"
+      # Secrets — the API refuses to boot if these are missing/weak/known-defaults.
+      ECOSYS_JWT_SIGNING_KEY: ${ECOSYS_JWT_SIGNING_KEY:?set ECOSYS_JWT_SIGNING_KEY in .env}
+      ECOSYS_PLATFORM_ADMIN_EMAIL: ${ECOSYS_PLATFORM_ADMIN_EMAIL:?set ECOSYS_PLATFORM_ADMIN_EMAIL in .env}
+      ECOSYS_PLATFORM_ADMIN_PASSWORD: ${ECOSYS_PLATFORM_ADMIN_PASSWORD:?set ECOSYS_PLATFORM_ADMIN_PASSWORD in .env}
+      ECOSYS_PLATFORM_ADMIN_FULL_NAME: ${ECOSYS_PLATFORM_ADMIN_FULL_NAME:-Platform Admin}
+      ECOSYS_CORS_ALLOWED_ORIGINS: ${ECOSYS_CORS_ALLOWED_ORIGINS}
+      # Comma-separated proxy IPs for accurate rate-limit/audit client IPs (see note below).
+      ECOSYS_KNOWN_PROXIES: ${ECOSYS_KNOWN_PROXIES:-}
+      # Outbound email (optional).
+      ECOSYS_SMTP_HOST: ${ECOSYS_SMTP_HOST:-}
+      ECOSYS_SMTP_PORT: ${ECOSYS_SMTP_PORT:-}
+      ECOSYS_SMTP_USE_SSL: ${ECOSYS_SMTP_USE_SSL:-}
+      ECOSYS_SMTP_USERNAME: ${ECOSYS_SMTP_USERNAME:-}
+      ECOSYS_SMTP_PASSWORD: ${ECOSYS_SMTP_PASSWORD:-}
+      # File storage inside the container (mapped to the `uploads` volume).
+      Storage__LocalBasePath: /app/storage/uploads
+      Storage__BaseUrl: ${ECOSYS_PUBLIC_URL:-http://localhost}/files
+    volumes:
+      - uploads:/app/storage/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  web:
+    build:
+      context: ./ecosys-serviceops-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${ECOSYS_PUBLIC_URL:-http://localhost}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      # Host:container. Put a TLS-terminating reverse proxy in front of this.
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  pgdata:
+  uploads:

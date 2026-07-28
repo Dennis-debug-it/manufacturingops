@@ -1,0 +1,12 @@
+node_modules/
+dist/
+frontend-backup/
+playwright-report/
+test-results/
+tmp/
+*.log
+*.err
+*.out
+.env
+.env.local
+.git/
