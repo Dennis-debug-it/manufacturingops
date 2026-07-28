@@ -1,0 +1,10 @@
+# Keep Linux/container-critical files LF regardless of contributor OS.
+* text=auto
+Dockerfile      text eol=lf
+*.dockerfile    text eol=lf
+.dockerignore   text eol=lf
+*.sh            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+nginx.conf      text eol=lf
+.env.example    text eol=lf
