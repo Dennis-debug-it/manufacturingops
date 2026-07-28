@@ -616,7 +616,8 @@ public sealed class WorkOrderExecutionFlowTests
             new FakeWorkOrderLifecycleService(dbContext),
             new FakeAssignmentWorkflowService(hasArrival),
             new FakePmChecklistService(),
-            new FakeSlaService());
+            new FakeSlaService(),
+            new NoOpWorkflowService());
 
         controller.ControllerContext = CreateControllerContext(fixture.User);
         return controller;
@@ -817,6 +818,8 @@ public sealed class WorkOrderExecutionFlowTests
         public string NormalizeStatus(string status) => status;
         public Task RecordCreatedAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, string workOrderNumber, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<WorkOrder> StartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<WorkOrder> HoldAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, string? holdType, string? reason, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<WorkOrder> ResumeAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class FakeDocumentNumberingService : IDocumentNumberingService
@@ -910,6 +913,14 @@ public sealed class WorkOrderExecutionFlowTests
         public Task EnsureRequiredChecklistCompletedAsync(Guid workOrderId, Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<PmTemplate> GetActiveTemplateAsync(Guid tenantId, Guid pmTemplateId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<WorkOrderChecklistItem> UpdateChecklistItemAsync(Guid workOrderId, Guid itemId, Guid tenantId, Guid actorUserId, string? responseValue, string? remarks, bool isCompleted, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class NoOpWorkflowService : IWorkflowService
+    {
+        public Task<WorkflowDefinition?> GetActiveWorkflowAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult<WorkflowDefinition?>(null);
+        public Task<IReadOnlyCollection<WorkflowStatus>> GetActiveWorkflowStatusesAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<WorkflowStatus>>([]);
+        public Task EnsureDefaultWorkflowAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<WorkflowStatus> ApplyStatusTransitionAsync(WorkOrder workOrder, Guid targetWorkflowStatusId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class FakeSlaService : ISlaService

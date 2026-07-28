@@ -415,7 +415,8 @@ public sealed class WorkOrderPhase3Tests
             new NoOpWorkOrderLifecycleService(),
             new NoOpAssignmentWorkflowService(),
             new NoOpPmChecklistService(),
-            new NoOpSlaService());
+            new NoOpSlaService(),
+            new NoOpWorkflowService());
 
         controller.ControllerContext = new ControllerContext
         {
@@ -499,6 +500,14 @@ public sealed class WorkOrderPhase3Tests
             Task.FromResult(Ecosys.Shared.Options.EmailSubjectRuleOptions.Default);
     }
 
+    private sealed class NoOpWorkflowService : IWorkflowService
+    {
+        public Task<WorkflowDefinition?> GetActiveWorkflowAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult<WorkflowDefinition?>(null);
+        public Task<IReadOnlyCollection<WorkflowStatus>> GetActiveWorkflowStatusesAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<WorkflowStatus>>([]);
+        public Task EnsureDefaultWorkflowAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<WorkflowStatus> ApplyStatusTransitionAsync(WorkOrder workOrder, Guid targetWorkflowStatusId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
     private sealed class NoOpSlaService : ISlaService
     {
         public Task ApplyDefinitionAsync(WorkOrder workOrder, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -563,6 +572,8 @@ public sealed class WorkOrderPhase3Tests
         public string NormalizeStatus(string status) => WorkOrderStatuses.Normalize(status);
         public Task RecordCreatedAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, string workOrderNumber, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<WorkOrder> StartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<WorkOrder> HoldAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, string? holdType, string? reason, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<WorkOrder> ResumeAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class NoOpAssignmentWorkflowService : IWorkOrderAssignmentWorkflowService

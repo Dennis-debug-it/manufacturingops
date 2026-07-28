@@ -908,6 +908,7 @@ public sealed class AuthEmailSafetyTests
             new NoOpAuditLogService(),
             new FakeUserPermissionTemplateService(),
             new FakeRolePermissionService(),
+            new FakeDynamicAccessService(),
             new FakeUserSessionService(dbContext),
             new NoOpLicenseGuardService(dbContext),
             new FakeTenantSecurityPolicyService());
@@ -1116,6 +1117,12 @@ public sealed class AuthEmailSafetyTests
         public void EnsureAdminOrPermission(string permissionName) { }
         public void EnsureAdminOrAnyPermission(params string[] permissionNames) { }
         public void EnsureTenantOperationalAccess() { }
+    }
+
+    private sealed class FakeDynamicAccessService : IDynamicAccessService
+    {
+        public Task<IReadOnlyList<EffectiveCapability>> GetEffectiveAccessAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<EffectiveCapability>>([]);
+        public Task<UserPermissionsModel> ResolveLegacyClaimsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken = default) => Task.FromResult(new UserPermissionsModel());
     }
 
     private sealed class FakeRolePermissionService : IRolePermissionService

@@ -85,7 +85,8 @@ public sealed class TenantIsolationTests
             new NoOpWorkOrderLifecycleService(),
             new NoOpAssignmentWorkflowService(),
             new NoOpPmChecklistService(),
-            new NoOpSlaService());
+            new NoOpSlaService(),
+            new NoOpWorkflowService());
 
         var materialRequestsController = new MaterialRequestsController(
             dbContext,
@@ -679,6 +680,8 @@ public sealed class TenantIsolationTests
         public Task<WorkOrder> AssignAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, Guid? technicianId, Guid? assignmentGroupId, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
         public Task<WorkOrderEvent> AddCommentAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderCommentRequest request, CancellationToken cancellationToken = default) => Task.FromException<WorkOrderEvent>(new NotSupportedException());
         public Task<WorkOrder> StartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
+        public Task<WorkOrder> HoldAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, string? holdType, string? reason, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
+        public Task<WorkOrder> ResumeAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
         public Task<WorkOrder> ArriveAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, Ecosys.Infrastructure.Services.WorkOrderLocationRequest request, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
         public Task<WorkOrder> DepartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, Ecosys.Infrastructure.Services.WorkOrderLocationRequest request, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
         public Task<WorkOrder> ChangeStatusAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderStatusChangeRequest request, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
@@ -704,6 +707,14 @@ public sealed class TenantIsolationTests
         public Task<int> AttachPmTemplateToWorkOrderAsync(Guid workOrderId, Guid pmTemplateId, Guid tenantId, Guid? actorUserId = null, bool replaceExisting = false, CancellationToken cancellationToken = default) => Task.FromResult(0);
         public Task<WorkOrderChecklistItem> UpdateChecklistItemAsync(Guid workOrderId, Guid itemId, Guid tenantId, Guid actorUserId, string? responseValue, string? remarks, bool isCompleted, CancellationToken cancellationToken = default) => Task.FromException<WorkOrderChecklistItem>(new NotSupportedException());
         public Task EnsureRequiredChecklistCompletedAsync(Guid workOrderId, Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class NoOpWorkflowService : IWorkflowService
+    {
+        public Task<WorkflowDefinition?> GetActiveWorkflowAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult<WorkflowDefinition?>(null);
+        public Task<IReadOnlyCollection<WorkflowStatus>> GetActiveWorkflowStatusesAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<WorkflowStatus>>([]);
+        public Task EnsureDefaultWorkflowAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<WorkflowStatus> ApplyStatusTransitionAsync(WorkOrder workOrder, Guid targetWorkflowStatusId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class NoOpSlaService : ISlaService

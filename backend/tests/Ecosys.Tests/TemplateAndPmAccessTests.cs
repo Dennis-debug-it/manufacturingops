@@ -149,7 +149,8 @@ public sealed class TemplateAndPmAccessTests
             new NoOpWorkOrderLifecycleService(),
             new NoOpAssignmentWorkflowService(),
             new NoOpPmChecklistService(),
-            new NoOpSlaService());
+            new NoOpSlaService(),
+            new NoOpWorkflowService());
 
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.Get(Guid.NewGuid(), CancellationToken.None));
     }
@@ -182,7 +183,8 @@ public sealed class TemplateAndPmAccessTests
             new NoOpWorkOrderLifecycleService(),
             new NoOpAssignmentWorkflowService(),
             new NoOpPmChecklistService(),
-            new NoOpSlaService());
+            new NoOpSlaService(),
+            new NoOpWorkflowService());
 
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetAll(null, null, null, null, null, null, null, null, null, null, CancellationToken.None));
     }
@@ -251,7 +253,8 @@ public sealed class TemplateAndPmAccessTests
             new TrackingWorkOrderLifecycleService(dbContext),
             new NoOpAssignmentWorkflowService(),
             new NoOpPmChecklistService(),
-            new NoOpSlaService());
+            new NoOpSlaService(),
+            new NoOpWorkflowService());
 
         var listResult = await controller.GetAll(null, null, null, null, null, null, null, null, null, null, CancellationToken.None);
         var listOk = Assert.IsType<OkObjectResult>(listResult.Result);
@@ -488,6 +491,8 @@ public sealed class TemplateAndPmAccessTests
         public string NormalizeStatus(string status) => status;
         public Task RecordCreatedAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, string workOrderNumber, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<WorkOrder> StartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
+        public Task<WorkOrder> HoldAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, string? holdType, string? reason, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
+        public Task<WorkOrder> ResumeAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
     }
 
     private sealed class TrackingWorkOrderLifecycleService(AppDbContext dbContext) : IWorkOrderLifecycleService
@@ -510,6 +515,9 @@ public sealed class TemplateAndPmAccessTests
             await dbContext.SaveChangesAsync(cancellationToken);
             return workOrder;
         }
+
+        public Task<WorkOrder> HoldAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, string? holdType, string? reason, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
+        public Task<WorkOrder> ResumeAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
     }
 
     private sealed class NoOpAssignmentWorkflowService : IWorkOrderAssignmentWorkflowService
@@ -548,6 +556,14 @@ public sealed class TemplateAndPmAccessTests
         }
 
         public Task<WorkOrderChecklistItem> UpdateChecklistItemAsync(Guid workOrderId, Guid itemId, Guid tenantId, Guid userId, string? responseValue, string? remarks, bool isCompleted, CancellationToken cancellationToken = default) => Task.FromException<WorkOrderChecklistItem>(new NotSupportedException());
+    }
+
+    private sealed class NoOpWorkflowService : IWorkflowService
+    {
+        public Task<WorkflowDefinition?> GetActiveWorkflowAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult<WorkflowDefinition?>(null);
+        public Task<IReadOnlyCollection<WorkflowStatus>> GetActiveWorkflowStatusesAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<WorkflowStatus>>([]);
+        public Task EnsureDefaultWorkflowAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<WorkflowStatus> ApplyStatusTransitionAsync(WorkOrder workOrder, Guid targetWorkflowStatusId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class NoOpSlaService : ISlaService

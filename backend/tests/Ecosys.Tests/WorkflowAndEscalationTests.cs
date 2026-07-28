@@ -267,6 +267,15 @@ public sealed class WorkflowAndEscalationTests
 
         dbContext.AddRange(client, workOrder);
         await dbContext.SaveChangesAsync();
+
+        // The audit interceptor stamps CreatedAt = UtcNow on insert, so re-apply the
+        // requested (back-dated) value via an update, where only UpdatedAt is touched.
+        if (createdAt.HasValue && workOrder.CreatedAt != createdAt.Value)
+        {
+            workOrder.CreatedAt = createdAt.Value;
+            await dbContext.SaveChangesAsync();
+        }
+
         return workOrder;
     }
 
