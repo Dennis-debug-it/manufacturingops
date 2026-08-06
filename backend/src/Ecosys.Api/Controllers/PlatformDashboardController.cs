@@ -32,9 +32,56 @@ public sealed class PlatformDashboardController(AppDbContext dbContext) : Contro
         var outstandingBalance = await dbContext.PlatformInvoices.Where(x => x.Status != "Paid" && x.Status != "Void").SumAsync(x => (decimal?)x.Balance, cancellationToken) ?? 0m;
         var mrr = await dbContext.TenantLicenses.Include(x => x.LicensePlan).Where(x => x.Status == "Active" || x.Status == "Trial").SumAsync(x => (decimal?)x.LicensePlan!.MonthlyPrice, cancellationToken) ?? 0m;
 
-        return Ok(new PlatformDashboardSummaryResponse(totalTenants, activeTenants, deactivatedTenants, suspendedTenants, totalUsers, openWorkOrders, closedWorkOrders, overdueWorkOrders, totalInvoices, overdueInvoices, totalRevenue, outstandingBalance, mrr));
+        // Conversion metrics (4b).
+        var totalLeads = await dbContext.PlatformLeads.CountAsync(cancellationToken);
+        var convertedLeads = await dbContext.PlatformLeads.CountAsync(x => x.ConvertedTenantId != null || x.Status == "Converted to Workspace", cancellationToken);
+        var leadConversionRate = totalLeads > 0 ? Math.Round((decimal)convertedLeads / totalLeads * 100, 1) : 0m;
+
+        var paidLicenses = await dbContext.TenantLicenses.CountAsync(x => x.Status == "Active", cancellationToken);
+        var trialLicenses = await dbContext.TenantLicenses.CountAsync(x => x.Status == "Trial", cancellationToken);
+        var trialToPaidRate = (paidLicenses + trialLicenses) > 0 ? Math.Round((decimal)paidLicenses / (paidLicenses + trialLicenses) * 100, 1) : 0m;
+
+        return Ok(new PlatformDashboardSummaryResponse(totalTenants, activeTenants, deactivatedTenants, suspendedTenants, totalUsers, openWorkOrders, closedWorkOrders, overdueWorkOrders, totalInvoices, overdueInvoices, totalRevenue, outstandingBalance, mrr, leadConversionRate, trialToPaidRate));
+    }
+
+    /// <summary>Cumulative tenant count at the end of each of the last 12 months (for a growth sparkline).</summary>
+    [HttpGet("tenant-growth")]
+    public async Task<ActionResult<IReadOnlyList<TenantGrowthPoint>>> GetTenantGrowth(CancellationToken cancellationToken)
+    {
+        var createdDates = await dbContext.Tenants
+            .Where(x => x.Id != PlatformConstants.RootTenantId)
+            .Select(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var now = DateTime.UtcNow;
+        var firstMonth = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-11);
+
+        var points = Enumerable.Range(0, 12)
+            .Select(offset => firstMonth.AddMonths(offset))
+            .Select(month => new TenantGrowthPoint(
+                month.ToString("yyyy-MM"),
+                createdDates.Count(created => created < month.AddMonths(1))))
+            .ToList();
+
+        return Ok(points);
+    }
+
+    /// <summary>Daily MRR snapshots over the requested window (written by the MRR snapshot job).</summary>
+    [HttpGet("mrr-trend")]
+    public async Task<ActionResult<IReadOnlyList<MrrTrendPoint>>> GetMrrTrend([FromQuery] int days = 90, CancellationToken cancellationToken = default)
+    {
+        var since = DateTime.UtcNow.Date.AddDays(-Math.Clamp(days, 7, 365));
+        var points = await dbContext.MrrSnapshots
+            .Where(x => x.SnapshotDate >= since)
+            .OrderBy(x => x.SnapshotDate)
+            .Select(x => new MrrTrendPoint(x.SnapshotDate, x.Mrr, x.PaidTenants, x.TrialTenants))
+            .ToListAsync(cancellationToken);
+        return Ok(points);
     }
 }
+
+public sealed record TenantGrowthPoint(string Month, int TenantCount);
+public sealed record MrrTrendPoint(DateTime Date, decimal Mrr, int PaidTenants, int TrialTenants);
 
 public sealed record PlatformDashboardSummaryResponse(
     int TotalTenants,
@@ -49,4 +96,6 @@ public sealed record PlatformDashboardSummaryResponse(
     int OverdueInvoices,
     decimal TotalRevenue,
     decimal OutstandingBalance,
-    decimal MonthlyRecurringRevenue);
+    decimal MonthlyRecurringRevenue,
+    decimal LeadConversionRate,
+    decimal TrialToPaidRate);

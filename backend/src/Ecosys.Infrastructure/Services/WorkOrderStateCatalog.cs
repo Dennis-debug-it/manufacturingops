@@ -74,6 +74,49 @@ public static class WorkOrderStatuses
     public static string Normalize(string? status)
         => ToValue(Parse(status));
 
+    // Every status string the app may have persisted: the canonical set plus the legacy synonyms
+    // that Parse() accepts. Keep in sync with Parse when adding new legacy inputs. Used to expand a
+    // status filter into the full set of stored values that normalize to the same canonical status,
+    // so the filter can run as a SQL IN-list (DB-level) yet still match legacy rows.
+    private static readonly string[] KnownRawStatuses =
+    [
+        .. All,
+        "Draft",
+        "Pending Materials", "Awaiting Materials", "Awaiting Parts", "Waiting for Spares", "Awaiting Spares",
+        "Pending Client", "Awaiting User", "Awaiting Client", "Awaiting Approval", "Awaiting Vendor",
+        "Waiting for Access", "Awaiting Site Access",
+        "Paused",
+        "Acknowledged",
+        "Ready to Close",
+    ];
+
+    /// <summary>
+    /// Returns the raw status strings that normalize to the same canonical status as
+    /// <paramref name="requested"/>. Throws <see cref="BusinessRuleException"/> if the requested
+    /// status is not recognized (same behavior as normalizing an invalid filter value).
+    /// </summary>
+    public static string[] RawStatusesMatching(string requested)
+    {
+        var canonical = Normalize(requested);
+        var matches = new List<string>();
+        foreach (var raw in KnownRawStatuses)
+        {
+            try
+            {
+                if (string.Equals(Normalize(raw), canonical, StringComparison.OrdinalIgnoreCase))
+                {
+                    matches.Add(raw);
+                }
+            }
+            catch (BusinessRuleException)
+            {
+                // Not a recognized status literal; skip.
+            }
+        }
+
+        return matches.ToArray();
+    }
+
     public static bool IsClosed(string? status) =>
         TerminalStatuses.Contains(Normalize(status), StringComparer.OrdinalIgnoreCase);
 

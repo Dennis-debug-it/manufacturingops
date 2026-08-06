@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
+import { EmptyState } from '../../shared/components/EmptyState'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { api } from '../../shared/api/apiClient'
 import { Field, SectionTitle } from '../common'
@@ -17,7 +18,7 @@ interface CrmSettings {
 export function CrmSettingsPage() {
   const canManage = usePermission('platform.settings.manage')
   const queryClient = useQueryClient()
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['platform', 'settings', 'crm'],
     queryFn: () => api.get<CrmSettings>('/api/platform/settings/crm'),
     staleTime: 30_000,
@@ -33,6 +34,7 @@ export function CrmSettingsPage() {
     },
   })
 
+  if (isError) return <EmptyState title="Couldn’t load CRM settings" description="Something went wrong fetching these settings." actionLabel="Retry" onAction={() => { void refetch() }} />
   if (isLoading || !values) return <Spinner label="Loading CRM settings" />
 
   const set = <K extends keyof CrmSettings>(key: K, value: CrmSettings[K]) => setValues((current) => (current ? { ...current, [key]: value } : current))

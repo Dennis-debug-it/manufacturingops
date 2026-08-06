@@ -12,7 +12,6 @@ const items = [
   { label: 'CRM', to: '/platform/settings/crm' },
   { label: 'Announcements', to: '/platform/settings/announcements' },
   { label: 'Support', to: '/platform/settings/support' },
-  { label: 'System Health', to: '/platform/settings/health' },
   { label: 'Document Templates', to: '/platform/settings/email-templates' },
   { label: 'Finance & Tax', to: '/platform/settings/plans' },
   { label: 'Audit & Logs', to: '/platform/settings/audit' },

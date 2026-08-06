@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { Plus, Search, Upload, Pencil, Power } from 'lucide-react'
@@ -8,7 +8,7 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
-import { useClients, useToggleClientActive } from './api'
+import { useClientsPaged, useToggleClientActive } from './api'
 import { TriTabNav } from './components/TriTabNav'
 import { ClientFormDrawer } from './components/ClientFormDrawer'
 import { ClientBulkImportDrawer } from './components/ClientBulkImportDrawer'
@@ -22,10 +22,14 @@ export function ClientsPage() {
   const [showImport, setShowImport] = useState(false)
   const [editClient, setEditClient] = useState<Client | null>(null)
   const [toggleClient, setToggleClient] = useState<Client | null>(null)
-  const { data, isLoading, isError } = useClients({ search: debouncedSearch, status: 'all' })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  // Reset to the first page whenever the search term changes.
+  useEffect(() => setPage(1), [debouncedSearch])
+  const { data, isLoading, isError } = useClientsPaged({ search: debouncedSearch, status: 'all' }, page, pageSize)
   const toggleActive = useToggleClientActive()
 
-  const rows = useMemo(() => data ?? [], [data])
+  const rows = useMemo(() => data?.items ?? [], [data])
 
   const confirmToggle = async () => {
     if (!toggleClient) {
@@ -100,7 +104,18 @@ export function ClientsPage() {
         loading={isLoading}
         emptyTitle={isError ? 'Clients unavailable' : 'No clients yet'}
         emptyDescription={isError ? 'The client list could not be loaded.' : 'Create your first client or bulk-import from CSV to get started.'}
-        virtualise={rows.length > 100}
+        emptyActionLabel={!isError && canManage ? 'New Client' : undefined}
+        onEmptyAction={!isError && canManage ? () => setShowForm(true) : undefined}
+        pagination={{
+          page,
+          pageSize,
+          total: data?.totalCount ?? 0,
+          onPageChange: setPage,
+          onPageSizeChange: (size) => {
+            setPageSize(size)
+            setPage(1)
+          },
+        }}
       />
 
       <ClientFormDrawer open={showForm} onClose={() => setShowForm(false)} />

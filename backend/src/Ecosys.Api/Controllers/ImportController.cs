@@ -1,4 +1,5 @@
 using System.Text;
+using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -1412,7 +1413,7 @@ public sealed class ImportController(
 
     private static IActionResult BuildTemplateFile(IReadOnlyList<string> headers, IReadOnlyList<string> sampleRow, string fileName)
     {
-        var content = string.Join(",", headers) + Environment.NewLine + string.Join(",", sampleRow) + Environment.NewLine;
+        var content = Csv.Row(headers) + Environment.NewLine + Csv.Row(sampleRow) + Environment.NewLine;
         return new FileContentResult(Encoding.UTF8.GetBytes(content), "text/csv")
         {
             FileDownloadName = fileName

@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AlertTriangle, MoreVertical } from 'lucide-react'
+import { cn } from '../../shared/utils/cn'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
@@ -61,6 +62,35 @@ const summaryFields: Array<{ key: string; label: string; render?: (value: string
   { key: 'branchName', label: 'Branch' },
 ]
 
+/** Lightweight in-tab navigation used to group related sub-tabs under one top-level tab. */
+function SubTabbed({ tabs }: { tabs: Array<{ id: string; label: string; content: ReactNode }> }) {
+  const [active, setActive] = useState(tabs[0]?.id)
+  const current = tabs.find((tab) => tab.id === active) ?? tabs[0]
+  if (!current) return null
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActive(tab.id)}
+            className={cn(
+              'inline-flex h-9 items-center rounded-full border px-3 text-xs font-medium transition',
+              tab.id === current.id
+                ? 'border-slate-900 bg-slate-900 text-white'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div>{current.content}</div>
+    </div>
+  )
+}
+
 export function WorkOrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -68,7 +98,6 @@ export function WorkOrderDetailPage() {
   const { data: workflowStatuses } = useWorkflowStatuses()
   const patchWorkflowStatus = usePatchWorkOrderWorkflowStatus()
 
-  const canAssign = usePermission('work-orders.assign')
   const canStart = usePermission('work-orders.start')
   const canExecute = usePermission('work-orders.execute')
   const canComplete = usePermission('work-orders.complete')
@@ -153,9 +182,25 @@ export function WorkOrderDetailPage() {
   const canPause = canExecute && !holdStatuses.includes(status) && !['Completed', 'Closed', 'Cancelled'].includes(status)
   const canResume = canExecute && holdStatuses.includes(status)
   const canStartNow = canStart && ['Assigned', 'Scheduled', 'New', 'Open'].includes(status)
-  const canCompleteNow = canComplete && !['Completed', 'Closed', 'Cancelled'].includes(status)
+  // Completion is only a legal transition from In Progress (mirrors the backend state machine);
+  // offering it earlier surfaces an action the server rejects.
+  const canCompleteNow = canComplete && status === 'In Progress'
   const canCloseNow = canClose && status === 'Completed'
   const canCancelNow = canCancel && !['Completed', 'Closed', 'Cancelled'].includes(status)
+
+  // The single most relevant next action for the current status earns primary (dark) emphasis;
+  // everything else is a secondary button. Cancel is destructive and never primary.
+  const primaryActionKey: 'start' | 'resume' | 'complete' | 'close' | null = canStartNow
+    ? 'start'
+    : canResume
+      ? 'resume'
+      : canCompleteNow
+        ? 'complete'
+        : canCloseNow
+          ? 'close'
+          : null
+  const primaryBtnClass = 'inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800'
+  const secondaryBtnClass = 'inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50'
 
   const currentWorkflowStatus = workOrder.workflowStatusId
     ? (workflowStatuses ?? []).find((s) => s.id === workOrder.workflowStatusId)
@@ -184,53 +229,52 @@ export function WorkOrderDetailPage() {
         { label: 'Work Orders', to: '/work-orders' },
         { label: workOrder.workOrderNumber },
       ]}
+      titleAdornment={
+        currentWorkflowStatus && canCreate ? (
+          <select
+            value={currentWorkflowStatus.id}
+            onChange={(event) => void changeWorkflowStatus(event.target.value)}
+            disabled={patchWorkflowStatus.isPending || currentWorkflowStatus.isFinal}
+            className="h-9 rounded-full border-0 px-3 text-xs font-medium text-white outline-none disabled:opacity-70"
+            style={{ backgroundColor: currentWorkflowStatus.color }}
+            aria-label="Work order status"
+          >
+            {workflowStatusOptions.map((option) => (
+              <option key={option.id} value={option.id} className="bg-white text-slate-900">
+                {option.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <StatusBadge status={status} />
+        )
+      }
       secondaryActions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Link to="/work-orders" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Back</Link>
-          {currentWorkflowStatus && canCreate ? (
-            <select
-              value={currentWorkflowStatus.id}
-              onChange={(event) => void changeWorkflowStatus(event.target.value)}
-              disabled={patchWorkflowStatus.isPending || currentWorkflowStatus.isFinal}
-              className="h-9 rounded-full border-0 px-3 text-xs font-medium text-white outline-none disabled:opacity-70"
-              style={{ backgroundColor: currentWorkflowStatus.color }}
-              aria-label="Work order status"
-            >
-              {workflowStatusOptions.map((option) => (
-                <option key={option.id} value={option.id} className="bg-white text-slate-900">
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <StatusBadge status={status} />
-          )}
-          {workOrder.quoteId && workOrder.quoteNumber ? (
-            <Link
-              to={`/finance/quotes/${workOrder.quoteId}`}
-              className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200 transition hover:bg-sky-100"
-            >
-              Created from Quote #{workOrder.quoteNumber}
-            </Link>
-          ) : null}
-        </div>
+        workOrder.quoteId && workOrder.quoteNumber ? (
+          <Link
+            to={`/finance/quotes/${workOrder.quoteId}`}
+            className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200 transition hover:bg-sky-100"
+          >
+            Created from Quote #{workOrder.quoteNumber}
+          </Link>
+        ) : undefined
       }
       primaryAction={
         <div className="hidden flex-wrap items-center gap-2 md:flex">
           {canStartNow ? (
-            <button type="button" onClick={() => runAction('Work started', () => startWorkOrder.mutateAsync(undefined))} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Start Work</button>
+            <button type="button" onClick={() => runAction('Work started', () => startWorkOrder.mutateAsync(undefined))} className={primaryActionKey === 'start' ? primaryBtnClass : secondaryBtnClass}>Start Work</button>
           ) : null}
           {canPause ? (
-            <button type="button" onClick={() => setHoldOpen(true)} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Put On Hold</button>
+            <button type="button" onClick={() => setHoldOpen(true)} className={secondaryBtnClass}>Put On Hold</button>
           ) : null}
           {canResume ? (
-            <button type="button" onClick={() => runAction('Work resumed', () => resumeFromHold.mutateAsync())} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Resume</button>
+            <button type="button" onClick={() => runAction('Work resumed', () => resumeFromHold.mutateAsync())} className={primaryActionKey === 'resume' ? primaryBtnClass : secondaryBtnClass}>Resume</button>
           ) : null}
           {canCompleteNow ? (
-            <button type="button" onClick={() => setCompleteOpen(true)} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">Complete</button>
+            <button type="button" onClick={() => setCompleteOpen(true)} className={primaryActionKey === 'complete' ? primaryBtnClass : secondaryBtnClass}>Complete</button>
           ) : null}
           {canCloseNow ? (
-            <button type="button" onClick={() => setConfirmAction('close')} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Close</button>
+            <button type="button" onClick={() => setConfirmAction('close')} className={primaryActionKey === 'close' ? primaryBtnClass : secondaryBtnClass}>Close</button>
           ) : null}
           {canCancelNow ? (
             <button type="button" onClick={() => setConfirmAction('cancel')} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-white px-4 text-sm font-medium text-rose-600 transition hover:bg-rose-50">Cancel</button>
@@ -315,25 +359,46 @@ export function WorkOrderDetailPage() {
               </SummarySection>
             ),
           },
-          { id: 'timeline', label: 'Timeline', content: <TimelineTab workOrderId={id} /> },
-          { id: 'activity', label: 'Activity', content: <ActivityTab workOrderId={id} /> },
-          { id: 'notes', label: 'Notes', content: <NotesTab workOrderId={id} /> },
+          {
+            id: 'history',
+            label: 'History',
+            content: (
+              <SubTabbed
+                tabs={[
+                  { id: 'timeline', label: 'Timeline', content: <TimelineTab workOrderId={id} /> },
+                  { id: 'activity', label: 'Activity', content: <ActivityTab workOrderId={id} /> },
+                  { id: 'notes', label: 'Notes', content: <NotesTab workOrderId={id} /> },
+                ]}
+              />
+            ),
+          },
           { id: 'assignment', label: 'Assignment', content: <AssignmentTab workOrder={workOrder} /> },
           { id: 'sla', label: 'SLA', content: <SlaTab workOrderId={id} /> },
-          { id: 'execution', label: 'Work Execution', content: <ExecutionTab workOrderId={id} /> },
-          { id: 'evidence', label: 'Evidence', content: <EvidenceTab workOrderId={id} /> },
-          { id: 'parts', label: 'Parts', content: <PartsTab workOrderId={id} /> },
-          { id: 'subtasks', label: 'Sub-tasks', content: <SubtasksTab workOrder={workOrder} /> },
-          { id: 'signatures', label: 'Signatures', content: <SignaturesTab workOrderId={id} /> },
-          { id: 'report', label: 'Report', content: <ReportTab workOrder={workOrder} /> },
+          {
+            id: 'execution',
+            label: 'Work Execution',
+            content: (
+              <SubTabbed
+                tabs={[
+                  { id: 'execution', label: 'Execution', content: <ExecutionTab workOrderId={id} /> },
+                  { id: 'evidence', label: 'Evidence', content: <EvidenceTab workOrderId={id} /> },
+                  { id: 'parts', label: 'Parts', content: <PartsTab workOrderId={id} /> },
+                  { id: 'subtasks', label: 'Sub-tasks', content: <SubtasksTab workOrder={workOrder} /> },
+                  { id: 'signatures', label: 'Signatures', content: <SignaturesTab workOrderId={id} /> },
+                  { id: 'report', label: 'Report', content: <ReportTab workOrder={workOrder} /> },
+                ]}
+              />
+            ),
+          },
         ]}
       />
 
-      {canAssign || canCompleteNow ? (
+      {canStartNow || canResume || canCompleteNow ? (
         <MobileActionBar
           actions={[
-            ...(canStartNow ? [{ label: 'Start Work', onClick: () => runAction('Work started', () => startWorkOrder.mutateAsync(undefined)) }] : []),
-            ...(canCompleteNow ? [{ label: 'Complete', primary: true, onClick: () => setCompleteOpen(true) }] : []),
+            ...(canStartNow ? [{ label: 'Start Work', primary: primaryActionKey === 'start', onClick: () => runAction('Work started', () => startWorkOrder.mutateAsync(undefined)) }] : []),
+            ...(canResume ? [{ label: 'Resume', primary: primaryActionKey === 'resume', onClick: () => runAction('Work resumed', () => resumeFromHold.mutateAsync()) }] : []),
+            ...(canCompleteNow ? [{ label: 'Complete', primary: primaryActionKey === 'complete', onClick: () => setCompleteOpen(true) }] : []),
           ]}
         />
       ) : null}

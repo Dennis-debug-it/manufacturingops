@@ -40,6 +40,20 @@ public sealed class PlatformFinanceController(
         var recentInvoices = await dbContext.PlatformInvoices.Include(x => x.Lines).OrderByDescending(x => x.IssueDate).Take(8).ToListAsync(cancellationToken);
         var overdueAccounts = await dbContext.PlatformInvoices.Include(x => x.Lines).Where(x => x.DueDate.HasValue && x.DueDate.Value.Date < now.Date && x.Status != "Paid" && x.Status != "Void").OrderBy(x => x.DueDate).Take(10).ToListAsync(cancellationToken);
 
+        // Receivables aging (4c): bucket unpaid balances by days past due.
+        var unpaid = await dbContext.PlatformInvoices
+            .Where(x => x.Status != "Paid" && x.Status != "Void")
+            .Select(x => new { x.DueDate, x.Balance })
+            .ToListAsync(cancellationToken);
+
+        int DaysPastDue(DateTime? due) => due.HasValue ? (now.Date - due.Value.Date).Days : 0;
+        var aging = new FinanceAging(
+            unpaid.Where(i => !i.DueDate.HasValue || DaysPastDue(i.DueDate) <= 0).Sum(i => i.Balance),
+            unpaid.Where(i => i.DueDate.HasValue && DaysPastDue(i.DueDate) is >= 1 and <= 30).Sum(i => i.Balance),
+            unpaid.Where(i => i.DueDate.HasValue && DaysPastDue(i.DueDate) is >= 31 and <= 60).Sum(i => i.Balance),
+            unpaid.Where(i => i.DueDate.HasValue && DaysPastDue(i.DueDate) is >= 61 and <= 90).Sum(i => i.Balance),
+            unpaid.Where(i => i.DueDate.HasValue && DaysPastDue(i.DueDate) > 90).Sum(i => i.Balance));
+
         return Ok(new PlatformFinanceDashboardResponse(
             totalRevenue,
             outstandingInvoices,
@@ -49,7 +63,8 @@ public sealed class PlatformFinanceController(
             conversionRate,
             recentPayments,
             recentInvoices.Select(MapInvoice).ToList(),
-            overdueAccounts.Select(MapInvoice).ToList()));
+            overdueAccounts.Select(MapInvoice).ToList(),
+            aging));
     }
 
     [HttpGet("summary")]
@@ -810,7 +825,8 @@ public sealed record UpsertPlatformTemplateRequest(
     bool? ShowPoweredByEcosys);
 public sealed record MarkInvoicePaidRequest(decimal? AmountPaid);
 
-public sealed record PlatformFinanceDashboardResponse(decimal TotalRevenue, decimal OutstandingInvoices, decimal OverdueInvoices, decimal ExpensesThisMonth, decimal ProfitEstimate, decimal QuotationConversionRate, IReadOnlyCollection<PlatformPaymentResponse> RecentPayments, IReadOnlyCollection<PlatformInvoiceResponse> RecentInvoices, IReadOnlyCollection<PlatformInvoiceResponse> OverdueAccounts);
+public sealed record FinanceAging(decimal Current, decimal Days1To30, decimal Days31To60, decimal Days61To90, decimal Days90Plus);
+public sealed record PlatformFinanceDashboardResponse(decimal TotalRevenue, decimal OutstandingInvoices, decimal OverdueInvoices, decimal ExpensesThisMonth, decimal ProfitEstimate, decimal QuotationConversionRate, IReadOnlyCollection<PlatformPaymentResponse> RecentPayments, IReadOnlyCollection<PlatformInvoiceResponse> RecentInvoices, IReadOnlyCollection<PlatformInvoiceResponse> OverdueAccounts, FinanceAging Aging);
 public sealed record PlatformQuotationResponse(Guid Id, string QuotationNumber, Guid? TenantId, string CustomerName, string? CustomerEmail, string Currency, decimal Subtotal, decimal DiscountRate, decimal DiscountAmount, decimal TaxRate, decimal TaxAmount, decimal Total, string Status, DateTime? ValidUntil, string? Notes, Guid? ConvertedInvoiceId, IReadOnlyCollection<PlatformQuotationLineResponse> Lines, DateTime CreatedAt, DateTime? UpdatedAt);
 public sealed record PlatformQuotationLineResponse(Guid Id, string Description, decimal Quantity, decimal UnitPrice, bool Taxable, decimal LineTotal);
 public sealed record PlatformInvoiceResponse(Guid Id, string InvoiceNumber, Guid? TenantId, Guid? QuotationId, string CustomerName, string? CustomerEmail, string Currency, decimal Subtotal, decimal DiscountRate, decimal DiscountAmount, decimal TaxRate, decimal TaxAmount, decimal Total, decimal AmountPaid, decimal Balance, string Status, DateTime IssueDate, DateTime? DueDate, string? Notes, IReadOnlyCollection<PlatformInvoiceLineResponse> Lines, DateTime CreatedAt, DateTime? UpdatedAt);

@@ -28,8 +28,8 @@ export interface DataTableProps<T extends { id?: string }> {
   loading?: boolean
   emptyTitle?: string
   emptyDescription?: string
-  emptyActionLabel?: string
-  onEmptyAction?: () => void
+  emptyActionLabel?: string | undefined
+  onEmptyAction?: (() => void) | undefined
   pagination?: DataTablePagination
   virtualise?: boolean
   batchSelect?: boolean
@@ -92,9 +92,14 @@ export function DataTable<T extends { id?: string }>({
     if (!effectivePagination) {
       return data
     }
+    // External (server-side) pagination: `data` is already just the current page, so render it
+    // as-is. Only the internal client-side pager slices the full dataset.
+    if (pagination) {
+      return data
+    }
     const start = (effectivePagination.page - 1) * effectivePagination.pageSize
     return data.slice(start, start + effectivePagination.pageSize)
-  }, [data, effectivePagination])
+  }, [data, effectivePagination, pagination])
 
   const showPaginationFooter = effectivePagination !== null && (Boolean(pagination) || effectivePagination.total > effectivePagination.pageSize)
 

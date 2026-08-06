@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useParams } from 'react-router-dom'
 import { PageHeader } from '../../shared/components/PageHeader'
@@ -7,8 +8,9 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDateTime } from '../../shared/utils/dates'
-import { useResendCredentials, useResetUserPassword, useSetUserStatus, useTeamUser } from './api'
-import { capabilityGroups } from './rolePermissionsApi'
+import { useResendCredentials, useResetUserPassword, useSetUserStatus, useTeamUser, useUpdateTeamUser } from './api'
+import { PermissionMatrix } from './components/PermissionMatrix'
+import type { RoleCapabilities } from './rolePermissionsApi'
 
 export function UserDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -17,6 +19,38 @@ export function UserDetailPage() {
   const setStatus = useSetUserStatus(id ?? '')
   const resendCredentials = useResendCredentials(id ?? '')
   const resetPassword = useResetUserPassword(id ?? '')
+  const updateUser = useUpdateTeamUser(id ?? '')
+
+  const [caps, setCaps] = useState<RoleCapabilities | null>(null)
+  useEffect(() => {
+    if (user) setCaps({ ...user.permissions })
+  }, [user])
+
+  const isAdminUser = Boolean(user) && user!.role.toLowerCase() === 'admin'
+  const permsDirty = Boolean(user && caps) && JSON.stringify(caps) !== JSON.stringify(user!.permissions)
+
+  const savePermissions = async () => {
+    if (!user || !caps) return
+    try {
+      await updateUser.mutateAsync({
+        fullName: user.fullName,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: user.role,
+        jobTitle: user.jobTitle,
+        department: user.department,
+        isActive: user.isActive,
+        permissions: caps,
+        branchIds: user.branchIds,
+        defaultBranchId: user.defaultBranchId,
+        hasAllBranchAccess: user.hasAllBranchAccess,
+        assignmentGroupIds: user.assignmentGroups.map((group) => group.id),
+      })
+      toast.success('Permissions updated')
+    } catch {
+      // interceptor surfaces the error toast
+    }
+  }
 
   const toggleStatus = async () => {
     if (!user) return
@@ -93,15 +127,28 @@ export function UserDetailPage() {
         </div>
       </SummarySection>
 
-      <SummarySection title="Access & Permissions" description="This user’s current direct capabilities. Explicit denies take precedence over inherited group access.">
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Permission groups</div><div className="mt-1 text-sm font-medium text-slate-900">No groups assigned</div></div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Access scope</div><div className="mt-1 text-sm font-medium text-slate-900">{user.hasAllBranchAccess ? 'Entire organization' : (user.defaultBranchName ?? 'Restricted')}</div></div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"><div className="text-xs font-semibold uppercase tracking-wider text-slate-500">Approval limits</div><div className="mt-1 text-sm font-medium text-slate-900">No monetary limits configured</div></div>
-        </div>
-        <div className="space-y-4">
-          {capabilityGroups.map((group) => <section key={group.group} className="overflow-hidden rounded-xl border border-slate-200"><h3 className="bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">{group.group}</h3><ul className="divide-y divide-slate-100">{group.items.map((item) => { const allowed = user.permissions[item.key]; return <li key={item.key} className="flex items-center justify-between gap-4 px-4 py-3"><span className="text-sm text-slate-700">{item.label}</span><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${allowed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'}`}>{allowed ? 'Allowed · Direct' : 'Not granted'}</span></li> })}</ul></section>)}
-        </div>
+      <SummarySection title="Access & Permissions" description="Check or uncheck each capability to control what this user can do.">
+        {isAdminUser ? (
+          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            This user is an <strong>Admin</strong> and implicitly has every capability. Change their role to grant a limited set.
+          </div>
+        ) : null}
+        {caps ? (
+          <PermissionMatrix value={isAdminUser ? user.permissions : caps} onChange={setCaps} disabled={!canManage || isAdminUser} />
+        ) : null}
+        {canManage && !isAdminUser ? (
+          <div className="mt-4 flex items-center justify-end gap-3">
+            {permsDirty ? <span className="text-xs font-medium text-amber-600">Unsaved changes</span> : null}
+            <button
+              type="button"
+              onClick={savePermissions}
+              disabled={!permsDirty || updateUser.isPending}
+              className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+            >
+              {updateUser.isPending ? 'Saving…' : 'Save permissions'}
+            </button>
+          </div>
+        ) : null}
       </SummarySection>
 
       {user.assignmentGroups.length > 0 ? (

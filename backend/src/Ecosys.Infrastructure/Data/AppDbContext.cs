@@ -19,6 +19,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<MrrSnapshot> MrrSnapshots => Set<MrrSnapshot>();
     public DbSet<CsatSurvey> CsatSurveys => Set<CsatSurvey>();
     public DbSet<ApprovalMatrix> ApprovalMatrices => Set<ApprovalMatrix>();
     public DbSet<ApprovalLevel> ApprovalLevels => Set<ApprovalLevel>();
@@ -341,6 +343,33 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.ToTable("refresh_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.ReplacedByTokenHash).HasMaxLength(128);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.ExpiresUtc });
+            entity.HasIndex(x => x.SessionId);
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Session)
+                .WithMany()
+                .HasForeignKey(x => x.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MrrSnapshot>(entity =>
+        {
+            entity.ToTable("mrr_snapshots");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Mrr).HasColumnType("numeric(18,2)");
+            entity.HasIndex(x => x.SnapshotDate).IsUnique();
+        });
+
         modelBuilder.Entity<ApprovalMatrix>(entity =>
         {
             entity.ToTable("approval_matrices");
@@ -642,6 +671,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 tableBuilder.HasCheckConstraint("CK_work_orders_hold_reason", "\"HoldReason\" IS NULL OR \"HoldReason\" IN ('Awaiting Materials', 'Awaiting Client', 'Awaiting Vendor', 'Awaiting Approval', 'Awaiting Site Access', 'Awaiting Spares', 'Other')");
             });
             entity.HasKey(x => x.Id);
+            // Optimistic concurrency for status transitions (F5-01): two concurrent transitions can
+            // otherwise both pass the CanTransition check and the last writer wins. xmin is Postgres'
+            // system row-version column, so this maps an existing column (no schema migration); a
+            // losing save throws DbUpdateConcurrencyException (surfaced as 409). No-op under the
+            // InMemory test provider.
+            entity.Property<uint>("xmin").HasColumnName("xmin").IsRowVersion();
             entity.Property(x => x.AssignmentType).HasMaxLength(40).IsRequired();
             entity.Property(x => x.AssignedTechnicianIdsJson).HasMaxLength(4000);
             entity.Property(x => x.WorkOrderNumber).HasMaxLength(50).IsRequired();

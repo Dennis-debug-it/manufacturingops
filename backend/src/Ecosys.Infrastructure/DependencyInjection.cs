@@ -81,6 +81,7 @@ public static class DependencyInjection
         services.AddHostedService<EmailOutboxWorker>();
         services.AddHostedService<TrialLifecycleWorker>();
         services.AddHostedService<PmSchedulerWorker>();
+        services.AddHostedService<MrrSnapshotWorker>();
         services.AddHostedService<SlaEnforcementWorker>();
         services.AddHostedService<ContractReminderWorker>();
         services.AddHostedService<ScheduledReportWorker>();

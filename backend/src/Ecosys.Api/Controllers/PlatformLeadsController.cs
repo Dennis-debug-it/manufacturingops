@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Net.Mail;
+using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -82,10 +83,30 @@ public sealed class PlatformLeadsController(
 
     [Authorize(Policy = "PlatformOwnerOnly")]
     [HttpGet("api/platform/leads")]
-    public async Task<ActionResult<IReadOnlyCollection<PlatformLeadListItemResponse>>> GetLeads(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetLeads(
+        [FromQuery] string? search,
+        [FromQuery] string? status,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        CancellationToken cancellationToken)
     {
-        var leads = await dbContext.PlatformLeads
-            .AsNoTracking()
+        var query = dbContext.PlatformLeads.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim().ToLower();
+            query = query.Where(x =>
+                x.CompanyName.ToLower().Contains(q)
+                || (x.ContactPersonName != null && x.ContactPersonName.ToLower().Contains(q))
+                || (x.Email != null && x.Email.ToLower().Contains(q)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(x => x.Status == status);
+        }
+
+        var projected = query
             .OrderByDescending(x => x.CreatedAt)
             .Select(x => new PlatformLeadListItemResponse(
                 x.Id,
@@ -96,10 +117,14 @@ public sealed class PlatformLeadsController(
                 x.Status,
                 x.CreatedAt,
                 x.ContactedAt,
-                x.ConvertedTenantId))
-            .ToListAsync(cancellationToken);
+                x.ConvertedTenantId));
 
-        return Ok(leads);
+        if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
+        {
+            return Ok(await projected.ToPagedResultAsync(page, pageSize, cancellationToken));
+        }
+
+        return Ok(await projected.ToListAsync(cancellationToken));
     }
 
     [Authorize(Policy = "PlatformOwnerOnly")]

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
@@ -6,7 +6,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
-import { useAssets } from './api'
+import { useAssetsPaged } from './api'
 import { TriTabNav } from './components/TriTabNav'
 import { AssetFormDrawer } from './components/AssetFormDrawer'
 import type { Asset } from './types'
@@ -16,9 +16,13 @@ export function AssetsPage() {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [showForm, setShowForm] = useState(false)
-  const { data, isLoading, isError } = useAssets({ search: debouncedSearch })
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+  // Reset to the first page whenever the search term changes.
+  useEffect(() => setPage(1), [debouncedSearch])
+  const { data, isLoading, isError } = useAssetsPaged({ search: debouncedSearch }, page, pageSize)
 
-  const rows = useMemo(() => data ?? [], [data])
+  const rows = useMemo(() => data?.items ?? [], [data])
 
   const columns: DataTableColumn<Asset>[] = [
     { key: 'assetName', header: 'Asset', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/assets/${row.id}`}>{row.assetName}</Link> },
@@ -58,7 +62,18 @@ export function AssetsPage() {
         loading={isLoading}
         emptyTitle={isError ? 'Assets unavailable' : 'No assets yet'}
         emptyDescription={isError ? 'The asset list could not be loaded.' : 'Create your first asset to get started.'}
-        virtualise={rows.length > 100}
+        emptyActionLabel={!isError && canCreate ? 'New Asset' : undefined}
+        onEmptyAction={!isError && canCreate ? () => setShowForm(true) : undefined}
+        pagination={{
+          page,
+          pageSize,
+          total: data?.totalCount ?? 0,
+          onPageChange: setPage,
+          onPageSizeChange: (size) => {
+            setPageSize(size)
+            setPage(1)
+          },
+        }}
       />
 
       <AssetFormDrawer open={showForm} onClose={() => setShowForm(false)} />

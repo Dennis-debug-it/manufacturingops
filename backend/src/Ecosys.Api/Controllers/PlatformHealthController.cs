@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Reflection;
+using Ecosys.Api.Observability;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +12,7 @@ namespace Ecosys.Api.Controllers;
 [ApiController]
 [Authorize(Policy = "PlatformSettingsAccess")]
 [Route("api/platform/health")]
-public sealed class PlatformHealthController(AppDbContext dbContext) : ControllerBase
+public sealed class PlatformHealthController(AppDbContext dbContext, IRuntimeMetrics runtimeMetrics) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PlatformHealthResponse>> Get(CancellationToken cancellationToken)
@@ -49,12 +51,52 @@ public sealed class PlatformHealthController(AppDbContext dbContext) : Controlle
             new("PM Generation", lastPmAt, "Success", null),
         };
 
-        return Ok(new PlatformHealthResponse(version, now, queueDepth, failedLast24h, services, jobs));
+        // ── Infrastructure / process vitals ──────────────────────────────────
+        using var process = Process.GetCurrentProcess();
+        var window = runtimeMetrics.GetWindowStats();
+
+        double? diskFreeGb = null;
+        double? diskTotalGb = null;
+        try
+        {
+            var root = Path.GetPathRoot(AppContext.BaseDirectory);
+            if (!string.IsNullOrEmpty(root))
+            {
+                var drive = new DriveInfo(root);
+                if (drive.IsReady)
+                {
+                    diskFreeGb = Math.Round(drive.AvailableFreeSpace / 1_000_000_000.0, 1);
+                    diskTotalGb = Math.Round(drive.TotalSize / 1_000_000_000.0, 1);
+                }
+            }
+        }
+        catch
+        {
+            // Disk info is best-effort (container/filesystem may not expose it).
+        }
+
+        var infrastructure = new InfrastructureHealth(
+            UptimeSeconds: (long)(now - runtimeMetrics.StartedUtc).TotalSeconds,
+            CpuPercent: Math.Round(runtimeMetrics.CpuPercent, 1),
+            MemoryWorkingSetMb: Math.Round(process.WorkingSet64 / 1_048_576.0, 1),
+            ManagedMemoryMb: Math.Round(GC.GetTotalMemory(forceFullCollection: false) / 1_048_576.0, 1),
+            DiskFreeGb: diskFreeGb,
+            DiskTotalGb: diskTotalGb,
+            ProcessorCount: Environment.ProcessorCount,
+            RequestsLast5m: window.RequestCount,
+            AvgLatencyMs: window.AvgLatencyMs,
+            ErrorRatePercent: window.ErrorRatePercent);
+
+        return Ok(new PlatformHealthResponse(version, now, queueDepth, failedLast24h, services, jobs, infrastructure));
     }
 }
 
 public sealed record ServiceHealth(string Name, string Status, DateTime LastCheckedAt, string? Detail);
 public sealed record BackgroundJob(string Name, DateTime? LastRunAt, string Status, double? DurationSeconds);
+public sealed record InfrastructureHealth(
+    long UptimeSeconds, double CpuPercent, double MemoryWorkingSetMb, double ManagedMemoryMb,
+    double? DiskFreeGb, double? DiskTotalGb, int ProcessorCount,
+    long RequestsLast5m, double AvgLatencyMs, double ErrorRatePercent);
 public sealed record PlatformHealthResponse(
     string Version, DateTime CheckedAt, int QueueDepth, int RecentErrors,
-    IReadOnlyList<ServiceHealth> Services, IReadOnlyList<BackgroundJob> Jobs);
+    IReadOnlyList<ServiceHealth> Services, IReadOnlyList<BackgroundJob> Jobs, InfrastructureHealth Infrastructure);

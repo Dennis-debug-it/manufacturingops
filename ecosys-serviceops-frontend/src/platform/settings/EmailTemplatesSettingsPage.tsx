@@ -29,7 +29,7 @@ interface EmailTemplateSummary {
 function TemplateEditor({ eventKey, onClose }: { eventKey: string; onClose: () => void }) {
   const canManage = usePermission('platform.settings.manage')
   const queryClient = useQueryClient()
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['platform', 'email-templates', eventKey],
     queryFn: () => api.get<EmailTemplateSummary>(`/api/platform/settings/email-templates/${eventKey}`),
   })
@@ -62,6 +62,9 @@ function TemplateEditor({ eventKey, onClose }: { eventKey: string; onClose: () =
     },
   })
 
+  if (isError) {
+    return <EmptyState title="Couldn’t load template" description="Something went wrong fetching this template." actionLabel="Retry" onAction={() => { void refetch() }} />
+  }
   if (isLoading || !data) {
     return <Spinner label="Loading template" />
   }

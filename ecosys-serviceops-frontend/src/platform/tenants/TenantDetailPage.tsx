@@ -51,7 +51,7 @@ const communicationGroups = [
 export function TenantDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: tenant, isLoading, isError } = useTenantDetail(id)
+  const { data: tenant, isLoading, isError, refetch: refetchTenant } = useTenantDetail(id)
   const { data: auditLogs } = useTenantAuditLogs(id)
   const { data: branding, isLoading: brandingLoading } = useTenantBranding(id)
   const { data: tenantUsers, isLoading: tenantUsersLoading } = useTenantUsers(id)
@@ -86,7 +86,7 @@ export function TenantDetailPage() {
   }
 
   if (isError || !tenant || !id) {
-    return <EmptyState title="Tenant unavailable" description="This tenant could not be loaded." />
+    return <EmptyState title="Tenant unavailable" description="This tenant could not be loaded." {...(id ? { actionLabel: 'Retry', onAction: () => { void refetchTenant() } } : {})} />
   }
 
   const auditColumns: DataTableColumn<PlatformTenantAuditLog>[] = [

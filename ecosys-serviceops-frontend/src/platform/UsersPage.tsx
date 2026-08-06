@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, Search, ShieldCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../shared/components/PageHeader'
@@ -11,7 +11,7 @@ import { useDebounce } from '../shared/hooks/useDebounce'
 import { formatDateTime } from '../shared/utils/dates'
 import {
   useCreatePlatformUser,
-  usePlatformUsers,
+  usePlatformUsersPaged,
   useResendPlatformUserCredentials,
   useResetPlatformUserPassword,
   useUpdatePlatformUserStatus,
@@ -34,11 +34,22 @@ const emptyForm = {
 }
 
 export function UsersPage() {
-  const { data, isLoading, isError } = usePlatformUsers()
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<UserRole>('All')
   const [statusFilter, setStatusFilter] = useState<UserStatus>('All')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
   const debouncedSearch = useDebounce(search, 250)
+  useEffect(() => setPage(1), [debouncedSearch, roleFilter, statusFilter])
+  const { data, isLoading, isError } = usePlatformUsersPaged(
+    {
+      search: debouncedSearch || undefined,
+      role: roleFilter === 'All' ? undefined : roleFilter,
+      status: statusFilter === 'All' ? undefined : statusFilter,
+    },
+    page,
+    pageSize,
+  )
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [activeUser, setActiveUser] = useState<PlatformUser | null>(null)
@@ -50,19 +61,8 @@ export function UsersPage() {
   const resetPassword = useResetPlatformUserPassword(resetUser?.id ?? '')
   const resendCredentials = useResendPlatformUserCredentials(resendUser?.id ?? '')
 
-  const rows = useMemo(() => {
-    const query = debouncedSearch.trim().toLowerCase()
-    return (data ?? []).filter((user) => {
-      const matchesSearch =
-        !query
-        || user.fullName.toLowerCase().includes(query)
-        || user.email.toLowerCase().includes(query)
-        || (user.phone ?? '').toLowerCase().includes(query)
-      const matchesRole = roleFilter === 'All' || user.role === roleFilter
-      const matchesStatus = statusFilter === 'All' || user.status === statusFilter
-      return matchesSearch && matchesRole && matchesStatus
-    })
-  }, [data, debouncedSearch, roleFilter, statusFilter])
+  // Search / role / status filtering + paging run server-side now (see usePlatformUsersPaged).
+  const rows = data?.items ?? []
 
   const columns: DataTableColumn<PlatformUser>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <div className="font-medium text-slate-900">{row.fullName}<div className="text-xs text-slate-500">{row.mustChangePassword ? 'Must change password' : 'Password ready'}</div></div> },
@@ -192,7 +192,19 @@ export function UsersPage() {
         rows.length === 0 ? (
           <EmptyState title="No platform users found" description="Adjust filters or create a new platform user." />
         ) : (
-          <DataTable<PlatformUser> columns={columns} data={rows} emptyTitle="No platform users found" emptyDescription="Adjust filters or create a new platform user." />
+          <DataTable<PlatformUser>
+            columns={columns}
+            data={rows}
+            emptyTitle="No platform users found"
+            emptyDescription="Adjust filters or create a new platform user."
+            pagination={{
+              page,
+              pageSize,
+              total: data?.totalCount ?? 0,
+              onPageChange: setPage,
+              onPageSizeChange: (size) => { setPageSize(size); setPage(1) },
+            }}
+          />
         )
       ) : null}
 

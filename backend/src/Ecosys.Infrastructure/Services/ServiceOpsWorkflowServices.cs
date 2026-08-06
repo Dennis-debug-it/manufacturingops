@@ -55,20 +55,35 @@ internal sealed class MaterialService(
     {
         var materialRequest = await GetMaterialRequestAsync(materialRequestId, MaterialRequestStatus.Approved, cancellationToken);
 
+        // Wrap the multi-line stock decrement in a transaction so a partial issue (earlier lines
+        // decremented, a later line short on stock) rolls back atomically. TryAdjustStockAsync does
+        // the race-safe guarded decrement that prevents oversell under concurrent issues.
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         foreach (var line in materialRequest.Lines)
         {
-            var storeItem = await dbContext.StoreItems.SingleAsync(x => x.Id == line.StoreItemId, cancellationToken);
-            if (storeItem.QuantityOnHand < line.RequestedQuantity)
+            var reserved = await TryAdjustStockAsync(line.StoreItemId, -line.RequestedQuantity, guard: true, cancellationToken);
+            if (!reserved)
             {
-                throw new BusinessRuleException($"Insufficient stock for store item {storeItem.Sku}.");
+                var sku = await dbContext.StoreItems
+                    .Where(x => x.Id == line.StoreItemId)
+                    .Select(x => x.Sku)
+                    .FirstOrDefaultAsync(cancellationToken);
+                throw new BusinessRuleException($"Insufficient stock for store item {sku}.");
             }
 
-            storeItem.QuantityOnHand -= line.RequestedQuantity;
             line.IssuedQuantity = line.RequestedQuantity;
         }
 
         materialRequest.Status = MaterialRequestStatus.Issued;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+
         await auditService.WriteAsync(materialRequest.TenantId, tenantContext.UserId, "Materials", "Issue", nameof(MaterialRequest), materialRequest.Id, materialRequest.Number, cancellationToken);
     }
 
@@ -96,6 +111,10 @@ internal sealed class MaterialService(
     {
         var materialRequest = await GetMaterialRequestAsync(materialRequestId, MaterialRequestStatus.Used, cancellationToken);
 
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
         foreach (var line in materialRequest.Lines)
         {
             var returnQuantity = Math.Max(line.IssuedQuantity - line.UsedQuantity, 0);
@@ -103,13 +122,49 @@ internal sealed class MaterialService(
 
             if (returnQuantity > 0)
             {
-                var storeItem = await dbContext.StoreItems.SingleAsync(x => x.Id == line.StoreItemId, cancellationToken);
-                storeItem.QuantityOnHand += returnQuantity;
+                // Atomic increment — no guard needed, but applied as a single UPDATE so concurrent
+                // returns can't lose an update via read-modify-write.
+                await TryAdjustStockAsync(line.StoreItemId, returnQuantity, guard: false, cancellationToken);
             }
         }
 
         materialRequest.Status = MaterialRequestStatus.Returned;
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+        }
+    }
+
+    // Atomically applies a stock delta to a StoreItem. On a relational provider this is a single
+    // guarded UPDATE (adding `WHERE quantity_on_hand + delta >= 0` when `guard` is set), so two
+    // concurrent issues can never both pass the check and oversell — the losing UPDATE affects
+    // 0 rows and returns false. Falls back to a tracked read-modify-write on non-relational
+    // providers (the InMemory test double), which don't support ExecuteUpdate.
+    private async Task<bool> TryAdjustStockAsync(Guid storeItemId, decimal delta, bool guard, CancellationToken cancellationToken)
+    {
+        if (dbContext.Database.IsRelational())
+        {
+            var query = dbContext.StoreItems.Where(x => x.Id == storeItemId);
+            if (guard)
+            {
+                query = query.Where(x => x.QuantityOnHand + delta >= 0);
+            }
+
+            var affected = await query.ExecuteUpdateAsync(
+                setters => setters.SetProperty(x => x.QuantityOnHand, x => x.QuantityOnHand + delta),
+                cancellationToken);
+            return affected > 0;
+        }
+
+        var storeItem = await dbContext.StoreItems.SingleOrDefaultAsync(x => x.Id == storeItemId, cancellationToken);
+        if (storeItem is null || (guard && storeItem.QuantityOnHand + delta < 0))
+        {
+            return false;
+        }
+
+        storeItem.QuantityOnHand += delta;
+        return true;
     }
 
     public async Task ReconcileAsync(Guid materialRequestId, CancellationToken cancellationToken = default)

@@ -7,7 +7,7 @@ import { tenantNavItems, type NavItem } from './navigation'
 
 const technicianNav = [
   { label: 'Jobs', to: '/work-orders', icon: ClipboardList },
-  { label: 'Clock', to: '/team/time-attendance/live', icon: Watch },
+  { label: 'My Time', to: '/me/time', icon: Watch },
   { label: 'Today', to: '/maintenance/calendar', icon: CalendarDays },
   { label: 'Alerts', to: '/reports', icon: Bell },
   { label: 'Profile', to: '/settings/account', icon: UserCircle2 },
@@ -81,7 +81,7 @@ export function BottomNav() {
   return (
     <>
       {showMore && overflowItems.length > 0 ? <MoreSheet items={overflowItems} onClose={() => setShowMore(false)} /> : null}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-2 py-2 backdrop-blur lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white shadow-[0_-1px_3px_rgba(15,23,42,0.06)] px-2 py-2 lg:hidden">
         <div className="grid grid-cols-5 gap-1">
           {primaryItems.map((item) => {
             const active = isActive(location.pathname, item.to)

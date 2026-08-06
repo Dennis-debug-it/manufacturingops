@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, Search, SlidersHorizontal } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../../shared/components/PageHeader'
+import { LastUpdated } from '../../shared/components/LastUpdated'
 import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
@@ -20,7 +21,7 @@ import {
   useExtendTenantTrial,
   useLead,
   useSuspendTenant,
-  useTenants,
+  useTenantsPaged,
 } from '../api'
 import { licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
 import type { PlatformTenantListItem } from '../types'
@@ -85,13 +86,33 @@ export function TenantsPage() {
   const canCreate = usePermission('platform.tenants.create')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { data, isLoading, isError } = useTenants()
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('All')
-  const [trialFilter, setTrialFilter] = useState<TrialFilter>('All')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const seed = searchParams.get('status')
+    return (statusOptions as readonly string[]).includes(seed ?? '') ? (seed as StatusFilter) : 'All'
+  })
+  const [trialFilter, setTrialFilter] = useState<TrialFilter>(() => {
+    const seed = searchParams.get('trial')
+    return (trialOptions as readonly string[]).includes(seed ?? '') ? (seed as TrialFilter) : 'All'
+  })
   const [sortBy, setSortBy] = useState<'name' | 'createdAt' | 'trialEndsAt' | 'status'>('name')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
   const debouncedSearch = useDebounce(search, 250)
+  useEffect(() => setPage(1), [debouncedSearch, statusFilter, trialFilter, sortBy, sortDirection])
+  const { data, isLoading, isError, dataUpdatedAt } = useTenantsPaged(
+    {
+      search: debouncedSearch || undefined,
+      status: statusFilter === 'All' ? undefined : statusFilter,
+      trial: trialFilter === 'All' ? undefined : trialFilter,
+      sortBy,
+      sortDir: sortDirection,
+    },
+    page,
+    pageSize,
+    { refetchInterval: 30_000 },
+  )
   const currentLeadId = searchParams.get('leadId')
   const lead = useLead(currentLeadId ?? undefined)
 
@@ -107,39 +128,8 @@ export function TenantsPage() {
   const deactivateTenant = useDeactivateTenant(showDeactivate?.tenantId ?? '')
   const extendTenantTrial = useExtendTenantTrial(trialTarget?.tenantId ?? '')
 
-  const rows = useMemo(() => {
-    const query = debouncedSearch.trim().toLowerCase()
-    const filtered = (data ?? []).filter((tenant) => {
-      const matchesSearch =
-        !query
-        || tenant.name.toLowerCase().includes(query)
-        || tenant.slug.toLowerCase().includes(query)
-        || (tenant.contactName ?? '').toLowerCase().includes(query)
-        || (tenant.contactEmail ?? '').toLowerCase().includes(query)
-      const matchesStatus = statusFilter === 'All' || tenant.status === statusFilter
-      const matchesTrial = trialFilter === 'All' || tenant.trialStatus === trialFilter
-      return matchesSearch && matchesStatus && matchesTrial
-    })
-
-    const direction = sortDirection === 'asc' ? 1 : -1
-    return filtered.sort((a, b) => {
-      const left = sortBy === 'createdAt'
-        ? a.createdAt
-        : sortBy === 'trialEndsAt'
-          ? a.trialEndsAt ?? ''
-          : sortBy === 'status'
-            ? a.status
-            : a.name
-      const right = sortBy === 'createdAt'
-        ? b.createdAt
-        : sortBy === 'trialEndsAt'
-          ? b.trialEndsAt ?? ''
-          : sortBy === 'status'
-            ? b.status
-            : b.name
-      return left.localeCompare(right) * direction
-    })
-  }, [data, debouncedSearch, sortBy, sortDirection, statusFilter, trialFilter])
+  // Search / filter / sort / paging all run server-side now (see useTenantsPaged).
+  const rows = data?.items ?? []
 
   const columns: DataTableColumn<PlatformTenantListItem>[] = [
     {
@@ -285,6 +275,7 @@ export function TenantsPage() {
       <PageHeader
         title="Tenants"
         subtitle="Workspace registry, lifecycle control, and account management."
+        secondaryActions={<LastUpdated at={dataUpdatedAt} />}
         primaryAction={
           canCreate ? (
             <button type="button" className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800" onClick={() => setShowCreate(true)}>
@@ -342,7 +333,20 @@ export function TenantsPage() {
         rows.length === 0 ? (
           <EmptyState title="No tenants found" description="Adjust filters or create a new tenant workspace." />
         ) : (
-          <DataTable<PlatformTenantListItem> columns={columns} data={rows} emptyTitle="No tenants found" emptyDescription="Adjust filters or create a new tenant workspace." />
+          <DataTable<PlatformTenantListItem>
+            columns={columns}
+            data={rows}
+            loading={isLoading}
+            emptyTitle={isError ? 'Tenants unavailable' : 'No tenants found'}
+            emptyDescription={isError ? 'The tenant list could not be loaded.' : 'Adjust filters or create a new tenant workspace.'}
+            pagination={{
+              page,
+              pageSize,
+              total: data?.totalCount ?? 0,
+              onPageChange: setPage,
+              onPageSizeChange: (size) => { setPageSize(size); setPage(1) },
+            }}
+          />
         )
       ) : null}
 

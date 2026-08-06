@@ -10,6 +10,7 @@ import {
   setAuthToken,
   setImpersonationSession,
   setLogoutHandler,
+  setRefreshToken,
   setSession,
 } from '../api/sessionStore'
 import { normalizeRole } from '../utils/normalizeRole'
@@ -134,6 +135,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const response = await api.post<LoginResponse>(endpoints.auth.login, credentials)
     const nextSession = toSession(response)
     setAuthToken(nextSession.token)
+    setRefreshToken(response.refreshToken)
     setSession(nextSession)
     setStateSession(nextSession)
     setIsReady(true)

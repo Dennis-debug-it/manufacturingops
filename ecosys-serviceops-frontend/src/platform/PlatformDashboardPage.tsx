@@ -1,7 +1,11 @@
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { AlertTriangle, ArrowRight, Building2, Clock3, DollarSign, FileWarning, ShieldAlert, Users } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { AlertTriangle, Activity, ArrowRight, Building2, Clock3, DollarSign, FileWarning, ShieldAlert, Users } from 'lucide-react'
+import { api } from '../shared/api/apiClient'
 import { PageHeader } from '../shared/components/PageHeader'
+import { AsyncPanel } from '../shared/components/AsyncPanel'
+import { LastUpdated } from '../shared/components/LastUpdated'
 import { Spinner } from '../shared/components/Spinner'
 import { EmptyState } from '../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../shared/components/DataTable'
@@ -17,6 +21,37 @@ import {
 } from './api'
 import { licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from './common'
 import type { PlatformLeadListItem, PlatformTenantListItem } from './types'
+
+// Independent, self-refreshing health pill — deliberately NOT part of the dashboard's combined
+// loading/error gate, so system-health stays visible even if other panels are slow or failing.
+function HealthChip() {
+  const { data, isError } = useQuery({
+    queryKey: ['platform', 'health', 'chip'],
+    queryFn: () => api.get<{ services: Array<{ status: string }> }>('/api/platform/health'),
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+  })
+
+  const base = 'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition'
+  if (isError) {
+    return <Link to="/platform/health" className={`${base} border-rose-200 bg-rose-50 text-rose-700`}><Activity className="h-3.5 w-3.5" />Health check unavailable</Link>
+  }
+  if (!data) {
+    return <span className={`${base} border-slate-200 bg-slate-50 text-slate-500`}><Activity className="h-3.5 w-3.5" />Checking system health…</span>
+  }
+
+  const down = data.services.filter((s) => s.status === 'Down').length
+  const degraded = data.services.filter((s) => s.status === 'Degraded').length
+  const tone = down > 0 ? 'border-rose-200 bg-rose-50 text-rose-700' : degraded > 0 ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+  const label = down > 0 ? `${down} service${down > 1 ? 's' : ''} down` : degraded > 0 ? `${degraded} degraded` : 'All systems healthy'
+  return (
+    <Link to="/platform/health" className={`${base} ${tone}`}>
+      <span className="h-2 w-2 rounded-full bg-current" />
+      {label}
+      <span className="opacity-60">· view</span>
+    </Link>
+  )
+}
 
 function Kpi({ label, value, icon, tone = 'default' }: { label: string; value: string | number; icon: ReactNode; tone?: 'default' | 'good' | 'warning' | 'danger' }) {
   const valueClass =
@@ -43,18 +78,20 @@ export function PlatformDashboardPage() {
   const leads = useLeads()
   const auditLogs = usePlatformAuditLogs()
 
-  const loading = summary.isLoading || platform.isLoading || tenants.isLoading || leads.isLoading || auditLogs.isLoading
-  const isError = summary.isError || platform.isError || tenants.isError || leads.isError || auditLogs.isError
-
-  if (loading) {
+  // Only the two aggregate endpoints that feed the headline KPIs are load-critical; the tenant,
+  // lead, and audit panels below degrade independently via <AsyncPanel> so one slow/failing list
+  // no longer blanks the whole command centre.
+  if (summary.isLoading || platform.isLoading) {
     return <Spinner label="Loading command centre" />
   }
 
-  if (isError || !summary.data || !platform.data) {
+  if (summary.isError || platform.isError || !summary.data || !platform.data) {
     return (
       <EmptyState
         title="Command centre unavailable"
         description="The platform overview could not be loaded."
+        actionLabel="Retry"
+        onAction={() => { void summary.refetch(); void platform.refetch() }}
       />
     )
   }
@@ -96,6 +133,7 @@ export function PlatformDashboardPage() {
       <PageHeader
         title="Platform Owner Overview"
         subtitle="Operational command centre for tenant lifecycle, leads, licensing, and finance."
+        primaryAction={<div className="flex items-center gap-3"><LastUpdated at={summary.dataUpdatedAt} /><HealthChip /></div>}
       />
 
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -123,12 +161,16 @@ export function PlatformDashboardPage() {
               </Link>
             </div>
             <div className="mt-4">
-              <DataTable<PlatformTenantListItem>
-                columns={tenantColumns}
-                data={recentTenants}
-                emptyTitle="No tenants yet"
-                emptyDescription="Tenant workspaces will appear here after creation."
-              />
+              <AsyncPanel query={tenants} loadingLabel="Loading tenants" errorTitle="Tenants unavailable" errorDescription="Recent tenants could not be loaded.">
+                {() => (
+                  <DataTable<PlatformTenantListItem>
+                    columns={tenantColumns}
+                    data={recentTenants}
+                    emptyTitle="No tenants yet"
+                    emptyDescription="Tenant workspaces will appear here after creation."
+                  />
+                )}
+              </AsyncPanel>
             </div>
           </div>
 
@@ -144,12 +186,16 @@ export function PlatformDashboardPage() {
               </Link>
             </div>
             <div className="mt-4">
-              <DataTable<PlatformLeadListItem>
-                columns={leadColumns}
-                data={recentLeads}
-                emptyTitle="No leads yet"
-                emptyDescription="Public workspace requests will appear here."
-              />
+              <AsyncPanel query={leads} loadingLabel="Loading leads" errorTitle="Leads unavailable" errorDescription="Recent leads could not be loaded.">
+                {() => (
+                  <DataTable<PlatformLeadListItem>
+                    columns={leadColumns}
+                    data={recentLeads}
+                    emptyTitle="No leads yet"
+                    emptyDescription="Public workspace requests will appear here."
+                  />
+                )}
+              </AsyncPanel>
             </div>
           </div>
         </div>
@@ -166,7 +212,8 @@ export function PlatformDashboardPage() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
-            {attentionTenants.length === 0 ? (
+            <AsyncPanel query={tenants} loadingLabel="Loading tenants" errorTitle="Unavailable" errorDescription="The attention queue could not be loaded.">
+              {() => attentionTenants.length === 0 ? (
               <div className="mt-4">
                 <EmptyState title="No attention required" description="No tenants are expiring, suspended, or overdue right now." />
               </div>
@@ -188,6 +235,7 @@ export function PlatformDashboardPage() {
                 ))}
               </div>
             )}
+            </AsyncPanel>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -201,7 +249,8 @@ export function PlatformDashboardPage() {
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
-            {auditRows.length === 0 ? (
+            <AsyncPanel query={auditLogs} loadingLabel="Loading activity" errorTitle="Unavailable" errorDescription="Recent activity could not be loaded.">
+              {() => auditRows.length === 0 ? (
               <div className="mt-4">
                 <EmptyState title="No audit entries yet" description="Platform actions will appear here." />
               </div>
@@ -222,6 +271,7 @@ export function PlatformDashboardPage() {
                 ))}
               </div>
             )}
+            </AsyncPanel>
           </div>
         </div>
       </section>

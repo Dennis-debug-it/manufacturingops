@@ -3,9 +3,11 @@ using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
+using Ecosys.Shared.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Ecosys.Api.Controllers;
 
@@ -20,6 +22,7 @@ public sealed class PreventiveMaintenanceController(
     IAuditLogService auditLogService,
     IBranchAccessService branchAccessService,
     IPmWorkOrderChecklistService pmWorkOrderChecklistService,
+    IOptions<TimeZoneOptions> timeZoneOptions,
     ILogger<PreventiveMaintenanceController> logger) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
@@ -39,7 +42,9 @@ public sealed class PreventiveMaintenanceController(
     public async Task<ActionResult<IReadOnlyCollection<PreventiveMaintenancePlanResponse>>> GetDue([FromQuery] Guid? branchId, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
-        var now = DateTime.UtcNow.Date;
+        // "Due today" is a calendar-date decision — use the operator's local day, not UTC, so a PM
+        // due today isn't shown a day late near the UTC/EAT midnight boundary (F6-02).
+        var now = DateTimeNormalizationHelper.LocalToday(timeZoneOptions.Value.DefaultTimeZone);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         var plans = await Query()
             .WhereAccessible(scope, x => x.BranchId)
@@ -122,6 +127,19 @@ public sealed class PreventiveMaintenanceController(
             throw new BusinessRuleException("Plan asset was not found.");
         }
 
+        // Idempotency guard (F6-01): don't generate a second work order while one is still open for
+        // this plan — matches the background PmSchedulerWorker so a double-click or retry can't
+        // create duplicate PM work orders.
+        var hasOpenWorkOrder = await dbContext.WorkOrders.AnyAsync(
+            x => x.PreventiveMaintenancePlanId == plan.Id
+                && x.Status != "Completed"
+                && x.Status != "Cancelled",
+            cancellationToken);
+        if (hasOpenWorkOrder)
+        {
+            throw new BusinessRuleException("An open preventive-maintenance work order already exists for this plan. Complete or cancel it before generating another.");
+        }
+
         var workOrder = new WorkOrder
         {
             TenantId = TenantId,
@@ -166,7 +184,7 @@ public sealed class PreventiveMaintenanceController(
         var nextIntervalMonths = ToServiceIntervalMonths(plan.Frequency);
         if (nextIntervalMonths.HasValue)
         {
-            var seedDate = plan.NextPmDate?.Date ?? DateTime.UtcNow.Date;
+            var seedDate = plan.NextPmDate?.Date ?? DateTimeNormalizationHelper.LocalToday(timeZoneOptions.Value.DefaultTimeZone);
             plan.NextPmDate = seedDate.AddMonths(nextIntervalMonths.Value);
         }
         await dbContext.SaveChangesAsync(cancellationToken);

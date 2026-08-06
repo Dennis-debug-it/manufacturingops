@@ -3,13 +3,25 @@ export interface CsvParseOptions {
   skipEmptyLines?: boolean
 }
 
+/**
+ * Prepares a value for safe inclusion inside a quoted CSV field: neutralizes CSV/formula
+ * injection (a leading `= + - @`, tab or CR is escaped with a `'` so spreadsheet apps treat the
+ * cell as text, not a formula) and doubles embedded quotes per RFC 4180. The caller wraps the
+ * result in surrounding quotes.
+ */
+export function escapeCsvField(value: string | number | boolean | null | undefined): string {
+  const raw = String(value ?? '')
+  const neutralized = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw
+  return neutralized.replace(/"/g, '""')
+}
+
 export function downloadCsv(fileName: string, rows: Array<Record<string, string | number | boolean | null | undefined>>) {
   if (rows.length === 0) {
     return
   }
 
   const headers = Array.from(new Set(rows.flatMap((row) => Object.keys(row))))
-  const escapeValue = (value: string | number | boolean | null | undefined) => `"${String(value ?? '').replace(/"/g, '""')}"`
+  const escapeValue = (value: string | number | boolean | null | undefined) => `"${escapeCsvField(value)}"`
   const csv = [
     headers.join(','),
     ...rows.map((row) => headers.map((header) => escapeValue(row[header])).join(',')),

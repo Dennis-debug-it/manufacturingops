@@ -15,7 +15,7 @@ import type { LeadStatus } from './types'
 export function LeadDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: lead, isLoading, isError } = useLead(id)
+  const { data: lead, isLoading, isError, refetch } = useLead(id)
   const updateStatus = useUpdateLeadStatus(id ?? '')
   const updateNotes = useUpdateLeadNotes(id ?? '')
 
@@ -75,7 +75,7 @@ export function LeadDetailPage() {
   }
 
   if (isError || !lead || !id) {
-    return <EmptyState title="Lead unavailable" description="This lead could not be loaded." />
+    return <EmptyState title="Lead unavailable" description="This lead could not be loaded." {...(id ? { actionLabel: 'Retry', onAction: () => { void refetch() } } : {})} />
   }
 
   return (

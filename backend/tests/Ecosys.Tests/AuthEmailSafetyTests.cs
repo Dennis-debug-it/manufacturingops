@@ -614,7 +614,7 @@ public sealed class AuthEmailSafetyTests
         var service = CreateAuthService(dbContext);
 
         var error = await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            service.LoginAsync("login.user@tenant.test", "WrongPassword123!", CancellationToken.None));
+            service.LoginAsync("login.user@tenant.test", "WrongPassword123!", cancellationToken: CancellationToken.None));
 
         Assert.Equal("Invalid email or password.", error.Message);
         Assert.Equal(401, error.StatusCode);
@@ -629,7 +629,7 @@ public sealed class AuthEmailSafetyTests
         var service = CreateAuthService(dbContext);
 
         await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            service.LoginAsync("inactive.user@tenant.test", "WrongPassword123!", CancellationToken.None));
+            service.LoginAsync("inactive.user@tenant.test", "WrongPassword123!", cancellationToken: CancellationToken.None));
 
         var refreshedUser = await dbContext.Users.SingleAsync(x => x.Id == user.Id);
         Assert.Equal(1, refreshedUser.FailedLoginCount);
@@ -648,7 +648,7 @@ public sealed class AuthEmailSafetyTests
         for (var attempt = 0; attempt < 5; attempt++)
         {
             await Assert.ThrowsAsync<UnauthorizedException>(() =>
-                service.LoginAsync("lockout.user@tenant.test", "WrongPassword123!", CancellationToken.None));
+                service.LoginAsync("lockout.user@tenant.test", "WrongPassword123!", cancellationToken: CancellationToken.None));
         }
 
         var refreshedUser = await dbContext.Users.SingleAsync(x => x.Id == user.Id);
@@ -670,7 +670,7 @@ public sealed class AuthEmailSafetyTests
         await dbContext.SaveChangesAsync();
         var service = CreateAuthService(dbContext);
 
-        var result = await service.LoginAsync("reset.login@tenant.test", "OriginalPass123!", CancellationToken.None);
+        var result = await service.LoginAsync("reset.login@tenant.test", "OriginalPass123!", cancellationToken: CancellationToken.None);
 
         Assert.NotEmpty(result.Token);
 
@@ -689,9 +689,9 @@ public sealed class AuthEmailSafetyTests
         var service = CreateAuthService(dbContext);
 
         var wrongPasswordError = await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            service.LoginAsync("known.user@tenant.test", "WrongPassword123!", CancellationToken.None));
+            service.LoginAsync("known.user@tenant.test", "WrongPassword123!", cancellationToken: CancellationToken.None));
         var unknownUserError = await Assert.ThrowsAsync<UnauthorizedException>(() =>
-            service.LoginAsync("missing.user@tenant.test", "WrongPassword123!", CancellationToken.None));
+            service.LoginAsync("missing.user@tenant.test", "WrongPassword123!", cancellationToken: CancellationToken.None));
 
         Assert.Equal("Invalid email or password.", wrongPasswordError.Message);
         Assert.Equal(wrongPasswordError.Message, unknownUserError.Message);
@@ -812,7 +812,8 @@ public sealed class AuthEmailSafetyTests
             new FakeTenantSecurityPolicyService(),
             new NoOpAuditLogService(),
             deliveryService,
-            new TemporaryPasswordService());
+            new TemporaryPasswordService(),
+            new FakeUserSessionService(dbContext));
     }
 
     private static AuthController CreateAuthController(AppDbContext dbContext, Guid tenantId, Guid userId, MvpAuthService authService, Guid? sessionId = null)
@@ -1099,6 +1100,42 @@ public sealed class AuthEmailSafetyTests
                 .Where(x => x.UserId == userId && x.Id != currentSessionId)
                 .ToListAsync(cancellationToken);
 
+            foreach (var session in sessions)
+            {
+                session.IsRevoked = true;
+                session.RevokedAt = DateTime.UtcNow;
+                session.LogoutAt = session.RevokedAt;
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return sessions.Count;
+        }
+
+        public async Task<int> RevokeSessionsForRolesAsync(Guid tenantId, IReadOnlyCollection<string> roles, string? reason = null, CancellationToken cancellationToken = default)
+        {
+            if (roles.Count == 0)
+            {
+                return 0;
+            }
+
+            var normalized = roles.Select(r => r.ToLower()).ToArray();
+            var userIds = await dbContext.Users
+                .Where(x => x.TenantId == tenantId && normalized.Contains(x.Role.ToLower()))
+                .Select(x => x.Id)
+                .ToListAsync(cancellationToken);
+            return await RevokeSessionsForUsersAsync(userIds, reason, cancellationToken);
+        }
+
+        public async Task<int> RevokeSessionsForUsersAsync(IReadOnlyCollection<Guid> userIds, string? reason = null, CancellationToken cancellationToken = default)
+        {
+            if (userIds.Count == 0)
+            {
+                return 0;
+            }
+
+            var sessions = await dbContext.UserSessions
+                .Where(x => userIds.Contains(x.UserId) && !x.IsRevoked)
+                .ToListAsync(cancellationToken);
             foreach (var session in sessions)
             {
                 session.IsRevoked = true;

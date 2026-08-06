@@ -210,58 +210,7 @@ public sealed class TimeAttendanceController(
         userAccessService.EnsureAdminOrAnyPermission(PermissionNames.AttendanceView, PermissionNames.AttendanceManage);
 
         var technician = await LoadTechnicianAsync(technicianId, cancellationToken);
-        var (start, end, label) = ResolvePeriod(view ?? "week", from, to);
-        var settings = await GetOrDefaultSettingsAsync(cancellationToken);
-
-        var entries = await dbContext.AttendanceEntries
-            .Where(x => x.TenantId == TenantId && x.TechnicianId == technicianId && x.WorkDate >= start && x.WorkDate <= end)
-            .OrderBy(x => x.WorkDate).ThenBy(x => x.ClockInAt)
-            .ToListAsync(cancellationToken);
-
-        var (total, overtime) = ComputeHours(entries, settings.OvertimeThresholdHoursPerDay);
-
-        var approvedLeaveDays = await dbContext.LeaveRequests
-            .Where(x => x.TenantId == TenantId && x.TechnicianId == technicianId && x.Status == "Approved"
-                && x.StartDate <= end && x.EndDate >= start)
-            .ToListAsync(cancellationToken);
-        var leaveHours = (double)(approvedLeaveDays.Sum(x => OverlapDays(x.StartDate, x.EndDate, start, end)) * settings.OvertimeThresholdHoursPerDay);
-
-        var daily = entries
-            .GroupBy(x => x.WorkDate)
-            .Select(g =>
-            {
-                var dayHours = g.Sum(EntryHours);
-                var first = g.OrderBy(x => x.ClockInAt).First();
-                var last = g.OrderByDescending(x => x.ClockInAt).First();
-                return new TimesheetDailyEntryResponse(
-                    g.Key.ToString("yyyy-MM-dd"),
-                    first.ClockInAt,
-                    last.ClockOutAt,
-                    g.Sum(x => x.BreakMinutes),
-                    Math.Round(dayHours, 2),
-                    first.Note);
-            })
-            .OrderBy(x => x.Date)
-            .ToList();
-
-        var audit = entries.SelectMany(entry =>
-        {
-            var events = new List<TimesheetAuditEntryResponse>
-            {
-                new(entry.ClockInAt, technician.FullName, $"Clocked in ({entry.WorkDate:dd MMM})"),
-            };
-            if (entry.ClockOutAt is not null)
-                events.Add(new(entry.ClockOutAt.Value, technician.FullName, $"Clocked out ({entry.WorkDate:dd MMM})"));
-            return events;
-        })
-        .OrderBy(x => x.At)
-        .ToList();
-
-        var status = overtime > 0 ? "Flagged" : "Pending";
-        return Ok(new TimesheetDetailResponse(
-            technician.Id, technician.Id, technician.FullName, label,
-            Math.Round(total, 2), Math.Round(overtime, 2), Math.Round(leaveHours, 2), status,
-            daily, audit));
+        return Ok(await BuildTimesheetDetailAsync(technician, view, from, to, cancellationToken));
     }
 
     // ── Leave ────────────────────────────────────────────────────────────────
@@ -339,6 +288,152 @@ public sealed class TimeAttendanceController(
         await auditLogService.LogAsync(TenantId, UserId, "attendance.leave.decided", nameof(LeaveRequest), leave.Id.ToString(), $"Leave {leave.Status.ToLowerInvariant()} for {leave.Technician?.FullName}", cancellationToken);
 
         return NoContent();
+    }
+
+    // ── Self-service (technician) ─────────────────────────────────────────────
+    // These endpoints are available to any authenticated user and always act on the
+    // caller's own linked technician profile. Approvals stay with managers (DecideLeave).
+
+    [HttpGet("leave-types")]
+    public async Task<ActionResult<IReadOnlyList<LeaveTypeModel>>> ListLeaveTypes(CancellationToken cancellationToken)
+        => Ok(await GetOrDefaultLeaveTypesAsync(cancellationToken));
+
+    [HttpGet("leave/mine")]
+    public async Task<ActionResult<IReadOnlyCollection<LeaveRequestResponse>>> ListMyLeave(CancellationToken cancellationToken)
+    {
+        var technician = await ResolveCallerTechnicianAsync(cancellationToken);
+        var items = await dbContext.LeaveRequests
+            .Include(x => x.Technician)
+            .Where(x => x.TenantId == TenantId && x.TechnicianId == technician.Id)
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+        return Ok(items.Select(MapLeave).ToList());
+    }
+
+    [HttpPost("leave/mine")]
+    public async Task<ActionResult<LeaveRequestResponse>> CreateMyLeave(
+        [FromBody] CreateMyLeaveRequest request, CancellationToken cancellationToken)
+    {
+        var technician = await ResolveCallerTechnicianAsync(cancellationToken);
+
+        if (request.EndDate < request.StartDate)
+            throw new BusinessRuleException("End date cannot be before start date.");
+        if (string.IsNullOrWhiteSpace(request.LeaveType))
+            throw new BusinessRuleException("Leave type is required.");
+
+        var leave = new LeaveRequest
+        {
+            TenantId = TenantId,
+            TechnicianId = technician.Id,
+            LeaveTypeCode = request.LeaveType.Trim(),
+            StartDate = request.StartDate,
+            EndDate = request.EndDate,
+            TotalDays = request.EndDate.DayNumber - request.StartDate.DayNumber + 1,
+            Reason = request.Reason?.Trim(),
+        };
+        dbContext.LeaveRequests.Add(leave);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "attendance.leave.requested", nameof(LeaveRequest), leave.Id.ToString(), $"Leave self-requested by {technician.FullName} ({leave.LeaveTypeCode})", cancellationToken);
+
+        leave.Technician = technician;
+        return Ok(MapLeave(leave));
+    }
+
+    [HttpGet("me/status")]
+    public async Task<ActionResult<MyAttendanceStatusResponse>> GetMyStatus(CancellationToken cancellationToken)
+    {
+        var technician = await ResolveCallerTechnicianAsync(cancellationToken);
+        var open = await FindOpenEntryAsync(technician.Id, cancellationToken);
+        var status = open is null || open.Status == "ClockedOut" ? "NotClockedIn" : open.Status;
+        return Ok(new MyAttendanceStatusResponse(
+            technician.Id, technician.FullName, status,
+            status == "NotClockedIn" ? null : open?.ClockInAt, open?.LastLocation));
+    }
+
+    [HttpPost("me/clock-in")]
+    public async Task<ActionResult<MyAttendanceStatusResponse>> ClockInMine(
+        [FromBody] SelfClockRequest request, CancellationToken cancellationToken)
+    {
+        var technician = await ResolveCallerTechnicianAsync(cancellationToken);
+        if (await FindOpenEntryAsync(technician.Id, cancellationToken) is not null)
+            throw new BusinessRuleException("You are already clocked in.");
+
+        var now = DateTime.UtcNow;
+        var entry = new AttendanceEntry
+        {
+            TenantId = TenantId,
+            TechnicianId = technician.Id,
+            WorkDate = DateOnly.FromDateTime(now),
+            ClockInAt = now,
+            Status = "ClockedIn",
+            LastLocation = request.Location?.Trim(),
+        };
+        dbContext.AttendanceEntries.Add(entry);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "attendance.clock_in", nameof(AttendanceEntry), entry.Id.ToString(), $"{technician.FullName} clocked in", cancellationToken);
+
+        return Ok(new MyAttendanceStatusResponse(technician.Id, technician.FullName, entry.Status, entry.ClockInAt, entry.LastLocation));
+    }
+
+    [HttpPost("me/clock-out")]
+    public async Task<ActionResult<MyAttendanceStatusResponse>> ClockOutMine(CancellationToken cancellationToken)
+    {
+        var technician = await ResolveCallerTechnicianAsync(cancellationToken);
+        var entry = await FindOpenEntryAsync(technician.Id, cancellationToken)
+            ?? throw new BusinessRuleException("You are not clocked in.");
+
+        var now = DateTime.UtcNow;
+        if (entry.Status == "OnBreak" && entry.BreakStartedAt is not null)
+        {
+            entry.BreakMinutes += (int)Math.Round((now - entry.BreakStartedAt.Value).TotalMinutes);
+            entry.BreakStartedAt = null;
+        }
+        entry.ClockOutAt = now;
+        entry.Status = "ClockedOut";
+        entry.UpdatedAt = now;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "attendance.clock_out", nameof(AttendanceEntry), entry.Id.ToString(), $"{technician.FullName} clocked out", cancellationToken);
+
+        return Ok(new MyAttendanceStatusResponse(technician.Id, technician.FullName, "NotClockedIn", null, entry.LastLocation));
+    }
+
+    [HttpPost("me/status")]
+    public async Task<ActionResult<MyAttendanceStatusResponse>> SetMyStatus(
+        [FromBody] SelfStatusRequest request, CancellationToken cancellationToken)
+    {
+        var technician = await ResolveCallerTechnicianAsync(cancellationToken);
+        var allowed = new[] { "ClockedIn", "OnBreak", "Travelling" };
+        if (!allowed.Contains(request.Status))
+            throw new BusinessRuleException("Status must be ClockedIn, OnBreak, or Travelling.");
+
+        var entry = await FindOpenEntryAsync(technician.Id, cancellationToken)
+            ?? throw new BusinessRuleException("You are not clocked in.");
+
+        var now = DateTime.UtcNow;
+        if (entry.Status == "OnBreak" && request.Status != "OnBreak" && entry.BreakStartedAt is not null)
+        {
+            entry.BreakMinutes += (int)Math.Round((now - entry.BreakStartedAt.Value).TotalMinutes);
+            entry.BreakStartedAt = null;
+        }
+        if (request.Status == "OnBreak" && entry.Status != "OnBreak")
+            entry.BreakStartedAt = now;
+
+        entry.Status = request.Status;
+        if (!string.IsNullOrWhiteSpace(request.Location))
+            entry.LastLocation = request.Location.Trim();
+        entry.UpdatedAt = now;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(new MyAttendanceStatusResponse(technician.Id, technician.FullName, entry.Status, entry.ClockInAt, entry.LastLocation));
+    }
+
+    [HttpGet("timesheets/mine")]
+    public async Task<ActionResult<TimesheetDetailResponse>> GetMyTimesheet(
+        [FromQuery] string? view, [FromQuery] DateOnly? from, [FromQuery] DateOnly? to, CancellationToken cancellationToken)
+    {
+        var technician = await ResolveCallerTechnicianAsync(cancellationToken);
+        return Ok(await BuildTimesheetDetailAsync(technician, view, from, to, cancellationToken));
     }
 
     // ── Reports ──────────────────────────────────────────────────────────────
@@ -470,6 +565,68 @@ public sealed class TimeAttendanceController(
         await dbContext.Technicians
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == technicianId, cancellationToken)
         ?? throw new NotFoundException("Technician not found.");
+
+    private async Task<Technician> ResolveCallerTechnicianAsync(CancellationToken cancellationToken) =>
+        await dbContext.Technicians
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.UserId == UserId, cancellationToken)
+        ?? throw new BusinessRuleException("Your account is not linked to a technician profile. Ask an administrator to link it before using time & attendance.");
+
+    private async Task<TimesheetDetailResponse> BuildTimesheetDetailAsync(
+        Technician technician, string? view, DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
+    {
+        var (start, end, label) = ResolvePeriod(view ?? "week", from, to);
+        var settings = await GetOrDefaultSettingsAsync(cancellationToken);
+
+        var entries = await dbContext.AttendanceEntries
+            .Where(x => x.TenantId == TenantId && x.TechnicianId == technician.Id && x.WorkDate >= start && x.WorkDate <= end)
+            .OrderBy(x => x.WorkDate).ThenBy(x => x.ClockInAt)
+            .ToListAsync(cancellationToken);
+
+        var (total, overtime) = ComputeHours(entries, settings.OvertimeThresholdHoursPerDay);
+
+        var approvedLeaveDays = await dbContext.LeaveRequests
+            .Where(x => x.TenantId == TenantId && x.TechnicianId == technician.Id && x.Status == "Approved"
+                && x.StartDate <= end && x.EndDate >= start)
+            .ToListAsync(cancellationToken);
+        var leaveHours = (double)(approvedLeaveDays.Sum(x => OverlapDays(x.StartDate, x.EndDate, start, end)) * settings.OvertimeThresholdHoursPerDay);
+
+        var daily = entries
+            .GroupBy(x => x.WorkDate)
+            .Select(g =>
+            {
+                var dayHours = g.Sum(EntryHours);
+                var first = g.OrderBy(x => x.ClockInAt).First();
+                var last = g.OrderByDescending(x => x.ClockInAt).First();
+                return new TimesheetDailyEntryResponse(
+                    g.Key.ToString("yyyy-MM-dd"),
+                    first.ClockInAt,
+                    last.ClockOutAt,
+                    g.Sum(x => x.BreakMinutes),
+                    Math.Round(dayHours, 2),
+                    first.Note);
+            })
+            .OrderBy(x => x.Date)
+            .ToList();
+
+        var audit = entries.SelectMany(entry =>
+        {
+            var events = new List<TimesheetAuditEntryResponse>
+            {
+                new(entry.ClockInAt, technician.FullName, $"Clocked in ({entry.WorkDate:dd MMM})"),
+            };
+            if (entry.ClockOutAt is not null)
+                events.Add(new(entry.ClockOutAt.Value, technician.FullName, $"Clocked out ({entry.WorkDate:dd MMM})"));
+            return events;
+        })
+        .OrderBy(x => x.At)
+        .ToList();
+
+        var status = overtime > 0 ? "Flagged" : "Pending";
+        return new TimesheetDetailResponse(
+            technician.Id, technician.Id, technician.FullName, label,
+            Math.Round(total, 2), Math.Round(overtime, 2), Math.Round(leaveHours, 2), status,
+            daily, audit);
+    }
 
     private async Task<AttendanceEntry?> FindOpenEntryAsync(Guid technicianId, CancellationToken cancellationToken) =>
         await dbContext.AttendanceEntries
@@ -615,6 +772,16 @@ public sealed record LeaveRequestResponse(
 
 public sealed record CreateLeaveRequestRequest(
     Guid TechnicianId, string LeaveType, DateOnly StartDate, DateOnly EndDate, string? Reason = null);
+
+public sealed record CreateMyLeaveRequest(
+    string LeaveType, DateOnly StartDate, DateOnly EndDate, string? Reason = null);
+
+public sealed record SelfClockRequest(string? Location = null);
+
+public sealed record SelfStatusRequest(string Status, string? Location = null);
+
+public sealed record MyAttendanceStatusResponse(
+    Guid TechnicianId, string TechnicianName, string Status, DateTime? ClockInAt, string? LastLocation);
 
 public sealed record LeaveDecisionRequest(bool Approve, string? Note = null);
 

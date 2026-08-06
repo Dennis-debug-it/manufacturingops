@@ -56,6 +56,7 @@ export function PlatformApp() {
           <Route path="finance" element={<FinancePage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="audit" element={<AuditPage />} />
+          <Route path="health" element={<HealthSettingsPage />} />
 
           <Route path="settings" element={<SettingsPage />}>
             <Route index element={<PlatformSettingsOverviewPage />} />

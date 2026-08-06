@@ -3,10 +3,7 @@ import { cn } from '../../../shared/utils/cn'
 
 const tabs = [
   { to: '/team/users', label: 'Users', match: ['/team', '/team/users'] },
-  { to: '/team/permission-groups', label: 'Permission Groups', match: ['/team/permission-groups'] },
-  { to: '/team/capabilities', label: 'Capabilities', match: ['/team/capabilities', '/team/roles'] },
-  { to: '/team/access-scopes', label: 'Access Scopes', match: ['/team/access-scopes'] },
-  { to: '/team/approval-limits', label: 'Approval Limits', match: ['/team/approval-limits'] },
+  { to: '/team/capabilities', label: 'Roles & Permissions', match: ['/team/capabilities', '/team/roles'] },
   { to: '/team/audit-history', label: 'Audit History', match: ['/team/audit-history'] },
 ]
 

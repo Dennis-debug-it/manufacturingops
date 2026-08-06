@@ -18,6 +18,7 @@ public sealed class RolePermissionsController(
     ITenantContext tenantContext,
     IUserAccessService userAccessService,
     IRolePermissionService rolePermissionService,
+    IUserSessionService userSessionService,
     IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
@@ -50,6 +51,11 @@ public sealed class RolePermissionsController(
             $"Role permissions updated for: {string.Join(", ", updates.Keys)}.",
             severity: "Warning",
             cancellationToken: cancellationToken);
+
+        // Permissions are baked into each user's JWT at login; revoke the sessions of everyone
+        // holding a changed role so the new matrix takes effect on their next sign-in rather than
+        // lingering for up to the token lifetime.
+        await userSessionService.RevokeSessionsForRolesAsync(TenantId, updates.Keys.ToArray(), "Role permissions changed", cancellationToken);
 
         var rows = await rolePermissionService.GetMatrixAsync(TenantId, cancellationToken);
         return Ok(BuildResponse(rows));

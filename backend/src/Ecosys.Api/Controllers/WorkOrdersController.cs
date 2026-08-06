@@ -1,4 +1,6 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
+using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -41,7 +43,7 @@ public sealed class WorkOrdersController(
     };
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyCollection<WorkOrderResponse>>> GetAll(
+    public async Task<IActionResult> GetAll(
         [FromQuery] Guid? branchId,
         [FromQuery] string? status,
         [FromQuery] string? workType,
@@ -52,29 +54,86 @@ public sealed class WorkOrdersController(
         [FromQuery] string? search,
         [FromQuery] DateTime? fromDate,
         [FromQuery] DateTime? toDate,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
         CancellationToken cancellationToken)
     {
         EnsureGeneralWorkspaceAccess(PermissionNames.CanViewWorkOrders);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
 
-        var workOrders = await QueryWorkOrders(scope)
-            .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync(cancellationToken);
+        // Translatable filters run in SQL. Status is expanded to the set of stored values that
+        // normalize to the requested status (RawStatusesMatching), so legacy/synonym rows still
+        // match while the filter stays a DB-level IN-list.
+        var query = QueryWorkOrders(scope);
+
+        if (assignmentGroupId.HasValue)
+        {
+            query = query.Where(x => x.AssignmentGroupId == assignmentGroupId);
+        }
+
+        if (technicianId.HasValue)
+        {
+            query = query.Where(x => x.TechnicianAssignments.Any(assignment => assignment.TechnicianId == technicianId));
+        }
+
+        if (unassigned.HasValue)
+        {
+            query = unassigned.Value
+                ? query.Where(x => x.AssignmentGroupId == null && !x.TechnicianAssignments.Any())
+                : query.Where(x => x.AssignmentGroupId != null || x.TechnicianAssignments.Any());
+        }
+
+        if (fromDate.HasValue)
+        {
+            query = query.Where(x => x.CreatedAt >= fromDate.Value);
+        }
+
+        if (toDate.HasValue)
+        {
+            query = query.Where(x => x.CreatedAt <= toDate.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            var matchingStatuses = WorkOrderStatuses.RawStatusesMatching(status);
+            query = query.Where(x => matchingStatuses.Contains(x.Status));
+        }
+
+        var ordered = query.OrderByDescending(x => x.CreatedAt);
+
+        // workType/assignmentStatus/search are derived in C# (status/type normalization, the
+        // assignment-status precedence, and the assignment-summary component of search aren't
+        // SQL-translatable), so they force a materialize-then-filter path. When none of them are
+        // used, the query is fully filtered in SQL and pages at the database.
+        var needsInMemoryFilter = !string.IsNullOrWhiteSpace(workType)
+            || !string.IsNullOrWhiteSpace(assignmentStatus)
+            || !string.IsNullOrWhiteSpace(search);
+
+        if (!needsInMemoryFilter)
+        {
+            if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
+            {
+                var pagedWorkOrders = await ordered.ToPagedResultAsync(page, pageSize, cancellationToken);
+                return Ok(pagedWorkOrders.Map(Map));
+            }
+
+            var all = await ordered.ToListAsync(cancellationToken);
+            return Ok(all.Select(Map).ToList());
+        }
+
+        var workOrders = await ordered.ToListAsync(cancellationToken);
 
         var filtered = workOrders
-            .Where(x => string.IsNullOrWhiteSpace(status) || string.Equals(workOrderLifecycleService.NormalizeStatus(x.Status), workOrderLifecycleService.NormalizeStatus(status), StringComparison.OrdinalIgnoreCase))
             .Where(x => string.IsNullOrWhiteSpace(workType) || string.Equals(WorkOrderTypes.Normalize(x.WorkType, WorkOrderTypes.CorrectiveMaintenance), WorkOrderTypes.Normalize(workType, WorkOrderTypes.CorrectiveMaintenance), StringComparison.OrdinalIgnoreCase))
-            .Where(x => !assignmentGroupId.HasValue || x.AssignmentGroupId == assignmentGroupId)
-            .Where(x => !technicianId.HasValue || x.TechnicianAssignments.Any(assignment => assignment.TechnicianId == technicianId))
-            .Where(x => !unassigned.HasValue || (unassigned.Value
-                ? x.AssignmentGroupId is null && !x.TechnicianAssignments.Any()
-                : x.AssignmentGroupId is not null || x.TechnicianAssignments.Any()))
             .Where(x => string.IsNullOrWhiteSpace(assignmentStatus) || string.Equals(GetAssignmentStatus(x), assignmentStatus, StringComparison.OrdinalIgnoreCase))
             .Where(x => string.IsNullOrWhiteSpace(search) || $"{x.WorkOrderNumber} {x.Title} {x.Client?.ClientName} {x.Asset?.AssetName} {BuildAssignmentSummary(x)}".Contains(search, StringComparison.OrdinalIgnoreCase))
-            .Where(x => !fromDate.HasValue || x.CreatedAt >= fromDate.Value)
-            .Where(x => !toDate.HasValue || x.CreatedAt <= toDate.Value)
             .Select(Map)
             .ToList();
+
+        if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
+        {
+            return Ok(filtered.ToPagedResult(page, pageSize));
+        }
 
         return Ok(filtered);
     }
@@ -2244,20 +2303,20 @@ public sealed record CreateWorkOrderRequest(
     Guid? SystemId,
     Guid? AssetId,
     Guid? AssignmentGroupId,
-    string? AssignmentType,
+    [property: StringLength(40)] string? AssignmentType,
     Guid? AssignedTechnicianId,
     IReadOnlyCollection<Guid>? AssignedTechnicianIds,
     Guid? LeadTechnicianId,
-    string? AssignmentNotes,
-    string Title,
-    string? Description,
-    string? Priority,
+    [property: StringLength(2000)] string? AssignmentNotes,
+    [property: StringLength(300)] string Title,
+    [property: StringLength(5000)] string? Description,
+    [property: StringLength(40)] string? Priority,
     DateTime? DueDate,
-    string? WorkType,
+    [property: StringLength(60)] string? WorkType,
     bool IsPreventiveMaintenance,
     Guid? PmTemplateId,
     bool NotifyClient = true,
-    string? ClientContactEmail = null,
+    [property: StringLength(256)] string? ClientContactEmail = null,
     Guid? TemplateId = null,
     Guid? ParentWorkOrderId = null);
 

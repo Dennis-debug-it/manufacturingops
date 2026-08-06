@@ -49,6 +49,7 @@ public sealed class TemplateAndPmAccessTests
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpBranchAccessService(),
             new NoOpPmChecklistService(),
+            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.TimeZoneOptions()),
             new NoOpLogger<PreventiveMaintenanceController>());
 
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetAll(null, CancellationToken.None));
@@ -99,6 +100,7 @@ public sealed class TemplateAndPmAccessTests
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpBranchAccessService(),
             new TemplateLookupPmChecklistService(template),
+            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.TimeZoneOptions()),
             new NoOpLogger<PreventiveMaintenanceController>());
 
         var createResult = await controller.Create(
@@ -186,7 +188,7 @@ public sealed class TemplateAndPmAccessTests
             new NoOpSlaService(),
             new NoOpWorkflowService());
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetAll(null, null, null, null, null, null, null, null, null, null, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetAll(null, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None));
     }
 
     [Fact]
@@ -256,8 +258,8 @@ public sealed class TemplateAndPmAccessTests
             new NoOpSlaService(),
             new NoOpWorkflowService());
 
-        var listResult = await controller.GetAll(null, null, null, null, null, null, null, null, null, null, CancellationToken.None);
-        var listOk = Assert.IsType<OkObjectResult>(listResult.Result);
+        var listResult = await controller.GetAll(null, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None);
+        var listOk = Assert.IsType<OkObjectResult>(listResult);
         var listItems = Assert.IsAssignableFrom<IReadOnlyCollection<WorkOrderResponse>>(listOk.Value);
         Assert.Single(listItems);
 

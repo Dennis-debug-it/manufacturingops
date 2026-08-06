@@ -15,7 +15,7 @@ export function Topbar({ syncingLabel }: TopbarProps) {
   const navigate = useNavigate()
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur lg:px-6">
+    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-slate-200 bg-white shadow-sm px-4 lg:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <Logo variant="mark" className="h-8 w-8 shrink-0 lg:hidden" />
         <div className="truncate text-sm font-medium text-slate-900">{tenant?.companyName ?? 'Ecosys'}</div>

@@ -204,3 +204,93 @@ export function useSaveTimeAttendanceSettings() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings', 'time-attendance'] }),
   })
 }
+
+// ── Technician self-service ──────────────────────────────────────────────────
+// These act on the signed-in user's own linked technician profile.
+
+export interface LeaveType {
+  code: string
+  name: string
+  isPaid: boolean
+  annualAllowanceDays: number
+}
+
+export function useLeaveTypes() {
+  return useQuery({
+    queryKey: ['attendance', 'leave-types'],
+    queryFn: () => api.get<LeaveType[]>('/api/attendance/leave-types'),
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function useMyLeave() {
+  return useQuery({
+    queryKey: ['attendance', 'me', 'leave'],
+    queryFn: () => api.get<LeaveRequestItem[]>('/api/attendance/leave/mine'),
+    staleTime: 30_000,
+  })
+}
+
+export interface ApplyForLeavePayload {
+  leaveType: string
+  startDate: string
+  endDate: string
+  reason?: string | undefined
+}
+
+export function useApplyForLeave() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: ApplyForLeavePayload) => api.post<LeaveRequestItem>('/api/attendance/leave/mine', payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['attendance', 'me', 'leave'] }),
+  })
+}
+
+export interface MyAttendanceStatus {
+  technicianId: string
+  technicianName: string
+  status: AttendanceStatus
+  clockInAt: string | null
+  lastLocation: string | null
+}
+
+export function useMyAttendanceStatus() {
+  return useQuery({
+    queryKey: ['attendance', 'me', 'status'],
+    queryFn: () => api.get<MyAttendanceStatus>('/api/attendance/me/status'),
+    staleTime: 15_000,
+  })
+}
+
+export function useClockInMine() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { location?: string } = {}) => api.post<MyAttendanceStatus>('/api/attendance/me/clock-in', payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['attendance', 'me'] }),
+  })
+}
+
+export function useClockOutMine() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post<MyAttendanceStatus>('/api/attendance/me/clock-out'),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['attendance', 'me'] }),
+  })
+}
+
+export function useSetMyStatus() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { status: Exclude<AttendanceStatus, 'NotClockedIn'>; location?: string }) =>
+      api.post<MyAttendanceStatus>('/api/attendance/me/status', payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['attendance', 'me'] }),
+  })
+}
+
+export function useMyTimesheet(view: TimesheetView = 'week', from?: string, to?: string) {
+  return useQuery({
+    queryKey: ['attendance', 'me', 'timesheet', view, from ?? '', to ?? ''],
+    queryFn: () => api.get<TimesheetDetail>('/api/attendance/timesheets/mine', { view, from, to }),
+    staleTime: 30_000,
+  })
+}

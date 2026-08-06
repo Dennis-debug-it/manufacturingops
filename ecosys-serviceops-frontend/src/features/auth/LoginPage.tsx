@@ -12,6 +12,7 @@ import { Logo } from '../../shared/components/Logo'
 const loginSchema = z.object({
   email: z.string().email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
+  rememberMe: z.boolean().optional(),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
@@ -54,6 +55,7 @@ export function LoginPage() {
     defaultValues: {
       email: '',
       password: '',
+      rememberMe: false,
     },
   })
 
@@ -67,7 +69,7 @@ export function LoginPage() {
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null)
     try {
-      const session = await login(values)
+      const session = await login({ email: values.email, password: values.password, rememberMe: values.rememberMe ?? false })
       navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : '/dashboard', { replace: true })
     } catch (error) {
       setSubmitError(resolveErrorMessage(error))
@@ -121,6 +123,15 @@ export function LoginPage() {
               </div>
               {errors.password ? <p className="mt-2 text-sm text-rose-600">{errors.password.message}</p> : null}
             </div>
+            <label htmlFor="login-remember" className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                id="login-remember"
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                {...register('rememberMe')}
+              />
+              Keep me signed in on this device
+            </label>
             {submitError ? (
               <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {submitError}

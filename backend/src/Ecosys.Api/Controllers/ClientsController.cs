@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -18,9 +20,11 @@ public sealed class ClientsController(
     IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyCollection<ClientResponse>>> GetAll(
+    public async Task<IActionResult> GetAll(
         [FromQuery] string? search,
         [FromQuery] string? status,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
         CancellationToken cancellationToken)
     {
         var normalizedStatus = NormalizeStatusFilter(status);
@@ -51,12 +55,17 @@ public sealed class ClientsController(
                 (x.Location != null && x.Location.ToLower().Contains(searchLower)));
         }
 
-        var clients = await query
-            .OrderBy(x => x.ClientName)
-            .ToListAsync(cancellationToken);
+        var ordered = query.OrderBy(x => x.ClientName);
 
-        var clientIds = clients.Select(x => x.Id).ToList();
-        var counts = await BuildClientCountsAsync(clientIds, cancellationToken);
+        if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
+        {
+            var pagedClients = await ordered.ToPagedResultAsync(page, pageSize, cancellationToken);
+            var pageCounts = await BuildClientCountsAsync(pagedClients.Items.Select(x => x.Id).ToList(), cancellationToken);
+            return Ok(pagedClients.Map(client => Map(client, pageCounts)));
+        }
+
+        var clients = await ordered.ToListAsync(cancellationToken);
+        var counts = await BuildClientCountsAsync(clients.Select(x => x.Id).ToList(), cancellationToken);
 
         return Ok(clients.Select(client => Map(client, counts)).ToList());
     }
@@ -531,18 +540,18 @@ public sealed class ClientsController(
 }
 
 public sealed record UpsertClientRequest(
-    string ClientName,
-    string? ClientType,
-    string? Email,
-    string? Phone,
-    string? Location,
-    string? ContactPerson,
-    string? ContactPhone,
+    [property: StringLength(200)] string ClientName,
+    [property: StringLength(100)] string? ClientType,
+    [property: StringLength(256)] string? Email,
+    [property: StringLength(40)] string? Phone,
+    [property: StringLength(200)] string? Location,
+    [property: StringLength(200)] string? ContactPerson,
+    [property: StringLength(40)] string? ContactPhone,
     Guid? SlaDefinitionId,
     DateTime? ActiveStartDate,
     int? ActiveDurationValue,
-    string? ActiveDurationUnit,
-    string? Notes,
+    [property: StringLength(50)] string? ActiveDurationUnit,
+    [property: StringLength(2000)] string? Notes,
     bool? IsActive);
 
 public sealed record ClientResponse(

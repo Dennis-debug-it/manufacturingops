@@ -2,6 +2,7 @@ import type { AuthSession } from '../types/auth'
 
 const storageKey = 'ecosys.serviceops.session'
 const tokenKey = 'ecosys.serviceops.token'
+const refreshTokenKey = 'ecosys.serviceops.refresh'
 // Tab-scoped (sessionStorage, never shared across tabs) so an impersonation session
 // never overwrites the platform admin's own session in localStorage.
 const impersonationKey = 'ecosys.serviceops.impersonation'
@@ -14,6 +15,7 @@ const impersonationRelayPrefix = 'ecosys.serviceops.impersonation.relay.'
 
 let session: AuthSession | null = null
 let authToken: string | null = null
+let refreshTokenValue: string | null = null
 let logoutHandler: (() => void) | null = null
 
 const hasWindow = () => typeof window !== 'undefined'
@@ -43,6 +45,30 @@ export function getAuthToken() {
   }
   const stored = window.localStorage.getItem(tokenKey)
   authToken = stored
+  return stored
+}
+
+export function setRefreshToken(token: string | null) {
+  refreshTokenValue = token
+  if (!hasWindow()) {
+    return
+  }
+  if (token) {
+    window.localStorage.setItem(refreshTokenKey, token)
+  } else {
+    window.localStorage.removeItem(refreshTokenKey)
+  }
+}
+
+export function getRefreshToken() {
+  if (refreshTokenValue) {
+    return refreshTokenValue
+  }
+  if (!hasWindow()) {
+    return null
+  }
+  const stored = window.localStorage.getItem(refreshTokenKey)
+  refreshTokenValue = stored
   return stored
 }
 
@@ -82,11 +108,13 @@ export function getSession(): AuthSession | null {
 export function clearSession() {
   session = null
   authToken = null
+  refreshTokenValue = null
   if (!hasWindow()) {
     return
   }
   window.localStorage.removeItem(storageKey)
   window.localStorage.removeItem(tokenKey)
+  window.localStorage.removeItem(refreshTokenKey)
 }
 
 export function setLogoutHandler(handler: (() => void) | null) {

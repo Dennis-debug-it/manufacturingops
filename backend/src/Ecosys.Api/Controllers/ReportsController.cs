@@ -1,3 +1,4 @@
+using Ecosys.Api.Common;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
@@ -121,7 +122,7 @@ public sealed class ReportsController(
         foreach (var wo in wos)
         {
             var onTime = wo.CompletedAt.HasValue && wo.DueDate.HasValue ? (wo.CompletedAt <= wo.DueDate ? "Yes" : "No") : "";
-            csv.AppendLine($"\"{wo.WorkOrderNumber}\",\"{wo.Title}\",\"{wo.Client?.ClientName}\",{wo.Priority},{wo.Status},{wo.CreatedAt:yyyy-MM-dd},{wo.DueDate?.ToString("yyyy-MM-dd")},{wo.CompletedAt?.ToString("yyyy-MM-dd")},{onTime},{(wo.IsPreventiveMaintenance ? "Yes" : "No")}");
+            csv.AppendLine($"\"{Csv.Escape(wo.WorkOrderNumber)}\",\"{Csv.Escape(wo.Title)}\",\"{Csv.Escape(wo.Client?.ClientName)}\",{wo.Priority},{wo.Status},{wo.CreatedAt:yyyy-MM-dd},{wo.DueDate?.ToString("yyyy-MM-dd")},{wo.CompletedAt?.ToString("yyyy-MM-dd")},{onTime},{(wo.IsPreventiveMaintenance ? "Yes" : "No")}");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"wo-performance-{start:yyyyMMdd}-{end:yyyyMMdd}.csv");
@@ -193,7 +194,7 @@ public sealed class ReportsController(
         if (data?.Technicians is IEnumerable<dynamic> techs)
         {
             foreach (var t in techs)
-                csv.AppendLine($"\"{t.Name}\",{t.TotalJobs},{t.Completed},{t.OnTimeRate},{t.AvgTimeOnSiteHours},{t.PmJobs},{t.CorrectiveJobs}");
+                csv.AppendLine($"\"{Csv.Escape((object?)t.Name)}\",{t.TotalJobs},{t.Completed},{t.OnTimeRate},{t.AvgTimeOnSiteHours},{t.PmJobs},{t.CorrectiveJobs}");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "technician-productivity.csv");
@@ -287,7 +288,7 @@ public sealed class ReportsController(
         if (data?.Assets is IEnumerable<dynamic> items)
         {
             foreach (var a in items)
-                csv.AppendLine($"\"{a.AssetCode}\",\"{a.AssetName}\",\"{a.CategoryName}\",\"{a.ClientName}\",{a.Status},{a.LastPmDate:yyyy-MM-dd},{a.NextPmDate:yyyy-MM-dd},{a.WarrantyStatus},{a.CorrectiveWos},{a.PmCompliance},{(a.IsRecurringFault ? "Yes" : "No")}");
+                csv.AppendLine($"\"{Csv.Escape((object?)a.AssetCode)}\",\"{Csv.Escape((object?)a.AssetName)}\",\"{Csv.Escape((object?)a.CategoryName)}\",\"{Csv.Escape((object?)a.ClientName)}\",{a.Status},{a.LastPmDate:yyyy-MM-dd},{a.NextPmDate:yyyy-MM-dd},{a.WarrantyStatus},{a.CorrectiveWos},{a.PmCompliance},{(a.IsRecurringFault ? "Yes" : "No")}");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "asset-reliability.csv");
@@ -384,7 +385,7 @@ public sealed class ReportsController(
         if (data?.OverduePlans is IEnumerable<dynamic> items)
         {
             foreach (var p in items)
-                csv.AppendLine($"\"{p.AssetName}\",\"{p.AssetCode}\",\"{p.ClientName}\",{p.NextPmDate:yyyy-MM-dd},{p.DaysOverdue}");
+                csv.AppendLine($"\"{Csv.Escape((object?)p.AssetName)}\",\"{Csv.Escape((object?)p.AssetCode)}\",\"{Csv.Escape((object?)p.ClientName)}\",{p.NextPmDate:yyyy-MM-dd},{p.DaysOverdue}");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "pm-compliance.csv");

@@ -2,7 +2,8 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Plus, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../shared/components/PageHeader'
-import { Spinner } from '../shared/components/Spinner'
+import { AsyncPanel } from '../shared/components/AsyncPanel'
+import { LastUpdated } from '../shared/components/LastUpdated'
 import { EmptyState } from '../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../shared/components/DataTable'
 import { FormDrawer } from '../shared/components/FormDrawer'
@@ -42,8 +43,6 @@ export function FinancePage() {
   const [actionTarget, setActionTarget] = useState<PlatformInvoice | PlatformQuotation | PlatformExpense | null>(null)
   const [action, setAction] = useState<FinanceAction | null>(null)
 
-  const loading = dashboard.isLoading || quotations.isLoading || invoices.isLoading || payments.isLoading || expenses.isLoading
-  const isError = dashboard.isError || quotations.isError || invoices.isError || payments.isError || expenses.isError
   const query = search.trim().toLowerCase()
   const createFormId = 'platform-finance-create-form'
 
@@ -170,6 +169,7 @@ export function FinancePage() {
       <PageHeader
         title="Finance"
         subtitle="Subscriptions, invoices, quotations, payments, expenses, and reporting."
+        secondaryActions={<LastUpdated at={dashboard.dataUpdatedAt} />}
         primaryAction={(
           <button
             type="button"
@@ -205,12 +205,9 @@ export function FinancePage() {
         />
       </div>
 
-      {loading ? <Spinner label="Loading finance workspace" /> : null}
-      {isError ? <EmptyState title="Finance unavailable" description="Finance records could not be loaded." /> : null}
-
-      {!loading && !isError ? (
-        <>
-          {tab === 'overview' ? (
+      {tab === 'overview' ? (
+        <AsyncPanel query={dashboard} loadingLabel="Loading finance overview" errorTitle="Overview unavailable" errorDescription="Finance overview could not be loaded.">
+          {() => (
             <div className="space-y-5">
               <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <Kpi label="Revenue" value={formatCurrency(dashboard.data?.totalRevenue ?? 0)} />
@@ -238,29 +235,39 @@ export function FinancePage() {
                 </Panel>
               </section>
             </div>
-          ) : null}
+          )}
+        </AsyncPanel>
+      ) : null}
 
-          {tab === 'quotations' ? (
-            <Panel title="Quotations">
-              <DataTable<PlatformQuotation> columns={quotationColumns} data={filteredQuotations} emptyTitle="No quotations" emptyDescription="Create a quotation to start the billing flow." />
-            </Panel>
-          ) : null}
-          {tab === 'invoices' ? (
-            <Panel title="Invoices">
-              <DataTable<PlatformInvoice> columns={invoiceColumns} data={filteredInvoices} emptyTitle="No invoices" emptyDescription="Create an invoice to start billing." />
-            </Panel>
-          ) : null}
-          {tab === 'payments' ? (
-            <Panel title="Payments">
-              <DataTable<PlatformPayment> columns={paymentColumns} data={filteredPayments} emptyTitle="No payments" emptyDescription="Record payments as they are received." />
-            </Panel>
-          ) : null}
-          {tab === 'expenses' ? (
-            <Panel title="Expenses">
-              <DataTable<PlatformExpense> columns={expenseColumns} data={filteredExpenses} emptyTitle="No expenses" emptyDescription="Record platform expenses as they are incurred." />
-            </Panel>
-          ) : null}
-          {tab === 'reports' ? (
+      {tab === 'quotations' ? (
+        <Panel title="Quotations">
+          <AsyncPanel query={quotations} loadingLabel="Loading quotations" errorTitle="Quotations unavailable" errorDescription="Quotations could not be loaded.">
+            {() => <DataTable<PlatformQuotation> columns={quotationColumns} data={filteredQuotations} emptyTitle="No quotations" emptyDescription="Create a quotation to start the billing flow." />}
+          </AsyncPanel>
+        </Panel>
+      ) : null}
+      {tab === 'invoices' ? (
+        <Panel title="Invoices">
+          <AsyncPanel query={invoices} loadingLabel="Loading invoices" errorTitle="Invoices unavailable" errorDescription="Invoices could not be loaded.">
+            {() => <DataTable<PlatformInvoice> columns={invoiceColumns} data={filteredInvoices} emptyTitle="No invoices" emptyDescription="Create an invoice to start billing." />}
+          </AsyncPanel>
+        </Panel>
+      ) : null}
+      {tab === 'payments' ? (
+        <Panel title="Payments">
+          <AsyncPanel query={payments} loadingLabel="Loading payments" errorTitle="Payments unavailable" errorDescription="Payments could not be loaded.">
+            {() => <DataTable<PlatformPayment> columns={paymentColumns} data={filteredPayments} emptyTitle="No payments" emptyDescription="Record payments as they are received." />}
+          </AsyncPanel>
+        </Panel>
+      ) : null}
+      {tab === 'expenses' ? (
+        <Panel title="Expenses">
+          <AsyncPanel query={expenses} loadingLabel="Loading expenses" errorTitle="Expenses unavailable" errorDescription="Expenses could not be loaded.">
+            {() => <DataTable<PlatformExpense> columns={expenseColumns} data={filteredExpenses} emptyTitle="No expenses" emptyDescription="Record platform expenses as they are incurred." />}
+          </AsyncPanel>
+        </Panel>
+      ) : null}
+      {tab === 'reports' ? (
             <Panel title="Reports">
               <EmptyState
                 title="Reports summary"
@@ -286,8 +293,6 @@ export function FinancePage() {
               />
             </Panel>
           ) : null}
-        </>
-      ) : null}
 
       <FormDrawer
         open={createKind !== null}

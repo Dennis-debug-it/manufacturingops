@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Ecosys.Api.Controllers;
 
 [ApiController, Authorize, Route("api/access")]
-public sealed class AccessControlController(AppDbContext dbContext, ITenantContext tenantContext, IUserAccessService userAccessService, IDynamicAccessService dynamicAccessService, IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
+public sealed class AccessControlController(AppDbContext dbContext, ITenantContext tenantContext, IUserAccessService userAccessService, IDynamicAccessService dynamicAccessService, IUserSessionService userSessionService, IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet("capabilities")]
     public ActionResult<object> Capabilities() => Ok(PermissionNames.All.Select(x => new { key = x, name = Humanize(x) }));
@@ -35,18 +35,21 @@ public sealed class AccessControlController(AppDbContext dbContext, ITenantConte
         var group = await dbContext.PermissionGroups.Include(x => x.Capabilities).SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException("Permission group was not found.");
         group.Name=request.Name.Trim(); group.Description=request.Description?.Trim(); group.IsActive=request.IsActive; group.UpdatedAt=DateTime.UtcNow;
         dbContext.GroupCapabilities.RemoveRange(group.Capabilities); group.Capabilities=request.Capabilities.Distinct(StringComparer.OrdinalIgnoreCase).Select(x => new GroupCapability { TenantId=TenantId, PermissionGroupId=id, Capability=x }).ToList();
-        await SaveAndAudit("permission_group.updated", id, $"Updated permission group '{group.Name}'.", ct); return NoContent();
+        var affectedUserIds = await dbContext.UserPermissionGroups.Where(x => x.PermissionGroupId == id).Select(x => x.UserId).ToListAsync(ct);
+        await SaveAndAudit("permission_group.updated", id, $"Updated permission group '{group.Name}'.", ct);
+        await userSessionService.RevokeSessionsForUsersAsync(affectedUserIds, "Access changed", ct); return NoContent();
     }
 
     [HttpDelete("permission-groups/{id:guid}")]
-    public async Task<ActionResult> DeleteGroup(Guid id, CancellationToken ct) { EnsureCanAssign(); var row=await dbContext.PermissionGroups.SingleOrDefaultAsync(x=>x.Id==id,ct)??throw new NotFoundException("Permission group was not found."); dbContext.Remove(row); await SaveAndAudit("permission_group.deleted",id,$"Deleted permission group '{row.Name}'.",ct); return NoContent(); }
+    public async Task<ActionResult> DeleteGroup(Guid id, CancellationToken ct) { EnsureCanAssign(); var row=await dbContext.PermissionGroups.SingleOrDefaultAsync(x=>x.Id==id,ct)??throw new NotFoundException("Permission group was not found."); var affectedUserIds=await dbContext.UserPermissionGroups.Where(x=>x.PermissionGroupId==id).Select(x=>x.UserId).ToListAsync(ct); dbContext.Remove(row); await SaveAndAudit("permission_group.deleted",id,$"Deleted permission group '{row.Name}'.",ct); await userSessionService.RevokeSessionsForUsersAsync(affectedUserIds, "Access changed", ct); return NoContent(); }
 
     [HttpPut("users/{id:guid}/groups")]
     public async Task<ActionResult> SetGroups(Guid id, SetGroupsRequest request, CancellationToken ct)
     {
         EnsureCanChangeUser(id); var valid=await dbContext.PermissionGroups.Where(x=>request.GroupIds.Contains(x.Id)&&x.IsActive).Select(x=>x.Id).ToListAsync(ct); if(valid.Count!=request.GroupIds.Distinct().Count()) throw new BusinessRuleException("One or more permission groups are invalid.");
         dbContext.UserPermissionGroups.RemoveRange(await dbContext.UserPermissionGroups.Where(x=>x.UserId==id).ToListAsync(ct)); dbContext.UserPermissionGroups.AddRange(valid.Select(groupId=>new UserPermissionGroup{TenantId=TenantId,UserId=id,PermissionGroupId=groupId}));
-        await SaveAndAudit("user_access.groups_changed",id,"Changed user permission-group memberships.",ct); return NoContent();
+        await SaveAndAudit("user_access.groups_changed",id,"Changed user permission-group memberships.",ct);
+        await userSessionService.RevokeAllForUserAsync(id, "Access changed", ct); return NoContent();
     }
 
     [HttpPut("users/{id:guid}/overrides")]
@@ -54,7 +57,8 @@ public sealed class AccessControlController(AppDbContext dbContext, ITenantConte
     {
         EnsureCanChangeUser(id); ValidateCapabilities(request.Overrides.Select(x=>x.Capability));
         dbContext.UserPermissionOverrides.RemoveRange(await dbContext.UserPermissionOverrides.Where(x=>x.UserId==id).ToListAsync(ct)); dbContext.UserPermissionOverrides.AddRange(request.Overrides.Select(x=>new UserPermissionOverride{TenantId=TenantId,UserId=id,Capability=x.Capability,IsAllowed=x.Effect.Equals("allow",StringComparison.OrdinalIgnoreCase)}));
-        await SaveAndAudit("user_access.overrides_changed",id,"Changed direct permission overrides.",ct); return NoContent();
+        await SaveAndAudit("user_access.overrides_changed",id,"Changed direct permission overrides.",ct);
+        await userSessionService.RevokeAllForUserAsync(id, "Access changed", ct); return NoContent();
     }
 
     [HttpGet("users/{id:guid}/effective")]
@@ -63,12 +67,12 @@ public sealed class AccessControlController(AppDbContext dbContext, ITenantConte
     [HttpGet("scopes")]
     public async Task<ActionResult> Scopes(CancellationToken ct) { userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings); return Ok(await dbContext.AccessScopes.AsNoTracking().ToListAsync(ct)); }
     [HttpPut("users/{id:guid}/scopes")]
-    public async Task<ActionResult> SetScopes(Guid id, ScopeRequest request, CancellationToken ct) { EnsureCanChangeUser(id); dbContext.AccessScopes.RemoveRange(await dbContext.AccessScopes.Where(x=>x.UserId==id).ToListAsync(ct)); dbContext.AccessScopes.AddRange(request.Scopes.Select(x=>new AccessScope{TenantId=TenantId,UserId=id,Capability=x.Capability,ScopeType=x.ScopeType,ScopeEntityId=x.ScopeEntityId})); await SaveAndAudit("user_access.scopes_changed",id,"Changed user access scopes.",ct); return NoContent(); }
+    public async Task<ActionResult> SetScopes(Guid id, ScopeRequest request, CancellationToken ct) { EnsureCanChangeUser(id); dbContext.AccessScopes.RemoveRange(await dbContext.AccessScopes.Where(x=>x.UserId==id).ToListAsync(ct)); dbContext.AccessScopes.AddRange(request.Scopes.Select(x=>new AccessScope{TenantId=TenantId,UserId=id,Capability=x.Capability,ScopeType=x.ScopeType,ScopeEntityId=x.ScopeEntityId})); await SaveAndAudit("user_access.scopes_changed",id,"Changed user access scopes.",ct); await userSessionService.RevokeAllForUserAsync(id, "Access changed", ct); return NoContent(); }
 
     [HttpGet("approval-limits")]
     public async Task<ActionResult> Limits(CancellationToken ct) { userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings); return Ok(await dbContext.PermissionThresholds.AsNoTracking().ToListAsync(ct)); }
     [HttpPut("users/{id:guid}/approval-limits")]
-    public async Task<ActionResult> SetLimits(Guid id, ThresholdRequest request, CancellationToken ct) { EnsureCanChangeUser(id); dbContext.PermissionThresholds.RemoveRange(await dbContext.PermissionThresholds.Where(x=>x.UserId==id).ToListAsync(ct)); dbContext.PermissionThresholds.AddRange(request.Limits.Select(x=>new PermissionThreshold{TenantId=TenantId,UserId=id,Capability=x.Capability,MaximumAmount=x.MaximumAmount,Currency=x.Currency.ToUpperInvariant()})); await SaveAndAudit("user_access.thresholds_changed",id,"Changed user approval limits.",ct); return NoContent(); }
+    public async Task<ActionResult> SetLimits(Guid id, ThresholdRequest request, CancellationToken ct) { EnsureCanChangeUser(id); dbContext.PermissionThresholds.RemoveRange(await dbContext.PermissionThresholds.Where(x=>x.UserId==id).ToListAsync(ct)); dbContext.PermissionThresholds.AddRange(request.Limits.Select(x=>new PermissionThreshold{TenantId=TenantId,UserId=id,Capability=x.Capability,MaximumAmount=x.MaximumAmount,Currency=x.Currency.ToUpperInvariant()})); await SaveAndAudit("user_access.thresholds_changed",id,"Changed user approval limits.",ct); await userSessionService.RevokeAllForUserAsync(id, "Access changed", ct); return NoContent(); }
 
     private void EnsureCanAssign() => userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
     private void EnsureCanChangeUser(Guid id) { EnsureCanAssign(); if(id==UserId) throw new ForbiddenException("Users cannot modify their own access."); }

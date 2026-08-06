@@ -107,6 +107,24 @@ public sealed class WorkOrderWorkTypeTests
     }
 
     [Fact]
+    public async Task GenerateWorkOrder_Twice_IsBlockedWhileFirstIsOpen()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedPmFixtureAsync(dbContext);
+        var controller = CreatePreventiveMaintenanceController(dbContext, fixture);
+
+        // First generation succeeds.
+        await controller.GenerateWorkOrder(fixture.Plan.Id, CancellationToken.None);
+
+        // Second generation is rejected (F6-01) — an open PM work order already exists.
+        await Assert.ThrowsAsync<Shared.Errors.BusinessRuleException>(
+            () => controller.GenerateWorkOrder(fixture.Plan.Id, CancellationToken.None));
+
+        var count = await dbContext.WorkOrders.CountAsync(x => x.PreventiveMaintenancePlanId == fixture.Plan.Id);
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
     public async Task Get_WorkOrderDetail_IncludesWorkType()
     {
         await using var dbContext = CreateDbContext();
@@ -229,6 +247,7 @@ public sealed class WorkOrderWorkTypeTests
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpBranchAccessService(),
             new TemplateLookupPmChecklistService(fixture.Template),
+            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.TimeZoneOptions()),
             new NoOpLogger<PreventiveMaintenanceController>());
 
     private static Tenant CreateTenant() =>

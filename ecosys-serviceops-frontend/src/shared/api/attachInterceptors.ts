@@ -11,11 +11,27 @@ export interface AuthInterceptorConfig {
   triggerLogout: () => void
   /** Where to send the user when their session expires. */
   loginPath: string
+  /**
+   * Attempts a silent token refresh. Resolves to a new bearer token on success, or null when
+   * refresh isn't possible (no refresh token, impersonation, or the refresh itself failed).
+   */
+  refresh?: () => Promise<string | null>
 }
 
-/** True for auth flows (sign-in, sign-up, password reset) that show errors inline themselves. */
+/** True for auth flows (sign-in, sign-up, password reset, token refresh) that handle errors themselves. */
 function isAuthRequest(url: string | undefined): boolean {
   return Boolean(url && url.includes('/auth/'))
+}
+
+// Single-flight guard: many requests can 401 at once when the access token expires; they must all
+// wait on ONE refresh call rather than stampeding the refresh endpoint.
+let refreshInFlight: Promise<string | null> | null = null
+
+function refreshOnce(refresh: () => Promise<string | null>): Promise<string | null> {
+  refreshInFlight ??= refresh().finally(() => {
+    refreshInFlight = null
+  })
+  return refreshInFlight
 }
 
 /**
@@ -35,14 +51,27 @@ export function attachAuthInterceptors(client: AxiosInstance, config: AuthInterc
 
   client.interceptors.response.use(
     (response) => response,
-    (error: unknown) => {
+    async (error: unknown) => {
       const apiError = normalizeError(error)
-      const requestUrl = axios.isAxiosError(error) ? error.config?.url : undefined
-      const authRequest = isAuthRequest(requestUrl)
-      const hadToken = axios.isAxiosError(error) && Boolean(error.config?.headers?.Authorization)
+      const originalRequest = axios.isAxiosError(error) ? error.config : undefined
+      const authRequest = isAuthRequest(originalRequest?.url)
+      const hadToken = axios.isAxiosError(error) && Boolean(originalRequest?.headers?.Authorization)
 
-      // Authenticated request rejected as 401 → the session is no longer valid.
+      // Authenticated request rejected as 401 → the access token expired or the session ended.
       if (apiError.status === 401 && hadToken && !authRequest) {
+        // Try a single silent refresh before ending the session. `_ecosysRetried` prevents an
+        // infinite loop when the retried request 401s again (e.g. the session was revoked).
+        const retriableRequest = originalRequest as (typeof originalRequest & { _ecosysRetried?: boolean }) | undefined
+        if (config.refresh && retriableRequest && !retriableRequest._ecosysRetried) {
+          const newToken = await refreshOnce(config.refresh)
+          if (newToken) {
+            retriableRequest._ecosysRetried = true
+            retriableRequest.headers = retriableRequest.headers ?? {}
+            retriableRequest.headers.Authorization = `Bearer ${newToken}`
+            return client(retriableRequest)
+          }
+        }
+
         config.clearSession()
         config.triggerLogout()
         if (typeof window !== 'undefined' && window.location.pathname !== config.loginPath) {

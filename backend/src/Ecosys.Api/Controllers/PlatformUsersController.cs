@@ -1,3 +1,4 @@
+using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -23,20 +24,55 @@ public sealed class PlatformUsersController(
     ITemporaryPasswordService temporaryPasswordService) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyCollection<PlatformUserResponse>>> GetAll(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? search,
+        [FromQuery] string? role,
+        [FromQuery] string? status,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        CancellationToken cancellationToken)
     {
-        var users = await QueryPlatformUsers()
-            .OrderBy(x => x.FullName)
-            .ToListAsync(cancellationToken);
+        var query = QueryPlatformUsers();
 
-        var userIds = users.Select(x => x.Id).ToArray();
-        var lastLogins = await dbContext.UserSessions
-            .Where(x => userIds.Contains(x.UserId))
-            .GroupBy(x => x.UserId)
-            .Select(group => new { UserId = group.Key, LastLoginAt = group.Max(x => x.LoginAt) })
-            .ToDictionaryAsync(x => x.UserId, x => (DateTime?)x.LastLoginAt, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim().ToLower();
+            query = query.Where(x => x.FullName.ToLower().Contains(q) || x.Email.ToLower().Contains(q));
+        }
 
-        return Ok(users.Select(user => MapUser(user, lastLogins.GetValueOrDefault(user.Id))).ToList());
+        if (!string.IsNullOrWhiteSpace(role) && !string.Equals(role, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(x => x.Role == role);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            var active = string.Equals(status, "Active", StringComparison.OrdinalIgnoreCase);
+            query = query.Where(x => x.IsActive == active);
+        }
+
+        var ordered = query.OrderBy(x => x.FullName);
+
+        async Task<List<PlatformUserResponse>> MapWithLoginsAsync(IReadOnlyList<User> pageUsers)
+        {
+            var ids = pageUsers.Select(u => u.Id).ToArray();
+            var lastLogins = await dbContext.UserSessions
+                .Where(x => ids.Contains(x.UserId))
+                .GroupBy(x => x.UserId)
+                .Select(group => new { UserId = group.Key, LastLoginAt = group.Max(x => x.LoginAt) })
+                .ToDictionaryAsync(x => x.UserId, x => (DateTime?)x.LastLoginAt, cancellationToken);
+            return pageUsers.Select(u => MapUser(u, lastLogins.GetValueOrDefault(u.Id))).ToList();
+        }
+
+        if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
+        {
+            var paged = await ordered.ToPagedResultAsync(page, pageSize, cancellationToken);
+            var mapped = await MapWithLoginsAsync(paged.Items);
+            return Ok(new PagedResult<PlatformUserResponse>(mapped, paged.Page, paged.PageSize, paged.TotalCount));
+        }
+
+        var all = await ordered.ToListAsync(cancellationToken);
+        return Ok(await MapWithLoginsAsync(all));
     }
 
     [HttpGet("{id:guid}")]

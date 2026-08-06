@@ -40,9 +40,26 @@ body,
   min-height: 100%;
 }
 
+html,
+body {
+  /* Keep scroll contained to the app: stops Chrome-for-Android pull-to-refresh and scroll-chaining
+     from hijacking the gesture, which reads as "scrolling fights me" in the installed PWA. */
+  overscroll-behavior-y: contain;
+}
+
 body {
   @apply bg-slate-50 text-slate-900 antialiased;
   font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Form controls render at 16px on phones. Below 16px, mobile browsers auto-zoom the page when a
+   field is focused (and don't cleanly zoom back) — the main "zoom keeps fighting me" symptom. */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 * {

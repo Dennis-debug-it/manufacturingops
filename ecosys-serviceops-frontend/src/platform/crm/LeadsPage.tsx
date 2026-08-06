@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowRightCircle, Mail, Search, UserCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../../shared/components/PageHeader'
+import { AsyncPanel } from '../../shared/components/AsyncPanel'
 import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
@@ -10,7 +11,7 @@ import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
-import { useLead, useLeads, useUpdateLeadNotes, useUpdateLeadStatus } from '../api'
+import { useLead, useLeadsPaged, useUpdateLeadNotes, useUpdateLeadStatus } from '../api'
 import { Field, SectionTitle } from '../common'
 import type { PlatformLeadDetail, PlatformLeadListItem } from '../types'
 import { CrmSubNav } from './CrmSubNav'
@@ -21,10 +22,18 @@ export function LeadsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const selectedLeadId = searchParams.get('lead')
-  const { data, isLoading, isError } = useLeads()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<(typeof statusOptions)[number]>('All')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
   const debouncedSearch = useDebounce(search, 250)
+  useEffect(() => setPage(1), [debouncedSearch, statusFilter])
+  const leadsQuery = useLeadsPaged(
+    { search: debouncedSearch || undefined, status: statusFilter === 'All' ? undefined : statusFilter },
+    page,
+    pageSize,
+  )
+  const { data } = leadsQuery
 
   const [showConvert, setShowConvert] = useState(false)
   const [notesDraft, setNotesDraft] = useState('')
@@ -41,19 +50,8 @@ export function LeadsPage() {
     }
   }, [selectedLead.data])
 
-  const rows = useMemo(() => {
-    const query = debouncedSearch.trim().toLowerCase()
-    return (data ?? []).filter((lead) => {
-      const matchesSearch =
-        !query
-        || lead.companyName.toLowerCase().includes(query)
-        || lead.contactPersonName.toLowerCase().includes(query)
-        || lead.email.toLowerCase().includes(query)
-        || lead.phone.toLowerCase().includes(query)
-      const matchesStatus = statusFilter === 'All' || lead.status === statusFilter
-      return matchesSearch && matchesStatus
-    })
-  }, [data, debouncedSearch, statusFilter])
+  // Search + status filtering + paging run server-side now (see useLeadsPaged).
+  const rows = data?.items ?? []
 
   const columns: DataTableColumn<PlatformLeadListItem>[] = [
     { key: 'companyName', header: 'Company', cell: (row) => <button type="button" className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" onClick={() => setSearchParams({ lead: row.id }, { replace: true })}>{row.companyName}</button> },
@@ -117,15 +115,23 @@ export function LeadsPage() {
         </select>
       </div>
 
-      {isLoading ? <Spinner label="Loading leads" /> : null}
-      {!isLoading && isError ? <EmptyState title="Leads unavailable" description="Lead records could not be loaded." /> : null}
-      {!isLoading && !isError ? (
-        rows.length === 0 ? (
-          <EmptyState title="No leads found" description="New public workspace requests will appear here once submitted." />
-        ) : (
-          <DataTable columns={columns} data={rows} emptyTitle="No leads found" emptyDescription="New public workspace requests will appear here once submitted." />
-        )
-      ) : null}
+      <AsyncPanel query={leadsQuery} loadingLabel="Loading leads" errorTitle="Leads unavailable" errorDescription="Lead records could not be loaded.">
+        {() => (
+          <DataTable
+            columns={columns}
+            data={rows}
+            emptyTitle="No leads found"
+            emptyDescription="New public workspace requests will appear here once submitted."
+            pagination={{
+              page,
+              pageSize,
+              total: data?.totalCount ?? 0,
+              onPageChange: setPage,
+              onPageSizeChange: (size) => { setPageSize(size); setPage(1) },
+            }}
+          />
+        )}
+      </AsyncPanel>
 
       <FormDrawer open={Boolean(selectedLeadId)} title={selectedLead.data?.companyName ?? 'Lead details'} onClose={closeDetail}>
         {selectedLead.isLoading ? <Spinner label="Loading lead" /> : null}

@@ -1,10 +1,10 @@
-import { parseCsvRecords } from '../../../shared/utils/csv'
+import { escapeCsvField, parseCsvRecords } from '../../../shared/utils/csv'
 
 export function downloadCsvTemplate(fileName: string, comments: string[], headers: readonly string[], exampleRows: Array<Record<string, string>>) {
   const lines = [
     ...comments,
     headers.join(','),
-    ...exampleRows.map((row) => headers.map((header) => `"${row[header] ?? ''}"`).join(',')),
+    ...exampleRows.map((row) => headers.map((header) => `"${escapeCsvField(row[header])}"`).join(',')),
   ]
   const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)

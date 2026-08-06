@@ -82,10 +82,12 @@ export interface AuthSession {
 export interface LoginRequest {
   email: string
   password: string
+  rememberMe?: boolean
 }
 
 export interface LoginResponse {
   token: string
+  refreshToken: string
   user: AuthUser
   tenant: AuthTenant
 }

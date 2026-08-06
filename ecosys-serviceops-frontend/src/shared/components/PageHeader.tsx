@@ -14,10 +14,12 @@ export interface PageHeaderProps {
   breadcrumbs?: BreadcrumbItem[] | undefined
   primaryAction?: ReactNode
   secondaryActions?: ReactNode
+  /** Rendered inline next to the title — e.g. a status badge. Keeps state out of the action row. */
+  titleAdornment?: ReactNode
   className?: string
 }
 
-export function PageHeader({ title, subtitle, breadcrumbs, primaryAction, secondaryActions, className }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, breadcrumbs, primaryAction, secondaryActions, titleAdornment, className }: PageHeaderProps) {
   const navigate = useNavigate()
   const parentCrumb = breadcrumbs?.slice().reverse().find((crumb) => crumb.to)
 
@@ -59,7 +61,10 @@ export function PageHeader({ title, subtitle, breadcrumbs, primaryAction, second
       ) : null}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{title}</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">{title}</h1>
+            {titleAdornment}
+          </div>
           {subtitle ? <p className="max-w-3xl text-sm leading-6 text-slate-600">{subtitle}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">

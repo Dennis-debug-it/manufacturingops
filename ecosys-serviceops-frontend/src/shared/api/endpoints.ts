@@ -26,6 +26,7 @@ TODO markers below are intentional for endpoints that exist in the domain spec b
 export const endpoints = {
   auth: {
     login: '/api/auth/login',
+    refresh: '/api/auth/refresh',
     me: '/api/auth/me',
     logout: '/api/auth/logout',
     forgotPassword: '/api/auth/forgot-password',

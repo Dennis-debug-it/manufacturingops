@@ -164,9 +164,9 @@ public sealed class AssetCategoryAssetFlowTests
 
         var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
 
-        var result = await assetsController.GetAll(null, null, null, null, generator.Id, null, "all", CancellationToken.None);
+        var result = await assetsController.GetAll(null, null, null, null, generator.Id, null, "all", null, null, CancellationToken.None);
 
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var ok = Assert.IsType<OkObjectResult>(result);
         var assets = Assert.IsAssignableFrom<IReadOnlyCollection<AssetResponse>>(ok.Value);
         var asset = Assert.Single(assets);
         Assert.Equal("Generator 01", asset.AssetName);

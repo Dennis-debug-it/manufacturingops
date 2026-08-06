@@ -54,6 +54,7 @@ import { AccessSectionPage } from '../features/team/AccessSectionPage'
 import { SkillsPage as TeamSkillsPageReal } from '../features/team/SkillsPage'
 import { GroupsPage as TeamGroupsPageReal } from '../features/team/GroupsPage'
 import { LiveAttendancePage, TimesheetsPage, TimesheetDetailPage, LeavePage, TimeAttendanceReportsPage } from '../features/team/TimeAttendancePages'
+import { MyTimePage } from '../features/team/MyTimePage'
 import { ContractsPage as ContractsPageReal } from '../features/contracts/ContractsPage'
 import { ContractDetailPage as ContractDetailPageReal } from '../features/contracts/ContractDetailPage'
 import { InvoicesPage } from '../features/finance/InvoicesPage'
@@ -298,6 +299,7 @@ export function AppRouter() {
       ['/team/time-attendance/timesheets/:id', TimeAttendanceTimesheetDetailPage],
       ['/team/time-attendance/leave', TimeAttendanceLeavePage],
       ['/team/time-attendance/reports', TimeAttendanceReportsPage],
+      ['/me/time', MyTimePage],
       ['/knowledge', KnowledgeBasePage],
       ['/contracts', ContractsPage],
       ['/contracts/:id', ContractDetailPage],

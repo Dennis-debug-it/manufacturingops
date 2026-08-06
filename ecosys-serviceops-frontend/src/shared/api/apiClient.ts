@@ -1,7 +1,18 @@
 import axios from 'axios'
 import { endpoints } from './endpoints'
-import { clearSession, getAuthToken, triggerLogout } from './sessionStore'
+import {
+  clearSession,
+  getAuthToken,
+  getImpersonationSession,
+  getRefreshToken,
+  getSession,
+  setAuthToken,
+  setRefreshToken,
+  setSession,
+  triggerLogout,
+} from './sessionStore'
 import { attachAuthInterceptors } from './attachInterceptors'
+import type { LoginResponse } from '../types/auth'
 
 const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5072'
 
@@ -12,11 +23,44 @@ export const apiClient = axios.create({
   },
 })
 
+/**
+ * Exchanges the stored refresh token for a fresh access token. Uses a bare axios call (not
+ * apiClient) so it never re-enters the auth interceptors. Returns the new access token, or null
+ * when refresh isn't possible — impersonation sessions have no refresh token, and a revoked or
+ * expired refresh token yields a 401 that ends the session.
+ */
+async function refreshAccessToken(): Promise<string | null> {
+  if (getImpersonationSession()) {
+    return null
+  }
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) {
+    return null
+  }
+  try {
+    const { data } = await axios.post<LoginResponse>(
+      `${defaultBaseUrl}${endpoints.auth.refresh}`,
+      { refreshToken },
+      { headers: { Accept: 'application/json' } },
+    )
+    setAuthToken(data.token)
+    setRefreshToken(data.refreshToken)
+    const stored = getSession()
+    if (stored) {
+      setSession({ ...stored, token: data.token })
+    }
+    return data.token
+  } catch {
+    return null
+  }
+}
+
 attachAuthInterceptors(apiClient, {
   getToken: getAuthToken,
   clearSession,
   triggerLogout,
   loginPath: '/login',
+  refresh: refreshAccessToken,
 })
 
 export const api = {

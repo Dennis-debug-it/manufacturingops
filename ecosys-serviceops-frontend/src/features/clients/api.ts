@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
+import type { PagedResult } from '../../shared/types/pagination'
 import type { Asset, Client, ClientSummary, SiteDetail } from './types'
 
 export interface ClientListFilters {
@@ -13,6 +14,16 @@ export function useClients(filters?: ClientListFilters) {
     queryKey: ['clients', filters ?? {}],
     queryFn: () => api.get<Client[]>(endpoints.clients.list, { search: filters?.search, status: filters?.status }),
     staleTime: 30_000,
+  })
+}
+
+/** Server-paginated clients for the list table (the bare {@link useClients} stays for pickers). */
+export function useClientsPaged(filters: ClientListFilters, page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ['clients', 'paged', filters, page, pageSize],
+    queryFn: () => api.get<PagedResult<Client>>(endpoints.clients.list, { search: filters.search, status: filters.status, page, pageSize }),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -141,6 +152,16 @@ export function useAssets(filters?: AssetListFilters) {
     queryKey: ['assets', filters ?? {}],
     queryFn: () => api.get<Asset[]>(endpoints.assets.list, { clientId: filters?.clientId, siteId: filters?.siteId, search: filters?.search }),
     staleTime: 30_000,
+  })
+}
+
+/** Server-paginated assets for the list table (the bare {@link useAssets} stays for pickers). */
+export function useAssetsPaged(filters: AssetListFilters, page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ['assets', 'paged', filters, page, pageSize],
+    queryFn: () => api.get<PagedResult<Asset>>(endpoints.assets.list, { clientId: filters.clientId, siteId: filters.siteId, search: filters.search, page, pageSize }),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
   })
 }
 

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
-import type { AssignmentGroup, CertificationDefinition, TeamManagementOverview, TeamUser, TenantUserRole, Technician } from './types'
+import type { AssignmentGroup, CertificationDefinition, PermissionSetFields, TeamManagementOverview, TeamUser, TenantUserRole, Technician } from './types'
 
 export function useTeamUsers() {
   return useQuery({
@@ -28,6 +28,7 @@ export interface CreateUserPayload {
   department?: string | null
   isActive: boolean
   credentialDeliveryMethod?: string
+  permissions?: PermissionSetFields | null
 }
 
 export function useCreateTeamUser() {
@@ -35,6 +36,34 @@ export function useCreateTeamUser() {
   return useMutation({
     mutationFn: (payload: CreateUserPayload) => api.post<TeamUser>(endpoints.users.create, payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team-users'] }),
+  })
+}
+
+export interface UpdateUserPayload {
+  fullName: string
+  email: string
+  phoneNumber?: string | null
+  role: TenantUserRole
+  jobTitle?: string | null
+  department?: string | null
+  isActive: boolean
+  permissions?: PermissionSetFields | null
+  branchIds?: string[]
+  defaultBranchId?: string | null
+  hasAllBranchAccess: boolean
+  assignmentGroupIds?: string[]
+}
+
+export function useUpdateTeamUser(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpdateUserPayload) => api.put<TeamUser>(endpoints.users.update(id), payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['team-users', id], data)
+      void queryClient.invalidateQueries({ queryKey: ['team-users'] })
+      // Effective permissions may be the current user's own — refresh the session.
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
+    },
   })
 }
 

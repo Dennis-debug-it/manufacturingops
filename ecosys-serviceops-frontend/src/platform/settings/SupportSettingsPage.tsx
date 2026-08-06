@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
+import { EmptyState } from '../../shared/components/EmptyState'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { api, apiClient } from '../../shared/api/apiClient'
 import { useTenants } from '../api'
@@ -19,7 +20,7 @@ interface SupportSettings {
 export function SupportSettingsPage() {
   const canManage = usePermission('platform.settings.manage')
   const queryClient = useQueryClient()
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['platform', 'settings', 'support'],
     queryFn: () => api.get<SupportSettings>('/api/platform/settings/support'),
     staleTime: 30_000,
@@ -35,6 +36,7 @@ export function SupportSettingsPage() {
     },
   })
 
+  if (isError) return <EmptyState title="Couldn’t load support settings" description="Something went wrong fetching these settings." actionLabel="Retry" onAction={() => { void refetch() }} />
   if (isLoading || !values) return <Spinner label="Loading support settings" />
 
   const set = <K extends keyof SupportSettings>(key: K, value: SupportSettings[K]) => setValues((current) => (current ? { ...current, [key]: value } : current))

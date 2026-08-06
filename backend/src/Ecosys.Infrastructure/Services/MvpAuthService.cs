@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
@@ -17,12 +18,14 @@ namespace Ecosys.Infrastructure.Services;
 public interface IMvpAuthService
 {
     Task<SignupResult> SignupAsync(string fullName, string email, string password, string companyName, string? industry, string country, CancellationToken cancellationToken = default);
-    Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default);
+    Task<LoginResult> LoginAsync(string email, string password, bool rememberMe = false, CancellationToken cancellationToken = default);
+    Task<LoginResult> RefreshAsync(string refreshToken, CancellationToken cancellationToken = default);
     Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default);
 }
 
 public sealed record SignupResult(
     string Token,
+    string RefreshToken,
     Guid TenantId,
     Guid UserId,
     string CompanyName,
@@ -32,6 +35,7 @@ public sealed record SignupResult(
 
 public sealed record LoginResult(
     string Token,
+    string RefreshToken,
     Guid TenantId,
     Guid UserId,
     string FullName,
@@ -173,11 +177,11 @@ internal sealed class MvpAuthService(
             $"Tenant '{tenant.CompanyName}' created with first admin '{user.FullName}'.",
             cancellationToken);
 
-        var token = await CreateTokenAsync(user, tenant, permissions, cancellationToken);
-        return new SignupResult(token, tenant.Id, user.Id, tenant.CompanyName, user.Role, user.JobTitle, permissions);
+        var (token, refreshToken) = await CreateTokensAsync(user, tenant, permissions, rememberMe: false, cancellationToken);
+        return new SignupResult(token, refreshToken, tenant.Id, user.Id, tenant.CompanyName, user.Role, user.JobTitle, permissions);
     }
 
-    public async Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default)
+    public async Task<LoginResult> LoginAsync(string email, string password, bool rememberMe = false, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
@@ -238,7 +242,7 @@ internal sealed class MvpAuthService(
 
         ResetFailedLoginState(user);
         var permissions = await ResolvePermissionsAsync(user, cancellationToken);
-        var token = await CreateTokenAsync(user, user.Tenant, permissions, cancellationToken, user.MustChangePassword);
+        var (token, refreshToken) = await CreateTokensAsync(user, user.Tenant, permissions, rememberMe, cancellationToken, user.MustChangePassword);
 
         await auditLogService.LogAsync(
             user.TenantId,
@@ -251,6 +255,7 @@ internal sealed class MvpAuthService(
 
         return new LoginResult(
             token,
+            refreshToken,
             user.TenantId,
             user.Id,
             user.FullName,
@@ -401,14 +406,119 @@ internal sealed class MvpAuthService(
         user.LastFailedLoginAt = null;
     }
 
-    private async Task<string> CreateTokenAsync(User user, Tenant tenant, UserPermissionsModel permissions, CancellationToken cancellationToken, bool mustChangePassword = false)
+    private async Task<(string AccessToken, string RefreshToken)> CreateTokensAsync(User user, Tenant tenant, UserPermissionsModel permissions, bool rememberMe, CancellationToken cancellationToken, bool mustChangePassword = false)
     {
         var jwtId = Guid.NewGuid().ToString("N");
         var session = userSessionService.StartSession(user, jwtId);
         var token = CreateToken(user, tenant, permissions, session.Id, jwtId, mustChangePassword);
+        var refreshToken = CreateRefreshToken(user, session.Id, rememberMe);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return token;
+        return (token, refreshToken);
     }
+
+    /// <summary>
+    /// Exchanges a valid refresh token for a fresh access token, rotating the refresh token in the
+    /// process. Permissions are re-resolved here so the new access token carries the current matrix
+    /// (a session that was revoked on a role/permission change fails this call, forcing re-login).
+    /// </summary>
+    public async Task<LoginResult> RefreshAsync(string refreshToken, CancellationToken cancellationToken = default)
+    {
+        const string invalidMessage = "Your session is no longer valid. Please sign in again.";
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            throw new UnauthorizedException(invalidMessage);
+        }
+
+        var hash = HashRefreshToken(refreshToken);
+        var existing = await dbContext.RefreshTokens.SingleOrDefaultAsync(x => x.TokenHash == hash, cancellationToken);
+        if (existing is null)
+        {
+            throw new UnauthorizedException(invalidMessage);
+        }
+
+        // Reuse detection: an already-rotated (revoked) token being presented again means the token
+        // family may be compromised — revoke every session for the user and refuse.
+        if (existing.RevokedUtc.HasValue)
+        {
+            await userSessionService.RevokeAllForUserAsync(existing.UserId, "Refresh token reuse detected", cancellationToken);
+            throw new UnauthorizedException(invalidMessage);
+        }
+
+        if (existing.ExpiresUtc <= DateTime.UtcNow)
+        {
+            throw new UnauthorizedException(invalidMessage);
+        }
+
+        var session = await userSessionService.GetAsync(existing.SessionId, cancellationToken);
+        if (session is null || session.IsRevoked || session.LogoutAt.HasValue)
+        {
+            throw new UnauthorizedException(invalidMessage);
+        }
+
+        var user = await dbContext.Users
+            .Include(x => x.Tenant)
+            .Include(x => x.Permission)
+            .SingleOrDefaultAsync(x => x.Id == existing.UserId, cancellationToken);
+        if (user is null || !user.IsActive || user.Tenant is null || !user.Tenant.IsActive)
+        {
+            throw new UnauthorizedException(invalidMessage);
+        }
+
+        var permissions = await ResolvePermissionsAsync(user, cancellationToken);
+
+        // Rotate: revoke the presented token and issue a replacement bound to the same session.
+        existing.RevokedUtc = DateTime.UtcNow;
+        var newRefreshToken = CreateRefreshToken(user, existing.SessionId, existing.RememberMe);
+        existing.ReplacedByTokenHash = HashRefreshToken(newRefreshToken);
+
+        var jwtId = Guid.NewGuid().ToString("N");
+        var accessToken = CreateToken(user, user.Tenant, permissions, existing.SessionId, jwtId, user.MustChangePassword);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new LoginResult(
+            accessToken,
+            newRefreshToken,
+            user.TenantId,
+            user.Id,
+            user.FullName,
+            user.Email,
+            user.Role,
+            user.JobTitle,
+            user.Department,
+            user.MustChangePassword,
+            permissions,
+            user.Tenant.CompanyName,
+            user.Tenant.Country,
+            user.Tenant.Industry,
+            user.Tenant.LogoUrl,
+            user.Tenant.ShowPoweredByEcosys);
+    }
+
+    /// <summary>Creates a refresh token bound to a session, persists only its hash, returns the raw value.</summary>
+    private string CreateRefreshToken(User user, Guid sessionId, bool rememberMe)
+    {
+        var raw = GenerateRefreshTokenValue();
+        var options = jwtOptions.Value;
+        dbContext.RefreshTokens.Add(new RefreshToken
+        {
+            TenantId = user.TenantId,
+            UserId = user.Id,
+            SessionId = sessionId,
+            TokenHash = HashRefreshToken(raw),
+            RememberMe = rememberMe,
+            ExpiresUtc = DateTime.UtcNow.AddDays(rememberMe ? options.RefreshTokenRememberMeDays : options.RefreshTokenDays)
+        });
+        return raw;
+    }
+
+    private static string GenerateRefreshTokenValue() =>
+        Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+
+    private static string HashRefreshToken(string token) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
     private string CreateToken(
         User user,

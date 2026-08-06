@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../shared/api/apiClient'
 import { endpoints } from '../shared/api/endpoints'
+import type { PagedResult } from '../shared/types/pagination'
 import type {
   PlatformAuditLog,
   PlatformDashboardSummary,
@@ -31,6 +32,7 @@ export function usePlatformSummary() {
     queryKey: ['platform', 'summary'],
     queryFn: () => api.get<PlatformSummary>(endpoints.platform.summary),
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 }
 
@@ -39,14 +41,32 @@ export function usePlatformDashboardSummary() {
     queryKey: ['platform', 'dashboard-summary'],
     queryFn: () => api.get<PlatformDashboardSummary>(endpoints.platform.dashboardSummary),
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 }
 
-export function useTenants() {
+export interface TenantListFilters { search?: string | undefined; status?: string | undefined; trial?: string | undefined; sortBy?: string | undefined; sortDir?: string | undefined }
+
+/** Server-paginated tenants for the list table (the bare {@link useTenants} stays for dropdowns). */
+export function useTenantsPaged(filters: TenantListFilters, page: number, pageSize: number, options?: { refetchInterval?: number }) {
+  return useQuery({
+    queryKey: ['platform', 'tenants', 'paged', filters, page, pageSize],
+    queryFn: () => api.get<PagedResult<PlatformTenantListItem>>(endpoints.platform.tenants, {
+      search: filters.search, status: filters.status, trial: filters.trial, sortBy: filters.sortBy, sortDir: filters.sortDir, page, pageSize,
+    }),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    ...(options?.refetchInterval ? { refetchInterval: options.refetchInterval } : {}),
+  })
+}
+
+/** `refetchInterval` lets operational pages opt into polling; dropdown consumers omit it. */
+export function useTenants(options?: { refetchInterval?: number }) {
   return useQuery({
     queryKey: ['platform', 'tenants'],
     queryFn: () => api.get<PlatformTenantListItem[]>(endpoints.platform.tenants),
     staleTime: 30_000,
+    ...(options?.refetchInterval ? { refetchInterval: options.refetchInterval } : {}),
   })
 }
 
@@ -255,11 +275,25 @@ export function useUpdateTenantCommunicationSettings(id: string) {
   })
 }
 
-export function useLeads() {
+/** `refetchInterval` lets operational pages opt into polling; dropdown consumers omit it. */
+export function useLeads(options?: { refetchInterval?: number }) {
   return useQuery({
     queryKey: ['platform', 'leads'],
     queryFn: () => api.get<PlatformLeadListItem[]>(endpoints.platform.leads),
     staleTime: 30_000,
+    ...(options?.refetchInterval ? { refetchInterval: options.refetchInterval } : {}),
+  })
+}
+
+export interface LeadListFilters { search?: string | undefined; status?: string | undefined }
+
+/** Server-paginated leads for the list table (the bare {@link useLeads} stays for other callers). */
+export function useLeadsPaged(filters: LeadListFilters, page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ['platform', 'leads', 'paged', filters, page, pageSize],
+    queryFn: () => api.get<PagedResult<PlatformLeadListItem>>(endpoints.platform.leads, { search: filters.search, status: filters.status, page, pageSize }),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -295,6 +329,18 @@ export function usePlatformUsers() {
     queryKey: ['platform', 'users'],
     queryFn: () => api.get<PlatformUser[]>(endpoints.platformUsers.list),
     staleTime: 30_000,
+  })
+}
+
+export interface PlatformUserListFilters { search?: string | undefined; role?: string | undefined; status?: string | undefined }
+
+/** Server-paginated platform users for the list table. */
+export function usePlatformUsersPaged(filters: PlatformUserListFilters, page: number, pageSize: number) {
+  return useQuery({
+    queryKey: ['platform', 'users', 'paged', filters, page, pageSize],
+    queryFn: () => api.get<PagedResult<PlatformUser>>(endpoints.platformUsers.list, { search: filters.search, role: filters.role, status: filters.status, page, pageSize }),
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -354,6 +400,7 @@ export function useLicensingUsage() {
     queryKey: ['platform', 'licensing', 'usage'],
     queryFn: () => api.get<LicenseUsageSnapshot[]>(endpoints.platformLicensing.usage),
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 }
 
@@ -385,6 +432,7 @@ export function useSubscriptions() {
     queryKey: ['platform', 'licensing', 'subscriptions'],
     queryFn: () => api.get<PlatformSubscription[]>(endpoints.platformLicensing.subscriptions),
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 }
 
@@ -393,6 +441,7 @@ export function useFinanceDashboard() {
     queryKey: ['platform', 'finance', 'dashboard'],
     queryFn: () => api.get<PlatformFinanceDashboard>(endpoints.platformFinance.dashboard),
     staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 }
 

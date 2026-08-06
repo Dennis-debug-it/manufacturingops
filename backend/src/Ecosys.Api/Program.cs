@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Ecosys.Api.Configuration;
+using Ecosys.Api.Observability;
 using Microsoft.AspNetCore.HttpOverrides;
 using Ecosys.Api.Hubs;
 using Ecosys.Infrastructure;
@@ -45,6 +46,8 @@ builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOpt
 builder.Services.Configure<PlatformAdminOptions>(builder.Configuration.GetSection(PlatformAdminOptions.SectionName));
 builder.Services.Configure<PublicAppOptions>(builder.Configuration.GetSection(PublicAppOptions.SectionName));
 builder.Services.Configure<AuthSecurityOptions>(builder.Configuration.GetSection(AuthSecurityOptions.SectionName));
+builder.Services.Configure<TimeZoneOptions>(builder.Configuration.GetSection(TimeZoneOptions.SectionName));
+builder.Services.AddSingleton<IRuntimeMetrics, RuntimeMetrics>();
 builder.Services.AddHttpClient();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSignalR();
@@ -200,29 +203,39 @@ builder.Services.AddHsts(options =>
     options.MaxAge = TimeSpan.FromDays(180);
     options.IncludeSubDomains = true;
 });
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
+// Swagger is a development-only surface. Registering it (and mapping it below) only in
+// Development means the OpenAPI generator/UI is never even built in Production — defense in depth
+// on top of the environment gate for the middleware (X-01).
+if (builder.Environment.IsDevelopment())
 {
-    options.SwaggerDoc("v1", new OpenApiInfo
+    builder.Services.AddEndpointsApiExplorer();
+    builder.Services.AddSwaggerGen(options =>
     {
-        Title = "Ecosys ServiceOps API",
-        Version = "v1"
+        options.SwaggerDoc("v1", new OpenApiInfo
+        {
+            Title = "Ecosys ServiceOps API",
+            Version = "v1"
+        });
+
+        var bearerScheme = new OpenApiSecurityScheme
+        {
+            Name = "Authorization",
+            Description = "Paste a JWT bearer token here.",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT"
+        };
+
+        options.AddSecurityDefinition("Bearer", bearerScheme);
     });
-
-    var bearerScheme = new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Description = "Paste a JWT bearer token here.",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT"
-    };
-
-    options.AddSecurityDefinition("Bearer", bearerScheme);
-});
+}
 
 var app = builder.Build();
+
+// Record request latency / status codes for the platform health page. First in the pipeline so it
+// captures the full request time and the final status (including errors mapped by the handler below).
+app.UseMiddleware<RequestMetricsMiddleware>();
 
 app.Use(async (context, next) =>
 {
@@ -297,6 +310,21 @@ app.Use(async (context, next) =>
                 statusCode: appException.StatusCode,
                 title: appException.Message,
                 extensions: extensions).ExecuteAsync(context);
+            return;
+        }
+
+        if (exception is DbUpdateConcurrencyException concurrencyException)
+        {
+            logger.LogWarning(concurrencyException, "Concurrent update conflict while processing request.");
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            await Results.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "This record was changed by someone else. Refresh and try again.",
+                extensions: new Dictionary<string, object?>
+                {
+                    ["traceId"] = context.TraceIdentifier,
+                    ["errorCode"] = "CONCURRENCY_CONFLICT"
+                }).ExecuteAsync(context);
             return;
         }
 
@@ -415,10 +443,33 @@ static string[] GetValidationErrors(ModelStateDictionary modelState)
 {
     return modelState.Values
         .SelectMany(entry => entry.Errors)
-        .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage) ? "The request payload is invalid." : error.ErrorMessage)
+        .Select(SanitizeValidationError)
         .Distinct(StringComparer.Ordinal)
         .ToArray();
 }
+
+// Never surface raw deserializer output — JSON paths, byte positions, and target CLR type names
+// leak internals and aid probing (X-04). Binding/parse failures carry an Exception (JsonException,
+// FormatException, …) or a framework-generated parser message; those become a generic message,
+// while genuine validation messages (DataAnnotations) are preserved.
+static string SanitizeValidationError(ModelError error)
+{
+    const string generic = "The request payload is invalid.";
+    if (error.Exception is not null || string.IsNullOrWhiteSpace(error.ErrorMessage) || LooksLikeParserMessage(error.ErrorMessage))
+    {
+        return generic;
+    }
+
+    return error.ErrorMessage;
+}
+
+static bool LooksLikeParserMessage(string message) =>
+    message.Contains("Path: $", StringComparison.Ordinal)
+    || message.Contains("LineNumber", StringComparison.OrdinalIgnoreCase)
+    || message.Contains("BytePositionInLine", StringComparison.OrdinalIgnoreCase)
+    || message.Contains("could not be converted", StringComparison.OrdinalIgnoreCase)
+    || message.Contains("is not valid for", StringComparison.OrdinalIgnoreCase)
+    || message.Contains("JSON", StringComparison.OrdinalIgnoreCase);
 
 static Dictionary<string, string?> BuildEnvironmentOverrides()
 {

@@ -1,3 +1,4 @@
+using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -21,7 +22,7 @@ public sealed class SitesController(
     private static readonly string[] AllowedSiteTypes = ["Branch", "HQ", "Data Centre", "Warehouse", "Factory", "Other"];
 
     [HttpGet("api/clients/{clientId:guid}/sites")]
-    public async Task<IActionResult> List(Guid clientId, [FromQuery] string? region, [FromQuery] string? status, [FromQuery] string? q, CancellationToken ct)
+    public async Task<IActionResult> List(Guid clientId, [FromQuery] string? region, [FromQuery] string? status, [FromQuery] string? q, [FromQuery] int? page, [FromQuery] int? pageSize, CancellationToken ct)
     {
         var query = dbContext.Sites
             .Where(x => x.TenantId == TenantId && x.ClientId == clientId);
@@ -33,7 +34,15 @@ public sealed class SitesController(
         if (!string.IsNullOrWhiteSpace(q))
             query = query.Where(x => x.SiteName.Contains(q) || x.SiteCode.Contains(q));
 
-        var sites = await query.OrderBy(x => x.SiteName).ToListAsync(ct);
+        var ordered = query.OrderBy(x => x.SiteName);
+
+        if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
+        {
+            var paged = await ordered.ToPagedResultAsync(page, pageSize, ct);
+            return Ok(paged.Map(MapSite));
+        }
+
+        var sites = await ordered.ToListAsync(ct);
         return Ok(sites.Select(MapSite));
     }
 

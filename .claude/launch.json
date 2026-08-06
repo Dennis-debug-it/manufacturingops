@@ -31,8 +31,8 @@
       "env": {
         "ConnectionStrings__DefaultConnection": "Host=localhost;Port=5432;Database=ecosys_serviceops;Username=postgres;Password=postgres",
         "Jwt__SigningKey": "local-dev-only-signing-key-not-for-production-use-32chars",
-        "PlatformAdmin__Email": "platform.owner@ecosys.dev",
-        "PlatformAdmin__Password": "DevPlatform#2026",
+        "PlatformAdmin__Email": "platform.owner@ecosys.test",
+        "PlatformAdmin__Password": "PlatformAdmin123!",
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
     }

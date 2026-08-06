@@ -32,6 +32,24 @@ public sealed class SecurityHardeningTests
     }
 
     [Fact]
+    public async Task MalformedJson_ReturnsGenericError_WithoutParserInternals()
+    {
+        await using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        // Truncated / invalid JSON body.
+        using var content = new StringContent("{ \"email\": ", System.Text.Encoding.UTF8, "application/json");
+        var response = await client.PostAsync("/api/auth/login", content);
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("LineNumber", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("BytePositionInLine", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Path: $", body, StringComparison.Ordinal);
+        Assert.Contains("The request payload is invalid.", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Startup_Fails_WhenJwtSigningKeyIsMissing()
     {
         var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>

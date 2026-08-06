@@ -37,6 +37,7 @@ public sealed class AuthController(
 
         return Ok(new SignupResponse(
             result.Token,
+            result.RefreshToken,
             result.TenantId,
             result.UserId,
             result.CompanyName,
@@ -48,13 +49,25 @@ public sealed class AuthController(
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        var result = await authService.LoginAsync(request.Email, request.Password, cancellationToken);
+        var result = await authService.LoginAsync(request.Email, request.Password, request.RememberMe, cancellationToken);
 
-        return Ok(new LoginResponse(
-            result.Token,
-            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId))),
-            new LoginTenantDto(result.TenantId, result.CompanyName, result.Country, result.Industry, result.LogoUrl, result.ShowPoweredByEcosys)));
+        return Ok(BuildLoginResponse(result));
     }
+
+    [HttpPost("refresh")]
+    public async Task<ActionResult<LoginResponse>> Refresh([FromBody] RefreshRequest request, CancellationToken cancellationToken)
+    {
+        var result = await authService.RefreshAsync(request.RefreshToken, cancellationToken);
+
+        return Ok(BuildLoginResponse(result));
+    }
+
+    private LoginResponse BuildLoginResponse(LoginResult result) =>
+        new(
+            result.Token,
+            result.RefreshToken,
+            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId))),
+            new LoginTenantDto(result.TenantId, result.CompanyName, result.Country, result.Industry, result.LogoUrl, result.ShowPoweredByEcosys));
 
     [HttpPost("forgot-password")]
     public async Task<ActionResult<MessageResponse>> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
@@ -135,7 +148,23 @@ public sealed class AuthController(
     public async Task<IActionResult> Logout(CancellationToken cancellationToken)
     {
         var sessionId = tenantContext.GetRequiredSessionId();
-        await userSessionService.LogoutAsync(tenantContext.GetRequiredSessionId(), cancellationToken);
+        await userSessionService.LogoutAsync(sessionId, cancellationToken);
+
+        // Revoke the refresh tokens bound to this session so a saved refresh token can't mint new
+        // access tokens after sign-out.
+        var sessionRefreshTokens = await dbContext.RefreshTokens
+            .Where(x => x.SessionId == sessionId && x.RevokedUtc == null)
+            .ToListAsync(cancellationToken);
+        if (sessionRefreshTokens.Count > 0)
+        {
+            var revokedAt = DateTime.UtcNow;
+            foreach (var refreshToken in sessionRefreshTokens)
+            {
+                refreshToken.RevokedUtc = revokedAt;
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
 
         if (!tenantContext.IsSuperAdmin && tenantContext.TenantId.HasValue && tenantContext.UserId.HasValue)
         {
@@ -326,6 +355,7 @@ public sealed record SignupRequest(
 
 public sealed record SignupResponse(
     string Token,
+    string RefreshToken,
     Guid TenantId,
     Guid UserId,
     string CompanyName,
@@ -333,7 +363,8 @@ public sealed record SignupResponse(
     string? JobTitle,
     PermissionResponse Permissions);
 
-public sealed record LoginRequest(string Email, string Password);
+public sealed record LoginRequest(string Email, string Password, bool RememberMe = false);
+public sealed record RefreshRequest(string RefreshToken);
 public sealed record ForgotPasswordRequest(string Email);
 public sealed record SelfServiceResetPasswordRequest(string Token, string NewPassword, string ConfirmPassword);
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword, string ConfirmPassword);
@@ -341,6 +372,7 @@ public sealed record MessageResponse(string Message);
 
 public sealed record LoginResponse(
     string Token,
+    string RefreshToken,
     LoginUserDto User,
     LoginTenantDto Tenant);
 

@@ -26,7 +26,8 @@ public sealed class UsersController(
     ITenantSecurityPolicyService tenantSecurityPolicyService,
     IAuditLogService auditLogService,
     IUserCredentialDeliveryService credentialDeliveryService,
-    ITemporaryPasswordService temporaryPasswordService) : TenantAwareControllerBase(tenantContext)
+    ITemporaryPasswordService temporaryPasswordService,
+    IUserSessionService userSessionService) : TenantAwareControllerBase(tenantContext)
 {
     private const int InviteExpiryHours = 72;
     [HttpGet]
@@ -232,6 +233,14 @@ public sealed class UsersController(
             $"Updated user '{user.Email}'.",
             cancellationToken);
 
+        // Force fresh authorization: this endpoint re-applies the user's role, permission set and
+        // branch access, so revoke their existing sessions (they carry the now-stale permission
+        // claims baked into the JWT). Skip self-edits so an admin doesn't log themselves out.
+        if (id != UserId)
+        {
+            await userSessionService.RevokeAllForUserAsync(id, "Account updated by administrator", cancellationToken);
+        }
+
         var workforceProfiles = await LoadWorkforceProfilesAsync([user], cancellationToken);
         return Ok(Map(user, workforceProfiles));
     }
@@ -271,6 +280,13 @@ public sealed class UsersController(
             user.Id.ToString(),
             $"{(request.IsActive ? "Activated" : "Deactivated")} user '{user.Email}'.",
             cancellationToken);
+
+        // Terminate all active sessions on deactivation so access is revoked immediately rather
+        // than lingering until the 8h JWT expires.
+        if (!request.IsActive)
+        {
+            await userSessionService.RevokeAllForUserAsync(id, "Account deactivated", cancellationToken);
+        }
 
         var workforceProfiles = await LoadWorkforceProfilesAsync([user], cancellationToken);
         return Ok(Map(user, workforceProfiles));
@@ -387,6 +403,10 @@ public sealed class UsersController(
             user.Id.ToString(),
             $"Deleted user '{user.Email}'.",
             cancellationToken);
+
+        // Soft-delete deactivates the account — revoke active sessions so the deleted user loses
+        // access immediately.
+        await userSessionService.RevokeAllForUserAsync(id, "Account deleted", cancellationToken);
         return NoContent();
     }
 

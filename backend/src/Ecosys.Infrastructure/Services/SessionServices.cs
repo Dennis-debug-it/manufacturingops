@@ -18,6 +18,8 @@ public interface IUserSessionService
     Task<UserSession?> GetAsync(Guid sessionId, CancellationToken cancellationToken = default);
     Task<int> RevokeAllForUserAsync(Guid userId, string? reason = null, CancellationToken cancellationToken = default);
     Task<int> RevokeOthersForUserAsync(Guid userId, Guid currentSessionId, string? reason = null, CancellationToken cancellationToken = default);
+    Task<int> RevokeSessionsForRolesAsync(Guid tenantId, IReadOnlyCollection<string> roles, string? reason = null, CancellationToken cancellationToken = default);
+    Task<int> RevokeSessionsForUsersAsync(IReadOnlyCollection<Guid> userIds, string? reason = null, CancellationToken cancellationToken = default);
 }
 
 internal sealed class UserSessionService(AppDbContext dbContext, IHttpContextAccessor httpContextAccessor) : IUserSessionService
@@ -45,6 +47,18 @@ internal sealed class UserSessionService(AppDbContext dbContext, IHttpContextAcc
     {
         var session = await dbContext.UserSessions.SingleOrDefaultAsync(x => x.Id == sessionId, cancellationToken);
         if (session is null || session.IsRevoked || session.LogoutAt.HasValue)
+        {
+            return false;
+        }
+
+        // Fail closed if the underlying user was deactivated — defense in depth so a deactivated or
+        // deleted user is rejected by the heartbeat (within one request) even if a revocation call
+        // on the mutation path was ever missed.
+        var userIsActive = await dbContext.Users
+            .Where(x => x.Id == session.UserId)
+            .Select(x => (bool?)x.IsActive)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (userIsActive != true)
         {
             return false;
         }
@@ -111,6 +125,66 @@ internal sealed class UserSessionService(AppDbContext dbContext, IHttpContextAcc
         var now = DateTime.UtcNow;
         var sessions = await dbContext.UserSessions
             .Where(x => x.UserId == userId && x.Id != currentSessionId && !x.IsRevoked)
+            .ToListAsync(cancellationToken);
+
+        foreach (var session in sessions)
+        {
+            session.IsRevoked = true;
+            session.RevokedAt = now;
+            session.LastSeenAt = now;
+            session.LogoutAt ??= now;
+            if (!string.IsNullOrWhiteSpace(reason) && string.IsNullOrWhiteSpace(session.UserAgent))
+            {
+                session.UserAgent = reason;
+            }
+        }
+
+        if (sessions.Count > 0)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return sessions.Count;
+    }
+
+    public async Task<int> RevokeSessionsForRolesAsync(Guid tenantId, IReadOnlyCollection<string> roles, string? reason = null, CancellationToken cancellationToken = default)
+    {
+        if (roles.Count == 0)
+        {
+            return 0;
+        }
+
+        var normalizedRoles = roles
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => r.ToLower())
+            .Distinct()
+            .ToArray();
+        if (normalizedRoles.Length == 0)
+        {
+            return 0;
+        }
+
+        // Revoke every active session of every user in this tenant who holds one of the changed
+        // roles, so the new permission matrix is picked up on their next login/refresh rather than
+        // lingering in their existing token claims.
+        var userIds = await dbContext.Users
+            .Where(x => x.TenantId == tenantId && normalizedRoles.Contains(x.Role.ToLower()))
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+
+        return await RevokeSessionsForUsersAsync(userIds, reason, cancellationToken);
+    }
+
+    public async Task<int> RevokeSessionsForUsersAsync(IReadOnlyCollection<Guid> userIds, string? reason = null, CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0)
+        {
+            return 0;
+        }
+
+        var now = DateTime.UtcNow;
+        var sessions = await dbContext.UserSessions
+            .Where(x => userIds.Contains(x.UserId) && !x.IsRevoked)
             .ToListAsync(cancellationToken);
 
         foreach (var session in sessions)

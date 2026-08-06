@@ -2,6 +2,7 @@ using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -35,13 +36,20 @@ public sealed class PlatformTenantsController(
     private const int TrialExpiringSoonDays = 3;
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyCollection<PlatformTenantListResponse>>> GetAll(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? search,
+        [FromQuery] string? status,
+        [FromQuery] string? trial,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDir,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
+        CancellationToken cancellationToken)
     {
         var tenants = await dbContext.Tenants
             .Include(x => x.TenantLicenses)
             .ThenInclude(x => x.LicensePlan)
             .Where(x => x.Id != PlatformConstants.RootTenantId)
-            .OrderBy(x => x.CompanyName)
             .ToListAsync(cancellationToken);
 
         var tenantIds = tenants.Select(x => x.Id).ToArray();
@@ -57,14 +65,56 @@ public sealed class PlatformTenantsController(
             .Select(group => new { TenantId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(x => x.TenantId, x => x.Count, cancellationToken);
 
-        var response = tenants
+        // Filter/sort on the mapped rows: status and trial state are derived (BuildTrialSnapshot /
+        // ResolveLicenseStatus), not plain columns, so this can't run as SQL. It moves the work
+        // server-side and bounds the payload; the tenant set is loaded in full to derive those
+        // fields regardless.
+        IEnumerable<PlatformTenantListResponse> mapped = tenants
             .Select(tenant => MapListItem(
                 tenant,
                 userCounts.GetValueOrDefault(tenant.Id),
-                branchCounts.GetValueOrDefault(tenant.Id)))
+                branchCounts.GetValueOrDefault(tenant.Id)));
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.Trim().ToLowerInvariant();
+            mapped = mapped.Where(t =>
+                t.Name.ToLowerInvariant().Contains(q)
+                || t.Slug.ToLowerInvariant().Contains(q)
+                || (t.ContactName ?? string.Empty).ToLowerInvariant().Contains(q)
+                || (t.ContactEmail ?? string.Empty).ToLowerInvariant().Contains(q));
+        }
+
+        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            mapped = mapped.Where(t => string.Equals(t.Status, status, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(trial) && !string.Equals(trial, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            mapped = mapped.Where(t => string.Equals(t.TrialStatus, trial, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var descending = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
+        Func<PlatformTenantListResponse, string> keySelector = sortBy switch
+        {
+            "createdAt" => t => t.CreatedAt.ToString("O"),
+            "trialEndsAt" => t => t.TrialEndsAt?.ToString("O") ?? string.Empty,
+            "status" => t => t.Status,
+            _ => t => t.Name,
+        };
+
+        var sorted = (descending
+            ? mapped.OrderByDescending(keySelector, StringComparer.OrdinalIgnoreCase)
+            : mapped.OrderBy(keySelector, StringComparer.OrdinalIgnoreCase))
             .ToList();
 
-        return Ok(response);
+        if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
+        {
+            return Ok(sorted.ToPagedResult(page, pageSize));
+        }
+
+        return Ok(sorted);
     }
 
     [HttpGet("{tenantId:guid}")]

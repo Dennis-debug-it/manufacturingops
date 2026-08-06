@@ -41,6 +41,11 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
+    // Emit hashed bundles under dist/static/ instead of the default dist/assets/. The SPA has an
+    // `/assets` route (the Assets module); with the default 'assets' dir, nginx `try_files` resolves
+    // `/assets` to the real static directory and returns 403 on refresh/deep-link. 'static' avoids
+    // the collision so `/assets` falls through to index.html.
+    assetsDir: 'static',
     rollupOptions: {
       output: {
         manualChunks(id) {

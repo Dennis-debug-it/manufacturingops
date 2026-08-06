@@ -1,18 +1,18 @@
 import { useMemo, useState } from 'react'
 import { Download, Search } from 'lucide-react'
 import { PageHeader } from '../shared/components/PageHeader'
-import { Spinner } from '../shared/components/Spinner'
+import { AsyncPanel } from '../shared/components/AsyncPanel'
 import { EmptyState } from '../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../shared/components/DataTable'
 import { useDebounce } from '../shared/hooks/useDebounce'
 import { downloadCsv } from '../shared/utils/csv'
 import { formatDateTime } from '../shared/utils/dates'
-import { usePlatformAuditLogs, useTenants } from './api'
+import { usePlatformAuditLogs } from './api'
 import type { PlatformAuditLog } from './types'
 
 export function AuditPage() {
-  const { data, isLoading, isError } = usePlatformAuditLogs()
-  const tenants = useTenants()
+  const auditQuery = usePlatformAuditLogs()
+  const { data } = auditQuery
   const [search, setSearch] = useState('')
   const [tenantFilter, setTenantFilter] = useState('All')
   const [severityFilter, setSeverityFilter] = useState('All')
@@ -49,14 +49,6 @@ export function AuditPage() {
     { key: 'severity', header: 'Severity', cell: (row) => row.severity },
   ]
 
-  if (isLoading || tenants.isLoading) {
-    return <Spinner label="Loading audit logs" />
-  }
-
-  if (isError || tenants.isError) {
-    return <EmptyState title="Audit unavailable" description="Audit records could not be loaded." />
-  }
-
   const tenantOptions = ['All', ...Array.from(new Set((data ?? []).map((row) => row.tenantName ?? 'Platform')))]
 
   return (
@@ -74,24 +66,32 @@ export function AuditPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(220px,280px))]">
-        <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
-          <Search className="h-4 w-4 text-slate-400" />
-          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search actor, action, entity, or details" className="w-full border-0 bg-transparent p-0 text-sm outline-none placeholder:text-slate-400" />
-        </label>
-        <select value={tenantFilter} onChange={(event) => setTenantFilter(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none">
-          {tenantOptions.map((tenant) => <option key={tenant} value={tenant}>{tenant === 'All' ? 'All tenants' : tenant}</option>)}
-        </select>
-        <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none">
-          {['All', 'Info', 'Warning', 'Error'].map((severity) => <option key={severity} value={severity}>{severity === 'All' ? 'All severities' : severity}</option>)}
-        </select>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none" />
-          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none" />
-        </div>
-      </div>
+      <AsyncPanel query={auditQuery} loadingLabel="Loading audit logs" errorTitle="Audit unavailable" errorDescription="Audit records could not be loaded.">
+        {() => (
+          <>
+            <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(220px,280px))]">
+              <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
+                <Search className="h-4 w-4 text-slate-400" />
+                <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search actor, action, entity, or details" className="w-full border-0 bg-transparent p-0 text-sm outline-none placeholder:text-slate-400" />
+              </label>
+              <select value={tenantFilter} onChange={(event) => setTenantFilter(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none">
+                {tenantOptions.map((tenant) => <option key={tenant} value={tenant}>{tenant === 'All' ? 'All tenants' : tenant}</option>)}
+              </select>
+              <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none">
+                {['All', 'Info', 'Warning', 'Error'].map((severity) => <option key={severity} value={severity}>{severity === 'All' ? 'All severities' : severity}</option>)}
+              </select>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none" />
+                <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none" />
+              </div>
+            </div>
 
-      {rows.length === 0 ? <EmptyState title="No audit logs found" description="Adjust the filters or widen the date range." /> : <DataTable columns={columns} data={rows} emptyTitle="No audit logs found" emptyDescription="Adjust the filters or widen the date range." />}
+            <div className="mt-4">
+              {rows.length === 0 ? <EmptyState title="No audit logs found" description="Adjust the filters or widen the date range." /> : <DataTable columns={columns} data={rows} emptyTitle="No audit logs found" emptyDescription="Adjust the filters or widen the date range." />}
+            </div>
+          </>
+        )}
+      </AsyncPanel>
     </div>
   )
 }

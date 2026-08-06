@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -29,7 +31,7 @@ public sealed class AssetsController(
     };
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyCollection<AssetResponse>>> GetAll(
+    public async Task<IActionResult> GetAll(
         [FromQuery] Guid? branchId,
         [FromQuery] Guid? clientId,
         [FromQuery] Guid? siteId,
@@ -37,6 +39,8 @@ public sealed class AssetsController(
         [FromQuery] Guid? categoryId,
         [FromQuery] string? search,
         [FromQuery] string? status,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
         CancellationToken cancellationToken)
     {
         userAccessService.EnsureTenantOperationalAccess();
@@ -98,10 +102,15 @@ public sealed class AssetsController(
                 || (x.Client != null && x.Client.ClientName.ToLower().Contains(searchLower)));
         }
 
-        var assets = await query
-            .OrderBy(x => x.AssetName)
-            .ToListAsync(cancellationToken);
+        var ordered = query.OrderBy(x => x.AssetName);
 
+        if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
+        {
+            var paged = await ordered.ToPagedResultAsync(page, pageSize, cancellationToken);
+            return Ok(paged.Map(Map));
+        }
+
+        var assets = await ordered.ToListAsync(cancellationToken);
         return Ok(assets.Select(Map).ToList());
     }
 
@@ -612,24 +621,24 @@ public sealed record UpsertAssetRequest(
     Guid? SiteId,
     Guid? SystemId,
     Guid? AssetCategoryId,
-    string AssetName,
-    string AssetCode,
-    string? AssetType,
-    string? OwnershipType,
-    string? Location,
-    string? SerialNumber,
-    string? Manufacturer,
-    string? Model,
+    [property: StringLength(200)] string AssetName,
+    [property: StringLength(100)] string AssetCode,
+    [property: StringLength(100)] string? AssetType,
+    [property: StringLength(50)] string? OwnershipType,
+    [property: StringLength(200)] string? Location,
+    [property: StringLength(100)] string? SerialNumber,
+    [property: StringLength(150)] string? Manufacturer,
+    [property: StringLength(150)] string? Model,
     DateTime? InstallationDate,
     DateTime? WarrantyExpiryDate,
-    string? RecommendedPmFrequency,
+    [property: StringLength(50)] string? RecommendedPmFrequency,
     int? PmFrequencyValue,
-    string? PmFrequencyUnit,
+    [property: StringLength(50)] string? PmFrequencyUnit,
     bool AutoSchedulePm,
     DateTime? LastPmDate,
     DateTime? NextPmDate,
-    string? Notes,
-    string? Status,
+    [property: StringLength(2000)] string? Notes,
+    [property: StringLength(50)] string? Status,
     IReadOnlyCollection<UpsertAssetCustomFieldValueRequest>? CustomFieldValues);
 
 public sealed record AssetResponse(

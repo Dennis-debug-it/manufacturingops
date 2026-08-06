@@ -31,6 +31,42 @@ export interface RoleCapabilities {
 
 export type CapabilityKey = keyof RoleCapabilities
 
+/** All 23 capabilities set to false — a safe starting point for a brand-new user. */
+export const EMPTY_CAPABILITIES: RoleCapabilities = {
+  canViewWorkOrders: false,
+  canCreateWorkOrders: false,
+  canAssignWorkOrders: false,
+  canCompleteWorkOrders: false,
+  canViewKnowledge: false,
+  canManageKnowledge: false,
+  canViewMaterials: false,
+  canRequestMaterials: false,
+  canManageMaterials: false,
+  canApproveMaterials: false,
+  canIssueMaterials: false,
+  canManageAssets: false,
+  canManageSettings: false,
+  canViewReports: false,
+  canViewFinance: false,
+  canManageFinance: false,
+  canViewFinanceRates: false,
+  canManageFinanceRates: false,
+  canViewFinanceApprovals: false,
+  canManageFinanceApprovals: false,
+  canViewBillableWork: false,
+  canManageBillableWork: false,
+  canOverrideMaterialStock: false,
+}
+
+/** All 23 capabilities set to true — used to show Admin's implicit full access. */
+export const FULL_CAPABILITIES: RoleCapabilities = (Object.keys(EMPTY_CAPABILITIES) as CapabilityKey[]).reduce(
+  (acc, key) => {
+    acc[key] = true
+    return acc
+  },
+  { ...EMPTY_CAPABILITIES },
+)
+
 export interface RolePermissionRow {
   role: string
   permissions: RoleCapabilities

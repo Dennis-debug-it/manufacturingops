@@ -9,6 +9,7 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
+import { downloadCsv } from '../../shared/utils/csv'
 import {
   useAttendanceLive,
   useAttendanceReportSummary,
@@ -319,21 +320,16 @@ export function TimeAttendanceReportsPage() {
 
   const exportCsv = () => {
     if (!data) return toast.error('No report data to export yet')
-    const rows: Array<[string, string | number]> = [
-      ['Period', data.periodLabel],
-      ['Total Worked Hours', data.totalWorkedHours],
-      ['Total Overtime Hours', data.totalOvertimeHours],
-      ['Total Scheduled Hours', data.totalScheduledHours],
-      ['Leave Days Taken', data.leaveDaysTaken],
-      ['Late Arrivals', data.lateArrivals],
+    // Route through the shared helper so cells are quote-escaped and formula-injection-neutralized.
+    const rows = [
+      { Metric: 'Period', Value: data.periodLabel },
+      { Metric: 'Total Worked Hours', Value: data.totalWorkedHours },
+      { Metric: 'Total Overtime Hours', Value: data.totalOvertimeHours },
+      { Metric: 'Total Scheduled Hours', Value: data.totalScheduledHours },
+      { Metric: 'Leave Days Taken', Value: data.leaveDaysTaken },
+      { Metric: 'Late Arrivals', Value: data.lateArrivals },
     ]
-    const csv = ['Metric,Value', ...rows.map(([k, v]) => `"${k}",${v}`)].join('\n')
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `attendance-report-${data.periodLabel.replace(/\s+/g, '-').toLowerCase()}.csv`
-    link.click()
-    URL.revokeObjectURL(url)
+    downloadCsv(`attendance-report-${data.periodLabel.replace(/\s+/g, '-').toLowerCase()}.csv`, rows)
   }
 
   return (
