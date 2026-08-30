@@ -21,6 +21,7 @@ public sealed class PlatformUsersController(
     IAuditLogService auditLogService,
     IPasswordHasher<User> passwordHasher,
     IUserCredentialDeliveryService credentialDeliveryService,
+    Microsoft.Extensions.Options.IOptions<Ecosys.Shared.Options.AuthSecurityOptions> authSecurityOptions,
     ITemporaryPasswordService temporaryPasswordService) : ControllerBase
 {
     [HttpGet]
@@ -312,7 +313,7 @@ public sealed class PlatformUsersController(
         }
 
         var rawToken = CreatePasswordLinkToken();
-        var expiresAt = now.AddHours(72);
+        var expiresAt = now.AddHours(AccountSetupExpiry.ResolveHours(authSecurityOptions.Value));
         dbContext.PasswordResetTokens.Add(new PasswordResetToken
         {
             UserId = user.Id,
@@ -399,8 +400,13 @@ public sealed class PlatformUsersController(
         return Ok(MapUser(user, lastLoginAt));
     }
 
+    /// <summary>
+    /// Platform staff are root-tenant accounts holding a platform role — an allowlist, not "everything
+    /// in the root tenant except Admin". Excluding by role let any root-tenant account carrying a
+    /// tenant role (Manager, Technician, Viewer) be administered here as though it were platform staff.
+    /// </summary>
     private IQueryable<User> QueryPlatformUsers() =>
-        dbContext.Users.Where(x => x.TenantId == PlatformConstants.RootTenantId && !x.Role.Equals(AppRoles.Admin));
+        dbContext.Users.Where(x => x.TenantId == PlatformConstants.RootTenantId && AppRoles.PlatformRoles.Contains(x.Role));
 
     private static PlatformUserResponse MapUser(User user, DateTime? lastLoginAt, PlatformCredentialDeliverySummaryResponse? credentialDelivery = null) =>
         new(

@@ -1,3 +1,4 @@
+import { Badge } from '../../../shared/components/Badge'
 import { cn } from '../../../shared/utils/cn'
 
 const priorityClasses: Record<string, string> = {
@@ -25,15 +26,12 @@ export interface PriorityBadgeProps {
 
 export function PriorityBadge({ priority, className }: PriorityBadgeProps) {
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset',
-        priorityClasses[priority] ?? priorityClasses.Low,
-        className,
-      )}
+    <Badge
+      size="sm"
+      dotClassName={priorityDotClass(priority)}
+      className={cn(priorityClasses[priority] ?? priorityClasses.Low, className)}
     >
-      <span className={cn('h-1.5 w-1.5 rounded-full', priorityDotClass(priority))} />
       {priority}
-    </span>
+    </Badge>
   )
 }

@@ -1,9 +1,10 @@
 namespace Ecosys.Shared.Options;
 
 /// <summary>
-/// The application's default wall-clock time zone, used where a calendar-date decision must reflect
-/// the operator's local day rather than UTC (e.g. "is this PM due today?"). Single-region default;
-/// override via config for other deployments. (A future per-tenant time zone would supersede this.)
+/// The deployment's fallback wall-clock time zone. It is the last resort in the resolution chain:
+/// tenant time zone → platform general setting → this option → UTC. Used wherever a wall-clock
+/// decision or a user-facing timestamp must reflect local time rather than UTC (e.g. "is this PM due
+/// today?", "this reset link expires at …").
 /// </summary>
 public sealed class TimeZoneOptions
 {

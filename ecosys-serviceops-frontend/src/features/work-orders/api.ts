@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
+import type { PagedResult } from '../../shared/types/pagination'
 import type {
   RelatedWorkOrders,
   RepeatVisitCheck,
@@ -17,11 +18,20 @@ import type {
   WorkOrderTemplate,
 } from './types'
 
+/**
+ * Every filter `WorkOrdersController.GetAll` accepts. `branchId` is deliberately absent: branch
+ * scoping is applied server-side from the caller's branch access, not chosen in the list UI.
+ */
 export interface WorkOrderListFilters {
   status?: string
+  priority?: string
   workType?: string
+  clientId?: string
+  siteId?: string
   technicianId?: string
   assignmentGroupId?: string
+  assignmentStatus?: string
+  slaStatus?: string
   unassigned?: boolean
   search?: string
   fromDate?: string
@@ -30,21 +40,48 @@ export interface WorkOrderListFilters {
 
 const workOrdersKey = (filters?: WorkOrderListFilters) => ['work-orders', filters ?? {}] as const
 
-export function useWorkOrders(filters?: WorkOrderListFilters) {
+const workOrderListParams = (filters?: WorkOrderListFilters) => ({
+  status: filters?.status,
+  priority: filters?.priority,
+  workType: filters?.workType,
+  clientId: filters?.clientId,
+  siteId: filters?.siteId,
+  technicianId: filters?.technicianId,
+  assignmentGroupId: filters?.assignmentGroupId,
+  assignmentStatus: filters?.assignmentStatus,
+  slaStatus: filters?.slaStatus,
+  unassigned: filters?.unassigned,
+  search: filters?.search,
+  fromDate: filters?.fromDate,
+  toDate: filters?.toDate,
+})
+
+export function useWorkOrders(filters?: WorkOrderListFilters, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: workOrdersKey(filters),
-    queryFn: () =>
-      api.get<WorkOrder[]>(endpoints.workOrders.list, {
-        status: filters?.status,
-        workType: filters?.workType,
-        technicianId: filters?.technicianId,
-        assignmentGroupId: filters?.assignmentGroupId,
-        unassigned: filters?.unassigned,
-        search: filters?.search,
-        fromDate: filters?.fromDate,
-        toDate: filters?.toDate,
-      }),
+    queryFn: () => api.get<WorkOrder[]>(endpoints.workOrders.list, workOrderListParams(filters)),
+    enabled: options?.enabled ?? true,
     staleTime: 30_000,
+  })
+}
+
+/**
+ * Server-paginated work orders for the list table. The endpoint returns a bare array unless
+ * `page`/`pageSize` are sent, so this is the opt-in paged twin of {@link useWorkOrders} — the
+ * board/calendar/map views still need the whole filtered set and keep using the unpaged hook.
+ */
+export function useWorkOrdersPaged(
+  filters: WorkOrderListFilters,
+  page: number,
+  pageSize: number,
+  options?: { enabled?: boolean },
+) {
+  return useQuery({
+    queryKey: ['work-orders', 'paged', filters, page, pageSize],
+    queryFn: () => api.get<PagedResult<WorkOrder>>(endpoints.workOrders.list, { ...workOrderListParams(filters), page, pageSize }),
+    enabled: options?.enabled ?? true,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -235,6 +272,115 @@ export function useReassignWorkOrder(id: string) {
       invalidateWorkOrders(queryClient, id)
       void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'assignment-history'] })
     },
+  })
+}
+
+/**
+ * Technician dispatch lifecycle (WorkOrderAssignmentsController + WorkOrderExecutionController).
+ *
+ * These write `work_order_technician_assignments`, which is what the Start and Complete guards
+ * read — `POST /{id}/arrive` on WorkOrdersController writes `work_orders.ArrivalAt` instead and
+ * does *not* satisfy the completion guard, so the arrival milestone goes through
+ * `POST /{id}/arrival` here.
+ *
+ * Every mutation carries the work order id in its variables: the same actions are taken from the
+ * work-order detail page and from the dispatcher's daily-route list, where the target work order
+ * isn't known until the user acts.
+ */
+export type TechnicianDispatchResponse = 'Accepted' | 'Declined'
+
+/** `TechnicianResponseActionRequest(Guid TechnicianId, string Response, string? Notes)`. */
+export interface TechnicianResponseVariables {
+  id: string
+  technicianId: string
+  response: TechnicianDispatchResponse
+  notes?: string | null
+}
+
+/** `MarkInTransitRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? InTransitAt, string? Notes)`. */
+export interface MarkInTransitVariables {
+  id: string
+  technicianId: string
+  latitude?: number | null
+  longitude?: number | null
+  inTransitAt?: string | null
+  notes?: string | null
+}
+
+/** `ArrivalActionRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? ArrivedAt)`. */
+export interface RecordArrivalVariables {
+  id: string
+  technicianId: string
+  latitude?: number | null
+  longitude?: number | null
+  arrivedAt?: string | null
+}
+
+/** `DepartureActionRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? DepartedAt)`. */
+export interface RecordDepartureVariables {
+  id: string
+  technicianId: string
+  latitude?: number | null
+  longitude?: number | null
+  departedAt?: string | null
+}
+
+function invalidateDispatchState(queryClient: ReturnType<typeof useQueryClient>, id: string) {
+  invalidateWorkOrders(queryClient, id)
+  void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'assignment-history'] })
+  void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'events'] })
+  void queryClient.invalidateQueries({ queryKey: ['dispatch'] })
+}
+
+export function useRecordTechnicianResponse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, technicianId, response, notes }: TechnicianResponseVariables) =>
+      api.post<WorkOrder>(endpoints.workOrders.technicianResponse(id), { technicianId, response, notes: notes ?? null }),
+    onSuccess: (_data, variables) => invalidateDispatchState(queryClient, variables.id),
+  })
+}
+
+export function useMarkTechnicianInTransit() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, technicianId, latitude, longitude, inTransitAt, notes }: MarkInTransitVariables) =>
+      api.post<WorkOrder>(endpoints.workOrders.inTransit(id), {
+        technicianId,
+        latitude: latitude ?? null,
+        longitude: longitude ?? null,
+        inTransitAt: inTransitAt ?? null,
+        notes: notes ?? null,
+      }),
+    onSuccess: (_data, variables) => invalidateDispatchState(queryClient, variables.id),
+  })
+}
+
+export function useRecordTechnicianArrival() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, technicianId, latitude, longitude, arrivedAt }: RecordArrivalVariables) =>
+      api.post<WorkOrder>(endpoints.workOrders.arrival(id), {
+        technicianId,
+        latitude: latitude ?? null,
+        longitude: longitude ?? null,
+        arrivedAt: arrivedAt ?? null,
+      }),
+    onSuccess: (_data, variables) => invalidateDispatchState(queryClient, variables.id),
+  })
+}
+
+export function useRecordTechnicianDeparture() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, technicianId, latitude, longitude, departedAt }: RecordDepartureVariables) =>
+      api.post<WorkOrder>(endpoints.workOrders.departure(id), {
+        technicianId,
+        latitude: latitude ?? null,
+        longitude: longitude ?? null,
+        departedAt: departedAt ?? null,
+      }),
+    onSuccess: (_data, variables) => invalidateDispatchState(queryClient, variables.id),
   })
 }
 
@@ -443,8 +589,8 @@ export function useStartWorkOrderById() {
 export function useCompleteWorkOrderById() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, workDoneNotes }: { id: string; workDoneNotes: string }) =>
-      api.post<WorkOrder>(endpoints.workOrders.complete(id), { workDoneNotes }),
+    mutationFn: ({ id, workDoneNotes, adminOverride, overrideReason }: { id: string; workDoneNotes: string; adminOverride?: boolean; overrideReason?: string | null }) =>
+      api.post<WorkOrder>(endpoints.workOrders.complete(id), { workDoneNotes, adminOverride, overrideReason }),
     onSuccess: (_data, variables) => invalidateWorkOrders(queryClient, variables.id),
   })
 }

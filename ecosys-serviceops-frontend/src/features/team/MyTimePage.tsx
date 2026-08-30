@@ -5,7 +5,7 @@ import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
-import { formatDate } from '../../shared/utils/dates'
+import { formatDate, formatTime } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
 import {
   useApplyForLeave,
@@ -18,10 +18,10 @@ import {
   useSetMyStatus,
 } from './timeAttendance/api'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 const secondaryBtn = 'inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50'
-const primaryBtn = 'inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50'
+const primaryBtn = 'inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-50'
 
 const STATUS_LABELS: Record<string, string> = {
   ClockedIn: 'Clocked in',
@@ -54,7 +54,7 @@ function ClockCard() {
   const isClockedIn = status.status !== 'NotClockedIn'
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -62,7 +62,7 @@ function ClockCard() {
           </div>
           <div className="mt-1 text-2xl font-semibold text-slate-900">{STATUS_LABELS[status.status] ?? status.status}</div>
           {status.clockInAt ? (
-            <div className="mt-1 text-sm text-slate-500">Since {new Date(status.clockInAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+            <div className="mt-1 text-sm text-slate-500">Since {formatTime(status.clockInAt)}</div>
           ) : null}
         </div>
         <span className={cn('h-3 w-3 rounded-full', isClockedIn ? 'bg-emerald-500' : 'bg-slate-300')} />
@@ -133,7 +133,7 @@ function LeaveSection() {
 
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <h2 className="text-base font-semibold text-slate-900">Apply for leave</h2>
         <p className="mt-1 text-sm text-slate-500">Submit a request for your manager to approve.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -155,7 +155,7 @@ function LeaveSection() {
           </div>
           <div className="sm:col-span-2">
             <label className={labelClass} htmlFor="leave-reason">Reason (optional)</label>
-            <textarea id="leave-reason" rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" value={reason} onChange={(event) => setReason(event.target.value)} />
+            <textarea id="leave-reason" rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" value={reason} onChange={(event) => setReason(event.target.value)} />
           </div>
         </div>
         <div className="mt-4 flex justify-end">
@@ -165,7 +165,7 @@ function LeaveSection() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <h2 className="text-base font-semibold text-slate-900">My requests</h2>
         {isLoading ? (
           <div className="mt-4"><Spinner label="Loading your leave requests" /></div>
@@ -192,7 +192,7 @@ function LeaveSection() {
 function TimesheetSection() {
   const { data, isLoading } = useMyTimesheet('week')
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
       <div className="flex items-center gap-2 text-base font-semibold text-slate-900">
         <CalendarClock className="h-4 w-4 text-slate-500" /> My timesheet
       </div>

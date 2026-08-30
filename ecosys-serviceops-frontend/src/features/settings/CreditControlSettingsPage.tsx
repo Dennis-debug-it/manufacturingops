@@ -31,19 +31,19 @@ function NewCreditTermDrawer({ open, onClose }: { open: boolean; onClose: () => 
       <div className="space-y-4">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Name</label>
-          <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Code</label>
-          <input value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          <input value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Net Days</label>
-          <input type="number" value={form.netDays} onChange={(event) => setForm((current) => ({ ...current, netDays: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          <input type="number" value={form.netDays} onChange={(event) => setForm((current) => ({ ...current, netDays: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Credit Limit (optional)</label>
-          <input type="number" value={form.creditLimit ?? ''} onChange={(event) => setForm((current) => ({ ...current, creditLimit: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          <input type="number" value={form.creditLimit ?? ''} onChange={(event) => setForm((current) => ({ ...current, creditLimit: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={form.isDepositRequired} onChange={(event) => setForm((current) => ({ ...current, isDepositRequired: event.target.checked }))} className="h-4 w-4 rounded border-slate-300" />
@@ -52,14 +52,14 @@ function NewCreditTermDrawer({ open, onClose }: { open: boolean; onClose: () => 
         {form.isDepositRequired ? (
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Deposit Percent</label>
-            <input type="number" value={form.depositPercent} onChange={(event) => setForm((current) => ({ ...current, depositPercent: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="number" value={form.depositPercent} onChange={(event) => setForm((current) => ({ ...current, depositPercent: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         ) : null}
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={form.isDefault} onChange={(event) => setForm((current) => ({ ...current, isDefault: event.target.checked }))} className="h-4 w-4 rounded border-slate-300" />
           Set as Default
         </label>
-        <button type="button" disabled={!form.name.trim() || !form.code.trim() || createTerm.isPending} onClick={submit} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
+        <button type="button" disabled={!form.name.trim() || !form.code.trim() || createTerm.isPending} onClick={submit} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">
           {createTerm.isPending ? 'Creating…' : 'Create Credit Term'}
         </button>
       </div>
@@ -85,7 +85,7 @@ export function CreditControlSettingsPage() {
       <PageHeader
         title="Credit Control"
         subtitle="Payment terms and credit limits applied to clients. Per-client escalation/hold stages are computed live on the Finance → Credit Control page from these terms and outstanding balances."
-        primaryAction={canManage ? <button type="button" onClick={() => setShowNew(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"><Plus className="h-4 w-4" />New Credit Term</button> : undefined}
+        primaryAction={canManage ? <button type="button" onClick={() => setShowNew(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"><Plus className="h-4 w-4" />New Credit Term</button> : undefined}
       />
       <DataTable
         columns={columns}

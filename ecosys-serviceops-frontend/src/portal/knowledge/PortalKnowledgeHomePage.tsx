@@ -18,7 +18,7 @@ export function PortalKnowledgeHomePage() {
 
   return (
     <div className="space-y-8">
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm sm:p-12">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-8 text-center shadow-sm sm:p-12">
         <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">How can we help you?</h1>
         <p className="mt-2 text-sm text-slate-600">Search our help center for guides, FAQs, and troubleshooting tips.</p>
         <form
@@ -34,10 +34,10 @@ export function PortalKnowledgeHomePage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search articles…"
-              className="h-12 w-full rounded-xl border border-slate-300 pl-10 pr-3 text-sm outline-none focus:border-slate-900"
+              className="h-12 w-full rounded-xl border border-slate-300 pl-10 pr-3 text-sm outline-none focus:border-[var(--app-primary)]"
             />
           </div>
-          <button type="submit" className="inline-flex h-12 items-center justify-center rounded-xl bg-slate-900 px-5 text-sm font-medium text-white transition hover:bg-slate-800">
+          <button type="submit" className="inline-flex h-12 items-center justify-center rounded-xl bg-[var(--app-primary)] px-5 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
             Search
           </button>
         </form>
@@ -58,7 +58,7 @@ export function PortalKnowledgeHomePage() {
                 key={category.id}
                 type="button"
                 onClick={() => navigate(`/portal/knowledge/browse?category=${category.id}`)}
-                className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                className="flex items-start gap-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
                   <Icon className="h-5 w-5" />

@@ -91,7 +91,7 @@ function drawAction(ctx: CanvasRenderingContext2D, action: Action, canvasWidth: 
 function TextInputOverlay({ onCommit, onCancel }: { onCommit: (text: string) => void; onCancel: () => void }) {
   const [value, setValue] = useState('')
   return (
-    <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 border-t border-slate-700 bg-slate-900 p-3">
+    <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 border-t border-slate-700 bg-[var(--app-primary)] p-3">
       <input
         autoFocus
         value={value}
@@ -256,7 +256,7 @@ export function PhotoAnnotationCanvas({ file, onCancel, onDone }: { file: File; 
         {textPoint ? <TextInputOverlay onCommit={commitText} onCancel={() => setTextPoint(null)} /> : null}
       </div>
 
-      <div className="border-t border-slate-800 bg-slate-900 px-3 py-3">
+      <div className="border-t border-slate-800 bg-[var(--app-primary)] px-3 py-3">
         <div className="mb-3 flex items-center justify-center gap-2">
           {colors.map((c) => (
             <button

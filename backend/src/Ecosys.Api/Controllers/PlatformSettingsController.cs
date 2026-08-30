@@ -24,6 +24,7 @@ public sealed class PlatformSettingsController(
     IEmailSubjectRuleService emailSubjectRuleService,
     IEmailOutboxService emailOutboxService,
     IEmailSender emailSender,
+    ITenantTimeZoneService tenantTimeZoneService,
     ILogger<PlatformSettingsController> logger) : ControllerBase
 {
     private const string PlatformFinanceCategory = "platform-finance";
@@ -139,13 +140,15 @@ public sealed class PlatformSettingsController(
         await UpsertCategoryAsync(PlatformFinanceCategory, currentFinance with { DefaultCurrency = NormalizeCurrencyOrDefault(request.DefaultCurrency) }, cancellationToken);
         await UpsertCategoryAsync(PlatformGeneralCategory, new PlatformGeneralRecord(
             NormalizeOptional(request.DefaultCountry) ?? "Kenya",
-            NormalizeOptional(request.Timezone) ?? "Africa/Nairobi",
+            tenantTimeZoneService.NormalizeTimeZoneId(request.Timezone) ?? "Africa/Nairobi",
             NormalizeOptional(request.CompanyLegalName) ?? tenant.Name,
             NormalizeOptional(request.CompanyRegistrationNumber),
             NormalizeOptional(request.CompanyPinTaxNumber),
             NormalizeOptional(request.DefaultLanguage) ?? "en"), cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        // Every tenant without its own override inherits this, so the whole resolution cache must go.
+        tenantTimeZoneService.Invalidate();
         await AuditAsync("platform.settings.general.updated", nameof(Tenant), tenant.Id.ToString(), "Platform general settings were updated.", cancellationToken);
         return Ok((await GetGeneral(cancellationToken)).Value!);
     }

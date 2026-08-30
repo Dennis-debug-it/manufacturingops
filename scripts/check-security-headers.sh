@@ -8,7 +8,7 @@
 # origin after every deploy (and in CI) so the drift can't silently return.
 #
 # Usage:
-#   scripts/check-security-headers.sh https://app.ecosysdigital.co.ke
+#   scripts/check-security-headers.sh https://serviceops.example.com
 #
 # Exit code 0 = all required headers present; non-zero = at least one missing (details printed).
 

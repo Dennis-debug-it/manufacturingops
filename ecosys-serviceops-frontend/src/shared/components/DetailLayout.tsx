@@ -29,7 +29,7 @@ export function DetailLayout({ header, tabs, defaultTabId, className, sidebar }:
 
   const body = (
     <div className="min-w-0 flex-1 space-y-6">
-      <div className="border-b border-slate-200">
+      <div className="border-b border-[var(--app-border)]">
         <nav className="flex flex-wrap gap-2">
           {tabs.map((tab) => {
             const selected = tab.id === currentTab.id
@@ -41,7 +41,7 @@ export function DetailLayout({ header, tabs, defaultTabId, className, sidebar }:
                 className={cn(
                   'inline-flex h-11 items-center rounded-t-lg border-b-2 px-4 text-sm font-medium transition',
                   selected
-                    ? 'border-slate-900 text-slate-900'
+                    ? 'border-[var(--app-lime)] text-[var(--app-primary)]'
                     : 'border-transparent text-slate-500 hover:border-slate-200 hover:text-slate-900',
                 )}
               >

@@ -5,6 +5,7 @@ import { Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
@@ -35,7 +36,7 @@ const emptyLine: DraftLine = { itemName: '', quantityOrdered: '1', unitCost: '0'
 export function PurchaseOrdersPage() {
   const canEdit = usePermission('inventory.edit')
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | 'All'>('All')
-  const { data, isLoading } = usePurchaseOrders(statusFilter)
+  const { data, isLoading, isError, refetch } = usePurchaseOrders(statusFilter)
   const { data: suppliers } = useSuppliers()
   const createPo = useCreatePurchaseOrder()
   const [showNewPo, setShowNewPo] = useState(false)
@@ -80,20 +81,20 @@ export function PurchaseOrdersPage() {
         subtitle="Draft, sent, received, and cancelled purchase orders."
         primaryAction={
           canEdit ? (
-            <button type="button" onClick={() => setShowNewPo(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowNewPo(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Purchase Order
             </button>
           ) : undefined
         }
       />
       <InventoryTabNav />
-      <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-3 shadow-sm">
         {statusOptions.map((status) => (
           <button
             key={status}
             type="button"
             onClick={() => setStatusFilter(status)}
-            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${statusFilter === status ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${statusFilter === status ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
           >
             {status === 'PartiallyReceived' ? 'Partially Received' : status}
           </button>
@@ -103,15 +104,17 @@ export function PurchaseOrdersPage() {
         columns={columns}
         data={data ?? []}
         loading={isLoading}
-        emptyTitle="No purchase orders yet"
-        emptyDescription="Raise a purchase order against a supplier to get started."
+        emptyTitle={isError ? 'Purchase orders unavailable' : 'No purchase orders yet'}
+        emptyDescription={isError ? 'Purchase orders could not be loaded — this is not a confirmation that none exist.' : 'Raise a purchase order against a supplier to get started.'}
+        emptyActionLabel={isError ? 'Retry' : undefined}
+        onEmptyAction={isError ? () => void refetch() : undefined}
       />
 
       <FormDrawer open={showNewPo} title="New Purchase Order" onClose={() => setShowNewPo(false)}>
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Supplier</label>
-            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               <option value="">Select a supplier…</option>
               {(suppliers ?? []).map((s) => <option key={s.id} value={s.id}>{s.supplierName}</option>)}
             </select>
@@ -119,7 +122,7 @@ export function PurchaseOrdersPage() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Expected Delivery Date</label>
-            <input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
 
           <div>
@@ -155,11 +158,11 @@ export function PurchaseOrdersPage() {
                     <div className="mt-2 flex items-end gap-3">
                       <label className="flex flex-col gap-1">
                         <span className="text-xs font-medium text-slate-500">Qty</span>
-                        <input value={line.quantityOrdered} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, quantityOrdered: e.target.value } : l)))} type="number" min="0" placeholder="0" aria-label="Quantity" className="h-10 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                        <input value={line.quantityOrdered} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, quantityOrdered: e.target.value } : l)))} type="number" min="0" placeholder="0" aria-label="Quantity" className="h-10 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                       </label>
                       <label className="flex flex-col gap-1">
                         <span className="text-xs font-medium text-slate-500">Unit Cost</span>
-                        <input value={line.unitCost} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, unitCost: e.target.value } : l)))} type="number" min="0" placeholder="0.00" aria-label="Unit cost" className="h-10 w-28 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                        <input value={line.unitCost} onChange={(e) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, unitCost: e.target.value } : l)))} type="number" min="0" placeholder="0.00" aria-label="Unit cost" className="h-10 w-28 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                       </label>
                       <div className="flex flex-1 flex-col gap-1 text-right">
                         <span className="text-xs font-medium text-slate-500">Subtotal</span>
@@ -177,13 +180,13 @@ export function PurchaseOrdersPage() {
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Notes</label>
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <button
             type="button"
             disabled={!supplierId || validLines.length === 0 || createPo.isPending}
             onClick={() => void submit()}
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60"
           >
             {createPo.isPending ? 'Creating…' : 'Create Purchase Order'}
           </button>
@@ -196,7 +199,7 @@ export function PurchaseOrdersPage() {
 export function PurchaseOrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const canEdit = usePermission('inventory.edit')
-  const { data, isLoading } = usePurchaseOrder(id)
+  const { data, isLoading, isError, refetch } = usePurchaseOrder(id)
   const receiveLine = useReceivePurchaseOrderLine(id ?? '')
   const setStatus = useSetPurchaseOrderStatus(id ?? '')
 
@@ -223,7 +226,7 @@ export function PurchaseOrderDetailPage() {
             <div className="flex items-center gap-2">
               <StatusBadge status={data.status} />
               {canEdit && canTransition && data.status === 'Draft' ? (
-                <button type="button" disabled={setStatus.isPending} onClick={() => void changeStatus('Sent')} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60">Mark Sent</button>
+                <button type="button" disabled={setStatus.isPending} onClick={() => void changeStatus('Sent')} className="rounded-lg bg-[var(--app-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">Mark Sent</button>
               ) : null}
               {canEdit && canTransition ? (
                 <button type="button" disabled={setStatus.isPending} onClick={() => void changeStatus('Cancelled')} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-60">Cancel</button>
@@ -232,11 +235,17 @@ export function PurchaseOrderDetailPage() {
           ) : undefined
         }
       />
-      {isLoading ? null : !data ? (
+      {isLoading ? null : isError ? (
+        <ErrorState
+          title="Purchase order unavailable"
+          description="We couldn’t load this purchase order, so we can’t say whether it still exists."
+          onRetry={() => void refetch()}
+        />
+      ) : !data ? (
         <EmptyState title="Purchase order not found" description="This purchase order may have been removed." />
       ) : (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
@@ -273,7 +282,7 @@ export function PurchaseOrderDetailPage() {
               </tbody>
             </table>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Receiving History</h2>
             {data.receivingHistory.length === 0 ? (
               <p className="mt-3 text-sm text-slate-500">No receipts recorded yet.</p>

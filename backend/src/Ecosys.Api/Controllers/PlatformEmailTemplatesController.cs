@@ -19,6 +19,7 @@ public sealed class PlatformEmailTemplatesController(
     IEmailTemplateService emailTemplateService,
     IEmailSubjectRuleService emailSubjectRuleService,
     IEmailOutboxService emailOutboxService,
+    ITenantTimeZoneService tenantTimeZoneService,
     IAuditLogService auditLogService) : ControllerBase
 {
     [HttpGet]
@@ -66,7 +67,7 @@ public sealed class PlatformEmailTemplatesController(
     [HttpPost("{eventKey}/preview")]
     public async Task<ActionResult<EmailTemplatePreviewResponse>> Preview(string eventKey, [FromBody] EmailTemplatePreviewRequest? request, CancellationToken cancellationToken)
     {
-        var rendered = await emailTemplateService.RenderPlatformTemplateAsync(eventKey, BuildSampleValues(request?.SampleData), cancellationToken);
+        var rendered = await emailTemplateService.RenderPlatformTemplateAsync(eventKey, BuildSampleValues(request?.SampleData, await SampleExpiryAsync(cancellationToken)), cancellationToken);
         var finalSubject = await emailSubjectRuleService.BuildFinalSubjectAsync(
             PlatformConstants.RootTenantId,
             ResolveNotificationEventKey(eventKey),
@@ -81,7 +82,7 @@ public sealed class PlatformEmailTemplatesController(
         var settings = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken)
             ?? throw new BusinessRuleException("Platform email settings are not configured.");
 
-        var rendered = await emailTemplateService.RenderPlatformTemplateAsync(eventKey, BuildSampleValues(request.SampleData), cancellationToken);
+        var rendered = await emailTemplateService.RenderPlatformTemplateAsync(eventKey, BuildSampleValues(request.SampleData, await SampleExpiryAsync(cancellationToken)), cancellationToken);
         if (!rendered.Enabled)
         {
             return Ok(new EmailTemplateTestResponse(false, "This email template is disabled."));
@@ -128,7 +129,10 @@ public sealed class PlatformEmailTemplatesController(
         return Ok(Map(template));
     }
 
-    private static Dictionary<string, string?> BuildSampleValues(IReadOnlyDictionary<string, string?>? sampleData)
+    private Task<string> SampleExpiryAsync(CancellationToken cancellationToken) =>
+        tenantTimeZoneService.FormatForTenantAsync(DateTime.UtcNow.AddHours(1), PlatformConstants.RootTenantId, cancellationToken: cancellationToken);
+
+    private static Dictionary<string, string?> BuildSampleValues(IReadOnlyDictionary<string, string?>? sampleData, string expiresAtSample)
     {
         var values = EmailTemplateVariables.WithRecipientAndActorAliases(
             "Jane Doe",
@@ -163,7 +167,8 @@ public sealed class PlatformEmailTemplatesController(
                 ["contactName"] = "Jane Doe",
                 ["contactEmail"] = "jane.doe@example.com",
                 ["submittedAt"] = DateTime.UtcNow.ToString("u"),
-                ["expiresAt"] = DateTime.UtcNow.AddHours(1).ToString("u")
+                ["expiresAt"] = expiresAtSample,
+                ["expiresAtUtc"] = DateTime.UtcNow.AddHours(1).ToString("u")
             });
 
         if (sampleData is not null)

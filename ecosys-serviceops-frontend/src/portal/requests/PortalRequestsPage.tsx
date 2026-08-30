@@ -25,7 +25,7 @@ export function PortalRequestsPage() {
       <PageHeader
         title="Service Requests"
         subtitle="Track requests submitted for your sites and assets."
-        primaryAction={<Link to="/portal/requests/new" className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"><Plus className="h-4 w-4" />New Request</Link>}
+        primaryAction={<Link to="/portal/requests/new" className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"><Plus className="h-4 w-4" />New Request</Link>}
       />
       <DataTable
         columns={columns}

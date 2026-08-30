@@ -3,11 +3,12 @@ import toast from 'react-hot-toast'
 import { Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useTeamUsers } from '../team/api'
 import { useApprovalMatrices, useUpsertApprovalMatrix, type ApprovalMatrix } from '../approvals/api'
 
-const fieldClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1 block text-xs font-medium text-slate-600'
 
 const documentTypeLabels: Record<string, string> = {
@@ -99,7 +100,7 @@ function MatrixEditor({ matrix }: { matrix: ApprovalMatrix }) {
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-900">{documentTypeLabels[matrix.documentType] ?? matrix.documentType}</h2>
@@ -197,7 +198,7 @@ function MatrixEditor({ matrix }: { matrix: ApprovalMatrix }) {
         >
           <Plus className="h-4 w-4" />Add Level
         </button>
-        <button type="button" onClick={() => void submit()} disabled={save.isPending} className="inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+        <button type="button" onClick={() => void submit()} disabled={save.isPending} className="inline-flex h-10 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
           {save.isPending ? 'Saving…' : 'Save Matrix'}
         </button>
       </div>
@@ -206,7 +207,7 @@ function MatrixEditor({ matrix }: { matrix: ApprovalMatrix }) {
 }
 
 export function ApprovalMatrixSettingsPage() {
-  const { data, isLoading, isError } = useApprovalMatrices()
+  const { data, isLoading, isError, refetch } = useApprovalMatrices()
 
   return (
     <div className="space-y-6">
@@ -218,7 +219,11 @@ export function ApprovalMatrixSettingsPage() {
       {isLoading ? (
         <Spinner label="Loading approval matrices" />
       ) : isError || !data ? (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">Approval matrices could not be loaded.</div>
+        <ErrorState
+          title="Approval matrices unavailable"
+          description="We couldn’t load the configured matrices — this is not a confirmation that none exist."
+          onRetry={() => void refetch()}
+        />
       ) : (
         <div className="space-y-6">
           {data.map((matrix) => (

@@ -77,45 +77,45 @@ function PlanDrawer({ open, plan, onClose }: { open: boolean; plan: PlatformLice
       <div className="space-y-4">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Name</label>
-          <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Code</label>
-          <input value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} placeholder="Auto-generated from name if blank" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          <input value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} placeholder="Auto-generated from name if blank" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Monthly Price</label>
-            <input type="number" value={form.monthlyPrice} onChange={(event) => setForm((current) => ({ ...current, monthlyPrice: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="number" value={form.monthlyPrice} onChange={(event) => setForm((current) => ({ ...current, monthlyPrice: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Annual Price</label>
-            <input type="number" value={form.annualPrice} onChange={(event) => setForm((current) => ({ ...current, annualPrice: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="number" value={form.annualPrice} onChange={(event) => setForm((current) => ({ ...current, annualPrice: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         </div>
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Max Users</label>
-            <input type="number" value={form.maxUsers ?? ''} onChange={(event) => setForm((current) => ({ ...current, maxUsers: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="number" value={form.maxUsers ?? ''} onChange={(event) => setForm((current) => ({ ...current, maxUsers: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Max Assets</label>
-            <input type="number" value={form.maxAssets ?? ''} onChange={(event) => setForm((current) => ({ ...current, maxAssets: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="number" value={form.maxAssets ?? ''} onChange={(event) => setForm((current) => ({ ...current, maxAssets: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Max WOs / mo</label>
-            <input type="number" value={form.maxWorkOrders ?? ''} onChange={(event) => setForm((current) => ({ ...current, maxWorkOrders: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="number" value={form.maxWorkOrders ?? ''} onChange={(event) => setForm((current) => ({ ...current, maxWorkOrders: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Modules Included (comma-separated)</label>
-          <input value={form.modulesIncluded} onChange={(event) => setForm((current) => ({ ...current, modulesIncluded: event.target.value }))} placeholder="EmailIngestion, MonitoringIntegration, AdvancedReports, ClientPortal" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          <input value={form.modulesIncluded} onChange={(event) => setForm((current) => ({ ...current, modulesIncluded: event.target.value }))} placeholder="EmailIngestion, MonitoringIntegration, AdvancedReports, ClientPortal" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={form.isActive} onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))} className="h-4 w-4 rounded border-slate-300" />
           Active
         </label>
-        <button type="button" disabled={!form.name.trim() || save.isPending} onClick={() => save.mutate()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
+        <button type="button" disabled={!form.name.trim() || save.isPending} onClick={() => save.mutate()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">
           {save.isPending ? 'Saving…' : plan ? 'Save Changes' : 'Create Plan'}
         </button>
       </div>
@@ -149,7 +149,7 @@ export function PlansSettingsPage() {
       <PageHeader
         title="License Plans"
         subtitle="Pricing tiers and entitlement limits offered to tenant workspaces."
-        primaryAction={canManage ? <button type="button" onClick={() => { setEditingPlan(null); setDrawerOpen(true) }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"><Plus className="h-4 w-4" />New Plan</button> : undefined}
+        primaryAction={canManage ? <button type="button" onClick={() => { setEditingPlan(null); setDrawerOpen(true) }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"><Plus className="h-4 w-4" />New Plan</button> : undefined}
       />
       <DataTable
         columns={columns}

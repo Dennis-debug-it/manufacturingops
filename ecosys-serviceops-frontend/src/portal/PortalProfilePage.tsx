@@ -46,18 +46,18 @@ export function PortalProfilePage() {
     return (
       <div className="space-y-6">
         <PageHeader title="Profile" subtitle="Your client portal contact details." />
-        <div className="max-w-xl space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="max-w-xl space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Full Name</label>
-            <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Phone</label>
-            <input value={phone} onChange={(event) => setPhone(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input value={phone} onChange={(event) => setPhone(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div className="flex gap-2 pt-1">
             <button type="button" onClick={() => setEditing(false)} className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
-            <button type="button" disabled={updateProfile.isPending} onClick={() => void submit()} className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">Save Changes</button>
+            <button type="button" disabled={updateProfile.isPending} onClick={() => void submit()} className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">Save Changes</button>
           </div>
         </div>
       </div>
@@ -77,9 +77,9 @@ export function PortalProfilePage() {
       <PageHeader
         title="Profile"
         subtitle="Your client portal contact details."
-        primaryAction={<button type="button" onClick={startEditing} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"><Pencil className="h-4 w-4" />Edit Profile</button>}
+        primaryAction={<button type="button" onClick={startEditing} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"><Pencil className="h-4 w-4" />Edit Profile</button>}
       />
-      <div className="max-w-xl rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="max-w-xl rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <dl className="space-y-4">
           {rows.map(([label, value]) => (
             <div key={label} className="flex items-center justify-between border-b border-slate-100 pb-3 last:border-0 last:pb-0">

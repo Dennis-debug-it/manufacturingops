@@ -7,13 +7,30 @@ import { useNavigate } from 'react-router-dom'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
 import { cn } from '../../../shared/utils/cn'
+import { applyApiFieldErrors } from '../../../shared/api/apiError'
 import { useCreateWorkOrder, useRepeatVisitCheckForAsset } from '../api'
 import { useAssetOptions, useClientOptions, useSiteOptions, useTechnicianOptions } from '../pickerApi'
 import { newWorkOrderSchema, priorityOptions, workTypeOptions, type NewWorkOrderFormValues } from '../schemas'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 const errorClass = 'mt-1 text-xs text-rose-600'
+
+/**
+ * The server blames the request DTO's PascalCase property names; the helper normalises casing
+ * before matching. Anything blamed that isn't listed here is toasted instead of being lost.
+ */
+const WORK_ORDER_FORM_FIELDS = [
+  'clientId',
+  'siteId',
+  'assetId',
+  'title',
+  'workType',
+  'priority',
+  'dueDate',
+  'description',
+  'assignedTechnicianId',
+] as const satisfies readonly (keyof NewWorkOrderFormValues)[]
 
 export interface NewWorkOrderFormProps {
   open: boolean
@@ -32,6 +49,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
     handleSubmit,
     watch,
     reset,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<NewWorkOrderFormValues>({
     resolver: zodResolver(newWorkOrderSchema),
@@ -107,8 +125,10 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
       toast.success(`Work order ${created.workOrderNumber} created`)
       closeAndReset()
       navigate(`/work-orders/${created.id}`)
-    } catch {
-      // apiClient interceptor already surfaces an error toast
+    } catch (error) {
+      // A model-validation 400 names the field it rejected; pin the message to that input instead
+      // of leaving the user with only the interceptor's one-line toast.
+      applyApiFieldErrors<NewWorkOrderFormValues>(error, { setError, fields: WORK_ORDER_FORM_FIELDS })
     }
   })
 
@@ -130,7 +150,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
             type="submit"
             form="new-work-order-form"
             disabled={isSubmitting}
-            className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? 'Creating…' : 'Create Work Order'}
           </button>

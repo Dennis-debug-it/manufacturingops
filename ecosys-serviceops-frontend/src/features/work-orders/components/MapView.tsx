@@ -91,7 +91,7 @@ function ClusterLayer({ rows, onOpen }: { rows: WorkOrderRow[]; onOpen: (id: str
       const button = document.createElement('button')
       button.type = 'button'
       button.textContent = 'Open'
-      button.className = 'mt-2 inline-flex h-8 items-center rounded-lg bg-slate-900 px-3 text-xs font-medium text-white'
+      button.className = 'mt-2 inline-flex h-8 items-center rounded-lg bg-[var(--app-primary)] px-3 text-xs font-medium text-white'
       button.addEventListener('click', () => onOpen(row.id))
       container.appendChild(button)
 

@@ -75,7 +75,7 @@ export function SkillsPage() {
         subtitle="Skill and certification catalogue mapped to the technician certification tracking backend."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Skill
             </button>
           ) : undefined
@@ -92,7 +92,7 @@ export function SkillsPage() {
         footer={
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={closeForm} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={submit} disabled={createCertification.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={submit} disabled={createCertification.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {createCertification.isPending ? 'Saving…' : 'Create'}
             </button>
           </div>
@@ -101,15 +101,15 @@ export function SkillsPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="skill-name">Name</label>
-            <input id="skill-name" value={name} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input id="skill-name" value={name} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="skill-issuer">Issuer</label>
-            <input id="skill-issuer" value={issuer} onChange={(event) => setIssuer(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input id="skill-issuer" value={issuer} onChange={(event) => setIssuer(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="skill-renewal">Renewal Period (months)</label>
-            <input id="skill-renewal" type="number" min="0" value={renewalMonths} onChange={(event) => setRenewalMonths(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input id="skill-renewal" type="number" min="0" value={renewalMonths} onChange={(event) => setRenewalMonths(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         </div>
       </FormDrawer>

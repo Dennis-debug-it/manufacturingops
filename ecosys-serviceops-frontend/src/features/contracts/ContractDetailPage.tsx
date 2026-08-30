@@ -328,7 +328,7 @@ export function ContractDetailPage() {
                   emptyTitle="No linked work orders"
                   emptyDescription="Work orders billed under this contract will appear here."
                 />
-                <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm">
+                <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-sm text-slate-700 shadow-sm">
                   Estimated total: <span className="font-semibold text-slate-900">{formatCurrency(contract.workOrders.reduce((sum, wo) => sum + (wo.estimatedCharge ?? 0), 0), contract.currency)}</span>
                 </div>
               </div>

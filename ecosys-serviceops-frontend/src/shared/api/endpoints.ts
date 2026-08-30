@@ -50,6 +50,12 @@ export const endpoints = {
     update: (id: string) => `/api/workorders/${id}`,
     assign: (id: string) => `/api/workorders/${id}/assign`,
     start: (id: string) => `/api/workorders/${id}/start`,
+    // Header-only site visit stamps (WorkOrdersController.Arrive/Depart -> WorkOrderLifecycleService).
+    // Deliberately UNUSED by the app: they write `work_orders.ArrivalAt`/`DepartureAt` and never
+    // touch `work_order_technician_assignments`, so an arrival recorded here does NOT satisfy the
+    // completion guard (`HasArrivalAsync`) and Complete still 400s. The UI records site milestones
+    // through `arrival`/`departure` below, which write the assignment row and roll the header
+    // timestamps up from it. Kept declared because the routes still exist server-side.
     arrive: (id: string) => `/api/workorders/${id}/arrive`,
     depart: (id: string) => `/api/workorders/${id}/depart`,
     events: (id: string) => `/api/workorders/${id}/events`,
@@ -113,6 +119,8 @@ export const endpoints = {
     deactivate: (id: string) => `/api/clients/${id}`,
     activate: (id: string) => `/api/clients/${id}/activate`,
     deactivateAction: (id: string) => `/api/clients/${id}/deactivate`,
+    validateDeletion: (id: string) => `/api/clients/${id}/validate-deletion`,
+    deletePermanent: (id: string) => `/api/clients/${id}/permanent`,
   },
   sites: {
     list: (clientId: string) => `/api/clients/${clientId}/sites`,
@@ -236,6 +244,29 @@ export const endpoints = {
   },
   rolePermissions: {
     matrix: '/api/settings/role-permissions',
+  },
+  /**
+   * Dynamic access control (AccessControlController, `api/access/...`).
+   *
+   * `capabilities`, `permissionGroups`, `permissionGroup`, `scopes` and `approvalLimits` back the
+   * Users & Access pages under /team. The four `user*` entries are the per-user assignment routes:
+   * the backend serves them today, but there is no per-user access editor in the UI yet — they are
+   * a known feature gap, not dead code, so they stay listed here.
+   */
+  access: {
+    capabilities: '/api/access/capabilities',
+    permissionGroups: '/api/access/permission-groups',
+    permissionGroup: (id: string) => `/api/access/permission-groups/${id}`,
+    scopes: '/api/access/scopes',
+    approvalLimits: '/api/access/approval-limits',
+    userGroups: (userId: string) => `/api/access/users/${userId}/groups`,
+    userOverrides: (userId: string) => `/api/access/users/${userId}/overrides`,
+    userEffective: (userId: string) => `/api/access/users/${userId}/effective`,
+    userScopes: (userId: string) => `/api/access/users/${userId}/scopes`,
+    userApprovalLimits: (userId: string) => `/api/access/users/${userId}/approval-limits`,
+  },
+  auditLogs: {
+    list: '/api/audit-logs',
   },
   knowledge: {
     articles: '/api/knowledge/articles',
@@ -419,6 +450,7 @@ export const endpoints = {
     tenantAuditLogs: (id: string) => `/api/platform/tenants/${id}/audit-logs`,
     tenantBranding: (id: string) => `/api/platform/tenants/${id}/branding`,
     tenantUsers: (id: string) => `/api/platform/tenants/${id}/users`,
+    tenantUserResendInvitation: (id: string, userId: string) => `/api/platform/tenants/${id}/users/${userId}/resend-invitation`,
     tenantNumbering: (id: string) => `/api/platform/tenants/${id}/numbering`,
     tenantDocumentDesigns: (id: string) => `/api/platform/tenants/${id}/document-designs`,
     tenantFinanceSummary: (id: string) => `/api/platform/tenants/${id}/finance-summary`,

@@ -11,6 +11,8 @@ import {
 } from '@dnd-kit/core'
 import { cn } from '../../../shared/utils/cn'
 import { EmptyState } from '../../../shared/components/EmptyState'
+import { useAuth } from '../../../shared/hooks/useAuth'
+import { COMPLETE_BLOCKED_REASON } from '../dispatchGuards'
 import { KANBAN_STATUSES, type WorkOrderRow } from '../listModel'
 import {
   useAssignWorkOrderById,
@@ -34,7 +36,7 @@ function KanbanColumn({ status, rows, children }: { status: string; rows: WorkOr
       ref={setNodeRef}
       className={cn(
         'flex w-72 shrink-0 flex-col rounded-2xl border bg-slate-50/60 transition',
-        isOver ? 'border-slate-900 bg-slate-100' : 'border-slate-200',
+        isOver ? 'border-[var(--app-primary)] bg-slate-100' : 'border-slate-200',
       )}
     >
       <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2.5">
@@ -60,6 +62,8 @@ export interface KanbanViewProps {
 }
 
 export function KanbanView({ rows }: KanbanViewProps) {
+  const { user } = useAuth()
+  const isTenantAdmin = user?.role === 'admin'
   const queryClient = useQueryClient()
   const patchStatus = usePatchWorkOrderStatus()
   const assignMutation = useAssignWorkOrderById()
@@ -89,9 +93,20 @@ export function KanbanView({ rows }: KanbanViewProps) {
     }
 
     if (targetStatus === 'Completed') {
+      // Dropping into Completed is the same call as the Complete action, so it answers to the same
+      // arrival guard: without an arrival only a tenant admin can proceed, via the override in the
+      // dialog.
+      if (!row.hasRecordedArrival && !isTenantAdmin) {
+        toast.error(COMPLETE_BLOCKED_REASON)
+        return
+      }
       setCompleteTarget(row)
       return
     }
+
+    // Note: dropping into "In Progress" goes through PATCH /status -> ChangeStatusAsync, which is a
+    // plain state-machine move and does not run the accepted-technician guard that POST /start does.
+    // It is deliberately not gated here.
 
     if (targetStatus === 'Closed') {
       closeMutation.mutate(row.id, {
@@ -163,11 +178,13 @@ export function KanbanView({ rows }: KanbanViewProps) {
         open={Boolean(completeTarget)}
         woNumber={completeTarget?.woNo}
         submitting={completeMutation.isPending}
+        arrivalRecorded={completeTarget?.hasRecordedArrival ?? false}
+        canAdminOverride={isTenantAdmin}
         onClose={() => setCompleteTarget(null)}
-        onSubmit={(workDoneNotes) => {
+        onSubmit={({ workDoneNotes, adminOverride, overrideReason }) => {
           if (!completeTarget) return
           completeMutation.mutate(
-            { id: completeTarget.id, workDoneNotes },
+            { id: completeTarget.id, workDoneNotes, adminOverride, overrideReason },
             {
               onSuccess: () => {
                 toast.success(`${completeTarget.woNo} completed`)

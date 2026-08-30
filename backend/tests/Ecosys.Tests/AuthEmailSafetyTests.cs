@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Ecosys.Tests;
@@ -246,6 +247,51 @@ public sealed class AuthEmailSafetyTests
     }
 
     [Fact]
+    public async Task ForgotPassword_StopsReportingSuccess_WhenNoMailboxIsConfiguredAnywhere()
+    {
+        // EC-P1-06d: on a fresh database there is no settings row, and with no Smtp:* configuration
+        // either nothing can be delivered. Reporting "instructions will be sent shortly" there is
+        // worse than failing — the user waits for mail that will never arrive.
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var user = await SeedTenantUserAsync(dbContext, tenantId, "existing@tenant.test", mustChangePassword: false);
+        var service = CreatePasswordResetService(
+            dbContext,
+            new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true, resetSendSucceeds: true),
+            configuredSmtpHost: string.Empty);
+
+        var failure = await Assert.ThrowsAsync<PasswordResetUnavailableException>(
+            () => service.RequestAsync(user.Email, CancellationToken.None));
+
+        Assert.Equal(503, failure.StatusCode);
+        Assert.Equal("EMAIL_NOT_CONFIGURED", failure.ErrorCode);
+        Assert.Empty(await dbContext.PasswordResetTokens.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ForgotPassword_UnconfiguredMailbox_AnswersIdenticallyForAnAddressThatDoesNotExist()
+    {
+        // The readiness check must not become an account enumeration oracle: it runs before the
+        // lookup and reads only this server's configuration, so a missing account gets exactly the
+        // failure an existing one gets.
+        await using var dbContext = CreateDbContext();
+        await SeedTenantUserAsync(dbContext, Guid.NewGuid(), "existing@tenant.test", mustChangePassword: false);
+        var service = CreatePasswordResetService(
+            dbContext,
+            new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true, resetSendSucceeds: true),
+            configuredSmtpHost: string.Empty);
+
+        var forExisting = await Assert.ThrowsAsync<PasswordResetUnavailableException>(
+            () => service.RequestAsync("existing@tenant.test", CancellationToken.None));
+        var forMissing = await Assert.ThrowsAsync<PasswordResetUnavailableException>(
+            () => service.RequestAsync("missing@tenant.test", CancellationToken.None));
+
+        Assert.Equal(forExisting.StatusCode, forMissing.StatusCode);
+        Assert.Equal(forExisting.ErrorCode, forMissing.ErrorCode);
+        Assert.Equal(forExisting.Message, forMissing.Message);
+    }
+
+    [Fact]
     public async Task ResetPassword_Succeeds_WithValidToken_AndRevokesSessions()
     {
         await using var dbContext = CreateDbContext();
@@ -318,6 +364,60 @@ public sealed class AuthEmailSafetyTests
 
         await Assert.ThrowsAsync<Shared.Errors.ForbiddenException>(() =>
             service.ResetAsync("used-token", "NewStrongPass123!", "NewStrongPass123!", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PlatformResendWorkspaceInvitation_IssuesAFreshLink_AndRetiresTheOldOne()
+    {
+        // The recovery path for a tenant admin whose first-login invitation lapsed: they cannot sign in
+        // to ask for a new one, and the tenant-side resend needs an admin already inside the workspace.
+        await using var dbContext = CreateDbContext();
+        await SeedPlatformUserAsync(dbContext, "owner@ecosys.test");
+        var tenantId = Guid.NewGuid();
+        var admin = await SeedTenantUserAsync(dbContext, tenantId, "pending.admin@tenant.test", mustChangePassword: true);
+        dbContext.PasswordResetTokens.Add(new PasswordResetToken
+        {
+            UserId = admin.Id,
+            TokenHash = ToTokenHash("stale-invitation"),
+            ExpiresAt = DateTime.UtcNow.AddHours(1)
+        });
+        await dbContext.SaveChangesAsync();
+
+        var controller = CreatePlatformTenantsController(dbContext, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true, resetSendSucceeds: true));
+
+        var actionResult = await controller.ResendWorkspaceUserInvitation(tenantId, admin.Id, CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(actionResult.Result);
+        var response = Assert.IsType<PlatformTenantCredentialDeliveryResponse>(ok.Value);
+        Assert.True(response.Success);
+        Assert.Equal("pending.admin@tenant.test", response.Email);
+        Assert.NotNull(response.LastCredentialSentAt);
+
+        var stale = await dbContext.PasswordResetTokens.SingleAsync(x => x.TokenHash == ToTokenHash("stale-invitation"));
+        Assert.NotNull(stale.UsedAt);
+
+        var fresh = await dbContext.PasswordResetTokens.SingleAsync(x => x.UserId == admin.Id && !x.UsedAt.HasValue);
+        Assert.True(fresh.ExpiresAt > DateTime.UtcNow.AddHours(24), "A resent setup link must use the invitation window, not the short reset window.");
+
+        var log = await dbContext.EmailDeliveryLogs.SingleAsync(x => x.RecipientEmail == "pending.admin@tenant.test");
+        Assert.Equal("account-setup-link", log.TemplateKey);
+        Assert.Equal("Sent", log.Status);
+    }
+
+    [Fact]
+    public async Task PlatformResendWorkspaceInvitation_RejectsUsersFromAnotherTenant()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedPlatformUserAsync(dbContext, "owner2@ecosys.test");
+        var tenantId = Guid.NewGuid();
+        var otherTenantId = Guid.NewGuid();
+        var outsider = await SeedTenantUserAsync(dbContext, otherTenantId, "outsider@other.test", mustChangePassword: true);
+        await SeedTenantAsync(dbContext, tenantId, "Target Workspace", "support@target.test");
+
+        var controller = CreatePlatformTenantsController(dbContext, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true, resetSendSucceeds: true));
+
+        await Assert.ThrowsAsync<NotFoundException>(() =>
+            controller.ResendWorkspaceUserInvitation(tenantId, outsider.Id, CancellationToken.None));
     }
 
     [Fact]
@@ -795,6 +895,106 @@ public sealed class AuthEmailSafetyTests
         Assert.Contains("Password", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task PlatformCanCreateAdditionalWorkspaceAdmins_ForOneTenant()
+    {
+        // Tenant creation seeds exactly one admin; a workspace usually needs more than one.
+        await using var dbContext = CreateDbContext();
+        await SeedPlatformUserAsync(dbContext, "owner3@ecosys.test");
+        var tenantId = Guid.NewGuid();
+        var firstAdmin = await SeedTenantUserAsync(dbContext, tenantId, "first.admin@tenant.test", mustChangePassword: false);
+        var controller = CreatePlatformTenantsController(dbContext, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true, resetSendSucceeds: true));
+
+        var actionResult = await controller.CreateWorkspaceUser(
+            tenantId,
+            new CreatePlatformTenantUserRequest("Second Admin", "second.admin@tenant.test", "+254700000009", AppRoles.Admin, null),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(actionResult.Result);
+        var response = Assert.IsType<PlatformTenantUserCreatedResponse>(ok.Value);
+        Assert.True(response.InvitationSent);
+        Assert.Equal(AppRoles.Admin, response.User.Role);
+
+        var admins = await dbContext.Users
+            .Where(x => x.TenantId == tenantId && x.Role == AppRoles.Admin)
+            .ToListAsync();
+        Assert.Equal(2, admins.Count);
+        Assert.Contains(admins, x => x.Id == firstAdmin.Id);
+
+        var created = admins.Single(x => x.Email == "second.admin@tenant.test");
+        Assert.True(created.MustChangePassword);
+        Assert.True(created.HasAllBranchAccess);
+        Assert.NotNull(created.LastCredentialSentAt);
+
+        var log = await dbContext.EmailDeliveryLogs.SingleAsync(x => x.RecipientEmail == "second.admin@tenant.test");
+        Assert.Equal("account-setup-link", log.TemplateKey);
+    }
+
+    [Fact]
+    public async Task PlatformCannotPlaceAPlatformRoleInsideATenantWorkspace()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedPlatformUserAsync(dbContext, "owner4@ecosys.test");
+        var tenantId = Guid.NewGuid();
+        await SeedTenantUserAsync(dbContext, tenantId, "existing@tenant.test", mustChangePassword: false);
+        var controller = CreatePlatformTenantsController(dbContext, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true, resetSendSucceeds: true));
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.CreateWorkspaceUser(
+            tenantId,
+            new CreatePlatformTenantUserRequest("Sneaky Staff", "staff@tenant.test", null, AppRoles.PlatformAdmin, null),
+            CancellationToken.None));
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.CreateWorkspaceUser(
+            tenantId,
+            new CreatePlatformTenantUserRequest("Sneaky Root", "root@tenant.test", null, AppRoles.SuperAdmin, null),
+            CancellationToken.None));
+
+        Assert.Empty(await dbContext.Users.Where(x => x.Email == "staff@tenant.test" || x.Email == "root@tenant.test").ToListAsync());
+    }
+
+    [Fact]
+    public async Task PlatformCannotReuseAnEmailAlreadyTakenAnywhere()
+    {
+        await using var dbContext = CreateDbContext();
+        await SeedPlatformUserAsync(dbContext, "taken@ecosys.test");
+        var tenantId = Guid.NewGuid();
+        await SeedTenantUserAsync(dbContext, tenantId, "existing2@tenant.test", mustChangePassword: false);
+        var controller = CreatePlatformTenantsController(dbContext, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true, resetSendSucceeds: true));
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.CreateWorkspaceUser(
+            tenantId,
+            new CreatePlatformTenantUserRequest("Clashing Admin", "taken@ecosys.test", null, AppRoles.Admin, null),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PlatformUserListing_ExcludesRootTenantAccountsHoldingTenantRoles()
+    {
+        // Platform staff is an allowlist of platform roles. A root-tenant account carrying a tenant
+        // role is not staff and must not be administrable from the platform users screen.
+        await using var dbContext = CreateDbContext();
+        await SeedPlatformUserAsync(dbContext, "staff@ecosys.test");
+        var strayUser = new User
+        {
+            TenantId = PlatformConstants.RootTenantId,
+            FullName = "Stray Tenant Role",
+            Email = "stray@ecosys.test",
+            Role = AppRoles.Manager,
+            IsActive = true
+        };
+        strayUser.PasswordHash = new PasswordHasher<User>().HashPassword(strayUser, "OriginalPass123!");
+        dbContext.Users.Add(strayUser);
+        await dbContext.SaveChangesAsync();
+
+        var controller = CreatePlatformUsersController(dbContext, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true));
+
+        var result = Assert.IsType<OkObjectResult>(await controller.GetAll(null, null, null, null, null, CancellationToken.None));
+        var users = Assert.IsType<List<PlatformUserResponse>>(result.Value);
+
+        Assert.Contains(users, x => x.Email == "staff@ecosys.test");
+        Assert.DoesNotContain(users, x => x.Email == "stray@ecosys.test");
+    }
+
     private static UsersController CreateUsersController(AppDbContext dbContext, Guid tenantId, FakeUserCredentialDeliveryService deliveryService)
     {
         return CreateUsersController(dbContext, tenantId, deliveryService, new NoOpLicenseGuardService(dbContext));
@@ -813,6 +1013,7 @@ public sealed class AuthEmailSafetyTests
             new NoOpAuditLogService(),
             deliveryService,
             new TemporaryPasswordService(),
+            Options.Create(new AuthSecurityOptions()),
             new FakeUserSessionService(dbContext));
     }
 
@@ -826,6 +1027,7 @@ public sealed class AuthEmailSafetyTests
             new NoOpAuditLogService(),
             CreatePasswordResetService(dbContext, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true, resetSendSucceeds: true)),
             new PasswordHasher<User>(),
+            TestTimeZones.Create(dbContext),
             new FakeTenantSecurityPolicyService());
     }
 
@@ -837,10 +1039,14 @@ public sealed class AuthEmailSafetyTests
             new NoOpAuditLogService(),
             new PasswordHasher<User>(),
             deliveryService,
+            Options.Create(new AuthSecurityOptions()),
             new TemporaryPasswordService());
     }
 
-    private static PasswordResetService CreatePasswordResetService(AppDbContext dbContext, FakeUserCredentialDeliveryService deliveryService)
+    private static PasswordResetService CreatePasswordResetService(
+        AppDbContext dbContext,
+        FakeUserCredentialDeliveryService deliveryService,
+        string configuredSmtpHost = "smtp.test")
     {
         return new PasswordResetService(
             dbContext,
@@ -849,7 +1055,11 @@ public sealed class AuthEmailSafetyTests
             new FakeTenantSecurityPolicyService(),
             new FakeUserSessionService(dbContext),
             deliveryService,
-            new NoOpAuditLogService());
+            new NoOpAuditLogService(),
+            new EmailSettingsResolver(dbContext),
+            Options.Create(new AuthSecurityOptions()),
+            Options.Create(new SmtpOptions { Host = configuredSmtpHost }),
+            NullLogger<PasswordResetService>.Instance);
     }
 
     private static PlatformTenantsController CreatePlatformTenantsController(AppDbContext dbContext, FakeUserCredentialDeliveryService deliveryService)
@@ -865,6 +1075,8 @@ public sealed class AuthEmailSafetyTests
             new PasswordHasher<User>(),
             new FakeUserPermissionTemplateService(),
             deliveryService,
+            Options.Create(new AuthSecurityOptions()),
+            TestTimeZones.Create(dbContext),
             CreateAuthService(dbContext));
 
         controller.ControllerContext = new ControllerContext

@@ -26,6 +26,11 @@ public sealed class TenantQuotationController(
     IEmailSubjectRuleService emailSubjectRuleService,
     ILogger<TenantQuotationController> logger) : TenantAwareControllerBase(tenantContext)
 {
+    // No platform-wide currency to inherit here: the tenant's own configured currency (derived from
+    // its country, same as the frontend's getActiveCurrency()) is what the create/edit forms send
+    // explicitly — this is only the last-resort default for a request that omits it outright.
+    private const string FallbackCurrency = "KES";
+
     // ── List ─────────────────────────────────────────────────────────────────
 
     [HttpGet]
@@ -88,7 +93,9 @@ public sealed class TenantQuotationController(
             ValidUntil = DateTime.SpecifyKind(request.ValidUntil, DateTimeKind.Utc),
             Subject = request.Subject?.Trim(),
             Notes = request.Notes?.Trim(),
-            Currency = string.IsNullOrWhiteSpace(request.Currency) ? "KES" : request.Currency.Trim().ToUpper(),
+            Currency = string.IsNullOrWhiteSpace(request.Currency)
+                ? FallbackCurrency
+                : request.Currency.Trim().ToUpper(),
         };
 
         BuildLines(quote, request.Lines);
@@ -118,7 +125,9 @@ public sealed class TenantQuotationController(
         quote.ValidUntil = DateTime.SpecifyKind(request.ValidUntil, DateTimeKind.Utc);
         quote.Subject = request.Subject?.Trim();
         quote.Notes = request.Notes?.Trim();
-        quote.Currency = string.IsNullOrWhiteSpace(request.Currency) ? "KES" : request.Currency.Trim().ToUpper();
+        quote.Currency = string.IsNullOrWhiteSpace(request.Currency)
+            ? FallbackCurrency
+            : request.Currency.Trim().ToUpper();
 
         dbContext.TenantQuotationLines.RemoveRange(quote.Lines);
         quote.Lines.Clear();

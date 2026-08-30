@@ -9,17 +9,26 @@ import {
   isToday as isTodayFn,
   subMonths as subMonthsFn,
 } from 'date-fns'
+import { toZonedDate } from './timezone'
 
 const isValidDate = (value: Date) => !Number.isNaN(value.getTime())
 
+// Instants arrive as UTC and are displayed in the workspace's time zone, not the browser's, so two
+// users in different countries read the same wall clock for the same event.
 export const formatDate = (value: string | Date, pattern = 'dd MMM yyyy') => {
   const date = new Date(value)
-  return isValidDate(date) ? format(date, pattern) : '—'
+  return isValidDate(date) ? format(toZonedDate(date), pattern) : '—'
 }
 export const formatDateTime = (value: string | Date) => {
   const date = new Date(value)
-  return isValidDate(date) ? format(date, 'dd MMM yyyy, HH:mm') : '—'
+  return isValidDate(date) ? format(toZonedDate(date), 'dd MMM yyyy, HH:mm') : '—'
 }
+export const formatTime = (value: string | Date, pattern = 'HH:mm') => {
+  const date = new Date(value)
+  return isValidDate(date) ? format(toZonedDate(date), pattern) : '—'
+}
+/** A UTC instant repositioned onto the workspace's calendar — for grouping instants by local day. */
+export const toWorkspaceDate = (value: string | Date) => toZonedDate(new Date(value))
 export const formatRelative = (value: string | Date) => {
   const date = new Date(value)
   return isValidDate(date) ? formatDistanceToNowStrict(date, { addSuffix: true }) : '—'

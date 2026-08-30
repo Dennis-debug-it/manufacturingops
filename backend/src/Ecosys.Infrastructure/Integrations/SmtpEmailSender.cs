@@ -30,16 +30,21 @@ internal sealed class SmtpEmailSender(IOptions<SmtpOptions> smtpOptions, ILogger
         }
 
         var options = smtpOptions.Value;
-        var host = settings.SmtpHost ?? options.Host;
+        var host = FirstNonBlank(settings.SmtpHost, options.Host);
         var port = settings.SmtpPort > 0 ? settings.SmtpPort : options.Port;
-        var username = settings.SmtpUsername ?? options.Username;
-        var secret = settings.SmtpPasswordSecret ?? options.Password;
+        var username = FirstNonBlank(settings.SmtpUsername, options.Username);
+        var secret = FirstNonBlank(settings.SmtpPasswordSecret, options.Password);
         var secureMode = settings.SecureMode;
 
         if (string.IsNullOrWhiteSpace(host))
         {
-            logger.LogWarning("SMTP host is not configured. Skipping email send.");
-            return;
+            // Nothing in the database row and nothing in Smtp:* / ECOSYS_SMTP_* — genuinely
+            // unconfigured. Throwing rather than returning is deliberate: a silent return let the
+            // outbox mark the message Sent and let password reset report success (EC-P1-06d).
+            logger.LogWarning("SMTP host is not configured in either the tenant email settings or the Smtp configuration section. Email was not sent.");
+            throw new EmailDeliveryException(
+                EmailErrorCategories.ConnectionFailed,
+                "SMTP host is not configured in either the tenant email settings or the Smtp configuration section.");
         }
 
         logger.LogInformation(
@@ -129,10 +134,10 @@ internal sealed class SmtpEmailSender(IOptions<SmtpOptions> smtpOptions, ILogger
         }
 
         var options = smtpOptions.Value;
-        var host = settings.SmtpHost ?? options.Host;
+        var host = FirstNonBlank(settings.SmtpHost, options.Host);
         var port = settings.SmtpPort > 0 ? settings.SmtpPort : options.Port;
-        var username = settings.SmtpUsername ?? options.Username;
-        var secret = settings.SmtpPasswordSecret ?? options.Password;
+        var username = FirstNonBlank(settings.SmtpUsername, options.Username);
+        var secret = FirstNonBlank(settings.SmtpPasswordSecret, options.Password);
         var secureMode = settings.SecureMode;
 
         if (string.IsNullOrWhiteSpace(host))
@@ -174,6 +179,14 @@ internal sealed class SmtpEmailSender(IOptions<SmtpOptions> smtpOptions, ILogger
             return new EmailVerificationResult(false, category, ex.Message);
         }
     }
+
+    /// <summary>
+    /// The settings row is written with empty strings by the settings screen long before anyone
+    /// fills it in, so <c>??</c> kept those empty strings in preference to Smtp:* / ECOSYS_SMTP_*.
+    /// Blank means absent here (EC-P1-06d).
+    /// </summary>
+    private static string? FirstNonBlank(string? preferred, string? fallback) =>
+        string.IsNullOrWhiteSpace(preferred) ? (string.IsNullOrWhiteSpace(fallback) ? null : fallback) : preferred;
 
     private static SecureSocketOptions ResolveSecureSocketOptions(EmailSecureMode secureMode, bool enableSsl) =>
         secureMode switch

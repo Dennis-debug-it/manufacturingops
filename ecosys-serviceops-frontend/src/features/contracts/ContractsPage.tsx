@@ -48,14 +48,14 @@ export function ContractsPage() {
         subtitle="Contract list, expiry, and renewal filters."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Contract
             </button>
           ) : undefined
         }
       />
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <Search className="h-4 w-4 text-slate-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by contract number, client, or name" className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400" />

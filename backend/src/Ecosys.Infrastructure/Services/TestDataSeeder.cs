@@ -3,9 +3,11 @@ using Ecosys.Domain.Entities;
 using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Auth;
+using Ecosys.Shared.Options;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Ecosys.Infrastructure.Services;
 
@@ -17,6 +19,7 @@ public interface ITestDataSeeder
 internal sealed class TestDataSeeder(
     AppDbContext dbContext,
     IPasswordHasher<User> passwordHasher,
+    IOptions<PlatformAdminOptions> platformAdminOptions,
     ILogger<TestDataSeeder> logger) : ITestDataSeeder
 {
     // ── Fixed GUIDs so re-runs are idempotent ────────────────────────────────
@@ -641,13 +644,41 @@ internal sealed class TestDataSeeder(
             new ContractLifecycleEvent { TenantId = DemoTenantId, ContractId = ContractHvacId, EventType = ContractLifecycleEventType.Created, NewStatus = ContractStatus.Active, Note = "Seeded HVAC contract", CreatedByUserId = ManagerUserId, CreatedAt = now },
             new ContractLifecycleEvent { TenantId = DemoTenantId, ContractId = ContractAdhocId, EventType = ContractLifecycleEventType.Created, NewStatus = ContractStatus.Active, Note = "Seeded adhoc contract", CreatedByUserId = ManagerUserId, CreatedAt = now });
 
+        // EC-019: work_order_technician_assignments is the source of truth for assignment; the
+        // legacy work_orders."AssignedTechnicianId" column above is a derived mirror. Seeding the
+        // column alone produced demo work orders that named a technician while the assignment model
+        // reported "Unassigned" — which is exactly how the defect was found. Seed both, so the demo
+        // tenant satisfies the same invariant the application maintains.
+        foreach (var workOrderId in new[] { WorkOrder1Id, WorkOrder2Id, WorkOrder3Id })
+        {
+            dbContext.WorkOrderTechnicianAssignments.Add(new WorkOrderTechnicianAssignment
+            {
+                TenantId = DemoTenantId,
+                WorkOrderId = workOrderId,
+                TechnicianId = TechnicianId,
+                IsLead = true,
+                Status = "Pending",
+                AssignedByUserId = ManagerUserId,
+                AssignedAt = now,
+                CreatedAt = now,
+            });
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("Demo seed data created successfully.");
-        logger.LogInformation("=== ECOSYS TEST CREDENTIALS ===");
-        logger.LogInformation("Platform Admin:  admin@ecosys.io     / Admin@1234");
+        // EC-025: this block used to advertise "admin@ecosys.io / Admin@1234" as the platform admin.
+        // No such account is ever created — the platform admin comes from PlatformAdmin:Email /
+        // PlatformAdmin:Password via IPlatformBootstrapService. Only accounts this seeder actually
+        // creates get their password printed here; the platform admin is named so developers know
+        // which address to use, and its password stays where the operator configured it.
+        var platformAdminEmail = platformAdminOptions.Value.Email;
+        logger.LogInformation("=== ECOSYS DEV SEED CREDENTIALS (development only) ===");
         logger.LogInformation("Tenant Manager:  manager@demo.co.ke  / Manager@1234");
         logger.LogInformation("Technician:      tech@demo.co.ke     / Tech@1234");
-        logger.LogInformation("================================");
+        logger.LogInformation(
+            "Platform Admin:  {PlatformAdminEmail} (not seeded here — password is PlatformAdmin:Password in configuration)",
+            string.IsNullOrWhiteSpace(platformAdminEmail) ? "<PlatformAdmin:Email not configured>" : platformAdminEmail);
+        logger.LogInformation("======================================================");
     }
 }

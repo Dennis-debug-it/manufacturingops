@@ -3,14 +3,18 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { SectionHeader } from '../../shared/components/SectionHeader'
 import { StatCard } from '../../shared/components/StatCard'
 import { cn } from '../../shared/utils/cn'
 import { usePmPlans, usePmPlansDue } from './api'
+import { MaintenanceTabNav } from './components/MaintenanceTabNav'
 
 export function EnginePage() {
-  const { data: plans, isLoading: plansLoading } = usePmPlans()
-  const { data: due, isLoading: dueLoading } = usePmPlansDue()
+  const plansQuery = usePmPlans()
+  const dueQuery = usePmPlansDue()
+  const { data: plans, isLoading: plansLoading } = plansQuery
+  const { data: due, isLoading: dueLoading } = dueQuery
 
   const activePlans = useMemo(() => (plans ?? []).filter((plan) => plan.status === 'Active'), [plans])
   const overdueCount = due?.length ?? 0
@@ -20,9 +24,25 @@ export function EnginePage() {
     return <Spinner label="Loading engine status" />
   }
 
+  // Every number and the health banner below are ratios of these two lists. Falling back to empty
+  // arrays would render a confident "PM schedules are on track" out of a failed request.
+  if (plansQuery.isError || dueQuery.isError) {
+    return (
+      <ErrorState
+        title="Engine status unavailable"
+        description="We couldn’t load PM plans or the due list, so no health signal is shown — an all-clear here would be indistinguishable from a failed request."
+        onRetry={() => {
+          void plansQuery.refetch()
+          void dueQuery.refetch()
+        }}
+      />
+    )
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader title="Engine Status" subtitle="Maintenance generation engine health and rules." />
+      <MaintenanceTabNav />
 
       <div className={cn('flex items-center gap-4 rounded-2xl border p-5 shadow-sm', healthy ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50')}>
         {healthy ? <CheckCircle2 className="h-8 w-8 shrink-0 text-emerald-600" /> : <AlertTriangle className="h-8 w-8 shrink-0 text-amber-600" />}
@@ -46,7 +66,7 @@ export function EnginePage() {
         <StatCard label="Manual Trigger Only" value={activePlans.filter((plan) => !plan.autoSchedule).length} />
       </div>
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <SectionHeader title="Generation Rules" description="How the current PM plans are configured to fire." />
         <p className="text-sm leading-6 text-slate-600">
           Each PM plan generates a work order via <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">POST /api/preventive-maintenance/{'{id}'}/generate-workorder</code>,

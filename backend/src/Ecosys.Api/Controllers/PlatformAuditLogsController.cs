@@ -1,3 +1,4 @@
+using Ecosys.Api.Common;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
@@ -12,8 +13,23 @@ namespace Ecosys.Api.Controllers;
 [Route("api/platform/audit-logs")]
 public sealed class PlatformAuditLogsController(AppDbContext dbContext) : ControllerBase
 {
+    /// <summary>
+    /// Ceiling on the legacy unpaged response. It predates EC-015 and is kept only so existing
+    /// callers that send no <c>page</c>/<c>pageSize</c> keep receiving a bare array of the shape
+    /// they expect; a caller that wants the rest of the set — and an honest total instead of a
+    /// silent cut-off at this number — asks for a page.
+    /// </summary>
+    private const int UnpagedResultCap = 500;
+
+    /// <summary>
+    /// EC-015 (platform side): this endpoint already had filters but no paging — it returned the
+    /// newest <see cref="UnpagedResultCap"/> matches with nothing in the response saying the set had
+    /// been cut off. Sending <c>page</c>/<c>pageSize</c> now returns a <see cref="PagedResult{T}"/>
+    /// with an accurate <c>totalCount</c>; omitting them keeps the old capped array for backward
+    /// compatibility.
+    /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyCollection<PlatformAuditLogResponse>>> GetAll(
+    public async Task<IActionResult> GetAll(
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
         [FromQuery] Guid? actorUserId,
@@ -21,6 +37,8 @@ public sealed class PlatformAuditLogsController(AppDbContext dbContext) : Contro
         [FromQuery] string? action,
         [FromQuery] string? entityType,
         [FromQuery] string? severity,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
         CancellationToken cancellationToken)
     {
         var query = dbContext.AuditLogs
@@ -67,9 +85,8 @@ public sealed class PlatformAuditLogsController(AppDbContext dbContext) : Contro
             query = query.Where(x => x.Severity.ToLower() == normalizedSeverity);
         }
 
-        var logs = await query
+        var projected = query
             .OrderByDescending(x => x.CreatedAt)
-            .Take(500)
             .Select(x => new PlatformAuditLogResponse(
                 x.Id,
                 x.TenantId == PlatformConstants.RootTenantId ? null : x.TenantId,
@@ -83,7 +100,15 @@ public sealed class PlatformAuditLogsController(AppDbContext dbContext) : Contro
                 x.UserAgent,
                 x.Severity,
                 x.CreatedAt,
-                x.Tenant != null ? x.Tenant.Name : null))
+                x.Tenant != null ? x.Tenant.Name : null));
+
+        if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
+        {
+            return Ok(await projected.ToPagedResultAsync(page, pageSize, cancellationToken));
+        }
+
+        var logs = await projected
+            .Take(UnpagedResultCap)
             .ToListAsync(cancellationToken);
 
         return Ok(logs);

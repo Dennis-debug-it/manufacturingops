@@ -12,7 +12,7 @@ import { useBranches } from './api'
 import { useCreateVan, useVans, type Van } from './vansApi'
 import { InventoryTabNav } from './components/InventoryTabNav'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 export function VansPage() {
@@ -62,7 +62,7 @@ export function VansPage() {
         title="Vans"
         subtitle="Mobile stock locations. Load parts from a branch, consume on jobs, return the rest."
         primaryAction={canManage ? (
-          <button type="button" onClick={() => setShowNew(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+          <button type="button" onClick={() => setShowNew(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
             <Plus className="h-4 w-4" />New Van
           </button>
         ) : undefined}
@@ -105,7 +105,7 @@ export function VansPage() {
               ))}
             </select>
           </div>
-          <button type="button" disabled={!name.trim() || createVan.isPending} onClick={() => void submit()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" disabled={!name.trim() || createVan.isPending} onClick={() => void submit()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             Create Van
           </button>
         </div>

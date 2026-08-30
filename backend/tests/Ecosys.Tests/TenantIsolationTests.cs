@@ -48,7 +48,7 @@ public sealed class TenantIsolationTests
 
         await using var dbContext = CreateDbContext(databaseName, tenantContext);
 
-        var clientsController = new ClientsController(dbContext, tenantContext, new NoOpAuditLogService());
+        var clientsController = new ClientsController(dbContext, tenantContext, new NoOpUserAccessService(), new NoOpAuditLogService());
         var sitesController = new SitesController(dbContext, tenantContext, new NoOpUserAccessService(), new NoOpDocumentNumberingService());
         var assetsController = new AssetsController(
             dbContext,
@@ -119,7 +119,7 @@ public sealed class TenantIsolationTests
             new NoOpAuditLogService(),
             new NoOpBranchAccessService(),
             new NoOpPmChecklistService(),
-            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.TimeZoneOptions()),
+            TestTimeZones.Create(dbContext),
             new NoOpLogger<PreventiveMaintenanceController>());
 
         await Assert.ThrowsAsync<NotFoundException>(() => templatesController.Get(fixture.TenantBTemplateId, CancellationToken.None));
@@ -151,6 +151,7 @@ public sealed class TenantIsolationTests
             new NoOpAuditLogService(),
             new NoOpUserCredentialDeliveryService(),
             new NoOpTemporaryPasswordService(),
+            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.AuthSecurityOptions()),
             new NoOpUserSessionService());
 
         await Assert.ThrowsAsync<NotFoundException>(() => controller.Get(fixture.TenantBManagedUserId, CancellationToken.None));
@@ -748,6 +749,7 @@ public sealed class TenantIsolationTests
         public Task RecordVanLoadAsync(MaterialItem material, Guid fromBranchId, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) => Task.FromException(new NotSupportedException());
         public Task RecordVanReturnAsync(MaterialItem material, Guid vanId, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) => Task.FromException(new NotSupportedException());
         public Task<StockMovement> RecordVanConsumeAsync(MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default) => Task.FromException<StockMovement>(new NotSupportedException());
+        public Task ExecuteAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default) => operation(cancellationToken);
     }
 
     private sealed class NoOpUserPermissionTemplateService : IUserPermissionTemplateService

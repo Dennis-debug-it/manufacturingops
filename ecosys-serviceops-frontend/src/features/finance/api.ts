@@ -372,6 +372,21 @@ export function useFinanceRateCards() {
   return useQuery({ queryKey: ['finance', 'rate-cards'], queryFn: () => api.get<RateCard[]>(endpoints.finance.rateCards), staleTime: 30_000 })
 }
 
+/**
+ * The tenant's configured tax rate, taken from its default rate card.
+ *
+ * That card is the only tenant-scoped place this platform stores a rate: the `tenants` table has no
+ * tax column, `/api/settings/*` exposes only a `vatNumber` identifier (not a rate), and the stored
+ * `defaultTaxRate` on `/api/platform/settings/tax-finance` is behind the `PlatformSettingsAccess`
+ * policy and unreadable by a tenant user. `null` therefore means "this workspace has not configured
+ * one" — callers must show an editable control rather than substituting a literal.
+ */
+export function useDefaultTaxRate() {
+  const { data, isLoading, isError } = useFinanceRateCards()
+  const defaultCard = (data ?? []).find((card) => card.isActive && card.isDefault && card.taxRate != null)
+  return { taxRate: defaultCard?.taxRate ?? null, isLoading, isError }
+}
+
 export interface UpsertRateCardPayload {
   name: string
   category: string

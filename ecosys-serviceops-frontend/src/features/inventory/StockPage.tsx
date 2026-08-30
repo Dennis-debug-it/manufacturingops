@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatCard } from '../../shared/components/StatCard'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { Spinner } from '../../shared/components/Spinner'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { cn } from '../../shared/utils/cn'
 import { formatCurrency } from '../../shared/utils/format'
 import { useMaterials } from './api'
@@ -15,8 +16,8 @@ import { InventoryTabNav } from './components/InventoryTabNav'
 
 export function StockPage() {
   const [view, setView] = useState<'all' | 'by-branch'>('all')
-  const { data, isLoading } = useMaterials({ status: 'active' })
-  const { data: vans } = useVans()
+  const { data, isLoading, isError, refetch } = useMaterials({ status: 'active' })
+  const { data: vans, isError: vansError, refetch: refetchVans } = useVans()
 
   const materials = useMemo(() => data ?? [], [data])
   const activeVans = vans ?? []
@@ -53,6 +54,19 @@ export function StockPage() {
     return <Spinner label="Loading stock levels" />
   }
 
+  // Every tile and table on this page is derived from `materials`; rendering them from an empty
+  // array after a failed fetch would report a stock count, a low-stock count and a stock value of
+  // zero that the server never said.
+  if (isError) {
+    return (
+      <ErrorState
+        title="Stock levels unavailable"
+        description="We couldn’t load stock records. No totals are shown, because zero here would be indistinguishable from a failed request."
+        onRetry={() => void refetch()}
+      />
+    )
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -65,7 +79,7 @@ export function StockPage() {
                 key={option}
                 type="button"
                 onClick={() => setView(option)}
-                className={cn('inline-flex h-10 items-center rounded-full border px-3 text-sm font-medium transition', view === option ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
+                className={cn('inline-flex h-10 items-center rounded-full border px-3 text-sm font-medium transition', view === option ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
               >
                 {option === 'all' ? 'All Items' : 'By Branch'}
               </button>
@@ -75,13 +89,22 @@ export function StockPage() {
       />
       <InventoryTabNav />
 
-      <Link to="/inventory/vans" className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
-        <span className="flex items-center gap-2">
-          <Truck className="h-4 w-4 text-slate-400" />
-          Stock is also held on <strong className="font-semibold text-slate-900">{activeVans.length}</strong> van{activeVans.length === 1 ? '' : 's'}. Load parts from a branch, consume on jobs, and return the rest.
-        </span>
-        <span className="shrink-0 font-medium text-slate-900">Manage vans →</span>
-      </Link>
+      {vansError ? (
+        <ErrorState
+          variant="inline"
+          title="Van stock unavailable."
+          description="The van count could not be loaded, so it is not shown here."
+          onRetry={() => void refetchVans()}
+        />
+      ) : (
+        <Link to="/inventory/vans" className="flex items-center justify-between gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] px-4 py-3 text-sm text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50">
+          <span className="flex items-center gap-2">
+            <Truck className="h-4 w-4 text-slate-400" />
+            Stock is also held on <strong className="font-semibold text-slate-900">{activeVans.length}</strong> van{activeVans.length === 1 ? '' : 's'}. Load parts from a branch, consume on jobs, and return the rest.
+          </span>
+          <span className="shrink-0 font-medium text-slate-900">Manage vans →</span>
+        </Link>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Total Items" value={stats.totalItems} />
@@ -95,7 +118,7 @@ export function StockPage() {
       ) : (
         <div className="space-y-6">
           {byBranch.map(([branch, items]) => (
-            <section key={branch} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section key={branch} className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">{branch}</h3>
               <DataTable columns={columns} data={items} emptyTitle="No items" emptyDescription="No stock at this branch." />
             </section>

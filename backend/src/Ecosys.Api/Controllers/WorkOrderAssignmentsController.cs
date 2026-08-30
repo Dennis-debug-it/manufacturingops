@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -110,7 +109,56 @@ public sealed class WorkOrderAssignmentsController(
         userAccessService.EnsureTenantOperationalAccess();
         await EnsureAccessibleAsync(workOrderId, cancellationToken);
         await assignmentWorkflowService.RecordDepartureAsync(TenantId, workOrderId, UserId, new TechnicianDepartureRequest(request.TechnicianId, request.Latitude, request.Longitude, request.DepartedAt, null), cancellationToken);
+        await SyncSiteVisitTimestampsAsync(workOrderId, cancellationToken);
         return Ok(await LoadResponseAsync(workOrderId, cancellationToken));
+    }
+
+    /// <summary>
+    /// Rolls the per-technician arrival/departure stamps up onto the work-order header.
+    /// <para>
+    /// EC-013: recording a departure only wrote <c>work_order_technician_assignments.DepartureAt</c>.
+    /// The arrival path happens to refresh the header as a side effect of its assignment-status
+    /// refresh; the departure path has no such refresh, so <c>work_orders.DepartureAt</c> — which the
+    /// detail DTO exposes as <c>departureAt</c> — stayed null forever.
+    /// </para>
+    /// <para>
+    /// Multi-technician convention (identical to the workflow service's own legacy-field sync):
+    /// the header arrival is the <b>earliest</b> technician arrival ("the crew got on site") and the
+    /// header departure is the <b>latest</b> technician departure ("the crew left site"). Both are
+    /// recomputed from the assignment rows, so the roll-up is idempotent and self-correcting.
+    /// </para>
+    /// </summary>
+    private async Task SyncSiteVisitTimestampsAsync(Guid workOrderId, CancellationToken cancellationToken)
+    {
+        var workOrder = await dbContext.WorkOrders
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == workOrderId, cancellationToken);
+        if (workOrder is null)
+        {
+            return;
+        }
+
+        var stamps = await dbContext.WorkOrderTechnicianAssignments
+            .Where(x => x.TenantId == TenantId && x.WorkOrderId == workOrderId)
+            .Select(x => new { x.ArrivalAt, x.DepartureAt })
+            .ToListAsync(cancellationToken);
+
+        // Min/Max over Nullable<DateTime> ignore nulls and yield null for an empty set. Only write
+        // when there is a stamp to write, so this never clears a header value recorded by another
+        // path (e.g. the lifecycle service, which stamps arrival without a technician row).
+        var earliestArrival = stamps.Min(x => x.ArrivalAt);
+        var latestDeparture = stamps.Max(x => x.DepartureAt);
+
+        if (earliestArrival.HasValue)
+        {
+            workOrder.ArrivalAt = earliestArrival;
+        }
+
+        if (latestDeparture.HasValue)
+        {
+            workOrder.DepartureAt = latestDeparture;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task EnsureAccessibleAsync(Guid workOrderId, CancellationToken cancellationToken)
@@ -148,11 +196,9 @@ public sealed class WorkOrderAssignmentsController(
             .SingleAsync(cancellationToken);
 
         var holdDetails = ResolveActiveHoldDetails(workOrder);
-        var technicianAssignments = workOrder.TechnicianAssignments
-            .OrderByDescending(x => x.IsLead)
-            .ThenBy(x => x.AssignedAt)
-            .Select(x => new WorkOrderTechnicianAssignmentResponse(x.Id, x.TechnicianId, x.Technician?.FullName, x.IsLead, x.Status, x.AssignedAt, x.AcceptedAt, x.ArrivalAt, x.DepartureAt, x.Notes))
-            .ToList();
+        // EC-019: same derivation the work orders list/detail endpoints use, so the assignment
+        // endpoints cannot report a different assignment picture for the same work order.
+        var assignment = WorkOrderAssignmentView.Resolve(workOrder);
 
         return new WorkOrderResponse(
             workOrder.Id,
@@ -174,9 +220,9 @@ public sealed class WorkOrderAssignmentsController(
             WorkOrderTypes.Normalize(workOrder.WorkType, WorkOrderTypes.CorrectiveMaintenance),
             workOrder.SlaResolutionBreached ? "Resolution Breached" : workOrder.SlaResponseBreached ? "Response Breached" : workOrder.SlaResolutionDeadline.HasValue ? "On Track" : "Not Configured",
             workOrder.AssignmentType,
-            workOrder.AssignedTechnicianId,
-            workOrder.AssignedTechnician?.FullName,
-            ResolveAssignedTechnicianIds(workOrder),
+            assignment.PrimaryTechnicianId,
+            assignment.PrimaryTechnicianName,
+            assignment.TechnicianIds,
             workOrder.LeadTechnicianId,
             workOrder.LeadTechnician?.FullName,
             workOrder.DueDate,
@@ -199,67 +245,11 @@ public sealed class WorkOrderAssignmentsController(
             workOrder.IsPreventiveMaintenance,
             holdDetails.Reason,
             holdDetails.Note,
-            workOrder.Assignments.OrderByDescending(x => x.AssignedAt).Select(x => x.AssignmentStatus).FirstOrDefault() ?? "Unassigned",
+            assignment.AssignmentStatus,
             workOrder.Assignments.OrderByDescending(x => x.AssignedAt).Select(x => x.Notes).FirstOrDefault(),
-            technicianAssignments,
-            BuildAssignmentSummary(workOrder.AssignmentGroup?.Name, technicianAssignments),
-            !workOrder.AssignmentGroupId.HasValue && technicianAssignments.Count == 0);
-    }
-
-    private static IReadOnlyCollection<Guid> ParseAssignedTechnicianIds(string? assignedTechnicianIdsJson)
-    {
-        if (string.IsNullOrWhiteSpace(assignedTechnicianIdsJson))
-        {
-            return [];
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<List<Guid>>(assignedTechnicianIdsJson) ?? [];
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
-    private static IReadOnlyCollection<Guid> ResolveAssignedTechnicianIds(WorkOrder workOrder)
-    {
-        var relationalIds = workOrder.TechnicianAssignments
-            .OrderByDescending(x => x.IsLead)
-            .ThenBy(x => x.AssignedAt)
-            .Select(x => x.TechnicianId)
-            .Distinct()
-            .ToList();
-
-        if (relationalIds.Count > 0)
-        {
-            return relationalIds;
-        }
-
-        var legacyIds = ParseAssignedTechnicianIds(workOrder.AssignedTechnicianIdsJson);
-        if (legacyIds.Count > 0)
-        {
-            return legacyIds;
-        }
-
-        return workOrder.AssignedTechnicianId.HasValue ? [workOrder.AssignedTechnicianId.Value] : [];
-    }
-
-    private static string BuildAssignmentSummary(string? groupName, IReadOnlyCollection<WorkOrderTechnicianAssignmentResponse> technicianAssignments)
-    {
-        if (technicianAssignments.Count == 0)
-        {
-            return groupName ?? "Unassigned";
-        }
-
-        var firstTechnician = technicianAssignments.First().TechnicianName ?? "Technician";
-        if (!string.IsNullOrWhiteSpace(groupName) && technicianAssignments.Count == 1)
-        {
-            return $"{groupName} -> {firstTechnician}";
-        }
-
-        return technicianAssignments.Count == 1 ? firstTechnician : $"{firstTechnician} + {technicianAssignments.Count - 1} others";
+            assignment.TechnicianAssignments,
+            assignment.AssignmentSummary,
+            assignment.IsUnassigned);
     }
 
     private static (string? Reason, string? Note) ResolveActiveHoldDetails(WorkOrder workOrder)

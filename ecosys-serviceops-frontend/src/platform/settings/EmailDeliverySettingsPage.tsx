@@ -128,7 +128,7 @@ export function EmailDeliverySettingsPage() {
       <PageHeader
         title="Email Delivery"
         subtitle="Platform SMTP configuration, notification email flags, and subject line rules."
-        primaryAction={canManage ? <button type="button" onClick={() => save.mutate()} disabled={save.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">{save.isPending ? 'Saving…' : 'Save Changes'}</button> : undefined}
+        primaryAction={canManage ? <button type="button" onClick={() => save.mutate()} disabled={save.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">{save.isPending ? 'Saving…' : 'Save Changes'}</button> : undefined}
       />
 
       {form.lastError ? <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">Last error: {form.lastError}</div> : null}
@@ -137,7 +137,7 @@ export function EmailDeliverySettingsPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Delivery Mode</label>
-            <select value={form.deliveryMode} disabled={!canManage} onChange={(event) => set('deliveryMode', event.target.value as EmailDeliveryMode)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50">
+            <select value={form.deliveryMode} disabled={!canManage} onChange={(event) => set('deliveryMode', event.target.value as EmailDeliveryMode)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50">
               {['Disabled', 'Smtp', 'Api'].map((mode) => <option key={mode} value={mode}>{mode}</option>)}
             </select>
           </div>
@@ -147,31 +147,31 @@ export function EmailDeliverySettingsPage() {
           </label>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">SMTP Host</label>
-            <input value={form.smtpHost} disabled={!canManage} onChange={(event) => set('smtpHost', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={form.smtpHost} disabled={!canManage} onChange={(event) => set('smtpHost', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">SMTP Port</label>
-            <input type="number" value={form.smtpPort} disabled={!canManage} onChange={(event) => set('smtpPort', Number(event.target.value))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input type="number" value={form.smtpPort} disabled={!canManage} onChange={(event) => set('smtpPort', Number(event.target.value))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">SMTP Username</label>
-            <input value={form.smtpUsername ?? ''} disabled={!canManage} onChange={(event) => set('smtpUsername', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={form.smtpUsername ?? ''} disabled={!canManage} onChange={(event) => set('smtpUsername', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">SMTP Password</label>
-            <input type="password" value={smtpPasswordSecret} disabled={!canManage} onChange={(event) => setSmtpPasswordSecret(event.target.value)} placeholder={form.smtpPasswordMasked ?? 'Enter to set/replace'} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input type="password" value={smtpPasswordSecret} disabled={!canManage} onChange={(event) => setSmtpPasswordSecret(event.target.value)} placeholder={form.smtpPasswordMasked ?? 'Enter to set/replace'} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Sender Name</label>
-            <input value={form.senderName} disabled={!canManage} onChange={(event) => set('senderName', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={form.senderName} disabled={!canManage} onChange={(event) => set('senderName', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Sender Email</label>
-            <input value={form.senderEmail} disabled={!canManage} onChange={(event) => set('senderEmail', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={form.senderEmail} disabled={!canManage} onChange={(event) => set('senderEmail', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Reply-To Email</label>
-            <input value={form.replyToEmail ?? ''} disabled={!canManage} onChange={(event) => set('replyToEmail', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={form.replyToEmail ?? ''} disabled={!canManage} onChange={(event) => set('replyToEmail', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700">
             <input type="checkbox" checked={form.enableSslTls} disabled={!canManage} onChange={(event) => set('enableSslTls', event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
@@ -180,7 +180,7 @@ export function EmailDeliverySettingsPage() {
         </div>
         {canManage ? (
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <input value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder="Test recipient email (optional)" className="h-10 w-64 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder="Test recipient email (optional)" className="h-10 w-64 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             <button type="button" onClick={() => test.mutate()} disabled={test.isPending} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">Send Test Email</button>
             <button type="button" onClick={() => verify.mutate()} disabled={verify.isPending} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">Verify Connection</button>
           </div>
@@ -202,15 +202,15 @@ export function EmailDeliverySettingsPage() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Subject Prefix</label>
-            <input value={form.subjectPrefix} disabled={!canManage} onChange={(event) => set('subjectPrefix', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={form.subjectPrefix} disabled={!canManage} onChange={(event) => set('subjectPrefix', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Subject Suffix</label>
-            <input value={form.subjectSuffix ?? ''} disabled={!canManage} onChange={(event) => set('subjectSuffix', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={form.subjectSuffix ?? ''} disabled={!canManage} onChange={(event) => set('subjectSuffix', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Environment Label</label>
-            <input value={form.environmentLabel} disabled={!canManage} onChange={(event) => set('environmentLabel', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={form.environmentLabel} disabled={!canManage} onChange={(event) => set('environmentLabel', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <div className="flex flex-col justify-end gap-2 pb-1">
             <label className="flex items-center gap-2 text-sm text-slate-700">

@@ -81,7 +81,7 @@ export function FeaturesSettingsPage() {
       {(data ?? []).length === 0 ? (
         <EmptyState title="No license plans configured" description="Create license plans on the Plans page before assigning module entitlements." />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
             <thead className="bg-slate-50">
               <tr>

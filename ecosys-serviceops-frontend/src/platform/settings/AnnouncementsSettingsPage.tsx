@@ -93,7 +93,7 @@ export function AnnouncementsSettingsPage() {
       <PageHeader
         title="Announcements"
         subtitle="Platform-wide banners and release notes shown to tenant workspaces."
-        primaryAction={canManage ? <button type="button" onClick={() => setShowNew(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"><Plus className="h-4 w-4" />New Announcement</button> : undefined}
+        primaryAction={canManage ? <button type="button" onClick={() => setShowNew(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"><Plus className="h-4 w-4" />New Announcement</button> : undefined}
       />
       <DataTable columns={columns} data={data ?? []} loading={isLoading} emptyTitle="No announcements yet" emptyDescription="Publish a platform-wide banner or release note." />
 
@@ -101,11 +101,11 @@ export function AnnouncementsSettingsPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Title</label>
-            <input value={title} onChange={(event) => setTitle(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input value={title} onChange={(event) => setTitle(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Audience</label>
-            <select value={audience} onChange={(event) => setAudience(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+            <select value={audience} onChange={(event) => setAudience(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               <option value="AllTenants">All Tenants</option>
               <option value="TrialTenants">Trial Tenants</option>
               <option value="ActiveTenants">Active Tenants</option>
@@ -113,11 +113,11 @@ export function AnnouncementsSettingsPage() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Body</label>
-            <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+            <textarea value={body} onChange={(event) => setBody(event.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div className="flex gap-2">
             <button type="button" disabled={!title.trim() || !body.trim() || createAnnouncement.isPending} onClick={() => void submit(false)} className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">Save Draft</button>
-            <button type="button" disabled={!title.trim() || !body.trim() || createAnnouncement.isPending} onClick={() => void submit(true)} className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">Publish</button>
+            <button type="button" disabled={!title.trim() || !body.trim() || createAnnouncement.isPending} onClick={() => void submit(true)} className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">Publish</button>
           </div>
         </div>
       </FormDrawer>

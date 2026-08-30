@@ -89,7 +89,7 @@ export function ReportsPage() {
 
 function Kpi({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
     </div>
@@ -98,7 +98,7 @@ function Kpi({ label, value }: { label: string; value: string | number }) {
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
       <p className="text-base font-semibold text-slate-900">{title}</p>
       <div className="mt-4">{children}</div>
     </section>

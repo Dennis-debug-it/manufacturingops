@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { cn } from '../../shared/utils/cn'
 import { formatCurrency } from '../../shared/utils/format'
@@ -19,10 +20,15 @@ const tabs = [
 
 export function ReportsPage() {
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>('valuation')
-  const { data: materials } = useMaterials({ status: 'active' })
-  const { data: issues } = useMaterialIssues()
-  const { data: transfers } = useStockTransfers()
-  const { data: purchaseOrders, isLoading: poLoading } = usePurchaseOrders('All')
+  const materialsQuery = useMaterials({ status: 'active' })
+  const issuesQuery = useMaterialIssues()
+  const transfersQuery = useStockTransfers()
+  const purchaseOrdersQuery = usePurchaseOrders('All')
+
+  const { data: materials } = materialsQuery
+  const { data: issues } = issuesQuery
+  const { data: transfers } = transfersQuery
+  const { data: purchaseOrders, isLoading: poLoading } = purchaseOrdersQuery
 
   const poColumns: DataTableColumn<PurchaseOrderListItem>[] = [
     { key: 'poNumber', header: 'PO No', cell: (row) => <span className="font-mono text-xs text-slate-700">{row.poNumber}</span> },
@@ -77,7 +83,7 @@ export function ReportsPage() {
             key={option.id}
             type="button"
             onClick={() => setTab(option.id)}
-            className={cn('inline-flex h-10 items-center rounded-full border px-3 text-sm font-medium transition', tab === option.id ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
+            className={cn('inline-flex h-10 items-center rounded-full border px-3 text-sm font-medium transition', tab === option.id ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
           >
             {option.label}
           </button>
@@ -85,36 +91,72 @@ export function ReportsPage() {
       </div>
 
       {tab === 'valuation' ? (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">Total stock value: <span className="font-semibold text-slate-900">{formatCurrency(totalValue)}</span></div>
-          <DataTable columns={valuationColumns} data={valuationRows} emptyTitle="No stock" emptyDescription="Active parts will appear here." />
-        </div>
+        materialsQuery.isError ? (
+          <ErrorState
+            title="Stock valuation unavailable"
+            description="We couldn’t load the parts this valuation totals, so a zero stock value would be a fabricated figure."
+            onRetry={() => void materialsQuery.refetch()}
+          />
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-sm text-slate-600 shadow-sm">Total stock value: <span className="font-semibold text-slate-900">{materialsQuery.isLoading ? '—' : formatCurrency(totalValue)}</span></div>
+            <DataTable columns={valuationColumns} data={valuationRows} loading={materialsQuery.isLoading} emptyTitle="No stock" emptyDescription="Active parts will appear here." />
+          </div>
+        )
       ) : null}
 
       {tab === 'usage' ? (
-        <DataTable columns={usageColumns} data={usageRows} emptyTitle="No usage recorded" emptyDescription="Material issued against work orders will appear here." />
+        materialsQuery.isError || issuesQuery.isError ? (
+          <ErrorState
+            title="Usage report unavailable"
+            description="Usage is computed from parts and material issues together, and at least one of those could not be loaded."
+            onRetry={() => {
+              void materialsQuery.refetch()
+              void issuesQuery.refetch()
+            }}
+          />
+        ) : (
+          <DataTable columns={usageColumns} data={usageRows} loading={materialsQuery.isLoading || issuesQuery.isLoading} emptyTitle="No usage recorded" emptyDescription="Material issued against work orders will appear here." />
+        )
       ) : null}
 
       {tab === 'po' ? (
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">Total committed spend: <span className="font-semibold text-slate-900">{formatCurrency(poTotal)}</span> across {(purchaseOrders ?? []).length} order(s)</div>
-          <DataTable columns={poColumns} data={purchaseOrders ?? []} loading={poLoading} emptyTitle="No purchase orders" emptyDescription="Purchase orders raised against suppliers will appear here." />
-        </div>
+        purchaseOrdersQuery.isError ? (
+          <ErrorState
+            title="Purchase order report unavailable"
+            description="We couldn’t load purchase orders, so a zero committed spend would be a fabricated figure."
+            onRetry={() => void purchaseOrdersQuery.refetch()}
+          />
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-sm text-slate-600 shadow-sm">Total committed spend: <span className="font-semibold text-slate-900">{poLoading ? '—' : formatCurrency(poTotal)}</span> across {poLoading ? '—' : (purchaseOrders ?? []).length} order(s)</div>
+            <DataTable columns={poColumns} data={purchaseOrders ?? []} loading={poLoading} emptyTitle="No purchase orders" emptyDescription="Purchase orders raised against suppliers will appear here." />
+          </div>
+        )
       ) : null}
 
       {tab === 'movement' ? (
-        <DataTable
-          columns={[
-            { key: 'materialName', header: 'Part', cell: (row) => row.materialName ?? '—' },
-            { key: 'route', header: 'Route', cell: (row) => `${row.fromBranchName ?? '—'} → ${row.toBranchName ?? '—'}` },
-            { key: 'quantity', header: 'Qty', cell: (row) => row.quantity },
-            { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
-            { key: 'createdAt', header: 'Date', cell: (row) => formatDateTime(row.createdAt) },
-          ]}
-          data={transfers ?? []}
-          emptyTitle="No movements"
-          emptyDescription="Branch-to-branch transfers will appear here."
-        />
+        transfersQuery.isError ? (
+          <ErrorState
+            title="Movement report unavailable"
+            description="We couldn’t load branch-to-branch transfers, so an empty table would be misleading."
+            onRetry={() => void transfersQuery.refetch()}
+          />
+        ) : (
+          <DataTable
+            columns={[
+              { key: 'materialName', header: 'Part', cell: (row) => row.materialName ?? '—' },
+              { key: 'route', header: 'Route', cell: (row) => `${row.fromBranchName ?? '—'} → ${row.toBranchName ?? '—'}` },
+              { key: 'quantity', header: 'Qty', cell: (row) => row.quantity },
+              { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+              { key: 'createdAt', header: 'Date', cell: (row) => formatDateTime(row.createdAt) },
+            ]}
+            data={transfers ?? []}
+            loading={transfersQuery.isLoading}
+            emptyTitle="No movements"
+            emptyDescription="Branch-to-branch transfers will appear here."
+          />
+        )
       ) : null}
     </div>
   )

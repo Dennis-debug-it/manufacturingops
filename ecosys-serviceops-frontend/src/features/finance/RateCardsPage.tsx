@@ -64,7 +64,7 @@ export function RateCardsPage() {
         subtitle="Labour and material rate tables."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Rate Card
             </button>
           ) : undefined
@@ -87,7 +87,7 @@ export function RateCardsPage() {
         footer={
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={close} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={submit} disabled={createRateCard.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={submit} disabled={createRateCard.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {createRateCard.isPending ? 'Saving…' : 'Create'}
             </button>
           </div>
@@ -96,18 +96,18 @@ export function RateCardsPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="rate-name">Name</label>
-            <input id="rate-name" value={name} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input id="rate-name" value={name} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="rate-category">Category</label>
-              <select id="rate-category" value={category} onChange={(event) => setCategory(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+              <select id="rate-category" value={category} onChange={(event) => setCategory(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
                 {categories.map((option) => (<option key={option} value={option}>{option}</option>))}
               </select>
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="rate-time-type">Time Type</label>
-              <select id="rate-time-type" value={timeType} onChange={(event) => setTimeType(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+              <select id="rate-time-type" value={timeType} onChange={(event) => setTimeType(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
                 {timeTypes.map((option) => (<option key={option} value={option}>{option}</option>))}
               </select>
             </div>
@@ -115,11 +115,11 @@ export function RateCardsPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="rate-unit-rate">Unit Rate</label>
-              <input id="rate-unit-rate" type="number" step="0.01" value={unitRate} onChange={(event) => setUnitRate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+              <input id="rate-unit-rate" type="number" step="0.01" value={unitRate} onChange={(event) => setUnitRate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="rate-unit">Unit</label>
-              <input id="rate-unit" value={unit} onChange={(event) => setUnit(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+              <input id="rate-unit" value={unit} onChange={(event) => setUnit(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
           </div>
         </div>

@@ -9,129 +9,132 @@ import { ProtectedRoute } from '../shared/components/ProtectedRoute'
 import { Spinner } from '../shared/components/Spinner'
 import { useAuth } from '../shared/hooks/useAuth'
 import { AppShell } from '../shared/layout/AppShell'
-import { createModulePage, type ModulePageConfig } from '../shared/pages/ModulePage'
 import type { AppRole } from '../shared/types/auth'
-import { DashboardPage } from '../features/dashboard/DashboardPage'
-import { ExecutiveDashboardPage } from '../features/dashboard/ExecutiveDashboardPage'
-import { LoginPage } from '../features/auth/LoginPage'
-import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage'
-import { ResetPasswordPage } from '../features/auth/ResetPasswordPage'
-import { ImpersonationEntryPage } from '../features/auth/ImpersonationEntryPage'
-import { RequestDemoPage } from '../features/public/RequestDemoPage'
-import { DemoConfirmationPage } from '../features/public/DemoConfirmationPage'
-import { CsatSurveyPage } from '../features/public/CsatSurveyPage'
-import { TrackJobPage } from '../features/portal/TrackJobPage'
-import { ForbiddenPage } from '../features/public/ForbiddenPage'
-import { NotFoundPage } from '../features/public/NotFoundPage'
-import { WorkOrdersPage } from '../features/work-orders/WorkOrdersPage'
-import { WorkOrderDetailPage } from '../features/work-orders/WorkOrderDetailPage'
-import { CalendarPage as MaintenanceCalendarPageReal } from '../features/maintenance/CalendarPage'
-import { SchedulesPage as MaintenanceSchedulesPageReal } from '../features/maintenance/SchedulesPage'
-import { ScheduleDetailPage as MaintenanceScheduleDetailPageReal } from '../features/maintenance/ScheduleDetailPage'
-import { CompliancePage as MaintenanceCompliancePageReal } from '../features/maintenance/CompliancePage'
-import { EnginePage as MaintenanceEnginePageReal } from '../features/maintenance/EnginePage'
-import { PartsPage } from '../features/inventory/PartsPage'
-import { PartDetailPage } from '../features/inventory/PartDetailPage'
-import { StockPage } from '../features/inventory/StockPage'
-import { LocationsPage } from '../features/inventory/LocationsPage'
-import { LocationDetailPage } from '../features/inventory/LocationDetailPage'
-import { MovementsPage } from '../features/inventory/MovementsPage'
-import { PurchaseOrdersPage, PurchaseOrderDetailPage } from '../features/inventory/PurchaseOrdersPage'
-import { SuppliersPage, SupplierDetailPage } from '../features/inventory/SuppliersPage'
-import { RestockRequestsPage } from '../features/inventory/RestockRequestsPage'
-import { PartsRequestsPage } from '../features/inventory/PartsRequestsPage'
-import { MaterialIssuesPage } from '../features/inventory/MaterialIssuesPage'
-import { VansPage } from '../features/inventory/VansPage'
-import { VanDetailPage } from '../features/inventory/VanDetailPage'
-import { AlertsPage as InventoryAlertsPageReal } from '../features/inventory/AlertsPage'
-import { ReportsPage as InventoryReportsPageReal } from '../features/inventory/ReportsPage'
-import { UsersPage as TeamUsersPageReal } from '../features/team/UsersPage'
-import { UserDetailPage as TeamUserDetailPageReal } from '../features/team/UserDetailPage'
-import { TechniciansPage as TeamTechniciansPageReal } from '../features/team/TechniciansPage'
-import { TechnicianDetailPage } from '../features/team/TechnicianDetailPage'
-import { RolesPage as TeamRolesPageReal } from '../features/team/RolesPage'
-import { AccessSectionPage } from '../features/team/AccessSectionPage'
-import { SkillsPage as TeamSkillsPageReal } from '../features/team/SkillsPage'
-import { GroupsPage as TeamGroupsPageReal } from '../features/team/GroupsPage'
-import { LiveAttendancePage, TimesheetsPage, TimesheetDetailPage, LeavePage, TimeAttendanceReportsPage } from '../features/team/TimeAttendancePages'
-import { MyTimePage } from '../features/team/MyTimePage'
-import { ContractsPage as ContractsPageReal } from '../features/contracts/ContractsPage'
-import { ContractDetailPage as ContractDetailPageReal } from '../features/contracts/ContractDetailPage'
-import { InvoicesPage } from '../features/finance/InvoicesPage'
-import { DocumentsPage } from '../features/finance/DocumentsPage'
-import { InvoiceDetailPage } from '../features/finance/InvoiceDetailPage'
-import { FinanceOverviewPage } from '../features/finance/FinanceOverviewPage'
-import { QuotesPage } from '../features/finance/QuotesPage'
-import { QuoteDetailPage } from '../features/finance/QuoteDetailPage'
-import { AgingPage as FinanceAgingPageReal } from '../features/finance/AgingPage'
-import { CreditControlPage } from '../features/finance/CreditControlPage'
-import { ReceiptsPage } from '../features/finance/ReceiptsPage'
-import { CreditNotesPage } from '../features/finance/CreditNotesPage'
-import { CreditNoteDetailPage } from '../features/finance/CreditNoteDetailPage'
-import { ExpensesPage, ExpenseDetailPage } from '../features/finance/ExpensesPage'
-import { PayablesPage, PayableDetailPage } from '../features/finance/PayablesPage'
-import { InvoiceApprovalsPage } from '../features/finance/InvoiceApprovalsPage'
-import { RateCardsPage as FinanceRateCardsPageReal } from '../features/finance/RateCardsPage'
-import { PreferentialRatesPage as FinancePreferentialRatesPageReal } from '../features/finance/PreferentialRatesPage'
-import { ExchangeRatesPage as FinanceExchangeRatesPageReal } from '../features/finance/ExchangeRatesPage'
-import { FinanceReportsPage as FinanceReportsPageReal } from '../features/finance/FinanceReportsPage'
-import { ReportsPage as ReportsPageReal } from '../features/reports/ReportsPage'
-import { OnboardingPage as OnboardingPageReal } from '../features/onboarding/OnboardingPage'
-import { ClientsPage } from '../features/clients/ClientsPage'
-import { SitesPage } from '../features/clients/SitesPage'
-import { AssetsPage } from '../features/clients/AssetsPage'
-import { ClientDetailPage } from '../features/clients/ClientDetailPage'
-import { SiteDetailPage } from '../features/clients/SiteDetailPage'
-import { AssetDetailPage } from '../features/clients/AssetDetailPage'
-import { CompanySettingsPage as SettingsCompanyPageReal } from '../features/settings/CompanySettingsPage'
-import { BrandingSettingsPage as SettingsBrandingPageReal } from '../features/settings/BrandingSettingsPage'
-import { SecuritySettingsPage as SettingsSecurityPageReal } from '../features/settings/SecuritySettingsPage'
-import { NotificationsSettingsPage as SettingsNotificationsPageReal } from '../features/settings/NotificationsSettingsPage'
-import { NumberingSettingsPage as SettingsNumberingPageReal } from '../features/settings/NumberingSettingsPage'
-import { PmTemplatesSettingsPage as SettingsPmTemplatesPageReal } from '../features/settings/PmTemplatesSettingsPage'
-import { EmailTemplatesSettingsPage as SettingsEmailTemplatesPageReal } from '../features/settings/EmailTemplatesSettingsPage'
-import { AuditLogsSettingsPage as SettingsAuditLogsPageReal } from '../features/settings/AuditLogsSettingsPage'
-import { AccountSettingsPage as SettingsAccountPageReal } from '../features/settings/AccountSettingsPage'
-import { DocumentTemplatesSettingsPage as SettingsTemplatesPageReal } from '../features/settings/DocumentTemplatesSettingsPage'
-import { EmailIntakeSettingsPage as SettingsEmailIntakePageReal } from '../features/settings/EmailIntakeSettingsPage'
-import { MonitoringIntakeSettingsPage as SettingsMonitoringIntakePageReal } from '../features/settings/MonitoringIntakeSettingsPage'
-import { CreditControlSettingsPage as SettingsCreditControlPageReal } from '../features/settings/CreditControlSettingsPage'
-import { SettingsOverviewPage as SettingsOverviewPageReal } from '../features/settings/SettingsOverviewPage'
-import { TimeAttendanceSettingsPage as SettingsTimeAttendancePageReal } from '../features/settings/TimeAttendanceSettingsPage'
-import { InventorySettingsPage as SettingsInventoryPageReal } from '../features/settings/InventorySettingsPage'
-import { WhatsAppSettingsPage as SettingsWhatsAppPageReal } from '../features/settings/WhatsAppSettingsPage'
-import { PaymentsSettingsPage as SettingsPaymentsPageReal } from '../features/settings/PaymentsSettingsPage'
-import { PortalSettingsPage as SettingsPortalPageReal } from '../features/settings/PortalSettingsPage'
-import { IntegrationsSettingsPage as SettingsIntegrationsPageReal } from '../features/settings/IntegrationsSettingsPage'
-import { ExecutiveDashboardSettingsPage as SettingsExecutiveDashboardPageReal } from '../features/settings/ExecutiveDashboardSettingsPage'
-import { ApprovalMatrixSettingsPage } from '../features/settings/ApprovalMatrixSettingsPage'
-import { NotificationTemplatesPage } from '../features/settings/NotificationTemplatesPage'
-import { SlaPoliciesPage } from '../features/settings/SlaPoliciesPage'
-import { WorkflowsSettingsPage } from '../features/settings/WorkflowsSettingsPage'
-import { EscalationRulesSettingsPage } from '../features/settings/EscalationRulesSettingsPage'
-import { WOTemplatesSettingsPage } from '../features/settings/WOTemplatesSettingsPage'
-import { MyApprovalsPage } from '../features/approvals/MyApprovalsPage'
-import { WhatsAppInboxPage } from '../features/whatsapp/WhatsAppInboxPage'
-import { KnowledgeBasePage } from '../features/knowledge/KnowledgeBasePage'
-import { LiveMapPage } from '../features/dispatch/LiveMapPage'
-import { DailyRouteView } from '../features/dispatch/DailyRouteView'
-import { SchedulingBoardPage } from '../features/dispatch/SchedulingBoardPage'
-import { PlatformApp } from '../platform/PlatformApp'
-import { PortalApp } from '../portal/PortalApp'
+const DashboardPage = lazy(() => import('../features/dashboard/DashboardPage').then((module) => ({ default: module.DashboardPage })))
+const ExecutiveDashboardPage = lazy(() => import('../features/dashboard/ExecutiveDashboardPage').then((module) => ({ default: module.ExecutiveDashboardPage })))
+const LoginPage = lazy(() => import('../features/auth/LoginPage').then((module) => ({ default: module.LoginPage })))
+const ForgotPasswordPage = lazy(() => import('../features/auth/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })))
+const ResetPasswordPage = lazy(() => import('../features/auth/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })))
+const ImpersonationEntryPage = lazy(() => import('../features/auth/ImpersonationEntryPage').then((module) => ({ default: module.ImpersonationEntryPage })))
+const RequestDemoPage = lazy(() => import('../features/public/RequestDemoPage').then((module) => ({ default: module.RequestDemoPage })))
+const DemoConfirmationPage = lazy(() => import('../features/public/DemoConfirmationPage').then((module) => ({ default: module.DemoConfirmationPage })))
+const CsatSurveyPage = lazy(() => import('../features/public/CsatSurveyPage').then((module) => ({ default: module.CsatSurveyPage })))
+const TrackJobPage = lazy(() => import('../features/portal/TrackJobPage').then((module) => ({ default: module.TrackJobPage })))
+const ForbiddenPage = lazy(() => import('../features/public/ForbiddenPage').then((module) => ({ default: module.ForbiddenPage })))
+const NotFoundPage = lazy(() => import('../features/public/NotFoundPage').then((module) => ({ default: module.NotFoundPage })))
+const WorkOrdersPage = lazy(() => import('../features/work-orders/WorkOrdersPage').then((module) => ({ default: module.WorkOrdersPage })))
+const WorkOrderDetailPage = lazy(() => import('../features/work-orders/WorkOrderDetailPage').then((module) => ({ default: module.WorkOrderDetailPage })))
+const MaintenanceCalendarPageReal = lazy(() => import('../features/maintenance/CalendarPage').then((module) => ({ default: module.CalendarPage })))
+const MaintenanceSchedulesPageReal = lazy(() => import('../features/maintenance/SchedulesPage').then((module) => ({ default: module.SchedulesPage })))
+const MaintenanceScheduleDetailPageReal = lazy(() => import('../features/maintenance/ScheduleDetailPage').then((module) => ({ default: module.ScheduleDetailPage })))
+const MaintenanceCompliancePageReal = lazy(() => import('../features/maintenance/CompliancePage').then((module) => ({ default: module.CompliancePage })))
+const MaintenanceEnginePageReal = lazy(() => import('../features/maintenance/EnginePage').then((module) => ({ default: module.EnginePage })))
+const PartsPage = lazy(() => import('../features/inventory/PartsPage').then((module) => ({ default: module.PartsPage })))
+const PartDetailPage = lazy(() => import('../features/inventory/PartDetailPage').then((module) => ({ default: module.PartDetailPage })))
+const StockPage = lazy(() => import('../features/inventory/StockPage').then((module) => ({ default: module.StockPage })))
+const LocationsPage = lazy(() => import('../features/inventory/LocationsPage').then((module) => ({ default: module.LocationsPage })))
+const LocationDetailPage = lazy(() => import('../features/inventory/LocationDetailPage').then((module) => ({ default: module.LocationDetailPage })))
+const MovementsPage = lazy(() => import('../features/inventory/MovementsPage').then((module) => ({ default: module.MovementsPage })))
+const PurchaseOrdersPage = lazy(() => import('../features/inventory/PurchaseOrdersPage').then((module) => ({ default: module.PurchaseOrdersPage })))
+const PurchaseOrderDetailPage = lazy(() => import('../features/inventory/PurchaseOrdersPage').then((module) => ({ default: module.PurchaseOrderDetailPage })))
+const SuppliersPage = lazy(() => import('../features/inventory/SuppliersPage').then((module) => ({ default: module.SuppliersPage })))
+const SupplierDetailPage = lazy(() => import('../features/inventory/SuppliersPage').then((module) => ({ default: module.SupplierDetailPage })))
+const RestockRequestsPage = lazy(() => import('../features/inventory/RestockRequestsPage').then((module) => ({ default: module.RestockRequestsPage })))
+const PartsRequestsPage = lazy(() => import('../features/inventory/PartsRequestsPage').then((module) => ({ default: module.PartsRequestsPage })))
+const MaterialIssuesPage = lazy(() => import('../features/inventory/MaterialIssuesPage').then((module) => ({ default: module.MaterialIssuesPage })))
+const VansPage = lazy(() => import('../features/inventory/VansPage').then((module) => ({ default: module.VansPage })))
+const VanDetailPage = lazy(() => import('../features/inventory/VanDetailPage').then((module) => ({ default: module.VanDetailPage })))
+const InventoryAlertsPageReal = lazy(() => import('../features/inventory/AlertsPage').then((module) => ({ default: module.AlertsPage })))
+const InventoryReportsPageReal = lazy(() => import('../features/inventory/ReportsPage').then((module) => ({ default: module.ReportsPage })))
+const TeamUsersPageReal = lazy(() => import('../features/team/UsersPage').then((module) => ({ default: module.UsersPage })))
+const TeamUserDetailPageReal = lazy(() => import('../features/team/UserDetailPage').then((module) => ({ default: module.UserDetailPage })))
+const TeamTechniciansPageReal = lazy(() => import('../features/team/TechniciansPage').then((module) => ({ default: module.TechniciansPage })))
+const TechnicianDetailPage = lazy(() => import('../features/team/TechnicianDetailPage').then((module) => ({ default: module.TechnicianDetailPage })))
+const TeamRolesPageReal = lazy(() => import('../features/team/RolesPage').then((module) => ({ default: module.RolesPage })))
+const AccessSectionPage = lazy(() => import('../features/team/AccessSectionPage').then((module) => ({ default: module.AccessSectionPage })))
+const TeamSkillsPageReal = lazy(() => import('../features/team/SkillsPage').then((module) => ({ default: module.SkillsPage })))
+const TeamGroupsPageReal = lazy(() => import('../features/team/GroupsPage').then((module) => ({ default: module.GroupsPage })))
+const LiveAttendancePage = lazy(() => import('../features/team/TimeAttendancePages').then((module) => ({ default: module.LiveAttendancePage })))
+const TimesheetsPage = lazy(() => import('../features/team/TimeAttendancePages').then((module) => ({ default: module.TimesheetsPage })))
+const TimesheetDetailPage = lazy(() => import('../features/team/TimeAttendancePages').then((module) => ({ default: module.TimesheetDetailPage })))
+const LeavePage = lazy(() => import('../features/team/TimeAttendancePages').then((module) => ({ default: module.LeavePage })))
+const TimeAttendanceReportsPage = lazy(() => import('../features/team/TimeAttendancePages').then((module) => ({ default: module.TimeAttendanceReportsPage })))
+const MyTimePage = lazy(() => import('../features/team/MyTimePage').then((module) => ({ default: module.MyTimePage })))
+const ContractsPageReal = lazy(() => import('../features/contracts/ContractsPage').then((module) => ({ default: module.ContractsPage })))
+const ContractDetailPageReal = lazy(() => import('../features/contracts/ContractDetailPage').then((module) => ({ default: module.ContractDetailPage })))
+const InvoicesPage = lazy(() => import('../features/finance/InvoicesPage').then((module) => ({ default: module.InvoicesPage })))
+const DocumentsPage = lazy(() => import('../features/finance/DocumentsPage').then((module) => ({ default: module.DocumentsPage })))
+const InvoiceDetailPage = lazy(() => import('../features/finance/InvoiceDetailPage').then((module) => ({ default: module.InvoiceDetailPage })))
+const FinanceOverviewPage = lazy(() => import('../features/finance/FinanceOverviewPage').then((module) => ({ default: module.FinanceOverviewPage })))
+const QuotesPage = lazy(() => import('../features/finance/QuotesPage').then((module) => ({ default: module.QuotesPage })))
+const QuoteDetailPage = lazy(() => import('../features/finance/QuoteDetailPage').then((module) => ({ default: module.QuoteDetailPage })))
+const FinanceAgingPageReal = lazy(() => import('../features/finance/AgingPage').then((module) => ({ default: module.AgingPage })))
+const CreditControlPage = lazy(() => import('../features/finance/CreditControlPage').then((module) => ({ default: module.CreditControlPage })))
+const ReceiptsPage = lazy(() => import('../features/finance/ReceiptsPage').then((module) => ({ default: module.ReceiptsPage })))
+const CreditNotesPage = lazy(() => import('../features/finance/CreditNotesPage').then((module) => ({ default: module.CreditNotesPage })))
+const CreditNoteDetailPage = lazy(() => import('../features/finance/CreditNoteDetailPage').then((module) => ({ default: module.CreditNoteDetailPage })))
+const ExpensesPage = lazy(() => import('../features/finance/ExpensesPage').then((module) => ({ default: module.ExpensesPage })))
+const ExpenseDetailPage = lazy(() => import('../features/finance/ExpensesPage').then((module) => ({ default: module.ExpenseDetailPage })))
+const PayablesPage = lazy(() => import('../features/finance/PayablesPage').then((module) => ({ default: module.PayablesPage })))
+const PayableDetailPage = lazy(() => import('../features/finance/PayablesPage').then((module) => ({ default: module.PayableDetailPage })))
+const InvoiceApprovalsPage = lazy(() => import('../features/finance/InvoiceApprovalsPage').then((module) => ({ default: module.InvoiceApprovalsPage })))
+const FinanceRateCardsPageReal = lazy(() => import('../features/finance/RateCardsPage').then((module) => ({ default: module.RateCardsPage })))
+const FinancePreferentialRatesPageReal = lazy(() => import('../features/finance/PreferentialRatesPage').then((module) => ({ default: module.PreferentialRatesPage })))
+const FinanceExchangeRatesPageReal = lazy(() => import('../features/finance/ExchangeRatesPage').then((module) => ({ default: module.ExchangeRatesPage })))
+const FinanceReportsPageReal = lazy(() => import('../features/finance/FinanceReportsPage').then((module) => ({ default: module.FinanceReportsPage })))
+const ReportsPageReal = lazy(() => import('../features/reports/ReportsPage').then((module) => ({ default: module.ReportsPage })))
+const OnboardingPageReal = lazy(() => import('../features/onboarding/OnboardingPage').then((module) => ({ default: module.OnboardingPage })))
+const ClientsPage = lazy(() => import('../features/clients/ClientsPage').then((module) => ({ default: module.ClientsPage })))
+const SitesPage = lazy(() => import('../features/clients/SitesPage').then((module) => ({ default: module.SitesPage })))
+const AssetsPage = lazy(() => import('../features/clients/AssetsPage').then((module) => ({ default: module.AssetsPage })))
+const ClientDetailPage = lazy(() => import('../features/clients/ClientDetailPage').then((module) => ({ default: module.ClientDetailPage })))
+const SiteDetailPage = lazy(() => import('../features/clients/SiteDetailPage').then((module) => ({ default: module.SiteDetailPage })))
+const AssetDetailPage = lazy(() => import('../features/clients/AssetDetailPage').then((module) => ({ default: module.AssetDetailPage })))
+const SettingsCompanyPageReal = lazy(() => import('../features/settings/CompanySettingsPage').then((module) => ({ default: module.CompanySettingsPage })))
+const SettingsBrandingPageReal = lazy(() => import('../features/settings/BrandingSettingsPage').then((module) => ({ default: module.BrandingSettingsPage })))
+const SettingsSecurityPageReal = lazy(() => import('../features/settings/SecuritySettingsPage').then((module) => ({ default: module.SecuritySettingsPage })))
+const SettingsNotificationsPageReal = lazy(() => import('../features/settings/NotificationsSettingsPage').then((module) => ({ default: module.NotificationsSettingsPage })))
+const SettingsNumberingPageReal = lazy(() => import('../features/settings/NumberingSettingsPage').then((module) => ({ default: module.NumberingSettingsPage })))
+const SettingsPmTemplatesPageReal = lazy(() => import('../features/settings/PmTemplatesSettingsPage').then((module) => ({ default: module.PmTemplatesSettingsPage })))
+const SettingsEmailTemplatesPageReal = lazy(() => import('../features/settings/EmailTemplatesSettingsPage').then((module) => ({ default: module.EmailTemplatesSettingsPage })))
+const SettingsAuditLogsPageReal = lazy(() => import('../features/settings/AuditLogsSettingsPage').then((module) => ({ default: module.AuditLogsSettingsPage })))
+const SettingsAccountPageReal = lazy(() => import('../features/settings/AccountSettingsPage').then((module) => ({ default: module.AccountSettingsPage })))
+const SettingsTemplatesPageReal = lazy(() => import('../features/settings/DocumentTemplatesSettingsPage').then((module) => ({ default: module.DocumentTemplatesSettingsPage })))
+const SettingsEmailIntakePageReal = lazy(() => import('../features/settings/EmailIntakeSettingsPage').then((module) => ({ default: module.EmailIntakeSettingsPage })))
+const SettingsEmailDeliveryPageReal = lazy(() => import('../features/settings/EmailDeliverySettingsPage').then((module) => ({ default: module.EmailDeliverySettingsPage })))
+const SettingsMonitoringIntakePageReal = lazy(() => import('../features/settings/MonitoringIntakeSettingsPage').then((module) => ({ default: module.MonitoringIntakeSettingsPage })))
+const SettingsCreditControlPageReal = lazy(() => import('../features/settings/CreditControlSettingsPage').then((module) => ({ default: module.CreditControlSettingsPage })))
+const SettingsOverviewPageReal = lazy(() => import('../features/settings/SettingsOverviewPage').then((module) => ({ default: module.SettingsOverviewPage })))
+const SettingsTimeAttendancePageReal = lazy(() => import('../features/settings/TimeAttendanceSettingsPage').then((module) => ({ default: module.TimeAttendanceSettingsPage })))
+const SettingsInventoryPageReal = lazy(() => import('../features/settings/InventorySettingsPage').then((module) => ({ default: module.InventorySettingsPage })))
+const SettingsWhatsAppPageReal = lazy(() => import('../features/settings/WhatsAppSettingsPage').then((module) => ({ default: module.WhatsAppSettingsPage })))
+const SettingsPaymentsPageReal = lazy(() => import('../features/settings/PaymentsSettingsPage').then((module) => ({ default: module.PaymentsSettingsPage })))
+const SettingsPortalPageReal = lazy(() => import('../features/settings/PortalSettingsPage').then((module) => ({ default: module.PortalSettingsPage })))
+const SettingsIntegrationsPageReal = lazy(() => import('../features/settings/IntegrationsSettingsPage').then((module) => ({ default: module.IntegrationsSettingsPage })))
+const SettingsExecutiveDashboardPageReal = lazy(() => import('../features/settings/ExecutiveDashboardSettingsPage').then((module) => ({ default: module.ExecutiveDashboardSettingsPage })))
+const ApprovalMatrixSettingsPage = lazy(() => import('../features/settings/ApprovalMatrixSettingsPage').then((module) => ({ default: module.ApprovalMatrixSettingsPage })))
+const NotificationTemplatesPage = lazy(() => import('../features/settings/NotificationTemplatesPage').then((module) => ({ default: module.NotificationTemplatesPage })))
+const SlaPoliciesPage = lazy(() => import('../features/settings/SlaPoliciesPage').then((module) => ({ default: module.SlaPoliciesPage })))
+const WorkflowsSettingsPage = lazy(() => import('../features/settings/WorkflowsSettingsPage').then((module) => ({ default: module.WorkflowsSettingsPage })))
+const EscalationRulesSettingsPage = lazy(() => import('../features/settings/EscalationRulesSettingsPage').then((module) => ({ default: module.EscalationRulesSettingsPage })))
+const WOTemplatesSettingsPage = lazy(() => import('../features/settings/WOTemplatesSettingsPage').then((module) => ({ default: module.WOTemplatesSettingsPage })))
+const MyApprovalsPage = lazy(() => import('../features/approvals/MyApprovalsPage').then((module) => ({ default: module.MyApprovalsPage })))
+const WhatsAppInboxPage = lazy(() => import('../features/whatsapp/WhatsAppInboxPage').then((module) => ({ default: module.WhatsAppInboxPage })))
+const KnowledgeBasePage = lazy(() => import('../features/knowledge/KnowledgeBasePage').then((module) => ({ default: module.KnowledgeBasePage })))
+const LiveMapPage = lazy(() => import('../features/dispatch/LiveMapPage').then((module) => ({ default: module.LiveMapPage })))
+const DailyRouteView = lazy(() => import('../features/dispatch/DailyRouteView').then((module) => ({ default: module.DailyRouteView })))
+const SchedulingBoardPage = lazy(() => import('../features/dispatch/SchedulingBoardPage').then((module) => ({ default: module.SchedulingBoardPage })))
+const PlatformApp = lazy(() => import('../platform/PlatformApp').then((module) => ({ default: module.PlatformApp })))
+const PortalApp = lazy(() => import('../portal/PortalApp').then((module) => ({ default: module.PortalApp })))
 
 const tenantRoles: AppRole[] = ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer']
 const platformRoles: AppRole[] = ['super_admin', 'platform_sales']
-
-const lazyModulePage = (config: ModulePageConfig) =>
-  lazy(async () => ({ default: createModulePage(config) }))
 
 const MaintenanceCalendarPage = MaintenanceCalendarPageReal
 const MaintenanceSchedulesPage = MaintenanceSchedulesPageReal
 const MaintenanceScheduleDetailPage = MaintenanceScheduleDetailPageReal
 const MaintenanceCompliancePage = MaintenanceCompliancePageReal
 const MaintenanceEnginePage = MaintenanceEnginePageReal
-
-const ClientWizardPage = lazyModulePage({ title: 'Client Setup Wizard', subtitle: 'Sites, assets, and contract setup flow.' })
 
 const InventoryPartsPage = PartsPage
 const InventoryPartDetailPage = PartDetailPage
@@ -191,6 +194,7 @@ const SettingsPmTemplatesPage = SettingsPmTemplatesPageReal
 const SettingsInventoryPage = SettingsInventoryPageReal
 const SettingsTimeAttendancePage = SettingsTimeAttendancePageReal
 const SettingsEmailIntakePage = SettingsEmailIntakePageReal
+const SettingsEmailDeliveryPage = SettingsEmailDeliveryPageReal
 const SettingsMonitoringIntakePage = SettingsMonitoringIntakePageReal
 const SettingsWhatsAppPage = SettingsWhatsAppPageReal
 const SettingsPaymentsPage = SettingsPaymentsPageReal
@@ -208,7 +212,14 @@ const OnboardingPage = OnboardingPageReal
 function TenantShellRoute() {
   return (
     <AppShell>
-      <Outlet />
+      {/*
+        The suspense boundary sits inside the shell, not above it. Every page is a `lazy()` chunk
+        now, and a boundary above `AppShell` would tear down the sidebar and topbar on each
+        navigation and rebuild them when the chunk arrived.
+      */}
+      <Suspense fallback={<Spinner label="Loading page" />}>
+        <Outlet />
+      </Suspense>
     </AppShell>
   )
 }
@@ -221,7 +232,9 @@ function DashboardRoute() {
 
   return (
     <AppShell>
-      <DashboardPage />
+      <Suspense fallback={<Spinner label="Loading page" />}>
+        <DashboardPage />
+      </Suspense>
     </AppShell>
   )
 }
@@ -248,13 +261,11 @@ export function AppRouter() {
       ['/dashboard/executive', ExecutiveDashboardPage],
       ['/maintenance/calendar', MaintenanceCalendarPage],
       ['/maintenance/schedules', MaintenanceSchedulesPage],
-      ['/maintenance/schedules/new', MaintenanceSchedulesPage],
       ['/maintenance/schedules/:id', MaintenanceScheduleDetailPage],
       ['/maintenance/compliance', MaintenanceCompliancePage],
       ['/maintenance/engine', MaintenanceEnginePage],
       ['/clients', ClientsPage],
       ['/clients/:id', ClientDetailPage],
-      ['/clients/:id/sites/new', ClientWizardPage],
       ['/sites', SitesPage],
       ['/sites/:id', SiteDetailPage],
       ['/sites/:id/assets/new', AssetDetailPage],
@@ -262,7 +273,6 @@ export function AppRouter() {
       ['/assets/:id', AssetDetailPage],
       ['/inventory', InventoryStockPage],
       ['/inventory/parts', InventoryPartsPage],
-      ['/inventory/parts/new', InventoryPartsPage],
       ['/inventory/parts/:id', InventoryPartDetailPage],
       ['/inventory/stock', InventoryStockPage],
       ['/inventory/locations', InventoryLocationsPage],
@@ -271,7 +281,6 @@ export function AppRouter() {
       ['/inventory/vans', VansPage],
       ['/inventory/vans/:id', VanDetailPage],
       ['/inventory/purchase-orders', InventoryPurchaseOrdersPage],
-      ['/inventory/purchase-orders/new', InventoryPurchaseOrdersPage],
       ['/inventory/purchase-orders/:id', InventoryPurchaseOrderDetailPage],
       ['/inventory/suppliers', InventorySuppliersPage],
       ['/inventory/suppliers/:id', InventorySupplierDetailPage],
@@ -331,12 +340,11 @@ export function AppRouter() {
       ['/settings/branding', SettingsBrandingPage],
       ['/settings/templates', SettingsTemplatesPage],
       ['/settings/email-templates', SettingsEmailTemplatesPage],
-      ['/settings/email-templates/:id', SettingsEmailTemplatesPage],
       ['/settings/numbering', SettingsNumberingPage],
       ['/settings/pm-templates', SettingsPmTemplatesPage],
-      ['/settings/pm-templates/:id', SettingsPmTemplatesPage],
       ['/settings/inventory', SettingsInventoryPage],
       ['/settings/time-attendance', SettingsTimeAttendancePage],
+      ['/settings/email-delivery', SettingsEmailDeliveryPage],
       ['/settings/email-intake', SettingsEmailIntakePage],
       ['/settings/monitoring', SettingsMonitoringIntakePage],
       ['/settings/whatsapp', SettingsWhatsAppPage],

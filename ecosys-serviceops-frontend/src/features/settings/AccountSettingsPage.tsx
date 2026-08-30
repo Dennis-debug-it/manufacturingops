@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { StatCard } from '../../shared/components/StatCard'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { formatDate } from '../../shared/utils/dates'
@@ -40,7 +41,7 @@ function FeatureRow({ label, enabled }: { label: string; enabled: boolean }) {
 }
 
 export function AccountSettingsPage() {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['settings', 'license'],
     queryFn: () => api.get<TenantLicenseSnapshot>('/api/settings/license'),
     staleTime: 30_000,
@@ -51,7 +52,13 @@ export function AccountSettingsPage() {
   }
 
   if (isError || !data) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">Account and license details could not be loaded.</div>
+    return (
+      <ErrorState
+        title="Account details unavailable"
+        description="We couldn’t load this workspace’s account and licence details."
+        onRetry={() => void refetch()}
+      />
+    )
   }
 
   return (
@@ -80,7 +87,7 @@ export function AccountSettingsPage() {
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900">Plan Features</h2>
         <div className="mt-3">
           <FeatureRow label="Email Ingestion" enabled={data.emailIngestion} />
@@ -90,7 +97,7 @@ export function AccountSettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 text-sm text-slate-600 shadow-sm">
         Plan changes, seat additions, and billing details are managed by Ecosys platform administrators. Contact support to request a change.
       </div>
     </div>

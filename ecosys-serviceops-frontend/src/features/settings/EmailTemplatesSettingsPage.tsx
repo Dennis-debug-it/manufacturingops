@@ -6,6 +6,7 @@ import { Mail } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { api } from '../../shared/api/apiClient'
 
@@ -30,7 +31,7 @@ interface EmailTemplateSummary {
 function TemplateEditor({ eventKey, onClose }: { eventKey: string; onClose: () => void }) {
   const canManage = usePermission('settings.manage')
   const queryClient = useQueryClient()
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['settings', 'email-templates', eventKey],
     queryFn: () => api.get<EmailTemplateSummary>(`/api/settings/email-templates/${eventKey}`),
   })
@@ -83,12 +84,31 @@ function TemplateEditor({ eventKey, onClose }: { eventKey: string; onClose: () =
     }
   }
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return <Spinner label="Loading template" />
   }
 
+  // Without this branch an exhausted retry leaves the drawer spinning over an unusable editor.
+  if (isError || !data) {
+    return (
+      <div className="fixed inset-0 z-50 flex justify-end bg-[var(--app-primary)]/40">
+        <div className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-xl">
+          <div className="flex justify-end">
+            <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">Close</button>
+          </div>
+          <ErrorState
+            className="mt-6"
+            title="Template unavailable"
+            description="We couldn’t load this email template. Editing is disabled until it loads — try again."
+            onRetry={() => void refetch()}
+          />
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40">
+    <div className="fixed inset-0 z-50 flex justify-end bg-[var(--app-primary)]/40">
       <div className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -106,12 +126,12 @@ function TemplateEditor({ eventKey, onClose }: { eventKey: string; onClose: () =
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Subject</label>
-            <input value={subject} disabled={!canManage} onChange={(event) => setSubject(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={subject} disabled={!canManage} onChange={(event) => setSubject(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">HTML Body</label>
-            <textarea value={htmlBody} disabled={!canManage} onChange={(event) => setHtmlBody(event.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <textarea value={htmlBody} disabled={!canManage} onChange={(event) => setHtmlBody(event.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-xs outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
 
           {data.availablePlaceholders.length > 0 ? (
@@ -125,7 +145,7 @@ function TemplateEditor({ eventKey, onClose }: { eventKey: string; onClose: () =
             <button type="button" onClick={loadPreview} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">Preview with sample data</button>
             {canManage ? (
               <>
-                <button type="button" onClick={() => save.mutate()} disabled={save.isPending} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60">Save</button>
+                <button type="button" onClick={() => save.mutate()} disabled={save.isPending} className="rounded-lg bg-[var(--app-primary)] px-3 py-2 text-xs font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">Save</button>
                 {data.isOverride ? (
                   <button type="button" onClick={() => reset.mutate()} disabled={reset.isPending} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">Reset to Default</button>
                 ) : null}
@@ -148,7 +168,7 @@ function TemplateEditor({ eventKey, onClose }: { eventKey: string; onClose: () =
 }
 
 export function EmailTemplatesSettingsPage() {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['settings', 'email-templates'],
     queryFn: () => api.get<EmailTemplateSummary[]>('/api/settings/email-templates'),
     staleTime: 30_000,
@@ -160,7 +180,13 @@ export function EmailTemplatesSettingsPage() {
   }
 
   if (isError) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">Email templates could not be loaded.</div>
+    return (
+      <ErrorState
+        title="Email templates unavailable"
+        description="We couldn’t load the configured template list, so this is not a confirmation that there are none."
+        onRetry={() => void refetch()}
+      />
+    )
   }
 
   return (
@@ -175,7 +201,7 @@ export function EmailTemplatesSettingsPage() {
               key={template.eventKey}
               type="button"
               onClick={() => setSelected(template.eventKey)}
-              className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300"
+              className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-left shadow-sm transition hover:border-slate-300"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-slate-900">{template.templateName}</span>

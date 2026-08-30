@@ -342,6 +342,9 @@ file sealed class NullEmailOutboxService : IEmailOutboxService
     public Task<bool> MarkSendingAsync(Guid outboxMessageId, DateTime utcNow, CancellationToken cancellationToken = default)
         => Task.FromResult(true);
 
+    public Task<int> ReleaseAbandonedClaimsAsync(TimeSpan claimTimeout, DateTime utcNow, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
     public Task MarkSentAsync(Guid outboxMessageId, DateTime utcNow, string? providerMessageId, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 

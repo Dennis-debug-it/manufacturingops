@@ -3,12 +3,13 @@ import toast from 'react-hot-toast'
 import { Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useSaveTimeAttendanceSettings, useTimeAttendanceSettings, type TimeAttendanceSettings } from '../team/timeAttendance/api'
 
 export function TimeAttendanceSettingsPage() {
   const canManage = usePermission('settings.manage')
-  const { data, isLoading } = useTimeAttendanceSettings()
+  const { data, isLoading, isError, refetch } = useTimeAttendanceSettings()
   const save = useSaveTimeAttendanceSettings()
   const [values, setValues] = useState<TimeAttendanceSettings | null>(null)
 
@@ -16,8 +17,19 @@ export function TimeAttendanceSettingsPage() {
     if (data) setValues(data)
   }, [data])
 
-  if (isLoading || !values) {
+  if (isLoading) {
     return <Spinner label="Loading settings" />
+  }
+
+  // Without this branch an exhausted retry leaves `values` null forever and the spinner never releases.
+  if (isError || !values) {
+    return (
+      <ErrorState
+        title="Time & Attendance settings unavailable"
+        description="We couldn’t load the work-hour, rounding, and leave-type settings. Nothing has been changed — try again."
+        onRetry={() => void refetch()}
+      />
+    )
   }
 
   const setField = <K extends keyof TimeAttendanceSettings>(key: K, value: TimeAttendanceSettings[K]) =>
@@ -57,13 +69,13 @@ export function TimeAttendanceSettingsPage() {
         subtitle="Work hours, rounding rules, overtime thresholds, and leave types."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => void onSave()} disabled={save.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={() => void onSave()} disabled={save.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {save.isPending ? 'Saving…' : 'Save Changes'}
             </button>
           ) : undefined
         }
       />
-      <div className="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm sm:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Clock Rounding (minutes)</label>
           <input
@@ -72,7 +84,7 @@ export function TimeAttendanceSettingsPage() {
             value={values.roundingMinutes}
             disabled={!canManage}
             onChange={(event) => setField('roundingMinutes', Number(event.target.value))}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
           />
           <p className="mt-1 text-xs text-slate-500">Clock in/out times round to the nearest interval.</p>
         </div>
@@ -85,7 +97,7 @@ export function TimeAttendanceSettingsPage() {
             value={values.overtimeThresholdHoursPerDay}
             disabled={!canManage}
             onChange={(event) => setField('overtimeThresholdHoursPerDay', Number(event.target.value))}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
           />
         </div>
         <div>
@@ -96,7 +108,7 @@ export function TimeAttendanceSettingsPage() {
             value={values.graceMinutes}
             disabled={!canManage}
             onChange={(event) => setField('graceMinutes', Number(event.target.value))}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
           />
           <p className="mt-1 text-xs text-slate-500">Minutes after shift start before a clock-in is flagged late.</p>
         </div>
@@ -108,12 +120,12 @@ export function TimeAttendanceSettingsPage() {
             value={values.autoClockOutAfterHours}
             disabled={!canManage}
             onChange={(event) => setField('autoClockOutAfterHours', Number(event.target.value))}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
           />
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Leave Types</h2>
           {canManage ? (
@@ -130,14 +142,14 @@ export function TimeAttendanceSettingsPage() {
                 disabled={!canManage}
                 onChange={(event) => updateLeaveType(index, { code: event.target.value.toUpperCase() })}
                 placeholder="CODE"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
               />
               <input
                 value={leaveType.name}
                 disabled={!canManage}
                 onChange={(event) => updateLeaveType(index, { name: event.target.value })}
                 placeholder="Name"
-                className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+                className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
               />
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
@@ -155,7 +167,7 @@ export function TimeAttendanceSettingsPage() {
                 value={leaveType.annualAllowanceDays}
                 disabled={!canManage}
                 onChange={(event) => updateLeaveType(index, { annualAllowanceDays: Number(event.target.value) })}
-                className="h-10 w-24 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+                className="h-10 w-24 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
               />
               {canManage ? (
                 <button type="button" onClick={() => removeLeaveType(index)} className="inline-flex h-10 items-center justify-center rounded-lg border border-rose-200 bg-white px-3 text-rose-600 hover:bg-rose-50">

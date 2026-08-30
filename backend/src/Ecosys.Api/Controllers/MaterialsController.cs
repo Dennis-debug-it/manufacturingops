@@ -83,13 +83,16 @@ public sealed class MaterialsController(
         dbContext.MaterialItems.Add(item);
 
         Guid? branchId = null;
-        if (request.QuantityOnHand > 0)
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, cancellationToken);
-            await stockLedgerService.RecordReceiptAsync(item, branchId, request.QuantityOnHand, UserId, "Initial stock balance", "INITIAL-STOCK", cancellationToken: cancellationToken);
-        }
+            if (request.QuantityOnHand > 0)
+            {
+                branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, ct);
+                await stockLedgerService.RecordReceiptAsync(item, branchId, request.QuantityOnHand, UserId, "Initial stock balance", "INITIAL-STOCK", cancellationToken: ct);
+            }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         var responseScope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = item.Id }, Map(item, responseScope));
@@ -147,12 +150,15 @@ public sealed class MaterialsController(
             }
         }
 
-        if (quantityDelta != 0)
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            await stockLedgerService.RecordAdjustmentAsync(item, scope.RequestedBranchId, quantityDelta, UserId, "Adjustment from material update", cancellationToken: cancellationToken);
-        }
+            if (quantityDelta != 0)
+            {
+                await stockLedgerService.RecordAdjustmentAsync(item, scope.RequestedBranchId, quantityDelta, UserId, "Adjustment from material update", cancellationToken: ct);
+            }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
         return Ok(Map(item, scope));
     }
 
@@ -178,14 +184,17 @@ public sealed class MaterialsController(
             item.UnitCost = request.UnitCost.Value;
         }
 
-        await stockLedgerService.RecordReceiptAsync(item, branchId, request.Quantity, UserId, request.Reason, request.ReferenceNumber, cancellationToken: cancellationToken);
-        var branchStock = item.BranchStocks.SingleOrDefault(x => x.BranchId == branchId);
-        if (branchStock is not null)
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            branchStock.UnitCost = request.UnitCost ?? branchStock.UnitCost ?? item.UnitCost;
-        }
+            await stockLedgerService.RecordReceiptAsync(item, branchId, request.Quantity, UserId, request.Reason, request.ReferenceNumber, cancellationToken: ct);
+            var branchStock = item.BranchStocks.SingleOrDefault(x => x.BranchId == branchId);
+            if (branchStock is not null)
+            {
+                branchStock.UnitCost = request.UnitCost ?? branchStock.UnitCost ?? item.UnitCost;
+            }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         await auditLogService.LogAsync(
             TenantId,
@@ -216,8 +225,11 @@ public sealed class MaterialsController(
             ?? throw new NotFoundException("Material item was not found.");
 
         var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, cancellationToken);
-        await stockLedgerService.RecordAdjustmentAsync(item, branchId, request.QuantityChange, UserId, request.Reason, cancellationToken: cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await stockLedgerService.ExecuteAsync(async ct =>
+        {
+            await stockLedgerService.RecordAdjustmentAsync(item, branchId, request.QuantityChange, UserId, request.Reason, cancellationToken: ct);
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         return Ok(Map(item, await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken)));
     }

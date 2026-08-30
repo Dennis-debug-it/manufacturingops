@@ -22,7 +22,7 @@ public sealed class PreventiveMaintenanceController(
     IAuditLogService auditLogService,
     IBranchAccessService branchAccessService,
     IPmWorkOrderChecklistService pmWorkOrderChecklistService,
-    IOptions<TimeZoneOptions> timeZoneOptions,
+    ITenantTimeZoneService tenantTimeZoneService,
     ILogger<PreventiveMaintenanceController> logger) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
@@ -42,13 +42,16 @@ public sealed class PreventiveMaintenanceController(
     public async Task<ActionResult<IReadOnlyCollection<PreventiveMaintenancePlanResponse>>> GetDue([FromQuery] Guid? branchId, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
-        // "Due today" is a calendar-date decision — use the operator's local day, not UTC, so a PM
-        // due today isn't shown a day late near the UTC/EAT midnight boundary (F6-02).
-        var now = DateTimeNormalizationHelper.LocalToday(timeZoneOptions.Value.DefaultTimeZone);
+        // "Due today" is a calendar-date decision — use the tenant's local day, not UTC, so a PM
+        // due today isn't shown a day late near the UTC/local midnight boundary (F6-02).
+        // NextPmDate is a timestamptz, and Npgsql only accepts UTC parameters, so the bound is the
+        // tenant's local end-of-day expressed as a UTC instant rather than a bare local date
+        // (EC-010): everything strictly before it falls on or before the tenant's current local day.
+        var dueBeforeUtc = await tenantTimeZoneService.TenantDayEndUtcAsync(TenantId, cancellationToken);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         var plans = await Query()
             .WhereAccessible(scope, x => x.BranchId)
-            .Where(x => x.NextPmDate.HasValue && x.NextPmDate.Value.Date <= now && x.Status == "Active")
+            .Where(x => x.NextPmDate.HasValue && x.NextPmDate.Value < dueBeforeUtc && x.Status == "Active")
             .OrderBy(x => x.NextPmDate)
             .ToListAsync(cancellationToken);
 
@@ -184,7 +187,12 @@ public sealed class PreventiveMaintenanceController(
         var nextIntervalMonths = ToServiceIntervalMonths(plan.Frequency);
         if (nextIntervalMonths.HasValue)
         {
-            var seedDate = plan.NextPmDate?.Date ?? DateTimeNormalizationHelper.LocalToday(timeZoneOptions.Value.DefaultTimeZone);
+            // TenantTodayAsync returns a wall-clock date (Kind=Unspecified); NextPmDate is a
+            // timestamptz, and Npgsql rejects a non-UTC parameter. PM dates are stored date-only at
+            // midnight, so tag the tenant's local calendar date as UTC rather than shifting it,
+            // which would move the scheduled day across the local/UTC boundary (EC-010).
+            var seedDate = plan.NextPmDate?.Date
+                ?? DateTimeNormalizationHelper.NormalizeToUtc(await tenantTimeZoneService.TenantTodayAsync(TenantId, cancellationToken));
             plan.NextPmDate = seedDate.AddMonths(nextIntervalMonths.Value);
         }
         await dbContext.SaveChangesAsync(cancellationToken);

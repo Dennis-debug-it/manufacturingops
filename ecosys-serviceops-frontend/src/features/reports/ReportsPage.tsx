@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
-import { subDays } from 'date-fns'
+import { format, subDays } from 'date-fns'
 import { Download } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { EmptyState } from '../../shared/components/EmptyState'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { StatCard } from '../../shared/components/StatCard'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { Spinner } from '../../shared/components/Spinner'
@@ -12,6 +13,7 @@ import { formatCurrency, formatPercent } from '../../shared/utils/format'
 import { apiClient } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import { useWorkOrders } from '../work-orders/api'
+import { toWorkOrderListFilters } from '../work-orders/listModel'
 import { useFinanceDashboard } from '../finance/api'
 import { usePmComplianceReport } from '../maintenance/api'
 import { useAssetReliability, useCsatReport, useTechnicianProductivity, useWorkOrderPerformance } from './api'
@@ -27,16 +29,49 @@ const tabs = [
 
 export function ReportsPage() {
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>('wo-performance')
-  const from = useMemo(() => subDays(new Date(), 30).toISOString(), [])
+  const periodStart = useMemo(() => subDays(new Date(), 30), [])
+  const from = useMemo(() => periodStart.toISOString(), [periodStart])
   const to = useMemo(() => new Date().toISOString(), [])
 
-  const { data: performance, isLoading: performanceLoading } = useWorkOrderPerformance({ from, to })
-  const { data: technicianReport, isLoading: technicianLoading } = useTechnicianProductivity({ from, to })
+  const performanceQuery = useWorkOrderPerformance({ from, to })
+  const technicianQuery = useTechnicianProductivity({ from, to })
   const { data: assetReliability } = useAssetReliability({ from, to })
-  const { data: pmCompliance, isLoading: pmLoading } = usePmComplianceReport({ from, to })
-  const { data: financeDashboard, isLoading: financeLoading } = useFinanceDashboard()
-  const { data: csat, isLoading: csatLoading } = useCsatReport({ from, to })
-  const { data: workOrders } = useWorkOrders()
+  const pmQuery = usePmComplianceReport({ from, to })
+  const financeQuery = useFinanceDashboard()
+  const csatQuery = useCsatReport({ from, to })
+
+  const { data: performance } = performanceQuery
+  const { data: technicianReport } = technicianQuery
+  const { data: pmCompliance } = pmQuery
+  const { data: financeDashboard } = financeQuery
+  const { data: csat } = csatQuery
+
+  /**
+   * The SLA tab needs the same 30-day window as every other tab and nothing else, so it goes
+   * through the shared UI-state -> server-param mapping rather than downloading the whole
+   * work-order table and filtering in the browser. `fromDate`/`toDate` bound `CreatedAt`
+   * server-side, which is the only date this endpoint filters on, so the tab aggregates the
+   * current SLA snapshot of work orders raised in the period. The query stays disabled until the
+   * tab is opened, so the other five tabs cost nothing.
+   */
+  const slaFilters = useMemo(
+    () =>
+      toWorkOrderListFilters({
+        search: '',
+        status: '',
+        technicianId: '',
+        clientId: '',
+        siteId: '',
+        priority: '',
+        slaStatus: '',
+        unassignedOnly: false,
+        fromDate: format(periodStart, 'yyyy-MM-dd'),
+        toDate: format(new Date(), 'yyyy-MM-dd'),
+      }),
+    [periodStart],
+  )
+  const slaQuery = useWorkOrders(slaFilters, { enabled: tab === 'sla' })
+  const { data: workOrders } = slaQuery
 
   const slaCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -66,7 +101,7 @@ export function ReportsPage() {
             key={option.id}
             type="button"
             onClick={() => setTab(option.id)}
-            className={cn('inline-flex h-10 items-center rounded-full border px-3 text-sm font-medium transition', tab === option.id ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
+            className={cn('inline-flex h-10 items-center rounded-full border px-3 text-sm font-medium transition', tab === option.id ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
           >
             {option.label}
           </button>
@@ -74,7 +109,13 @@ export function ReportsPage() {
       </div>
 
       {tab === 'wo-performance' ? (
-        performanceLoading ? <Spinner label="Loading report" /> : (
+        performanceQuery.isError ? (
+          <ErrorState
+            title="Work order report unavailable"
+            description="We couldn’t load work order performance for this period, so no figures are shown rather than misleading zeroes."
+            onRetry={() => void performanceQuery.refetch()}
+          />
+        ) : performanceQuery.isLoading ? <Spinner label="Loading report" /> : (
           <div className="space-y-4">
             <div className="flex justify-end">
               <button type="button" onClick={() => exportReport(endpoints.reports.workOrderPerformanceExport, 'work-order-performance.csv')} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
@@ -101,19 +142,34 @@ export function ReportsPage() {
       ) : null}
 
       {tab === 'sla' ? (
-        <DataTable
-          columns={[
-            { key: 'status', header: 'SLA Status', cell: (row) => <StatusBadge status={row.status} /> },
-            { key: 'count', header: 'Work Orders', cell: (row) => row.count },
-          ] satisfies DataTableColumn<{ id: string; status: string; count: number }>[]}
-          data={slaCounts}
-          emptyTitle="No data"
-          emptyDescription="SLA status is derived from each work order's response/resolution deadlines — this table aggregates the current snapshot, not a historical trend."
-        />
+        slaQuery.isError ? (
+          <ErrorState
+            title="SLA breakdown unavailable"
+            description="We couldn’t load the work orders this breakdown counts, so an empty table would be misleading."
+            onRetry={() => void slaQuery.refetch()}
+          />
+        ) : (
+          <DataTable
+            columns={[
+              { key: 'status', header: 'SLA Status', cell: (row) => <StatusBadge status={row.status} /> },
+              { key: 'count', header: 'Work Orders', cell: (row) => row.count },
+            ] satisfies DataTableColumn<{ id: string; status: string; count: number }>[]}
+            data={slaCounts}
+            loading={slaQuery.isLoading}
+            emptyTitle="No data"
+            emptyDescription="SLA status is derived from each work order's response/resolution deadlines — this table aggregates work orders raised in the last 30 days, not a historical trend."
+          />
+        )
       ) : null}
 
       {tab === 'pm-compliance' ? (
-        pmLoading ? <Spinner label="Loading report" /> : (
+        pmQuery.isError ? (
+          <ErrorState
+            title="PM compliance report unavailable"
+            description="We couldn’t load preventive maintenance compliance for this period, so no figures are shown rather than misleading zeroes."
+            onRetry={() => void pmQuery.refetch()}
+          />
+        ) : pmQuery.isLoading ? <Spinner label="Loading report" /> : (
           <div className="space-y-4">
             <div className="flex justify-end">
               <button type="button" onClick={() => exportReport(endpoints.reports.pmComplianceExport, 'pm-compliance.csv')} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
@@ -132,7 +188,13 @@ export function ReportsPage() {
       ) : null}
 
       {tab === 'finance' ? (
-        financeLoading ? <Spinner label="Loading report" /> : (
+        financeQuery.isError ? (
+          <ErrorState
+            title="Finance summary unavailable"
+            description="We couldn’t load the finance dashboard. A zero balance here would be indistinguishable from a failed request."
+            onRetry={() => void financeQuery.refetch()}
+          />
+        ) : financeQuery.isLoading ? <Spinner label="Loading report" /> : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard label="Invoiced (YTD)" value={formatCurrency(financeDashboard?.totalInvoicedYtd ?? 0)} />
             <StatCard label="Collected (YTD)" value={formatCurrency(financeDashboard?.totalCollectedYtd ?? 0)} tone="success" />
@@ -143,7 +205,13 @@ export function ReportsPage() {
       ) : null}
 
       {tab === 'technician' ? (
-        technicianLoading ? <Spinner label="Loading report" /> : (
+        technicianQuery.isError ? (
+          <ErrorState
+            title="Technician report unavailable"
+            description="We couldn’t load technician productivity for this period, so an empty table would be misleading."
+            onRetry={() => void technicianQuery.refetch()}
+          />
+        ) : technicianQuery.isLoading ? <Spinner label="Loading report" /> : (
           <div className="space-y-4">
             <div className="flex justify-end">
               <button type="button" onClick={() => exportReport(endpoints.reports.technicianProductivityExport, 'technician-productivity.csv')} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
@@ -172,7 +240,13 @@ export function ReportsPage() {
       ) : null}
 
       {tab === 'csat' ? (
-        csatLoading ? (
+        csatQuery.isError ? (
+          <ErrorState
+            title="CSAT report unavailable"
+            description="We couldn’t load survey results for this period, which is not the same as no surveys having been sent."
+            onRetry={() => void csatQuery.refetch()}
+          />
+        ) : csatQuery.isLoading ? (
           <Spinner label="Loading CSAT report" />
         ) : !csat || csat.sentCount === 0 ? (
           <EmptyState title="No surveys sent yet" description="CSAT surveys are emailed to clients automatically when work orders are completed. Results will appear here." />
@@ -186,7 +260,7 @@ export function ReportsPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
                 <h3 className="text-sm font-semibold text-slate-900">Score Distribution</h3>
                 <div className="mt-4 space-y-2">
                   {csat.scoreDistribution.slice().reverse().map((row) => {
@@ -204,7 +278,7 @@ export function ReportsPage() {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
                 <h3 className="text-sm font-semibold text-slate-900">Monthly Trend</h3>
                 <DataTable
                   className="mt-4"
@@ -220,7 +294,7 @@ export function ReportsPage() {
               </section>
             </div>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">By Technician</h3>
               <DataTable
                 className="mt-4"
@@ -236,7 +310,7 @@ export function ReportsPage() {
             </section>
 
             {csat.recentComments.length > 0 ? (
-              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
                 <h3 className="text-sm font-semibold text-slate-900">Recent Comments</h3>
                 <ul className="mt-4 space-y-3">
                   {csat.recentComments.map((row, index) => (

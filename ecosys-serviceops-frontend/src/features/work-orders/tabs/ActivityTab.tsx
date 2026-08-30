@@ -45,10 +45,10 @@ function ActivityEventRow({ event }: { event: WorkOrderEvent }) {
       <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 ring-4 ring-white">
         {iconForEventType(event.eventType)}
       </span>
-      <div className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="min-w-0 flex-1 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[10px] font-semibold text-white">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--app-primary)] text-[10px] font-semibold text-white">
               {initials(event.actorUserName)}
             </span>
             <span className="text-sm font-medium text-slate-900">{event.actorUserName ?? 'System'}</span>

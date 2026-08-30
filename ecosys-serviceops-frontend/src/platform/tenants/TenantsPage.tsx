@@ -159,7 +159,7 @@ export function TenantsPage() {
       cell: (row) => (
         <div className="flex flex-wrap gap-2">
           {row.status !== 'Active' ? (
-            <button type="button" className="inline-flex h-9 items-center rounded-lg bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800" onClick={() => void api.post(endpoints.platform.tenantActivate(row.tenantId)).then(() => toast.success('Tenant activated'))}>
+            <button type="button" className="inline-flex h-9 items-center rounded-lg bg-[var(--app-primary)] px-3 text-xs font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void api.post(endpoints.platform.tenantActivate(row.tenantId)).then(() => toast.success('Tenant activated'))}>
               Activate
             </button>
           ) : null}
@@ -278,7 +278,7 @@ export function TenantsPage() {
         secondaryActions={<LastUpdated at={dataUpdatedAt} />}
         primaryAction={
           canCreate ? (
-            <button type="button" className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800" onClick={() => setShowCreate(true)}>
+            <button type="button" className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => setShowCreate(true)}>
               <Plus className="h-4 w-4" />
               Create tenant
             </button>
@@ -292,7 +292,7 @@ export function TenantsPage() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
+      <div className="grid grid-cols-1 gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
         <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
           <Search className="h-4 w-4 text-slate-400" />
           <input
@@ -359,7 +359,7 @@ export function TenantsPage() {
             <button type="button" className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={closeCreate}>
               Cancel
             </button>
-            <button type="button" className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60" onClick={() => void submitCreate()} disabled={createTenant.isPending}>
+            <button type="button" className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60" onClick={() => void submitCreate()} disabled={createTenant.isPending}>
               {createTenant.isPending ? 'Creating...' : 'Create tenant'}
             </button>
           </div>
@@ -368,40 +368,40 @@ export function TenantsPage() {
         <div className="space-y-5">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Company / tenant name">
-              <input value={createForm.companyName} onChange={(event) => setCreateForm((current) => ({ ...current, companyName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input value={createForm.companyName} onChange={(event) => setCreateForm((current) => ({ ...current, companyName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
             <Field label="Workspace slug">
-              <input value={createForm.slug} onChange={(event) => setCreateForm((current) => ({ ...current, slug: event.target.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 font-mono text-sm outline-none focus:border-slate-900" />
+              <input value={createForm.slug} onChange={(event) => setCreateForm((current) => ({ ...current, slug: event.target.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 font-mono text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
             <Field label="Industry">
-              <input value={createForm.industry} onChange={(event) => setCreateForm((current) => ({ ...current, industry: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input value={createForm.industry} onChange={(event) => setCreateForm((current) => ({ ...current, industry: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
             <Field label="Plan">
-              <input value={createForm.planName} onChange={(event) => setCreateForm((current) => ({ ...current, planName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" placeholder="Trial, Starter, Pro..." />
+              <input value={createForm.planName} onChange={(event) => setCreateForm((current) => ({ ...current, planName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" placeholder="Trial, Starter, Pro..." />
             </Field>
             <Field label="Contact name">
-              <input value={createForm.contactName} onChange={(event) => setCreateForm((current) => ({ ...current, contactName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input value={createForm.contactName} onChange={(event) => setCreateForm((current) => ({ ...current, contactName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
             <Field label="Contact email">
-              <input type="email" value={createForm.contactEmail} onChange={(event) => setCreateForm((current) => ({ ...current, contactEmail: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input type="email" value={createForm.contactEmail} onChange={(event) => setCreateForm((current) => ({ ...current, contactEmail: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
             <Field label="Contact phone">
-              <input value={createForm.contactPhone} onChange={(event) => setCreateForm((current) => ({ ...current, contactPhone: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input value={createForm.contactPhone} onChange={(event) => setCreateForm((current) => ({ ...current, contactPhone: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
             <Field label="Country">
-              <input value={createForm.country} onChange={(event) => setCreateForm((current) => ({ ...current, country: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input value={createForm.country} onChange={(event) => setCreateForm((current) => ({ ...current, country: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
             <Field label="County">
-              <input value={createForm.county} onChange={(event) => setCreateForm((current) => ({ ...current, county: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input value={createForm.county} onChange={(event) => setCreateForm((current) => ({ ...current, county: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
             <Field label="City">
-              <input value={createForm.city} onChange={(event) => setCreateForm((current) => ({ ...current, city: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input value={createForm.city} onChange={(event) => setCreateForm((current) => ({ ...current, city: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
             <Field label="Max users">
-              <input type="number" value={createForm.maxUsers ?? ''} onChange={(event) => setCreateForm((current) => ({ ...current, maxUsers: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input type="number" value={createForm.maxUsers ?? ''} onChange={(event) => setCreateForm((current) => ({ ...current, maxUsers: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
             <Field label="Max branches / sites">
-              <input type="number" value={createForm.maxBranches ?? ''} onChange={(event) => setCreateForm((current) => ({ ...current, maxBranches: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input type="number" value={createForm.maxBranches ?? ''} onChange={(event) => setCreateForm((current) => ({ ...current, maxBranches: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </Field>
           </div>
 
@@ -417,13 +417,13 @@ export function TenantsPage() {
             {!createForm.usePrimaryContactAsWorkspaceAdmin ? (
               <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                 <Field label="First admin full name">
-                  <input value={createForm.adminFullName} onChange={(event) => setCreateForm((current) => ({ ...current, adminFullName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+                  <input value={createForm.adminFullName} onChange={(event) => setCreateForm((current) => ({ ...current, adminFullName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
                 </Field>
                 <Field label="First admin email">
-                  <input type="email" value={createForm.adminEmail} onChange={(event) => setCreateForm((current) => ({ ...current, adminEmail: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+                  <input type="email" value={createForm.adminEmail} onChange={(event) => setCreateForm((current) => ({ ...current, adminEmail: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
                 </Field>
                 <Field label="First admin phone">
-                  <input value={createForm.adminPhone} onChange={(event) => setCreateForm((current) => ({ ...current, adminPhone: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+                  <input value={createForm.adminPhone} onChange={(event) => setCreateForm((current) => ({ ...current, adminPhone: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
                 </Field>
               </div>
             ) : null}

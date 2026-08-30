@@ -155,6 +155,99 @@ public sealed class EmailOutboxTests
         Assert.Equal("Connection failed", failedLog.ErrorCategory);
     }
 
+    [Fact]
+    public async Task ReleaseAbandonedClaimsAsync_ReturnsStrandedSendingMessagesToTheQueue()
+    {
+        // EC-P1-06d: MarkSendingAsync moves a row to Sending and the batch query only ever selects
+        // Pending, so a claim left behind by an instance that stopped mid-send was unreachable for
+        // ever. Verified live with three messages stuck in Sending.
+        await using var dbContext = CreateDbContext();
+        var logService = new EmailDeliveryLogService(dbContext);
+        var outboxService = new EmailOutboxService(dbContext, logService);
+
+        var message = await QueueTestMessageAsync(outboxService);
+        await ClaimAsync(dbContext, message.Id, DateTime.UtcNow.AddHours(-1));
+
+        var now = DateTime.UtcNow;
+        Assert.Empty(await outboxService.GetPendingBatchAsync(10, now, CancellationToken.None));
+
+        var released = await outboxService.ReleaseAbandonedClaimsAsync(TimeSpan.FromMinutes(15), now, CancellationToken.None);
+
+        var rescued = await dbContext.EmailOutboxMessages.SingleAsync(x => x.Id == message.Id);
+        Assert.Equal(1, released);
+        Assert.Equal(EmailOutboxStatuses.Pending, rescued.Status);
+        Assert.Equal(1, rescued.AttemptCount);
+        Assert.NotNull(rescued.NextAttemptAt);
+        Assert.Equal("Abandoned", rescued.ErrorCategory);
+    }
+
+    [Fact]
+    public async Task ReleaseAbandonedClaimsAsync_RetiresAMessageThatHasUsedUpItsAttempts()
+    {
+        // A message that kills whichever worker picks it up must reach the terminal Failed state
+        // rather than being requeued for ever.
+        await using var dbContext = CreateDbContext();
+        var logService = new EmailDeliveryLogService(dbContext);
+        var outboxService = new EmailOutboxService(dbContext, logService);
+
+        var message = await QueueTestMessageAsync(outboxService, maxAttempts: 1);
+        await ClaimAsync(dbContext, message.Id, DateTime.UtcNow.AddHours(-1));
+
+        await outboxService.ReleaseAbandonedClaimsAsync(TimeSpan.FromMinutes(15), DateTime.UtcNow, CancellationToken.None);
+
+        var retired = await dbContext.EmailOutboxMessages.SingleAsync(x => x.Id == message.Id);
+        Assert.Equal(EmailOutboxStatuses.Failed, retired.Status);
+        Assert.Null(retired.NextAttemptAt);
+    }
+
+    [Fact]
+    public async Task ReleaseAbandonedClaimsAsync_LeavesAClaimThatIsStillWithinTheTimeout()
+    {
+        await using var dbContext = CreateDbContext();
+        var logService = new EmailDeliveryLogService(dbContext);
+        var outboxService = new EmailOutboxService(dbContext, logService);
+
+        var message = await QueueTestMessageAsync(outboxService);
+        await ClaimAsync(dbContext, message.Id, DateTime.UtcNow);
+
+        var released = await outboxService.ReleaseAbandonedClaimsAsync(TimeSpan.FromMinutes(15), DateTime.UtcNow, CancellationToken.None);
+
+        Assert.Equal(0, released);
+        Assert.Equal(EmailOutboxStatuses.Sending, (await dbContext.EmailOutboxMessages.SingleAsync(x => x.Id == message.Id)).Status);
+    }
+
+    /// <summary>
+    /// Reproduces the row shape <see cref="EmailOutboxService.MarkSendingAsync"/> leaves behind. That
+    /// method claims with ExecuteUpdate, which the in-memory provider does not support, so the state
+    /// is written directly rather than through it.
+    /// </summary>
+    private static async Task ClaimAsync(AppDbContext dbContext, Guid outboxMessageId, DateTime claimedAt)
+    {
+        var message = await dbContext.EmailOutboxMessages.SingleAsync(x => x.Id == outboxMessageId);
+        message.Status = EmailOutboxStatuses.Sending;
+        message.LastAttemptAt = claimedAt;
+        message.NextAttemptAt = null;
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static Task<EmailOutboxMessage> QueueTestMessageAsync(EmailOutboxService outboxService, int maxAttempts = 3) =>
+        outboxService.QueueEmailAsync(
+            new QueueEmailRequest(
+                null,
+                "email.test",
+                "test-email",
+                "recipient@example.com",
+                null,
+                "Ecosys",
+                "noreply@example.com",
+                null,
+                "[Ecosys] [Test] SMTP delivery test",
+                "<p>Hello</p>",
+                "Hello",
+                null,
+                maxAttempts),
+            CancellationToken.None);
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

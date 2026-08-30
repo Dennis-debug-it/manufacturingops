@@ -1001,6 +1001,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId");
@@ -3117,6 +3123,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasKey("Id");
 
+                    b.HasIndex("TenantId", "ClaimNumber")
+                        .IsUnique();
+
                     b.HasIndex("TenantId", "Status");
 
                     b.ToTable("expenses", (string)null);
@@ -4224,6 +4233,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId", "ItemCode")
@@ -4465,6 +4480,41 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsUnique();
 
                     b.ToTable("monitoring_webhook_integrations", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.MrrSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ActiveTenants")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Mrr")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("PaidTenants")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SnapshotDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TrialTenants")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SnapshotDate")
+                        .IsUnique();
+
+                    b.ToTable("mrr_snapshots", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.NotificationSetting", b =>
@@ -6520,7 +6570,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("ClientId");
 
-                    b.HasIndex("TenantId", "SiteCode");
+                    b.HasIndex("TenantId", "SiteCode")
+                        .IsUnique();
 
                     b.ToTable("sites", (string)null);
                 });
@@ -6963,6 +7014,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("SupplierId");
 
+                    b.HasIndex("TenantId", "BillNumber")
+                        .IsUnique();
+
                     b.HasIndex("TenantId", "Status");
 
                     b.ToTable("supplier_bills", (string)null);
@@ -7308,6 +7362,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<string>("TaxPin")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TimeZoneId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("TradingName")
                         .HasMaxLength(200)
@@ -8724,6 +8782,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid>("VanId")
                         .HasColumnType("uuid");
 
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MaterialId");
@@ -9285,8 +9349,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("WorkflowStatusId");
 
+                    b.HasIndex("TenantId", "CreatedAt");
+
+                    b.HasIndex("TenantId", "DueDate");
+
+                    b.HasIndex("TenantId", "ScheduledStartAt")
+                        .HasFilter("\"ScheduledStartAt\" IS NOT NULL");
+
                     b.HasIndex("TenantId", "WorkOrderNumber")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "Status", "CreatedAt");
 
                     b.ToTable("work_orders", null, t =>
                         {
@@ -10911,7 +10984,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
                         .WithMany()
                         .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
@@ -11229,7 +11302,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.User", "UpdatedByUser")
                         .WithMany()
                         .HasForeignKey("UpdatedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Category");
 
@@ -11820,7 +11893,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
                         .WithMany()
                         .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
@@ -12620,7 +12693,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
                         .WithMany("Payments")
                         .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
@@ -13245,7 +13318,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.WorkOrder", "WorkOrder")
                         .WithMany("BillableItems")
                         .HasForeignKey("WorkOrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("RateCard");

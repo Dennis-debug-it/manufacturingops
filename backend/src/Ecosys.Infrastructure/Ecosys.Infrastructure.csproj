@@ -32,18 +32,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Remove="Hosted\**\*.cs" />
-    <Compile Remove="Migrations\20260425155039_InitialCreate.cs" />
-    <Compile Remove="Migrations\20260425155039_InitialCreate.Designer.cs" />
-    <Compile Remove="Migrations\20260426090839_ModularMultiTenantSaaS.cs" />
-    <Compile Remove="Migrations\20260426090839_ModularMultiTenantSaaS.Designer.cs" />
-    <Compile Remove="Migrations\EcosysDbContextModelSnapshot.cs" />
-    <Compile Remove="Persistence\EcosysDbContext.cs" />
-    <Compile Remove="Services\AuthService.cs" />
-    <Compile Remove="Services\PlatformServices.cs" />
-    <Compile Remove="Services\ServiceOpsCatalogServices.cs" />
-    <Compile Remove="Services\ServiceOpsWorkflowServices.cs" />
-    <Compile Remove="Services\WorkOrderApplicationService.cs" />
   </ItemGroup>
 
 </Project>

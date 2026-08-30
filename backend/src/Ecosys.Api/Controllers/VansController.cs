@@ -157,8 +157,11 @@ public sealed class VansController(
         }
         await EnsureBranchAsync(request.BranchId.Value, cancellationToken);
 
-        await stockLedgerService.RecordVanLoadAsync(material, request.BranchId.Value, van.Id, request.Quantity, UserId, Normalize(request.Reason), cancellationToken: cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await stockLedgerService.ExecuteAsync(async ct =>
+        {
+            await stockLedgerService.RecordVanLoadAsync(material, request.BranchId.Value, van.Id, request.Quantity, UserId, Normalize(request.Reason), cancellationToken: ct);
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "van.stock.loaded", nameof(Van), van.Id.ToString(), $"Loaded {request.Quantity} x '{material.ItemName}' onto van '{van.Name}'.", cancellationToken);
         return NoContent();
     }
@@ -176,8 +179,11 @@ public sealed class VansController(
         }
         await EnsureBranchAsync(request.BranchId.Value, cancellationToken);
 
-        await stockLedgerService.RecordVanReturnAsync(material, van.Id, request.BranchId.Value, request.Quantity, UserId, Normalize(request.Reason), cancellationToken: cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await stockLedgerService.ExecuteAsync(async ct =>
+        {
+            await stockLedgerService.RecordVanReturnAsync(material, van.Id, request.BranchId.Value, request.Quantity, UserId, Normalize(request.Reason), cancellationToken: ct);
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "van.stock.returned", nameof(Van), van.Id.ToString(), $"Returned {request.Quantity} x '{material.ItemName}' from van '{van.Name}'.", cancellationToken);
         return NoContent();
     }
@@ -198,8 +204,11 @@ public sealed class VansController(
             }
         }
 
-        await stockLedgerService.RecordVanConsumeAsync(material, van.Id, request.Quantity, UserId, Normalize(request.Reason), workOrderId: request.WorkOrderId, cancellationToken: cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await stockLedgerService.ExecuteAsync(async ct =>
+        {
+            await stockLedgerService.RecordVanConsumeAsync(material, van.Id, request.Quantity, UserId, Normalize(request.Reason), workOrderId: request.WorkOrderId, cancellationToken: ct);
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "van.stock.consumed", nameof(Van), van.Id.ToString(), $"Consumed {request.Quantity} x '{material.ItemName}' from van '{van.Name}'.", cancellationToken);
         return NoContent();
     }

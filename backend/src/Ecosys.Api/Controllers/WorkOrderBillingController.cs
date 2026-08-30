@@ -97,6 +97,14 @@ public sealed class WorkOrderBillingController(
         var item = await dbContext.WorkOrderBillableItems
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.WorkOrderId == workOrderId && x.Id == itemId, cancellationToken)
             ?? throw new NotFoundException("Billable item was not found.");
+
+        // An invoiced item is the row a tenant_invoice_line was priced from. Deleting it nulls that
+        // line's source link (the FK is SetNull), silently detaching the invoice from its evidence.
+        if (item.IsBilled)
+        {
+            throw new ConflictException("This billable item has already been invoiced and cannot be deleted.");
+        }
+
         dbContext.WorkOrderBillableItems.Remove(item);
         await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
@@ -361,9 +369,23 @@ public sealed class WorkOrderBillingController(
         return workOrder;
     }
 
-    // Default 16% Kenya VAT — future: read from tenant settings table
-    private static Task<decimal> GetDefaultTaxRateAsync(CancellationToken _) =>
-        Task.FromResult(16m);
+    /// <summary>
+    /// The tenant's own configured rate, not a platform-wide one — the only tenant-scoped place this
+    /// platform stores a tax rate is the tenant's default rate card (the platform's own
+    /// <c>tax-finance</c> setting sits behind <c>PlatformSettingsAccess</c> and is not the tenant's
+    /// to inherit). Mirrors <c>useDefaultTaxRate()</c> on the frontend, which reads the same card for
+    /// the manual invoice/quote/credit-note forms. 0 when the tenant has configured no default —
+    /// billable items generated this way still carry an editable <c>TaxRate</c> the user can correct.
+    /// </summary>
+    private async Task<decimal> GetDefaultTaxRateAsync(CancellationToken cancellationToken)
+    {
+        var defaultCard = await dbContext.RateCards
+            .AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.IsActive && x.IsDefault && x.TaxRate != null)
+            .OrderBy(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        return defaultCard?.TaxRate ?? 0m;
+    }
 
     private static BillableItemResponse MapItem(WorkOrderBillableItem item) =>
         new(item.Id, item.WorkOrderId, item.ItemType, item.Description, item.Quantity, item.Unit,

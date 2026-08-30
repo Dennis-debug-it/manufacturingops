@@ -52,7 +52,7 @@ export function PortalQuoteDetailPage() {
                   }
                 }}
                 disabled={accept.isPending}
-                className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+                className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60"
               >
                 {accept.isPending ? 'Accepting…' : 'Accept Quote'}
               </button>
@@ -65,7 +65,7 @@ export function PortalQuoteDetailPage() {
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">Declined: {data.rejectionReason}</div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
           <thead className="bg-slate-50">
             <tr>

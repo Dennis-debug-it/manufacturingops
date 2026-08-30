@@ -16,7 +16,7 @@ import { formatCurrency } from '../../shared/utils/format'
 import { useAdjustMaterial, useDeleteMaterial, useMaterial, useMaterialMovements, useMaterials, useReplenishMaterial, useUpdateMaterial } from './api'
 import type { Material, StockMovement } from './types'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 function EditPartDrawer({ open, material, onClose }: { open: boolean; material: Material; onClose: () => void }) {
@@ -70,7 +70,7 @@ function EditPartDrawer({ open, material, onClose }: { open: boolean; material: 
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => void submit()} disabled={updateMaterial.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={() => void submit()} disabled={updateMaterial.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {updateMaterial.isPending ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
@@ -210,7 +210,7 @@ export function PartDetailPage() {
             <button type="button" onClick={() => setShowAdjust(true)} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
               Adjust Stock
             </button>
-            <button type="button" onClick={() => setShowReplenish(true)} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowReplenish(true)} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               Replenish Stock
             </button>
             <button type="button" onClick={() => setConfirmDeactivate(true)} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-white px-4 text-sm font-medium text-rose-600 transition hover:bg-rose-50">
@@ -304,7 +304,7 @@ export function PartDetailPage() {
         footer={
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={() => setShowAdjust(false)} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={() => void submitAdjust()} disabled={adjust.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={() => void submitAdjust()} disabled={adjust.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {adjust.isPending ? 'Saving…' : 'Adjust Stock'}
             </button>
           </div>
@@ -322,7 +322,7 @@ export function PartDetailPage() {
                   key={direction}
                   type="button"
                   onClick={() => setAdjustDirection(direction)}
-                  className={`inline-flex h-11 flex-1 items-center justify-center rounded-lg border text-sm font-medium transition ${adjustDirection === direction ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+                  className={`inline-flex h-11 flex-1 items-center justify-center rounded-lg border text-sm font-medium transition ${adjustDirection === direction ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
                 >
                   {direction === 'decrease' ? 'Decrease (−)' : 'Increase (+)'}
                 </button>
@@ -347,7 +347,7 @@ export function PartDetailPage() {
         footer={
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={() => setShowReplenish(false)} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={submitReplenish} disabled={replenish.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={submitReplenish} disabled={replenish.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {replenish.isPending ? 'Saving…' : 'Replenish'}
             </button>
           </div>

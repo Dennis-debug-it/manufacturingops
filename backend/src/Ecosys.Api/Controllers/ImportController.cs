@@ -18,6 +18,7 @@ namespace Ecosys.Api.Controllers;
 public sealed class ImportController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
+    IUserAccessService userAccessService,
     IPreventiveMaintenancePlanService preventiveMaintenancePlanService,
     IAuditLogService auditLogService,
     IUserPermissionTemplateService permissionTemplateService,
@@ -120,6 +121,7 @@ public sealed class ImportController(
     [HttpGet("templates/clients")]
     public async Task<IActionResult> DownloadClientTemplate(CancellationToken cancellationToken)
     {
+        EnsureCanImportClients();
         await LogTemplateDownloadAsync("clients", cancellationToken);
         return BuildTemplateFile(ClientHeaders, ["ABC Factory", "John Mwangi", "john@abcfactory.co.ke", "+254700000000", "Kenya", "Nairobi", "Nairobi", "Industrial Area", "Active"], "clients_import_template.csv");
     }
@@ -127,6 +129,7 @@ public sealed class ImportController(
     [HttpGet("templates/assets")]
     public async Task<IActionResult> DownloadAssetTemplate(CancellationToken cancellationToken)
     {
+        EnsureCanImportAssets();
         await LogTemplateDownloadAsync("assets", cancellationToken);
         return BuildTemplateFile(AssetHeaders, ["ABC Factory", "", "Main Site", "", "Generator System", "", "Generator", "Generator 500kVA", "GEN-001", "Generator", "Power", "ClientOwned", "2025-01-15", "2026-04-01", "3", "months", "", "true", "Head Office", ""], "assets_import_template.csv");
     }
@@ -134,6 +137,7 @@ public sealed class ImportController(
     [HttpGet("templates/users")]
     public async Task<IActionResult> DownloadUserTemplate(CancellationToken cancellationToken)
     {
+        EnsureCanImportUsers();
         await LogTemplateDownloadAsync("users", cancellationToken);
         return BuildTemplateFile(UserHeaders, ["Dennis Yegon", "dennis@example.com", "+254700000000", "TenantAdmin", "Operations Manager", "Head Office", "false", "Active"], "users_import_template.csv");
     }
@@ -141,6 +145,7 @@ public sealed class ImportController(
     [HttpGet("templates/branches")]
     public async Task<IActionResult> DownloadBranchTemplate(CancellationToken cancellationToken)
     {
+        EnsureCanImportBranches();
         await LogTemplateDownloadAsync("branches", cancellationToken);
         return BuildTemplateFile(BranchHeaders, ["Head Office", "HO", "Kenya", "Nairobi", "Nairobi", "Upper Hill", "Active"], "branches_import_template.csv");
     }
@@ -148,6 +153,7 @@ public sealed class ImportController(
     [HttpGet("templates/materials")]
     public async Task<IActionResult> DownloadMaterialTemplate(CancellationToken cancellationToken)
     {
+        EnsureCanImportMaterials();
         await LogTemplateDownloadAsync("materials", cancellationToken);
         return BuildTemplateFile(MaterialHeaders, ["Generator Oil", "MAT-001", "Consumables", "Litres", "20", "5", "1200", "Head Office"], "materials_import_template.csv");
     }
@@ -155,6 +161,7 @@ public sealed class ImportController(
     [HttpGet("templates/sites")]
     public async Task<IActionResult> DownloadSiteTemplate(CancellationToken cancellationToken)
     {
+        EnsureCanImportSites();
         await LogTemplateDownloadAsync("sites", cancellationToken);
         return BuildTemplateFile(SiteHeaders, ["ABC Factory", "", "Main Campus", "Branch", "Kenya", "Nairobi", "Nairobi", "Industrial Area", "Jane Wanjiku", "+254700000000", "jane@abcfactory.co.ke", "Active"], "sites_import_template.csv");
     }
@@ -162,6 +169,7 @@ public sealed class ImportController(
     [HttpPost("clients/preview")]
     public async Task<ActionResult<ImportPreviewResponse>> PreviewClients([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportClients();
         var rows = await BuildClientPreviewAsync(request.File, cancellationToken);
         return Ok(new ImportPreviewResponse("Clients", rows.Count, rows));
     }
@@ -169,6 +177,7 @@ public sealed class ImportController(
     [HttpPost("assets/preview")]
     public async Task<ActionResult<ImportPreviewResponse>> PreviewAssets([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportAssets();
         var rows = await BuildAssetPreviewAsync(request.File, cancellationToken);
         return Ok(new ImportPreviewResponse("Assets", rows.Count, rows));
     }
@@ -176,6 +185,7 @@ public sealed class ImportController(
     [HttpPost("users/preview")]
     public async Task<ActionResult<ImportPreviewResponse>> PreviewUsers([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportUsers();
         var rows = await BuildUserPreviewAsync(request.File, cancellationToken);
         return Ok(new ImportPreviewResponse("Users", rows.Count, rows));
     }
@@ -183,6 +193,7 @@ public sealed class ImportController(
     [HttpPost("branches/preview")]
     public async Task<ActionResult<ImportPreviewResponse>> PreviewBranches([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportBranches();
         var rows = await BuildBranchPreviewAsync(request.File, cancellationToken);
         return Ok(new ImportPreviewResponse("Branches", rows.Count, rows));
     }
@@ -190,6 +201,7 @@ public sealed class ImportController(
     [HttpPost("materials/preview")]
     public async Task<ActionResult<ImportPreviewResponse>> PreviewMaterials([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportMaterials();
         var rows = await BuildMaterialPreviewAsync(request.File, cancellationToken);
         return Ok(new ImportPreviewResponse("Materials", rows.Count, rows));
     }
@@ -197,6 +209,7 @@ public sealed class ImportController(
     [HttpPost("sites/preview")]
     public async Task<ActionResult<ImportPreviewResponse>> PreviewSites([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportSites();
         var rows = await BuildSitePreviewAsync(request.File, cancellationToken);
         return Ok(new ImportPreviewResponse("Sites", rows.Count, rows));
     }
@@ -204,6 +217,7 @@ public sealed class ImportController(
     [HttpPost("sites/commit")]
     public async Task<ActionResult<ImportCommitResponse>> CommitSites([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportSites();
         var rows = await BuildSitePreviewAsync(request.File, cancellationToken);
         var successful = 0;
         var failed = 0;
@@ -280,6 +294,7 @@ public sealed class ImportController(
     [HttpPost("clients/commit")]
     public async Task<ActionResult<ImportCommitResponse>> CommitClients([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportClients();
         var rows = await BuildClientPreviewAsync(request.File, cancellationToken);
         var successful = 0;
         var failed = 0;
@@ -337,6 +352,7 @@ public sealed class ImportController(
     [HttpPost("assets/commit")]
     public async Task<ActionResult<ImportCommitResponse>> CommitAssets([FromForm] CsvUploadRequest request, [FromForm(Name = "AllowCreateSystems")] bool allowCreateSystems, CancellationToken cancellationToken)
     {
+        EnsureCanImportAssets();
         var rows = await BuildAssetPreviewAsync(request.File, cancellationToken);
         var successful = 0;
         var failed = 0;
@@ -520,6 +536,7 @@ public sealed class ImportController(
     [HttpPost("users/commit")]
     public async Task<ActionResult<ImportCommitResponse>> CommitUsers([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportUsers();
         var rows = await BuildUserPreviewAsync(request.File, cancellationToken);
         var branchLookup = await dbContext.Branches
             .Where(x => x.TenantId == TenantId && x.IsActive)
@@ -528,6 +545,8 @@ public sealed class ImportController(
         var successful = 0;
         var failed = 0;
         var rowErrors = new List<ImportCommitRowErrorResponse>();
+        var createdAccounts = new List<string>();
+        var createdUserIds = new List<Guid>();
 
         foreach (var row in rows)
         {
@@ -559,6 +578,8 @@ public sealed class ImportController(
 
             dbContext.Users.Add(user);
             await dbContext.SaveChangesAsync(cancellationToken);
+            createdUserIds.Add(user.Id);
+            createdAccounts.Add($"'{user.Email}' as {user.Role}");
 
             if (ParseBoolean(row.RawValues["IsTechnician"]))
             {
@@ -618,12 +639,28 @@ public sealed class ImportController(
             $"Completed user import with {successful} successful rows and {failed} failed rows.",
             cancellationToken);
 
+        // A user import is a privilege grant: a row carrying Role=TenantAdmin mints a full tenant
+        // administrator. The row count above cannot show that, so name every account created and the
+        // role it was granted, the same way UsersController.Create records a single account.
+        if (createdAccounts.Count > 0)
+        {
+            await auditLogService.LogAsync(
+                TenantId,
+                UserId,
+                "Users imported",
+                nameof(User),
+                string.Join(",", createdUserIds),
+                $"Created {createdAccounts.Count} user account(s) by import: {string.Join(", ", createdAccounts)}.",
+                cancellationToken);
+        }
+
         return Ok(new ImportCommitResponse(rows.Count, successful, failed, skipped, rowErrors));
     }
 
     [HttpPost("branches/commit")]
     public async Task<ActionResult<ImportCommitResponse>> CommitBranches([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportBranches();
         var rows = await BuildBranchPreviewAsync(request.File, cancellationToken);
         var successful = 0;
         var failed = 0;
@@ -677,6 +714,7 @@ public sealed class ImportController(
     [HttpPost("materials/commit")]
     public async Task<ActionResult<ImportCommitResponse>> CommitMaterials([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanImportMaterials();
         var rows = await BuildMaterialPreviewAsync(request.File, cancellationToken);
         var branchLookup = await dbContext.Branches
             .Where(x => x.TenantId == TenantId && x.IsActive)
@@ -1400,6 +1438,22 @@ public sealed class ImportController(
             CanManageBillableWork = permissions.CanManageBillableWork,
             CanOverrideMaterialStock = permissions.CanOverrideMaterialStock
         };
+
+    // Every action here previews or commits a privileged bulk mutation, so each one carries the same
+    // guard as the single-record controller for the entity it writes. The user import creates accounts
+    // and grants roles, which is admin-only in UsersController; branches and sites are admin-only in
+    // BranchesController and SitesController and stay that way here.
+    private void EnsureCanImportUsers() => userAccessService.EnsureAdmin();
+
+    private void EnsureCanImportClients() => userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
+
+    private void EnsureCanImportAssets() => userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
+
+    private void EnsureCanImportMaterials() => userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
+
+    private void EnsureCanImportBranches() => userAccessService.EnsureAdmin();
+
+    private void EnsureCanImportSites() => userAccessService.EnsureAdmin();
 
     private Task LogTemplateDownloadAsync(string templateType, CancellationToken cancellationToken) =>
         auditLogService.LogAsync(

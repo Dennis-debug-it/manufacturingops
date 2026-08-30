@@ -31,10 +31,10 @@ export function PortalDashboardPage() {
         <Link to="/portal/invoices"><StatCard label="Outstanding Balance" value={data.outstandingInvoiceBalance.toLocaleString(undefined, { style: 'currency', currency: 'KES' })} tone={data.outstandingInvoiceBalance > 0 ? 'warning' : 'default'} icon={<Receipt className="h-4 w-4 text-slate-400" />} /></Link>
         <Link to="/portal/quotes"><StatCard label="Quotes Awaiting Response" value={data.pendingQuotations} tone={data.pendingQuotations > 0 ? 'warning' : 'default'} icon={<FileText className="h-4 w-4 text-slate-400" />} /></Link>
       </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900">Need something serviced?</h2>
         <p className="mt-1 text-sm text-slate-600">Submit a new service request and our team will be notified immediately.</p>
-        <Link to="/portal/requests/new" className="mt-4 inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">Submit a Request</Link>
+        <Link to="/portal/requests/new" className="mt-4 inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">Submit a Request</Link>
       </div>
     </div>
   )

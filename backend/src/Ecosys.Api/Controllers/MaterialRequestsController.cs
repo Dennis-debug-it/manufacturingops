@@ -143,35 +143,38 @@ public sealed class MaterialRequestsController(
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Material request was not found.");
 
-        foreach (var issueLine in request.Lines)
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            var line = materialRequest.Lines.SingleOrDefault(x => x.Id == issueLine.MaterialRequestLineId)
-                ?? throw new BusinessRuleException("Material request line was not found.");
-
-            var item = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == line.MaterialItemId, cancellationToken);
-            var quantityToIssue = issueLine.QuantityIssued <= 0 ? line.QuantityRequested - line.QuantityIssued : issueLine.QuantityIssued;
-
-            if (quantityToIssue <= 0)
+            foreach (var issueLine in request.Lines)
             {
-                continue;
+                var line = materialRequest.Lines.SingleOrDefault(x => x.Id == issueLine.MaterialRequestLineId)
+                    ?? throw new BusinessRuleException("Material request line was not found.");
+
+                var item = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == line.MaterialItemId, ct);
+                var quantityToIssue = issueLine.QuantityIssued <= 0 ? line.QuantityRequested - line.QuantityIssued : issueLine.QuantityIssued;
+
+                if (quantityToIssue <= 0)
+                {
+                    continue;
+                }
+
+                line.QuantityIssued += quantityToIssue;
+                await stockLedgerService.RecordIssueAsync(
+                    item,
+                    materialRequest.BranchId,
+                    quantityToIssue,
+                    UserId,
+                    $"Issued against material request {materialRequest.RequestNumber}",
+                    materialRequest.RequestNumber,
+                    materialRequest.WorkOrderId,
+                    materialRequest.Id,
+                    false,
+                    ct);
             }
 
-            line.QuantityIssued += quantityToIssue;
-            await stockLedgerService.RecordIssueAsync(
-                item,
-                materialRequest.BranchId,
-                quantityToIssue,
-                UserId,
-                $"Issued against material request {materialRequest.RequestNumber}",
-                materialRequest.RequestNumber,
-                materialRequest.WorkOrderId,
-                materialRequest.Id,
-                false,
-                cancellationToken);
-        }
-
-        materialRequest.Status = "Issued";
-        await dbContext.SaveChangesAsync(cancellationToken);
+            materialRequest.Status = "Issued";
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         await auditLogService.LogAsync(
             TenantId,
@@ -201,42 +204,45 @@ public sealed class MaterialRequestsController(
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Material request was not found.");
 
-        foreach (var closeLine in request.Lines)
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            var line = materialRequest.Lines.SingleOrDefault(x => x.Id == closeLine.MaterialRequestLineId)
-                ?? throw new BusinessRuleException("Material request line was not found.");
-
-            if (closeLine.QuantityUsed < 0 || closeLine.QuantityReturned < 0)
+            foreach (var closeLine in request.Lines)
             {
-                throw new BusinessRuleException("Used and returned quantities cannot be negative.");
+                var line = materialRequest.Lines.SingleOrDefault(x => x.Id == closeLine.MaterialRequestLineId)
+                    ?? throw new BusinessRuleException("Material request line was not found.");
+
+                if (closeLine.QuantityUsed < 0 || closeLine.QuantityReturned < 0)
+                {
+                    throw new BusinessRuleException("Used and returned quantities cannot be negative.");
+                }
+
+                if (closeLine.QuantityUsed + closeLine.QuantityReturned > line.QuantityIssued)
+                {
+                    throw new BusinessRuleException("Used plus returned quantity cannot exceed issued quantity.");
+                }
+
+                line.QuantityUsed = closeLine.QuantityUsed;
+                line.QuantityReturned = closeLine.QuantityReturned;
+
+                if (closeLine.QuantityReturned > 0)
+                {
+                    var item = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == line.MaterialItemId, ct);
+                    await stockLedgerService.RecordReturnAsync(
+                        item,
+                        materialRequest.BranchId,
+                        closeLine.QuantityReturned,
+                        UserId,
+                        $"Returned from material request {materialRequest.RequestNumber}",
+                        materialRequest.RequestNumber,
+                        materialRequest.WorkOrderId,
+                        materialRequest.Id,
+                        ct);
+                }
             }
 
-            if (closeLine.QuantityUsed + closeLine.QuantityReturned > line.QuantityIssued)
-            {
-                throw new BusinessRuleException("Used plus returned quantity cannot exceed issued quantity.");
-            }
-
-            line.QuantityUsed = closeLine.QuantityUsed;
-            line.QuantityReturned = closeLine.QuantityReturned;
-
-            if (closeLine.QuantityReturned > 0)
-            {
-                var item = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == line.MaterialItemId, cancellationToken);
-                await stockLedgerService.RecordReturnAsync(
-                    item,
-                    materialRequest.BranchId,
-                    closeLine.QuantityReturned,
-                    UserId,
-                    $"Returned from material request {materialRequest.RequestNumber}",
-                    materialRequest.RequestNumber,
-                    materialRequest.WorkOrderId,
-                    materialRequest.Id,
-                    cancellationToken);
-            }
-        }
-
-        materialRequest.Status = "Closed";
-        await dbContext.SaveChangesAsync(cancellationToken);
+            materialRequest.Status = "Closed";
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         await auditLogService.LogAsync(
             TenantId,

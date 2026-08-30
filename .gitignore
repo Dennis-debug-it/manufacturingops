@@ -14,16 +14,22 @@ build/
 .env.local
 .env.production
 
-# Logs
+# Logs and captured process output (EC-P3-03). These were tracked once; they are
+# untracked now and must stay that way - build/run noise, not source.
 *.log
+*.out
+*.err
 
-# Windows/temp files
+# Windows/temp files and editor backups
 ~$*
 *.tmp
+*.bak
 
-# User secrets
+# User secrets and machine-local config. The tracked templates are the `.env.example`
+# files; anything holding a real host or credential stays out (EC-P3-03).
 appsettings.Development.json
 .claude/settings.local.json
+config.env
 
 # Test/build artifacts
 ecosys-serviceops-frontend/playwright-report/

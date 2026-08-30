@@ -8,6 +8,7 @@ import {
   Building2,
   CheckCircle2,
   FileWarning,
+  LineChart,
   MessageCircle,
   PackageX,
   UserCheck,
@@ -19,6 +20,8 @@ import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
 import { SectionHeader } from '../../shared/components/SectionHeader'
+import { Surface } from '../../shared/components/Surface'
+import { Crystal } from '../../shared/components/Crystal'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { formatNumber } from '../../shared/utils/format'
@@ -94,43 +97,54 @@ export function DashboardPage() {
         title="Dashboard"
         subtitle="Operational command centre for daily field service work."
         secondaryActions={
-          branches.length > 1 ? (
-            <select
-              value={branchId}
-              onChange={(event) => setBranchId(event.target.value)}
-              className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-900"
+          <div className="flex flex-wrap items-center gap-2">
+            {branches.length > 1 ? (
+              <select
+                value={branchId}
+                onChange={(event) => setBranchId(event.target.value)}
+                className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[var(--app-primary)]"
+              >
+                <option value="">All Branches</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>{branch.name}</option>
+                ))}
+              </select>
+            ) : null}
+            {/* The only entry point to the executive view — its route had no inbound link at all. */}
+            <Link
+              to="/dashboard/executive"
+              className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
-              <option value="">All Branches</option>
-              {branches.map((branch) => (
-                <option key={branch.id} value={branch.id}>{branch.name}</option>
-              ))}
-            </select>
-          ) : undefined
+              <LineChart className="h-4 w-4" />
+              Executive View
+            </Link>
+          </div>
         }
       />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="relative grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div aria-hidden className="pointer-events-none absolute -inset-x-4 -inset-y-6 -z-10 overflow-hidden">
+          <Crystal variant="dashboard" className="absolute inset-0 opacity-70" />
+        </div>
         {statCards.map((card) => {
           const Icon = card.icon
           const value = data[card.key]
           return (
-            <Link
-              key={card.key}
-              to={card.to}
-              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-            >
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-slate-600">{card.label}</div>
-                <Icon className={`h-4 w-4 ${toneClasses[card.tone ?? 'default']}`} />
-              </div>
-              <div className={`mt-3 text-2xl font-semibold ${toneClasses[card.tone ?? 'default']}`}>{formatNumber(Number(value ?? 0))}</div>
+            <Link key={card.key} to={card.to} className="block transition hover:-translate-y-0.5">
+              <Surface variant="glass" padding="sm" crystal="kpi">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium text-slate-600">{card.label}</div>
+                  <Icon className={`h-4 w-4 ${toneClasses[card.tone ?? 'default']}`} />
+                </div>
+                <div className={`mt-3 text-2xl font-semibold ${toneClasses[card.tone ?? 'default']}`}>{formatNumber(Number(value ?? 0))}</div>
+              </Surface>
             </Link>
           )
         })}
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <Surface as="section" variant="glass" padding="lg" className="space-y-4">
           <SectionHeader title="Work Orders by Group" description="Open work order load per assignment group." />
           <DataTable
             columns={groupColumns}
@@ -138,9 +152,9 @@ export function DashboardPage() {
             emptyTitle="No group assignments"
             emptyDescription="Work orders assigned to groups will appear here."
           />
-        </section>
+        </Surface>
 
-        <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <Surface as="section" variant="glass" padding="lg" className="space-y-4">
           <SectionHeader title="Technician Utilisation" description="Active load and on-site status per technician." />
           <DataTable
             columns={workloadColumns}
@@ -148,34 +162,34 @@ export function DashboardPage() {
             emptyTitle="No technician activity"
             emptyDescription="Technician workload will appear here once work orders are assigned."
           />
-        </section>
+        </Surface>
       </div>
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <Surface as="section" variant="glass" padding="lg" className="space-y-4">
         <SectionHeader title="Contract Health" description="Renewal risk and expiry pipeline across all active contracts." />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-xl border border-slate-200 px-4 py-3">
+          <div className="rounded-xl border border-[var(--app-border)] px-4 py-3">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Expiring in 90 Days</div>
             <div className="mt-2 text-xl font-semibold text-slate-900">{formatNumber(data.contractsExpiringIn90Days)}</div>
           </div>
-          <div className="rounded-xl border border-slate-200 px-4 py-3">
+          <div className="rounded-xl border border-[var(--app-border)] px-4 py-3">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Expiring in 30 Days</div>
             <div className="mt-2 text-xl font-semibold text-amber-600">{formatNumber(data.contractsExpiringIn30Days)}</div>
           </div>
-          <div className="rounded-xl border border-slate-200 px-4 py-3">
+          <div className="rounded-xl border border-[var(--app-border)] px-4 py-3">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Critical Renewal Risk</div>
             <div className="mt-2 text-xl font-semibold text-rose-600">{formatNumber(data.criticalRenewalRiskContracts)}</div>
           </div>
-          <div className="rounded-xl border border-slate-200 px-4 py-3">
+          <div className="rounded-xl border border-[var(--app-border)] px-4 py-3">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Expired</div>
             <div className="mt-2 text-xl font-semibold text-rose-600">{formatNumber(data.expiredContracts)}</div>
           </div>
         </div>
-      </section>
+      </Surface>
 
       <WhatsAppAlertsWidget />
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <Surface variant="solid" padding="sm">
         <div className="flex flex-wrap gap-4 text-sm text-slate-600">
           <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-600" />Closed: {formatNumber(data.closedWorkOrders)}</span>
           <span>Assigned to Group: {formatNumber(data.assignedToGroup)}</span>
@@ -183,7 +197,7 @@ export function DashboardPage() {
           <span>Awaiting Acceptance: {formatNumber(data.awaitingAcceptance)}</span>
           <span>Renewal In Progress: {formatNumber(data.renewalInProgressContracts)}</span>
         </div>
-      </div>
+      </Surface>
     </div>
   )
 }
@@ -194,7 +208,7 @@ function WhatsAppAlertsWidget() {
   const totalUnread = (conversations ?? []).reduce((sum, c) => sum + (c.unreadCount ?? 0), 0)
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <Surface as="section" variant="glass" padding="lg">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <MessageCircle className="h-5 w-5 text-emerald-600" />
@@ -223,6 +237,6 @@ function WhatsAppAlertsWidget() {
           ))}
         </ul>
       )}
-    </section>
+    </Surface>
   )
 }

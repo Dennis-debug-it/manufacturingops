@@ -56,7 +56,7 @@ function TemplateEditor({ setting, onClose }: { setting: EtaNotificationSetting;
         canManage ? (
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={save} disabled={update.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={save} disabled={update.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {update.isPending ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -78,7 +78,7 @@ function TemplateEditor({ setting, onClose }: { setting: EtaNotificationSetting;
             value={subject}
             disabled={!canManage}
             onChange={(event) => setSubject(event.target.value)}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
           />
         </div>
 
@@ -90,7 +90,7 @@ function TemplateEditor({ setting, onClose }: { setting: EtaNotificationSetting;
             disabled={!canManage}
             onChange={(event) => setBody(event.target.value)}
             rows={8}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
           />
         </div>
 
@@ -138,7 +138,7 @@ export function NotificationTemplatesPage() {
                 key={row.eventType}
                 type="button"
                 onClick={() => setSelected(row.eventType)}
-                className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-slate-300"
+                className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-left shadow-sm transition hover:border-slate-300"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">

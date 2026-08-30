@@ -20,6 +20,7 @@ public sealed class TenantEmailTemplatesController(
     IEmailTemplateService emailTemplateService,
     IEmailSubjectRuleService emailSubjectRuleService,
     IEmailOutboxService emailOutboxService,
+    ITenantTimeZoneService tenantTimeZoneService,
     IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
@@ -71,7 +72,7 @@ public sealed class TenantEmailTemplatesController(
     public async Task<ActionResult<EmailTemplatePreviewResponse>> Preview(string eventKey, [FromBody] EmailTemplatePreviewRequest? request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
-        var rendered = await emailTemplateService.RenderTenantTemplateAsync(TenantId, eventKey, BuildSampleValues(request?.SampleData), cancellationToken);
+        var rendered = await emailTemplateService.RenderTenantTemplateAsync(TenantId, eventKey, BuildSampleValues(request?.SampleData, await SampleExpiryAsync(cancellationToken)), cancellationToken);
         var finalSubject = await emailSubjectRuleService.BuildFinalSubjectAsync(
             TenantId,
             eventKey,
@@ -87,7 +88,7 @@ public sealed class TenantEmailTemplatesController(
         var settings = await ResolveEffectiveEmailSettingsAsync(cancellationToken)
             ?? throw new BusinessRuleException("Email settings are not configured.");
 
-        var rendered = await emailTemplateService.RenderTenantTemplateAsync(TenantId, eventKey, BuildSampleValues(request.SampleData), cancellationToken);
+        var rendered = await emailTemplateService.RenderTenantTemplateAsync(TenantId, eventKey, BuildSampleValues(request.SampleData, await SampleExpiryAsync(cancellationToken)), cancellationToken);
         if (!rendered.Enabled)
         {
             return Ok(new EmailTemplateTestResponse(false, "This email template is disabled."));
@@ -142,7 +143,10 @@ public sealed class TenantEmailTemplatesController(
         return await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
     }
 
-    private static Dictionary<string, string?> BuildSampleValues(IReadOnlyDictionary<string, string?>? sampleData)
+    private Task<string> SampleExpiryAsync(CancellationToken cancellationToken) =>
+        tenantTimeZoneService.FormatForTenantAsync(DateTime.UtcNow.AddHours(1), TenantId, cancellationToken: cancellationToken);
+
+    private static Dictionary<string, string?> BuildSampleValues(IReadOnlyDictionary<string, string?>? sampleData, string expiresAtSample)
     {
         var values = EmailTemplateVariables.WithRecipientAndActorAliases(
             "Jane Doe",
@@ -177,7 +181,8 @@ public sealed class TenantEmailTemplatesController(
                 ["contactName"] = "Jane Doe",
                 ["contactEmail"] = "jane.doe@example.com",
                 ["submittedAt"] = DateTime.UtcNow.ToString("u"),
-                ["expiresAt"] = DateTime.UtcNow.AddHours(1).ToString("u")
+                ["expiresAt"] = expiresAtSample,
+                ["expiresAtUtc"] = DateTime.UtcNow.AddHours(1).ToString("u")
             });
 
         if (sampleData is not null)

@@ -30,6 +30,10 @@ public sealed class WorkOrdersController(
     IWorkflowService workflowService,
     IContractOperationalService? contractOperationalService = null) : TenantAwareControllerBase(tenantContext)
 {
+    /// <summary>Minutes-to-deadline below which the list treats a work order as "at risk".
+    /// Must stay in step with the client-side <c>resolveSlaStatusKey</c> threshold.</summary>
+    private const int SlaAtRiskWindowMinutes = 120;
+
     private static readonly HashSet<string> EditableStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         WorkOrderStatuses.New,
@@ -45,12 +49,16 @@ public sealed class WorkOrdersController(
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? branchId,
+        [FromQuery] Guid? clientId,
+        [FromQuery] Guid? siteId,
         [FromQuery] string? status,
+        [FromQuery] string? priority,
         [FromQuery] string? workType,
         [FromQuery] Guid? assignmentGroupId,
         [FromQuery] Guid? technicianId,
         [FromQuery] bool? unassigned,
         [FromQuery] string? assignmentStatus,
+        [FromQuery] string? slaStatus,
         [FromQuery] string? search,
         [FromQuery] DateTime? fromDate,
         [FromQuery] DateTime? toDate,
@@ -65,6 +73,16 @@ public sealed class WorkOrdersController(
         // normalize to the requested status (RawStatusesMatching), so legacy/synonym rows still
         // match while the filter stays a DB-level IN-list.
         var query = QueryWorkOrders(scope);
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(x => x.ClientId == clientId.Value);
+        }
+
+        if (siteId.HasValue)
+        {
+            query = query.Where(x => x.SiteId == siteId.Value);
+        }
 
         if (assignmentGroupId.HasValue)
         {
@@ -99,12 +117,32 @@ public sealed class WorkOrdersController(
             query = query.Where(x => matchingStatuses.Contains(x.Status));
         }
 
+        if (!string.IsNullOrWhiteSpace(priority))
+        {
+            // Priority, unlike status, is a closed enum with no legacy synonyms: every writer stores
+            // WorkOrderPriorities.Normalize(...) output, so a single equality comparison is enough
+            // and no RawStatusesMatching-style expansion is needed. Normalizing the filter value
+            // also rejects garbage input with the same message the create/update endpoints use.
+            var normalizedPriority = WorkOrderPriorities.Normalize(priority);
+            query = query.Where(x => x.Priority == normalizedPriority);
+        }
+
+        if (!string.IsNullOrWhiteSpace(slaStatus))
+        {
+            query = ApplySlaStatusFilter(query, slaStatus, DateTime.UtcNow);
+        }
+
         var ordered = query.OrderByDescending(x => x.CreatedAt);
 
-        // workType/assignmentStatus/search are derived in C# (status/type normalization, the
+        // branchId/clientId/siteId/status/priority/slaStatus/technicianId/assignmentGroupId/
+        // unassigned/fromDate/toDate are all filtered in SQL above, so the list the UI actually
+        // requests pages at the database.
+        //
+        // workType/assignmentStatus/search remain derived in C# (type normalization, the
         // assignment-status precedence, and the assignment-summary component of search aren't
-        // SQL-translatable), so they force a materialize-then-filter path. When none of them are
-        // used, the query is fully filtered in SQL and pages at the database.
+        // SQL-translatable), so any request using one of those three still materializes the
+        // tenant's work orders before filtering and paging. Paging is still correct in that case —
+        // it just isn't cheap.
         var needsInMemoryFilter = !string.IsNullOrWhiteSpace(workType)
             || !string.IsNullOrWhiteSpace(assignmentStatus)
             || !string.IsNullOrWhiteSpace(search);
@@ -125,8 +163,8 @@ public sealed class WorkOrdersController(
 
         var filtered = workOrders
             .Where(x => string.IsNullOrWhiteSpace(workType) || string.Equals(WorkOrderTypes.Normalize(x.WorkType, WorkOrderTypes.CorrectiveMaintenance), WorkOrderTypes.Normalize(workType, WorkOrderTypes.CorrectiveMaintenance), StringComparison.OrdinalIgnoreCase))
-            .Where(x => string.IsNullOrWhiteSpace(assignmentStatus) || string.Equals(GetAssignmentStatus(x), assignmentStatus, StringComparison.OrdinalIgnoreCase))
-            .Where(x => string.IsNullOrWhiteSpace(search) || $"{x.WorkOrderNumber} {x.Title} {x.Client?.ClientName} {x.Asset?.AssetName} {BuildAssignmentSummary(x)}".Contains(search, StringComparison.OrdinalIgnoreCase))
+            .Where(x => string.IsNullOrWhiteSpace(assignmentStatus) || string.Equals(WorkOrderAssignmentView.Resolve(x).AssignmentStatus, assignmentStatus, StringComparison.OrdinalIgnoreCase))
+            .Where(x => string.IsNullOrWhiteSpace(search) || $"{x.WorkOrderNumber} {x.Title} {x.Client?.ClientName} {x.Asset?.AssetName} {WorkOrderAssignmentView.Resolve(x).AssignmentSummary}".Contains(search, StringComparison.OrdinalIgnoreCase))
             .Select(Map)
             .ToList();
 
@@ -718,6 +756,14 @@ public sealed class WorkOrdersController(
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Work order was not found.");
 
+        // A payload naming neither a technician nor a group used to reach ApplyAssignmentsAsync as a
+        // no-op, return 200, and still write an audit entry saying the work order had been assigned.
+        // Refuse it here so nothing is assigned and nothing is recorded.
+        if (!request.TechnicianId.HasValue && !request.AssignmentGroupId.HasValue)
+        {
+            throw new BusinessRuleException("Assign a technician or an assignment group.");
+        }
+
         await assignmentWorkflowService.ApplyAssignmentsAsync(
             TenantId,
             workOrder.Id,
@@ -775,7 +821,18 @@ public sealed class WorkOrdersController(
         var workOrder = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Work order was not found.");
 
-        await workOrderLifecycleService.ArriveAsync(TenantId, workOrder.Id, UserId, new Infrastructure.Services.WorkOrderLocationRequest(request.Latitude, request.Longitude), cancellationToken);
+        // Delegates to the assignment-level recorder rather than WorkOrderLifecycleService.ArriveAsync.
+        // That wrote work_orders.ArrivalAt only, which never satisfied the completion guard - the guard
+        // reads work_order_technician_assignments.ArrivalAt - so this endpoint returned 200 while
+        // leaving Complete blocked. RecordArrivalAsync writes the assignment row and rolls the header
+        // up from it, keeping one source of truth.
+        var arrivalTechnicianId = await ResolveDispatchTechnicianIdAsync(workOrder.Id, "Arrival", cancellationToken);
+        await assignmentWorkflowService.RecordArrivalAsync(
+            TenantId,
+            workOrder.Id,
+            UserId,
+            new Infrastructure.Services.TechnicianArrivalRequest(arrivalTechnicianId, request.Latitude, request.Longitude, null, null),
+            cancellationToken);
         var persisted = await QueryWorkOrders(await branchAccessService.GetQueryScopeAsync(TenantId, workOrder.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == workOrder.Id, cancellationToken);
         return Ok(Map(persisted));
@@ -789,7 +846,15 @@ public sealed class WorkOrdersController(
         var workOrder = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Work order was not found.");
 
-        await workOrderLifecycleService.DepartAsync(TenantId, workOrder.Id, UserId, new Infrastructure.Services.WorkOrderLocationRequest(request.Latitude, request.Longitude), cancellationToken);
+        // Same reconciliation as /arrive above: the assignment row is the source of truth and
+        // RecordDepartureAsync rolls the header up from it.
+        var departureTechnicianId = await ResolveDispatchTechnicianIdAsync(workOrder.Id, "Departure", cancellationToken);
+        await assignmentWorkflowService.RecordDepartureAsync(
+            TenantId,
+            workOrder.Id,
+            UserId,
+            new Infrastructure.Services.TechnicianDepartureRequest(departureTechnicianId, request.Latitude, request.Longitude, null, null),
+            cancellationToken);
         var persisted = await QueryWorkOrders(await branchAccessService.GetQueryScopeAsync(TenantId, workOrder.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == workOrder.Id, cancellationToken);
         return Ok(Map(persisted));
@@ -1831,101 +1896,38 @@ public sealed class WorkOrdersController(
         return normalized;
     }
 
-    private static IReadOnlyCollection<Guid> ParseAssignedTechnicianIds(string? assignedTechnicianIdsJson)
+    /// <summary>
+    /// Applies the SLA bucket the Work Orders list filters on. Mirrors the client-side
+    /// <c>resolveSlaStatusKey</c> exactly (breached wins, then "no deadline" is No SLA, then a
+    /// deadline inside the at-risk window is At risk) so moving the filter server-side does not
+    /// change which rows a user sees.
+    /// </summary>
+    private static IQueryable<WorkOrder> ApplySlaStatusFilter(IQueryable<WorkOrder> query, string slaStatus, DateTime utcNow)
     {
-        if (string.IsNullOrWhiteSpace(assignedTechnicianIdsJson))
+        var atRiskThreshold = utcNow.AddMinutes(SlaAtRiskWindowMinutes);
+        var normalized = new string(slaStatus.Where(char.IsLetter).ToArray()).ToLowerInvariant();
+
+        return normalized switch
         {
-            return [];
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<List<Guid>>(assignedTechnicianIdsJson) ?? [];
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
-    private static IReadOnlyCollection<Guid> ResolveAssignedTechnicianIds(WorkOrder workOrder)
-    {
-        var relationalIds = workOrder.TechnicianAssignments
-            .OrderByDescending(x => x.IsLead)
-            .ThenBy(x => x.AssignedAt)
-            .Select(x => x.TechnicianId)
-            .Distinct()
-            .ToList();
-
-        if (relationalIds.Count > 0)
-        {
-            return relationalIds;
-        }
-
-        var legacyIds = ParseAssignedTechnicianIds(workOrder.AssignedTechnicianIdsJson);
-        if (legacyIds.Count > 0)
-        {
-            return legacyIds;
-        }
-
-        return workOrder.AssignedTechnicianId.HasValue ? [workOrder.AssignedTechnicianId.Value] : [];
-    }
-
-    private static string GetAssignmentStatus(WorkOrder workOrder) =>
-        workOrder.Assignments
-            .OrderByDescending(x => x.AssignedAt)
-            .Select(x => x.AssignmentStatus)
-            .FirstOrDefault()
-        ?? (workOrder.AssignmentGroupId.HasValue
-            ? "AssignedToGroup"
-            : workOrder.TechnicianAssignments.Any()
-                ? "AssignedToTechnician"
-                : "Unassigned");
-
-    private static string BuildAssignmentSummary(WorkOrder workOrder)
-    {
-        var technicians = workOrder.TechnicianAssignments
-            .OrderByDescending(x => x.IsLead)
-            .ThenBy(x => x.AssignedAt)
-            .ToList();
-
-        if (!technicians.Any())
-        {
-            return workOrder.AssignmentGroup?.Name ?? "Unassigned";
-        }
-
-        var firstTechnicianName = technicians[0].Technician?.FullName ?? workOrder.AssignedTechnician?.FullName ?? "Technician";
-        if (!string.IsNullOrWhiteSpace(workOrder.AssignmentGroup?.Name) && technicians.Count == 1)
-        {
-            return $"{workOrder.AssignmentGroup.Name} -> {firstTechnicianName}";
-        }
-
-        if (technicians.Count == 1)
-        {
-            return firstTechnicianName;
-        }
-
-        return $"{firstTechnicianName} + {technicians.Count - 1} others";
+            "breached" => query.Where(x => x.SlaResponseBreached || x.SlaResolutionBreached),
+            "nosla" => query.Where(x => !x.SlaResponseBreached && !x.SlaResolutionBreached && x.SlaResolutionDeadline == null),
+            "atrisk" => query.Where(x => !x.SlaResponseBreached
+                && !x.SlaResolutionBreached
+                && x.SlaResolutionDeadline != null
+                && x.SlaResolutionDeadline <= atRiskThreshold),
+            "ontrack" => query.Where(x => !x.SlaResponseBreached
+                && !x.SlaResolutionBreached
+                && x.SlaResolutionDeadline != null
+                && x.SlaResolutionDeadline > atRiskThreshold),
+            _ => throw new BusinessRuleException("SLA status filter must be on-track, at-risk, breached, or no-sla.")
+        };
     }
 
     private WorkOrderResponse Map(WorkOrder workOrder)
     {
         var holdDetails = ResolveActiveHoldDetails(workOrder);
-        var technicianAssignments = workOrder.TechnicianAssignments
-            .OrderByDescending(x => x.IsLead)
-            .ThenBy(x => x.AssignedAt)
-            .Select(x => new WorkOrderTechnicianAssignmentResponse(
-                x.Id,
-                x.TechnicianId,
-                x.Technician?.FullName,
-                x.IsLead,
-                x.Status,
-                x.AssignedAt,
-                x.AcceptedAt,
-                x.ArrivalAt,
-                x.DepartureAt,
-                x.Notes))
-            .ToList();
+        var assignment = WorkOrderAssignmentView.Resolve(workOrder);
+        var technicianAssignments = assignment.TechnicianAssignments;
         var availableTransitions = WorkOrderStatusTransitions
             .GetAllowedTargets(workOrder.Status, CanUseAdminOnlyLifecycleTransitions())
             .ToList();
@@ -1950,9 +1952,9 @@ public sealed class WorkOrdersController(
             WorkOrderTypes.Normalize(workOrder.WorkType, WorkOrderTypes.CorrectiveMaintenance),
             ResolveSlaStatus(workOrder),
             workOrder.AssignmentType,
-            workOrder.AssignedTechnicianId,
-            workOrder.AssignedTechnician?.FullName,
-            ResolveAssignedTechnicianIds(workOrder),
+            assignment.PrimaryTechnicianId,
+            assignment.PrimaryTechnicianName,
+            assignment.TechnicianIds,
             workOrder.LeadTechnicianId,
             workOrder.LeadTechnician?.FullName,
             workOrder.DueDate,
@@ -1975,11 +1977,11 @@ public sealed class WorkOrdersController(
             workOrder.IsPreventiveMaintenance,
             holdDetails.Reason,
             holdDetails.Note,
-            GetAssignmentStatus(workOrder),
+            assignment.AssignmentStatus,
             workOrder.Assignments.OrderByDescending(x => x.AssignedAt).Select(x => x.Notes).FirstOrDefault(),
             technicianAssignments,
-            BuildAssignmentSummary(workOrder),
-            !workOrder.AssignmentGroupId.HasValue && technicianAssignments.Count == 0,
+            assignment.AssignmentSummary,
+            assignment.IsUnassigned,
             workOrder.PmTemplateId,
             workOrder.PmTemplateNameSnapshot ?? workOrder.PmTemplate?.Name,
             workOrder.PreventiveMaintenancePlanId,
@@ -2232,6 +2234,37 @@ public sealed class WorkOrdersController(
         }
     }
 
+    /// <summary>
+    /// Resolves the technician whose assignment row the location-only <c>/arrive</c> and <c>/depart</c>
+    /// endpoints act on. They predate the technician dispatch lifecycle and carry no technician id, so
+    /// the caller's own assignment is preferred and a sole assignment is used otherwise. Failing loudly
+    /// beats writing a header timestamp that satisfies no guard.
+    /// </summary>
+    private async Task<Guid> ResolveDispatchTechnicianIdAsync(Guid workOrderId, string action, CancellationToken cancellationToken)
+    {
+        var currentTechnicianId = await ResolveCurrentTechnicianIdAsync(cancellationToken);
+        if (currentTechnicianId.HasValue
+            && await dbContext.WorkOrderTechnicianAssignments.AnyAsync(
+                x => x.TenantId == TenantId && x.WorkOrderId == workOrderId && x.TechnicianId == currentTechnicianId.Value,
+                cancellationToken))
+        {
+            return currentTechnicianId.Value;
+        }
+
+        var technicianIds = await dbContext.WorkOrderTechnicianAssignments
+            .Where(x => x.TenantId == TenantId && x.WorkOrderId == workOrderId)
+            .Select(x => x.TechnicianId)
+            .Take(2)
+            .ToListAsync(cancellationToken);
+
+        return technicianIds.Count switch
+        {
+            1 => technicianIds[0],
+            0 => throw new BusinessRuleException($"{action} cannot be recorded before a technician is assigned to this work order."),
+            _ => throw new BusinessRuleException($"This work order has more than one assigned technician, so {action.ToLowerInvariant()} must be recorded against a specific technician.")
+        };
+    }
+
     private async Task EnsureAssignedExecutionAccessAsync(Guid workOrderId, CancellationToken cancellationToken)
     {
         if (!IsTechnicianOnlyWorkspaceUser())
@@ -2303,20 +2336,20 @@ public sealed record CreateWorkOrderRequest(
     Guid? SystemId,
     Guid? AssetId,
     Guid? AssignmentGroupId,
-    [property: StringLength(40)] string? AssignmentType,
+    [StringLength(40)] string? AssignmentType,
     Guid? AssignedTechnicianId,
     IReadOnlyCollection<Guid>? AssignedTechnicianIds,
     Guid? LeadTechnicianId,
-    [property: StringLength(2000)] string? AssignmentNotes,
-    [property: StringLength(300)] string Title,
-    [property: StringLength(5000)] string? Description,
-    [property: StringLength(40)] string? Priority,
+    [StringLength(2000)] string? AssignmentNotes,
+    [StringLength(200)] string Title,
+    [StringLength(4000)] string? Description,
+    [StringLength(40)] string? Priority,
     DateTime? DueDate,
-    [property: StringLength(60)] string? WorkType,
+    [StringLength(50)] string? WorkType,
     bool IsPreventiveMaintenance,
     Guid? PmTemplateId,
     bool NotifyClient = true,
-    [property: StringLength(256)] string? ClientContactEmail = null,
+    [StringLength(256)] string? ClientContactEmail = null,
     Guid? TemplateId = null,
     Guid? ParentWorkOrderId = null);
 
@@ -2575,3 +2608,186 @@ public sealed record WorkOrderDocumentResponse(
     string Number,
     string Status,
     string? PdfUrl);
+
+/// <summary>
+/// One work order's assignment picture, derived once and used for every assignment-shaped field on
+/// <see cref="WorkOrderResponse"/> so that they can never contradict each other.
+/// </summary>
+public sealed record WorkOrderAssignmentSnapshot(
+    IReadOnlyCollection<WorkOrderTechnicianAssignmentResponse> TechnicianAssignments,
+    Guid? PrimaryTechnicianId,
+    string? PrimaryTechnicianName,
+    IReadOnlyCollection<Guid> TechnicianIds,
+    string AssignmentStatus,
+    string AssignmentSummary,
+    bool IsUnassigned);
+
+/// <summary>
+/// EC-019 — the single source of truth for "who is assigned to this work order".
+///
+/// <para><c>work_order_technician_assignments</c> is authoritative. The legacy
+/// <c>WorkOrder.AssignedTechnicianId</c>/<c>AssignedTechnicianIdsJson</c> columns are still written
+/// and still exposed on the DTO (dispatch, reports, escalation, the SLA monitor and the technician
+/// workspace all query the column), but they are never read alongside the table: they only stand in
+/// when the table holds no row for the work order at all, and then they are projected into the same
+/// shape, so <c>assignedTechnicianId</c>, <c>technicianAssignments</c>, <c>assignmentStatus</c>,
+/// <c>assignmentSummary</c> and <c>isUnassigned</c> all describe the same reality.
+/// </para>
+///
+/// <para>Rows in that stand-in state are legacy or other-writer data (the demo seeder, the dispatch
+/// board's schedule endpoint). Migration
+/// <c>20260824113000_BackfillLegacyWorkOrderTechnicianAssignments</c> converts the existing ones
+/// into real assignment rows, and <c>WorkOrderAssignmentWorkflowService.SyncLegacyFieldsAsync</c>
+/// keeps the legacy column derived from the table for everything written through the assignment
+/// workflow.
+/// </para>
+/// </summary>
+internal static class WorkOrderAssignmentView
+{
+    private const string UnassignedStatus = "Unassigned";
+
+    public static WorkOrderAssignmentSnapshot Resolve(WorkOrder workOrder)
+    {
+        var technicianAssignments = workOrder.TechnicianAssignments
+            .OrderByDescending(x => x.IsLead)
+            .ThenBy(x => x.AssignedAt)
+            .Select(x => new WorkOrderTechnicianAssignmentResponse(
+                x.Id,
+                x.TechnicianId,
+                x.Technician?.FullName,
+                x.IsLead,
+                x.Status,
+                x.AssignedAt,
+                x.AcceptedAt,
+                x.ArrivalAt,
+                x.DepartureAt,
+                x.Notes))
+            .ToList();
+
+        if (technicianAssignments.Count == 0 && workOrder.AssignedTechnicianId.HasValue)
+        {
+            // Legacy stand-in: an assignment that only ever reached the work_orders row. Carries an
+            // empty Id because no persisted assignment record backs it yet.
+            technicianAssignments.Add(new WorkOrderTechnicianAssignmentResponse(
+                Guid.Empty,
+                workOrder.AssignedTechnicianId.Value,
+                workOrder.AssignedTechnician?.FullName,
+                true,
+                ResolveLegacyTechnicianStatus(workOrder),
+                workOrder.CreatedAt,
+                null,
+                workOrder.ArrivalAt,
+                workOrder.DepartureAt,
+                null));
+        }
+
+        var technicianIds = technicianAssignments.Count > 0
+            ? technicianAssignments.Select(x => x.TechnicianId).Distinct().ToList()
+            : ParseAssignedTechnicianIds(workOrder.AssignedTechnicianIdsJson).Distinct().ToList();
+
+        var primary = technicianAssignments.FirstOrDefault();
+
+        return new WorkOrderAssignmentSnapshot(
+            technicianAssignments,
+            primary?.TechnicianId,
+            primary?.TechnicianName,
+            technicianIds,
+            ResolveAssignmentStatus(workOrder, technicianAssignments),
+            BuildAssignmentSummary(workOrder.AssignmentGroup?.Name, technicianAssignments),
+            !workOrder.AssignmentGroupId.HasValue && technicianAssignments.Count == 0);
+    }
+
+    private static string ResolveAssignmentStatus(WorkOrder workOrder, IReadOnlyCollection<WorkOrderTechnicianAssignmentResponse> technicianAssignments)
+    {
+        var derived = workOrder.AssignmentGroupId.HasValue
+            ? "AssignedToGroup"
+            : technicianAssignments.Count > 0
+                ? "AssignedToTechnician"
+                : UnassignedStatus;
+
+        var persisted = workOrder.Assignments
+            .OrderByDescending(x => x.AssignedAt)
+            .Select(x => x.AssignmentStatus)
+            .FirstOrDefault();
+
+        // The persisted assignment-workflow status wins, because it carries the richer lifecycle
+        // values (Accepted, InProgress, Completed, Closed) — except when it claims "Unassigned" for
+        // a work order that demonstrably has someone on it. A stale row never wins over reality.
+        if (string.IsNullOrWhiteSpace(persisted)
+            || (string.Equals(persisted, UnassignedStatus, StringComparison.OrdinalIgnoreCase) && !string.Equals(derived, UnassignedStatus, StringComparison.Ordinal)))
+        {
+            return derived;
+        }
+
+        return persisted;
+    }
+
+    private static string BuildAssignmentSummary(string? groupName, IReadOnlyCollection<WorkOrderTechnicianAssignmentResponse> technicianAssignments)
+    {
+        if (technicianAssignments.Count == 0)
+        {
+            return string.IsNullOrWhiteSpace(groupName) ? UnassignedStatus : groupName;
+        }
+
+        var firstTechnicianName = technicianAssignments.First().TechnicianName ?? "Technician";
+        if (!string.IsNullOrWhiteSpace(groupName) && technicianAssignments.Count == 1)
+        {
+            return $"{groupName} -> {firstTechnicianName}";
+        }
+
+        if (technicianAssignments.Count == 1)
+        {
+            return firstTechnicianName;
+        }
+
+        return $"{firstTechnicianName} + {technicianAssignments.Count - 1} others";
+    }
+
+    /// <summary>
+    /// Status for the stand-in row, derived from the work order itself. Mirrors the CASE used by the
+    /// original backfill in migration <c>20260502132146_WorkOrderAssignmentWorkflowRefactor</c>.
+    /// </summary>
+    private static string ResolveLegacyTechnicianStatus(WorkOrder workOrder)
+    {
+        var status = WorkOrderStatuses.Normalize(workOrder.Status);
+
+        if (string.Equals(status, WorkOrderStatuses.Completed, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, WorkOrderStatuses.ClientAccepted, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, WorkOrderStatuses.Closed, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Completed";
+        }
+
+        if (string.Equals(status, WorkOrderStatuses.Cancelled, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status, WorkOrderStatuses.Rejected, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Cancelled";
+        }
+
+        if (workOrder.ArrivalAt.HasValue)
+        {
+            return "Arrived";
+        }
+
+        return string.Equals(status, WorkOrderStatuses.InProgress, StringComparison.OrdinalIgnoreCase)
+            ? "InProgress"
+            : "Pending";
+    }
+
+    private static IReadOnlyCollection<Guid> ParseAssignedTechnicianIds(string? assignedTechnicianIdsJson)
+    {
+        if (string.IsNullOrWhiteSpace(assignedTechnicianIdsJson))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<Guid>>(assignedTechnicianIdsJson) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+}

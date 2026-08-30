@@ -54,7 +54,7 @@ export function SitesPage() {
       />
       <TriTabNav />
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <Search className="h-4 w-4 text-slate-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search sites by name or code (top 25 active matches)" className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400" />

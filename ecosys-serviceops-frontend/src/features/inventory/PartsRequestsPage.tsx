@@ -121,7 +121,7 @@ export function PartsRequestsPage() {
       <InventoryTabNav />
 
       <div className="flex flex-wrap items-center gap-2">
-        <select value={status} onChange={(event) => setStatus(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+        <select value={status} onChange={(event) => setStatus(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
           <option value="">All statuses</option>
           <option value="Pending">Pending</option>
           <option value="Approved">Approved</option>
@@ -129,7 +129,7 @@ export function PartsRequestsPage() {
           <option value="Delivered">Delivered</option>
           <option value="Rejected">Rejected</option>
         </select>
-        <select value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+        <select value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
           <option value="">All technicians</option>
           {(technicians ?? []).map((technician) => (
             <option key={technician.id} value={technician.id}>{technician.fullName}</option>
@@ -139,11 +139,11 @@ export function PartsRequestsPage() {
           value={woSearch}
           onChange={(event) => setWoSearch(event.target.value)}
           placeholder="Search work order…"
-          className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+          className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
         />
-        <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+        <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         <span className="text-sm text-slate-400">to</span>
-        <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+        <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
       </div>
 
       <DataTable
@@ -174,7 +174,7 @@ export function PartsRequestsPage() {
       >
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="reject-reason">Reason</label>
-          <textarea id="reject-reason" value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+          <textarea id="reject-reason" value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
       </FormDrawer>
     </div>

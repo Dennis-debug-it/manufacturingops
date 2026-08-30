@@ -99,7 +99,7 @@ public sealed class MaterialIssuesController(
             issue.IssueStatus = "pending_approval";
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        else if (tenantContext.IsAdmin || HasPermission(PermissionNames.CanIssueMaterials))
+        else if (IsAdmin || HasPermission(PermissionNames.CanIssueMaterials))
         {
             await IssueInternalAsync(issue, true, cancellationToken);
         }
@@ -162,21 +162,24 @@ public sealed class MaterialIssuesController(
             throw new BusinessRuleException("Only issued material can be returned.");
         }
 
-        foreach (var line in request.Lines)
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            var issueLine = issue.Lines.SingleOrDefault(x => x.Id == line.MaterialIssueLineId)
-                ?? throw new BusinessRuleException("Material issue line was not found.");
-            if (line.QuantityReturned <= 0 || issueLine.QuantityReturned + line.QuantityReturned > issueLine.QuantityIssued)
+            foreach (var line in request.Lines)
             {
-                throw new BusinessRuleException("Returned quantity must be positive and cannot exceed the issued quantity.");
+                var issueLine = issue.Lines.SingleOrDefault(x => x.Id == line.MaterialIssueLineId)
+                    ?? throw new BusinessRuleException("Material issue line was not found.");
+                if (line.QuantityReturned <= 0 || issueLine.QuantityReturned + line.QuantityReturned > issueLine.QuantityIssued)
+                {
+                    throw new BusinessRuleException("Returned quantity must be positive and cannot exceed the issued quantity.");
+                }
+                issueLine.QuantityReturned += line.QuantityReturned;
+                var material = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == issueLine.MaterialItemId, ct);
+                await stockLedgerService.RecordReturnAsync(material, issue.BranchId, line.QuantityReturned, UserId, $"Returned from material issue {issue.IssueNumber}", issue.IssueNumber, issue.WorkOrderId, null, ct);
             }
-            issueLine.QuantityReturned += line.QuantityReturned;
-            var material = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == issueLine.MaterialItemId, cancellationToken);
-            await stockLedgerService.RecordReturnAsync(material, issue.BranchId, line.QuantityReturned, UserId, $"Returned from material issue {issue.IssueNumber}", issue.IssueNumber, issue.WorkOrderId, null, cancellationToken);
-        }
 
-        issue.IssueStatus = "returned";
-        await dbContext.SaveChangesAsync(cancellationToken);
+            issue.IssueStatus = "returned";
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.returned", nameof(MaterialIssue), issue.Id.ToString(), $"Returned material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
         return Ok(Map(persisted));
@@ -208,48 +211,51 @@ public sealed class MaterialIssuesController(
         }
 
         var allowNegativeStock = IsAdmin || HasPermission(PermissionNames.MaterialsOverrideStock);
-        var materialIds = issue.Lines.Select(x => x.MaterialItemId).Distinct().ToList();
-        var materials = await dbContext.MaterialItems.Where(x => x.TenantId == TenantId && materialIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, cancellationToken);
-        foreach (var line in issue.Lines)
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            if (!materials.TryGetValue(line.MaterialItemId, out var material))
+            var materialIds = issue.Lines.Select(x => x.MaterialItemId).Distinct().ToList();
+            var materials = await dbContext.MaterialItems.Where(x => x.TenantId == TenantId && materialIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
+            foreach (var line in issue.Lines)
             {
-                throw new BusinessRuleException("Material item was not found for this tenant.");
-            }
-
-            var quantityToIssue = line.QuantityIssued > 0 ? line.QuantityIssued : line.QuantityRequested;
-            if (quantityToIssue <= 0)
-            {
-                continue;
-            }
-
-            await stockLedgerService.RecordIssueAsync(material, issue.BranchId, quantityToIssue, UserId, $"Issued via material issue {issue.IssueNumber}", issue.IssueNumber, issue.WorkOrderId, null, allowNegativeStock, cancellationToken);
-            line.QuantityIssued = quantityToIssue;
-            line.UnitCost ??= material.UnitCost;
-
-            if (issue.WorkOrderId.HasValue)
-            {
-                dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
+                if (!materials.TryGetValue(line.MaterialItemId, out var material))
                 {
-                    TenantId = TenantId,
-                    WorkOrderId = issue.WorkOrderId.Value,
-                    MaterialItemId = material.Id,
-                    AssetId = issue.AssetId,
-                    QuantityUsed = quantityToIssue,
-                    UnitCost = line.UnitCost,
-                    Chargeable = true,
-                    Notes = issue.Notes,
-                    UsedByUserId = UserId,
-                    UsedAt = DateTime.UtcNow
-                });
-            }
-        }
+                    throw new BusinessRuleException("Material item was not found for this tenant.");
+                }
 
-        issue.IssueStatus = "issued";
-        issue.IssuedByUserId = UserId;
-        issue.IssuedAt = DateTime.UtcNow;
-        issue.TotalIssuedCost = issue.Lines.Sum(x => x.QuantityIssued * (x.UnitCost ?? 0));
-        await dbContext.SaveChangesAsync(cancellationToken);
+                var quantityToIssue = line.QuantityIssued > 0 ? line.QuantityIssued : line.QuantityRequested;
+                if (quantityToIssue <= 0)
+                {
+                    continue;
+                }
+
+                await stockLedgerService.RecordIssueAsync(material, issue.BranchId, quantityToIssue, UserId, $"Issued via material issue {issue.IssueNumber}", issue.IssueNumber, issue.WorkOrderId, null, allowNegativeStock, ct);
+                line.QuantityIssued = quantityToIssue;
+                line.UnitCost ??= material.UnitCost;
+
+                if (issue.WorkOrderId.HasValue)
+                {
+                    dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
+                    {
+                        TenantId = TenantId,
+                        WorkOrderId = issue.WorkOrderId.Value,
+                        MaterialItemId = material.Id,
+                        AssetId = issue.AssetId,
+                        QuantityUsed = quantityToIssue,
+                        UnitCost = line.UnitCost,
+                        Chargeable = true,
+                        Notes = issue.Notes,
+                        UsedByUserId = UserId,
+                        UsedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            issue.IssueStatus = "issued";
+            issue.IssuedByUserId = UserId;
+            issue.IssuedAt = DateTime.UtcNow;
+            issue.TotalIssuedCost = issue.Lines.Sum(x => x.QuantityIssued * (x.UnitCost ?? 0));
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, autoIssue ? "material_issue.issued_auto" : "material_issue.issued", nameof(MaterialIssue), issue.Id.ToString(), $"Issued material issue '{issue.IssueNumber}'.", cancellationToken);
     }
 

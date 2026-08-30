@@ -2,12 +2,31 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
+import { applyApiFieldErrors } from '../../../shared/api/apiError'
 import { useCreateSite } from '../api'
 import { siteSchema, type SiteFormValues } from '../schemas'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 const errorClass = 'mt-1 text-xs text-rose-600'
+
+/**
+ * The fields a server-side 400 is allowed to blame. `country` is deliberately absent: the form
+ * submits it but renders no input for it, so a message pinned there would be invisible — the helper
+ * toasts it instead. `UpsertSiteRequest` uses PascalCase; the helper normalises before matching.
+ */
+const FORM_FIELDS = [
+  'siteName',
+  'siteType',
+  'streetAddress',
+  'townCity',
+  'county',
+  'contactPerson',
+  'contactPhone',
+  'contactEmail',
+  'operatingHours',
+  'accessNotes',
+] as const satisfies readonly (keyof SiteFormValues)[]
 
 export interface SiteFormDrawerProps {
   open: boolean
@@ -16,7 +35,7 @@ export interface SiteFormDrawerProps {
 }
 
 export function SiteFormDrawer({ open, clientId, onClose }: SiteFormDrawerProps) {
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<SiteFormValues>({
+  const { register, handleSubmit, reset, setError, formState: { errors, isSubmitting } } = useForm<SiteFormValues>({
     resolver: zodResolver(siteSchema),
     defaultValues: { siteName: '', streetAddress: '', townCity: '', county: '', country: '', contactPerson: '', contactPhone: '', contactEmail: '', operatingHours: '', accessNotes: '' },
   })
@@ -44,8 +63,10 @@ export function SiteFormDrawer({ open, clientId, onClose }: SiteFormDrawerProps)
       })
       toast.success('Site created')
       close()
-    } catch {
-      // interceptor surfaces the error toast
+    } catch (error) {
+      // A model-validation 400 names the field it rejected; pin the message to that input instead
+      // of leaving the user with only the interceptor's one-line toast.
+      applyApiFieldErrors<SiteFormValues>(error, { setError, fields: FORM_FIELDS })
     }
   })
 
@@ -57,7 +78,7 @@ export function SiteFormDrawer({ open, clientId, onClose }: SiteFormDrawerProps)
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={close} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="submit" form="site-form" disabled={isSubmitting} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
+          <button type="submit" form="site-form" disabled={isSubmitting} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60">
             {isSubmitting ? 'Creating…' : 'Create Site'}
           </button>
         </div>
@@ -77,29 +98,35 @@ export function SiteFormDrawer({ open, clientId, onClose }: SiteFormDrawerProps)
               <option key={type} value={type}>{type}</option>
             ))}
           </select>
+          {errors.siteType ? <p className={errorClass}>{errors.siteType.message}</p> : null}
         </div>
         <div>
           <label className={labelClass} htmlFor="site-address">Street Address</label>
           <input id="site-address" {...register('streetAddress')} className={fieldClass} />
+          {errors.streetAddress ? <p className={errorClass}>{errors.streetAddress.message}</p> : null}
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelClass} htmlFor="site-town">Town / City</label>
             <input id="site-town" {...register('townCity')} className={fieldClass} />
+            {errors.townCity ? <p className={errorClass}>{errors.townCity.message}</p> : null}
           </div>
           <div>
             <label className={labelClass} htmlFor="site-county">County</label>
             <input id="site-county" {...register('county')} className={fieldClass} />
+            {errors.county ? <p className={errorClass}>{errors.county.message}</p> : null}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelClass} htmlFor="site-contact-person">Contact Person</label>
             <input id="site-contact-person" {...register('contactPerson')} className={fieldClass} />
+            {errors.contactPerson ? <p className={errorClass}>{errors.contactPerson.message}</p> : null}
           </div>
           <div>
             <label className={labelClass} htmlFor="site-contact-phone">Contact Phone</label>
             <input id="site-contact-phone" {...register('contactPhone')} className={fieldClass} />
+            {errors.contactPhone ? <p className={errorClass}>{errors.contactPhone.message}</p> : null}
           </div>
         </div>
         <div>
@@ -110,10 +137,12 @@ export function SiteFormDrawer({ open, clientId, onClose }: SiteFormDrawerProps)
         <div>
           <label className={labelClass} htmlFor="site-operating-hours">Operating Hours</label>
           <input id="site-operating-hours" {...register('operatingHours')} className={fieldClass} />
+          {errors.operatingHours ? <p className={errorClass}>{errors.operatingHours.message}</p> : null}
         </div>
         <div>
           <label className={labelClass} htmlFor="site-access-notes">Access Notes</label>
           <textarea id="site-access-notes" {...register('accessNotes')} rows={3} className={`${fieldClass} h-auto py-2`} />
+          {errors.accessNotes ? <p className={errorClass}>{errors.accessNotes.message}</p> : null}
         </div>
       </form>
     </FormDrawer>

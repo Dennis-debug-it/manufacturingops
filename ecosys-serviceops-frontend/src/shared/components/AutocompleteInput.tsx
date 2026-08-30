@@ -116,7 +116,7 @@ export function AutocompleteInput({
         aria-expanded={showList}
         aria-autocomplete="list"
         className={cn(
-          'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900',
+          'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]',
           className,
         )}
       />

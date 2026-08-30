@@ -10,6 +10,7 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDateTime } from '../../shared/utils/dates'
 import { useResendCredentials, useResetUserPassword, useSetUserStatus, useTeamUser, useUpdateTeamUser } from './api'
 import { PermissionMatrix } from './components/PermissionMatrix'
+import { UserAccessPanel } from './components/UserAccessPanel'
 import type { RoleCapabilities } from './rolePermissionsApi'
 
 export function UserDetailPage() {
@@ -100,7 +101,7 @@ export function UserDetailPage() {
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={resend} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Resend Credentials</button>
               <button type="button" onClick={reset} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Reset Password</button>
-              <button type="button" onClick={toggleStatus} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+              <button type="button" onClick={toggleStatus} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
                 {user.isActive ? 'Deactivate' : 'Activate'}
               </button>
             </div>
@@ -143,13 +144,15 @@ export function UserDetailPage() {
               type="button"
               onClick={savePermissions}
               disabled={!permsDirty || updateUser.isPending}
-              className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+              className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-5 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-50"
             >
               {updateUser.isPending ? 'Saving…' : 'Save permissions'}
             </button>
           </div>
         ) : null}
       </SummarySection>
+
+      {id ? <UserAccessPanel userId={id} isAdminUser={isAdminUser} /> : null}
 
       {user.assignmentGroups.length > 0 ? (
         <SummarySection title="Assignment Groups" description="Groups this user belongs to.">

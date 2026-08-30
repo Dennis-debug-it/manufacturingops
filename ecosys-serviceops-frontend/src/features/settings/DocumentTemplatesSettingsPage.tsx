@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, Download, RotateCcw } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { Collapsible } from '../../shared/components/Collapsible'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { api, apiClient } from '../../shared/api/apiClient'
@@ -128,13 +129,13 @@ const bankFields: Array<{ key: keyof ReportTemplateConfig; label: string }> = [
   { key: 'paybill', label: 'Paybill / Till Number' },
 ]
 
-const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50'
+const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 export function DocumentTemplatesSettingsPage() {
   const canManage = usePermission('settings.manage')
   const queryClient = useQueryClient()
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['settings', 'document-designs'],
     queryFn: () => api.get<DocumentDesignsResponse>('/api/settings/document-designs'),
     staleTime: 30_000,
@@ -245,14 +246,19 @@ export function DocumentTemplatesSettingsPage() {
 
   const previewConfig = useMemo(() => config, [config])
 
-  if (isLoading || !config) {
-    return isLoading ? <Spinner label="Loading document designer" /> : (
-      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">Document design settings could not be loaded.</div>
-    )
+  if (isLoading) {
+    return <Spinner label="Loading document designer" />
   }
 
-  if (isError) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">Document design settings could not be loaded.</div>
+  // `config` is seeded from the query, so a failed load must not fall through to a blank designer.
+  if (isError || !config) {
+    return (
+      <ErrorState
+        title="Document design settings unavailable"
+        description="We couldn’t load the document designer configuration. Nothing has been changed — try again."
+        onRetry={() => void refetch()}
+      />
+    )
   }
 
   return (
@@ -262,7 +268,7 @@ export function DocumentTemplatesSettingsPage() {
         subtitle="Design every generated document independently — branding, colours, fonts, watermark, sections, and boilerplate — with a live preview and real sample PDFs."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => save.mutate()} disabled={save.isPending || !dirty} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
+            <button type="button" onClick={() => save.mutate()} disabled={save.isPending || !dirty} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-50">
               {save.isPending ? 'Saving…' : dirty ? 'Save Changes' : 'Saved'}
             </button>
           ) : undefined
@@ -279,7 +285,7 @@ export function DocumentTemplatesSettingsPage() {
               type="button"
               onClick={() => setSelectedType(doc.id)}
               className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                selectedType === doc.id ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                selectedType === doc.id ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
               }`}
             >
               {doc.label}
@@ -381,7 +387,7 @@ export function DocumentTemplatesSettingsPage() {
 
           <Collapsible title="Introduction & Header Text">
             <label className={labelClass}>Introduction Text</label>
-            <textarea value={config.introText ?? ''} disabled={!canManage} onChange={(e) => set('introText', e.target.value || null)} rows={2} placeholder="Optional paragraph shown above the document body" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <textarea value={config.introText ?? ''} disabled={!canManage} onChange={(e) => set('introText', e.target.value || null)} rows={2} placeholder="Optional paragraph shown above the document body" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </Collapsible>
 
           <Collapsible title="Sections (order & visibility)">
@@ -504,7 +510,7 @@ export function DocumentTemplatesSettingsPage() {
                 <div key={field.key}>
                   <label className={labelClass}>{field.label}</label>
                   {field.area ? (
-                    <textarea value={(config[field.key] as string) ?? ''} disabled={!canManage} onChange={(e) => set(field.key, (e.target.value || null) as never)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+                    <textarea value={(config[field.key] as string) ?? ''} disabled={!canManage} onChange={(e) => set(field.key, (e.target.value || null) as never)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
                   ) : (
                     <input value={(config[field.key] as string) ?? ''} disabled={!canManage} onChange={(e) => set(field.key, (e.target.value || null) as never)} className={inputClass} />
                   )}
@@ -523,7 +529,7 @@ export function DocumentTemplatesSettingsPage() {
               ))}
               <div className="sm:col-span-2">
                 <label className={labelClass}>Payment Instructions</label>
-                <textarea value={config.paymentInstructions ?? ''} disabled={!canManage} onChange={(e) => set('paymentInstructions', e.target.value || null)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+                <textarea value={config.paymentInstructions ?? ''} disabled={!canManage} onChange={(e) => set('paymentInstructions', e.target.value || null)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
               </div>
             </div>
           </Collapsible>
@@ -539,11 +545,11 @@ export function DocumentTemplatesSettingsPage() {
       </div>
 
       {showResetModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-primary)]/50 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-slate-900">Reset {docTypeList.find((d) => d.id === selectedType)?.label} design?</h3>
             <p className="mt-2 text-sm text-slate-600">This removes this document's independent design and reverts it to the shared base design. Type <span className="font-mono font-semibold">RESET</span> to confirm.</p>
-            <input value={resetConfirm} onChange={(e) => setResetConfirm(e.target.value)} placeholder="RESET" className="mt-3 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" autoFocus />
+            <input value={resetConfirm} onChange={(e) => setResetConfirm(e.target.value)} placeholder="RESET" className="mt-3 h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" autoFocus />
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => { setShowResetModal(false); setResetConfirm('') }} className="inline-flex h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
               <button type="button" disabled={resetConfirm !== 'RESET' || reset.isPending} onClick={() => reset.mutate()} className="inline-flex h-10 items-center rounded-lg bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50">

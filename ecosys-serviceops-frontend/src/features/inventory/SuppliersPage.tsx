@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
@@ -14,7 +15,7 @@ import { InventoryTabNav } from './components/InventoryTabNav'
 
 export function SuppliersPage() {
   const canEdit = usePermission('inventory.edit')
-  const { data, isLoading } = useSuppliers()
+  const { data, isLoading, isError, refetch } = useSuppliers()
   const createSupplier = useCreateSupplier()
   const [showNewSupplier, setShowNewSupplier] = useState(false)
   const [supplierName, setSupplierName] = useState('')
@@ -48,7 +49,7 @@ export function SuppliersPage() {
         subtitle="Supplier list and performance metrics."
         primaryAction={
           canEdit ? (
-            <button type="button" onClick={() => setShowNewSupplier(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowNewSupplier(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Supplier
             </button>
           ) : undefined
@@ -59,33 +60,35 @@ export function SuppliersPage() {
         columns={columns}
         data={data ?? []}
         loading={isLoading}
-        emptyTitle="No suppliers yet"
-        emptyDescription="Add a supplier to source parts and raise purchase orders."
+        emptyTitle={isError ? 'Suppliers unavailable' : 'No suppliers yet'}
+        emptyDescription={isError ? 'The supplier list could not be loaded — this is not a confirmation that none exist.' : 'Add a supplier to source parts and raise purchase orders.'}
+        emptyActionLabel={isError ? 'Retry' : undefined}
+        onEmptyAction={isError ? () => void refetch() : undefined}
       />
 
       <FormDrawer open={showNewSupplier} title="New Supplier" onClose={() => setShowNewSupplier(false)}>
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Supplier Name</label>
-            <input value={supplierName} onChange={(event) => setSupplierName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input value={supplierName} onChange={(event) => setSupplierName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Contact Person</label>
-            <input value={contactPerson} onChange={(event) => setContactPerson(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input value={contactPerson} onChange={(event) => setContactPerson(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Phone</label>
-            <input value={phone} onChange={(event) => setPhone(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input value={phone} onChange={(event) => setPhone(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
-            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <button
             type="button"
             disabled={!supplierName.trim() || createSupplier.isPending}
             onClick={() => void submit()}
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60"
           >
             {createSupplier.isPending ? 'Creating…' : 'Create Supplier'}
           </button>
@@ -97,7 +100,7 @@ export function SuppliersPage() {
 
 export function SupplierDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { data, isLoading } = useSupplier(id)
+  const { data, isLoading, isError, refetch } = useSupplier(id)
 
   return (
     <div className="space-y-6">
@@ -107,7 +110,13 @@ export function SupplierDetailPage() {
         breadcrumbs={[{ label: 'Suppliers', to: '/inventory/suppliers' }, { label: data?.supplierName ?? 'Detail' }]}
         secondaryActions={data ? <StatusBadge status={data.status} /> : undefined}
       />
-      {isLoading ? null : !data ? (
+      {isLoading ? null : isError ? (
+        <ErrorState
+          title="Supplier unavailable"
+          description="We couldn’t load this supplier, so we can’t say whether it still exists."
+          onRetry={() => void refetch()}
+        />
+      ) : !data ? (
         <EmptyState title="Supplier not found" description="This supplier may have been removed." />
       ) : (
         <>
@@ -125,7 +134,7 @@ export function SupplierDetailPage() {
             ))}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Supplied Parts</h2>
             {data.suppliedParts.length === 0 ? (
               <p className="mt-3 text-sm text-slate-500">No parts recorded for this supplier yet.</p>
@@ -141,7 +150,7 @@ export function SupplierDetailPage() {
             )}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Recent Purchase Orders</h2>
             {data.recentPurchaseOrders.length === 0 ? (
               <p className="mt-3 text-sm text-slate-500">No purchase orders yet.</p>

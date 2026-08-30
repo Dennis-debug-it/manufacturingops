@@ -27,7 +27,6 @@ public sealed class ContractManagementFlowTests
             new FakeTenantContext(fixture.TenantId, fixture.UserId),
             new AllowAllContractAccessService(),
             lifecycleService,
-            new StubContractPricingService(),
             new AuditLogService(dbContext, new HttpContextAccessor()));
 
         var request = new UpsertContractRequest(
@@ -531,12 +530,6 @@ public sealed class ContractManagementFlowTests
         public void EnsureCanManageRenewals() { }
         public void EnsureCanViewContracts() { }
         public void EnsureCanViewPricing() { }
-    }
-
-    private sealed class StubContractPricingService : IContractPricingService
-    {
-        public Task<ContractPricingEvaluation> EvaluateAsync(Guid tenantId, Guid clientId, Guid? siteId, Guid? assetId, string? workOrderType, string? priority, DateTime? asOfUtc = null, decimal? estimatedLabourHours = null, decimal? estimatedMaterialCost = null, bool allowGracePeriod = true, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new ContractPricingEvaluation(null, null, null, null, BillingModel.ChargeableCallout, CoverageStatus.NotCovered, "StandardChargeableFallback", 0m, 0m, 0m, 0m, 0m, 0m, 1m, 0m, 0m, 0m, 0m, 0m, true, 0m, []));
     }
 
     private sealed class FakeContractLifecycleService(AppDbContext dbContext) : IContractLifecycleService

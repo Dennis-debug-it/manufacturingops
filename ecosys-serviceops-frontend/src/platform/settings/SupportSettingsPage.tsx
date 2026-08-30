@@ -46,25 +46,25 @@ export function SupportSettingsPage() {
       <PageHeader
         title="Support"
         subtitle="Support contact details, escalation routing, and admin tools."
-        primaryAction={canManage ? <button type="button" onClick={() => save.mutate(values)} disabled={save.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">{save.isPending ? 'Saving…' : 'Save Changes'}</button> : undefined}
+        primaryAction={canManage ? <button type="button" onClick={() => save.mutate(values)} disabled={save.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">{save.isPending ? 'Saving…' : 'Save Changes'}</button> : undefined}
       />
-      <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="space-y-5 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <SectionTitle title="Contact & Escalation" description="Where tenant support requests and escalations are routed." />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Support Email">
-            <input value={values.supportEmail} disabled={!canManage} onChange={(event) => set('supportEmail', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={values.supportEmail} disabled={!canManage} onChange={(event) => set('supportEmail', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </Field>
           <Field label="Support Phone">
-            <input value={values.supportPhone} disabled={!canManage} onChange={(event) => set('supportPhone', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={values.supportPhone} disabled={!canManage} onChange={(event) => set('supportPhone', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </Field>
           <Field label="Escalation Email">
-            <input value={values.escalationEmail} disabled={!canManage} onChange={(event) => set('escalationEmail', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={values.escalationEmail} disabled={!canManage} onChange={(event) => set('escalationEmail', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </Field>
           <Field label="SLA First Response (hours)">
-            <input type="number" min={0} value={values.slaResponseHours} disabled={!canManage} onChange={(event) => set('slaResponseHours', Number(event.target.value))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input type="number" min={0} value={values.slaResponseHours} disabled={!canManage} onChange={(event) => set('slaResponseHours', Number(event.target.value))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </Field>
           <Field label="Business Hours">
-            <input value={values.businessHours} disabled={!canManage} onChange={(event) => set('businessHours', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input value={values.businessHours} disabled={!canManage} onChange={(event) => set('businessHours', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </Field>
         </div>
       </div>
@@ -133,17 +133,17 @@ function SupportTools() {
   const buttonClass = 'inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60'
 
   return (
-    <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-5 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
       <SectionTitle title="Support Tools" description="Run maintenance actions against a specific tenant workspace." />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Tenant">
-          <select value={tenantId} onChange={(event) => setTenantId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+          <select value={tenantId} onChange={(event) => setTenantId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
             <option value="">Select a tenant…</option>
             {(tenants ?? []).map((t) => <option key={t.tenantId} value={t.tenantId}>{t.name}</option>)}
           </select>
         </Field>
         <Field label="Numbering Document Type">
-          <select value={documentType} onChange={(event) => setDocumentType(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+          <select value={documentType} onChange={(event) => setDocumentType(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
             {['WorkOrder', 'Invoice', 'Quotation', 'Receipt', 'PurchaseOrder', 'Expense'].map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
         </Field>

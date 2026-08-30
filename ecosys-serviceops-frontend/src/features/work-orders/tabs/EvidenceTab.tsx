@@ -29,7 +29,7 @@ function PhotoCard({ photo, workOrderId, canEdit, onPreview }: { photo: WorkOrde
   const downloadUrl = photo.publicUrl ?? `/api/attachments/${photo.attachmentId}/download`
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
       <button type="button" onClick={onPreview} className="block w-full">
         <AuthenticatedImage src={downloadUrl} alt={photo.caption} className="h-40 w-full cursor-zoom-in object-cover" />
       </button>
@@ -39,7 +39,7 @@ function PhotoCard({ photo, workOrderId, canEdit, onPreview }: { photo: WorkOrde
           disabled={!canEdit}
           onChange={(event) => setCaption(event.target.value)}
           onBlur={saveEdits}
-          className="h-9 w-full rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-slate-900 disabled:bg-slate-50"
+          className="h-9 w-full rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
         />
         <select
           value={category}
@@ -48,7 +48,7 @@ function PhotoCard({ photo, workOrderId, canEdit, onPreview }: { photo: WorkOrde
             setCategory(event.target.value)
           }}
           onBlur={saveEdits}
-          className="h-9 w-full rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-slate-900 disabled:bg-slate-50"
+          className="h-9 w-full rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
         >
           {photoCategories.map((option) => (
             <option key={option} value={option}>{option}</option>
@@ -104,7 +104,7 @@ export function EvidenceTab({ workOrderId }: { workOrderId: string }) {
             type="button"
             disabled={uploadPhoto.isPending}
             onClick={() => fileInputRef.current?.click()}
-            className="inline-flex h-11 shrink-0 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-11 shrink-0 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Upload className="h-4 w-4" />
             {uploadPhoto.isPending ? 'Uploading…' : 'Upload Photo'}
@@ -123,7 +123,7 @@ export function EvidenceTab({ workOrderId }: { workOrderId: string }) {
       )}
 
       {preview ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 p-4" onClick={() => setPreview(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--app-primary)]/80 p-4" onClick={() => setPreview(null)}>
           <button type="button" onClick={() => setPreview(null)} className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
             <X className="h-5 w-5" />
           </button>

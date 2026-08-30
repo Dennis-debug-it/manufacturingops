@@ -11,7 +11,7 @@ export interface AssignTechnicianDialogProps {
   onSubmit: (technicianId: string, notes: string) => void
 }
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 export function AssignTechnicianDialog({ open, title = 'Assign technician', description, submitting, onClose, onSubmit }: AssignTechnicianDialogProps) {
@@ -32,8 +32,8 @@ export function AssignTechnicianDialog({ open, title = 'Assign technician', desc
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
-      <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-slate-900/40" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+      <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[var(--app-primary)]/40" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
@@ -57,7 +57,7 @@ export function AssignTechnicianDialog({ open, title = 'Assign technician', desc
           <div>
             <label className={labelClass}>Notes (optional)</label>
             <textarea
-              className="min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+              className="min-h-[80px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--app-primary)]"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
               placeholder="Assignment notes"
@@ -73,7 +73,7 @@ export function AssignTechnicianDialog({ open, title = 'Assign technician', desc
             type="button"
             disabled={!technicianId || submitting}
             onClick={() => onSubmit(technicianId, notes)}
-            className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:bg-slate-300"
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:bg-slate-300"
           >
             Assign
           </button>

@@ -90,14 +90,14 @@ export function LeadDetailPage() {
             {lead.status !== 'Qualified' ? <button type="button" onClick={() => setPendingStatus('Qualified')} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Mark Qualified</button> : null}
             {lead.status !== 'Not a Fit' ? <button type="button" onClick={() => setPendingStatus('Not a Fit')} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 hover:bg-rose-100">Mark Not a Fit</button> : null}
             {lead.status !== 'Converted to Workspace' && !lead.convertedTenantId ? (
-              <button type="button" onClick={() => setConvertStep('confirm')} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">Convert to Tenant</button>
+              <button type="button" onClick={() => setConvertStep('confirm')} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">Convert to Tenant</button>
             ) : null}
           </div>
         }
       />
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900">Contact Details</h3>
           <dl className="space-y-2 text-sm">
             {[
@@ -120,15 +120,15 @@ export function LeadDetailPage() {
           ) : null}
         </section>
 
-        <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900">Notes</h3>
           <textarea
             defaultValue={lead.notes ?? ''}
             onChange={(event) => setNotes(event.target.value)}
             rows={8}
-            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-900"
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-[var(--app-primary)]"
           />
-          <button type="button" onClick={() => void saveNotes()} disabled={updateNotes.isPending} className="inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={() => void saveNotes()} disabled={updateNotes.isPending} className="inline-flex h-10 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {updateNotes.isPending ? 'Saving…' : 'Save Notes'}
           </button>
         </section>

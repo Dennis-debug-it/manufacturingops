@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircle2, Eye, MoreHorizontal, PlayCircle, UserPlus } from 'lucide-react'
 import { cn } from '../../../shared/utils/cn'
+import { useAuth } from '../../../shared/hooks/useAuth'
 import { usePermission } from '../../../shared/hooks/usePermission'
+import { COMPLETE_BLOCKED_REASON, START_BLOCKED_REASON } from '../dispatchGuards'
 import type { WorkOrderRow } from '../listModel'
 
 export interface QuickActionsMenuProps {
@@ -17,6 +19,7 @@ export function QuickActionsMenu({ row, onAssign, onStart, onComplete, align = '
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
 
+  const { user } = useAuth()
   const canAssign = usePermission('work-orders.assign')
   const canStart = usePermission('work-orders.start')
   const canComplete = usePermission('work-orders.complete')
@@ -34,6 +37,10 @@ export function QuickActionsMenu({ row, onAssign, onStart, onComplete, align = '
 
   const canStartNow = canStart && row.status !== 'In Progress' && row.status !== 'Completed' && row.status !== 'Closed' && !row.isUnassigned
   const canCompleteNow = canComplete && row.status === 'In Progress'
+  // The server guards on top of the state machine: Start needs an accepted technician assignment,
+  // Complete needs a recorded arrival unless a tenant admin overrides it in the completion dialog.
+  const startBlockedReason = row.hasAcceptedTechnician ? null : START_BLOCKED_REASON
+  const completeBlockedReason = row.hasRecordedArrival || user?.role === 'admin' ? null : COMPLETE_BLOCKED_REASON
 
   return (
     <div className="relative inline-block" ref={ref}>
@@ -75,33 +82,61 @@ export function QuickActionsMenu({ row, onAssign, onStart, onComplete, align = '
             </button>
           ) : null}
           {canStartNow ? (
-            <button
-              type="button"
-              onClick={() => {
+            <GuardedAction
+              icon={PlayCircle}
+              label="Start"
+              blockedReason={startBlockedReason}
+              onSelect={() => {
                 setOpen(false)
                 onStart(row)
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
-            >
-              <PlayCircle className="h-3.5 w-3.5 text-slate-400" />
-              Start
-            </button>
+            />
           ) : null}
           {canCompleteNow ? (
-            <button
-              type="button"
-              onClick={() => {
+            <GuardedAction
+              icon={CheckCircle2}
+              label="Complete"
+              blockedReason={completeBlockedReason}
+              onSelect={() => {
                 setOpen(false)
                 onComplete(row)
               }}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 hover:bg-slate-50"
-            >
-              <CheckCircle2 className="h-3.5 w-3.5 text-slate-400" />
-              Complete
-            </button>
+            />
           ) : null}
         </div>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * A menu action that the server would reject stays visible but disabled with the reason underneath,
+ * so the operator learns what is missing instead of watching the request come back 400.
+ */
+function GuardedAction({
+  icon: Icon,
+  label,
+  blockedReason,
+  onSelect,
+}: {
+  icon: typeof PlayCircle
+  label: string
+  blockedReason: string | null
+  onSelect: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={blockedReason !== null}
+      title={blockedReason ?? undefined}
+      onClick={onSelect}
+      className="flex w-full items-start gap-2 px-3 py-2 text-left text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-slate-400"
+    >
+      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+      <span className="min-w-0">
+        {label}
+        {blockedReason ? <span className="mt-0.5 block text-[11px] leading-4 text-slate-400">{blockedReason}</span> : null}
+      </span>
+    </button>
   )
 }

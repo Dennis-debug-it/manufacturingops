@@ -26,6 +26,11 @@ public sealed class TenantInvoiceController(
     IEmailSubjectRuleService emailSubjectRuleService,
     ILogger<TenantInvoiceController> logger) : TenantAwareControllerBase(tenantContext)
 {
+    // No platform-wide currency to inherit here: the tenant's own configured currency (derived from
+    // its country, same as the frontend's getActiveCurrency()) is what the create/edit forms send
+    // explicitly — this is only the last-resort default for a request that omits it outright.
+    private const string FallbackCurrency = "KES";
+
     // ── List ─────────────────────────────────────────────────────────────────
 
     [HttpGet]
@@ -127,7 +132,9 @@ public sealed class TenantInvoiceController(
             DueDate = dueDate,
             Notes = request.Notes?.Trim(),
             TermsAndConditions = request.TermsAndConditions?.Trim(),
-            Currency = string.IsNullOrWhiteSpace(request.Currency) ? "KES" : request.Currency.Trim().ToUpper(),
+            Currency = string.IsNullOrWhiteSpace(request.Currency)
+                ? FallbackCurrency
+                : request.Currency.Trim().ToUpper(),
         };
 
         // Deposit fields
@@ -164,8 +171,10 @@ public sealed class TenantInvoiceController(
 
         dbContext.TenantInvoices.Add(invoice);
 
-        // Update client's running balance
-        client.CurrentBalance += invoice.TotalAmount;
+        // Update the client's running balance from the single source of truth (sum of open invoice
+        // balances, including this not-yet-saved one) instead of incrementing it, so the value is
+        // self-correcting rather than drifting further whenever it is already wrong.
+        await InvoiceBalanceCalculator.RecalcClientBalanceAsync(dbContext, client, cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "finance.invoice.created", nameof(TenantInvoice), invoice.Id.ToString(), $"Created invoice {invoice.InvoiceNumber}", cancellationToken);
@@ -321,7 +330,9 @@ public sealed class TenantInvoiceController(
 
         invoice.Notes = request.Notes?.Trim();
         invoice.TermsAndConditions = request.TermsAndConditions?.Trim();
-        invoice.Currency = string.IsNullOrWhiteSpace(request.Currency) ? "KES" : request.Currency.Trim().ToUpper();
+        invoice.Currency = string.IsNullOrWhiteSpace(request.Currency)
+            ? FallbackCurrency
+            : request.Currency.Trim().ToUpper();
 
         dbContext.TenantInvoiceLines.RemoveRange(invoice.Lines);
         invoice.Lines.Clear();
@@ -347,6 +358,13 @@ public sealed class TenantInvoiceController(
         }
 
         RecalcTotals(invoice);
+
+        // An edit can change the total — and even move the invoice to another client — so refresh the
+        // running balance of both the new and the previous client before saving (EC-012 family).
+        var previousClientId = dbContext.Entry(invoice).OriginalValues.GetValue<Guid>(nameof(TenantInvoice.ClientId));
+        await InvoiceBalanceCalculator.RecalcClientBalancesAsync(
+            dbContext, TenantId, [invoice], cancellationToken, previousClientId);
+
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapDetail(invoice));
     }
@@ -412,6 +430,12 @@ public sealed class TenantInvoiceController(
         invoice.Status = "Void";
         if (!string.IsNullOrWhiteSpace(request.Reason))
             invoice.Notes = $"VOIDED: {request.Reason.Trim()}\n{invoice.Notes}".Trim();
+
+        // A voided invoice no longer counts as outstanding debt, so the client's running balance has
+        // to drop by its balance — it used to keep carrying it forever (EC-012 family).
+        await InvoiceBalanceCalculator.RecalcClientBalancesAsync(
+            dbContext, TenantId, [invoice], cancellationToken);
+
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "finance.invoice.voided", nameof(TenantInvoice), invoice.Id.ToString(), $"Voided invoice {invoice.InvoiceNumber}", cancellationToken);
         return Ok(MapDetail(invoice));
@@ -567,7 +591,6 @@ public sealed class TenantInvoiceController(
         };
 
         dbContext.TenantPayments.Add(payment);
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         // Apply against this invoice up to its outstanding balance; any excess is retained as
         // customer credit (an unallocated payment) that can be applied to other invoices later.
@@ -579,8 +602,11 @@ public sealed class TenantInvoiceController(
                 new[] { (invoice, applyAmount) }, cancellationToken);
         }
 
-        if (invoice.Client is not null)
-            await InvoiceBalanceCalculator.RecalcClientBalanceAsync(dbContext, invoice.Client, cancellationToken);
+        await InvoiceBalanceCalculator.RecalcClientBalancesAsync(
+            dbContext, TenantId, [invoice], cancellationToken);
+
+        // Payment, allocations, invoice state and the client's running balance are persisted by this
+        // single save, so they can never diverge (EC-012).
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(TenantId, UserId, "finance.payment.recorded", nameof(TenantPayment), payment.Id.ToString(), $"Recorded payment {payment.PaymentNumber} for invoice {invoice.InvoiceNumber}", cancellationToken);
@@ -623,7 +649,6 @@ public sealed class TenantInvoiceController(
             Status = "Confirmed",
         };
         dbContext.TenantPayments.Add(payment);
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         var items = await ResolveAllocationItemsAsync(client.Id, requested, cancellationToken);
         if (items.Count > 0)
@@ -631,6 +656,8 @@ public sealed class TenantInvoiceController(
                 dbContext, TenantId, AllocationSourceTypes.Payment, payment.Id, items, cancellationToken);
 
         await InvoiceBalanceCalculator.RecalcClientBalanceAsync(dbContext, client, cancellationToken);
+
+        // Single save: payment, allocations, invoice balances and the client balance commit together.
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(TenantId, UserId, "finance.payment.received", nameof(TenantPayment), payment.Id.ToString(),
@@ -667,9 +694,9 @@ public sealed class TenantInvoiceController(
         await InvoiceBalanceCalculator.ApplyAllocationsAsync(
             dbContext, TenantId, AllocationSourceTypes.Payment, payment.Id, items, cancellationToken);
 
-        var client = await dbContext.Clients.SingleOrDefaultAsync(c => c.TenantId == TenantId && c.Id == payment.ClientId, cancellationToken);
-        if (client is not null)
-            await InvoiceBalanceCalculator.RecalcClientBalanceAsync(dbContext, client, cancellationToken);
+        await InvoiceBalanceCalculator.RecalcClientBalancesAsync(
+            dbContext, TenantId, items.Select(i => i.Invoice), cancellationToken, payment.ClientId);
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(TenantId, UserId, "finance.payment.allocated", nameof(TenantPayment), payment.Id.ToString(),
@@ -687,7 +714,7 @@ public sealed class TenantInvoiceController(
             ?? throw new NotFoundException("Client not found.");
 
         var available = await InvoiceBalanceCalculator.GetAvailableCreditAsync(dbContext, TenantId, clientId, cancellationToken);
-        return Ok(new ClientCreditBalanceResponse(client.Id, client.ClientName, client.CurrentBalance, available, "KES"));
+        return Ok(new ClientCreditBalanceResponse(client.Id, client.ClientName, client.CurrentBalance, available, FallbackCurrency));
     }
 
     /// <summary>
@@ -736,19 +763,15 @@ public sealed class TenantInvoiceController(
             throw new BusinessRuleException("Payment is already reversed.");
 
         payment.Status = "Reversed";
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         // Reverse every allocation this payment made and recompute the invoices it touched.
         var affected = await InvoiceBalanceCalculator.ReverseAllocationsForSourceAsync(
             dbContext, TenantId, AllocationSourceTypes.Payment, payment.Id, cancellationToken);
 
-        var clientIds = affected.Select(i => i.ClientId).Append(payment.ClientId).Distinct().ToList();
-        var clients = await dbContext.Clients
-            .Where(c => c.TenantId == TenantId && clientIds.Contains(c.Id))
-            .ToListAsync(cancellationToken);
-        foreach (var client in clients)
-            await InvoiceBalanceCalculator.RecalcClientBalanceAsync(dbContext, client, cancellationToken);
+        await InvoiceBalanceCalculator.RecalcClientBalancesAsync(
+            dbContext, TenantId, affected, cancellationToken, payment.ClientId);
 
+        // Single save: reversal, allocations, invoice balances and client balances commit together.
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "finance.payment.reversed", nameof(TenantPayment), payment.Id.ToString(), $"Reversed payment {payment.PaymentNumber}", cancellationToken);
         return NoContent();
@@ -779,7 +802,7 @@ public sealed class TenantInvoiceController(
             ClientName:     client?.ClientName ?? "Unknown",
             PaymentDate:    payment.PaymentDate,
             Amount:         payment.Amount,
-            Currency:       payment.Invoice?.Currency ?? "KES",
+            Currency:       payment.Invoice?.Currency ?? FallbackCurrency,
             Method:         payment.Method,
             Reference:      payment.Reference,
             CompanyName:    tenant?.CompanyName ?? "Ecosys",
@@ -827,7 +850,7 @@ public sealed class TenantInvoiceController(
             Status = "Draft",
             InvoiceDate = DateTime.UtcNow,
             DueDate = DateTime.UtcNow.AddDays(30),
-            Currency = "KES",
+            Currency = FallbackCurrency,
             Notes = $"Invoice for work order {workOrder.WorkOrderNumber}",
         };
 

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
   Radio, MessageCircle, CreditCard, ShieldCheck, Users, Bell, Plug, LineChart,
-  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle,
+  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Send, Rocket,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 
@@ -19,6 +19,7 @@ const groups: SettingsGroup[] = [
       { to: '/settings/branding', label: 'Branding', description: 'Logo and brand colours.', icon: Palette },
       { to: '/settings/templates', label: 'Document Templates', description: 'Layout, sections, and boilerplate text.', icon: FileText },
       { to: '/settings/email-templates', label: 'Email Templates', description: 'Transactional email content.', icon: Mail },
+      { to: '/settings/email-delivery', label: 'Email Delivery', description: 'Send through platform mail or your own SMTP server.', icon: Send },
     ],
   },
   {
@@ -26,6 +27,7 @@ const groups: SettingsGroup[] = [
     items: [
       { to: '/settings/numbering', label: 'Numbering Rules', description: 'Document prefixes and sequences.', icon: Hash },
       { to: '/settings/pm-templates', label: 'PM Templates', description: 'Preventive maintenance checklists.', icon: ClipboardList },
+      { to: '/settings/wo-templates', label: 'Work Order Templates', description: 'Reusable job types with default tasks and materials.', icon: ClipboardList },
       { to: '/settings/inventory', label: 'Inventory Settings', description: 'Stock alerts and deduction rules.', icon: Boxes },
       { to: '/settings/time-attendance', label: 'Time & Attendance Settings', description: 'Work hours and leave policy.', icon: Clock },
       { to: '/settings/sla-policies', label: 'SLA Policies', description: 'Response and resolution targets per priority.', icon: Timer },
@@ -65,6 +67,9 @@ const groups: SettingsGroup[] = [
     items: [
       { to: '/settings/account', label: 'Account', description: 'Subscription and plan details.', icon: UserCircle },
       { to: '/settings/audit-logs', label: 'Audit Logs', description: 'Tenant administrative history.', icon: ScrollText },
+      // The workspace setup checklist and starter packs. Fully wired, but no link anywhere in the
+      // app pointed at `/onboarding`, so nobody could reach it after first sign-in.
+      { to: '/onboarding', label: 'Getting Started', description: 'Workspace setup checklist and starter packs.', icon: Rocket },
     ],
   },
 ]
@@ -81,7 +86,7 @@ export function SettingsOverviewPage() {
               <Link
                 key={item.to}
                 to={item.to}
-                className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow"
+                className="flex items-start gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm transition hover:border-slate-300 hover:shadow"
               >
                 <item.icon className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
                 <div>

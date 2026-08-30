@@ -26,7 +26,7 @@ export function PlatformSettingsOverviewPage() {
       <PageHeader title="Platform Settings" subtitle="Configuration that applies across every tenant workspace." />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => (
-          <Link key={item.to} to={item.to} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
+          <Link key={item.to} to={item.to} className="flex items-start gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm transition hover:border-slate-300 hover:shadow">
             <item.icon className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
             <div>
               <p className="text-sm font-medium text-slate-900">{item.label}</p>

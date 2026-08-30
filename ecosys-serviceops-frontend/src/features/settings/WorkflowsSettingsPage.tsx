@@ -74,7 +74,7 @@ function WorkflowEditor({ workflow, onClose }: { workflow: WorkflowDefinition | 
         canManage ? (
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={save} disabled={isPending || !name.trim()} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={save} disabled={isPending || !name.trim()} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {isPending ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -84,7 +84,7 @@ function WorkflowEditor({ workflow, onClose }: { workflow: WorkflowDefinition | 
       <div className="space-y-5">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="workflow-name">Name</label>
-          <input id="workflow-name" value={name} disabled={!canManage} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+          <input id="workflow-name" value={name} disabled={!canManage} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={isDefault} disabled={!canManage} onChange={(event) => setIsDefault(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
@@ -149,7 +149,7 @@ function StatusEditor({
         canManage ? (
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={save} disabled={isPending || !name.trim()} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={save} disabled={isPending || !name.trim()} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {isPending ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -159,7 +159,7 @@ function StatusEditor({
       <div className="space-y-5">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="status-name">Name</label>
-          <input id="status-name" value={name} disabled={!canManage} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+          <input id="status-name" value={name} disabled={!canManage} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Colour</label>
@@ -170,7 +170,7 @@ function StatusEditor({
                 type="button"
                 disabled={!canManage}
                 onClick={() => setColor(swatch)}
-                className={`h-8 w-8 rounded-full ring-2 ring-offset-2 transition ${color === swatch ? 'ring-slate-900' : 'ring-transparent'}`}
+                className={`h-8 w-8 rounded-full ring-2 ring-offset-2 transition ${color === swatch ? 'ring-[var(--app-primary)]' : 'ring-transparent'}`}
                 style={{ backgroundColor: swatch }}
                 aria-label={`Use colour ${swatch}`}
               />
@@ -197,7 +197,7 @@ function FlowPreview({ statuses }: { statuses: WorkflowStatus[] }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="flex flex-wrap items-center gap-2 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       {ordered.map((status, index) => (
         <div key={status.id} className="flex items-center gap-2">
           <span
@@ -260,7 +260,7 @@ function StatusCard({
   const otherStatuses = allStatuses.filter((s) => s.id !== status.id)
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="h-4 w-4 shrink-0 rounded-full" style={{ backgroundColor: status.color }} />
@@ -318,7 +318,7 @@ function StatusCard({
                   type="button"
                   disabled={!canManage}
                   onClick={() => toggleTransition(target.id)}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset transition ${active ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'}`}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset transition ${active ? 'bg-[var(--app-primary)] text-white ring-[var(--app-primary)]' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'}`}
                 >
                   {target.name}
                 </button>
@@ -388,7 +388,7 @@ export function WorkflowsSettingsPage() {
             <button
               type="button"
               onClick={() => setEditingWorkflow({ workflow: null })}
-              className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+              className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
             >
               <Plus className="h-4 w-4" />
               New Workflow
@@ -408,7 +408,7 @@ export function WorkflowsSettingsPage() {
                 type="button"
                 onClick={() => setSelectedId(workflow.id)}
                 className={`w-full rounded-xl border px-3 py-2.5 text-left text-sm transition ${
-                  selected?.id === workflow.id ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                  selected?.id === workflow.id ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                 }`}
               >
                 <span className="font-medium">{workflow.name}</span>

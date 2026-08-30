@@ -98,7 +98,7 @@ export function QuoteDetailPage() {
               ) : null}
               {quote.status === 'Sent' ? (
                 <>
-                  <button type="button" onClick={() => run('Quote accepted', () => accept.mutateAsync(undefined))} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">Accept</button>
+                  <button type="button" onClick={() => run('Quote accepted', () => accept.mutateAsync(undefined))} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">Accept</button>
                   <button type="button" onClick={() => run('Quote rejected', () => reject.mutateAsync(undefined))} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-white px-4 text-sm font-medium text-rose-600 transition hover:bg-rose-50">Decline</button>
                 </>
               ) : null}
@@ -118,7 +118,7 @@ export function QuoteDetailPage() {
                       // interceptor surfaces the error toast
                     }
                   }}
-                  className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+                  className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
                 >
                   Build Proforma
                 </button>

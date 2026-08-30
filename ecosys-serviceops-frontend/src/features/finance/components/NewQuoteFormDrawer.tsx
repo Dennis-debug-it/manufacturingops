@@ -4,11 +4,12 @@ import { useNavigate } from 'react-router-dom'
 import { Trash2 } from 'lucide-react'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { formatCurrency } from '../../../shared/utils/format'
+import { getActiveCurrency } from '../../../shared/utils/currency'
 import { useClients } from '../../clients/api'
-import { useCreateQuotation, useFinanceRateCards } from '../api'
+import { useCreateQuotation, useDefaultTaxRate, useFinanceRateCards } from '../api'
 import { RateCardAutocomplete } from './RateCardAutocomplete'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 interface Line {
@@ -16,30 +17,37 @@ interface Line {
   quantity: string
   unitRate: string
   unit: string
-  taxRate: string
+  /** `null` means "the user hasn't set one" — the tenant's configured rate is shown instead. */
+  taxRate: string | null
   itemType: string
   rateCardId: string
 }
 
-const emptyLine = (): Line => ({ description: '', quantity: '1', unitRate: '0', unit: 'unit', taxRate: '16', itemType: 'Service', rateCardId: '' })
+const emptyLine = (): Line => ({ description: '', quantity: '1', unitRate: '0', unit: 'unit', taxRate: null, itemType: 'Service', rateCardId: '' })
 
 export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate()
   const { data: clients } = useClients()
   const { data: rateCards } = useFinanceRateCards()
+  const { taxRate: tenantTaxRate } = useDefaultTaxRate()
   const createQuotation = useCreateQuotation()
 
   const [clientId, setClientId] = useState('')
   const [subject, setSubject] = useState('')
   const [validUntil, setValidUntil] = useState('')
+  const [currency, setCurrency] = useState(getActiveCurrency)
   const [lines, setLines] = useState<Line[]>([emptyLine()])
 
   const activeRateCards = (rateCards ?? []).filter((card) => card.isActive)
+
+  /** What the Tax % input shows: the user's own entry, else the tenant's configured rate. */
+  const displayedTaxRate = (line: Line) => line.taxRate ?? (tenantTaxRate != null ? String(tenantTaxRate) : '')
 
   const close = () => {
     setClientId('')
     setSubject('')
     setValidUntil('')
+    setCurrency(getActiveCurrency())
     setLines([emptyLine()])
     onClose()
   }
@@ -60,7 +68,7 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
       description: card.description?.trim() || card.name,
       unitRate: String(card.unitRate),
       unit: card.unit || 'unit',
-      taxRate: card.taxRate != null ? String(card.taxRate) : '16',
+      ...(card.taxRate != null ? { taxRate: String(card.taxRate) } : {}),
       itemType: card.category || 'Service',
     })
   }
@@ -72,7 +80,7 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
   const total = lines.reduce((sum, line) => {
     const quantity = Number(line.quantity) || 0
     const rate = Number(line.unitRate) || 0
-    const tax = Number(line.taxRate) || 0
+    const tax = Number(displayedTaxRate(line)) || 0
     const lineTotal = quantity * rate
     return sum + lineTotal + lineTotal * (tax / 100)
   }, 0)
@@ -88,13 +96,14 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
         quoteDate: new Date().toISOString(),
         validUntil: new Date(validUntil).toISOString(),
         subject: subject.trim() || null,
+        currency: currency.trim().toUpperCase() || getActiveCurrency(),
         lines: lines.filter((line) => line.description.trim()).map((line) => ({
           description: line.description.trim(),
           itemType: line.itemType || 'Service',
           quantity: Number(line.quantity) || 1,
           unit: line.unit || 'unit',
           unitRate: Number(line.unitRate) || 0,
-          taxRate: Number(line.taxRate) || 0,
+          taxRate: Number(displayedTaxRate(line)) || 0,
         })),
       })
       toast.success(`Quote ${created.quoteNumber} created`)
@@ -117,7 +126,7 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
           </div>
           <div className="flex items-center gap-2">
             <button type="button" onClick={close} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={() => void submit()} disabled={createQuotation.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={() => void submit()} disabled={createQuotation.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {createQuotation.isPending ? 'Creating…' : 'Create Quote'}
             </button>
           </div>
@@ -136,9 +145,15 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
           <label className={labelClass} htmlFor="quote-subject">Subject</label>
           <input id="quote-subject" value={subject} onChange={(event) => setSubject(event.target.value)} className={fieldClass} />
         </div>
-        <div>
-          <label className={labelClass} htmlFor="quote-valid-until">Valid Until</label>
-          <input id="quote-valid-until" type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} className={fieldClass} />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass} htmlFor="quote-valid-until">Valid Until</label>
+            <input id="quote-valid-until" type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} className={fieldClass} />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="quote-currency">Currency</label>
+            <input id="quote-currency" value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} className={fieldClass} />
+          </div>
         </div>
         <div>
           <label className={labelClass}>Line Items</label>
@@ -146,7 +161,7 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
             {lines.map((line, index) => {
               const qty = Number(line.quantity) || 0
               const rate = Number(line.unitRate) || 0
-              const tax = Number(line.taxRate) || 0
+              const tax = Number(displayedTaxRate(line)) || 0
               const lineTotal = qty * rate * (1 + tax / 100)
               return (
                 <div key={index} className="rounded-xl border border-slate-200 p-3">
@@ -160,15 +175,15 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
                   <div className="mt-2 flex items-end gap-2.5">
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">Qty</span>
-                      <input type="number" min="0" placeholder="0" value={line.quantity} onChange={(event) => updateLine(index, { quantity: event.target.value })} aria-label="Quantity" className="h-10 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      <input type="number" min="0" placeholder="0" value={line.quantity} onChange={(event) => updateLine(index, { quantity: event.target.value })} aria-label="Quantity" className="h-10 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                     </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">Rate</span>
-                      <input type="number" min="0" placeholder="0.00" value={line.unitRate} onChange={(event) => updateLine(index, { unitRate: event.target.value })} aria-label="Unit rate" className="h-10 w-24 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      <input type="number" min="0" placeholder="0.00" value={line.unitRate} onChange={(event) => updateLine(index, { unitRate: event.target.value })} aria-label="Unit rate" className="h-10 w-24 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                     </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">Tax %</span>
-                      <input type="number" min="0" placeholder="0" value={line.taxRate} onChange={(event) => updateLine(index, { taxRate: event.target.value })} aria-label="Tax percent" className="h-10 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      <input type="number" min="0" placeholder="0" value={displayedTaxRate(line)} onChange={(event) => updateLine(index, { taxRate: event.target.value })} aria-label="Tax percent" className="h-10 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                     </label>
                     <div className="flex flex-1 flex-col gap-1 text-right">
                       <span className="text-xs font-medium text-slate-500">Total</span>
@@ -191,6 +206,11 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
           <button type="button" onClick={() => setLines((current) => [...current, emptyLine()])} className="mt-2 text-xs font-medium text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-slate-900">
             + Add line
           </button>
+          <p className="mt-2 text-xs text-slate-500">
+            {tenantTaxRate != null
+              ? `Tax % defaults to your default rate card's ${tenantTaxRate}% and can be changed per line.`
+              : 'No default rate card with a tax rate is configured, so Tax % starts blank — set it per line, or add one under Finance → Rate Cards.'}
+          </p>
         </div>
       </div>
     </FormDrawer>

@@ -256,3 +256,34 @@ export function useResendClientPortalLink(clientId: string) {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['clients', clientId, 'portal-contacts'] }),
   })
 }
+
+// ── Client Archive/Delete ────────────────────────────────────────────────────
+
+export interface ClientDeletionCheck {
+  canDelete: boolean
+  blockingReason: string | null
+  workOrderCount: number
+  invoiceCount: number
+  contractCount: number
+  assetCount: number
+  siteCount: number
+}
+
+export function useValidateClientDeletion(id: string) {
+  return useQuery({
+    queryKey: ['clients', id, 'validate-deletion'],
+    queryFn: () => api.post<ClientDeletionCheck>(endpoints.clients.validateDeletion(id)),
+    enabled: Boolean(id),
+  })
+}
+
+export function useDeleteClientPermanent(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.delete(endpoints.clients.deletePermanent(id)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['clients'] })
+      void queryClient.removeQueries({ queryKey: ['clients', id] })
+    },
+  })
+}

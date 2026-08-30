@@ -86,7 +86,7 @@ export function ReceiptsPage() {
         subtitle="Payments recorded across all invoices. Receive a payment and allocate it across a client's open invoices."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowReceive(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowReceive(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />
               Receive Payment
             </button>
@@ -121,6 +121,10 @@ function ReceivePaymentDrawer({ open, onClose }: { open: boolean; onClose: () =>
     () => (clientId ? (invoices ?? []).filter((inv) => inv.balance > 0 && inv.status !== 'Void') : []),
     [invoices, clientId],
   )
+
+  // A payment settles this client's open invoices, so it is denominated in their currency. Null
+  // until a client with open invoices is picked, at which point the workspace currency stands in.
+  const paymentCurrency = openInvoices[0]?.currency ?? null
 
   const total = Number(amount) || 0
   const allocated = Object.values(amounts).reduce((sum, v) => sum + (Number(v) || 0), 0)
@@ -165,14 +169,14 @@ function ReceivePaymentDrawer({ open, onClose }: { open: boolean; onClose: () =>
         reference: reference.trim() || null,
         allocations,
       })
-      toast.success(leftover > 0 ? `Payment received · ${formatCurrency(leftover)} held as credit` : 'Payment received')
+      toast.success(leftover > 0 ? `Payment received · ${formatCurrency(leftover, paymentCurrency)} held as credit` : 'Payment received')
       close()
     } catch {
       // interceptor surfaces the error toast
     }
   }
 
-  const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+  const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
   const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
   return (
@@ -182,8 +186,8 @@ function ReceivePaymentDrawer({ open, onClose }: { open: boolean; onClose: () =>
       onClose={close}
       footer={
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm text-slate-500">Unapplied: <span className={leftover < 0 ? 'font-semibold text-rose-600' : 'font-semibold text-slate-900'}>{formatCurrency(leftover)}</span></span>
-          <button type="button" onClick={submit} disabled={receive.isPending} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <span className="text-sm text-slate-500">Unapplied: <span className={leftover < 0 ? 'font-semibold text-rose-600' : 'font-semibold text-slate-900'}>{formatCurrency(leftover, paymentCurrency)}</span></span>
+          <button type="button" onClick={submit} disabled={receive.isPending} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {receive.isPending ? 'Saving…' : 'Receive Payment'}
           </button>
         </div>
@@ -245,7 +249,7 @@ function ReceivePaymentDrawer({ open, onClose }: { open: boolean; onClose: () =>
                       placeholder="0.00"
                       value={amounts[inv.id] ?? ''}
                       onChange={(event) => setAmounts((current) => ({ ...current, [inv.id]: event.target.value }))}
-                      className="h-10 w-32 rounded-lg border border-slate-300 px-2 text-right text-sm outline-none focus:border-slate-900"
+                      className="h-10 w-32 rounded-lg border border-slate-300 px-2 text-right text-sm outline-none focus:border-[var(--app-primary)]"
                       aria-label={`Amount for ${inv.invoiceNumber}`}
                     />
                   </div>

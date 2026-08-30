@@ -2,15 +2,16 @@ import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { MapContainer, Marker, Polyline, Popup, TileLayer } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import { format } from 'date-fns'
-import { Route as RouteIcon } from 'lucide-react'
+import { Radio, Route as RouteIcon } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { cn } from '../../shared/utils/cn'
 import { useTechnician } from '../team/api'
+import { WorkOrderDispatchDrawer } from '../work-orders/components/WorkOrderDispatchDrawer'
 import { useOptimisedRoute, type RouteStop } from './api'
 import { routeStopIcon } from './mapIcons'
+import { formatTime } from '../../shared/utils/dates'
 
 const NAIROBI_CENTER: [number, number] = [-1.286389, 36.817223]
 
@@ -22,12 +23,15 @@ function formatScheduledTime(value: string | null) {
   if (!value) {
     return 'Unscheduled'
   }
-  return format(new Date(value), 'HH:mm')
+  return formatTime(value)
 }
 
 export function DailyRouteView() {
   const { technicianId } = useParams<{ technicianId: string }>()
   const [date, setDate] = useState(todayIso())
+  // `RouteStopResponse` is a scheduling projection (id, number, client, address, coordinates) with
+  // no assignment state on it, so the drawer re-reads the work order to decide what is legal.
+  const [dispatchWorkOrderId, setDispatchWorkOrderId] = useState<string | null>(null)
 
   const { data: technician } = useTechnician(technicianId)
   const { data: stops, isLoading, isFetching, refetch } = useOptimisedRoute(technicianId, date)
@@ -115,6 +119,14 @@ export function DailyRouteView() {
                         ~{stop.estimatedTravelMins} min to next stop
                       </p>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setDispatchWorkOrderId(stop.id)}
+                      className="mt-2 inline-flex h-7 items-center gap-1 rounded-md border border-[var(--app-border)] bg-white px-2 text-[11px] font-medium text-slate-600 transition hover:bg-[var(--app-primary-soft)] hover:text-slate-900"
+                    >
+                      <Radio className="h-3 w-3" />
+                      Dispatch
+                    </button>
                   </div>
                 </li>
               ))}
@@ -122,6 +134,8 @@ export function DailyRouteView() {
           </aside>
         </div>
       )}
+
+      <WorkOrderDispatchDrawer workOrderId={dispatchWorkOrderId} onClose={() => setDispatchWorkOrderId(null)} />
     </div>
   )
 }

@@ -47,27 +47,79 @@ services:
       ECOSYS_SMTP_USE_SSL: ${ECOSYS_SMTP_USE_SSL:-}
       ECOSYS_SMTP_USERNAME: ${ECOSYS_SMTP_USERNAME:-}
       ECOSYS_SMTP_PASSWORD: ${ECOSYS_SMTP_PASSWORD:-}
+      # Fallback workspace time zone, used when neither the tenant nor the platform sets one.
+      Time__DefaultTimeZone: ${ECOSYS_DEFAULT_TIME_ZONE:-Africa/Nairobi}
+      # Origin the API puts in password-reset / account-setup / ETA links it emails out.
+      # appsettings.json only carries a localhost placeholder, so this MUST be set for any
+      # real deployment or every emailed link points at the wrong host (EC-P1-06c).
+      App__PublicUrl: ${ECOSYS_PUBLIC_URL:?set ECOSYS_PUBLIC_URL in .env}
       # File storage inside the container (mapped to the `uploads` volume).
       Storage__LocalBasePath: /app/storage/uploads
-      Storage__BaseUrl: ${ECOSYS_PUBLIC_URL:-http://localhost}/files
+      Storage__BaseUrl: ${ECOSYS_PUBLIC_URL}/files
     volumes:
       - uploads:/app/storage/uploads
+      # Tenant branding logos, written by TenantController to {WebRootPath}/uploads/logos
+      # (EC-P2-12). Mounted at the logos subdirectory *only* - mounting all of /app/wwwroot
+      # would shadow the app's own static assets. The Dockerfile creates and chowns this
+      # path at build time, so a fresh volume comes up owned by the non-root `app` user.
+      - tenant-logos:/app/wwwroot/uploads/logos
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:5000/health"]
+      # /health/ready is the database-backed readiness check; /health/live only proves the
+      # process is up. depends_on here waits for readiness, so /health/ready is the right one.
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/health/ready"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 60s
+
+  # Opt-in one-shot database backup. It is behind the `backup` profile, so a plain
+  # `docker compose up` never starts it; it only runs when you ask for it:
+  #
+  #     docker compose --profile backup run --rm db-backup
+  #
+  # This container is NOT a scheduler - it takes one dump and exits. Schedule it from the
+  # host (cron / systemd timer / Windows Task Scheduler); see "Backup and restore" in
+  # docs/DEPLOYMENT.md. A looping sleep container would have no retry, no alerting and no
+  # missed-run catch-up, which is worse than an honest cron line.
+  #
+  # The image must match the `db` service above: pg_dump refuses to dump a server newer
+  # than itself. Bump both together.
+  db-backup:
+    profiles: ["backup"]
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-ecosys}
+      PGDATABASE: ${POSTGRES_DB:-ecosys}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${ECOSYS_BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - ./scripts:/scripts:ro
+      # Host path, deliberately: a named volume would be deleted by the same
+      # `docker compose down -v` the backups exist to survive.
+      - ${ECOSYS_BACKUP_DIR:-./backups}:/backups
+    entrypoint: ["/bin/sh", "/scripts/backup-db.sh"]
 
   web:
     build:
       context: ./ecosys-serviceops-frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: ${ECOSYS_PUBLIC_URL:-http://localhost}
+        VITE_API_BASE_URL: ${ECOSYS_PUBLIC_URL}
     restart: unless-stopped
     depends_on:
       - api
+    environment:
+      # Extra origins appended to the SPA's CSP connect-src at container start, for the
+      # API/SignalR host when it is not the same origin as the SPA (EC-P3-05b). Empty by
+      # default, which leaves the policy at `connect-src 'self'`. Space-separated.
+      ECOSYS_CSP_CONNECT_SRC: ${ECOSYS_CSP_CONNECT_SRC:-}
     ports:
       # Host:container. Put a TLS-terminating reverse proxy in front of this.
       - "${WEB_PORT:-8080}:80"
@@ -75,3 +127,4 @@ services:
 volumes:
   pgdata:
   uploads:
+  tenant-logos:

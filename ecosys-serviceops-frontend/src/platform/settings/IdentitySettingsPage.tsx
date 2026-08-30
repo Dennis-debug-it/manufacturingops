@@ -1,4 +1,5 @@
 import { SettingsForm } from '../../features/settings/components/SettingsForm'
+import { TIME_ZONE_OPTIONS } from '../../shared/utils/timeZoneOptions'
 
 export function IdentitySettingsPage() {
   return (
@@ -14,7 +15,13 @@ export function IdentitySettingsPage() {
         { key: 'supportEmail', label: 'Support Email', type: 'email' },
         { key: 'defaultCountry', label: 'Default Country', type: 'text' },
         { key: 'defaultCurrency', label: 'Default Currency', type: 'text' },
-        { key: 'timezone', label: 'Timezone', type: 'text' },
+        {
+          key: 'timezone',
+          label: 'Default Timezone',
+          type: 'select',
+          options: TIME_ZONE_OPTIONS,
+          helperText: 'Inherited by every tenant that has not set its own timezone.',
+        },
         { key: 'defaultLanguage', label: 'Default Language', type: 'text' },
         { key: 'companyLegalName', label: 'Company Legal Name', type: 'text' },
         { key: 'companyRegistrationNumber', label: 'Company Registration Number', type: 'text' },

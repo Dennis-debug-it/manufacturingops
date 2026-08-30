@@ -63,7 +63,7 @@ export function AgingPage() {
     <div className="space-y-6">
       <PageHeader title="Aging" subtitle="Receivables aging buckets, colour-coded by days overdue. Send a statement straight from any row." />
       <FinanceWorkspaceNav />
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-sm text-slate-600 shadow-sm">
         Total outstanding: <span className="font-semibold text-slate-900">{formatCurrency(totals.total)}</span>
       </div>
       <DataTable columns={columns} data={rows} loading={isLoading} emptyTitle={isError ? 'Aging unavailable' : 'No outstanding balances'} emptyDescription={isError ? 'Aging report could not be loaded.' : 'All invoices are settled.'} />

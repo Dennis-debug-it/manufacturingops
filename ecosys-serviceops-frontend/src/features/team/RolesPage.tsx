@@ -67,7 +67,7 @@ export function RolesPage() {
             onClick={() => setSelectedRole(role)}
             className={cn(
               'inline-flex h-10 items-center rounded-full border px-4 text-sm font-medium transition',
-              role === selectedRole ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+              role === selectedRole ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
             )}
           >
             {roleLabel(role)}
@@ -91,7 +91,7 @@ export function RolesPage() {
               type="button"
               onClick={onSave}
               disabled={!dirty || save.isPending}
-              className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+              className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-5 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-50"
             >
               {save.isPending ? 'Saving…' : 'Save changes'}
             </button>

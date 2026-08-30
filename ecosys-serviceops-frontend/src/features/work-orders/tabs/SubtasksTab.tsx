@@ -17,7 +17,7 @@ export function SubtasksTab({ workOrder }: { workOrder: WorkOrder }) {
 
   if (workOrder.parentWorkOrderId) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <p className="text-sm text-slate-600">
           This work order is a sub-task of{' '}
           <Link to={`/work-orders/${workOrder.parentWorkOrderId}`} className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4">
@@ -41,7 +41,7 @@ export function SubtasksTab({ workOrder }: { workOrder: WorkOrder }) {
           <button
             type="button"
             onClick={() => setShowAddForm(true)}
-            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800"
+            className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-3 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
           >
             <Plus className="h-4 w-4" />Add Sub-task
           </button>
@@ -56,7 +56,7 @@ export function SubtasksTab({ workOrder }: { workOrder: WorkOrder }) {
             <Link
               key={child.id}
               to={`/work-orders/${child.id}`}
-              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 transition hover:border-slate-900 hover:shadow-sm"
+              className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 transition hover:border-[var(--app-primary)] hover:shadow-sm"
             >
               <div>
                 <p className="font-mono text-sm text-slate-900">{child.workOrderNumber}</p>

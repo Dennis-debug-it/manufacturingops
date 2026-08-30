@@ -16,6 +16,7 @@ public sealed record CompanySettingsRequest(
     string Country,
     string? Industry,
     string? Address,
+    string? TimeZoneId,
     string? PrimaryColor,
     string? SecondaryColor,
     bool ShowPoweredByEcosys);
@@ -34,6 +35,9 @@ public sealed record CompanySettingsResponse(
     string Country,
     string? Industry,
     string? Address,
+    string? TimeZoneId,
+    /// <summary>Effective zone actually in force — the tenant override when set, else the platform default.</summary>
+    string EffectiveTimeZoneId,
     string PrimaryColor,
     string SecondaryColor,
     bool ShowPoweredByEcosys);
@@ -72,7 +76,12 @@ public sealed record EmailNotificationSettingsRequest(
     string? ApiKeySecret,
     string? ApiProviderName,
     int TimeoutSeconds,
-    int MaxRetries);
+    int MaxRetries,
+    /// <summary>
+    /// True sends this workspace's mail through the platform's mailbox and leaves the SMTP fields
+    /// below inert; false switches the workspace onto the SMTP server configured here.
+    /// </summary>
+    bool UsePlatformDefaults = true);
 
 public sealed record EmailNotificationSettingsResponse(
     Guid Id,
@@ -95,11 +104,22 @@ public sealed record EmailNotificationSettingsResponse(
     bool HasSecret,
     bool IsConfigured,
     DateTime? LastTestedAt,
-    string? LastError);
+    string? LastError,
+    bool UsePlatformDefaults,
+    /// <summary>Mailbox mail is really leaving through right now — the fields above are inert when true.</summary>
+    bool UsesPlatformMail,
+    /// <summary>Address recipients will actually see in the From header.</summary>
+    string? EffectiveFromEmail);
 
 public sealed record EmailNotificationTestRequest(string? TestRecipientEmail);
 
-public sealed record EmailNotificationTestResponse(bool Success, DateTime? LastTestedAt, string? LastError);
+public sealed record EmailNotificationTestResponse(
+    bool Success,
+    DateTime? LastTestedAt,
+    string? LastError,
+    /// <summary>True when the test ran against platform mail because this workspace has no SMTP override.</summary>
+    bool UsedPlatformMail,
+    string Message);
 
 public sealed record EmailIntakeSettingsRequest(
     bool IsEnabled,

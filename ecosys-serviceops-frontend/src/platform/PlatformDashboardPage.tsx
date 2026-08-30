@@ -10,6 +10,7 @@ import { Spinner } from '../shared/components/Spinner'
 import { EmptyState } from '../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../shared/components/DataTable'
 import { StatusBadge } from '../shared/components/StatusBadge'
+import { Crystal } from '../shared/components/Crystal'
 import { formatCurrency } from '../shared/utils/format'
 import { formatDate, formatDateTime } from '../shared/utils/dates'
 import {
@@ -61,12 +62,15 @@ function Kpi({ label, value, icon, tone = 'default' }: { label: string; value: s
           : 'text-slate-900'
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
-        <div className="text-slate-400">{icon}</div>
+    <div className="relative overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-4 shadow-sm backdrop-blur-[var(--glass-blur-md)]">
+      <Crystal variant="kpi" className="absolute inset-0" />
+      <div className="relative">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</p>
+          <div className="text-slate-400">{icon}</div>
+        </div>
+        <div className={`mt-3 text-2xl font-semibold tracking-tight ${valueClass}`}>{value}</div>
       </div>
-      <div className={`mt-3 text-2xl font-semibold tracking-tight ${valueClass}`}>{value}</div>
     </div>
   )
 }
@@ -136,7 +140,10 @@ export function PlatformDashboardPage() {
         primaryAction={<div className="flex items-center gap-3"><LastUpdated at={summary.dataUpdatedAt} /><HealthChip /></div>}
       />
 
-      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="relative grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div aria-hidden className="pointer-events-none absolute -inset-x-4 -inset-y-6 -z-10 overflow-hidden">
+          <Crystal variant="command-centre" className="absolute inset-0 opacity-70" />
+        </div>
         <Kpi label="Total tenants" value={summary.data.totalTenants} icon={<Building2 className="h-4 w-4" />} />
         <Kpi label="Active tenants" value={summary.data.activeTenants} icon={<ShieldAlert className="h-4 w-4" />} tone="good" />
         <Kpi label="Total users" value={summary.data.totalUsers} icon={<Users className="h-4 w-4" />} />
@@ -149,7 +156,7 @@ export function PlatformDashboardPage() {
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-base font-semibold text-slate-900">Tenant lifecycle</p>
@@ -174,7 +181,7 @@ export function PlatformDashboardPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-base font-semibold text-slate-900">Lead funnel</p>
@@ -201,7 +208,7 @@ export function PlatformDashboardPage() {
         </div>
 
         <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-base font-semibold text-slate-900">Attention queue</p>
@@ -220,7 +227,7 @@ export function PlatformDashboardPage() {
             ) : (
               <div className="mt-4 space-y-2">
                 {attentionTenants.map((tenant) => (
-                  <Link key={tenant.tenantId} to={`/platform/tenants/${tenant.tenantId}`} className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 transition hover:bg-slate-50">
+                  <Link key={tenant.tenantId} to={`/platform/tenants/${tenant.tenantId}`} className="flex items-center justify-between rounded-xl border border-[var(--app-border)] px-4 py-3 transition hover:bg-[var(--app-primary-soft)]">
                     <div>
                       <p className="font-medium text-slate-900">{tenant.name}</p>
                       <p className="mt-1 text-xs text-slate-500">{tenant.slug} · {tenant.contactEmail ?? 'No contact email'}</p>
@@ -238,7 +245,7 @@ export function PlatformDashboardPage() {
             </AsyncPanel>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-base font-semibold text-slate-900">Recent activity</p>
@@ -257,7 +264,7 @@ export function PlatformDashboardPage() {
             ) : (
               <div className="mt-4 space-y-2">
                 {auditRows.map((entry) => (
-                  <div key={entry.id} className="rounded-xl border border-slate-200 px-4 py-3">
+                  <div key={entry.id} className="rounded-xl border border-[var(--app-border)] px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-medium text-slate-900">{entry.action}</p>
@@ -277,7 +284,7 @@ export function PlatformDashboardPage() {
       </section>
 
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-base font-semibold text-slate-900">Outstanding invoices</p>
@@ -293,7 +300,7 @@ export function PlatformDashboardPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-base font-semibold text-slate-900">Platform health</p>

@@ -24,7 +24,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     if (this.state.hasError) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6">
-          <div className="max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="max-w-xl rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-6 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Application error</p>
             <h1 className="mt-2 text-2xl font-semibold text-slate-900">We hit a render problem</h1>
             <p className="mt-2 text-sm text-slate-600">
@@ -32,7 +32,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             </p>
             <button
               type="button"
-              className="mt-6 inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+              className="mt-6 inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
               onClick={() => this.setState({ hasError: false })}
             >
               Retry

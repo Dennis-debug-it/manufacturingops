@@ -5,7 +5,7 @@ import { cn } from '../../../shared/utils/cn'
 import { useClients, useAssets } from '../../clients/api'
 import { useCreatePmPlan, usePmTemplates } from '../api'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 const frequencyOptions = ['Monthly', 'Quarterly', 'Semi-Annual', 'Annual']
@@ -84,12 +84,12 @@ export function NewScheduleWizard({ open, onClose }: NewScheduleWizardProps) {
               type="button"
               onClick={() => setStep((value) => value + 1)}
               disabled={step === 1 && !assetId}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               Next
             </button>
           ) : (
-            <button type="button" onClick={submit} disabled={createPlan.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={submit} disabled={createPlan.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {createPlan.isPending ? 'Creating…' : 'Create Schedule'}
             </button>
           )}
@@ -99,7 +99,7 @@ export function NewScheduleWizard({ open, onClose }: NewScheduleWizardProps) {
       <div className="mb-6 flex items-center gap-2">
         {stepLabels.map((label, index) => (
           <div key={label} className="flex flex-1 items-center gap-2">
-            <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold', step === index + 1 ? 'bg-slate-900 text-white' : step > index + 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500')}>
+            <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold', step === index + 1 ? 'bg-[var(--app-primary)] text-white' : step > index + 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500')}>
               {index + 1}
             </div>
             <span className={cn('text-xs font-medium', step === index + 1 ? 'text-slate-900' : 'text-slate-400')}>{label}</span>

@@ -6,10 +6,12 @@ import { useNavigate } from 'react-router-dom'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { api } from '../../../shared/api/apiClient'
 import { endpoints } from '../../../shared/api/endpoints'
+import { applyApiFieldErrors } from '../../../shared/api/apiError'
+import { getActiveCurrency } from '../../../shared/utils/currency'
 import { useClients, useAssets } from '../../clients/api'
 import { useCreateContract } from '../api'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 const contractTypes = ['ServiceAgreement', 'MaintenanceContract', 'SLA', 'ProjectBased']
@@ -54,9 +56,29 @@ interface FormValues {
   description: string
 }
 
+/**
+ * The server blames the request DTO's PascalCase property names; the helper normalises casing
+ * before matching. Anything blamed that isn't listed here is toasted instead of being lost.
+ */
+const CONTRACT_FORM_FIELDS = [
+  'contractNumber',
+  'clientId',
+  'name',
+  'contractType',
+  'startDate',
+  'endDate',
+  'billingModel',
+  'currency',
+  'contractValue',
+  'renewalNoticeDays',
+  'responseTimeHours',
+  'resolutionTimeHours',
+  'description',
+] as const satisfies readonly (keyof FormValues)[]
+
 export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate()
-  const { control, register, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { control, register, handleSubmit, watch, reset, setError, formState: { errors, isSubmitting } } = useForm<FormValues>({
     defaultValues: {
       contractNumber: `CNT-${Date.now()}`,
       clientId: '',
@@ -65,7 +87,7 @@ export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: 
       startDate: '',
       endDate: '',
       billingModel: 'FixedPrice',
-      currency: 'KES',
+      currency: getActiveCurrency(),
       contractValue: '',
       renewalNoticeDays: '30',
       responseTimeHours: '',
@@ -115,7 +137,7 @@ export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: 
         startDate: new Date(values.startDate).toISOString(),
         endDate: new Date(values.endDate).toISOString(),
         billingModel: values.billingModel,
-        currency: values.currency,
+        currency: values.currency.trim().toUpperCase() || getActiveCurrency(),
         contractValue: values.contractValue ? Number(values.contractValue) : null,
         renewalNoticeDays: Number(values.renewalNoticeDays) || 30,
         description: values.description.trim() || null,
@@ -143,8 +165,10 @@ export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: 
       toast.success(`Contract ${created.contractNumber} created`)
       close()
       navigate(`/contracts/${created.id}`)
-    } catch {
-      // interceptor surfaces the error toast
+    } catch (error) {
+      // A model-validation 400 names the field it rejected; pin the message to that input instead
+      // of leaving the user with only the interceptor's one-line toast.
+      applyApiFieldErrors<FormValues>(error, { setError, fields: CONTRACT_FORM_FIELDS })
     }
   })
 
@@ -156,7 +180,7 @@ export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: 
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={close} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="submit" form="contract-form" disabled={isSubmitting} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="submit" form="contract-form" disabled={isSubmitting} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {isSubmitting ? 'Creating…' : 'Create Contract'}
           </button>
         </div>
@@ -200,7 +224,7 @@ export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: 
                 key={mode}
                 type="button"
                 onClick={() => setCoverageMode(mode)}
-                className={`inline-flex h-10 flex-1 items-center justify-center rounded-lg border text-sm font-medium transition ${coverageMode === mode ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+                className={`inline-flex h-10 flex-1 items-center justify-center rounded-lg border text-sm font-medium transition ${coverageMode === mode ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
               >
                 {label}
               </button>
@@ -226,7 +250,7 @@ export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: 
                 disabled={!clientId}
                 value={assetIds}
                 onChange={(event) => setAssetIds(Array.from(event.target.selectedOptions, (option) => option.value))}
-                className="h-28 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+                className="h-28 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
               >
                 {(assets ?? []).map((asset) => (<option key={asset.id} value={asset.id}>{asset.assetName}</option>))}
               </select>
@@ -255,6 +279,10 @@ export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: 
             <label className={labelClass} htmlFor="contract-value">Contract Value</label>
             <input id="contract-value" type="number" step="0.01" {...register('contractValue')} className={fieldClass} />
           </div>
+        </div>
+        <div>
+          <label className={labelClass} htmlFor="contract-currency">Currency</label>
+          <input id="contract-currency" maxLength={3} {...register('currency')} className={fieldClass} />
         </div>
         <div>
           <label className={labelClass} htmlFor="contract-renewal-notice">Renewal Notice (days)</label>
@@ -293,7 +321,7 @@ export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: 
                         aria-label={`${priority} response hours`}
                         value={slaMatrix[priority].response}
                         onChange={(event) => setSlaCell(priority, 'response', event.target.value)}
-                        className="h-9 w-full rounded-md border border-slate-300 px-2 text-sm outline-none focus:border-slate-900"
+                        className="h-9 w-full rounded-md border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]"
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -304,7 +332,7 @@ export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: 
                         aria-label={`${priority} resolution hours`}
                         value={slaMatrix[priority].resolution}
                         onChange={(event) => setSlaCell(priority, 'resolution', event.target.value)}
-                        className="h-9 w-full rounded-md border border-slate-300 px-2 text-sm outline-none focus:border-slate-900"
+                        className="h-9 w-full rounded-md border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]"
                       />
                     </td>
                   </tr>
@@ -316,7 +344,7 @@ export function ContractFormDrawer({ open, onClose }: { open: boolean; onClose: 
         </div>
         <div>
           <label className={labelClass} htmlFor="contract-description">Description</label>
-          <textarea id="contract-description" {...register('description')} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+          <textarea id="contract-description" {...register('description')} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
       </form>
     </FormDrawer>

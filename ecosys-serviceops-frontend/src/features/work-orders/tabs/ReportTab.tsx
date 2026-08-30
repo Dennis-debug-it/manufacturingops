@@ -15,7 +15,7 @@ import type { WorkOrder } from '../types'
 function Section({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
       <button type="button" onClick={() => setOpen((value) => !value)} className="flex w-full items-center justify-between px-5 py-4 text-left">
         <span className="text-sm font-semibold text-slate-900">{title}</span>
         <ChevronDown className={cn('h-4 w-4 text-slate-400 transition-transform', open && 'rotate-180')} />
@@ -97,7 +97,7 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <div className="flex items-center gap-3">
           <StatusBadge status={status} />
           <span className="text-sm text-slate-600">{report.workOrderNumber} — {report.title}</span>
@@ -109,7 +109,7 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
               {generate.isPending ? 'Regenerating…' : 'Regenerate'}
             </button>
           ) : null}
-          <button type="button" onClick={downloadPdf} disabled={downloading} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={downloadPdf} disabled={downloading} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-3 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             <Download className="h-4 w-4" />
             {downloading ? 'Preparing…' : 'Download PDF'}
           </button>
@@ -122,18 +122,18 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
       </div>
 
       {ackOpen ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="ack-name">Acknowledged By</label>
-              <input id="ack-name" value={ackName} onChange={(event) => setAckName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+              <input id="ack-name" value={ackName} onChange={(event) => setAckName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="ack-comment">Comments</label>
-              <input id="ack-comment" value={ackComment} onChange={(event) => setAckComment(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+              <input id="ack-comment" value={ackComment} onChange={(event) => setAckComment(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
           </div>
-          <button type="button" onClick={submitAcknowledge} disabled={acknowledge.isPending} className="mt-3 inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={submitAcknowledge} disabled={acknowledge.isPending} className="mt-3 inline-flex h-10 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {acknowledge.isPending ? 'Saving…' : 'Confirm Acknowledgement'}
           </button>
         </div>

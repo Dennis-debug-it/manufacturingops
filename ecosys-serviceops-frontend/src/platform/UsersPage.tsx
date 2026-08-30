@@ -151,11 +151,11 @@ export function UsersPage() {
     <div className="space-y-5">
       <PageHeader
         title="Platform Users"
-        subtitle="Manage owner, admin, support, finance, and read-only platform access."
-        primaryAction={<button type="button" className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Create user</button>}
+        subtitle="Ecosys staff accounts only. Users inside a tenant workspace are managed from that tenant’s detail page."
+        primaryAction={<button type="button" className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Create user</button>}
       />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <SectionTitle title="Role guide" description="Platform users are staff-only accounts. Tenant users are managed inside each workspace." />
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           {[
@@ -173,7 +173,7 @@ export function UsersPage() {
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,2fr)_repeat(2,minmax(220px,280px))]">
+      <div className="grid grid-cols-1 gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm lg:grid-cols-[minmax(0,2fr)_repeat(2,minmax(220px,280px))]">
         <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
           <Search className="h-4 w-4 text-slate-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, email, or phone" className="w-full border-0 bg-transparent p-0 text-sm outline-none placeholder:text-slate-400" />
@@ -212,14 +212,14 @@ export function UsersPage() {
         open={showCreate}
         title="Create platform user"
         onClose={() => setShowCreate(false)}
-        footer={<div className="flex justify-end gap-2"><button type="button" className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setShowCreate(false)}>Cancel</button><button type="button" className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800" onClick={() => void submitCreate()}>Create user</button></div>}
+        footer={<div className="flex justify-end gap-2"><button type="button" className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setShowCreate(false)}>Cancel</button><button type="button" className="rounded-lg bg-[var(--app-primary)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void submitCreate()}>Create user</button></div>}
       >
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Field label="Full name"><input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Email"><input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Phone"><input value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Role"><select value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900">{roles.filter((role) => role !== 'All').map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></Field>
-          <Field label="Status"><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
+          <Field label="Full name"><input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
+          <Field label="Email"><input type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
+          <Field label="Phone"><input value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
+          <Field label="Role"><select value={form.role} onChange={(event) => setForm((current) => ({ ...current, role: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]">{roles.filter((role) => role !== 'All').map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></Field>
+          <Field label="Status"><select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"><option value="Active">Active</option><option value="Inactive">Inactive</option></select></Field>
         </div>
       </FormDrawer>
 

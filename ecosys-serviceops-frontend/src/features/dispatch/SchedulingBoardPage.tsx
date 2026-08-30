@@ -22,6 +22,7 @@ import {
   useUnassignBoardWorkOrder,
   type BoardWorkOrder,
 } from './boardApi'
+import { WorkOrderDispatchDrawer } from '../work-orders/components/WorkOrderDispatchDrawer'
 import { UnassignedPanel } from './components/UnassignedPanel'
 import { TechnicianRow, type DragPreview } from './components/TechnicianRow'
 import {
@@ -63,6 +64,9 @@ export function SchedulingBoardPage() {
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null)
   const [activeDrag, setActiveDrag] = useState<ActiveDrag | null>(null)
   const [dragPreview, setDragPreview] = useState<DragPreview | null>(null)
+  // Scheduling a job and dispatching it are different steps: the board assigns and times the visit,
+  // the drawer records the technician's response and site milestones that Start/Complete depend on.
+  const [dispatchWorkOrderId, setDispatchWorkOrderId] = useState<string | null>(null)
 
   const dateParam = format(selectedDate, 'yyyy-MM-dd')
   const { data, isLoading, isError } = useSchedulingBoard(dateParam)
@@ -211,7 +215,7 @@ export function SchedulingBoardPage() {
                   onClick={() => setStepMode(option)}
                   className={cn(
                     'rounded-lg px-2.5 py-1 text-xs font-medium capitalize transition',
-                    stepMode === option ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100',
+                    stepMode === option ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100',
                   )}
                 >
                   {option}
@@ -254,7 +258,7 @@ export function SchedulingBoardPage() {
               <UnassignedPanel workOrders={unassigned} isDraggingAssigned={Boolean(activeDrag?.sourceTechnicianId)} />
             </div>
 
-            <div className="min-w-0 flex-1 overflow-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="min-w-0 flex-1 overflow-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
               <div style={{ width: 224 + SLOT_COUNT * SLOT_WIDTH }}>
                 <div className="flex border-b border-slate-200 bg-slate-50">
                   <div className="sticky left-0 z-20 w-56 shrink-0 border-r border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -278,7 +282,13 @@ export function SchedulingBoardPage() {
                   <div className="p-8 text-center text-sm text-slate-500">No technicians available for this branch.</div>
                 ) : (
                   technicians.map((technician) => (
-                    <TechnicianRow key={technician.id} technician={technician} day={selectedDate} preview={dragPreview} />
+                    <TechnicianRow
+                      key={technician.id}
+                      technician={technician}
+                      day={selectedDate}
+                      preview={dragPreview}
+                      onOpenDispatch={(workOrder) => setDispatchWorkOrderId(workOrder.id)}
+                    />
                   ))
                 )}
               </div>
@@ -286,6 +296,8 @@ export function SchedulingBoardPage() {
           </div>
         </DndContext>
       )}
+
+      <WorkOrderDispatchDrawer workOrderId={dispatchWorkOrderId} onClose={() => setDispatchWorkOrderId(null)} />
     </div>
   )
 }

@@ -177,7 +177,7 @@ internal sealed class EmailTemplateService(AppDbContext dbContext) : IEmailTempl
                 This link expires at {{expiresAt}}.
                 Need help? Contact {{supportEmail}}.
                 """,
-                ["fullName", "platformName", "resetLink", "supportEmail", "expiresAt"],
+                ["fullName", "platformName", "resetLink", "supportEmail", "expiresAt", "expiresAtUtc"],
                 ["fullName", "resetLink"],
                 true),
             ["account-setup-link"] = new(
@@ -203,7 +203,7 @@ internal sealed class EmailTemplateService(AppDbContext dbContext) : IEmailTempl
                 This link expires at {{expiresAt}}. If it expires, ask your administrator to resend the invitation.
                 Need help? Contact {{supportEmail}}.
                 """,
-                ["fullName", "tenantName", "platformName", "setPasswordUrl", "supportEmail", "expiresAt"],
+                ["fullName", "tenantName", "platformName", "setPasswordUrl", "supportEmail", "expiresAt", "expiresAtUtc"],
                 ["fullName", "setPasswordUrl"],
                 true),
             ["workspace-request-received"] = new(

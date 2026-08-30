@@ -307,9 +307,9 @@ public sealed class ReportsController(
 
         var plansQuery = dbContext.PreventiveMaintenancePlans
             .Include(x => x.Asset)
-                .ThenInclude(a => a.Client)
+                .ThenInclude(a => a!.Client)
             .Include(x => x.Asset)
-                .ThenInclude(a => a.AssetCategory)
+                .ThenInclude(a => a!.AssetCategory)
             .Where(x => x.TenantId == TenantId && x.Status == "Active");
 
         if (clientId.HasValue)

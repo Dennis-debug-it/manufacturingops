@@ -39,6 +39,9 @@ public sealed class PortalAuthController(IPortalAuthService portalAuthService, A
 
     private const string GenericMessage = "If this email is registered for portal access, a sign-in link has been sent.";
 
+    // Public by design: this is how a portal user obtains a token in the first place, so it has to
+    // opt out of the global FallbackPolicy that Program.cs applies to unannotated endpoints.
+    [AllowAnonymous]
     [HttpPost("request-link")]
     public async Task<ActionResult<PortalMessageResponse>> RequestLink([FromBody] PortalRequestLinkRequest request, CancellationToken cancellationToken)
     {
@@ -52,6 +55,7 @@ public sealed class PortalAuthController(IPortalAuthService portalAuthService, A
         return Ok(new PortalMessageResponse(GenericMessage));
     }
 
+    [AllowAnonymous]
     [HttpPost("verify")]
     public async Task<ActionResult<PortalVerifyResponse>> Verify([FromBody] PortalVerifyRequest request, CancellationToken cancellationToken)
     {

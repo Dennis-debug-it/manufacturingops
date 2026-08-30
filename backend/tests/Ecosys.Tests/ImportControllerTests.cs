@@ -1,10 +1,11 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using Ecosys.Api.Controllers;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
+using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -81,6 +82,27 @@ public sealed class ImportControllerTests
         Assert.Single(deliveryService.Requests);
     }
 
+    [Fact]
+    public async Task CommitUsers_WithoutAdminAccess_IsRejected_AndCreatesNoUsers()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var deliveryService = new RecordingCredentialDeliveryService();
+        var passwordService = new QueueTemporaryPasswordService("TempPass!234");
+        var controller = CreateController(dbContext, fixture, deliveryService, passwordService, new DenyAdminUserAccessService());
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.CommitUsers(
+            new CsvUploadRequest(CreateCsvFile(
+                """
+                FullName,Email,Phone,Role,JobTitle,BranchName,IsTechnician,Status
+                Mallory Kip,mallory@example.com,+254700000003,TenantAdmin,Operations Manager,Head Office,false,Active
+                """)),
+            CancellationToken.None));
+
+        Assert.Empty(await dbContext.Users.Where(x => x.Id != fixture.Actor.Id).ToListAsync());
+        Assert.Empty(deliveryService.Requests);
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -130,10 +152,12 @@ public sealed class ImportControllerTests
         AppDbContext dbContext,
         FixtureData fixture,
         RecordingCredentialDeliveryService deliveryService,
-        QueueTemporaryPasswordService passwordService) =>
+        QueueTemporaryPasswordService passwordService,
+        IUserAccessService? userAccessService = null) =>
         new(
             dbContext,
             new FakeTenantContext(fixture.Tenant.Id, fixture.Actor.Id, fixture.Actor.Email),
+            userAccessService ?? new NoOpUserAccessService(),
             new NoOpPreventiveMaintenancePlanService(),
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new FakePermissionTemplateService(),
@@ -182,6 +206,24 @@ public sealed class ImportControllerTests
         public Guid GetRequiredTenantId() => tenantId;
         public Guid GetRequiredUserId() => userId;
         public Guid GetRequiredSessionId() => SessionId!.Value;
+    }
+
+    private sealed class NoOpUserAccessService : IUserAccessService
+    {
+        public void EnsureAdmin() { }
+        public void EnsureAdminOrPermission(string permissionName) { }
+        public void EnsureAdminOrAnyPermission(params string[] permissionNames) { }
+        public void EnsureTenantOperationalAccess() { }
+    }
+
+    // Stands in for a non-admin caller: the import endpoints are the only thing between a Viewer and
+    // a self-minted TenantAdmin, so the guard itself is what the test below asserts.
+    private sealed class DenyAdminUserAccessService : IUserAccessService
+    {
+        public void EnsureAdmin() => throw new ForbiddenException("Admin access is required for this action.");
+        public void EnsureAdminOrPermission(string permissionName) => throw new ForbiddenException("You do not have permission to perform this action.");
+        public void EnsureAdminOrAnyPermission(params string[] permissionNames) => throw new ForbiddenException("You do not have permission to perform this action.");
+        public void EnsureTenantOperationalAccess() { }
     }
 
     private sealed class NoOpPreventiveMaintenancePlanService : IPreventiveMaintenancePlanService

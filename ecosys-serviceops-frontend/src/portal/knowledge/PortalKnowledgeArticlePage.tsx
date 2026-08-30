@@ -7,6 +7,7 @@ import { ArrowLeft, Eye, ThumbsUp, ThumbsDown, ArrowRight } from 'lucide-react'
 import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { usePortalKnowledgeArticle, useSubmitPortalKnowledgeFeedback } from '../api'
+import { formatDate } from '../../shared/utils/dates'
 
 export function PortalKnowledgeArticlePage() {
   const { slug } = useParams<{ slug: string }>()
@@ -41,12 +42,12 @@ export function PortalKnowledgeArticlePage() {
         Help Center
       </Link>
 
-      <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+      <article className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-6 shadow-sm sm:p-8">
         {article.categoryName ? <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{article.categoryName}</div> : null}
         <h1 className="mt-1 text-2xl font-semibold text-slate-900 sm:text-3xl">{article.title}</h1>
         <div className="mt-2 flex items-center gap-4 text-xs text-slate-500">
           <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" />{article.viewCount} views</span>
-          {article.publishedAt ? <span>Updated {new Date(article.publishedAt).toLocaleDateString()}</span> : null}
+          {article.publishedAt ? <span>Updated {formatDate(article.publishedAt)}</span> : null}
         </div>
 
         <div className="prose prose-slate mt-6 max-w-none text-sm" dangerouslySetInnerHTML={{ __html: html }} />
@@ -60,7 +61,7 @@ export function PortalKnowledgeArticlePage() {
         ) : null}
       </article>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-6 text-center shadow-sm">
         {feedbackGiven === null ? (
           <>
             <p className="text-sm font-medium text-slate-900">Was this helpful?</p>
@@ -94,7 +95,7 @@ export function PortalKnowledgeArticlePage() {
         <p className="text-sm text-slate-600">Still need help?</p>
         <Link
           to="/portal/requests/new"
-          className="mt-3 inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+          className="mt-3 inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
         >
           Raise a service request
           <ArrowRight className="h-4 w-4" />

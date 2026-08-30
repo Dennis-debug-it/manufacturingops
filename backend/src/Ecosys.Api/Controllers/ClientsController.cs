@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
+using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
@@ -17,6 +18,7 @@ namespace Ecosys.Api.Controllers;
 public sealed class ClientsController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
+    IUserAccessService userAccessService,
     IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
@@ -138,6 +140,7 @@ public sealed class ClientsController(
     [HttpPost]
     public async Task<ActionResult<ClientResponse>> Create([FromBody] UpsertClientRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanManageClients();
         Validate(request);
         await EnsureUniqueNameAsync(request.ClientName, null, cancellationToken);
 
@@ -180,6 +183,7 @@ public sealed class ClientsController(
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<ClientResponse>> Update(Guid id, [FromBody] UpsertClientRequest request, CancellationToken cancellationToken)
     {
+        EnsureCanManageClients();
         Validate(request);
         var client = await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Client was not found.");
@@ -220,6 +224,8 @@ public sealed class ClientsController(
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
+        EnsureCanManageClients();
+
         var client = await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Client was not found.");
 
@@ -227,9 +233,45 @@ public sealed class ClientsController(
         return NoContent();
     }
 
+    [HttpDelete("{id:guid}/permanent")]
+    public async Task<IActionResult> DeletePermanent(Guid id, CancellationToken cancellationToken)
+    {
+        // A permanent delete destroys history rather than archiving it, so it is admin-only
+        // regardless of who holds the master-data permission that guards the other mutations.
+        userAccessService.EnsureAdmin();
+
+        var client = await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Client was not found.");
+
+        var blockers = await GetDeletionBlockersAsync(client, cancellationToken);
+        if (!blockers.CanDelete)
+        {
+            // 409 rather than 400: the request is well formed, it is the current state of the
+            // client's history that forbids it. This mirrors what PostgreSQL would raise (23503)
+            // if a Restrict child slipped past this check.
+            throw new ConflictException(blockers.BlockingReason!);
+        }
+
+        dbContext.Clients.Remove(client);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditLogService.LogAsync(
+            TenantId,
+            UserId,
+            "Client permanently deleted",
+            nameof(Client),
+            client.Id.ToString(),
+            $"Permanently deleted client '{client.ClientName}'.",
+            cancellationToken);
+
+        return NoContent();
+    }
+
     [HttpPatch("{id:guid}/activate")]
     public async Task<ActionResult<ClientResponse>> Activate(Guid id, CancellationToken cancellationToken)
     {
+        EnsureCanManageClients();
+
         var client = await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Client was not found.");
 
@@ -258,6 +300,8 @@ public sealed class ClientsController(
     [HttpPatch("{id:guid}/deactivate")]
     public async Task<ActionResult<ClientResponse>> Deactivate(Guid id, CancellationToken cancellationToken)
     {
+        EnsureCanManageClients();
+
         var client = await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Client was not found.");
 
@@ -271,6 +315,29 @@ public sealed class ClientsController(
         var clientCountsAfterDeactivate = await BuildClientCountsAsync([client.Id], cancellationToken);
         return Ok(Map(client, clientCountsAfterDeactivate));
     }
+
+    [HttpPost("{id:guid}/validate-deletion")]
+    public async Task<ActionResult<ClientDeletionCheckResponse>> ValidateDeletion(Guid id, CancellationToken cancellationToken)
+    {
+        var client = await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Client was not found.");
+
+        var blockers = await GetDeletionBlockersAsync(client, cancellationToken);
+
+        return Ok(new ClientDeletionCheckResponse(
+            blockers.CanDelete,
+            blockers.BlockingReason,
+            blockers.WorkOrderCount,
+            blockers.InvoiceCount,
+            blockers.ContractCount,
+            blockers.AssetCount,
+            blockers.SiteCount));
+    }
+
+    // There is no client-specific capability. Clients are master data alongside assets and sites,
+    // and the clients importer already gates on CanManageAssets, so the single-record mutations use
+    // the same constant; splitting them would let a bulk import do what a single edit cannot.
+    private void EnsureCanManageClients() => userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
 
     private async Task DeactivateClientAsync(Client client, CancellationToken cancellationToken)
     {
@@ -537,21 +604,92 @@ public sealed class ClientsController(
 
     private static string? NormalizeSearch(string? search) =>
         string.IsNullOrWhiteSpace(search) ? null : search.Trim();
+
+    // Work orders, assets, systems, contracts, invoices, payments, credit notes and quotations
+    // all hold a Restrict foreign key to Client, so a permanent delete is only possible for a
+    // client that never accumulated operational history. Sites, portal users and preferential
+    // rates cascade and do not block.
+    private async Task<ClientDeletionBlockers> GetDeletionBlockersAsync(Client client, CancellationToken cancellationToken)
+    {
+        return new ClientDeletionBlockers(
+            await dbContext.WorkOrders.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
+            await dbContext.Assets.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
+            await dbContext.Systems.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
+            await dbContext.Contracts.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
+            await dbContext.TenantInvoices.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
+            await dbContext.TenantPayments.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
+            await dbContext.CreditNotes.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
+            await dbContext.TenantQuotations.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
+            await dbContext.Sites.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken));
+    }
+}
+
+sealed record ClientDeletionBlockers(
+    int WorkOrderCount,
+    int AssetCount,
+    int SystemCount,
+    int ContractCount,
+    int InvoiceCount,
+    int PaymentCount,
+    int CreditNoteCount,
+    int QuotationCount,
+    int SiteCount)
+{
+    public bool CanDelete =>
+        WorkOrderCount == 0
+        && AssetCount == 0
+        && SystemCount == 0
+        && ContractCount == 0
+        && InvoiceCount == 0
+        && PaymentCount == 0
+        && CreditNoteCount == 0
+        && QuotationCount == 0;
+
+    public string? BlockingReason
+    {
+        get
+        {
+            if (CanDelete)
+            {
+                return null;
+            }
+
+            var parts = new List<string>();
+            Add(parts, WorkOrderCount, "work order");
+            Add(parts, AssetCount, "asset");
+            Add(parts, SystemCount, "system");
+            Add(parts, ContractCount, "contract");
+            Add(parts, InvoiceCount, "invoice");
+            Add(parts, PaymentCount, "payment");
+            Add(parts, CreditNoteCount, "credit note");
+            Add(parts, QuotationCount, "quotation");
+
+            return $"This client has {string.Join(", ", parts)} on record and cannot be permanently deleted. Archive it instead to retain the history.";
+        }
+    }
+
+    private static void Add(List<string> parts, int count, string noun)
+    {
+        if (count > 0)
+        {
+            parts.Add($"{count} {noun}{(count == 1 ? string.Empty : "s")}");
+        }
+    }
 }
 
 public sealed record UpsertClientRequest(
-    [property: StringLength(200)] string ClientName,
-    [property: StringLength(100)] string? ClientType,
-    [property: StringLength(256)] string? Email,
-    [property: StringLength(40)] string? Phone,
-    [property: StringLength(200)] string? Location,
-    [property: StringLength(200)] string? ContactPerson,
-    [property: StringLength(40)] string? ContactPhone,
+    [StringLength(200)] string ClientName,
+    [StringLength(100)] string? ClientType,
+    [StringLength(256)] string? Email,
+    [StringLength(40)] string? Phone,
+    [StringLength(200)] string? Location,
+    [StringLength(200)] string? ContactPerson,
+    [StringLength(40)] string? ContactPhone,
     Guid? SlaDefinitionId,
     DateTime? ActiveStartDate,
     int? ActiveDurationValue,
-    [property: StringLength(50)] string? ActiveDurationUnit,
-    [property: StringLength(2000)] string? Notes,
+    [StringLength(20)] string? ActiveDurationUnit,
+    [StringLength(2000)] string? Notes,
     bool? IsActive);
 
 public sealed record ClientResponse(
@@ -607,3 +745,12 @@ sealed record ClientCountBundle(
     IReadOnlyDictionary<Guid, int> AssetCounts,
     IReadOnlyDictionary<Guid, int> OpenWorkOrderCounts,
     IReadOnlyDictionary<Guid, int> UpcomingPmCounts);
+
+public sealed record ClientDeletionCheckResponse(
+    bool CanDelete,
+    string? BlockingReason,
+    int WorkOrderCount,
+    int InvoiceCount,
+    int ContractCount,
+    int AssetCount,
+    int SiteCount);

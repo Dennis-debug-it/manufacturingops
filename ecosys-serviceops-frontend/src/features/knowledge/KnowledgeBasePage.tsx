@@ -31,6 +31,7 @@ import type {
   KnowledgeCategory,
   UpsertKnowledgeArticlePayload,
 } from './types'
+import { formatDate } from '../../shared/utils/dates'
 
 const statusStyles: Record<KnowledgeArticleStatus, string> = {
   Draft: 'bg-slate-100 text-slate-700 ring-slate-200',
@@ -87,7 +88,7 @@ function CategoryEditor({ category, onClose }: { category: KnowledgeCategory | n
         canManage ? (
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={save} disabled={isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={save} disabled={isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {isPending ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -97,12 +98,12 @@ function CategoryEditor({ category, onClose }: { category: KnowledgeCategory | n
       <div className="space-y-5">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="kb-cat-name">Name</label>
-          <input id="kb-cat-name" value={name} disabled={!canManage} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+          <input id="kb-cat-name" value={name} disabled={!canManage} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
         </div>
 
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="kb-cat-description">Description</label>
-          <textarea id="kb-cat-description" value={description ?? ''} disabled={!canManage} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+          <textarea id="kb-cat-description" value={description ?? ''} disabled={!canManage} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
         </div>
 
         <div>
@@ -119,7 +120,7 @@ function CategoryEditor({ category, onClose }: { category: KnowledgeCategory | n
                   onClick={() => setIcon(option.name)}
                   className={cn(
                     'flex h-12 items-center justify-center rounded-lg border transition',
-                    active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                    active ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
                   )}
                 >
                   <Icon className="h-5 w-5" />
@@ -131,7 +132,7 @@ function CategoryEditor({ category, onClose }: { category: KnowledgeCategory | n
 
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="kb-cat-order">Display order</label>
-          <input id="kb-cat-order" type="number" value={displayOrder} disabled={!canManage} onChange={(event) => setDisplayOrder(Number(event.target.value))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+          <input id="kb-cat-order" type="number" value={displayOrder} disabled={!canManage} onChange={(event) => setDisplayOrder(Number(event.target.value))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
         </div>
 
         <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -252,7 +253,7 @@ function ArticleEditor({
             ) : <span />}
             <div className="flex items-center gap-2">
               <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={save} disabled={isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+              <button type="button" onClick={save} disabled={isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
                 {isPending ? 'Saving…' : 'Save'}
               </button>
             </div>
@@ -266,13 +267,13 @@ function ArticleEditor({
         <div className="space-y-5">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="kb-art-title">Title</label>
-            <input id="kb-art-title" value={title} disabled={!canManage} onChange={(event) => setTitle(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input id="kb-art-title" value={title} disabled={!canManage} onChange={(event) => setTitle(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="kb-art-category">Category</label>
-              <select id="kb-art-category" value={categoryId} disabled={!canManage} onChange={(event) => setCategoryId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50">
+              <select id="kb-art-category" value={categoryId} disabled={!canManage} onChange={(event) => setCategoryId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50">
                 <option value="">No category</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
@@ -281,7 +282,7 @@ function ArticleEditor({
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="kb-art-visibility">Visibility</label>
-              <select id="kb-art-visibility" value={visibility} disabled={!canManage} onChange={(event) => setVisibility(event.target.value as KnowledgeArticleVisibility)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50">
+              <select id="kb-art-visibility" value={visibility} disabled={!canManage} onChange={(event) => setVisibility(event.target.value as KnowledgeArticleVisibility)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50">
                 {visibilityOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
@@ -291,26 +292,26 @@ function ArticleEditor({
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="kb-art-tags">Tags (comma separated)</label>
-            <input id="kb-art-tags" value={tagsInput} disabled={!canManage} onChange={(event) => setTagsInput(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input id="kb-art-tags" value={tagsInput} disabled={!canManage} onChange={(event) => setTagsInput(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="kb-art-summary">Excerpt</label>
-            <textarea id="kb-art-summary" value={summary ?? ''} disabled={!canManage} onChange={(event) => setSummary(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <textarea id="kb-art-summary" value={summary ?? ''} disabled={!canManage} onChange={(event) => setSummary(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
 
           <div>
             <div className="mb-1.5 flex items-center justify-between">
               <label className="block text-sm font-medium text-slate-700" htmlFor="kb-art-body">Body (Markdown)</label>
               <div className="flex overflow-hidden rounded-lg border border-slate-200">
-                <button type="button" onClick={() => setPreviewMode(false)} className={cn('px-3 py-1 text-xs font-medium', !previewMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-600')}>Write</button>
-                <button type="button" onClick={() => setPreviewMode(true)} className={cn('px-3 py-1 text-xs font-medium', previewMode ? 'bg-slate-900 text-white' : 'bg-white text-slate-600')}>Preview</button>
+                <button type="button" onClick={() => setPreviewMode(false)} className={cn('px-3 py-1 text-xs font-medium', !previewMode ? 'bg-[var(--app-primary)] text-white' : 'bg-white text-slate-600')}>Write</button>
+                <button type="button" onClick={() => setPreviewMode(true)} className={cn('px-3 py-1 text-xs font-medium', previewMode ? 'bg-[var(--app-primary)] text-white' : 'bg-white text-slate-600')}>Preview</button>
               </div>
             </div>
             {previewMode ? (
               <div className="prose prose-slate min-h-[16rem] max-w-none rounded-lg border border-slate-200 px-3 py-2 text-sm" dangerouslySetInnerHTML={{ __html: renderedHtml }} />
             ) : (
-              <textarea id="kb-art-body" value={body} disabled={!canManage} onChange={(event) => setBody(event.target.value)} rows={16} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+              <textarea id="kb-art-body" value={body} disabled={!canManage} onChange={(event) => setBody(event.target.value)} rows={16} className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
             )}
           </div>
         </div>
@@ -352,7 +353,7 @@ export function KnowledgeBasePage() {
         subtitle="Internal reference articles and client-facing help center content."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setEditingArticle({ open: true, id: null })} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setEditingArticle({ open: true, id: null })} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />
               New Article
             </button>
@@ -374,7 +375,7 @@ export function KnowledgeBasePage() {
           onClick={() => setActiveCategoryId('all')}
           className={cn(
             'inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium ring-1 ring-inset transition',
-            activeCategoryId === 'all' ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50',
+            activeCategoryId === 'all' ? 'bg-[var(--app-primary)] text-white ring-[var(--app-primary)]' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50',
           )}
         >
           All articles
@@ -389,7 +390,7 @@ export function KnowledgeBasePage() {
                 onClick={() => setActiveCategoryId(category.id)}
                 className={cn(
                   'inline-flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium ring-1 ring-inset transition',
-                  active ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50',
+                  active ? 'bg-[var(--app-primary)] text-white ring-[var(--app-primary)]' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50',
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -424,7 +425,7 @@ export function KnowledgeBasePage() {
           onAction={canManage ? () => setEditingArticle({ open: true, id: null }) : undefined}
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
               <tr>
@@ -452,7 +453,7 @@ export function KnowledgeBasePage() {
                   <td className="px-4 py-3 text-slate-600">
                     <span className="inline-flex items-center gap-1"><Eye className="h-3.5 w-3.5" />{article.viewCount}</span>
                   </td>
-                  <td className="px-4 py-3 text-slate-500">{new Date(article.updatedAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-slate-500">{formatDate(article.updatedAt)}</td>
                   <td className="px-4 py-3 text-right">
                     {canManage ? (
                       <button

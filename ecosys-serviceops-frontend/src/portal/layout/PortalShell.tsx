@@ -4,6 +4,7 @@ import { cn } from '../../shared/utils/cn'
 import { brand } from '../../shared/config/brand'
 import { LayoutDashboard, ClipboardList, FileText, UserCircle2, LogOut, BookOpen } from 'lucide-react'
 import { usePortalAuth } from '../auth/PortalAuthContext'
+import { Crystal } from '../../shared/components/Crystal'
 
 const portalNav = [
   { label: 'Dashboard', to: '/portal/dashboard', icon: LayoutDashboard },
@@ -28,8 +29,11 @@ export function PortalShell({ children }: PortalShellProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+    <div className="relative min-h-screen bg-[var(--app-bg)] text-[var(--app-text)]">
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <Crystal variant="analytics" className="absolute inset-0" />
+      </div>
+      <header className="border-b border-[var(--glass-border)] bg-[var(--glass-white-strong)] px-4 py-4 shadow-[var(--shadow-app)] backdrop-blur-[var(--glass-blur-md)] sm:px-6">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{tenant?.companyName ?? brand.appName}</div>
@@ -43,7 +47,7 @@ export function PortalShell({ children }: PortalShellProps) {
             <button
               type="button"
               onClick={() => void handleLogout()}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-700 hover:bg-slate-100"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[var(--app-border)] px-3 text-xs font-medium text-slate-700 hover:bg-[var(--app-primary-soft)]"
             >
               <LogOut className="h-3.5 w-3.5" />
               Sign out
@@ -52,7 +56,7 @@ export function PortalShell({ children }: PortalShellProps) {
         </div>
       </header>
       <div className="mx-auto flex max-w-7xl gap-6 px-4 py-4 sm:px-6">
-        <aside className="hidden w-64 shrink-0 rounded-2xl border border-slate-200 bg-white p-3 lg:block">
+        <aside className="hidden w-64 shrink-0 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-3 backdrop-blur-[var(--glass-blur-md)] lg:block">
           <nav className="space-y-1">
             {portalNav.map((item) => {
               const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
@@ -62,8 +66,10 @@ export function PortalShell({ children }: PortalShellProps) {
                   key={item.to}
                   to={item.to}
                   className={cn(
-                    'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
-                    active ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100',
+                    'relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
+                    active
+                      ? 'bg-[var(--app-primary)] text-white before:absolute before:left-0 before:top-1/2 before:h-5 before:w-[3px] before:-translate-y-1/2 before:rounded-full before:bg-[var(--app-lime)] before:content-[""]'
+                      : 'text-slate-700 hover:bg-[var(--app-primary-soft)]',
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -75,7 +81,7 @@ export function PortalShell({ children }: PortalShellProps) {
         </aside>
         <main className="min-w-0 flex-1 pb-24 lg:pb-6">{children}</main>
       </div>
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-2 py-2 lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--glass-border)] bg-[var(--glass-white-strong)] px-2 py-2 backdrop-blur-[var(--glass-blur-md)] lg:hidden">
         <div className="grid grid-cols-5 gap-1">
           {portalNav.map((item) => {
             const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
@@ -86,7 +92,7 @@ export function PortalShell({ children }: PortalShellProps) {
                 to={item.to}
                 className={cn(
                   'flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium',
-                  active ? 'bg-slate-900 text-white' : 'text-slate-500',
+                  active ? 'bg-[var(--app-primary)] text-white' : 'text-slate-500',
                 )}
               >
                 <Icon className="h-4 w-4" />

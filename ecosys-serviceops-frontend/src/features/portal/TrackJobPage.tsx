@@ -86,16 +86,16 @@ export function TrackJobPage() {
           return (
             <div key={step.key} className="flex flex-1 flex-col items-center text-center">
               <div className="flex w-full items-center">
-                <div className={cn('h-px flex-1', index === 0 ? 'opacity-0' : reached ? 'bg-slate-900' : 'bg-slate-200')} />
+                <div className={cn('h-px flex-1', index === 0 ? 'opacity-0' : reached ? 'bg-[var(--app-primary)]' : 'bg-slate-200')} />
                 <div
                   className={cn(
                     'flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2',
-                    reached ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-400',
+                    reached ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-400',
                   )}
                 >
                   <Icon className="h-4 w-4" />
                 </div>
-                <div className={cn('h-px flex-1', index === steps.length - 1 ? 'opacity-0' : reached && index < activeStep ? 'bg-slate-900' : 'bg-slate-200')} />
+                <div className={cn('h-px flex-1', index === steps.length - 1 ? 'opacity-0' : reached && index < activeStep ? 'bg-[var(--app-primary)]' : 'bg-slate-200')} />
               </div>
               <span className={cn('mt-2 text-[11px] font-medium', reached ? 'text-slate-900' : 'text-slate-400')}>{step.label}</span>
             </div>

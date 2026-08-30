@@ -1,4 +1,5 @@
-import { differenceInMinutes } from '../../shared/utils/dates'
+import type { WorkOrderListFilters } from './api'
+import { hasAcceptedTechnician, hasRecordedArrival, readAssignmentGuardState } from './dispatchGuards'
 
 export interface WorkOrderRow {
   id: string
@@ -31,16 +32,18 @@ export interface WorkOrderRow {
   holdNote: string | null
   isRepeatVisit: boolean
   repeatVisitCount: number
+  /** Server Start guard: at least one persisted technician assignment in an accepted state. */
+  hasAcceptedTechnician: boolean
+  /** Server Complete guard: at least one persisted technician assignment with an arrival recorded. */
+  hasRecordedArrival: boolean
 }
 
+/**
+ * SLA filter values. These are sent verbatim as the `slaStatus` query param — the server's
+ * `ApplySlaStatusFilter` strips non-letters before matching, so `on-track`/`at-risk`/`breached`/
+ * `no-sla` are exactly the four literals it accepts and anything else is a 400.
+ */
 export type SlaStatusKey = 'on-track' | 'at-risk' | 'breached' | 'no-sla'
-
-export function resolveSlaStatusKey(deadline: string | null, breached: boolean): SlaStatusKey {
-  if (breached) return 'breached'
-  if (!deadline) return 'no-sla'
-  const minutesRemaining = differenceInMinutes(deadline, new Date())
-  return minutesRemaining <= 120 ? 'at-risk' : 'on-track'
-}
 
 export const slaStatusLabels: Record<SlaStatusKey, string> = {
   'on-track': 'On track',
@@ -106,6 +109,8 @@ export function normalizeWorkOrders(payload: unknown): WorkOrderRow[] {
       holdNote: typeof row.holdNote === 'string' ? row.holdNote : null,
       isRepeatVisit: Boolean(row.isRepeatVisit),
       repeatVisitCount: typeof row.repeatVisitCount === 'number' ? row.repeatVisitCount : 0,
+      hasAcceptedTechnician: hasAcceptedTechnician(readAssignmentGuardState(row.technicianAssignments)),
+      hasRecordedArrival: hasRecordedArrival(readAssignmentGuardState(row.technicianAssignments)),
     }))
 }
 
@@ -122,29 +127,32 @@ export interface WorkOrderFilterValues {
   toDate: string
 }
 
-export function filterWorkOrderRows(rows: WorkOrderRow[], filters: WorkOrderFilterValues): WorkOrderRow[] {
-  const query = filters.search.trim().toLowerCase()
-
-  return rows.filter((row) => {
-    if (query && ![row.woNo, row.client, row.site, row.asset, row.type, row.assignedTo, row.status, row.title]
-      .some((value) => value.toLowerCase().includes(query))) {
-      return false
-    }
-    if (filters.status && row.status !== filters.status) return false
-    if (filters.technicianId && row.assignedTechnicianId !== filters.technicianId) return false
-    if (filters.clientId && row.clientId !== filters.clientId) return false
-    if (filters.siteId && row.siteId !== filters.siteId) return false
-    if (filters.priority && row.priority !== filters.priority) return false
-    if (filters.slaStatus && resolveSlaStatusKey(row.slaResolutionDeadline, row.slaResponseBreached || row.slaResolutionBreached) !== filters.slaStatus) return false
-    if (filters.unassignedOnly && !row.isUnassigned) return false
-    if (filters.fromDate) {
-      const reference = row.dueDate !== '—' ? row.dueDate : row.createdAt
-      if (!reference || new Date(reference) < new Date(filters.fromDate)) return false
-    }
-    if (filters.toDate) {
-      const reference = row.dueDate !== '—' ? row.dueDate : row.createdAt
-      if (!reference || new Date(reference) > new Date(`${filters.toDate}T23:59:59`)) return false
-    }
-    return true
-  })
+/**
+ * Translates the URL-backed filter state into the query params `WorkOrdersController.GetAll`
+ * accepts, so the list is filtered in the database instead of being downloaded whole and filtered
+ * in the browser.
+ *
+ * Two semantics shift with the move to the server and are intentional:
+ * - `fromDate`/`toDate` bound `CreatedAt` server-side (the only date the endpoint filters on),
+ *   where the old client-side pass used the due date and fell back to created.
+ * - `search` matches WO number, title, client, asset and the assignment summary server-side; site
+ *   and work type are no longer part of the free-text match.
+ *
+ * Empty strings are dropped rather than sent, because the server treats a present-but-blank
+ * `status`/`priority`/`slaStatus` as a value to normalize and rejects what it cannot parse.
+ */
+export function toWorkOrderListFilters(filters: WorkOrderFilterValues): WorkOrderListFilters {
+  const trimmedSearch = filters.search.trim()
+  return {
+    ...(filters.status ? { status: filters.status } : {}),
+    ...(filters.priority ? { priority: filters.priority } : {}),
+    ...(filters.technicianId ? { technicianId: filters.technicianId } : {}),
+    ...(filters.clientId ? { clientId: filters.clientId } : {}),
+    ...(filters.siteId ? { siteId: filters.siteId } : {}),
+    ...(filters.slaStatus ? { slaStatus: filters.slaStatus } : {}),
+    ...(filters.unassignedOnly ? { unassigned: true } : {}),
+    ...(trimmedSearch ? { search: trimmedSearch } : {}),
+    ...(filters.fromDate ? { fromDate: `${filters.fromDate}T00:00:00` } : {}),
+    ...(filters.toDate ? { toDate: `${filters.toDate}T23:59:59` } : {}),
+  }
 }

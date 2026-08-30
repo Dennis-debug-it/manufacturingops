@@ -18,6 +18,7 @@ public sealed class DispatchController(
     ITenantContext tenantContext,
     IUserAccessService userAccessService,
     IBranchAccessService branchAccessService,
+    IWorkOrderAssignmentWorkflowService assignmentWorkflowService,
     IServiceOpsNotifier serviceOpsNotifier) : TenantAwareControllerBase(tenantContext)
 {
     private const double NairobiLatitude = -1.286389;
@@ -248,12 +249,34 @@ public sealed class DispatchController(
         await EnsureNoOverlapAsync(technician.Id, request.ScheduledStart, request.ScheduledEnd, workOrder.Id, cancellationToken);
 
         var previousStatus = workOrder.Status;
-        workOrder.AssignedTechnicianId = technician.Id;
-        workOrder.AssignmentType = WorkOrderAssignmentTypes.IndividualTechnician;
+
+        // EC-019: assignment goes through the one workflow that owns it. Writing
+        // work_orders."AssignedTechnicianId" directly here left work_order_technician_assignments
+        // with no row, so the board could assign a technician that the assignment model — and
+        // therefore every list, report and dispatch load calculation reading that table — still
+        // considered unassigned. ApplyAssignmentsAsync creates the row, records history and an
+        // event, refreshes SLA, and syncs the legacy column, so the two can no longer disagree.
+        var wasAssigned = workOrder.AssignedTechnicianId.HasValue;
+        await assignmentWorkflowService.ApplyAssignmentsAsync(
+            TenantId,
+            workOrder.Id,
+            UserId,
+            new WorkOrderAssignmentUpdateRequest(
+                AssignmentGroupId: null,
+                TechnicianIds: [technician.Id],
+                LeadTechnicianId: technician.Id,
+                Notes: null),
+            isReassignment: wasAssigned,
+            cancellationToken);
+
         workOrder.ScheduledStartAt = request.ScheduledStart;
         workOrder.ScheduledEndAt = request.ScheduledEnd;
 
-        if (workOrder.Status is WorkOrderStatuses.New or WorkOrderStatuses.Open or WorkOrderStatuses.Reopened)
+        // Scheduling runs after the assignment, which moves an unassigned work order to Assigned —
+        // so Assigned has to count as schedulable here or the board would silently stop advancing
+        // the status it is responsible for.
+        if (workOrder.Status is WorkOrderStatuses.New or WorkOrderStatuses.Open
+            or WorkOrderStatuses.Reopened or WorkOrderStatuses.Assigned)
         {
             workOrder.Status = WorkOrderStatuses.Scheduled;
         }
@@ -299,8 +322,22 @@ public sealed class DispatchController(
         }
 
         var previousStatus = workOrder.Status;
-        workOrder.AssignedTechnicianId = null;
-        workOrder.AssignmentType = WorkOrderAssignmentTypes.Unassigned;
+
+        // EC-019, the other half: clearing only the legacy column left the technician's assignment
+        // row behind, so an "unassigned" work order still counted against that technician's load.
+        // An empty assignment set removes the rows and re-syncs the legacy column to null.
+        await assignmentWorkflowService.ApplyAssignmentsAsync(
+            TenantId,
+            workOrder.Id,
+            UserId,
+            new WorkOrderAssignmentUpdateRequest(
+                AssignmentGroupId: null,
+                TechnicianIds: [],
+                LeadTechnicianId: null,
+                Notes: null),
+            isReassignment: false,
+            cancellationToken);
+
         workOrder.ScheduledStartAt = null;
         workOrder.ScheduledEndAt = null;
 

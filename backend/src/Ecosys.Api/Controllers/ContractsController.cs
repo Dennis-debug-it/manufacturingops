@@ -19,7 +19,6 @@ public sealed class ContractsController(
     ITenantContext tenantContext,
     IContractAccessService contractAccessService,
     IContractLifecycleService contractLifecycleService,
-    IContractPricingService contractPricingService,
     IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]

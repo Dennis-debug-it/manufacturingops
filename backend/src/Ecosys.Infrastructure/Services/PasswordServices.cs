@@ -6,12 +6,27 @@ using Ecosys.Shared.Contracts.Integration;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Ecosys.Infrastructure.Services;
 
 public interface ITemporaryPasswordService
 {
     string Generate(int minimumLength = 14);
+}
+
+/// <summary>
+/// Raised when self-service password reset cannot run because no mailbox is configured anywhere —
+/// neither the platform settings row nor <c>Smtp:*</c> / <c>ECOSYS_SMTP_*</c>. Deliberately raised
+/// before the account lookup and from the platform scope, so the answer depends only on the server's
+/// own configuration and never on whether the submitted address exists (EC-P1-06d).
+/// </summary>
+public sealed class PasswordResetUnavailableException(string message)
+    : Shared.Errors.AppException(message), Shared.Errors.ILocalizedErrorCode
+{
+    public override int StatusCode => 503;
+    public string ErrorCode => "EMAIL_NOT_CONFIGURED";
 }
 
 public interface IPasswordResetService
@@ -65,15 +80,31 @@ public sealed class PasswordResetService(
     ITenantSecurityPolicyService tenantSecurityPolicyService,
     IUserSessionService userSessionService,
     IUserCredentialDeliveryService credentialDeliveryService,
-    IAuditLogService auditLogService) : IPasswordResetService
+    IAuditLogService auditLogService,
+    IEmailSettingsResolver emailSettingsResolver,
+    IOptions<Shared.Options.AuthSecurityOptions> authSecurityOptions,
+    IOptions<Shared.Options.SmtpOptions> smtpOptions,
+    ILogger<PasswordResetService> logger) : IPasswordResetService
 {
-    private const int ExpiryMinutes = 45;
+    private const int MinimumExpiryMinutes = 15;
+    private const int DefaultExpiryMinutes = 120;
     private const string GenericMessage = "If an account exists for this email, password reset instructions will be sent shortly.";
     private const string SuccessMessage = "Your password has been reset. You can now sign in.";
     private const string InvalidLinkMessage = "This password reset link is invalid or has expired. Please request a new one.";
+    private const string UnavailableMessage = "Password reset is temporarily unavailable because email delivery is not configured. Please contact your administrator.";
 
     public async Task<string> RequestAsync(string email, CancellationToken cancellationToken = default)
     {
+        // Deliverability is checked first, at platform scope, and its answer is the same for every
+        // caller: it depends on this server's configuration, not on the address that was submitted.
+        // Reporting success while no mailbox exists anywhere is what stranded reset requests
+        // silently, but the check has to stay address-independent or it becomes an account
+        // enumeration oracle — so it runs before the lookup below and cannot see the address at all.
+        // A per-recipient failure after this point (that mailbox rejected, that tenant's own SMTP
+        // broken) is address-dependent by nature and stays behind GenericMessage; it is logged and
+        // audited instead (EC-P1-06d).
+        await EnsureEmailDeliveryIsConfiguredAsync(cancellationToken);
+
         if (string.IsNullOrWhiteSpace(email))
         {
             return GenericMessage;
@@ -100,7 +131,7 @@ public sealed class PasswordResetService(
         }
 
         var rawToken = CreateRawToken();
-        var expiresAt = now.AddMinutes(ExpiryMinutes);
+        var expiresAt = now.AddMinutes(ResolveExpiryMinutes());
         dbContext.PasswordResetTokens.Add(new PasswordResetToken
         {
             UserId = user.Id,
@@ -152,8 +183,31 @@ public sealed class PasswordResetService(
             .Include(x => x.User)
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
 
-        if (resetToken is null || resetToken.User is null || resetToken.UsedAt.HasValue || resetToken.ExpiresAt <= now)
+        if (resetToken is null || resetToken.User is null)
         {
+            logger.LogWarning("Password reset rejected: the token was not found.");
+            throw new Shared.Errors.ForbiddenException(InvalidLinkMessage);
+        }
+
+        if (resetToken.UsedAt.HasValue)
+        {
+            logger.LogWarning(
+                "Password reset rejected for user {UserId}: the token was already used at {UsedAt:o}.",
+                resetToken.UserId,
+                resetToken.UsedAt.Value);
+            throw new Shared.Errors.ForbiddenException(InvalidLinkMessage);
+        }
+
+        // Rows written before the column carried an explicit UTC kind come back as Unspecified; compare
+        // like-for-like so a valid link is never rejected as expired.
+        var expiresAtUtc = DateTimeNormalizationHelper.NormalizeToUtc(resetToken.ExpiresAt);
+        if (expiresAtUtc <= now)
+        {
+            logger.LogWarning(
+                "Password reset rejected for user {UserId}: the token expired at {ExpiresAt:o} (now {Now:o}).",
+                resetToken.UserId,
+                expiresAtUtc,
+                now);
             throw new Shared.Errors.ForbiddenException(InvalidLinkMessage);
         }
 
@@ -181,6 +235,35 @@ public sealed class PasswordResetService(
             cancellationToken: cancellationToken);
 
         return SuccessMessage;
+    }
+
+    /// <summary>
+    /// Resolves the platform mailbox exactly as a send would — database row first, then the
+    /// <c>Smtp:*</c> configuration section — and refuses the request when neither supplies a host.
+    /// Platform mail is what every tenant without its own override sends through, so "nothing here"
+    /// means nothing can be delivered for anyone.
+    /// </summary>
+    private async Task EnsureEmailDeliveryIsConfiguredAsync(CancellationToken cancellationToken)
+    {
+        var platformSettings = (await emailSettingsResolver.ResolveAsync(null, cancellationToken)).Settings;
+
+        if (EmailDeliveryResolution.IsExplicitlyDisabled(platformSettings)
+            || EmailDeliveryResolution.Resolve(platformSettings, null, smtpOptions.Value) is null)
+        {
+            logger.LogError("Password reset was requested but no SMTP host is configured in the platform email settings or the Smtp configuration section.");
+            throw new PasswordResetUnavailableException(UnavailableMessage);
+        }
+    }
+
+    /// <summary>
+    /// Reset links have to survive SMTP queueing and retry delays before the recipient ever opens the
+    /// mail, so an operator-supplied window below <see cref="MinimumExpiryMinutes"/> is treated as a
+    /// misconfiguration rather than honoured.
+    /// </summary>
+    private int ResolveExpiryMinutes()
+    {
+        var configured = authSecurityOptions.Value.PasswordResetExpiryMinutes;
+        return configured <= 0 ? DefaultExpiryMinutes : Math.Max(MinimumExpiryMinutes, configured);
     }
 
     private static string CreateRawToken()

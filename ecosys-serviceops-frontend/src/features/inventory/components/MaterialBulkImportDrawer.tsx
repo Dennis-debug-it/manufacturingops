@@ -118,7 +118,7 @@ export function MaterialBulkImportDrawer({ open, onClose }: MaterialBulkImportDr
             <button type="button" onClick={() => void handlePreview()} disabled={!file || previewing || importing} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60">
               {previewing ? 'Previewing...' : 'Preview Import'}
             </button>
-            <button type="button" onClick={() => void handleImport()} disabled={!preview || validRows === 0 || previewing || importing} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={() => void handleImport()} disabled={!preview || validRows === 0 || previewing || importing} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {importing ? 'Importing...' : 'Confirm Import'}
             </button>
           </div>
@@ -153,15 +153,15 @@ export function MaterialBulkImportDrawer({ open, onClose }: MaterialBulkImportDr
 
         {preview ? (
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Rows</p>
               <p className="mt-2 text-2xl font-semibold text-slate-900">{preview.totalRows}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Valid</p>
               <p className="mt-2 text-2xl font-semibold text-emerald-600">{validRows}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Needs Review</p>
               <p className="mt-2 text-2xl font-semibold text-amber-600">{errorRows}</p>
             </div>
@@ -171,7 +171,7 @@ export function MaterialBulkImportDrawer({ open, onClose }: MaterialBulkImportDr
         {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
 
         {preview ? (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
             <div className="max-h-[22rem] overflow-auto">
               <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
                 <thead className="sticky top-0 bg-slate-50">
@@ -211,7 +211,7 @@ export function MaterialBulkImportDrawer({ open, onClose }: MaterialBulkImportDr
               Imported {summary.successfulRows} of {summary.totalRows} rows. Failed {summary.failedRows}. Skipped {summary.skippedRows}.
             </div>
             {summary.rowErrors && summary.rowErrors.length > 0 ? (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
                 <div className="max-h-48 overflow-auto">
                   <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
                     <thead className="bg-slate-50">

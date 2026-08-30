@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '../utils/cn'
+import { Surface } from './Surface'
 
 export interface StatCardProps {
   label: string
@@ -18,12 +19,12 @@ const toneClasses: Record<NonNullable<StatCardProps['tone']>, string> = {
 
 export function StatCard({ label, value, icon, tone = 'default', className }: StatCardProps) {
   return (
-    <div className={cn('rounded-2xl border border-slate-200 bg-white p-4 shadow-sm', className)}>
+    <Surface variant="glass" padding="sm" crystal="kpi" className={cn(className)}>
       <div className="flex items-center justify-between">
         <div className="text-sm font-medium text-slate-600">{label}</div>
         {icon}
       </div>
       <div className={cn('mt-3 text-2xl font-semibold', toneClasses[tone])}>{value}</div>
-    </div>
+    </Surface>
   )
 }

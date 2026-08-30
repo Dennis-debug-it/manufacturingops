@@ -10,6 +10,12 @@ public sealed class Tenant : AuditableEntity
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
     public string Country { get; set; } = string.Empty;
+    /// <summary>
+    /// IANA time-zone id (e.g. "Africa/Nairobi") this tenant's users work in. Null inherits the
+    /// platform default. All timestamps stay UTC in storage; this only drives display and
+    /// wall-clock/calendar-date decisions.
+    /// </summary>
+    public string? TimeZoneId { get; set; }
     public string? Industry { get; set; }
     public string? ContactName { get; set; }
     public string? ContactEmail { get; set; }

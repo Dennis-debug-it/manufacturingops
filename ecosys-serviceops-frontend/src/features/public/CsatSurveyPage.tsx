@@ -116,7 +116,7 @@ export function CsatSurveyPage() {
           onChange={(event) => setComment(event.target.value)}
           rows={4}
           maxLength={2000}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--app-primary)]"
         />
       </div>
 
@@ -129,7 +129,7 @@ export function CsatSurveyPage() {
           setSubmitError('')
           submit.mutate()
         }}
-        className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+        className="mt-6 inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {submit.isPending ? 'Submitting…' : 'Submit Feedback'}
       </button>

@@ -21,6 +21,23 @@ public interface IMvpAuthService
     Task<LoginResult> LoginAsync(string email, string password, bool rememberMe = false, CancellationToken cancellationToken = default);
     Task<LoginResult> RefreshAsync(string refreshToken, CancellationToken cancellationToken = default);
     Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Starts an impersonation session as the tenant's admin, recording the operator's stated
+    /// justification. <paramref name="reason"/> is written into both audit entries: "who impersonated
+    /// which tenant, and why" is the question an auditor actually asks (EC-028), and it cannot be
+    /// reconstructed after the fact. A separate overload rather than an added parameter so the
+    /// existing four-argument call sites keep binding to the overload above unchanged.
+    /// </summary>
+    Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, string? reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The permissions the user would be issued by a fresh login, resolved through exactly the same
+    /// path login uses. Callers that echo a signed-in user's own context back to the client (notably
+    /// <c>GET /api/auth/me</c>) must use this instead of mapping the stored <c>user_permissions</c>
+    /// row, so a page refresh can never hand the client a different permission set than the token.
+    /// </summary>
+    Task<UserPermissionsModel> ResolvePermissionsForUserAsync(Guid userId, CancellationToken cancellationToken = default);
 }
 
 public sealed record SignupResult(
@@ -272,7 +289,10 @@ internal sealed class MvpAuthService(
             user.Tenant.ShowPoweredByEcosys);
     }
 
-    public async Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default)
+    public Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default) =>
+        ImpersonateTenantAdminAsync(tenantId, actingUserId, actingUserName, null, cancellationToken);
+
+    public async Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, string? reason, CancellationToken cancellationToken = default)
     {
         var tenant = await dbContext.Tenants
             .SingleOrDefaultAsync(x => x.Id == tenantId && x.Id != PlatformConstants.RootTenantId, cancellationToken)
@@ -297,13 +317,20 @@ internal sealed class MvpAuthService(
         var token = CreateToken(targetUser, tenant, permissions, session.Id, jwtId, mustChangePassword: false, actingUserId, actingUserName);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        // EC-028: both entries name the acting platform user, the target tenant, and the stated
+        // reason. The reason is operator-supplied free text and is recorded verbatim; nothing about
+        // the issued session (token, jwt id, session id) is logged.
+        var reasonSuffix = string.IsNullOrWhiteSpace(reason)
+            ? " No reason was given."
+            : $" Reason: {reason.Trim()}";
+
         await auditLogService.LogAsync(
             tenantId,
             actingUserId,
             "impersonation.started",
             nameof(User),
             targetUser.Id.ToString(),
-            $"Platform admin '{actingUserName}' started an impersonation session as tenant admin '{targetUser.Email}'.",
+            $"Platform admin '{actingUserName}' started an impersonation session in tenant '{tenant.Name}' as tenant admin '{targetUser.Email}'.{reasonSuffix}",
             severity: "Warning",
             cancellationToken: cancellationToken);
 
@@ -313,7 +340,7 @@ internal sealed class MvpAuthService(
             "platform.tenant.impersonation.started",
             nameof(Tenant),
             tenantId.ToString(),
-            $"Started impersonating '{targetUser.Email}' in tenant '{tenant.Name}'.",
+            $"Platform admin '{actingUserName}' started impersonating tenant admin '{targetUser.Email}' in tenant '{tenant.Name}'.{reasonSuffix}",
             severity: "Warning",
             cancellationToken: cancellationToken);
 
@@ -577,6 +604,20 @@ internal sealed class MvpAuthService(
             signingCredentials: new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256));
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <inheritdoc />
+    public async Task<UserPermissionsModel> ResolvePermissionsForUserAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        // Query filters are bypassed deliberately: this resolves the caller's own account, and the
+        // ambient tenant filter is not applied on every path that needs this (login is anonymous).
+        var user = await dbContext.Users
+            .AsNoTracking()
+            .IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new NotFoundException("User was not found.");
+
+        return await ResolvePermissionsAsync(user, cancellationToken);
     }
 
     /// <summary>

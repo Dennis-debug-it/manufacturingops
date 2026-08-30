@@ -45,7 +45,7 @@ export function RelatedWorkOrdersPanel({ workOrderId }: { workOrderId: string })
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Related Work Orders</h3>
         <Link to="/work-orders" className="text-xs font-medium text-slate-500 hover:text-slate-900">View all</Link>

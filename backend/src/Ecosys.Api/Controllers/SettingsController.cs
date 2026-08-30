@@ -25,6 +25,8 @@ public sealed class SettingsController(
     IDocumentNumberingService documentNumberingService,
     IAuditLogService auditLogService,
     ISecretEncryptionService secretEncryptionService,
+    ITenantTimeZoneService tenantTimeZoneService,
+    IEmailSettingsResolver emailSettingsResolver,
     IEmailSender emailSender,
     ILogger<SettingsController> logger) : TenantAwareControllerBase(tenantContext)
 {
@@ -51,7 +53,7 @@ public sealed class SettingsController(
     {
         userAccessService.EnsureAdmin();
         var tenant = await GetTenantAsync(cancellationToken);
-        return Ok(MapCompany(tenant));
+        return Ok(await MapCompanyAsync(tenant, cancellationToken));
     }
 
     [HttpPut("company")]
@@ -80,11 +82,17 @@ public sealed class SettingsController(
         tenant.Country = request.Country.Trim();
         tenant.Industry = NormalizeOptional(request.Industry);
         tenant.Address = request.Address is null ? tenant.Address : NormalizeOptional(request.Address);
+        // Null leaves the current override untouched; an explicit blank clears it back to the platform default.
+        if (request.TimeZoneId is not null)
+        {
+            tenant.TimeZoneId = tenantTimeZoneService.NormalizeTimeZoneId(request.TimeZoneId);
+        }
         tenant.PrimaryColor = string.IsNullOrWhiteSpace(request.PrimaryColor) ? tenant.PrimaryColor : request.PrimaryColor.Trim();
         tenant.SecondaryColor = string.IsNullOrWhiteSpace(request.SecondaryColor) ? tenant.SecondaryColor : request.SecondaryColor.Trim();
         tenant.ShowPoweredByEcosys = request.ShowPoweredByEcosys;
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(MapCompany(tenant));
+        tenantTimeZoneService.Invalidate(tenant.Id);
+        return Ok(await MapCompanyAsync(tenant, cancellationToken));
     }
 
     [HttpGet("email")]
@@ -117,7 +125,10 @@ public sealed class SettingsController(
             null,
             null,
             30,
-            0), preserveExistingSecretWhenMissing: false);
+            0,
+            // Preserve the current mode: this legacy endpoint edits SMTP fields, it does not decide
+            // which mailbox the workspace sends through.
+            settings.UsePlatformDefaults), preserveExistingSecretWhenMissing: false);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapLegacyEmail(settings));
@@ -128,7 +139,7 @@ public sealed class SettingsController(
     {
         userAccessService.EnsureAdmin();
         var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
-        return Ok(MapEmailNotification(settings));
+        return Ok(await MapEmailNotificationAsync(settings, cancellationToken));
     }
 
     [HttpPut("email-notifications")]
@@ -138,18 +149,35 @@ public sealed class SettingsController(
         ValidateEmailNotificationRequest(request);
 
         var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
+        var previousMode = settings.UsePlatformDefaults;
         ApplyEmailNotificationSettings(settings, request, preserveExistingSecretWhenMissing: true);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await AuditSettingsChangeAsync("Email notifications updated", nameof(EmailSetting), settings.Id, cancellationToken);
-        return Ok(MapEmailNotification(settings));
+        // Which mailbox a workspace sends through is worth its own audit line — it changes where every
+        // password reset and invitation originates.
+        var description = previousMode == settings.UsePlatformDefaults
+            ? "Email notifications updated"
+            : settings.UsePlatformDefaults
+                ? "Email delivery switched to platform mail"
+                : $"Email delivery switched to own SMTP ({settings.Host})";
+        await AuditSettingsChangeAsync(description, nameof(EmailSetting), settings.Id, cancellationToken);
+        return Ok(await MapEmailNotificationAsync(settings, cancellationToken));
     }
 
     [HttpPost("email-notifications/test")]
     public async Task<ActionResult<EmailNotificationTestResponse>> TestEmailNotifications([FromBody] EmailNotificationTestRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
-        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
+        var storedSettings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
+
+        // Test what actually sends. A workspace on platform mail never uses its own row, so testing that
+        // row would report a pass or a failure that says nothing about whether its email works.
+        var effective = await emailSettingsResolver.ResolveAsync(TenantId, cancellationToken);
+        var settings = effective.Settings ?? storedSettings;
+        var scopeNote = effective.UsesPlatformMail
+            ? "Tested platform mail — this workspace has no SMTP override of its own."
+            : "Tested this workspace's own SMTP settings.";
+
         var recipient = string.IsNullOrWhiteSpace(request.TestRecipientEmail) ? settings.SenderAddress : request.TestRecipientEmail.Trim();
 
         if (string.IsNullOrWhiteSpace(recipient))
@@ -178,22 +206,38 @@ public sealed class SettingsController(
                 delivery,
                 cancellationToken);
 
-            settings.LastTestedAt = DateTime.UtcNow;
-            settings.LastError = null;
-            settings.IsConfigured = HasConfiguredNotificationSecret(settings);
+            // The outcome is recorded against the tenant's own row even when platform mail was used —
+            // it is this workspace's test history, not the platform's.
+            storedSettings.LastTestedAt = DateTime.UtcNow;
+            storedSettings.LastError = null;
+            storedSettings.IsConfigured = HasConfiguredNotificationSecret(storedSettings);
             await dbContext.SaveChangesAsync(cancellationToken);
-            await AuditSettingsChangeAsync("Email notification test sent", nameof(EmailSetting), settings.Id, cancellationToken);
-            return Ok(new EmailNotificationTestResponse(true, settings.LastTestedAt, null));
+            await AuditSettingsChangeAsync("Email notification test sent", nameof(EmailSetting), storedSettings.Id, cancellationToken);
+            return Ok(new EmailNotificationTestResponse(
+                true,
+                storedSettings.LastTestedAt,
+                null,
+                effective.UsesPlatformMail,
+                $"Test email sent to {recipient}. {scopeNote}"));
         }
         catch (Exception ex)
         {
-            settings.LastTestedAt = DateTime.UtcNow;
-            settings.LastError = ex is EmailDeliveryException deliveryException
+            storedSettings.LastTestedAt = DateTime.UtcNow;
+            storedSettings.LastError = ex is EmailDeliveryException deliveryException
                 ? deliveryException.ErrorCategory
                 : EmailErrorCategories.UnknownSmtpError;
             await dbContext.SaveChangesAsync(cancellationToken);
-            logger.LogWarning(ex, "Tenant email notification test failed for tenant {TenantId}.", TenantId);
-            return Ok(new EmailNotificationTestResponse(false, settings.LastTestedAt, settings.LastError));
+            logger.LogWarning(
+                ex,
+                "Tenant email notification test failed for tenant {TenantId}. Used platform mail: {UsedPlatformMail}.",
+                TenantId,
+                effective.UsesPlatformMail);
+            return Ok(new EmailNotificationTestResponse(
+                false,
+                storedSettings.LastTestedAt,
+                storedSettings.LastError,
+                effective.UsesPlatformMail,
+                $"Test email to {recipient} failed. {scopeNote}"));
         }
     }
 
@@ -551,16 +595,18 @@ public sealed class SettingsController(
         }
 
         var tenant = await GetTenantAsync(cancellationToken);
+        // Matches how every other creation path seeds a tenant (platform-created, self-signup, seeder):
+        // inherit platform mail. Seeding an override pointed at localhost:25 would silently route the
+        // workspace's mail into a relay that does not exist.
         settings = new EmailSetting
         {
             TenantId = TenantId,
-            UsePlatformDefaults = false,
-            OverrideSmtpSettings = true,
+            UsePlatformDefaults = true,
+            OverrideSmtpSettings = false,
             IsEnabled = true,
             Provider = EmailDeliveryMode.Smtp.ToString(),
-            Host = "localhost",
-            Port = 25,
-            UseSsl = false,
+            Port = 587,
+            UseSsl = true,
             SenderName = tenant.CompanyName,
             SenderAddress = tenant.Email
         };
@@ -596,14 +642,25 @@ public sealed class SettingsController(
 
     private static void ValidateEmailNotificationRequest(EmailNotificationSettingsRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.FromName) ||
-            string.IsNullOrWhiteSpace(request.FromEmail) ||
-            (request.IsEnabled && request.DeliveryMode == EmailDeliveryMode.Smtp && string.IsNullOrWhiteSpace(request.SmtpHost)))
+        if (string.IsNullOrWhiteSpace(request.FromName) || string.IsNullOrWhiteSpace(request.FromEmail))
         {
-            throw new BusinessRuleException("From name, from email, and SMTP host are required when SMTP delivery is enabled.");
+            throw new BusinessRuleException("From name and from email are required.");
         }
 
-        if (request.IsEnabled && request.DeliveryMode == EmailDeliveryMode.Smtp && request.SmtpPort <= 0)
+        // On platform mail the SMTP fields are never used, so demanding a host would block a workspace
+        // from saving a sender name it is perfectly entitled to set.
+        if (request.UsePlatformDefaults)
+        {
+            return;
+        }
+
+        var needsSmtpDetails = request.IsEnabled && request.DeliveryMode == EmailDeliveryMode.Smtp;
+        if (needsSmtpDetails && string.IsNullOrWhiteSpace(request.SmtpHost))
+        {
+            throw new BusinessRuleException("SMTP host is required to send through your own mail server.");
+        }
+
+        if (needsSmtpDetails && request.SmtpPort <= 0)
         {
             throw new BusinessRuleException("SMTP port must be greater than zero.");
         }
@@ -624,6 +681,10 @@ public sealed class SettingsController(
 
     private void ApplyEmailNotificationSettings(EmailSetting settings, EmailNotificationSettingsRequest request, bool preserveExistingSecretWhenMissing)
     {
+        // The pair is the mode: platform mail is (true, false), own relay is (false, true). Storing any
+        // other combination would leave the resolver reading a state no screen can express.
+        settings.UsePlatformDefaults = request.UsePlatformDefaults;
+        settings.OverrideSmtpSettings = !request.UsePlatformDefaults;
         settings.IsEnabled = request.IsEnabled;
         settings.Provider = request.DeliveryMode.ToString();
         settings.Host = string.IsNullOrWhiteSpace(request.SmtpHost) ? string.Empty : request.SmtpHost.Trim();
@@ -912,7 +973,7 @@ public sealed class SettingsController(
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static CompanySettingsResponse MapCompany(Tenant tenant) =>
+    private async Task<CompanySettingsResponse> MapCompanyAsync(Tenant tenant, CancellationToken cancellationToken) =>
         new(
             tenant.CompanyName,
             tenant.LegalName,
@@ -927,6 +988,8 @@ public sealed class SettingsController(
             tenant.Country,
             tenant.Industry,
             tenant.Address,
+            tenant.TimeZoneId,
+            await tenantTimeZoneService.GetTimeZoneIdAsync(tenant.Id, cancellationToken),
             tenant.PrimaryColor,
             tenant.SecondaryColor,
             tenant.ShowPoweredByEcosys);
@@ -934,7 +997,16 @@ public sealed class SettingsController(
     private static EmailSettingsResponse MapLegacyEmail(EmailSetting settings) =>
         new(settings.Host, settings.Port, settings.UseSsl, settings.Username, null, settings.SenderName, settings.SenderAddress);
 
-    private static EmailNotificationSettingsResponse MapEmailNotification(EmailSetting settings) =>
+    private async Task<EmailNotificationSettingsResponse> MapEmailNotificationAsync(EmailSetting settings, CancellationToken cancellationToken)
+    {
+        var effective = await emailSettingsResolver.ResolveAsync(settings.TenantId, cancellationToken);
+        return MapEmailNotification(settings, effective.UsesPlatformMail, effective.Settings?.SenderAddress);
+    }
+
+    private static EmailNotificationSettingsResponse MapEmailNotification(
+        EmailSetting settings,
+        bool usesPlatformMail,
+        string? effectiveFromEmail) =>
         new(
             settings.Id,
             settings.TenantId,
@@ -956,7 +1028,10 @@ public sealed class SettingsController(
             HasConfiguredNotificationSecret(settings),
             settings.IsConfigured,
             settings.LastTestedAt,
-            settings.LastError);
+            settings.LastError,
+            settings.UsePlatformDefaults,
+            usesPlatformMail,
+            effectiveFromEmail);
 
     private static EmailIntakeSettingsResponse MapEmailIntake(EmailIntakeSetting settings) =>
         new(

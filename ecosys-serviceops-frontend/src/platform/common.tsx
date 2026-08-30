@@ -49,7 +49,7 @@ export function trialStatusBadge(status: TrialStatus | string) {
 
 export function miniSidebarLinkClass(isActive: boolean) {
   return isActive
-    ? 'rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white'
+    ? 'rounded-lg bg-[var(--app-primary)] px-3 py-2 text-sm font-medium text-white'
     : 'rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900'
 }
 
@@ -59,7 +59,7 @@ export function MiniSidebar({
   items: Array<{ label: string; to: string }>
 }) {
   return (
-    <div className="flex flex-wrap gap-1 rounded-2xl border border-slate-200 bg-white p-2 xl:flex-col">
+    <div className="flex flex-wrap gap-1 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-2 xl:flex-col">
       {items.map((item) => (
         <NavLink
           key={item.to}

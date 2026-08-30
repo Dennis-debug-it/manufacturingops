@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Ecosys.Infrastructure;
 
@@ -24,6 +25,7 @@ public static class DependencyInjection
         services.AddSingleton<IFileStorageService, LocalFileStorageService>();
 
         services.AddHttpContextAccessor();
+        services.AddMemoryCache();
         services.AddDataProtection();
         services.AddScoped<ITenantContext, HttpTenantContext>();
         services.AddScoped<IPortalContext, HttpPortalContext>();
@@ -53,6 +55,7 @@ public static class DependencyInjection
         services.AddScoped<ILicenseGuardService, LicenseGuardService>();
         services.AddScoped<ISecretEncryptionService, SecretEncryptionService>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
+        services.AddScoped<IEmailSettingsResolver, EmailSettingsResolver>();
         services.AddScoped<IEmailTemplateService, EmailTemplateService>();
         services.AddScoped<IEmailNotificationRegistry, EmailNotificationRegistry>();
         services.AddScoped<IEmailDeliveryLogService, EmailDeliveryLogService>();
@@ -63,6 +66,7 @@ public static class DependencyInjection
         services.AddScoped<ITemporaryPasswordService, TemporaryPasswordService>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
         services.AddScoped<ITenantSecurityPolicyService, TenantSecurityPolicyService>();
+        services.AddScoped<ITenantTimeZoneService, TenantTimeZoneService>();
         services.AddScoped<IWorkOrderLifecycleService, WorkOrderLifecycleService>();
         services.AddScoped<IWorkOrderAssignmentWorkflowService, WorkOrderAssignmentWorkflowService>();
         services.AddScoped<IPmWorkOrderChecklistService, PmWorkOrderChecklistService>();
@@ -78,15 +82,23 @@ public static class DependencyInjection
         services.AddSingleton<IPdfRenderer, QuestPdfRenderer>();
         services.AddScoped<IScheduledReportService, ScheduledReportService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
-        services.AddHostedService<EmailOutboxWorker>();
-        services.AddHostedService<TrialLifecycleWorker>();
-        services.AddHostedService<PmSchedulerWorker>();
-        services.AddHostedService<MrrSnapshotWorker>();
-        services.AddHostedService<SlaEnforcementWorker>();
-        services.AddHostedService<ContractReminderWorker>();
-        services.AddHostedService<ScheduledReportWorker>();
-        services.AddHostedService<ApprovalReminderWorker>();
-        services.AddHostedService<EscalationRuleWorker>();
+        // Every one of these nine workers generates work orders, sends customer email or writes
+        // snapshots on a timer. Registered plainly they ran on every replica, so `--scale api=2`
+        // produced duplicate preventive-maintenance work orders and duplicate customer emails. The
+        // lease is applied here, once, for all of them rather than inside each worker — a worker
+        // added later cannot silently miss the guard (EC-P2-10).
+        services.AddSingleton<IBackgroundWorkLease>(serviceProvider => new PostgresAdvisoryLockLease(
+            connectionString,
+            serviceProvider.GetRequiredService<ILogger<PostgresAdvisoryLockLease>>()));
+        services.AddSingleInstanceHostedService<EmailOutboxWorker>();
+        services.AddSingleInstanceHostedService<TrialLifecycleWorker>();
+        services.AddSingleInstanceHostedService<PmSchedulerWorker>();
+        services.AddSingleInstanceHostedService<MrrSnapshotWorker>();
+        services.AddSingleInstanceHostedService<SlaEnforcementWorker>();
+        services.AddSingleInstanceHostedService<ContractReminderWorker>();
+        services.AddSingleInstanceHostedService<ScheduledReportWorker>();
+        services.AddSingleInstanceHostedService<ApprovalReminderWorker>();
+        services.AddSingleInstanceHostedService<EscalationRuleWorker>();
 
         return services;
     }

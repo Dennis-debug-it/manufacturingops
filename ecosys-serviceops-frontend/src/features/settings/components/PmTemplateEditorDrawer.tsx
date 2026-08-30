@@ -3,10 +3,11 @@ import toast from 'react-hot-toast'
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { Spinner } from '../../../shared/components/Spinner'
+import { ErrorState } from '../../../shared/components/ErrorState'
 import { useCreatePmTemplate, usePmTemplate, useUpdatePmTemplate, type UpsertPmTemplatePayload } from '../../maintenance/api'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
-const smallFieldClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
+const smallFieldClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 const questionTypes = [
@@ -73,7 +74,7 @@ export interface PmTemplateEditorDrawerProps {
 
 export function PmTemplateEditorDrawer({ open, templateId, onClose }: PmTemplateEditorDrawerProps) {
   const isEdit = Boolean(templateId)
-  const { data: existing, isLoading: loadingExisting } = usePmTemplate(open && templateId ? templateId : undefined)
+  const { data: existing, isLoading: loadingExisting, isError: existingError, refetch: refetchExisting } = usePmTemplate(open && templateId ? templateId : undefined)
   const createTemplate = useCreatePmTemplate()
   const updateTemplate = useUpdatePmTemplate(templateId ?? '')
 
@@ -256,7 +257,7 @@ export function PmTemplateEditorDrawer({ open, templateId, onClose }: PmTemplate
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => void submit()} disabled={saving || (isEdit && loadingExisting)} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={() => void submit()} disabled={saving || (isEdit && (loadingExisting || existingError))} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Template'}
           </button>
         </div>
@@ -264,6 +265,14 @@ export function PmTemplateEditorDrawer({ open, templateId, onClose }: PmTemplate
     >
       {isEdit && loadingExisting ? (
         <Spinner label="Loading template" />
+      ) : isEdit && existingError ? (
+        // The form is seeded from `existing`; rendering it after a failed load would offer a blank
+        // editor that overwrites the stored template on save.
+        <ErrorState
+          title="Template unavailable"
+          description="We couldn’t load this template’s current values, so it can’t be edited safely yet. Try again."
+          onRetry={() => void refetchExisting()}
+        />
       ) : (
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3">
@@ -292,7 +301,7 @@ export function PmTemplateEditorDrawer({ open, templateId, onClose }: PmTemplate
             </div>
             <div className="col-span-2">
               <label className={labelClass} htmlFor="tpl-description">Description</label>
-              <textarea id="tpl-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+              <textarea id="tpl-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
             <label className="col-span-2 flex items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
@@ -417,6 +426,6 @@ export function PmTemplateEditorDrawer({ open, templateId, onClose }: PmTemplate
   )
 }
 
-const cnSection = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-medium outline-none transition focus:border-slate-900'
+const cnSection = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm font-medium outline-none transition focus:border-[var(--app-primary)]'
 const iconBtn = 'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 disabled:opacity-40'
 const iconBtnSm = 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 disabled:opacity-40'

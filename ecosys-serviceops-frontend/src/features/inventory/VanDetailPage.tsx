@@ -13,7 +13,7 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { useMaterials, useBranches } from './api'
 import { useVan, useVanStock, useLoadVan, useReturnVanStock, useConsumeVanStock, useDeactivateVan, type VanStockLine } from './vansApi'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 type MoveMode = 'load' | 'return' | 'consume' | null
@@ -111,7 +111,7 @@ export function VanDetailPage() {
           <div className="flex flex-wrap gap-2">
             {canIssue ? (
               <>
-                <button type="button" onClick={() => setMode('load')} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+                <button type="button" onClick={() => setMode('load')} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
                   <Upload className="h-4 w-4" />Load
                 </button>
                 <button type="button" onClick={() => setMode('return')} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
@@ -131,7 +131,7 @@ export function VanDetailPage() {
         }
       />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <h3 className="mb-4 text-sm font-semibold text-slate-900">Stock on this van</h3>
         {stockLoading ? (
           <Spinner label="Loading van stock" />
@@ -176,7 +176,7 @@ export function VanDetailPage() {
             type="button"
             disabled={loadVan.isPending || returnVan.isPending || consumeVan.isPending}
             onClick={() => void submitMove()}
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60"
           >
             {mode === 'load' ? 'Load onto Van' : mode === 'return' ? 'Return to Branch' : 'Confirm Consume'}
           </button>

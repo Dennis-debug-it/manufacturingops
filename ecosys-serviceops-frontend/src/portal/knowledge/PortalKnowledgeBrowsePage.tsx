@@ -46,10 +46,10 @@ export function PortalKnowledgeBrowsePage() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search articles…"
-            className="h-11 w-full rounded-lg border border-slate-300 pl-10 pr-3 text-sm outline-none focus:border-slate-900"
+            className="h-11 w-full rounded-lg border border-slate-300 pl-10 pr-3 text-sm outline-none focus:border-[var(--app-primary)]"
           />
         </div>
-        <button type="submit" className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+        <button type="submit" className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
           Search
         </button>
       </form>
@@ -66,7 +66,7 @@ export function PortalKnowledgeBrowsePage() {
             <Link
               key={article.id}
               to={`/portal/knowledge/articles/${article.slug}`}
-              className="block rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
+              className="block rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
             >
               <div className="font-medium text-slate-900">{article.title}</div>
               {article.summary ? <p className="mt-1 text-sm text-slate-600">{article.summary}</p> : null}

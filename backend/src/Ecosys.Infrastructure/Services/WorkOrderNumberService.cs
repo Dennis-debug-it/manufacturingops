@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Errors;
@@ -81,28 +82,144 @@ public interface IDocumentNumberingService
     Task<NumberingSetting> UpsertAsync(Guid tenantId, Guid? branchId, string documentType, string prefix, long nextNumber, int paddingLength, string resetFrequency, bool includeYear, bool includeMonth, bool isActive, CancellationToken cancellationToken = default, string? suffix = null, string yearFormat = "YYYY", string separator = "-", bool isLocked = false);
 }
 
+/// <summary>
+/// Raised when a document number could not be reserved because concurrent requests kept colliding
+/// on the numbering row. Maps to HTTP 409 with the same <c>CONCURRENCY_CONFLICT</c> error code the
+/// global handler already uses for <see cref="Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException"/>,
+/// so clients see one consistent "retry this request" signal instead of an opaque 500 (EC-017).
+/// </summary>
+public sealed class DocumentNumberContentionException(string message)
+    : AppException(message), ILocalizedErrorCode
+{
+    public override int StatusCode => 409;
+    public string ErrorCode => "CONCURRENCY_CONFLICT";
+}
+
 internal sealed class DocumentNumberingService(AppDbContext dbContext) : IDocumentNumberingService
 {
+    /// <summary>PostgreSQL <c>serialization_failure</c>.</summary>
+    private const string SerializationFailure = "40001";
+
+    /// <summary>PostgreSQL <c>deadlock_detected</c>.</summary>
+    private const string DeadlockDetected = "40P01";
+
+    private const int MaxGenerateAttempts = 5;
+
+    /// <summary>
+    /// Reserves the next document number. The reservation runs in a serializable transaction, so
+    /// concurrent requests for the same counter can legitimately fail with SQLSTATE 40001; that is
+    /// PostgreSQL asking the loser to try again, not a server fault. Retry a bounded number of times
+    /// with a short randomised backoff and, only if the contention really does not clear, surface a
+    /// 409 the client can act on (EC-017).
+    /// </summary>
     public async Task<string> GenerateAsync(Guid tenantId, Guid? branchId, string documentType, CancellationToken cancellationToken = default)
     {
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        // A retry re-runs SaveChanges, which flushes everything tracked by this (request-scoped)
+        // context — not just the counter. A serialization failure raised at COMMIT time leaves those
+        // other changes accepted in memory but rolled back in the database, so replaying would
+        // silently drop them. When the caller already has unrelated pending work — or owns an ambient
+        // transaction, which a serialization failure has already aborted — take the single attempt
+        // and translate a failure into 409 instead of retrying blind.
+        var canRetry = !HasPendingChangesOutsideNumbering()
+            && (!dbContext.Database.IsRelational() || dbContext.Database.CurrentTransaction is null);
 
-        var setting = await FindSettingAsync(tenantId, branchId, documentType, cancellationToken)
-            ?? await CreateDefaultSettingAsync(tenantId, branchId, documentType, cancellationToken);
-
-        if (dbContext.Entry(setting).State == EntityState.Detached)
+        for (var attempt = 1; ; attempt++)
         {
-            dbContext.NumberingSettings.Add(setting);
+            try
+            {
+                return await GenerateOnceAsync(tenantId, branchId, documentType, cancellationToken);
+            }
+            catch (Exception ex) when (IsConcurrencyConflict(ex))
+            {
+                // The transaction rolled back, so nothing of this attempt has been applied.
+                DetachNumberingState();
+
+                if (!canRetry || attempt >= MaxGenerateAttempts)
+                {
+                    throw new DocumentNumberContentionException(
+                        "Another user reserved a document number at the same moment. Nothing was saved — please submit again.");
+                }
+
+                // Short randomised backoff so colliding requests do not line up again immediately.
+                await Task.Delay(Random.Shared.Next(10, 40) * attempt, cancellationToken);
+            }
+        }
+    }
+
+    private async Task<string> GenerateOnceAsync(Guid tenantId, Guid? branchId, string documentType, CancellationToken cancellationToken)
+    {
+        // Providers without transaction support (the in-memory provider used by tests) cannot begin
+        // one; there is no concurrency to serialise there either.
+        var useTransaction = dbContext.Database.IsRelational() && dbContext.Database.CurrentTransaction is null;
+        var transaction = useTransaction
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : null;
+
+        try
+        {
+            var setting = await FindSettingAsync(tenantId, branchId, documentType, cancellationToken)
+                ?? await CreateDefaultSettingAsync(tenantId, branchId, documentType, cancellationToken);
+
+            if (dbContext.Entry(setting).State == EntityState.Detached)
+            {
+                dbContext.NumberingSettings.Add(setting);
+            }
+
+            ResetIfNeeded(setting);
+
+            var nextNumber = setting.NextNumber;
+            setting.NextNumber += 1;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+
+            return Format(setting, branchId, nextNumber);
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when the exception chain carries a PostgreSQL serialization failure or deadlock — the
+    /// two SQLSTATEs that mean "this transaction lost a race and may simply be retried".
+    /// </summary>
+    private static bool IsConcurrencyConflict(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is DbException dbException
+                && dbException.SqlState is SerializationFailure or DeadlockDetected)
+            {
+                return true;
+            }
         }
 
-        ResetIfNeeded(setting);
+        return false;
+    }
 
-        var nextNumber = setting.NextNumber;
-        setting.NextNumber += 1;
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+    private bool HasPendingChangesOutsideNumbering() =>
+        dbContext.ChangeTracker.Entries().Any(entry =>
+            entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted
+            && entry.Entity is not NumberingSetting);
 
-        return Format(setting, branchId, nextNumber);
+    /// <summary>
+    /// Drops the counter rows this attempt touched so the retry re-reads the committed values
+    /// instead of replaying the already-incremented (and now rolled back) in-memory state.
+    /// </summary>
+    private void DetachNumberingState()
+    {
+        foreach (var entry in dbContext.ChangeTracker.Entries<NumberingSetting>().ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
     }
 
     public async Task<NumberingSetting> UpsertAsync(

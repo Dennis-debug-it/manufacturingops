@@ -10,7 +10,7 @@ export function DemoConfirmationPage() {
           subtitle="Thanks. We’ll be in touch shortly."
         />
         <div className="mt-6">
-          <Link to="/login" className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+          <Link to="/login" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
             Return to login
           </Link>
         </div>

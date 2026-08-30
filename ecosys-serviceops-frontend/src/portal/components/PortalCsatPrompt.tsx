@@ -59,13 +59,13 @@ function RatingRow({ survey }: { survey: PendingCsat }) {
             onChange={(event) => setComment(event.target.value)}
             maxLength={2000}
             placeholder="Any comments? (optional)"
-            className="h-10 flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+            className="h-10 flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
           />
           <button
             type="button"
             disabled={score === 0 || submit.isPending}
             onClick={() => submit.mutate()}
-            className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-50"
           >
             {submit.isPending ? 'Sending…' : 'Submit'}
           </button>

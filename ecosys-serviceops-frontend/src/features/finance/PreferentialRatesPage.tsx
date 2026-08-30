@@ -13,6 +13,7 @@ import { useApprovePreferentialRate, useCreatePreferentialRate, usePreferentialR
 import { PreferentialRateBulkImportDrawer } from './components/PreferentialRateBulkImportDrawer'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 import type { PreferentialRate } from './types'
+import { getActiveCurrency } from '../../shared/utils/currency'
 
 function ApproveButton({ rate }: { rate: PreferentialRate }) {
   const canApprove = usePermission('finance.approvals.manage')
@@ -71,7 +72,7 @@ export function PreferentialRatesPage() {
         unit: 'hour',
         defaultRate: Number(defaultRate) || 0,
         preferentialRate: Number(preferentialRate) || 0,
-        currency: 'KES',
+        currency: getActiveCurrency(),
         effectiveFrom: new Date().toISOString(),
         status: 'Pending',
         requiresApproval: true,
@@ -99,7 +100,7 @@ export function PreferentialRatesPage() {
         subtitle="Client-specific rate overrides."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Rate
             </button>
           ) : undefined
@@ -122,7 +123,7 @@ export function PreferentialRatesPage() {
         footer={
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={close} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={submit} disabled={createRate.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={submit} disabled={createRate.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {createRate.isPending ? 'Saving…' : 'Create'}
             </button>
           </div>
@@ -131,23 +132,23 @@ export function PreferentialRatesPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="pref-client">Client</label>
-            <select id="pref-client" value={clientId} onChange={(event) => setClientId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+            <select id="pref-client" value={clientId} onChange={(event) => setClientId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               <option value="">Select a client</option>
               {(clients ?? []).map((client) => (<option key={client.id} value={client.id}>{client.clientName}</option>))}
             </select>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="pref-name">Rate Name</label>
-            <input id="pref-name" value={rateName} onChange={(event) => setRateName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input id="pref-name" value={rateName} onChange={(event) => setRateName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="pref-default">Default Rate</label>
-              <input id="pref-default" type="number" step="0.01" value={defaultRate} onChange={(event) => setDefaultRate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+              <input id="pref-default" type="number" step="0.01" value={defaultRate} onChange={(event) => setDefaultRate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="pref-preferential">Preferential Rate</label>
-              <input id="pref-preferential" type="number" step="0.01" value={preferentialRate} onChange={(event) => setPreferentialRate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+              <input id="pref-preferential" type="number" step="0.01" value={preferentialRate} onChange={(event) => setPreferentialRate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
           </div>
         </div>

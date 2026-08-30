@@ -24,7 +24,7 @@ function SectionLink({ to, label }: { to: string; label: string }) {
 
 export function FinanceOverviewPage() {
   const canManage = usePermission('finance.manage')
-  const { data: dashboard, isLoading: dashboardLoading } = useFinanceDashboard()
+  const { data: dashboard, isLoading: dashboardLoading, isError: dashboardError } = useFinanceDashboard()
   const { data: invoices, isLoading: invoicesLoading, isError: invoicesError } = useInvoices()
   const { data: quotes, isLoading: quotesLoading, isError: quotesError } = useQuotations()
   const { data: aging, isLoading: agingLoading, isError: agingError } = useAgingReport()
@@ -34,7 +34,9 @@ export function FinanceOverviewPage() {
   const agingRows = [...(aging ?? [])].filter((row) => row.total > 0).sort((left, right) => right.days90Plus - left.days90Plus || right.total - left.total).slice(0, 5)
   const openBalances = (invoices ?? []).filter((invoice) => invoice.balance > 0 && invoice.status.toLowerCase() !== 'paid')
   const outstandingBalance = openBalances.reduce((sum, invoice) => sum + invoice.balance, 0)
-  const invoiceCurrency = invoices?.[0]?.currency ?? dashboard?.currency ?? 'KES'
+  // The currency this workspace actually invoices in. Null when nothing has been invoiced yet, in
+  // which case formatCurrency falls back to the workspace currency rather than a literal.
+  const invoiceCurrency = invoices?.[0]?.currency ?? dashboard?.currency ?? null
 
   const invoiceColumns: DataTableColumn<InvoiceListItem>[] = [
     { key: 'invoiceNumber', header: 'Invoice', cell: (row) => <Link className="font-mono text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/finance/invoices/${row.id}`}>{row.invoiceNumber}</Link> },
@@ -54,8 +56,8 @@ export function FinanceOverviewPage() {
 
   const agingColumns: DataTableColumn<AgingRow & { id: string }>[] = [
     { key: 'clientName', header: 'Client', cell: (row) => row.clientName },
-    { key: 'days90Plus', header: '90+ Days', cell: (row) => <span className={row.days90Plus > 0 ? 'font-semibold text-rose-600' : 'text-slate-700'}>{formatCurrency(row.days90Plus)}</span> },
-    { key: 'total', header: 'Total Outstanding', cell: (row) => <span className="font-semibold text-slate-900">{formatCurrency(row.total)}</span> },
+    { key: 'days90Plus', header: '90+ Days', cell: (row) => <span className={row.days90Plus > 0 ? 'font-semibold text-rose-600' : 'text-slate-700'}>{formatCurrency(row.days90Plus, invoiceCurrency)}</span> },
+    { key: 'total', header: 'Total Outstanding', cell: (row) => <span className="font-semibold text-slate-900">{formatCurrency(row.total, invoiceCurrency)}</span> },
   ]
 
   return (
@@ -65,7 +67,7 @@ export function FinanceOverviewPage() {
         subtitle="Revenue, receivables, pricing controls, and billing operations in one workspace."
         primaryAction={
           canManage ? (
-            <Link to="/finance/invoices" className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <Link to="/finance/invoices" className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Receipt className="h-4 w-4" />
               Open Invoices
             </Link>
@@ -82,14 +84,15 @@ export function FinanceOverviewPage() {
       <FinanceWorkspaceNav />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <StatCard label="Invoiced YTD" value={dashboardLoading ? '-' : formatCurrency(dashboard?.totalInvoicedYtd ?? 0, dashboard?.currency)} icon={<StatIcon tone="default"><FileText className="h-4 w-4" /></StatIcon>} />
-        <StatCard label="Collected YTD" value={dashboardLoading ? '-' : formatCurrency(dashboard?.totalCollectedYtd ?? 0, dashboard?.currency)} tone="success" icon={<StatIcon tone="success"><Wallet className="h-4 w-4" /></StatIcon>} />
-        <StatCard label="Outstanding" value={invoicesLoading ? '-' : formatCurrency(outstandingBalance, invoiceCurrency)} tone={outstandingBalance > 0 ? 'warning' : 'success'} icon={<StatIcon tone={outstandingBalance > 0 ? 'warning' : 'success'}><Clock className="h-4 w-4" /></StatIcon>} />
+        {/* A failed dashboard must read as "unknown", not as a real balance of zero. */}
+        <StatCard label="Invoiced YTD" value={dashboardLoading || dashboardError ? '—' : formatCurrency(dashboard?.totalInvoicedYtd ?? 0, dashboard?.currency)} icon={<StatIcon tone="default"><FileText className="h-4 w-4" /></StatIcon>} />
+        <StatCard label="Collected YTD" value={dashboardLoading || dashboardError ? '—' : formatCurrency(dashboard?.totalCollectedYtd ?? 0, dashboard?.currency)} tone={dashboardError ? 'default' : 'success'} icon={<StatIcon tone="success"><Wallet className="h-4 w-4" /></StatIcon>} />
+        <StatCard label="Outstanding" value={invoicesLoading || invoicesError ? '—' : formatCurrency(outstandingBalance, invoiceCurrency)} tone={invoicesError ? 'default' : outstandingBalance > 0 ? 'warning' : 'success'} icon={<StatIcon tone={outstandingBalance > 0 ? 'warning' : 'success'}><Clock className="h-4 w-4" /></StatIcon>} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="space-y-6">
-          <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Recent invoices</h2>
@@ -100,7 +103,7 @@ export function FinanceOverviewPage() {
             <DataTable columns={invoiceColumns} data={invoiceRows} loading={invoicesLoading} emptyTitle={invoicesError ? 'Invoices unavailable' : 'No invoices yet'} emptyDescription={invoicesError ? 'Invoice data could not be loaded.' : 'Create your first invoice to start tracking collections.'} />
           </section>
 
-          <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Recent quotes</h2>
@@ -113,7 +116,7 @@ export function FinanceOverviewPage() {
         </div>
 
         <div className="space-y-6">
-          <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Receivables watchlist</h2>
@@ -124,7 +127,7 @@ export function FinanceOverviewPage() {
             <DataTable columns={agingColumns} data={agingRows.map((row) => ({ ...row, id: row.clientId }))} loading={agingLoading} emptyTitle={agingError ? 'Aging unavailable' : 'No overdue balances'} emptyDescription={agingError ? 'Receivables aging could not be loaded.' : 'Outstanding client balances will appear here when invoices age.'} />
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Pricing and controls</h2>
             <p className="mt-1 text-sm text-slate-600">Jump straight to the places that affect rate application, approvals, and collection follow-up.</p>
             <div className="mt-4 grid gap-3">

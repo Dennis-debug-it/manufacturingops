@@ -379,7 +379,8 @@ public sealed class KnowledgeDocumentsController(
             .Include(x => x.LinkedSystem)
             .Include(x => x.LinkedAsset)
             .Include(x => x.LinkedWorkOrder)
-            .SingleAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken);
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Knowledge document not found.");
         var chunkCount = await dbContext.KnowledgeDocumentChunks.CountAsync(x => x.TenantId == TenantId && x.DocumentId == document.Id, cancellationToken);
 
         return new KnowledgeDocumentResponse(

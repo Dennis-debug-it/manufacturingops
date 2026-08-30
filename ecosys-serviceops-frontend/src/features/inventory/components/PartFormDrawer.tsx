@@ -1,10 +1,12 @@
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
+import { applyApiFieldErrors } from '../../../shared/api/apiError'
 import { useCreateMaterial } from '../api'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
+const errorClass = 'mt-1 text-xs text-rose-600'
 
 interface FormValues {
   itemCode: string
@@ -16,8 +18,22 @@ interface FormValues {
   unitCost: string
 }
 
+/**
+ * The fields the server is allowed to blame. A 400 whose message names anything else keeps the
+ * interceptor's toast rather than being pinned to an unrelated input.
+ */
+const FORM_FIELDS = [
+  'itemCode',
+  'itemName',
+  'category',
+  'unitOfMeasure',
+  'quantityOnHand',
+  'reorderLevel',
+  'unitCost',
+] as const satisfies readonly (keyof FormValues)[]
+
 export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, setError, formState: { errors, isSubmitting } } = useForm<FormValues>({
     defaultValues: { itemCode: '', itemName: '', category: '', unitOfMeasure: 'unit', quantityOnHand: '0', reorderLevel: '0', unitCost: '' },
   })
   const createMaterial = useCreateMaterial()
@@ -41,8 +57,11 @@ export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () =
       })
       toast.success(`Part "${created.itemName}" created`)
       close()
-    } catch {
-      // interceptor surfaces the error toast
+    } catch (error) {
+      // A model-validation 400 names the field it rejected; pin the message to that input instead
+      // of leaving the user with only the interceptor's one-line toast. Anything the helper can't
+      // place stays with that toast.
+      applyApiFieldErrors<FormValues>(error, { setError, fields: FORM_FIELDS })
     }
   })
 
@@ -54,7 +73,7 @@ export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () =
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={close} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="submit" form="part-form" disabled={isSubmitting} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="submit" form="part-form" disabled={isSubmitting} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {isSubmitting ? 'Creating…' : 'Create Part'}
           </button>
         </div>
@@ -65,34 +84,39 @@ export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () =
           <div>
             <label className={labelClass} htmlFor="part-code">Item Code</label>
             <input id="part-code" {...register('itemCode', { required: true })} className={fieldClass} />
-            {errors.itemCode ? <p className="mt-1 text-xs text-rose-600">Required</p> : null}
+            {errors.itemCode ? <p className={errorClass}>{errors.itemCode.message ?? 'Required'}</p> : null}
           </div>
           <div>
             <label className={labelClass} htmlFor="part-uom">Unit of Measure</label>
             <input id="part-uom" {...register('unitOfMeasure')} className={fieldClass} />
+            {errors.unitOfMeasure?.message ? <p className={errorClass}>{errors.unitOfMeasure.message}</p> : null}
           </div>
         </div>
         <div>
           <label className={labelClass} htmlFor="part-name">Item Name</label>
           <input id="part-name" {...register('itemName', { required: true })} className={fieldClass} />
-          {errors.itemName ? <p className="mt-1 text-xs text-rose-600">Required</p> : null}
+          {errors.itemName ? <p className={errorClass}>{errors.itemName.message ?? 'Required'}</p> : null}
         </div>
         <div>
           <label className={labelClass} htmlFor="part-category">Category</label>
           <input id="part-category" {...register('category')} className={fieldClass} />
+          {errors.category?.message ? <p className={errorClass}>{errors.category.message}</p> : null}
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className={labelClass} htmlFor="part-qty">Initial Qty</label>
             <input id="part-qty" type="number" step="0.01" {...register('quantityOnHand')} className={fieldClass} />
+            {errors.quantityOnHand?.message ? <p className={errorClass}>{errors.quantityOnHand.message}</p> : null}
           </div>
           <div>
             <label className={labelClass} htmlFor="part-reorder">Reorder Level</label>
             <input id="part-reorder" type="number" step="0.01" {...register('reorderLevel')} className={fieldClass} />
+            {errors.reorderLevel?.message ? <p className={errorClass}>{errors.reorderLevel.message}</p> : null}
           </div>
           <div>
             <label className={labelClass} htmlFor="part-cost">Unit Cost</label>
             <input id="part-cost" type="number" step="0.01" {...register('unitCost')} className={fieldClass} />
+            {errors.unitCost?.message ? <p className={errorClass}>{errors.unitCost.message}</p> : null}
           </div>
         </div>
       </form>

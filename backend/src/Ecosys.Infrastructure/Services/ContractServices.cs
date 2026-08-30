@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Ecosys.Domain.Entities;
 using Ecosys.Domain.Enums;
@@ -784,8 +783,7 @@ internal sealed class ContractPricingService(
 }
 
 internal sealed class ContractLifecycleService(
-    AppDbContext dbContext,
-    ILogger<ContractLifecycleService> logger) : IContractLifecycleService
+    AppDbContext dbContext) : IContractLifecycleService
 {
     public async Task<IReadOnlyCollection<ContractLifecycleEvent>> GetLifecycleAsync(Guid tenantId, Guid contractId, CancellationToken cancellationToken = default) =>
         await dbContext.ContractLifecycleEvents
@@ -1266,17 +1264,20 @@ internal sealed class ContractOperationalService(
         workOrder.EstimatedCharge = pricing.EstimatedCharge;
         workOrder.PricingNotes = pricing.Warnings.Count > 0 ? string.Join(" | ", pricing.Warnings) : null;
 
-        var appliedContractSla = coverage.ContractId.HasValue
-            && slaTarget.ResponseTimeHours.HasValue
-            && slaTarget.ResolutionTimeHours.HasValue;
-
-        if (appliedContractSla)
+        // Pattern-matched rather than tested through a bool: flow analysis cannot see that
+        // `appliedContractSla == true` implies the two nullables are non-null, so the .Value reads
+        // below were CS8629. Binding them here proves it to the compiler and to the reader.
+        bool appliedContractSla;
+        if (coverage.ContractId.HasValue
+            && slaTarget.ResponseTimeHours is { } contractResponseHours
+            && slaTarget.ResolutionTimeHours is { } contractResolutionHours)
         {
+            appliedContractSla = true;
             workOrder.AppliedSlaSource = slaTarget.Source;
-            workOrder.AppliedResponseHours = slaTarget.ResponseTimeHours;
-            workOrder.AppliedResolutionHours = slaTarget.ResolutionTimeHours;
-            workOrder.SlaResponseDeadline = DateTime.UtcNow.AddHours((double)slaTarget.ResponseTimeHours.Value);
-            workOrder.SlaResolutionDeadline = DateTime.UtcNow.AddHours((double)slaTarget.ResolutionTimeHours.Value);
+            workOrder.AppliedResponseHours = contractResponseHours;
+            workOrder.AppliedResolutionHours = contractResolutionHours;
+            workOrder.SlaResponseDeadline = DateTime.UtcNow.AddHours((double)contractResponseHours);
+            workOrder.SlaResolutionDeadline = DateTime.UtcNow.AddHours((double)contractResolutionHours);
             workOrder.SlaResponseBreached = false;
             workOrder.SlaResolutionBreached = false;
             workOrder.SlaResponseBreachedAt = null;
@@ -1284,6 +1285,7 @@ internal sealed class ContractOperationalService(
         }
         else
         {
+            appliedContractSla = false;
             workOrder.AppliedSlaSource = "TenantDefault";
             workOrder.AppliedResponseHours = null;
             workOrder.AppliedResolutionHours = null;

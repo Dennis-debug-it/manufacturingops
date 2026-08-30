@@ -69,7 +69,7 @@ export function AuditPage() {
       <AsyncPanel query={auditQuery} loadingLabel="Loading audit logs" errorTitle="Audit unavailable" errorDescription="Audit records could not be loaded.">
         {() => (
           <>
-            <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(220px,280px))]">
+            <div className="grid grid-cols-1 gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(220px,280px))]">
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
                 <Search className="h-4 w-4 text-slate-400" />
                 <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search actor, action, entity, or details" className="w-full border-0 bg-transparent p-0 text-sm outline-none placeholder:text-slate-400" />

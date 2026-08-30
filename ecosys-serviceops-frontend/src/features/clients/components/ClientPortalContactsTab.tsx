@@ -38,22 +38,22 @@ function NewContactDrawer({ open, clientId, onClose }: { open: boolean; clientId
       <div className="space-y-4">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Full Name</label>
-          <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          <input value={fullName} onChange={(event) => setFullName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
-          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Phone (optional)</label>
-          <input value={phone} onChange={(event) => setPhone(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+          <input value={phone} onChange={(event) => setPhone(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <p className="text-xs text-slate-500">A one-time sign-in link will be emailed to this contact immediately.</p>
         <button
           type="button"
           disabled={!fullName.trim() || !email.trim() || createContact.isPending}
           onClick={() => void submit()}
-          className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60"
         >
           {createContact.isPending ? 'Sending Invite…' : 'Send Portal Invite'}
         </button>
@@ -124,7 +124,7 @@ export function ClientPortalContactsTab({ clientId }: { clientId: string }) {
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-600">Contacts invited here can sign in to the client portal to view their requests, invoices, and quotes.</p>
         {canManage ? (
-          <button type="button" onClick={() => setShowInvite(true)} className="inline-flex h-11 shrink-0 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">
+          <button type="button" onClick={() => setShowInvite(true)} className="inline-flex h-11 shrink-0 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">
             <Plus className="h-4 w-4" />Invite Contact
           </button>
         ) : null}

@@ -1129,6 +1129,12 @@ internal sealed class WorkOrderLifecycleService(
             workOrder.ClosedByUserId = null;
         }
 
+        // EC-026: the assignment records are part of the work order's lifecycle, not a parallel one.
+        // Every status change (complete, close, cancel, hold, resume, …) funnels through here, so
+        // this is the one place that keeps them in step — previously they were only refreshed from
+        // the assignment endpoints, which left a closed work order sitting on "Arrived"/"InProgress".
+        await SyncAssignmentLifecycleAsync(workOrder, targetStatus, utcNow, cancellationToken);
+
         await SaveEventAsync(
             workOrder.TenantId,
             workOrder,
@@ -1144,6 +1150,80 @@ internal sealed class WorkOrderLifecycleService(
             note: note,
             cancellationToken: cancellationToken);
     }
+
+    /// <summary>
+    /// Brings the assignment records in line with the work order's new status: terminal statuses
+    /// finalise each technician assignment, and the work order's assignment row is re-derived from
+    /// the new status. Changes are left tracked; the caller's SaveChanges persists them.
+    /// </summary>
+    private async Task SyncAssignmentLifecycleAsync(WorkOrder workOrder, string targetStatus, DateTime utcNow, CancellationToken cancellationToken)
+    {
+        var technicianAssignments = await dbContext.WorkOrderTechnicianAssignments
+            .Where(x => x.TenantId == workOrder.TenantId && x.WorkOrderId == workOrder.Id)
+            .ToListAsync(cancellationToken);
+
+        var terminalTechnicianStatus = ResolveTerminalTechnicianAssignmentStatus(targetStatus);
+        if (terminalTechnicianStatus is not null)
+        {
+            foreach (var assignment in technicianAssignments)
+            {
+                if (!string.Equals(assignment.Status, terminalTechnicianStatus, StringComparison.OrdinalIgnoreCase))
+                {
+                    assignment.Status = terminalTechnicianStatus;
+                }
+
+                // A technician who arrived but never marked departure is off site once the job is
+                // finished; without this the departure timestamp stays null forever.
+                if (string.Equals(terminalTechnicianStatus, "Completed", StringComparison.OrdinalIgnoreCase)
+                    && assignment.ArrivalAt.HasValue
+                    && !assignment.DepartureAt.HasValue)
+                {
+                    assignment.DepartureAt = utcNow;
+                }
+            }
+        }
+
+        var groupAssignment = await dbContext.WorkOrderAssignments
+            .SingleOrDefaultAsync(x => x.TenantId == workOrder.TenantId && x.WorkOrderId == workOrder.Id, cancellationToken);
+
+        if (groupAssignment is not null)
+        {
+            groupAssignment.AssignmentStatus = ResolveAssignmentStatus(targetStatus, groupAssignment.AssignmentGroupId, technicianAssignments);
+        }
+    }
+
+    /// <summary>
+    /// The per-technician assignment status a terminal work-order status implies, or null when the
+    /// work order status says nothing about the individual technicians (the technician dispatch
+    /// workflow owns Pending/Accepted/InTransit/Arrived).
+    /// </summary>
+    private static string? ResolveTerminalTechnicianAssignmentStatus(string targetStatus) =>
+        WorkOrderStatuses.Normalize(targetStatus) switch
+        {
+            WorkOrderStatuses.Completed or WorkOrderStatuses.ClientAccepted or WorkOrderStatuses.Closed => "Completed",
+            WorkOrderStatuses.Cancelled or WorkOrderStatuses.Rejected => "Cancelled",
+            _ => null
+        };
+
+    /// <summary>
+    /// Work-order status to work-order assignment status. Mirrors
+    /// <c>WorkOrderAssignmentWorkflowService.ResolveAssignmentStatus</c> (which owns the same
+    /// mapping for the assignment endpoints); keep the two in step, plus the Client Accepted case
+    /// that only this lifecycle path can reach.
+    /// </summary>
+    private static string ResolveAssignmentStatus(string workOrderStatus, Guid? assignmentGroupId, IReadOnlyCollection<WorkOrderTechnicianAssignment> technicianAssignments) =>
+        WorkOrderStatuses.Normalize(workOrderStatus) switch
+        {
+            WorkOrderStatuses.Completed or WorkOrderStatuses.ClientAccepted => "Completed",
+            WorkOrderStatuses.Closed => "Closed",
+            WorkOrderStatuses.Cancelled or WorkOrderStatuses.Rejected => "Cancelled",
+            WorkOrderStatuses.OnHold or WorkOrderStatuses.WaitingOnParts or WorkOrderStatuses.WaitingOnClient => "OnHold",
+            WorkOrderStatuses.InProgress => "InProgress",
+            _ when technicianAssignments.Any(x => x.Status is "Accepted" or "InTransit" or "Arrived" or "InProgress" or "Completed") => "Accepted",
+            _ when technicianAssignments.Count > 0 => "AssignedToTechnician",
+            _ when assignmentGroupId.HasValue => "AssignedToGroup",
+            _ => "Unassigned"
+        };
 
     private async Task SaveEventAsync(
         Guid tenantId,

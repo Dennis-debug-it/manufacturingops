@@ -4,10 +4,12 @@ using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Errors;
+using Ecosys.Shared.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Ecosys.Infrastructure.Services;
 
@@ -51,6 +53,16 @@ public interface IEmailOutboxService
     Task<EmailOutboxMessage> QueueEmailAsync(QueueEmailRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<EmailOutboxMessage>> GetPendingBatchAsync(int batchSize, DateTime utcNow, CancellationToken cancellationToken = default);
     Task<bool> MarkSendingAsync(Guid outboxMessageId, DateTime utcNow, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns messages whose <c>Sending</c> claim is older than <paramref name="claimTimeout"/> to
+    /// the queue. <see cref="MarkSendingAsync"/> moves a row to <c>Sending</c> and the batch query
+    /// only ever selects <c>Pending</c>, so an instance that stopped mid-send left its claimed rows
+    /// unreachable for ever — verified live with three messages stuck in <c>Sending</c>. Each rescue
+    /// counts an attempt, so a message that kills whichever worker picks it up still reaches the
+    /// terminal <c>Failed</c> state instead of looping (EC-P1-06d).
+    /// </summary>
+    Task<int> ReleaseAbandonedClaimsAsync(TimeSpan claimTimeout, DateTime utcNow, CancellationToken cancellationToken = default);
     Task MarkSentAsync(Guid outboxMessageId, DateTime utcNow, string? providerMessageId, CancellationToken cancellationToken = default);
     Task MarkFailedAsync(Guid outboxMessageId, string? errorCategory, string? errorMessage, DateTime utcNow, CancellationToken cancellationToken = default);
     Task RetryAsync(Guid outboxMessageId, DateTime nextAttemptAt, string? errorMessage, CancellationToken cancellationToken = default);
@@ -147,6 +159,59 @@ public sealed class EmailOutboxService(
         }
 
         return updated > 0;
+    }
+
+    public async Task<int> ReleaseAbandonedClaimsAsync(TimeSpan claimTimeout, DateTime utcNow, CancellationToken cancellationToken = default)
+    {
+        var cutoff = utcNow - claimTimeout;
+        var abandoned = await dbContext.EmailOutboxMessages
+            .Where(x => x.Status == EmailOutboxStatuses.Sending
+                && (!x.LastAttemptAt.HasValue || x.LastAttemptAt < cutoff))
+            .ToListAsync(cancellationToken);
+
+        if (abandoned.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var message in abandoned)
+        {
+            // Same ladder MarkFailedAsync uses: count the attempt, retire the message once it has
+            // used up MaxAttempts, otherwise put it back with the normal backoff.
+            message.AttemptCount += 1;
+            message.ErrorCategory = "Abandoned";
+            message.ErrorMessage = "Delivery was claimed but never completed. The sending instance stopped before it finished.";
+
+            if (message.AttemptCount >= message.MaxAttempts)
+            {
+                message.Status = EmailOutboxStatuses.Failed;
+                message.NextAttemptAt = null;
+            }
+            else
+            {
+                message.Status = EmailOutboxStatuses.Pending;
+                message.NextAttemptAt = GetNextAttemptAt(message.AttemptCount, utcNow);
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (var message in abandoned)
+        {
+            await emailDeliveryLogService.UpdateOutboxStatusAsync(
+                new UpdateOutboxStatusRequest(
+                    message.Id,
+                    message.Status == EmailOutboxStatuses.Failed ? EmailOutboxStatuses.Failed : "Retrying",
+                    message.ErrorCategory,
+                    message.ErrorMessage,
+                    message.AttemptCount,
+                    message.LastAttemptAt,
+                    message.NextAttemptAt,
+                    null),
+                cancellationToken);
+        }
+
+        return abandoned.Count;
     }
 
     public async Task MarkSentAsync(Guid outboxMessageId, DateTime utcNow, string? providerMessageId, CancellationToken cancellationToken = default)
@@ -253,15 +318,30 @@ public sealed class EmailOutboxService(
 }
 
 public sealed class EmailOutboxProcessor(
-    AppDbContext dbContext,
     IEmailOutboxService emailOutboxService,
     IEmailSender emailSender,
     ISecretEncryptionService secretEncryptionService,
+    IEmailSettingsResolver emailSettingsResolver,
+    IOptions<SmtpOptions> smtpOptions,
     ILogger<EmailOutboxProcessor> logger) : IEmailOutboxProcessor
 {
+    /// <summary>
+    /// How long a <c>Sending</c> claim may stand before it is treated as abandoned. Comfortably
+    /// beyond the 30s SMTP timeout a single send can take, short enough that a replica restart costs
+    /// one cycle rather than a stranded message.
+    /// </summary>
+    private static readonly TimeSpan ClaimTimeout = TimeSpan.FromMinutes(15);
+
     public async Task<int> ProcessPendingBatchAsync(int batchSize, CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
+
+        var released = await emailOutboxService.ReleaseAbandonedClaimsAsync(ClaimTimeout, now, cancellationToken);
+        if (released > 0)
+        {
+            logger.LogWarning("Returned {ReleasedCount} abandoned email outbox message(s) from Sending to the queue.", released);
+        }
+
         var pending = await emailOutboxService.GetPendingBatchAsync(batchSize, now, cancellationToken);
         var processed = 0;
 
@@ -275,19 +355,11 @@ public sealed class EmailOutboxProcessor(
                     continue;
                 }
 
+                // A row that exists and says "off" is an operator decision and is honoured. A missing
+                // row is not a decision at all, so it falls through to the configuration fallback
+                // inside CreateDeliveryOptions rather than failing the message outright.
                 var emailSettings = await ResolveEffectiveEmailSettingsAsync(message.TenantId, cancellationToken);
-                if (emailSettings is null)
-                {
-                    await emailOutboxService.MarkFailedAsync(
-                        message.Id,
-                        "Not configured",
-                        "Email delivery could not start because email settings are not configured.",
-                        DateTime.UtcNow,
-                        cancellationToken);
-                    continue;
-                }
-
-                if (!emailSettings.IsEnabled || string.Equals(emailSettings.Provider, EmailDeliveryMode.Disabled.ToString(), StringComparison.OrdinalIgnoreCase))
+                if (EmailDeliveryResolution.IsExplicitlyDisabled(emailSettings))
                 {
                     await emailOutboxService.MarkFailedAsync(
                         message.Id,
@@ -304,7 +376,7 @@ public sealed class EmailOutboxProcessor(
                     await emailOutboxService.MarkFailedAsync(
                         message.Id,
                         "Not configured",
-                        "Email delivery could not start because SMTP settings are incomplete.",
+                        "Email delivery could not start because neither the email settings nor the Smtp configuration section supply an SMTP host.",
                         DateTime.UtcNow,
                         cancellationToken);
                     continue;
@@ -318,9 +390,9 @@ public sealed class EmailOutboxProcessor(
                         message.RecipientEmail,
                         message.Subject,
                         cleanBody,
-                        message.SenderName ?? emailSettings.SenderName,
-                        message.SenderEmail ?? emailSettings.SenderAddress,
-                        message.ReplyToEmail ?? emailSettings.ReplyToEmail,
+                        message.SenderName ?? delivery.SenderName,
+                        message.SenderEmail ?? delivery.SenderEmail,
+                        message.ReplyToEmail ?? delivery.ReplyToEmail,
                         IsHtml: !string.IsNullOrWhiteSpace(message.HtmlBody),
                         Attachments: attachments.Count > 0 ? attachments : null),
                     delivery,
@@ -343,22 +415,8 @@ public sealed class EmailOutboxProcessor(
         return processed;
     }
 
-    private async Task<EmailSetting?> ResolveEffectiveEmailSettingsAsync(Guid? tenantId, CancellationToken cancellationToken)
-    {
-        var scopeTenantId = tenantId ?? PlatformConstants.RootTenantId;
-        var tenantSetting = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == scopeTenantId, cancellationToken);
-        if (tenantSetting is null)
-        {
-            return await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-        }
-
-        if (scopeTenantId != PlatformConstants.RootTenantId && tenantSetting.UsePlatformDefaults && !tenantSetting.OverrideSmtpSettings)
-        {
-            return await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-        }
-
-        return tenantSetting;
-    }
+    private async Task<EmailSetting?> ResolveEffectiveEmailSettingsAsync(Guid? tenantId, CancellationToken cancellationToken) =>
+        (await emailSettingsResolver.ResolveAsync(tenantId, cancellationToken)).Settings;
 
     // Parses <!-- attachment:filename:base64 --> comments injected by ScheduledReportService,
     // returns the cleaned body and any reconstructed attachments.
@@ -391,32 +449,11 @@ public sealed class EmailOutboxProcessor(
         return (cleanBody.Trim(), attachments);
     }
 
-    private EmailDeliverySettings? CreateDeliveryOptions(EmailSetting settings)
-    {
-        var mode = Enum.TryParse<EmailDeliveryMode>(settings.Provider, true, out var parsed) ? parsed : EmailDeliveryMode.Smtp;
-        var secret = secretEncryptionService.Decrypt(settings.EncryptedSecret) ?? settings.Password;
-        if (mode == EmailDeliveryMode.Smtp && string.IsNullOrWhiteSpace(settings.Host))
-        {
-            return null;
-        }
-
-        return new EmailDeliverySettings(
-            mode,
-            settings.Host,
-            settings.Port,
-            settings.Username,
-            secret,
-            settings.SenderName,
-            settings.SenderAddress,
-            settings.ReplyToEmail,
-            settings.UseSsl,
-            EmailDeliveryModeResolver.ResolveSecureMode(settings.Port, settings.UseSsl),
-            null,
-            null,
-            null,
-            30,
-            0);
-    }
+    private EmailDeliverySettings? CreateDeliveryOptions(EmailSetting? settings) =>
+        EmailDeliveryResolution.Resolve(
+            settings,
+            settings is null ? null : secretEncryptionService.Decrypt(settings.EncryptedSecret) ?? settings.Password,
+            smtpOptions.Value);
 }
 
 public sealed class EmailOutboxWorker(IServiceScopeFactory serviceScopeFactory, ILogger<EmailOutboxWorker> logger) : BackgroundService

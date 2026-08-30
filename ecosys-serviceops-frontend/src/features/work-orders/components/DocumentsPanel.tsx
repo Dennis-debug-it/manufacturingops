@@ -44,7 +44,7 @@ export function DocumentsPanel({ workOrderId }: { workOrderId: string }) {
   const documents = data ?? []
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Documents</h3>
       {documents.length === 0 ? (
         <p className="mt-3 text-sm text-slate-500">No linked documents yet.</p>

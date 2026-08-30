@@ -113,13 +113,16 @@ public sealed class StockTransfersController(
         var material = await dbContext.MaterialItems.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == transfer.MaterialId, cancellationToken)
             ?? throw new BusinessRuleException("Material item was not found for this tenant.");
 
-        await stockLedgerService.RecordTransferOutAsync(material, transfer.FromBranchId, transfer.Quantity, UserId, transfer.Reason, transfer.ReferenceNumber, cancellationToken);
-        await stockLedgerService.RecordTransferInAsync(material, transfer.ToBranchId, transfer.Quantity, UserId, transfer.Reason, transfer.ReferenceNumber, cancellationToken);
+        await stockLedgerService.ExecuteAsync(async ct =>
+        {
+            await stockLedgerService.RecordTransferOutAsync(material, transfer.FromBranchId, transfer.Quantity, UserId, transfer.Reason, transfer.ReferenceNumber, ct);
+            await stockLedgerService.RecordTransferInAsync(material, transfer.ToBranchId, transfer.Quantity, UserId, transfer.Reason, transfer.ReferenceNumber, ct);
 
-        transfer.Status = "Completed";
-        transfer.CompletedByUserId = UserId;
-        transfer.CompletedAt = DateTime.UtcNow;
-        await dbContext.SaveChangesAsync(cancellationToken);
+            transfer.Status = "Completed";
+            transfer.CompletedByUserId = UserId;
+            transfer.CompletedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         var persisted = await Query().SingleAsync(x => x.Id == transfer.Id, cancellationToken);
         return Ok(Map(persisted));

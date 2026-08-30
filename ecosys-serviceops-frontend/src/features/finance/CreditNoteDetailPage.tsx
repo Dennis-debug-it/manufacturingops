@@ -21,7 +21,7 @@ export function CreditNoteDetailPage() {
   const [showApply, setShowApply] = useState(false)
 
   if (isLoading) return <div className="flex justify-center py-20"><Spinner label="Loading credit note" /></div>
-  if (isError || !note) return <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">Credit note not found.</div>
+  if (isError || !note) return <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-8 text-center text-sm text-slate-500">Credit note not found.</div>
 
   const canApply = note.status === 'Issued' || note.status === 'PartiallyApplied'
 
@@ -38,12 +38,12 @@ export function CreditNoteDetailPage() {
           canManage ? (
             <div className="flex items-center gap-2">
               {note.status === 'Draft' && (
-                <button type="button" onClick={() => issue.mutateAsync().then(() => toast.success('Credit note issued')).catch(() => {})} disabled={issue.isPending} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+                <button type="button" onClick={() => issue.mutateAsync().then(() => toast.success('Credit note issued')).catch(() => {})} disabled={issue.isPending} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
                   {issue.isPending ? 'Issuing…' : 'Issue'}
                 </button>
               )}
               {canApply && (
-                <button type="button" onClick={() => setShowApply(true)} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+                <button type="button" onClick={() => setShowApply(true)} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
                   Apply to invoices
                 </button>
               )}
@@ -64,7 +64,7 @@ export function CreditNoteDetailPage() {
         <SummaryCard label="Unapplied credit">{formatCurrency(note.balance, note.currency)}</SummaryCard>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
             <tr>
@@ -90,7 +90,7 @@ export function CreditNoteDetailPage() {
       </div>
 
       {note.applications.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <h3 className="mb-3 text-sm font-semibold text-slate-900">Applied to</h3>
           <ul className="divide-y divide-slate-100 text-sm">
             {note.applications.map((app, i) => (
@@ -104,7 +104,7 @@ export function CreditNoteDetailPage() {
         </div>
       )}
 
-      {note.notes && <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm whitespace-pre-line">{note.notes}</div>}
+      {note.notes && <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-sm text-slate-600 shadow-sm whitespace-pre-line">{note.notes}</div>}
 
       {canApply && (
         <ApplyCreditNoteDrawer
@@ -122,7 +122,7 @@ export function CreditNoteDetailPage() {
 
 function SummaryCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
       <div className="mt-1.5 text-lg font-semibold text-slate-900">{children}</div>
     </div>
@@ -179,7 +179,7 @@ function ApplyCreditNoteDrawer({ open, onClose, creditNoteId, clientId, currency
       footer={
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm text-slate-500">Remaining: <span className={remaining < 0 ? 'font-semibold text-rose-600' : 'font-semibold text-slate-900'}>{formatCurrency(remaining, currency)}</span></span>
-          <button type="button" onClick={submit} disabled={apply.isPending} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={submit} disabled={apply.isPending} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {apply.isPending ? 'Applying…' : 'Apply'}
           </button>
         </div>
@@ -203,7 +203,7 @@ function ApplyCreditNoteDrawer({ open, onClose, creditNoteId, clientId, currency
                 placeholder="0.00"
                 value={amounts[inv.id] ?? ''}
                 onChange={(event) => setAmounts((current) => ({ ...current, [inv.id]: event.target.value }))}
-                className="h-10 w-32 rounded-lg border border-slate-300 px-2 text-right text-sm outline-none focus:border-slate-900"
+                className="h-10 w-32 rounded-lg border border-slate-300 px-2 text-right text-sm outline-none focus:border-[var(--app-primary)]"
                 aria-label={`Amount for ${inv.invoiceNumber}`}
               />
             </div>

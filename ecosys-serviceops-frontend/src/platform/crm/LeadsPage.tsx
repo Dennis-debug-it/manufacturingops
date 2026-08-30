@@ -105,7 +105,7 @@ export function LeadsPage() {
 
       <CrmSubNav />
 
-      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[minmax(0,2fr)_minmax(220px,280px)]">
+      <div className="grid grid-cols-1 gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm lg:grid-cols-[minmax(0,2fr)_minmax(220px,280px)]">
         <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
           <Search className="h-4 w-4 text-slate-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search company, contact, email, or phone" className="w-full border-0 bg-transparent p-0 text-sm outline-none placeholder:text-slate-400" />
@@ -203,15 +203,15 @@ function LeadDrawerContent({
         <InfoCard label="Converted tenant" value={lead.convertedTenantId ?? 'Not converted'} />
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <SectionTitle title="Request details" description="What the prospective customer submitted." />
         <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-700">{lead.message ?? 'No message provided.'}</p>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <SectionTitle title="Lead actions" description="Advance the lead through the platform owner's follow-up flow." />
         <div className="mt-4 flex flex-wrap gap-2">
-          <button type="button" className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800" onClick={() => setStatusDraft('Contacted')}>
+          <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => setStatusDraft('Contacted')}>
             <Mail className="h-4 w-4" />
             Mark contacted
           </button>
@@ -227,17 +227,17 @@ function LeadDrawerContent({
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
           <Field label="Status">
-            <select value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900">
+            <select value={statusDraft} onChange={(event) => setStatusDraft(event.target.value)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               {['New', 'Contacted', 'Qualified', 'Demo Scheduled', 'Converted to Workspace', 'Not a Fit'].map((status) => <option key={status} value={status}>{status}</option>)}
             </select>
           </Field>
-          <button type="button" className="self-end rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-800" onClick={onSaveStatus}>
+          <button type="button" className="self-end rounded-lg bg-[var(--app-primary)] px-4 py-3 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={onSaveStatus}>
             Save status
           </button>
         </div>
 
         <Field label="Internal notes">
-          <textarea value={notesDraft} onChange={(event) => setNotesDraft(event.target.value)} className="min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+          <textarea value={notesDraft} onChange={(event) => setNotesDraft(event.target.value)} className="min-h-[140px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
         </Field>
         <div className="mt-4 flex justify-end">
           <button type="button" className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={onSaveNotes}>

@@ -4,18 +4,25 @@ import { Trash2 } from 'lucide-react'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { formatCurrency } from '../../../shared/utils/format'
 import { useClients } from '../../clients/api'
-import { useUpdateInvoice } from '../api'
+import { useDefaultTaxRate, useUpdateInvoice } from '../api'
 import { RateCardAutocomplete } from './RateCardAutocomplete'
 import type { InvoiceDetail } from '../types'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 interface Line { description: string; quantity: string; unitRate: string; taxRate: string; unit: string; itemType: string }
 
-function toLines(invoice: InvoiceDetail): Line[] {
+/** A brand-new line starts at the tenant's configured rate, or blank when it has configured none. */
+const emptyLine = (tenantTaxRate: number | null): Line => ({
+  description: '', quantity: '1', unitRate: '0',
+  taxRate: tenantTaxRate != null ? String(tenantTaxRate) : '',
+  unit: 'unit', itemType: 'Service',
+})
+
+function toLines(invoice: InvoiceDetail, tenantTaxRate: number | null): Line[] {
   if (invoice.lines.length === 0) {
-    return [{ description: '', quantity: '1', unitRate: '0', taxRate: '16', unit: 'unit', itemType: 'Service' }]
+    return [emptyLine(tenantTaxRate)]
   }
   return invoice.lines.map((line) => ({
     description: line.description,
@@ -30,12 +37,13 @@ function toLines(invoice: InvoiceDetail): Line[] {
 export function EditInvoiceDrawer({ open, invoice, onClose }: { open: boolean; invoice: InvoiceDetail; onClose: () => void }) {
   const { data: clients } = useClients()
   const updateInvoice = useUpdateInvoice(invoice.id)
+  const { taxRate: tenantTaxRate } = useDefaultTaxRate()
 
   const [clientId, setClientId] = useState(invoice.clientId)
   const [invoiceDate, setInvoiceDate] = useState(invoice.invoiceDate.slice(0, 10))
   const [dueDate, setDueDate] = useState(invoice.dueDate.slice(0, 10))
   const [notes, setNotes] = useState(invoice.notes ?? '')
-  const [lines, setLines] = useState<Line[]>(() => toLines(invoice))
+  const [lines, setLines] = useState<Line[]>(() => toLines(invoice, tenantTaxRate))
 
   useEffect(() => {
     if (open) {
@@ -43,9 +51,9 @@ export function EditInvoiceDrawer({ open, invoice, onClose }: { open: boolean; i
       setInvoiceDate(invoice.invoiceDate.slice(0, 10))
       setDueDate(invoice.dueDate.slice(0, 10))
       setNotes(invoice.notes ?? '')
-      setLines(toLines(invoice))
+      setLines(toLines(invoice, tenantTaxRate))
     }
-  }, [open, invoice])
+  }, [open, invoice, tenantTaxRate])
 
   const updateLine = (index: number, field: keyof Line, value: string) => {
     setLines((current) => current.map((line, i) => (i === index ? { ...line, [field]: value } : line)))
@@ -87,7 +95,7 @@ export function EditInvoiceDrawer({ open, invoice, onClose }: { open: boolean; i
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => void submit()} disabled={updateInvoice.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={() => void submit()} disabled={updateInvoice.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {updateInvoice.isPending ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
@@ -115,7 +123,7 @@ export function EditInvoiceDrawer({ open, invoice, onClose }: { open: boolean; i
         </div>
         <div>
           <label className={labelClass} htmlFor="edit-invoice-notes">Notes</label>
-          <textarea id="edit-invoice-notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+          <textarea id="edit-invoice-notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <div>
           <label className={labelClass}>Line Items</label>
@@ -141,15 +149,15 @@ export function EditInvoiceDrawer({ open, invoice, onClose }: { open: boolean; i
                   <div className="mt-2 flex items-end gap-2.5">
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">Qty</span>
-                      <input type="number" min="0" placeholder="0" value={line.quantity} onChange={(event) => updateLine(index, 'quantity', event.target.value)} aria-label="Quantity" className="h-10 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      <input type="number" min="0" placeholder="0" value={line.quantity} onChange={(event) => updateLine(index, 'quantity', event.target.value)} aria-label="Quantity" className="h-10 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                     </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">Rate</span>
-                      <input type="number" min="0" placeholder="0.00" value={line.unitRate} onChange={(event) => updateLine(index, 'unitRate', event.target.value)} aria-label="Unit rate" className="h-10 w-24 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      <input type="number" min="0" placeholder="0.00" value={line.unitRate} onChange={(event) => updateLine(index, 'unitRate', event.target.value)} aria-label="Unit rate" className="h-10 w-24 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                     </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">Tax %</span>
-                      <input type="number" min="0" placeholder="0" value={line.taxRate} onChange={(event) => updateLine(index, 'taxRate', event.target.value)} aria-label="Tax percent" className="h-10 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      <input type="number" min="0" placeholder="0" value={line.taxRate} onChange={(event) => updateLine(index, 'taxRate', event.target.value)} aria-label="Tax percent" className="h-10 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                     </label>
                     <div className="flex flex-1 flex-col gap-1 text-right">
                       <span className="text-xs font-medium text-slate-500">Total</span>
@@ -165,7 +173,7 @@ export function EditInvoiceDrawer({ open, invoice, onClose }: { open: boolean; i
           </div>
           <button
             type="button"
-            onClick={() => setLines((current) => [...current, { description: '', quantity: '1', unitRate: '0', taxRate: '16', unit: 'unit', itemType: 'Service' }])}
+            onClick={() => setLines((current) => [...current, emptyLine(tenantTaxRate)])}
             className="mt-3 text-xs font-medium text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-slate-900"
           >
             + Add line

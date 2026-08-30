@@ -203,6 +203,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Phone).HasMaxLength(50);
             entity.Property(x => x.Country).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.TimeZoneId).HasMaxLength(64);
             entity.Property(x => x.Industry).HasMaxLength(100);
             entity.Property(x => x.ContactName).HasMaxLength(200);
             entity.Property(x => x.ContactEmail).HasMaxLength(256);
@@ -450,6 +451,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Phone).HasMaxLength(50);
+            // Deliberately global, not (TenantId, Email): PortalAuthService.RequestMagicLinkAsync
+            // resolves the portal user from the email alone — the request carries no tenant or
+            // client discriminator — via IgnoreQueryFilters().SingleOrDefaultAsync. Scoping this
+            // index per tenant would allow two rows to share an address and turn that Single into
+            // an InvalidOperationException, locking both contacts out of the portal. Widening it
+            // requires a tenant-aware portal login first; same open product decision as User.Email.
             entity.HasIndex(x => x.Email).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.ClientId });
             entity.HasOne(x => x.Tenant)
@@ -726,6 +733,24 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.PlannedMaterialsJson);
             entity.Property(x => x.PreviousStatus).HasMaxLength(50);
             entity.HasIndex(x => new { x.TenantId, x.WorkOrderNumber }).IsUnique();
+            // Tenant-leading indexes for the shapes the list, board, dashboard and report queries
+            // actually issue (P2-01). Before these the only tenant-leading index was the
+            // WorkOrderNumber unique above, so every one of them degenerated into a full tenant
+            // scan plus sort on the largest table in the product.
+            //   (TenantId, Status, CreatedAt) — GetAll's status IN-list combined with its fixed
+            //     ORDER BY CreatedAt DESC, and as a leading prefix the dashboard's open/closed
+            //     status counts. Deliberately covering rather than a bare (TenantId, Status): the
+            //     sort is unconditional, so the narrower index would still leave a sort node behind.
+            //   (TenantId, CreatedAt) — GetAll with no status filter, and the reports' CreatedAt
+            //     BETWEEN scans, which the composite above cannot serve without a Status equality.
+            //   (TenantId, DueDate) — the dashboard's overdue count and the PM compliance report's
+            //     DueDate BETWEEN scan.
+            //   (TenantId, ScheduledStartAt) — the dispatch board's single-day window. Partial
+            //     because only scheduled work orders carry the column, which keeps it small.
+            entity.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.TenantId, x.CreatedAt });
+            entity.HasIndex(x => new { x.TenantId, x.DueDate });
+            entity.HasIndex(x => new { x.TenantId, x.ScheduledStartAt }).HasFilter("\"ScheduledStartAt\" IS NOT NULL");
             entity.HasIndex(x => x.TrackingToken).IsUnique().HasFilter("\"TrackingToken\" IS NOT NULL");
             entity.HasIndex(x => x.QuoteId);
             entity.HasIndex(x => x.ParentWorkOrderId);
@@ -1004,6 +1029,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("material_items");
             entity.HasKey(x => x.Id);
+            // Optimistic concurrency for QuantityOnHand (F5-02): StockLedgerService.RecordAsync is a
+            // read-modify-write, so two concurrent issues/receipts otherwise both read the same
+            // balance and the last writer wins. Same xmin mapping as WorkOrder above — a Postgres
+            // system column, so no schema migration and no-op under the InMemory test provider.
+            entity.Property<uint>("xmin").HasColumnName("xmin").IsRowVersion();
             entity.Property(x => x.ItemCode).HasMaxLength(100).IsRequired();
             entity.Property(x => x.ItemName).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Category).HasMaxLength(100);
@@ -1022,6 +1052,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("branch_material_stocks");
             entity.HasKey(x => x.Id);
+            // Optimistic concurrency for QuantityOnHand (F5-02) — see MaterialItem above.
+            entity.Property<uint>("xmin").HasColumnName("xmin").IsRowVersion();
             entity.Property(x => x.QuantityOnHand).HasPrecision(18, 2);
             entity.Property(x => x.ReorderLevel).HasPrecision(18, 2);
             entity.Property(x => x.UnitCost).HasPrecision(18, 2);
@@ -1065,6 +1097,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("van_material_stocks");
             entity.HasKey(x => x.Id);
+            // Optimistic concurrency for QuantityOnHand (F5-02) — see MaterialItem above.
+            entity.Property<uint>("xmin").HasColumnName("xmin").IsRowVersion();
             entity.Property(x => x.QuantityOnHand).HasPrecision(18, 2);
             entity.Property(x => x.ReorderLevel).HasPrecision(18, 2);
             entity.Property(x => x.UnitCost).HasPrecision(18, 2);
@@ -2610,7 +2644,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.SpecialInstructions).HasMaxLength(2000);
             entity.Property(x => x.Latitude).HasPrecision(9, 6);
             entity.Property(x => x.Longitude).HasPrecision(9, 6);
-            entity.HasIndex(x => new { x.TenantId, x.SiteCode });
+            // Site codes come from INumberSequenceService per tenant and are treated as unique in
+            // the domain, so the index is unique rather than a plain lookup. SiteCode is required
+            // and never null, so PostgreSQL's "NULLs are distinct" rule does not apply here.
+            // Deployment note: this index fails to build on a database that already holds two sites
+            // with the same (TenantId, SiteCode) — de-duplicate before migrating.
+            entity.HasIndex(x => new { x.TenantId, x.SiteCode }).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany()
                 .HasForeignKey(x => x.TenantId)
@@ -2839,10 +2878,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany()
                 .HasForeignKey(x => x.CreatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            // EC-P2-12: pure attribution over an already-nullable column, so the article survives a
+            // user delete with the "last edited by" lost. The other eleven Restrict FKs into users
+            // sit on non-nullable columns and are left alone — see the offboarding note in the
+            // deployment docs.
             entity.HasOne(x => x.UpdatedByUser)
                 .WithMany()
                 .HasForeignKey(x => x.UpdatedByUserId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.SourceWorkOrder)
                 .WithMany()
                 .HasForeignKey(x => x.SourceWorkOrderId)
@@ -3024,10 +3067,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany()
                 .HasForeignKey(x => x.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
+            // EC-P2-11: was Cascade, which let a work-order delete silently take already-invoiced
+            // billable items with it — the line that a tenant_invoice_lines row was priced from.
+            // Restrict now blocks the parent delete instead; the API surfaces 23503 as a 409.
             entity.HasOne(x => x.WorkOrder)
                 .WithMany(x => x.BillableItems)
                 .HasForeignKey(x => x.WorkOrderId)
-                .OnDelete(DeleteBehavior.Cascade);
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.RateCard)
                 .WithMany()
                 .HasForeignKey(x => x.RateCardId)
@@ -3115,7 +3161,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Invoice).WithMany(x => x.Payments).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.SetNull);
+            // EC-P2-11: was SetNull, which orphaned a received payment — money on the books with no
+            // invoice behind it — as soon as the invoice was deleted. The link is a financial fact,
+            // not attribution, so the invoice delete is blocked instead. InvoiceId stays nullable
+            // because an unapplied prepayment legitimately has no invoice yet.
+            entity.HasOne(x => x.Invoice).WithMany(x => x.Payments).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.TenantId, x.PaymentNumber }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.InvoiceId });
@@ -3131,7 +3181,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
             entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            // EC-P2-11: was Cascade, which deleted the allocation rows that record which payment or
+            // credit note settled the invoice, leaving those documents reconciled against nothing.
+            // An allocation is the join between two independent financial documents, so it is not
+            // the invoice's to destroy.
+            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.TenantId, x.InvoiceId, x.Status });
             entity.HasIndex(x => new { x.TenantId, x.SourceType, x.SourceId });
         });
@@ -3154,7 +3208,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Currency).HasMaxLength(10).IsRequired();
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.SetNull);
+            // EC-P2-11, same shape as TenantPayment.Invoice: a credit note is an independent
+            // document whose AmountApplied/Balance only reconcile against the invoice it credits,
+            // so detaching it on invoice delete loses the reconciliation. InvoiceId stays nullable
+            // for standalone credit notes.
+            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.TenantId, x.CreditNoteNumber }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.Status });
             entity.HasIndex(x => new { x.TenantId, x.ClientId });
@@ -3453,6 +3511,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired().HasDefaultValue("Submitted");
             entity.Property(x => x.Description).HasMaxLength(2000);
             entity.Property(x => x.ApprovedByName).HasMaxLength(200);
+            // ClaimNumber is issued per tenant by IDocumentNumberingService, exactly like
+            // TenantInvoice.InvoiceNumber, so it carries the same per-tenant unique index. The
+            // column is required, so there are no NULL rows to reason about. Deployment note: this
+            // index fails to build where duplicate claim numbers already exist in a tenant.
+            entity.HasIndex(x => new { x.TenantId, x.ClaimNumber }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.Status });
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -3468,6 +3531,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Currency).HasMaxLength(10).IsRequired().HasDefaultValue("KES");
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired().HasDefaultValue("Open");
             entity.Property(x => x.Notes).HasMaxLength(2000);
+            // BillNumber is issued per tenant by IDocumentNumberingService; same reasoning as
+            // Expense.ClaimNumber above, including the pre-existing-duplicate deployment caveat.
+            entity.HasIndex(x => new { x.TenantId, x.BillNumber }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.Status });
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);

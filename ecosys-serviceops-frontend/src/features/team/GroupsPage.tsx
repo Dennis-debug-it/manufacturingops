@@ -19,7 +19,7 @@ import {
 import type { AssignmentGroup } from './types'
 import { TeamTabNav } from './components/TeamTabNav'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 function ManageGroupDrawer({ group, onClose }: { group: AssignmentGroup; onClose: () => void }) {
@@ -85,7 +85,7 @@ function ManageGroupDrawer({ group, onClose }: { group: AssignmentGroup; onClose
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Close</button>
-          <button type="button" onClick={() => void saveDetails()} disabled={updateGroup.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={() => void saveDetails()} disabled={updateGroup.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {updateGroup.isPending ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
@@ -103,7 +103,7 @@ function ManageGroupDrawer({ group, onClose }: { group: AssignmentGroup; onClose
           </div>
           <div>
             <label className={labelClass} htmlFor="group-edit-description">Description</label>
-            <textarea id="group-edit-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+            <textarea id="group-edit-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
@@ -235,7 +235,7 @@ export function GroupsPage() {
         subtitle="Default assignment groups and members. Click a group to edit details and manage members."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Group
             </button>
           ) : undefined
@@ -274,7 +274,7 @@ export function GroupsPage() {
         footer={
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={close} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={submit} disabled={createGroup.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={submit} disabled={createGroup.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {createGroup.isPending ? 'Creating…' : 'Create Group'}
             </button>
           </div>
@@ -291,7 +291,7 @@ export function GroupsPage() {
           </div>
           <div>
             <label className={labelClass} htmlFor="group-description">Description</label>
-            <textarea id="group-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+            <textarea id="group-description" value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         </div>
       </FormDrawer>

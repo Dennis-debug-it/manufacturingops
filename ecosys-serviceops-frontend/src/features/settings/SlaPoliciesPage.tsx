@@ -129,7 +129,7 @@ function PolicyEditor({
         canManage ? (
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={save} disabled={isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={save} disabled={isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {isPending ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -139,12 +139,12 @@ function PolicyEditor({
       <div className="space-y-5">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="sla-name">Name</label>
-          <input id="sla-name" value={name} disabled={!canManage} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+          <input id="sla-name" value={name} disabled={!canManage} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
         </div>
 
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="sla-priority">Priority</label>
-          <select id="sla-priority" value={priority} disabled={!canManage || Boolean(policy)} onChange={(event) => setPriority(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50">
+          <select id="sla-priority" value={priority} disabled={!canManage || Boolean(policy)} onChange={(event) => setPriority(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50">
             {priorities.map((p) => (
               <option key={p} value={p}>{p}</option>
             ))}
@@ -154,11 +154,11 @@ function PolicyEditor({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="sla-response">Response target (hours)</label>
-            <input id="sla-response" type="number" min={0} step={0.5} value={responseHours} disabled={!canManage} onChange={(event) => setResponseHours(Number(event.target.value))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input id="sla-response" type="number" min={0} step={0.5} value={responseHours} disabled={!canManage} onChange={(event) => setResponseHours(Number(event.target.value))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="sla-resolution">Resolution target (hours)</label>
-            <input id="sla-resolution" type="number" min={0} step={0.5} value={resolutionHours} disabled={!canManage} onChange={(event) => setResolutionHours(Number(event.target.value))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+            <input id="sla-resolution" type="number" min={0} step={0.5} value={resolutionHours} disabled={!canManage} onChange={(event) => setResolutionHours(Number(event.target.value))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
           </div>
         </div>
 
@@ -171,11 +171,11 @@ function PolicyEditor({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="sla-hours-start">Business hours start</label>
-              <input id="sla-hours-start" type="time" value={businessHoursStart} disabled={!canManage} onChange={(event) => setBusinessHoursStart(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+              <input id="sla-hours-start" type="time" value={businessHoursStart} disabled={!canManage} onChange={(event) => setBusinessHoursStart(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="sla-hours-end">Business hours end</label>
-              <input id="sla-hours-end" type="time" value={businessHoursEnd} disabled={!canManage} onChange={(event) => setBusinessHoursEnd(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+              <input id="sla-hours-end" type="time" value={businessHoursEnd} disabled={!canManage} onChange={(event) => setBusinessHoursEnd(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
             </div>
           </div>
         ) : null}
@@ -208,7 +208,7 @@ function PolicyEditor({
                         onChange={(event) =>
                           setEscalations((prev) => prev.map((e) => (e.key === escalation.key ? { ...e, triggerAtPercent: Number(event.target.value) } : e)))
                         }
-                        className="h-8 w-16 rounded border border-slate-300 px-2 text-xs outline-none focus:border-slate-900"
+                        className="h-8 w-16 rounded border border-slate-300 px-2 text-xs outline-none focus:border-[var(--app-primary)]"
                       />
                       % of SLA elapsed
                     </label>
@@ -228,7 +228,7 @@ function PolicyEditor({
                           type="button"
                           disabled={!canManage}
                           onClick={() => toggleRole(escalation.key, role)}
-                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset transition ${active ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'}`}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium ring-1 ring-inset transition ${active ? 'bg-[var(--app-primary)] text-white ring-[var(--app-primary)]' : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'}`}
                         >
                           {role}
                         </button>
@@ -245,7 +245,7 @@ function PolicyEditor({
                       onChange={(event) =>
                         setEscalations((prev) => prev.map((e) => (e.key === escalation.key ? { ...e, escalateToUserId: event.target.value || null } : e)))
                       }
-                      className="h-8 w-full rounded border border-slate-300 px-2 text-xs outline-none focus:border-slate-900"
+                      className="h-8 w-full rounded border border-slate-300 px-2 text-xs outline-none focus:border-[var(--app-primary)]"
                     >
                       <option value="">No specific user</option>
                       {(users ?? []).map((u) => (
@@ -289,7 +289,7 @@ export function SlaPoliciesPage() {
         {priorities.map((priority) => {
           const policy = byPriority.get(priority)
           return (
-            <div key={priority} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div key={priority} className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <div className="flex items-center justify-between gap-2">
                 <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${priorityStyles[priority]}`}>{priority}</span>
                 {policy ? (

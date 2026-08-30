@@ -210,7 +210,7 @@ export function InvoiceDetailPage() {
               {downloading ? 'Preparing...' : 'Download PDF'}
             </button>
             {canManage && isProforma ? (
-              <button type="button" onClick={convertToFinalInvoice} disabled={convertProforma.isPending} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+              <button type="button" onClick={convertToFinalInvoice} disabled={convertProforma.isPending} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
                 {convertProforma.isPending ? 'Converting...' : 'Convert to Invoice'}
               </button>
             ) : null}
@@ -225,7 +225,7 @@ export function InvoiceDetailPage() {
               </>
             ) : null}
             {canManage && !isProforma && invoice.balance > 0 && invoice.status !== 'Void' ? (
-              <button type="button" onClick={() => setShowPayment(true)} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+              <button type="button" onClick={() => setShowPayment(true)} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
                 Record Payment
               </button>
             ) : null}
@@ -247,7 +247,7 @@ export function InvoiceDetailPage() {
           ['Total', formatCurrency(invoice.totalAmount, invoice.currency)],
           ['Balance', formatCurrency(invoice.balance, invoice.currency)],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div key={label} className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <div className="text-sm font-medium text-slate-600">{label}</div>
             <div className="mt-2 text-xl font-semibold text-slate-900">{value}</div>
           </div>
@@ -308,7 +308,7 @@ export function InvoiceDetailPage() {
             <button type="button" onClick={() => setShowPayment(false)} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
               Cancel
             </button>
-            <button type="button" onClick={submitPayment} disabled={recordPayment.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={submitPayment} disabled={recordPayment.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {recordPayment.isPending ? 'Saving...' : 'Record Payment'}
             </button>
           </div>
@@ -317,12 +317,12 @@ export function InvoiceDetailPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="payment-amount">Amount</label>
-            <input id="payment-amount" type="number" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input id="payment-amount" type="number" step="0.01" value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             <p className="mt-1 text-xs text-slate-500">Outstanding balance: {formatCurrency(invoice.balance, invoice.currency)}</p>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="payment-method">Method</label>
-            <select id="payment-method" value={method} onChange={(event) => setMethod(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+            <select id="payment-method" value={method} onChange={(event) => setMethod(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               {paymentMethods.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -332,7 +332,7 @@ export function InvoiceDetailPage() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="payment-reference">Reference</label>
-            <input id="payment-reference" value={reference} onChange={(event) => setReference(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input id="payment-reference" value={reference} onChange={(event) => setReference(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         </div>
       </FormDrawer>

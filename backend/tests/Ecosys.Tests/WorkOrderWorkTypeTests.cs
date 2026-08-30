@@ -247,7 +247,7 @@ public sealed class WorkOrderWorkTypeTests
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpBranchAccessService(),
             new TemplateLookupPmChecklistService(fixture.Template),
-            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.TimeZoneOptions()),
+            TestTimeZones.Create(dbContext),
             new NoOpLogger<PreventiveMaintenanceController>());
 
     private static Tenant CreateTenant() =>

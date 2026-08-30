@@ -73,7 +73,7 @@ export function PmTemplatesSettingsPage() {
         subtitle="Reusable preventive maintenance checklists used when scheduling PM plans."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setEditorState({ open: true, templateId: null })} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">
+            <button type="button" onClick={() => setEditorState({ open: true, templateId: null })} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Template
             </button>
           ) : undefined

@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Clock, FileStack, FileText, Percent, Walle
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { EmptyState } from '../../shared/components/EmptyState'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { Spinner } from '../../shared/components/Spinner'
 import { StatCard } from '../../shared/components/StatCard'
 import { cn } from '../../shared/utils/cn'
@@ -55,11 +56,11 @@ function RevenueTrendChart({ rows }: { rows: RevenueReportRow[] }) {
   const gridLines = [0, 0.25, 0.5, 0.75, 1]
 
   return (
-    <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-slate-900">Invoiced vs collected by month</h3>
         <div className="flex items-center gap-4 text-xs text-slate-600">
-          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-slate-900" />Invoiced</span>
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-[var(--app-primary)]" />Invoiced</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Collected</span>
         </div>
       </div>
@@ -102,11 +103,21 @@ function RevenueTrendChart({ rows }: { rows: RevenueReportRow[] }) {
 
 export function FinanceReportsPage() {
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>('revenue')
-  const { data: dashboard, isLoading } = useFinanceDashboard()
-  const { data: aging } = useAgingReport()
+  const dashboardQuery = useFinanceDashboard()
+  const agingQuery = useAgingReport()
   const monthlyRevenue = useRevenueReport({ groupBy: 'month' })
   const clientRevenue = useRevenueReport({ groupBy: 'client' })
-  const { data: payables, isLoading: payablesLoading } = usePayables('All')
+  const payablesQuery = usePayables('All')
+
+  const { data: dashboard, isLoading } = dashboardQuery
+  const { data: aging } = agingQuery
+  const { data: payables, isLoading: payablesLoading } = payablesQuery
+  /**
+   * Money tiles are the most dangerous thing on this page to get wrong: "0 outstanding" reads as a
+   * fact, not as a failed request. Whenever the dashboard query is in error every tile it feeds
+   * falls back to an em dash and the row is preceded by an explicit retry banner.
+   */
+  const dashboardUnavailable = dashboardQuery.isError
 
   const payableColumns: DataTableColumn<PayableListItem>[] = [
     { key: 'billNumber', header: 'Bill No', cell: (row) => <span className="font-mono text-xs text-slate-700">{row.billNumber}</span> },
@@ -146,7 +157,7 @@ export function FinanceReportsPage() {
             key={option.id}
             type="button"
             onClick={() => setTab(option.id)}
-            className={cn('inline-flex h-10 items-center rounded-full border px-3 text-sm font-medium transition', tab === option.id ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
+            className={cn('inline-flex h-10 items-center rounded-full border px-3 text-sm font-medium transition', tab === option.id ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
           >
             {option.label}
           </button>
@@ -155,51 +166,96 @@ export function FinanceReportsPage() {
 
       {tab === 'revenue' ? (
         <>
+          {dashboardUnavailable ? (
+            <ErrorState
+              variant="inline"
+              title="Year-to-date totals unavailable."
+              description="The finance dashboard could not be loaded, so no balances are shown."
+              onRetry={() => void dashboardQuery.refetch()}
+            />
+          ) : null}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Total Invoiced (YTD)" value={isLoading ? '—' : formatCurrency(dashboard?.totalInvoicedYtd ?? 0)} icon={<StatIcon tone="default"><FileText className="h-4 w-4" /></StatIcon>} />
-            <StatCard label="Total Collected (YTD)" value={isLoading ? '—' : formatCurrency(dashboard?.totalCollectedYtd ?? 0)} tone="success" icon={<StatIcon tone="success"><Wallet className="h-4 w-4" /></StatIcon>} />
-            <StatCard label="Outstanding" value={isLoading ? '—' : formatCurrency(dashboard?.outstandingBalance ?? 0)} tone="warning" icon={<StatIcon tone="warning"><Clock className="h-4 w-4" /></StatIcon>} />
-            <StatCard label="Overdue" value={isLoading ? '—' : formatCurrency(dashboard?.overdueBalance ?? 0)} tone="danger" icon={<StatIcon tone="danger"><AlertTriangle className="h-4 w-4" /></StatIcon>} />
+            <StatCard label="Total Invoiced (YTD)" value={isLoading || dashboardUnavailable ? '—' : formatCurrency(dashboard?.totalInvoicedYtd ?? 0)} icon={<StatIcon tone="default"><FileText className="h-4 w-4" /></StatIcon>} />
+            <StatCard label="Total Collected (YTD)" value={isLoading || dashboardUnavailable ? '—' : formatCurrency(dashboard?.totalCollectedYtd ?? 0)} tone="success" icon={<StatIcon tone="success"><Wallet className="h-4 w-4" /></StatIcon>} />
+            <StatCard label="Outstanding" value={isLoading || dashboardUnavailable ? '—' : formatCurrency(dashboard?.outstandingBalance ?? 0)} tone="warning" icon={<StatIcon tone="warning"><Clock className="h-4 w-4" /></StatIcon>} />
+            <StatCard label="Overdue" value={isLoading || dashboardUnavailable ? '—' : formatCurrency(dashboard?.overdueBalance ?? 0)} tone="danger" icon={<StatIcon tone="danger"><AlertTriangle className="h-4 w-4" /></StatIcon>} />
           </div>
-          {monthlyRevenue.isLoading ? <Spinner label="Loading revenue trend" /> : <RevenueTrendChart rows={monthlyRevenue.data ?? []} />}
-          <DataTable
-            columns={monthColumns}
-            data={(monthlyRevenue.data ?? []).map((row) => ({ ...row, id: row.group }))}
-            loading={monthlyRevenue.isLoading}
-            emptyTitle="No revenue data"
-            emptyDescription="Monthly revenue will appear here once invoices exist."
-          />
+          {monthlyRevenue.isError ? (
+            <ErrorState
+              title="Revenue trend unavailable"
+              description="We couldn’t load monthly invoiced and collected totals, so an empty chart would be misleading."
+              onRetry={() => void monthlyRevenue.refetch()}
+            />
+          ) : (
+            <>
+              {monthlyRevenue.isLoading ? <Spinner label="Loading revenue trend" /> : <RevenueTrendChart rows={monthlyRevenue.data ?? []} />}
+              <DataTable
+                columns={monthColumns}
+                data={(monthlyRevenue.data ?? []).map((row) => ({ ...row, id: row.group }))}
+                loading={monthlyRevenue.isLoading}
+                emptyTitle="No revenue data"
+                emptyDescription="Monthly revenue will appear here once invoices exist."
+              />
+            </>
+          )}
         </>
       ) : null}
 
       {tab === 'receivables' ? (
-        <DataTable
-          columns={[
-            { key: 'clientName', header: 'Client', cell: (row) => row.clientName },
-            { key: 'total', header: 'Total Outstanding', cell: (row) => formatCurrency(row.total) },
-          ] satisfies DataTableColumn<{ id: string; clientName: string; total: number }>[]}
-          data={(aging ?? []).map((row) => ({ id: row.clientId, clientName: row.clientName, total: row.total }))}
-          emptyTitle="No data"
-          emptyDescription="No outstanding balances by client."
-        />
+        agingQuery.isError ? (
+          <ErrorState
+            title="Outstanding receivables unavailable"
+            description="We couldn’t load the aging report — this is not a confirmation that nothing is outstanding."
+            onRetry={() => void agingQuery.refetch()}
+          />
+        ) : (
+          <DataTable
+            columns={[
+              { key: 'clientName', header: 'Client', cell: (row) => row.clientName },
+              { key: 'total', header: 'Total Outstanding', cell: (row) => formatCurrency(row.total) },
+            ] satisfies DataTableColumn<{ id: string; clientName: string; total: number }>[]}
+            data={(aging ?? []).map((row) => ({ id: row.clientId, clientName: row.clientName, total: row.total }))}
+            loading={agingQuery.isLoading}
+            emptyTitle="No data"
+            emptyDescription="No outstanding balances by client."
+          />
+        )
       ) : null}
 
       {tab === 'collections' ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatCard label="Quotations" value={dashboard?.totalQuotations ?? 0} icon={<StatIcon tone="default"><FileStack className="h-4 w-4" /></StatIcon>} />
-          <StatCard label="Converted" value={dashboard?.convertedQuotations ?? 0} tone="success" icon={<StatIcon tone="success"><CheckCircle2 className="h-4 w-4" /></StatIcon>} />
-          <StatCard label="Conversion Rate" value={`${dashboard?.quoteConversionRate ?? 0}%`} icon={<StatIcon tone="default"><Percent className="h-4 w-4" /></StatIcon>} />
+        <div className="space-y-4">
+          {dashboardUnavailable ? (
+            <ErrorState
+              variant="inline"
+              title="Conversion figures unavailable."
+              description="The finance dashboard could not be loaded, so no quote totals are shown."
+              onRetry={() => void dashboardQuery.refetch()}
+            />
+          ) : null}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <StatCard label="Quotations" value={isLoading || dashboardUnavailable ? '—' : dashboard?.totalQuotations ?? 0} icon={<StatIcon tone="default"><FileStack className="h-4 w-4" /></StatIcon>} />
+            <StatCard label="Converted" value={isLoading || dashboardUnavailable ? '—' : dashboard?.convertedQuotations ?? 0} tone={dashboardUnavailable ? 'default' : 'success'} icon={<StatIcon tone="success"><CheckCircle2 className="h-4 w-4" /></StatIcon>} />
+            <StatCard label="Conversion Rate" value={isLoading || dashboardUnavailable ? '—' : `${dashboard?.quoteConversionRate ?? 0}%`} icon={<StatIcon tone="default"><Percent className="h-4 w-4" /></StatIcon>} />
+          </div>
         </div>
       ) : null}
 
       {tab === 'by-client' ? (
-        <DataTable
-          columns={clientColumns}
-          data={(clientRevenue.data ?? []).map((row) => ({ ...row, id: row.group }))}
-          loading={clientRevenue.isLoading}
-          emptyTitle="No client revenue yet"
-          emptyDescription="Invoiced, collected, and outstanding totals per client will appear here."
-        />
+        clientRevenue.isError ? (
+          <ErrorState
+            title="Per-client revenue unavailable"
+            description="We couldn’t load revenue grouped by client, so an empty table would be misleading."
+            onRetry={() => void clientRevenue.refetch()}
+          />
+        ) : (
+          <DataTable
+            columns={clientColumns}
+            data={(clientRevenue.data ?? []).map((row) => ({ ...row, id: row.group }))}
+            loading={clientRevenue.isLoading}
+            emptyTitle="No client revenue yet"
+            emptyDescription="Invoiced, collected, and outstanding totals per client will appear here."
+          />
+        )
       ) : null}
 
       {tab === 'contract-pnl' ? (
@@ -207,16 +263,24 @@ export function FinanceReportsPage() {
       ) : null}
 
       {tab === 'payables-aging' ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {(['Current', '1–30 days', '31–60 days', '60+ days'] as const).map((bucket) => {
-              const total = outstandingPayables.filter((p) => agingBucket(p) === bucket).reduce((sum, p) => sum + (p.amount - p.amountPaid), 0)
-              return <StatCard key={bucket} label={bucket} value={formatCurrency(total)} tone={bucket === '60+ days' && total > 0 ? 'danger' : 'default'} />
-            })}
+        payablesQuery.isError ? (
+          <ErrorState
+            title="Payables aging unavailable"
+            description="We couldn’t load supplier bills, so a zero outstanding total would be a fabricated figure."
+            onRetry={() => void payablesQuery.refetch()}
+          />
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {(['Current', '1–30 days', '31–60 days', '60+ days'] as const).map((bucket) => {
+                const total = outstandingPayables.filter((p) => agingBucket(p) === bucket).reduce((sum, p) => sum + (p.amount - p.amountPaid), 0)
+                return <StatCard key={bucket} label={bucket} value={payablesLoading ? '—' : formatCurrency(total)} tone={!payablesLoading && bucket === '60+ days' && total > 0 ? 'danger' : 'default'} />
+              })}
+            </div>
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-sm text-slate-600 shadow-sm">Total outstanding: <span className="font-semibold text-slate-900">{payablesLoading ? '—' : formatCurrency(payablesTotal)}</span> across {payablesLoading ? '—' : outstandingPayables.length} bill(s)</div>
+            <DataTable columns={payableColumns} data={outstandingPayables} loading={payablesLoading} emptyTitle="No outstanding payables" emptyDescription="Unpaid supplier bills will appear here." />
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">Total outstanding: <span className="font-semibold text-slate-900">{formatCurrency(payablesTotal)}</span> across {outstandingPayables.length} bill(s)</div>
-          <DataTable columns={payableColumns} data={outstandingPayables} loading={payablesLoading} emptyTitle="No outstanding payables" emptyDescription="Unpaid supplier bills will appear here." />
-        </div>
+        )
       ) : null}
     </div>
   )

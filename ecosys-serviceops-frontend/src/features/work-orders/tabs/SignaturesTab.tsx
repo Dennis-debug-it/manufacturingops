@@ -78,7 +78,7 @@ export function SignaturesTab({ workOrderId }: { workOrderId: string }) {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+            className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
           >
             <PenLine className="h-4 w-4" />
             Capture Signature
@@ -91,7 +91,7 @@ export function SignaturesTab({ workOrderId }: { workOrderId: string }) {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {data.signatures.map((signature) => (
-            <div key={signature.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div key={signature.id} className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{signature.signatureType}</div>
@@ -125,7 +125,7 @@ export function SignaturesTab({ workOrderId }: { workOrderId: string }) {
               type="button"
               onClick={submit}
               disabled={capture.isPending}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {capture.isPending ? 'Saving…' : 'Save Signature'}
             </button>
@@ -135,7 +135,7 @@ export function SignaturesTab({ workOrderId }: { workOrderId: string }) {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="signature-type">Type</label>
-            <select id="signature-type" value={signatureType} onChange={(event) => setSignatureType(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+            <select id="signature-type" value={signatureType} onChange={(event) => setSignatureType(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               {signatureTypes.map((type) => (
                 <option key={type.value} value={type.value}>{type.label}</option>
               ))}
@@ -143,11 +143,11 @@ export function SignaturesTab({ workOrderId }: { workOrderId: string }) {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="signer-name">Signer Name</label>
-            <input id="signer-name" value={signerName} onChange={(event) => setSignerName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input id="signer-name" value={signerName} onChange={(event) => setSignerName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="signer-role">Role (optional)</label>
-            <input id="signer-role" value={signerRole} onChange={(event) => setSignerRole(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input id="signer-role" value={signerRole} onChange={(event) => setSignerRole(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Signature</label>
@@ -155,7 +155,7 @@ export function SignaturesTab({ workOrderId }: { workOrderId: string }) {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="signature-comment">Comment (optional)</label>
-            <textarea id="signature-comment" value={comment} onChange={(event) => setComment(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+            <textarea id="signature-comment" value={comment} onChange={(event) => setComment(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         </div>
       </FormDrawer>

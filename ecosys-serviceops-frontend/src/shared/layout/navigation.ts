@@ -27,8 +27,19 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Settings', to: '/settings', roles: ['admin'], permission: 'settings.view', icon: Settings2 },
 ]
 
+/**
+ * The platform (command-centre) sections and, per section, the roles allowed to open it.
+ *
+ * These `roles` are load-bearing in two places — `PlatformShell` renders only the items the
+ * current role may reach, and `PlatformApp` refuses direct navigation to the rest — so they
+ * must stay aligned with the server-side policies each section's controller declares
+ * (`AddPlatformPolicy` in `backend/src/Ecosys.Api/Program.cs`). Hiding a link is presentation;
+ * the server remains the authority.
+ */
 export const platformNavItems: NavItem[] = [
-  { label: 'Overview', to: '/platform', roles: ['super_admin', 'platform_sales'], permission: 'platform.dashboard.view', icon: ShieldCheck },
+  // `/platform/overview` rather than `/platform`: the shell's active-state test treats `to` as a
+  // path prefix, so a bare `/platform` matched every platform route and kept Overview highlighted.
+  { label: 'Overview', to: '/platform/overview', roles: ['super_admin', 'platform_sales'], permission: 'platform.dashboard.view', icon: ShieldCheck },
   { label: 'Tenants', to: '/platform/tenants', roles: ['super_admin', 'platform_sales'], permission: 'platform.tenants.view', icon: Building2 },
   { label: 'Leads', to: '/platform/leads', roles: ['super_admin', 'platform_sales'], permission: 'platform.crm.view', icon: Megaphone },
   { label: 'Finance', to: '/platform/finance', roles: ['super_admin'], permission: 'platform.finance.view', icon: Wallet },

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { FlaskConical, Plus, Trash2 } from 'lucide-react'
 import { api } from '../../../shared/api/apiClient'
 import { DataTable, type DataTableColumn } from '../../../shared/components/DataTable'
+import { ErrorState } from '../../../shared/components/ErrorState'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { ConfirmDialog } from '../../../shared/components/ConfirmDialog'
@@ -12,7 +13,7 @@ import { useClients } from '../../clients/api'
 import { useAssignmentGroups } from '../../team/api'
 
 const baseUrl = '/api/settings/intake-protocols'
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 const criteriaFields = ['Subject', 'Body', 'Sender'] as const
@@ -151,7 +152,7 @@ function buildPayload(form: RuleFormState, existing?: IntakeProtocol) {
 
 export function IntakeRulesSection() {
   const queryClient = useQueryClient()
-  const { data: protocols, isLoading } = useQuery({
+  const { data: protocols, isLoading, isError, refetch } = useQuery({
     queryKey: ['intake-protocols'],
     queryFn: () => api.get<IntakeProtocol[]>(baseUrl),
   })
@@ -246,19 +247,27 @@ export function IntakeRulesSection() {
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-900">Intake Rules</h2>
           <p className="mt-1 text-sm text-slate-600">Multiple rules can match incoming email or monitoring alerts and create work orders with different defaults.</p>
         </div>
-        <button type="button" onClick={() => { setEditing(null); setCreating(true) }} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+        <button type="button" onClick={() => { setEditing(null); setCreating(true) }} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
           <Plus className="h-4 w-4" />New Rule
         </button>
       </div>
 
       <div className="mt-4">
-        <DataTable columns={columns} data={protocols ?? []} loading={isLoading} emptyTitle="No intake rules" emptyDescription="Create a rule to auto-create work orders from incoming email or monitoring alerts." />
+        {isError ? (
+          <ErrorState
+            title="Intake rules unavailable"
+            description="We couldn’t load the configured rules, so this is not a confirmation that there are none."
+            onRetry={() => void refetch()}
+          />
+        ) : (
+          <DataTable columns={columns} data={protocols ?? []} loading={isLoading} emptyTitle="No intake rules" emptyDescription="Create a rule to auto-create work orders from incoming email or monitoring alerts." />
+        )}
       </div>
 
       <FormDrawer
@@ -278,7 +287,7 @@ export function IntakeRulesSection() {
                 save.mutate()
               }}
               disabled={save.isPending}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60"
             >
               {save.isPending ? 'Saving…' : editing ? 'Save Changes' : 'Create Rule'}
             </button>

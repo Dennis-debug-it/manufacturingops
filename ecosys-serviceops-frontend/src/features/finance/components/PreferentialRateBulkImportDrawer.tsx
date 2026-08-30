@@ -6,6 +6,7 @@ import { FormDrawer } from '../../../shared/components/FormDrawer'
 import type { Client } from '../../clients/types'
 import { downloadCsvTemplate, readCsvFile } from './financeImportUtils'
 import type { UpsertPreferentialRatePayload } from '../api'
+import { getActiveCurrency } from '../../../shared/utils/currency'
 
 const statuses = ['Active', 'Inactive', 'Pending'] as const
 const itemTypes = ['labour', 'material', 'callout', 'transport', 'service', 'other'] as const
@@ -50,7 +51,7 @@ function validateRows(rows: Array<Record<string, string>>, clients: Client[]) {
     const unit = row['unit*']?.trim()
     const defaultRate = Number(row['default_rate*']?.trim())
     const preferentialRate = Number(row['preferential_rate*']?.trim())
-    const currency = row.currency?.trim().toUpperCase() || 'KES'
+    const currency = row.currency?.trim().toUpperCase() || getActiveCurrency()
     const effectiveFrom = normalizeDate(row['effective_from*'] ?? '')
     const effectiveToRaw = row.effective_to?.trim() ?? ''
     const effectiveTo = effectiveToRaw ? normalizeDate(effectiveToRaw) : null
@@ -215,7 +216,7 @@ export function PreferentialRateBulkImportDrawer({ open, onClose, clients, onImp
               ],
               csvHeaders,
               [
-                { 'client_name*': 'Acme Facilities', 'rate_name*': 'Preferred Generator Labour', rate_type: 'Preferential', 'item_type*': 'labour', 'unit*': 'hour', 'default_rate*': '3500', 'preferential_rate*': '3000', currency: 'KES', 'effective_from*': '2026-06-01', effective_to: '2026-12-31', status: 'Pending', requires_approval: 'TRUE' },
+                { 'client_name*': 'Acme Facilities', 'rate_name*': 'Preferred Generator Labour', rate_type: 'Preferential', 'item_type*': 'labour', 'unit*': 'hour', 'default_rate*': '3500', 'preferential_rate*': '3000', currency: getActiveCurrency(), 'effective_from*': '2026-06-01', effective_to: '2026-12-31', status: 'Pending', requires_approval: 'TRUE' },
               ],
             )}
             disabled={parsing || importing}
@@ -231,7 +232,7 @@ export function PreferentialRateBulkImportDrawer({ open, onClose, clients, onImp
             <button type="button" onClick={() => void handleParse()} disabled={!file || parsing || importing} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60">
               {parsing ? 'Validating...' : 'Validate CSV'}
             </button>
-            <button type="button" onClick={() => void handleImport()} disabled={importing || validRows.length === 0} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={() => void handleImport()} disabled={importing || validRows.length === 0} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {importing ? 'Importing...' : 'Import Rates'}
             </button>
           </div>
@@ -265,7 +266,7 @@ export function PreferentialRateBulkImportDrawer({ open, onClose, clients, onImp
           />
         </label>
 
-        <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <label className="flex items-center justify-between rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] px-4 py-3 shadow-sm">
           <div>
             <p className="text-sm font-medium text-slate-900">Skip invalid rows</p>
             <p className="text-xs text-slate-500">Import every valid row and leave anything that needs correction in the results table.</p>
@@ -275,15 +276,15 @@ export function PreferentialRateBulkImportDrawer({ open, onClose, clients, onImp
 
         {validations.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Rows</p>
               <p className="mt-2 text-2xl font-semibold text-slate-900">{validations.length}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Valid</p>
               <p className="mt-2 text-2xl font-semibold text-emerald-600">{validRows.length}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Needs Review</p>
               <p className="mt-2 text-2xl font-semibold text-amber-600">{invalidRows}</p>
             </div>
@@ -293,7 +294,7 @@ export function PreferentialRateBulkImportDrawer({ open, onClose, clients, onImp
         {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
 
         {rows.length > 0 ? (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
             <div className="max-h-[22rem] overflow-auto">
               <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
                 <thead className="sticky top-0 bg-slate-50">
@@ -333,7 +334,7 @@ export function PreferentialRateBulkImportDrawer({ open, onClose, clients, onImp
               Created {result.created} preferential rates. Failed {result.failed}.
             </div>
             {result.failures.length > 0 ? (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
                 <div className="max-h-40 overflow-auto px-4 py-3 text-sm text-rose-700">
                   {result.failures.map((failure) => <p key={failure}>{failure}</p>)}
                 </div>

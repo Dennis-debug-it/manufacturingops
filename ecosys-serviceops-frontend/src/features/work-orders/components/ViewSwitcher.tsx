@@ -25,7 +25,7 @@ export function ViewSwitcher({ value, onChange }: ViewSwitcherProps) {
           aria-pressed={value === key}
           className={cn(
             'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition',
-            value === key ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100',
+            value === key ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100',
           )}
         >
           <Icon className="h-3.5 w-3.5" />

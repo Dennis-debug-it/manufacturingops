@@ -87,17 +87,17 @@ export function OnboardingPage() {
     <div className="space-y-6">
       <PageHeader title="Onboarding" subtitle="Tenant checklist and setup flow." />
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <div className="flex items-center justify-between text-sm">
           <span className="font-medium text-slate-900">Setup progress</span>
           <span className="text-slate-600">{doneCount} / {requiredSteps.length} required steps</span>
         </div>
         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-          <div className="h-full rounded-full bg-slate-900 transition-all" style={{ width: `${progress}%` }} />
+          <div className="h-full rounded-full bg-[var(--app-primary)] transition-all" style={{ width: `${progress}%` }} />
         </div>
       </div>
 
-      <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-900">Required Steps</h3>
         <ul className="space-y-2">
           {requiredSteps.map((step) => (
@@ -111,7 +111,7 @@ export function OnboardingPage() {
         </ul>
       </section>
 
-      <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-900">Recommended Steps</h3>
         <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {recommendedSteps.map((step) => (
@@ -125,7 +125,7 @@ export function OnboardingPage() {
         </ul>
       </section>
 
-      <section id="starter-packs" className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section id="starter-packs" className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-900">Starter Packs</h3>
         <p className="text-sm text-slate-600">Pre-built checklist templates for your contractor type.</p>
         <ul className="space-y-2">

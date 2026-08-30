@@ -3,6 +3,7 @@ import toast from 'react-hot-toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { api } from '../../shared/api/apiClient'
 
@@ -50,14 +51,14 @@ function RuleRow({ rule }: { rule: NumberingRule }) {
   return (
     <tr>
       <td className="px-4 py-3 text-sm font-medium text-slate-900">{rule.documentType}</td>
-      <td className="px-4 py-3"><input value={prefix} disabled={!canManage} onChange={(event) => setPrefix(event.target.value)} className="h-9 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" /></td>
-      <td className="px-4 py-3"><input type="number" value={nextNumber} disabled={!canManage} onChange={(event) => setNextNumber(event.target.value)} className="h-9 w-24 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" /></td>
-      <td className="px-4 py-3"><input type="number" value={paddingLength} disabled={!canManage} onChange={(event) => setPaddingLength(event.target.value)} className="h-9 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" /></td>
+      <td className="px-4 py-3"><input value={prefix} disabled={!canManage} onChange={(event) => setPrefix(event.target.value)} className="h-9 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" /></td>
+      <td className="px-4 py-3"><input type="number" value={nextNumber} disabled={!canManage} onChange={(event) => setNextNumber(event.target.value)} className="h-9 w-24 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" /></td>
+      <td className="px-4 py-3"><input type="number" value={paddingLength} disabled={!canManage} onChange={(event) => setPaddingLength(event.target.value)} className="h-9 w-16 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" /></td>
       <td className="px-4 py-3 text-xs text-slate-500">{preview ?? '—'}</td>
       <td className="px-4 py-3">
         <div className="flex gap-2">
           <button type="button" onClick={loadPreview} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Preview</button>
-          {canManage ? <button type="button" onClick={() => save.mutate()} disabled={save.isPending} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-60">Save</button> : null}
+          {canManage ? <button type="button" onClick={() => save.mutate()} disabled={save.isPending} className="rounded-lg bg-[var(--app-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">Save</button> : null}
         </div>
       </td>
     </tr>
@@ -65,7 +66,7 @@ function RuleRow({ rule }: { rule: NumberingRule }) {
 }
 
 export function NumberingSettingsPage() {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['settings', 'numbering-rules'],
     queryFn: () => api.get<NumberingRule[]>('/api/settings/numbering-rules'),
     staleTime: 30_000,
@@ -76,13 +77,19 @@ export function NumberingSettingsPage() {
   }
 
   if (isError) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">Numbering rules could not be loaded.</div>
+    return (
+      <ErrorState
+        title="Numbering rules unavailable"
+        description="We couldn’t load the document numbering rules. Nothing has been changed — try again."
+        onRetry={() => void refetch()}
+      />
+    )
   }
 
   return (
     <div className="space-y-6">
       <PageHeader title="Numbering Rules" subtitle="Document prefixes, start numbers, and padding — with live preview." />
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
           <thead className="bg-slate-50">
             <tr>

@@ -32,12 +32,12 @@ export function PortalInvoiceDetailPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="text-xs uppercase text-slate-500">Total</div><div className="mt-1 text-lg font-semibold text-slate-900">{money(data.totalAmount, data.currency)}</div></div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="text-xs uppercase text-slate-500">Paid</div><div className="mt-1 text-lg font-semibold text-emerald-600">{money(data.amountPaid, data.currency)}</div></div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="text-xs uppercase text-slate-500">Balance</div><div className="mt-1 text-lg font-semibold text-rose-600">{money(data.balance, data.currency)}</div></div>
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm"><div className="text-xs uppercase text-slate-500">Total</div><div className="mt-1 text-lg font-semibold text-slate-900">{money(data.totalAmount, data.currency)}</div></div>
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm"><div className="text-xs uppercase text-slate-500">Paid</div><div className="mt-1 text-lg font-semibold text-emerald-600">{money(data.amountPaid, data.currency)}</div></div>
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm"><div className="text-xs uppercase text-slate-500">Balance</div><div className="mt-1 text-lg font-semibold text-rose-600">{money(data.balance, data.currency)}</div></div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
           <thead className="bg-slate-50">
             <tr>
@@ -61,7 +61,7 @@ export function PortalInvoiceDetailPage() {
       </div>
 
       {data.payments.length > 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">Payment History</h2>
           <div className="mt-3 space-y-2">
             {data.payments.map((payment) => (
@@ -75,7 +75,7 @@ export function PortalInvoiceDetailPage() {
       ) : null}
 
       {data.notes ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">Notes</h2>
           <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{data.notes}</p>
         </div>

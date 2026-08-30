@@ -39,13 +39,13 @@ export function PortalRequestDetailPage() {
       />
 
       {data.description ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">Description</h2>
           <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{data.description}</p>
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm sm:grid-cols-2">
         {rows.map(([label, value]) => (
           <div key={label}>
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
@@ -55,14 +55,14 @@ export function PortalRequestDetailPage() {
       </div>
 
       {data.workDoneNotes ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">Technician Notes</h2>
           <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{data.workDoneNotes}</p>
         </div>
       ) : null}
 
       {notes && notes.length > 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">Updates</h2>
           <ul className="mt-3 space-y-3">
             {notes.map((note) => (

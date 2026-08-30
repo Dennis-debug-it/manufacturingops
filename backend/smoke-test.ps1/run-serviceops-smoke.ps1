@@ -1,5 +1,24 @@
+<#
+.SYNOPSIS
+    End-to-end smoke test for the ServiceOps API.
+
+.DESCRIPTION
+    Credentials are NOT baked into this file (EC-P3-03). Supply them as parameters or
+    through the environment before running:
+
+        $env:ECOSYS_SMOKE_SUPERADMIN_EMAIL    = 'superadmin@your-instance'
+        $env:ECOSYS_SMOKE_SUPERADMIN_PASSWORD = '...'
+        $env:ECOSYS_SMOKE_PASSWORD            = '...'   # optional; a random one is generated
+        ./run-serviceops-smoke.ps1
+
+    This script CREATES a tenant, users, clients, assets and work orders and does not clean
+    them up. Point it at a disposable environment, never at production.
+#>
 param(
-    [string]$ApiBaseUrl = "http://127.0.0.1:5099"
+    [string]$ApiBaseUrl = $(if ($env:ECOSYS_SMOKE_API_BASE_URL) { $env:ECOSYS_SMOKE_API_BASE_URL } else { "http://127.0.0.1:5099" }),
+    [string]$SuperAdminEmail = $env:ECOSYS_SMOKE_SUPERADMIN_EMAIL,
+    [string]$SuperAdminPassword = $env:ECOSYS_SMOKE_SUPERADMIN_PASSWORD,
+    [string]$Password = $env:ECOSYS_SMOKE_PASSWORD
 )
 
 $ErrorActionPreference = "Stop"
@@ -85,12 +104,49 @@ function Assert-True {
     }
 }
 
+function Require-Setting {
+    param(
+        # AllowNull/AllowEmptyString on purpose: an unset $env: variable arrives here as
+        # null/empty, and that is exactly the case this function exists to report. A
+        # Mandatory parameter would reject it at bind time with an unhelpful message.
+        [AllowNull()][AllowEmptyString()][string]$Value,
+        [Parameter(Mandatory = $true)][string]$ParameterName,
+        [Parameter(Mandatory = $true)][string]$EnvironmentVariable
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        throw ("{0} is not set. This script no longer ships credentials. Set it first:`n" +
+               "    `$env:{1} = '<value>'`n" +
+               "or pass it explicitly:`n" +
+               "    ./run-serviceops-smoke.ps1 -{0} '<value>'") -f $ParameterName, $EnvironmentVariable
+    }
+
+    return $Value
+}
+
+# The step-17 platform checks sign in as the existing platform admin, so those two are
+# genuine credentials for the target environment and have to be supplied.
+$superAdminEmail = Require-Setting -Value $SuperAdminEmail `
+    -ParameterName "SuperAdminEmail" -EnvironmentVariable "ECOSYS_SMOKE_SUPERADMIN_EMAIL"
+$superAdminPassword = Require-Setting -Value $SuperAdminPassword `
+    -ParameterName "SuperAdminPassword" -EnvironmentVariable "ECOSYS_SMOKE_SUPERADMIN_PASSWORD"
+
 $stamp = [DateTime]::UtcNow.ToString("yyyyMMddHHmmss")
 $tenantEmail = "admin.$stamp@ecosys-smoke.local"
 $technicianEmail = "tech.$stamp@ecosys-smoke.local"
-$password = "Password123!"
-$superAdminEmail = "superadmin@ecosys.local"
-$superAdminPassword = "SuperAdmin123!"
+
+# The tenant admin and technician are created by this run, so their password is ours to
+# choose. Generate a fresh strong one per run unless the caller pinned one; a constant in
+# the file would be a working credential on every environment this has ever been run against.
+if ([string]::IsNullOrWhiteSpace($Password)) {
+    $bytes = [byte[]]::new(24)
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    # Suffix keeps it valid against the upper/lower/digit/symbol password policy.
+    $password = ([Convert]::ToBase64String($bytes) -replace '[^A-Za-z0-9]', '') + "aA1!"
+}
+else {
+    $password = $Password
+}
 
 Write-Host "1. Signup tenant Admin"
 $signup = Invoke-Api -Method "POST" -Path "/api/auth/signup" -Body @{

@@ -104,7 +104,7 @@ function RuleEditor({ rule, onClose }: { rule: EscalationRule | null; onClose: (
         canManage ? (
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={save} disabled={isPending || !name.trim()} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={save} disabled={isPending || !name.trim()} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {isPending ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -114,7 +114,7 @@ function RuleEditor({ rule, onClose }: { rule: EscalationRule | null; onClose: (
       <div className="space-y-5">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="rule-name">Name</label>
-          <input id="rule-name" value={name} disabled={!canManage} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50" />
+          <input id="rule-name" value={name} disabled={!canManage} onChange={(event) => setName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
         </div>
 
         <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -132,7 +132,7 @@ function RuleEditor({ rule, onClose }: { rule: EscalationRule | null; onClose: (
                 value={triggerCondition}
                 disabled={!canManage}
                 onChange={(event) => setTriggerCondition(event.target.value as EscalationTriggerCondition)}
-                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
               >
                 {escalationTriggerConditions.map((condition) => (
                   <option key={condition} value={condition}>{conditionLabels[condition]}</option>
@@ -148,7 +148,7 @@ function RuleEditor({ rule, onClose }: { rule: EscalationRule | null; onClose: (
                 value={triggerValue}
                 disabled={!canManage}
                 onChange={(event) => setTriggerValue(Number(event.target.value))}
-                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
               />
             </div>
           </div>
@@ -166,7 +166,7 @@ function RuleEditor({ rule, onClose }: { rule: EscalationRule | null; onClose: (
                 setAction(event.target.value as EscalationAction)
                 setActionValue('')
               }}
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
             >
               {escalationActions.map((a) => (
                 <option key={a} value={a}>{actionLabels[a]}</option>
@@ -182,7 +182,7 @@ function RuleEditor({ rule, onClose }: { rule: EscalationRule | null; onClose: (
                 value={actionValue}
                 disabled={!canManage}
                 onChange={(event) => setActionValue(event.target.value)}
-                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
               >
                 <option value="">Select a user</option>
                 {(users ?? []).map((u) => (
@@ -200,7 +200,7 @@ function RuleEditor({ rule, onClose }: { rule: EscalationRule | null; onClose: (
                 value={actionValue}
                 disabled={!canManage}
                 onChange={(event) => setActionValue(event.target.value)}
-                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+                className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
               >
                 <option value="">Select a priority</option>
                 {priorities.map((p) => (
@@ -220,7 +220,7 @@ function RuleEditor({ rule, onClose }: { rule: EscalationRule | null; onClose: (
             value={cooldownMins}
             disabled={!canManage}
             onChange={(event) => setCooldownMins(Number(event.target.value))}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900 disabled:bg-slate-50"
+            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50"
           />
           <p className="mt-1 text-xs text-slate-500">Minimum time before this rule can fire again for the same work order.</p>
         </div>
@@ -256,7 +256,7 @@ export function EscalationRulesSettingsPage() {
             <button
               type="button"
               onClick={() => setEditing({ rule: null })}
-              className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+              className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
             >
               <Plus className="h-4 w-4" />
               New Rule
@@ -270,7 +270,7 @@ export function EscalationRulesSettingsPage() {
       ) : (
         <div className="space-y-3">
           {rules.map((rule) => (
-            <div key={rule.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div key={rule.id} className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">

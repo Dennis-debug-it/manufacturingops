@@ -50,7 +50,7 @@ export function TechnicianLocationPanel({ workOrder }: { workOrder: WorkOrder })
   const bounds: [number, number][] = sitePosition ? [techPosition, sitePosition] : [techPosition]
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
       <div className="flex items-center justify-between px-4 pt-4">
         <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Technician Location</h3>
       </div>

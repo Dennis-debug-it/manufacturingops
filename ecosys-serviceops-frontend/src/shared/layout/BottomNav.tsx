@@ -24,8 +24,8 @@ function MoreSheet({ items, onClose }: { items: Pick<NavItem, 'label' | 'to' | '
     // z-[1100]: Leaflet panes/controls (used by the Live Map and Work Orders Map views)
     // default to z-index 1000, so this sheet must clear that to stay on top of the map.
     <div className="fixed inset-0 z-[1100] flex items-end lg:hidden">
-      <button type="button" aria-label="Close menu" className="absolute inset-0 bg-slate-900/40" onClick={onClose} />
-      <div className="relative w-full rounded-t-2xl border-t border-slate-200 bg-white p-4 pb-24 shadow-2xl">
+      <button type="button" aria-label="Close menu" className="absolute inset-0 bg-[var(--app-primary)]/30 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="relative w-full rounded-t-2xl border-t border-[var(--glass-border)] bg-[var(--glass-white-strong)] p-4 pb-24 shadow-2xl backdrop-blur-[var(--glass-blur-lg)]">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-slate-900">All modules</span>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
@@ -43,7 +43,9 @@ function MoreSheet({ items, onClose }: { items: Pick<NavItem, 'label' | 'to' | '
                 onClick={onClose}
                 className={cn(
                   'flex flex-col items-center gap-1.5 rounded-xl px-2 py-3 text-xs font-medium transition',
-                  active ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                  active
+                    ? 'bg-[var(--app-primary)] text-white'
+                    : 'text-slate-600 hover:bg-[var(--app-primary-soft)] hover:text-[var(--app-primary)]',
                 )}
               >
                 <Icon className="h-5 w-5" />
@@ -81,7 +83,7 @@ export function BottomNav() {
   return (
     <>
       {showMore && overflowItems.length > 0 ? <MoreSheet items={overflowItems} onClose={() => setShowMore(false)} /> : null}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white shadow-[0_-1px_3px_rgba(15,23,42,0.06)] px-2 py-2 lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--glass-border)] bg-[var(--glass-white-strong)] px-2 py-2 shadow-[0_-1px_3px_rgba(7,63,67,0.06)] backdrop-blur-[var(--glass-blur-md)] lg:hidden">
         <div className="grid grid-cols-5 gap-1">
           {primaryItems.map((item) => {
             const active = isActive(location.pathname, item.to)
@@ -92,7 +94,9 @@ export function BottomNav() {
                 to={item.to}
                 className={cn(
                   'flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium transition',
-                  active ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900',
+                  active
+                    ? 'bg-[var(--app-primary)] text-white'
+                    : 'text-slate-500 hover:bg-[var(--app-primary-soft)] hover:text-[var(--app-primary)]',
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -107,8 +111,8 @@ export function BottomNav() {
               className={cn(
                 'flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium transition',
                 showMore || overflowItems.some((item) => isActive(location.pathname, item.to))
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900',
+                  ? 'bg-[var(--app-primary)] text-white'
+                  : 'text-slate-500 hover:bg-[var(--app-primary-soft)] hover:text-[var(--app-primary)]',
               )}
             >
               <MoreHorizontal className="h-4 w-4" />

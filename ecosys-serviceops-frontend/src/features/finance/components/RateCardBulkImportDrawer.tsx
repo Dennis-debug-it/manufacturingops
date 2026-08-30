@@ -190,8 +190,8 @@ export function RateCardBulkImportDrawer({ open, onClose, onImport }: RateCardBu
               ],
               csvHeaders,
               [
-                { 'name*': 'Standard Labour - Senior', 'category*': 'Labour', 'time_type*': 'Standard', skill_level: 'Senior', 'unit_rate*': '2500', 'unit*': 'hour', tax_rate: '16', is_default: 'FALSE' },
-                { 'name*': 'Emergency Callout', 'category*': 'Callout', 'time_type*': 'Emergency', skill_level: '', 'unit_rate*': '5000', 'unit*': 'visit', tax_rate: '16', is_default: 'FALSE' },
+                { 'name*': 'Standard Labour - Senior', 'category*': 'Labour', 'time_type*': 'Standard', skill_level: 'Senior', 'unit_rate*': '2500', 'unit*': 'hour', tax_rate: '', is_default: 'FALSE' },
+                { 'name*': 'Emergency Callout', 'category*': 'Callout', 'time_type*': 'Emergency', skill_level: '', 'unit_rate*': '5000', 'unit*': 'visit', tax_rate: '', is_default: 'FALSE' },
               ],
             )}
             disabled={parsing || importing}
@@ -207,7 +207,7 @@ export function RateCardBulkImportDrawer({ open, onClose, onImport }: RateCardBu
             <button type="button" onClick={() => void handleParse()} disabled={!file || parsing || importing} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60">
               {parsing ? 'Validating...' : 'Validate CSV'}
             </button>
-            <button type="button" onClick={() => void handleImport()} disabled={importing || validRows.length === 0} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={() => void handleImport()} disabled={importing || validRows.length === 0} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {importing ? 'Importing...' : 'Import Rate Cards'}
             </button>
           </div>
@@ -241,7 +241,7 @@ export function RateCardBulkImportDrawer({ open, onClose, onImport }: RateCardBu
           />
         </label>
 
-        <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <label className="flex items-center justify-between rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] px-4 py-3 shadow-sm">
           <div>
             <p className="text-sm font-medium text-slate-900">Skip invalid rows</p>
             <p className="text-xs text-slate-500">Import every valid row and keep the rows that need correction in the report.</p>
@@ -251,15 +251,15 @@ export function RateCardBulkImportDrawer({ open, onClose, onImport }: RateCardBu
 
         {validations.length > 0 ? (
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Rows</p>
               <p className="mt-2 text-2xl font-semibold text-slate-900">{validations.length}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Valid</p>
               <p className="mt-2 text-2xl font-semibold text-emerald-600">{validRows.length}</p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Needs Review</p>
               <p className="mt-2 text-2xl font-semibold text-amber-600">{invalidRows}</p>
             </div>
@@ -269,7 +269,7 @@ export function RateCardBulkImportDrawer({ open, onClose, onImport }: RateCardBu
         {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
 
         {rows.length > 0 ? (
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
             <div className="max-h-[22rem] overflow-auto">
               <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
                 <thead className="sticky top-0 bg-slate-50">
@@ -309,7 +309,7 @@ export function RateCardBulkImportDrawer({ open, onClose, onImport }: RateCardBu
               Created {result.created} rate cards. Failed {result.failed}.
             </div>
             {result.failures.length > 0 ? (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
                 <div className="max-h-40 overflow-auto px-4 py-3 text-sm text-rose-700">
                   {result.failures.map((failure) => <p key={failure}>{failure}</p>)}
                 </div>

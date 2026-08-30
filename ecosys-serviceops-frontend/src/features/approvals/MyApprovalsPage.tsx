@@ -31,7 +31,7 @@ function ApprovalCard({ request }: { request: ApprovalRequest }) {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -47,7 +47,7 @@ function ApprovalCard({ request }: { request: ApprovalRequest }) {
         </div>
         {mode === null ? (
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setMode('approve')} className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setMode('approve')} className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-[var(--app-primary)] px-3.5 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Check className="h-4 w-4" />Approve
             </button>
             <button type="button" onClick={() => setMode('reject')} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3.5 text-sm font-medium text-rose-600 transition hover:bg-rose-50">
@@ -80,7 +80,7 @@ function ApprovalCard({ request }: { request: ApprovalRequest }) {
             value={note}
             onChange={(event) => setNote(event.target.value)}
             rows={2}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]"
           />
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={() => { setMode(null); setNote('') }} className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
@@ -88,7 +88,7 @@ function ApprovalCard({ request }: { request: ApprovalRequest }) {
               type="button"
               disabled={decide.isPending}
               onClick={() => submit(mode === 'approve')}
-              className={`inline-flex h-9 items-center rounded-lg px-4 text-sm font-medium text-white disabled:opacity-60 ${mode === 'approve' ? 'bg-slate-900 hover:bg-slate-800' : 'bg-rose-600 hover:bg-rose-700'}`}
+              className={`inline-flex h-9 items-center rounded-lg px-4 text-sm font-medium text-white disabled:opacity-60 ${mode === 'approve' ? 'bg-[var(--app-primary)] hover:bg-[var(--app-secondary)]' : 'bg-rose-600 hover:bg-rose-700'}`}
             >
               {decide.isPending ? 'Saving…' : mode === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}
             </button>

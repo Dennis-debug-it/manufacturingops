@@ -1,20 +1,47 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
+import { CompletionOverrideFields } from './CompletionOverrideFields'
+
+export interface CompleteWorkOrderSubmission {
+  workDoneNotes: string
+  adminOverride: boolean
+  overrideReason: string | null
+}
 
 export interface CompleteWorkOrderDialogProps {
   open: boolean
   woNumber?: string | undefined
   submitting?: boolean
+  /**
+   * True once a technician arrival is on record. When false the server refuses completion unless
+   * the payload carries an admin override, so the dialog asks for one instead of firing a request
+   * that is guaranteed to 400.
+   */
+  arrivalRecorded: boolean
+  /** Whether the signed-in user holds the tenant `admin` role the server requires for an override. */
+  canAdminOverride: boolean
   onClose: () => void
-  onSubmit: (workDoneNotes: string) => void
+  onSubmit: (submission: CompleteWorkOrderSubmission) => void
 }
 
-export function CompleteWorkOrderDialog({ open, woNumber, submitting, onClose, onSubmit }: CompleteWorkOrderDialogProps) {
+export function CompleteWorkOrderDialog({
+  open,
+  woNumber,
+  submitting,
+  arrivalRecorded,
+  canAdminOverride,
+  onClose,
+  onSubmit,
+}: CompleteWorkOrderDialogProps) {
   const [notes, setNotes] = useState('')
+  const [overrideEnabled, setOverrideEnabled] = useState(false)
+  const [overrideReason, setOverrideReason] = useState('')
 
   useEffect(() => {
     if (!open) {
       setNotes('')
+      setOverrideEnabled(false)
+      setOverrideReason('')
     }
   }, [open])
 
@@ -22,10 +49,15 @@ export function CompleteWorkOrderDialog({ open, woNumber, submitting, onClose, o
     return null
   }
 
+  const overrideOffered = canAdminOverride && !arrivalRecorded
+  // Without an arrival the server needs all three of adminOverride, the admin role and a reason,
+  // so the submit stays disabled until the operator has deliberately supplied the first and third.
+  const overrideSatisfied = arrivalRecorded || (overrideEnabled && overrideReason.trim().length > 0)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
-      <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-slate-900/40" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+      <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-[var(--app-primary)]/40" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-semibold text-slate-900">Complete work order</h3>
@@ -39,9 +71,10 @@ export function CompleteWorkOrderDialog({ open, woNumber, submitting, onClose, o
         </div>
 
         <div className="mt-4">
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Work done notes</label>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="complete-dialog-notes">Work done notes</label>
           <textarea
-            className="min-h-[120px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900"
+            id="complete-dialog-notes"
+            className="min-h-[120px] w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--app-primary)]"
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             placeholder="Describe the work performed"
@@ -49,15 +82,33 @@ export function CompleteWorkOrderDialog({ open, woNumber, submitting, onClose, o
           />
         </div>
 
+        {overrideOffered ? (
+          <div className="mt-4">
+            <CompletionOverrideFields
+              idPrefix="complete-dialog"
+              enabled={overrideEnabled}
+              reason={overrideReason}
+              onEnabledChange={setOverrideEnabled}
+              onReasonChange={setOverrideReason}
+            />
+          </div>
+        ) : null}
+
         <div className="mt-6 flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
             Cancel
           </button>
           <button
             type="button"
-            disabled={!notes.trim() || submitting}
-            onClick={() => onSubmit(notes.trim())}
-            className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:bg-slate-300"
+            disabled={!notes.trim() || !overrideSatisfied || submitting}
+            onClick={() =>
+              onSubmit({
+                workDoneNotes: notes.trim(),
+                adminOverride: overrideOffered && overrideEnabled,
+                overrideReason: overrideOffered && overrideEnabled ? overrideReason.trim() : null,
+              })
+            }
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:bg-slate-300"
           >
             Mark complete
           </button>

@@ -128,7 +128,7 @@ export function ReportQueueTab() {
             onClick={() => { setStatus(card.filter); setPage(1) }}
             className={cn(
               'rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:border-slate-300',
-              status === card.filter ? 'border-slate-900' : 'border-slate-200',
+              status === card.filter ? 'border-[var(--app-primary)]' : 'border-slate-200',
             )}
           >
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{card.label}</div>
@@ -147,7 +147,7 @@ export function ReportQueueTab() {
               onClick={() => { setStatus(f.key); setPage(1) }}
               className={cn(
                 'rounded-full border px-3 py-1.5 text-xs font-medium transition',
-                status === f.key ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                status === f.key ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
               )}
             >
               {f.label}
@@ -163,7 +163,7 @@ export function ReportQueueTab() {
             <button type="button" disabled={selected.size === 0 || sendBatch.isPending} onClick={() => void batchSend()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
               <Send className="h-3.5 w-3.5" />Send Selected
             </button>
-            <button type="button" disabled={selected.size === 0 || zipping} onClick={() => void batchZip()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50">
+            <button type="button" disabled={selected.size === 0 || zipping} onClick={() => void batchZip()} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--app-primary)] px-3 text-xs font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-50">
               <Archive className="h-3.5 w-3.5" />{zipping ? 'Zipping…' : 'Download ZIP'}
             </button>
           </div>
@@ -176,7 +176,7 @@ export function ReportQueueTab() {
       ) : rows.length === 0 ? (
         <EmptyState title="No reports in the queue" description="Completed work orders awaiting reports will appear here." />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
           <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
             <thead className="bg-slate-50">
               <tr>

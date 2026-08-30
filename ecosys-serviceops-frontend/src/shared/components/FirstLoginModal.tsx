@@ -41,8 +41,8 @@ export function FirstLoginModal() {
   if (!current) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--app-primary)]/30 px-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-md rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white-strong)] p-6 shadow-2xl backdrop-blur-[var(--glass-blur-lg)]">
         <div className="flex items-start justify-between">
           <h3 className="text-lg font-semibold text-slate-900">{current.title}</h3>
           <button type="button" onClick={close} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><X className="h-4 w-4" /></button>
@@ -51,15 +51,15 @@ export function FirstLoginModal() {
         <div className="mt-6 flex items-center justify-between">
           <div className="flex gap-1.5">
             {steps.map((_, index) => (
-              <span key={index} className={cn('h-1.5 w-6 rounded-full', index === step ? 'bg-slate-900' : 'bg-slate-200')} />
+              <span key={index} className={cn('h-1.5 w-6 rounded-full', index === step ? 'bg-[var(--app-lime)]' : 'bg-slate-200')} />
             ))}
           </div>
           <div className="flex gap-2">
-            {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)} className="inline-flex h-10 items-center rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">Back</button> : null}
+            {step > 0 ? <button type="button" onClick={() => setStep((value) => value - 1)} className="inline-flex h-10 items-center rounded-lg border border-[var(--app-border)] px-4 text-sm font-medium text-slate-700 hover:bg-[var(--app-primary-soft)]">Back</button> : null}
             {step < steps.length - 1 ? (
-              <button type="button" onClick={() => setStep((value) => value + 1)} className="inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">Next</button>
+              <button type="button" onClick={() => setStep((value) => value + 1)} className="inline-flex h-10 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">Next</button>
             ) : (
-              <button type="button" onClick={close} className="inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">Get Started</button>
+              <button type="button" onClick={close} className="inline-flex h-10 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">Get Started</button>
             )}
           </div>
         </div>

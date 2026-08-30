@@ -32,6 +32,13 @@ internal sealed class HttpTenantContext(IHttpContextAccessor httpContextAccessor
         || HasRole(AppRoles.Auditor);
     public bool IsAdmin => HasRole(AppRoles.Admin);
 
+    /// <summary>
+    /// Client-portal logins are customers of the tenant, never staff of it. Stated explicitly on the
+    /// concrete context (not just inherited from the interface default) so it is visible next to
+    /// <see cref="IsSuperAdmin"/> — the two together are the "not tenant staff" test.
+    /// </summary>
+    public bool IsPortalClient => HasRole(AppRoles.PortalClient);
+
     public bool HasRole(string role) => User?.IsInRole(role) == true;
     public bool HasPermission(string permissionName) =>
         string.Equals(User?.FindFirstValue(permissionName), bool.TrueString, StringComparison.OrdinalIgnoreCase);

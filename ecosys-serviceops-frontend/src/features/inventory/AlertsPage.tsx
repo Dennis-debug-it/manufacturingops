@@ -40,7 +40,7 @@ function ReplenishForm({ material, onClose }: { material: Material; onClose: () 
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={submit} disabled={replenish.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={submit} disabled={replenish.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {replenish.isPending ? 'Saving…' : 'Replenish'}
           </button>
         </div>
@@ -48,7 +48,7 @@ function ReplenishForm({ material, onClose }: { material: Material; onClose: () 
     >
       <div>
         <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="alert-qty">Quantity to add</label>
-        <input id="alert-qty" type="number" min="0" step="0.01" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+        <input id="alert-qty" type="number" min="0" step="0.01" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         <p className="mt-2 text-xs text-slate-500">Currently {material.quantityOnHand} {material.unitOfMeasure} on hand · reorder level {material.reorderLevel}</p>
       </div>
     </FormDrawer>

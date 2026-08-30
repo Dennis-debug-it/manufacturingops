@@ -156,44 +156,47 @@ public sealed partial class WorkOrderExecutionController(
                 ?? throw new BusinessRuleException("Asset was not found.");
         }
 
-        await stockLedgerService.RecordIssueAsync(
-            material,
-            workOrder.BranchId,
-            request.QuantityUsed,
-            UserId,
-            $"Used on work order {workOrder.WorkOrderNumber}",
-            workOrder.WorkOrderNumber,
-            workOrder.Id,
-            null,
-            false,
-            cancellationToken);
-
-        dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            TenantId = TenantId,
-            WorkOrderId = workOrderId,
-            MaterialItemId = material.Id,
-            AssetId = asset?.Id ?? workOrder.AssetId,
-            QuantityUsed = request.QuantityUsed,
-            UnitCost = request.UnitCost ?? material.UnitCost,
-            Chargeable = request.Chargeable,
-            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-            UsedByUserId = UserId,
-            UsedAt = request.UsedAt ?? DateTime.UtcNow
-        });
+            await stockLedgerService.RecordIssueAsync(
+                material,
+                workOrder.BranchId,
+                request.QuantityUsed,
+                UserId,
+                $"Used on work order {workOrder.WorkOrderNumber}",
+                workOrder.WorkOrderNumber,
+                workOrder.Id,
+                null,
+                false,
+                ct);
 
-        dbContext.WorkOrderEvents.Add(new WorkOrderEvent
-        {
-            TenantId = TenantId,
-            WorkOrderId = workOrderId,
-            ActorUserId = UserId,
-            EventType = "PartUsed",
-            Status = WorkOrderStatuses.Normalize(workOrder.Status),
-            Message = $"Used {request.QuantityUsed} x {material.ItemName}.",
-            OccurredAt = DateTime.UtcNow
-        });
+            dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
+            {
+                TenantId = TenantId,
+                WorkOrderId = workOrderId,
+                MaterialItemId = material.Id,
+                AssetId = asset?.Id ?? workOrder.AssetId,
+                QuantityUsed = request.QuantityUsed,
+                UnitCost = request.UnitCost ?? material.UnitCost,
+                Chargeable = request.Chargeable,
+                Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+                UsedByUserId = UserId,
+                UsedAt = request.UsedAt ?? DateTime.UtcNow
+            });
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+            dbContext.WorkOrderEvents.Add(new WorkOrderEvent
+            {
+                TenantId = TenantId,
+                WorkOrderId = workOrderId,
+                ActorUserId = UserId,
+                EventType = "PartUsed",
+                Status = WorkOrderStatuses.Normalize(workOrder.Status),
+                Message = $"Used {request.QuantityUsed} x {material.ItemName}.",
+                OccurredAt = DateTime.UtcNow
+            });
+
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         await auditLogService.LogAsync(
             TenantId,
@@ -671,7 +674,7 @@ public sealed partial class WorkOrderExecutionController(
             .Include(x => x.Client)
             .Include(x => x.Site)
             .Include(x => x.Asset)
-            .ThenInclude(x => x.AssetCategory)
+            .ThenInclude(x => x!.AssetCategory)
             .Include(x => x.System)
             .Include(x => x.Branch)
             .Include(x => x.AssignmentGroup)
@@ -716,7 +719,7 @@ public sealed partial class WorkOrderExecutionController(
         var refreshed = await dbContext.WorkOrders
             .Include(x => x.Client)
             .Include(x => x.Asset)
-            .ThenInclude(x => x.AssetCategory)
+            .ThenInclude(x => x!.AssetCategory)
             .Include(x => x.Site)
             .Include(x => x.System)
             .Include(x => x.AssignedTechnician)

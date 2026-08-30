@@ -14,6 +14,7 @@ export interface ConfirmDialogProps {
   onConfirm: () => void
   danger?: boolean
   icon?: ReactNode
+  confirmDisabled?: boolean
 }
 
 export function ConfirmDialog({
@@ -27,6 +28,7 @@ export function ConfirmDialog({
   onConfirm,
   danger = false,
   icon,
+  confirmDisabled = false,
 }: ConfirmDialogProps) {
   const [typedValue, setTypedValue] = useState('')
 
@@ -55,8 +57,13 @@ export function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
-      <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-slate-900/40" onClick={onCancel} />
-      <div className="relative w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+      <button
+        type="button"
+        aria-label="Close dialog"
+        className="absolute inset-0 bg-[var(--app-primary)]/30 backdrop-blur-[2px]"
+        onClick={onCancel}
+      />
+      <div className="relative w-full max-w-lg rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white-strong)] p-6 shadow-xl backdrop-blur-[var(--glass-blur-lg)]">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             {icon}
@@ -77,21 +84,21 @@ export function ConfirmDialog({
             <input
               value={typedValue}
               onChange={(event) => setTypedValue(event.target.value)}
-              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900"
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]"
             />
           </div>
         ) : null}
         <div className="mt-6 flex items-center justify-end gap-2">
-          <button type="button" onClick={onCancel} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+          <button type="button" onClick={onCancel} className="inline-flex h-11 items-center justify-center rounded-lg border border-[var(--app-border)] bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-[var(--app-primary-soft)]">
             {cancelLabel}
           </button>
           <button
             type="button"
-            disabled={!canConfirm}
+            disabled={!canConfirm || confirmDisabled}
             onClick={onConfirm}
             className={cn(
               'inline-flex h-11 items-center justify-center rounded-lg px-4 text-sm font-medium text-white transition',
-              danger ? 'bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300' : 'bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300',
+              danger ? 'bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300' : 'bg-[var(--app-primary)] hover:bg-[var(--app-secondary)] disabled:bg-slate-300',
             )}
           >
             {confirmLabel}

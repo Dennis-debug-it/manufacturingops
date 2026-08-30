@@ -20,6 +20,7 @@ public sealed class TenantFinanceController(
     IUserAccessService userAccessService,
     IPdfRenderer pdfRenderer,
     IEmailSender emailSender,
+    IEmailSettingsResolver emailSettingsResolver,
     ISecretEncryptionService secretEncryptionService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet("overview")]
@@ -737,21 +738,8 @@ public sealed class TenantFinanceController(
         return (model, clientCode);
     }
 
-    private async Task<EmailSetting?> ResolveEffectiveEmailSettingsAsync(Guid tenantId, CancellationToken cancellationToken)
-    {
-        var tenantSetting = await dbContext.EmailSettings
-            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
-
-        if (tenantSetting is null)
-            return await dbContext.EmailSettings
-                .SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-
-        if (tenantSetting.UsePlatformDefaults && !tenantSetting.OverrideSmtpSettings)
-            return await dbContext.EmailSettings
-                .SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-
-        return tenantSetting;
-    }
+    private async Task<EmailSetting?> ResolveEffectiveEmailSettingsAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        (await emailSettingsResolver.ResolveAsync(tenantId, cancellationToken)).Settings;
 
     private EmailDeliverySettings? CreateDeliverySettings(EmailSetting settings)
     {

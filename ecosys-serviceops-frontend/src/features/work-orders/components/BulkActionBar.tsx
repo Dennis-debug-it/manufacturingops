@@ -50,7 +50,7 @@ export function BulkActionBar({ selectedRows, onClearSelection }: BulkActionBarP
 
   return (
     <>
-      <div className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-900 px-4 py-3 text-white shadow-xl">
+      <div className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-[var(--app-primary)] px-4 py-3 text-white shadow-xl">
         <div className="flex items-center gap-3">
           <span className="text-sm font-medium">{selectedRows.length} selected</span>
           <button type="button" onClick={onClearSelection} className="text-xs text-slate-300 underline decoration-slate-500 underline-offset-4 hover:text-white">

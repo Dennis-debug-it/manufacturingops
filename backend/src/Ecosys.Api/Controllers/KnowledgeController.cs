@@ -451,7 +451,7 @@ public sealed class KnowledgeController(
         return score;
     }
 
-    private async Task ReplaceTagsAsync(KnowledgeArticle article, IEnumerable<string>? tagNames, CancellationToken cancellationToken)
+    private async Task ReplaceTagsAsync(KnowledgeArticle article, IEnumerable<string?>? tagNames, CancellationToken cancellationToken)
     {
         var existing = await dbContext.KnowledgeArticleTags
             .Where(x => x.ArticleId == article.Id)

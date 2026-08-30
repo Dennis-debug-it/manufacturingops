@@ -37,7 +37,7 @@ export function PermissionMatrix({ value, onChange, disabled = false }: Permissi
               <label className={cn('inline-flex items-center gap-2 text-xs font-medium', disabled ? 'text-slate-400' : 'cursor-pointer text-slate-600')}>
                 <input
                   type="checkbox"
-                  className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                  className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-[var(--app-primary)]"
                   checked={allChecked}
                   ref={(el) => {
                     if (el) el.indeterminate = !allChecked && someChecked
@@ -55,7 +55,7 @@ export function PermissionMatrix({ value, onChange, disabled = false }: Permissi
                     <span>{item.label}</span>
                     <input
                       type="checkbox"
-                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-[var(--app-primary)]"
                       checked={value[item.key]}
                       disabled={disabled}
                       onChange={(event) => setKey(item.key, event.target.checked)}

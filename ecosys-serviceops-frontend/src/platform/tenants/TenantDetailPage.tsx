@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
-import { Trash2, UserCog } from 'lucide-react'
+import { Send, Trash2, UserCog, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
@@ -27,10 +27,12 @@ import {
   useTenantModuleSettings,
   useTenantNumbering,
   useTenantUsers,
+  useResendTenantUserInvitation,
   useUpdateTenantCommunicationSettings,
   useDeactivateTenant,
 } from '../api'
 import { Field, SectionTitle, licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
+import { NewWorkspaceUserDrawer } from './NewWorkspaceUserDrawer'
 import type { PlatformTenantAuditLog, TenantCommunicationSettings } from '../types'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import type { PlatformTenantNumbering, PlatformTenantUser } from '../api'
@@ -67,6 +69,8 @@ export function TenantDetailPage() {
   const extendTrial = useExtendTenantTrial(id ?? '')
   const deleteTenant = useDeleteTenant()
   const impersonate = useImpersonateTenant(id ?? '')
+  const resendInvitation = useResendTenantUserInvitation(id)
+  const [showAddWorkspaceUser, setShowAddWorkspaceUser] = useState(false)
 
   const [showDelete, setShowDelete] = useState(false)
   const [showSuspend, setShowSuspend] = useState(false)
@@ -139,13 +143,54 @@ export function TenantDetailPage() {
     }
   }
 
+  const handleResendInvitation = async (user: PlatformTenantUser) => {
+    try {
+      const result = await resendInvitation.mutateAsync(user.id)
+      if (result.success) {
+        toast.success(result.message)
+      } else {
+        toast.error(result.message)
+      }
+    } catch {
+      // handled by interceptor
+    }
+  }
+
   const tenantUserColumns: DataTableColumn<PlatformTenantUser>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <span className="font-medium text-slate-900">{row.fullName}</span> },
     { key: 'email', header: 'Email', cell: (row) => row.email },
     { key: 'role', header: 'Role', cell: (row) => row.role },
     { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? '—' },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
+    {
+      key: 'access',
+      header: 'Access',
+      // A never-signed-in account is the case this table exists to rescue: its setup link may have
+      // lapsed, and the user cannot request a new one without being able to log in.
+      cell: (row) => (row.lastLoginAt ? <span className="text-slate-600">Signed in {formatDateTime(row.lastLoginAt)}</span> : <span className="font-medium text-amber-700">Never signed in</span>),
+    },
+    {
+      key: 'lastCredentialSentAt',
+      header: 'Setup link sent',
+      cell: (row) => (row.lastCredentialSentAt ? formatDateTime(row.lastCredentialSentAt) : '—'),
+    },
     { key: 'createdAt', header: 'Joined', cell: (row) => formatDateTime(row.createdAt) },
+    {
+      key: 'actions',
+      header: '',
+      cell: (row) => (
+        <button
+          type="button"
+          onClick={() => void handleResendInvitation(row)}
+          disabled={!row.isActive || resendInvitation.isPending}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:border-[var(--app-primary)] hover:text-[var(--app-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+          title={row.isActive ? 'Email this user a fresh account setup link' : 'Reactivate the account to resend its setup link'}
+        >
+          <Send className="h-3.5 w-3.5" />
+          {resendInvitation.isPending && resendInvitation.variables === row.id ? 'Sending…' : 'Resend setup link'}
+        </button>
+      ),
+    },
   ]
 
   const resetNumbering = async (documentType: string) => {
@@ -190,7 +235,7 @@ export function TenantDetailPage() {
             <MiniStat label="Active now" value={tenant.activeUsersNow} />
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <SectionTitle title="Tenant profile" description="Workspace details and lifecycle summary." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <InfoCard label="Tenant name" value={tenant.name} />
@@ -221,7 +266,7 @@ export function TenantDetailPage() {
       content: brandingLoading ? (
         <Spinner label="Loading branding" />
       ) : branding ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <SectionTitle title="Tenant branding" description="Read-only view. Branding is edited from within the tenant's own workspace settings." />
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <InfoCard label="Company name" value={branding.companyName} />
@@ -251,7 +296,7 @@ export function TenantDetailPage() {
       label: 'Users',
       content: (
         <div className="space-y-5">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <SectionTitle title="Workspace users" description="Cross-tenant user listing is not exposed yet. We can safely show the tenant-side account summary we do have." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <InfoCard label="Tenant users" value={tenant.userCount} />
@@ -260,8 +305,18 @@ export function TenantDetailPage() {
               <InfoCard label="Initial admin note" value={tenant.initialAdminInvitationMessage ?? '—'} />
             </div>
           </section>
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <SectionTitle title="Workspace user list" description="Read-only. Use impersonation or the tenant workspace for detailed user administration." />
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <SectionTitle title="Workspace user list" description="Accounts inside this tenant. Add another admin here when the workspace needs more than the one seeded at creation, or resend a lapsed setup link — the only recovery path for an admin who has never signed in. Ecosys staff accounts live under Platform → Users." />
+              <button
+                type="button"
+                onClick={() => setShowAddWorkspaceUser(true)}
+                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[var(--app-primary)] px-3 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
+              >
+                <UserPlus className="h-4 w-4" />
+                Add workspace user
+              </button>
+            </div>
             <div className="mt-4">
               <DataTable<PlatformTenantUser>
                 columns={tenantUserColumns}
@@ -280,7 +335,7 @@ export function TenantDetailPage() {
       label: 'Modules',
       content: (
         <div className="space-y-5">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <SectionTitle title="Configured module settings" description="Module-level configuration this tenant has saved (executive dashboard, inventory, payments, portal, integrations, etc). Full module enable/disable entitlement is governed by licensing, not a per-module toggle." />
             <div className="mt-4">
               {moduleSettingsLoading ? (
@@ -310,7 +365,7 @@ export function TenantDetailPage() {
       label: 'Subscription / Licensing',
       content: (
         <div className="space-y-5">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <SectionTitle title="Subscription state" description="Lifecycle controls available from the platform owner workspace." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <InfoCard label="License status" value={licenseStatusBadge(tenant.licenseStatus)} />
@@ -322,7 +377,7 @@ export function TenantDetailPage() {
             </div>
           </section>
           <div className="flex flex-wrap gap-2">
-            {tenant.status !== 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800" onClick={() => void activate.mutateAsync(undefined)}>Activate</button> : null}
+            {tenant.status !== 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void activate.mutateAsync(undefined)}>Activate</button> : null}
             {tenant.status === 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-800 hover:bg-amber-100" onClick={() => setShowSuspend(true)}>Suspend</button> : null}
             {!tenant.trialExtensionUsed ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setShowExtend(true)}>Extend trial</button> : null}
             {tenant.status !== 'Inactive' ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 hover:bg-rose-100" onClick={() => setShowDeactivate(true)}>Deactivate</button> : null}
@@ -335,7 +390,7 @@ export function TenantDetailPage() {
       label: 'Communication',
       content: communicationForm ? (
         <div className="space-y-5">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <SectionTitle title="Email settings" description="Tenant communication settings with platform defaults and explicit overrides." />
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field label="Use platform defaults">
@@ -355,25 +410,25 @@ export function TenantDetailPage() {
                 />
               </Field>
               <Field label="SMTP host">
-                <input value={communicationForm.emailSettings.smtpHost ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpHost: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+                <input value={communicationForm.emailSettings.smtpHost ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpHost: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
               </Field>
               <Field label="SMTP port">
-                <input type="number" value={communicationForm.emailSettings.smtpPort ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpPort: event.target.value ? Number(event.target.value) : null } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+                <input type="number" value={communicationForm.emailSettings.smtpPort ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpPort: event.target.value ? Number(event.target.value) : null } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
               </Field>
               <Field label="SMTP username">
-                <input value={communicationForm.emailSettings.smtpUsername ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpUsername: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+                <input value={communicationForm.emailSettings.smtpUsername ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpUsername: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
               </Field>
               <Field label="SMTP password">
-                <input type="password" placeholder={communicationForm.emailSettings.smtpPasswordMasked ?? 'Leave blank to keep existing'} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpPasswordMasked: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+                <input type="password" placeholder={communicationForm.emailSettings.smtpPasswordMasked ?? 'Leave blank to keep existing'} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpPasswordMasked: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
               </Field>
               <Field label="Sender name">
-                <input value={communicationForm.emailSettings.senderName ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, senderName: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+                <input value={communicationForm.emailSettings.senderName ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, senderName: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
               </Field>
               <Field label="Sender email">
-                <input value={communicationForm.emailSettings.senderEmail ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, senderEmail: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+                <input value={communicationForm.emailSettings.senderEmail ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, senderEmail: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
               </Field>
               <Field label="Reply-to email">
-                <input value={communicationForm.emailSettings.replyToEmail ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, replyToEmail: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+                <input value={communicationForm.emailSettings.replyToEmail ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, replyToEmail: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
               </Field>
               <Field label="Enable tenant notifications">
                 <input
@@ -386,7 +441,7 @@ export function TenantDetailPage() {
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800" onClick={() => void saveCommunication()}>
+              <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void saveCommunication()}>
                 Save communication
               </button>
               <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => void sendTestEmail()}>
@@ -402,7 +457,7 @@ export function TenantDetailPage() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <SectionTitle title="Notification groups" description="Default recipient groups and switches." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
               {communicationGroups.map((group) => (
@@ -422,7 +477,7 @@ export function TenantDetailPage() {
       id: 'numbering',
       label: 'Numbering',
       content: (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <SectionTitle title="Document numbering" description="Tenant-wide numbering sequences. Reset uses the same support tool available from Platform Support." />
           <div className="mt-4">
             <DataTable<PlatformTenantNumbering>
@@ -440,7 +495,7 @@ export function TenantDetailPage() {
       id: 'templates',
       label: 'Templates',
       content: (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <SectionTitle title="Document designs" description="Which document types this tenant has customized via the Document Designer. Editing happens from within the tenant's own workspace." />
           <div className="mt-4">
             {documentDesignsLoading ? (
@@ -499,10 +554,10 @@ export function TenantDetailPage() {
       label: 'Account Management',
       content: (
         <section className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <SectionTitle title="Account management" description="Lifecycle controls that are safe to expose from the platform owner workspace." />
             <div className="mt-4 flex flex-wrap gap-2">
-              {tenant.status !== 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800" onClick={() => void activate.mutateAsync(undefined)}>Activate tenant</button> : null}
+              {tenant.status !== 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void activate.mutateAsync(undefined)}>Activate tenant</button> : null}
               {tenant.status === 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-800 hover:bg-amber-100" onClick={() => setShowSuspend(true)}>Suspend tenant</button> : null}
               {tenant.status !== 'Inactive' ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 hover:bg-rose-100" onClick={() => setShowDeactivate(true)}>Deactivate tenant</button> : null}
               {!tenant.trialExtensionUsed ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setShowExtend(true)}>Extend trial</button> : null}
@@ -548,6 +603,13 @@ export function TenantDetailPage() {
         }
         tabs={tabs.map((tab) => ({ id: tab.id, label: tab.label, content: tab.content }))}
         defaultTabId="overview"
+      />
+
+      <NewWorkspaceUserDrawer
+        open={showAddWorkspaceUser}
+        tenantId={id}
+        tenantName={tenant.name}
+        onClose={() => setShowAddWorkspaceUser(false)}
       />
 
       <ConfirmDialog
@@ -615,7 +677,7 @@ export function TenantDetailPage() {
 
 function MiniStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
     </div>

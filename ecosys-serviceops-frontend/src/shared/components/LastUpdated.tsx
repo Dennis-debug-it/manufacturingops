@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react'
+import { formatTime } from '../utils/dates'
 
 export interface LastUpdatedProps {
   /** react-query `dataUpdatedAt` epoch (ms). 0/undefined renders nothing. */
@@ -15,7 +16,7 @@ export function LastUpdated({ at, className }: LastUpdatedProps) {
     return null
   }
 
-  const time = new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const time = formatTime(new Date(at), 'HH:mm:ss')
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs text-slate-500 ${className ?? ''}`}>
       <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />

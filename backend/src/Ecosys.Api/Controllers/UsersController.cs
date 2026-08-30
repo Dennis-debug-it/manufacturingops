@@ -27,9 +27,10 @@ public sealed class UsersController(
     IAuditLogService auditLogService,
     IUserCredentialDeliveryService credentialDeliveryService,
     ITemporaryPasswordService temporaryPasswordService,
+    Microsoft.Extensions.Options.IOptions<Ecosys.Shared.Options.AuthSecurityOptions> authSecurityOptions,
     IUserSessionService userSessionService) : TenantAwareControllerBase(tenantContext)
 {
-    private const int InviteExpiryHours = 72;
+    private int InviteExpiryHours => AccountSetupExpiry.ResolveHours(authSecurityOptions.Value);
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<UserResponse>>> GetAll(CancellationToken cancellationToken)
     {

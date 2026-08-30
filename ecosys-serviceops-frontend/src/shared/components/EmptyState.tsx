@@ -19,7 +19,7 @@ export function EmptyState({ icon: Icon, title, description, actionLabel, onActi
       {actionLabel && onAction ? (
         <button
           type="button"
-          className="mt-6 inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+          className="mt-6 inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
           onClick={onAction}
         >
           {actionLabel}

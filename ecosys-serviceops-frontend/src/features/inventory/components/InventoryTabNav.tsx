@@ -27,7 +27,7 @@ export function InventoryTabNav() {
             to={tab.to}
             className={cn(
               'inline-flex h-10 items-center gap-2 rounded-full border px-3.5 text-sm font-medium transition',
-              active ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+              active ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
             )}
           >
             {tab.label}

@@ -65,7 +65,7 @@ export function RequestDemoPage() {
             <div key={key}>
               <label className="mb-2 block text-sm font-medium text-slate-700">{label}</label>
               <input
-                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-slate-900"
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none focus:border-[var(--app-primary)]"
                 {...register(key as keyof DemoFormValues)}
               />
               {errors[key as keyof DemoFormValues] ? <p className="mt-2 text-sm text-rose-600">{errors[key as keyof DemoFormValues]?.message}</p> : null}
@@ -73,12 +73,12 @@ export function RequestDemoPage() {
           ))}
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">Additional notes</label>
-            <textarea className="min-h-32 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-slate-900" {...register('notes')} />
+            <textarea className="min-h-32 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-[var(--app-primary)]" {...register('notes')} />
           </div>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="inline-flex h-12 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+            className="inline-flex h-12 items-center justify-center rounded-xl bg-[var(--app-primary)] px-4 text-sm font-semibold text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60"
           >
             Submit request
           </button>

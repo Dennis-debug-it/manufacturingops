@@ -49,7 +49,7 @@ public sealed class TemplateAndPmAccessTests
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpBranchAccessService(),
             new NoOpPmChecklistService(),
-            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.TimeZoneOptions()),
+            TestTimeZones.Create(dbContext),
             new NoOpLogger<PreventiveMaintenanceController>());
 
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetAll(null, CancellationToken.None));
@@ -100,7 +100,7 @@ public sealed class TemplateAndPmAccessTests
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpBranchAccessService(),
             new TemplateLookupPmChecklistService(template),
-            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.TimeZoneOptions()),
+            TestTimeZones.Create(dbContext),
             new NoOpLogger<PreventiveMaintenanceController>());
 
         var createResult = await controller.Create(
@@ -188,7 +188,11 @@ public sealed class TemplateAndPmAccessTests
             new NoOpSlaService(),
             new NoOpWorkflowService());
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetAll(null, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetAll(
+                branchId: null, clientId: null, siteId: null, status: null, priority: null,
+                workType: null, assignmentGroupId: null, technicianId: null, unassigned: null,
+                assignmentStatus: null, slaStatus: null, search: null, fromDate: null, toDate: null,
+                page: null, pageSize: null, cancellationToken: CancellationToken.None));
     }
 
     [Fact]
@@ -258,7 +262,11 @@ public sealed class TemplateAndPmAccessTests
             new NoOpSlaService(),
             new NoOpWorkflowService());
 
-        var listResult = await controller.GetAll(null, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None);
+        var listResult = await controller.GetAll(
+                branchId: null, clientId: null, siteId: null, status: null, priority: null,
+                workType: null, assignmentGroupId: null, technicianId: null, unassigned: null,
+                assignmentStatus: null, slaStatus: null, search: null, fromDate: null, toDate: null,
+                page: null, pageSize: null, cancellationToken: CancellationToken.None);
         var listOk = Assert.IsType<OkObjectResult>(listResult);
         var listItems = Assert.IsAssignableFrom<IReadOnlyCollection<WorkOrderResponse>>(listOk.Value);
         Assert.Single(listItems);
@@ -593,6 +601,7 @@ public sealed class TemplateAndPmAccessTests
         public Task RecordVanLoadAsync(MaterialItem material, Guid fromBranchId, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) => Task.FromException(new NotSupportedException());
         public Task RecordVanReturnAsync(MaterialItem material, Guid vanId, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) => Task.FromException(new NotSupportedException());
         public Task<StockMovement> RecordVanConsumeAsync(MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default) => Task.FromException<StockMovement>(new NotSupportedException());
+        public Task ExecuteAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default) => operation(cancellationToken);
     }
 
     private sealed class NoOpPdfRenderer : IPdfRenderer

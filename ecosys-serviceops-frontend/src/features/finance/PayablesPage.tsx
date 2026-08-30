@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
@@ -18,7 +19,7 @@ const statusOptions: Array<PayableStatus | 'All'> = ['All', 'Open', 'PartiallyPa
 export function PayablesPage() {
   const canManage = usePermission('finance.manage')
   const [statusFilter, setStatusFilter] = useState<PayableStatus | 'All'>('All')
-  const { data, isLoading } = usePayables(statusFilter)
+  const { data, isLoading, isError, refetch } = usePayables(statusFilter)
   const { data: suppliers } = useSuppliers()
   const createPayable = useCreatePayable()
   const [showNewBill, setShowNewBill] = useState(false)
@@ -55,20 +56,20 @@ export function PayablesPage() {
         subtitle="Bills to pay and supplier invoices."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowNewBill(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowNewBill(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Bill
             </button>
           ) : undefined
         }
       />
       <FinanceWorkspaceNav />
-      <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-3 shadow-sm">
         {statusOptions.map((status) => (
           <button
             key={status}
             type="button"
             onClick={() => setStatusFilter(status)}
-            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${statusFilter === status ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${statusFilter === status ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
           >
             {status === 'PartiallyPaid' ? 'Partially Paid' : status}
           </button>
@@ -78,15 +79,17 @@ export function PayablesPage() {
         columns={columns}
         data={data ?? []}
         loading={isLoading}
-        emptyTitle="No payables yet"
-        emptyDescription="Record a supplier bill to track what you owe."
+        emptyTitle={isError ? 'Payables unavailable' : 'No payables yet'}
+        emptyDescription={isError ? 'Supplier bills could not be loaded — this is not a confirmation that you owe nothing.' : 'Record a supplier bill to track what you owe.'}
+        emptyActionLabel={isError ? 'Retry' : undefined}
+        onEmptyAction={isError ? () => void refetch() : undefined}
       />
 
       <FormDrawer open={showNewBill} title="New Supplier Bill" onClose={() => setShowNewBill(false)}>
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Supplier</label>
-            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+            <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               <option value="">Select a supplier…</option>
               {(suppliers ?? []).map((s) => <option key={s.id} value={s.id}>{s.supplierName}</option>)}
             </select>
@@ -94,21 +97,21 @@ export function PayablesPage() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Amount (KES)</label>
-            <input type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Due Date</label>
-            <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Notes</label>
-            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+            <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <button
             type="button"
             disabled={!supplierId || !amount || !dueDate || createPayable.isPending}
             onClick={() => void submit()}
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60"
           >
             {createPayable.isPending ? 'Creating…' : 'Create Bill'}
           </button>
@@ -120,7 +123,7 @@ export function PayablesPage() {
 
 export function PayableDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { data, isLoading } = usePayable(id)
+  const { data, isLoading, isError, refetch } = usePayable(id)
   const recordPayment = useRecordPayablePayment(id ?? '')
   const [showPayment, setShowPayment] = useState(false)
   const [amount, setAmount] = useState('')
@@ -144,11 +147,17 @@ export function PayableDetailPage() {
         secondaryActions={data ? <StatusBadge status={data.status} /> : undefined}
         primaryAction={
           data && data.status !== 'Paid' ? (
-            <button type="button" onClick={() => setShowPayment(true)} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">Record Payment</button>
+            <button type="button" onClick={() => setShowPayment(true)} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">Record Payment</button>
           ) : undefined
         }
       />
-      {isLoading ? null : !data ? (
+      {isLoading ? null : isError ? (
+        <ErrorState
+          title="Payable unavailable"
+          description="We couldn’t load this supplier bill, so we can’t say whether it still exists."
+          onRetry={() => void refetch()}
+        />
+      ) : !data ? (
         <EmptyState title="Payable not found" description="This supplier bill may have been removed." />
       ) : (
         <>
@@ -165,7 +174,7 @@ export function PayableDetailPage() {
               </div>
             ))}
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Payment History</h2>
             {data.paymentHistory.length === 0 ? (
               <p className="mt-3 text-sm text-slate-500">No payments recorded yet.</p>
@@ -187,11 +196,11 @@ export function PayableDetailPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Amount</label>
-            <input type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Method</label>
-            <select value={method} onChange={(event) => setMethod(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+            <select value={method} onChange={(event) => setMethod(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               <option>Bank Transfer</option>
               <option>M-Pesa</option>
               <option>Cheque</option>
@@ -200,13 +209,13 @@ export function PayableDetailPage() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Reference (optional)</label>
-            <input value={reference} onChange={(event) => setReference(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input value={reference} onChange={(event) => setReference(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <button
             type="button"
             disabled={!amount || recordPayment.isPending}
             onClick={() => void submitPayment()}
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60"
           >
             {recordPayment.isPending ? 'Recording…' : 'Record Payment'}
           </button>

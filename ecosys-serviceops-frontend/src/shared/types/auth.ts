@@ -52,6 +52,10 @@ export interface AuthTenant {
   country: string
   industry: string | null
   logoUrl: string | null
+  /** Effective IANA zone the workspace's timestamps are displayed in (e.g. 'Africa/Nairobi'). */
+  timeZoneId?: string | null
+  /** Workspace currency configured by the tenant. Null when unset, so the client falls back. */
+  defaultCurrency?: string | null
   primaryColor: string
   secondaryColor: string
   showPoweredByEcosys: boolean

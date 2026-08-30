@@ -10,7 +10,7 @@ import { apiClient } from '../../../shared/api/apiClient'
 import { endpoints } from '../../../shared/api/endpoints'
 import { useClientStatement, useEmailClientStatement } from '../api'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 
 function isoDaysAgo(days: number) {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
@@ -83,7 +83,7 @@ export function ClientStatementDrawer({ open, clientId, clientName, onClose }: C
             type="button"
             onClick={() => void sendEmail()}
             disabled={emailStatement.isPending}
-            className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+            className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60"
           >
             <Mail className="h-4 w-4" />
             {emailStatement.isPending ? 'Sending…' : 'Email Statement'}
@@ -169,7 +169,7 @@ export function ClientStatementDrawer({ open, clientId, clientName, onClose }: C
             onChange={(event) => setMessage(event.target.value)}
             rows={3}
             placeholder="Added above the standard statement summary in the email body"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]"
           />
         </div>
       </div>

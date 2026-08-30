@@ -12,7 +12,7 @@ export interface CollapsibleProps {
 export function Collapsible({ title, defaultOpen = false, action, children }: CollapsibleProps) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
       <div className="flex items-center justify-between px-5 py-4">
         <button type="button" onClick={() => setOpen((value) => !value)} className="flex flex-1 items-center justify-between text-left">
           <span className="text-sm font-semibold text-slate-900">{title}</span>

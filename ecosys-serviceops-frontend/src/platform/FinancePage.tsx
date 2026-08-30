@@ -173,7 +173,7 @@ export function FinancePage() {
         primaryAction={(
           <button
             type="button"
-            className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
+            className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"
             onClick={() => setCreateKind('invoice')}
           >
             <Plus className="h-4 w-4" />
@@ -182,20 +182,20 @@ export function FinancePage() {
         )}
       />
 
-      <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+      <div className="flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-2 shadow-sm">
         {tabs.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => setTab(item.id)}
-            className={`rounded-lg px-3 py-2 text-sm font-medium ${tab === item.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
+            className={`rounded-lg px-3 py-2 text-sm font-medium ${tab === item.id ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
           >
             {item.label}
           </button>
         ))}
       </div>
 
-      <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <Search className="h-4 w-4 text-slate-400" />
         <input
           value={search}
@@ -310,7 +310,7 @@ export function FinancePage() {
             <button
               type="submit"
               form={createFormId}
-              className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800"
+              className="rounded-lg bg-[var(--app-primary)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"
             >
               Save
             </button>
@@ -441,28 +441,28 @@ function CreateFinanceForm({
         <input
           value={form.tenantId}
           onChange={(event) => setForm((current) => ({ ...current, tenantId: event.target.value }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"
+          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
         />
       </Field>
       <Field label="Customer / vendor">
         <input
           value={kind === 'expense' ? form.vendor : form.customerName}
           onChange={(event) => setForm((current) => (kind === 'expense' ? { ...current, vendor: event.target.value } : { ...current, customerName: event.target.value }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"
+          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
         />
       </Field>
       <Field label="Email / description">
         <input
           value={kind === 'expense' ? form.notes : form.customerEmail}
           onChange={(event) => setForm((current) => (kind === 'expense' ? { ...current, notes: event.target.value } : { ...current, customerEmail: event.target.value }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"
+          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
         />
       </Field>
       <Field label="Currency">
         <input
           value={form.currency}
           onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"
+          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
         />
       </Field>
       <Field label="Date">
@@ -470,7 +470,7 @@ function CreateFinanceForm({
           type="date"
           value={form.issueDate}
           onChange={(event) => setForm((current) => ({ ...current, issueDate: event.target.value }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"
+          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
         />
       </Field>
       <Field label="Due date">
@@ -478,7 +478,7 @@ function CreateFinanceForm({
           type="date"
           value={form.dueDate}
           onChange={(event) => setForm((current) => ({ ...current, dueDate: event.target.value }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"
+          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
         />
       </Field>
       <Field label="Amount / total">
@@ -486,7 +486,7 @@ function CreateFinanceForm({
           type="number"
           value={kind === 'payment' ? form.amount : form.total}
           onChange={(event) => setForm((current) => (kind === 'payment' ? { ...current, amount: Number(event.target.value) || 0 } : { ...current, total: Number(event.target.value) || 0 }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"
+          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
         />
       </Field>
       {kind === 'expense' ? (
@@ -495,7 +495,7 @@ function CreateFinanceForm({
             type="number"
             value={form.taxAmount}
             onChange={(event) => setForm((current) => ({ ...current, taxAmount: Number(event.target.value) || 0 }))}
-            className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"
+            className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
           />
         </Field>
       ) : null}
@@ -504,7 +504,7 @@ function CreateFinanceForm({
           <input
             value={form.method}
             onChange={(event) => setForm((current) => ({ ...current, method: event.target.value }))}
-            className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"
+            className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
           />
         </Field>
       ) : null}
@@ -513,7 +513,7 @@ function CreateFinanceForm({
           <input
             value={form.category}
             onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-            className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900"
+            className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
           />
         </Field>
       ) : null}
@@ -521,7 +521,7 @@ function CreateFinanceForm({
         <textarea
           value={form.notes}
           onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-          className="min-h-[100px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-900"
+          className="min-h-[100px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]"
         />
       </Field>
     </form>
@@ -530,7 +530,7 @@ function CreateFinanceForm({
 
 function Kpi({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
     </div>
@@ -539,7 +539,7 @@ function Kpi({ label, value }: { label: string; value: string | number }) {
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
       <p className="text-base font-semibold text-slate-900">{title}</p>
       <div className="mt-4">{children}</div>
     </section>

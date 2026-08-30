@@ -19,12 +19,14 @@ import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { StatCard } from '../../shared/components/StatCard'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { cn } from '../../shared/utils/cn'
-import { formatDate } from '../../shared/utils/dates'
+import { formatDate, toWorkspaceDate } from '../../shared/utils/dates'
 import { useGenerateWorkOrderNow, usePmPlans } from './api'
 import type { PmPlan } from './types'
+import { MaintenanceTabNav } from './components/MaintenanceTabNav'
 
 type Tone = 'grey' | 'green' | 'blue' | 'amber' | 'red'
 
@@ -58,7 +60,7 @@ export function CalendarPage() {
   const [cursor, setCursor] = useState(new Date())
   const [selected, setSelected] = useState<PmPlan | null>(null)
   const canTrigger = usePermission('maintenance.trigger')
-  const { data, isLoading, isError } = usePmPlans()
+  const { data, isLoading, isError, refetch } = usePmPlans()
   const generateNow = useGenerateWorkOrderNow(selected?.id ?? '')
 
   const plans = useMemo(() => data ?? [], [data])
@@ -74,7 +76,7 @@ export function CalendarPage() {
     const map = new Map<string, PmPlan[]>()
     for (const plan of plans) {
       if (!plan.nextPmDate) continue
-      const key = format(new Date(plan.nextPmDate), 'yyyy-MM-dd')
+      const key = format(toWorkspaceDate(plan.nextPmDate), 'yyyy-MM-dd')
       const bucket = map.get(key) ?? []
       bucket.push(plan)
       map.set(key, bucket)
@@ -107,7 +109,13 @@ export function CalendarPage() {
   }
 
   if (isError) {
-    return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-600">PM plans could not be loaded.</div>
+    return (
+      <ErrorState
+        title="PM calendar unavailable"
+        description="We couldn’t load preventive maintenance plans, so an empty calendar would be misleading."
+        onRetry={() => void refetch()}
+      />
+    )
   }
 
   return (
@@ -122,7 +130,7 @@ export function CalendarPage() {
                 key={option}
                 type="button"
                 onClick={() => setView(option)}
-                className={cn('inline-flex h-10 items-center rounded-full border px-3 text-sm font-medium capitalize transition', view === option ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
+                className={cn('inline-flex h-10 items-center rounded-full border px-3 text-sm font-medium capitalize transition', view === option ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50')}
               >
                 {option}
               </button>
@@ -130,6 +138,7 @@ export function CalendarPage() {
           </div>
         }
       />
+      <MaintenanceTabNav />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <StatCard label="Overdue" value={stats.red} tone="danger" />
@@ -139,7 +148,7 @@ export function CalendarPage() {
         <StatCard label="Inactive" value={stats.grey} />
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <button type="button" onClick={() => navigate(-1)} className="rounded-lg p-2 hover:bg-slate-100"><ChevronLeft className="h-4 w-4" /></button>
           <div className="text-sm font-semibold text-slate-900">{view === 'week' ? `Week of ${formatDate(days[0] ?? cursor)}` : format(cursor, 'MMMM yyyy')}</div>
@@ -155,7 +164,7 @@ export function CalendarPage() {
             const inMonth = view === 'week' || isSameMonth(day, cursor)
             const today = isSameDay(day, new Date())
             return (
-              <div key={key} className={cn('min-h-[6rem] rounded-lg border p-1.5', inMonth ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50', today && 'ring-2 ring-slate-900')}>
+              <div key={key} className={cn('min-h-[6rem] rounded-lg border p-1.5', inMonth ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50', today && 'ring-2 ring-[var(--app-primary)]')}>
                 <div className={cn('text-xs font-medium', inMonth ? 'text-slate-700' : 'text-slate-400')}>{format(day, 'd')}</div>
                 <div className="mt-1 space-y-1">
                   {dayPlans.slice(0, 3).map((plan) => (
@@ -178,7 +187,7 @@ export function CalendarPage() {
       </div>
 
       {selected ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40" onClick={() => setSelected(null)}>
+        <div className="fixed inset-0 z-50 flex justify-end bg-[var(--app-primary)]/40" onClick={() => setSelected(null)}>
           <div className="h-full w-full max-w-md overflow-y-auto bg-white p-6 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between">
               <h3 className="text-lg font-semibold text-slate-900">{selected.assetName ?? 'PM Plan'}</h3>
@@ -194,7 +203,7 @@ export function CalendarPage() {
             </div>
             <div className="mt-6 flex flex-col gap-2">
               {canTrigger ? (
-                <button type="button" onClick={triggerGenerate} disabled={generateNow.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+                <button type="button" onClick={triggerGenerate} disabled={generateNow.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
                   {generateNow.isPending ? 'Generating…' : 'Generate Work Order Now'}
                 </button>
               ) : null}

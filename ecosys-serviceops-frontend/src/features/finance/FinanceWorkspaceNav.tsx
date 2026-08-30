@@ -82,13 +82,13 @@ export function FinanceWorkspaceNav() {
   return (
     <nav className="space-y-2">
       {/* Primary: Overview + section tabs. */}
-      <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
+      <div className="flex flex-wrap items-center gap-1.5 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-1.5 shadow-sm">
         <NavLink
           to={overview.to}
           end
           className={cn(
             'inline-flex h-9 items-center rounded-xl px-3.5 text-sm font-semibold transition',
-            overviewActive ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+            overviewActive ? 'bg-[var(--app-primary)] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
           )}
         >
           {overview.label}
@@ -102,7 +102,7 @@ export function FinanceWorkspaceNav() {
               to={group.to}
               className={cn(
                 'inline-flex h-9 items-center rounded-xl px-3.5 text-sm font-semibold transition',
-                isActive ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                isActive ? 'bg-[var(--app-primary)] text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
               )}
             >
               {group.label}

@@ -44,7 +44,7 @@ public sealed class RolePermissionsController(
 
         await auditLogService.LogAsync(
             TenantId,
-            tenantContext.UserId,
+            UserId,
             "settings.role_permissions.updated",
             nameof(RolePermission),
             TenantId.ToString(),

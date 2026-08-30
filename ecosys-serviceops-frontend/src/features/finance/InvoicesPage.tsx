@@ -74,7 +74,7 @@ export function InvoicesPage({
         subtitle={subtitle}
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />
               New Invoice
             </button>
@@ -93,7 +93,7 @@ export function InvoicesPage({
               type="button"
               onClick={() => setDocumentType(filter.value)}
               className={isActive
-                ? 'inline-flex h-10 items-center rounded-full bg-slate-900 px-4 text-sm font-medium text-white'
+                ? 'inline-flex h-10 items-center rounded-full bg-[var(--app-primary)] px-4 text-sm font-medium text-white'
                 : 'inline-flex h-10 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 transition hover:border-slate-300 hover:text-slate-900'}
             >
               {filter.label}
@@ -102,7 +102,7 @@ export function InvoicesPage({
         })}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <Search className="h-4 w-4 text-slate-400" />
           <input

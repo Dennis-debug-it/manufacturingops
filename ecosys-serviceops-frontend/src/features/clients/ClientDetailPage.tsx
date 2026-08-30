@@ -106,7 +106,7 @@ export function ClientDetailPage() {
               <div className="space-y-4">
                 {canEdit ? (
                   <div className="flex justify-end">
-                    <button type="button" onClick={() => setShowSiteForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+                    <button type="button" onClick={() => setShowSiteForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
                       <Plus className="h-4 w-4" />New Site
                     </button>
                   </div>
@@ -122,7 +122,7 @@ export function ClientDetailPage() {
               <div className="space-y-4">
                 {canEdit ? (
                   <div className="flex justify-end">
-                    <button type="button" onClick={() => setShowAssetForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+                    <button type="button" onClick={() => setShowAssetForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
                       <Plus className="h-4 w-4" />New Asset
                     </button>
                   </div>

@@ -61,7 +61,7 @@ export function QuotesPage() {
         subtitle="Quotes list and lifecycle management."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Quote
             </button>
           ) : undefined
@@ -71,7 +71,7 @@ export function QuotesPage() {
       <FinanceWorkspaceNav />
 
       {canManage ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] px-4 py-3 shadow-sm">
           <div>
             <div className="text-sm font-medium text-slate-900">Document workflow</div>
             <div className="text-sm text-slate-500">
@@ -82,14 +82,14 @@ export function QuotesPage() {
             type="button"
             disabled={!canBuildSelectedProforma}
             onClick={() => setShowProformaDrawer(true)}
-            className="inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex h-10 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Build Proforma Invoice
           </button>
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <Search className="h-4 w-4 text-slate-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search quotes" className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400" />
@@ -137,7 +137,7 @@ export function QuotesPage() {
                   // interceptor surfaces the error toast
                 }
               }}
-              className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60"
+              className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60"
             >
               {buildProforma.isPending ? 'Building...' : 'Create Proforma'}
             </button>
@@ -156,16 +156,16 @@ export function QuotesPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="proforma-date">Proforma date</label>
-              <input id="proforma-date" type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+              <input id="proforma-date" type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="proforma-due">Due date</label>
-              <input id="proforma-due" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+              <input id="proforma-due" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="proforma-notes">Notes</label>
-            <textarea id="proforma-notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" placeholder="Optional cover note for the combined proforma invoice" />
+            <textarea id="proforma-notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" placeholder="Optional cover note for the combined proforma invoice" />
           </div>
           <div className="rounded-xl border border-slate-200">
             <div className="border-b border-slate-200 px-4 py-3 text-sm font-medium text-slate-900">Selected quotations</div>

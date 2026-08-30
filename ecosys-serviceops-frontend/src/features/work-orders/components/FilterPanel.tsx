@@ -11,7 +11,7 @@ import type { WorkOrderListState } from '../hooks/useWorkOrderListState'
 const PRIORITIES = ['Low', 'Medium', 'High', 'Critical']
 const SLA_STATUSES: SlaStatusKey[] = ['on-track', 'at-risk', 'breached', 'no-sla']
 
-const fieldClass = 'h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1 block text-xs font-medium text-slate-500'
 
 function useSiteFilterOptions(clientId: string) {
@@ -71,13 +71,13 @@ export function FilterPanel({ state, onChange, onClear, activeFilterCount }: Fil
           onClick={() => setOpen((value) => !value)}
           className={cn(
             'inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm font-medium transition',
-            open ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+            open ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
           )}
         >
           <Funnel className="h-4 w-4" />
           Filters
           {activeFilterCount > 0 ? (
-            <span className={cn('inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[11px] font-semibold', open ? 'bg-white text-slate-900' : 'bg-slate-900 text-white')}>
+            <span className={cn('inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[11px] font-semibold', open ? 'bg-white text-slate-900' : 'bg-[var(--app-primary)] text-white')}>
               {activeFilterCount}
             </span>
           ) : null}
@@ -101,7 +101,7 @@ export function FilterPanel({ state, onChange, onClear, activeFilterCount }: Fil
       </div>
 
       {open ? (
-        <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <label className={labelClass}>Status</label>
             <select className={fieldClass} value={state.status} onChange={(event) => onChange({ status: event.target.value })}>
@@ -175,7 +175,7 @@ export function FilterPanel({ state, onChange, onClear, activeFilterCount }: Fil
           <label className="flex items-center gap-2 pt-6 text-sm text-slate-700">
             <input
               type="checkbox"
-              className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+              className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-[var(--app-primary)]"
               checked={state.unassignedOnly}
               onChange={(event) => onChange({ unassignedOnly: event.target.checked })}
             />

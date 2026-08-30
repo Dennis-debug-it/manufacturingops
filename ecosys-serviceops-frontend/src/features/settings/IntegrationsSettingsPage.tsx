@@ -281,7 +281,7 @@ export function IntegrationsSettingsPage() {
             <p className="mt-1 font-mono text-xs">{revealedKey}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <button type="button" onClick={() => copyToClipboard(revealedKey)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800"><Copy className="h-3.5 w-3.5" />Copy</button>
+            <button type="button" onClick={() => copyToClipboard(revealedKey)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--app-primary)] px-3 text-xs font-medium text-white hover:bg-[var(--app-secondary)]"><Copy className="h-3.5 w-3.5" />Copy</button>
             <button type="button" onClick={() => setRevealedKey(null)} className="text-xs font-medium text-amber-900 hover:underline">Dismiss</button>
           </div>
         </div>
@@ -294,20 +294,20 @@ export function IntegrationsSettingsPage() {
             <p className="mt-1 font-mono text-xs">{revealedSecret}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <button type="button" onClick={() => copyToClipboard(revealedSecret)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800"><Copy className="h-3.5 w-3.5" />Copy</button>
+            <button type="button" onClick={() => copyToClipboard(revealedSecret)} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--app-primary)] px-3 text-xs font-medium text-white hover:bg-[var(--app-secondary)]"><Copy className="h-3.5 w-3.5" />Copy</button>
             <button type="button" onClick={() => setRevealedSecret(null)} className="text-xs font-medium text-amber-900 hover:underline">Dismiss</button>
           </div>
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-slate-400" />
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">API Keys</h2>
           </div>
           {canManage ? (
-            <button type="button" onClick={() => setShowNewKey(true)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800">
+            <button type="button" onClick={() => setShowNewKey(true)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-3 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />Generate Key
             </button>
           ) : null}
@@ -317,14 +317,14 @@ export function IntegrationsSettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Webhook className="h-4 w-4 text-slate-400" />
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Outbound Webhooks</h2>
           </div>
           {canManage ? (
-            <button type="button" onClick={openCreateWebhook} className="inline-flex h-10 items-center gap-2 rounded-lg bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-800">
+            <button type="button" onClick={openCreateWebhook} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-3 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />Add Webhook
             </button>
           ) : null}
@@ -338,9 +338,9 @@ export function IntegrationsSettingsPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Label</label>
-            <input value={keyLabel} onChange={(event) => setKeyLabel(event.target.value)} placeholder="e.g. Zapier integration" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input value={keyLabel} onChange={(event) => setKeyLabel(event.target.value)} placeholder="e.g. Zapier integration" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
-          <button type="button" disabled={!keyLabel.trim() || createApiKey.isPending} onClick={() => void submitNewKey()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">Generate Key</button>
+          <button type="button" disabled={!keyLabel.trim() || createApiKey.isPending} onClick={() => void submitNewKey()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">Generate Key</button>
         </div>
       </FormDrawer>
 
@@ -348,7 +348,7 @@ export function IntegrationsSettingsPage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Endpoint URL</label>
-            <input value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} placeholder="https://example.com/webhooks/ecosys" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} placeholder="https://example.com/webhooks/ecosys" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Events</label>
@@ -367,7 +367,7 @@ export function IntegrationsSettingsPage() {
               Active
             </label>
           ) : null}
-          <button type="button" disabled={!webhookUrl.trim() || webhookEvents.length === 0 || createWebhook.isPending || updateWebhook.isPending} onClick={() => void submitWebhook()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" disabled={!webhookUrl.trim() || webhookEvents.length === 0 || createWebhook.isPending || updateWebhook.isPending} onClick={() => void submitWebhook()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {editingWebhookId ? 'Save Changes' : 'Add Webhook'}
           </button>
         </div>

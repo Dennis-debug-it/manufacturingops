@@ -110,7 +110,7 @@ export function CalendarView({ rows }: CalendarViewProps) {
                 onClick={() => setMode(option)}
                 className={cn(
                   'rounded-md px-2.5 py-1 text-xs font-medium capitalize transition',
-                  mode === option ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100',
+                  mode === option ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100',
                 )}
               >
                 {option}
@@ -156,7 +156,7 @@ export function CalendarView({ rows }: CalendarViewProps) {
                 <span
                   className={cn(
                     'inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold',
-                    isToday(day) ? 'bg-slate-900 text-white' : 'text-slate-700',
+                    isToday(day) ? 'bg-[var(--app-primary)] text-white' : 'text-slate-700',
                   )}
                 >
                   {format(day, 'd')}
@@ -179,8 +179,8 @@ export function CalendarView({ rows }: CalendarViewProps) {
 
       {selectedDay ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
-          <button type="button" aria-label="Close" className="absolute inset-0 bg-slate-900/40" onClick={() => setSelectedDay(null)} />
-          <div className="relative flex max-h-[80vh] w-full max-w-lg flex-col rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+          <button type="button" aria-label="Close" className="absolute inset-0 bg-[var(--app-primary)]/40" onClick={() => setSelectedDay(null)} />
+          <div className="relative flex max-h-[80vh] w-full max-w-lg flex-col rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-6 shadow-xl">
             <div className="flex items-center justify-between gap-4">
               <h3 className="text-lg font-semibold text-slate-900">{format(selectedDay, 'EEEE, d MMM yyyy')}</h3>
               <button type="button" onClick={() => setSelectedDay(null)} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">

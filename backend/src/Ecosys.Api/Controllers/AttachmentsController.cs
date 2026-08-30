@@ -53,7 +53,11 @@ public sealed class AttachmentsController(
     };
 
     [HttpPost("upload")]
-    [RequestSizeLimit(6_000_000)]
+    // Deliberately above MaxFileSizeBytes plus multipart framing: whichever limit is lower decides
+    // what the caller sees, and Kestrel's is an opaque 413 with a connection reset while the check
+    // below is a readable 400. At 6.5 MB the friendly message wins for every payload up to ~6.2 MB
+    // of file content, and nothing larger than 5 MB is ever stored either way.
+    [RequestSizeLimit(6_500_000)]
     public async Task<ActionResult<AttachmentDto>> Upload(
         [FromForm] string entityType,
         [FromForm] string entityId,
@@ -85,6 +89,15 @@ public sealed class AttachmentsController(
             || !allowedExtensions.Contains(fileExtension, StringComparer.OrdinalIgnoreCase))
         {
             return BadRequest(new { message = $"File extension '{fileExtension}' does not match an allowed file type.", errorCode = "VALIDATION_ERROR" });
+        }
+
+        // EC-029: everything checked so far was declared by the client. Read the leading bytes and
+        // confirm they match the declared type, so a script payload named .jpg and posted as
+        // image/jpeg cannot be stored under a type it is not. Done before the entity lookup so a bad
+        // payload costs no database round trips and cannot probe which entity ids exist.
+        if (!await ContentMatchesDeclaredTypeAsync(file, mimeType, cancellationToken))
+        {
+            return BadRequest(new { message = $"File contents do not match the declared type '{mimeType}'.", errorCode = "VALIDATION_ERROR" });
         }
 
         var tenantId = TenantId;
@@ -184,6 +197,21 @@ public sealed class AttachmentsController(
         a.CreatedAt);
 
     private static string BuildDownloadUrl(Guid attachmentId) => $"/api/attachments/{attachmentId}/download";
+
+    /// <summary>
+    /// Samples the head of the upload and asks <see cref="FileContentSignature"/> whether those
+    /// bytes are consistent with the declared type. A separate read stream is opened so the upload
+    /// itself still starts at byte zero, whatever the form buffered the body into.
+    /// </summary>
+    private static async Task<bool> ContentMatchesDeclaredTypeAsync(IFormFile file, string mimeType, CancellationToken cancellationToken)
+    {
+        var buffer = new byte[FileContentSignature.SampleSizeBytes];
+
+        await using var probe = file.OpenReadStream();
+        var read = await probe.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, cancellationToken);
+
+        return FileContentSignature.Matches(mimeType, buffer.AsSpan(0, read));
+    }
 
     private async Task EnsureEntityExistsAsync(string entityType, Guid entityId, Guid tenantId, CancellationToken cancellationToken)
     {

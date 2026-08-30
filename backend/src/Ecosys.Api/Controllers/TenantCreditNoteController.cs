@@ -22,6 +22,11 @@ public sealed class TenantCreditNoteController(
     private static readonly HashSet<string> Reasons =
         new(StringComparer.OrdinalIgnoreCase) { "Return", "Overcharge", "Goodwill", "Cancellation", "Other" };
 
+    // No platform-wide currency to inherit here: the tenant's own configured currency (derived from
+    // its country, same as the frontend's getActiveCurrency()) is what the create form sends
+    // explicitly — this is only the last-resort default for a request that omits it outright.
+    private const string FallbackCurrency = "KES";
+
     // ── List ─────────────────────────────────────────────────────────────────
 
     [HttpGet]
@@ -77,7 +82,9 @@ public sealed class TenantCreditNoteController(
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.ClientId, cancellationToken)
             ?? throw new NotFoundException("Client not found.");
 
-        var currency = string.IsNullOrWhiteSpace(request.Currency) ? "KES" : request.Currency.Trim().ToUpper();
+        var currency = string.IsNullOrWhiteSpace(request.Currency)
+            ? FallbackCurrency
+            : request.Currency.Trim().ToUpper();
 
         if (request.InvoiceId.HasValue)
         {
@@ -215,10 +222,11 @@ public sealed class TenantCreditNoteController(
         note.Balance = note.TotalAmount - note.AmountApplied;
         note.Status = note.Balance <= 0 ? "Applied" : "PartiallyApplied";
 
-        var client = await dbContext.Clients.SingleOrDefaultAsync(c => c.TenantId == TenantId && c.Id == note.ClientId, cancellationToken);
-        if (client is not null)
-            await InvoiceBalanceCalculator.RecalcClientBalanceAsync(dbContext, client, cancellationToken);
+        await InvoiceBalanceCalculator.RecalcClientBalancesAsync(
+            dbContext, TenantId, items.Select(i => i.Invoice), cancellationToken, note.ClientId);
 
+        // Single save: allocations, invoice balances, the credit note and the client's running
+        // balance commit together (EC-012).
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "finance.credit_note.applied", nameof(CreditNote), note.Id.ToString(),
             $"Applied {applied:N2} of credit note {note.CreditNoteNumber} to {items.Count} invoice(s)", cancellationToken);

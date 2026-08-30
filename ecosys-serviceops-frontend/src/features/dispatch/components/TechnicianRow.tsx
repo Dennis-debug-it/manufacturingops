@@ -1,6 +1,6 @@
 import { useDroppable } from '@dnd-kit/core'
 import { cn } from '../../../shared/utils/cn'
-import type { BoardTechnician } from '../boardApi'
+import type { BoardTechnician, BoardWorkOrder } from '../boardApi'
 import { dateToSlotOffset, ROW_HEIGHT, SLOT_COUNT, SLOT_WIDTH } from '../gridUtils'
 import { TechnicianAvatar, technicianStatusLabel } from './TechnicianAvatar'
 import { WorkOrderCard } from './WorkOrderCard'
@@ -16,9 +16,10 @@ export interface TechnicianRowProps {
   technician: BoardTechnician
   day: Date
   preview: DragPreview | null
+  onOpenDispatch: (workOrder: BoardWorkOrder) => void
 }
 
-export function TechnicianRow({ technician, day, preview }: TechnicianRowProps) {
+export function TechnicianRow({ technician, day, preview, onOpenDispatch }: TechnicianRowProps) {
   const { setNodeRef, isOver } = useDroppable({ id: `row:${technician.id}`, data: { technicianId: technician.id } })
   const showPreview = preview && preview.technicianId === technician.id
 
@@ -55,6 +56,7 @@ export function TechnicianRow({ technician, day, preview }: TechnicianRowProps) 
               sourceTechnicianId={technician.id}
               variant="block"
               style={{ left: offset * SLOT_WIDTH + 2, width: span * SLOT_WIDTH - 4 }}
+              onOpenDispatch={onOpenDispatch}
             />
           )
         })}

@@ -58,7 +58,10 @@ internal sealed class UserCredentialDeliveryService(
     IEmailDeliveryLogService emailDeliveryLogService,
     IEmailSubjectRuleService emailSubjectRuleService,
     ISecretEncryptionService secretEncryptionService,
+    ITenantTimeZoneService tenantTimeZoneService,
+    IEmailSettingsResolver emailSettingsResolver,
     IOptions<PublicAppOptions> publicAppOptions,
+    IOptions<SmtpOptions> smtpOptions,
     ILogger<UserCredentialDeliveryService> logger) : IUserCredentialDeliveryService
 {
     public string BuildLoginUrl() => $"{ResolveBaseUrl()}/login";
@@ -92,28 +95,16 @@ internal sealed class UserCredentialDeliveryService(
         }
 
         var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == tenantId, cancellationToken);
-        var tenantSettings = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
-        var effectiveSettings = await ResolveEffectiveEmailSettingsAsync(tenantId, tenantSettings, cancellationToken);
+        var effectiveSettings = (await emailSettingsResolver.ResolveAsync(tenantId, cancellationToken)).Settings;
         var supportEmail = effectiveSettings?.ReplyToEmail
             ?? effectiveSettings?.SenderAddress
             ?? tenant?.ContactEmail
             ?? tenant?.Email
             ?? "support@ecosys.local";
 
-        if (effectiveSettings is null)
-        {
-            await WriteDeliveryLogAsync(
-                tenantId,
-                user.Email,
-                request.TemplateEventKey,
-                "Failed",
-                "Not configured",
-                "Credential email could not be sent because email settings are not configured.",
-                cancellationToken);
-            return new UserCredentialDeliveryResult(false, "NotConfigured", "Credential email could not be sent because email settings are not configured.");
-        }
-
-        if (!effectiveSettings.IsEnabled || string.Equals(effectiveSettings.Provider, EmailDeliveryMode.Disabled.ToString(), StringComparison.OrdinalIgnoreCase))
+        // A missing row is not a decision — it falls through to the Smtp:* / ECOSYS_SMTP_* fallback
+        // inside CreateDeliveryOptions. Only an explicit "off" stops the send here (EC-P1-06d).
+        if (EmailDeliveryResolution.IsExplicitlyDisabled(effectiveSettings))
         {
             await WriteDeliveryLogAsync(
                 tenantId,
@@ -135,9 +126,9 @@ internal sealed class UserCredentialDeliveryService(
                 request.TemplateEventKey,
                 "Failed",
                 "Not configured",
-                "Credential email could not be sent because SMTP settings are incomplete.",
+                "Credential email could not be sent because no SMTP host is configured.",
                 cancellationToken);
-            return new UserCredentialDeliveryResult(false, "NotConfigured", "Credential email could not be sent because SMTP settings are incomplete.");
+            return new UserCredentialDeliveryResult(false, "NotConfigured", "Credential email could not be sent because no SMTP host is configured.");
         }
 
         try
@@ -189,9 +180,9 @@ internal sealed class UserCredentialDeliveryService(
                     user.Email,
                     finalSubject,
                     template.HtmlBody,
-                    template.SenderNameOverride ?? effectiveSettings.SenderName,
-                    effectiveSettings.SenderAddress,
-                    template.ReplyToOverride ?? effectiveSettings.ReplyToEmail,
+                    template.SenderNameOverride ?? delivery.SenderName,
+                    delivery.SenderEmail,
+                    template.ReplyToOverride ?? delivery.ReplyToEmail,
                     IsHtml: true),
                 delivery,
                 cancellationToken);
@@ -264,28 +255,14 @@ internal sealed class UserCredentialDeliveryService(
         }
 
         var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == tenantId, cancellationToken);
-        var tenantSettings = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
-        var effectiveSettings = await ResolveEffectiveEmailSettingsAsync(tenantId, tenantSettings, cancellationToken);
+        var effectiveSettings = (await emailSettingsResolver.ResolveAsync(tenantId, cancellationToken)).Settings;
         var supportEmail = effectiveSettings?.ReplyToEmail
             ?? effectiveSettings?.SenderAddress
             ?? tenant?.ContactEmail
             ?? tenant?.Email
             ?? "support@ecosys.local";
 
-        if (effectiveSettings is null)
-        {
-            await WriteDeliveryLogAsync(
-                tenantId,
-                user.Email,
-                templateKey,
-                "Failed",
-                "Not configured",
-                $"{deliveryLabel} email could not be sent because email settings are not configured.",
-                cancellationToken);
-            return new UserCredentialDeliveryResult(false, "NotConfigured", $"{deliveryLabel} email could not be sent because email settings are not configured.");
-        }
-
-        if (!effectiveSettings.IsEnabled || string.Equals(effectiveSettings.Provider, EmailDeliveryMode.Disabled.ToString(), StringComparison.OrdinalIgnoreCase))
+        if (EmailDeliveryResolution.IsExplicitlyDisabled(effectiveSettings))
         {
             await WriteDeliveryLogAsync(
                 tenantId,
@@ -307,10 +284,14 @@ internal sealed class UserCredentialDeliveryService(
                 templateKey,
                 "Failed",
                 "Not configured",
-                $"{deliveryLabel} email could not be sent because SMTP settings are incomplete.",
+                $"{deliveryLabel} email could not be sent because no SMTP host is configured.",
                 cancellationToken);
-            return new UserCredentialDeliveryResult(false, "NotConfigured", $"{deliveryLabel} email could not be sent because SMTP settings are incomplete.");
+            return new UserCredentialDeliveryResult(false, "NotConfigured", $"{deliveryLabel} email could not be sent because no SMTP host is configured.");
         }
+
+        // Recipients read this expiry against their own wall clock, so it is rendered in the tenant's
+        // time zone with an explicit label — a bare UTC value reads as already past in UTC+3.
+        var expiresAtLocal = await tenantTimeZoneService.FormatForTenantAsync(request.ExpiresAt, tenantId, cancellationToken: cancellationToken);
 
         try
         {
@@ -328,7 +309,8 @@ internal sealed class UserCredentialDeliveryService(
                         ["activateAccountUrl"] = request.ResetLink,
                         ["supportEmail"] = supportEmail,
                         ["tenantName"] = tenant?.Name ?? tenant?.CompanyName ?? "Ecosys Workspace",
-                        ["expiresAt"] = request.ExpiresAt.ToString("u"),
+                        ["expiresAt"] = expiresAtLocal,
+                        ["expiresAtUtc"] = request.ExpiresAt.ToString("u"),
                     }),
                 cancellationToken);
             var finalSubject = await emailSubjectRuleService.BuildFinalSubjectAsync(
@@ -357,9 +339,9 @@ internal sealed class UserCredentialDeliveryService(
                     user.Email,
                     finalSubject,
                     template.HtmlBody,
-                    template.SenderNameOverride ?? effectiveSettings.SenderName,
-                    effectiveSettings.SenderAddress,
-                    template.ReplyToOverride ?? effectiveSettings.ReplyToEmail,
+                    template.SenderNameOverride ?? delivery.SenderName,
+                    delivery.SenderEmail,
+                    template.ReplyToOverride ?? delivery.ReplyToEmail,
                     IsHtml: true),
                 delivery,
                 cancellationToken);
@@ -445,63 +427,13 @@ internal sealed class UserCredentialDeliveryService(
         };
     }
 
-    private async Task<EmailSetting?> ResolveEffectiveEmailSettingsAsync(Guid tenantId, EmailSetting? tenantSettings, CancellationToken cancellationToken)
-    {
-        if (tenantSettings is null)
-        {
-            tenantSettings = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
-        }
 
-        if (tenantSettings is null)
-        {
-            return null;
-        }
+    private EmailDeliverySettings? CreateDeliveryOptions(EmailSetting? settings) =>
+        EmailDeliveryResolution.Resolve(
+            settings,
+            settings is null ? null : secretEncryptionService.Decrypt(settings.EncryptedSecret) ?? settings.Password,
+            smtpOptions.Value);
 
-        if (tenantSettings.UsePlatformDefaults && !tenantSettings.OverrideSmtpSettings && tenantId != PlatformConstants.RootTenantId)
-        {
-            return await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-        }
-
-        return tenantSettings;
-    }
-
-    private EmailDeliverySettings? CreateDeliveryOptions(EmailSetting settings)
-    {
-        var mode = ParseDeliveryMode(settings.Provider);
-        var secret = secretEncryptionService.Decrypt(settings.EncryptedSecret) ?? settings.Password;
-
-        if (mode == EmailDeliveryMode.Smtp && string.IsNullOrWhiteSpace(settings.Host))
-        {
-            return null;
-        }
-
-        return new EmailDeliverySettings(
-            mode,
-            settings.Host,
-            settings.Port,
-            settings.Username,
-            secret,
-            settings.SenderName,
-            settings.SenderAddress,
-            settings.ReplyToEmail,
-            settings.UseSsl,
-            EmailDeliveryModeResolver.ResolveSecureMode(settings.Port, settings.UseSsl),
-            null,
-            null,
-            null,
-            30,
-            0);
-    }
-
-    private static EmailDeliveryMode ParseDeliveryMode(string? value)
-    {
-        if (Enum.TryParse<EmailDeliveryMode>(value, true, out var parsed))
-        {
-            return parsed;
-        }
-
-        return EmailDeliveryMode.Smtp;
-    }
     private string ResolveBaseUrl()
     {
         var request = httpContextAccessor.HttpContext?.Request;

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, Funnel, Plus } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
@@ -8,11 +8,12 @@ import { Spinner } from '../../shared/components/Spinner'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { SlaBadge } from '../../shared/components/SlaBadge'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate, formatRelative } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
 import toast from 'react-hot-toast'
-import { useAssignWorkOrderById, useCompleteWorkOrderById, useStartWorkOrderById, useWorkOrders } from './api'
+import { useAssignWorkOrderById, useCompleteWorkOrderById, useStartWorkOrderById, useWorkOrders, useWorkOrdersPaged } from './api'
 import { NewWorkOrderForm } from './components/NewWorkOrderForm'
 import { ReportQueueTab } from './components/ReportQueueTab'
 import { ViewSwitcher } from './components/ViewSwitcher'
@@ -25,7 +26,7 @@ import { QuickActionsMenu } from './components/QuickActionsMenu'
 import { AssignTechnicianDialog } from './components/AssignTechnicianDialog'
 import { CompleteWorkOrderDialog } from './components/CompleteWorkOrderDialog'
 import { useWorkOrderListState } from './hooks/useWorkOrderListState'
-import { filterWorkOrderRows, normalizeWorkOrders, type WorkOrderRow } from './listModel'
+import { normalizeWorkOrders, toWorkOrderListFilters, type WorkOrderRow } from './listModel'
 
 export type { WorkOrderRow }
 
@@ -39,20 +40,38 @@ export function WorkOrdersPage() {
   const [completeTarget, setCompleteTarget] = useState<WorkOrderRow | null>(null)
 
   const { state, update, setView, clearFilters, activeFilterCount } = useWorkOrderListState()
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
 
-  const { data, isLoading, isError } = useWorkOrders()
+  // The search box drives a server-side `search` param, so it is debounced rather than typed
+  // straight into a query key.
+  const debouncedSearch = useDebounce(state.search, 300)
+  const filters = useMemo(
+    () => toWorkOrderListFilters({ ...state, search: debouncedSearch }),
+    [state, debouncedSearch],
+  )
+  const filterSignature = JSON.stringify(filters)
+  useEffect(() => setPage(1), [filterSignature])
+
+  // EC-P2-07: the table pages at the database; the board/calendar/map views operate over the whole
+  // filtered set (grouping, month layout, marker clustering) and so keep the unpaged hook. Only the
+  // view that is actually on screen fetches.
+  const isTableView = state.view === 'table'
+  const pagedQuery = useWorkOrdersPaged(filters, page, pageSize, { enabled: tab === 'all' && isTableView })
+  const listQuery = useWorkOrders(filters, { enabled: tab === 'all' && !isTableView })
+  const { data, isLoading, isError } = isTableView ? pagedQuery : listQuery
+
   const assignMutation = useAssignWorkOrderById()
   const startMutation = useStartWorkOrderById()
   const completeMutation = useCompleteWorkOrderById()
 
   const rows = useMemo(() => {
     const normalized = normalizeWorkOrders(data)
-    const filtered = filterWorkOrderRows(normalized, state)
     if (user?.role === 'technician') {
-      return filtered.filter((row) => row.assignedTo === user.fullName || row.assignedTo === '—')
+      return normalized.filter((row) => row.assignedTo === user.fullName || row.assignedTo === '—')
     }
-    return filtered
-  }, [data, state, user])
+    return normalized
+  }, [data, user])
 
   const selectedRows = useMemo(() => rows.filter((row) => selectedIds.includes(row.id)), [rows, selectedIds])
 
@@ -125,20 +144,16 @@ export function WorkOrdersPage() {
     },
   ]
 
-  if (isLoading) {
-    return <Spinner label="Loading work orders" />
-  }
-
-  if (isError) {
-    return (
-      <EmptyState
-        title="Work orders unavailable"
-        description="The work order list could not be loaded."
-        actionLabel="Reload"
-        onAction={() => window.location.reload()}
-      />
-    )
-  }
+  // Switching view now switches which query runs, so the loading and error states render inside the
+  // results slot instead of replacing the page — the tabs, search box and filters stay put.
+  const resultsError = (
+    <EmptyState
+      title="Work orders unavailable"
+      description="The work order list could not be loaded."
+      actionLabel="Reload"
+      onAction={() => window.location.reload()}
+    />
+  )
 
   return (
     <div className={cn('space-y-6', user?.role === 'technician' ? 'pb-20' : '')}>
@@ -150,7 +165,7 @@ export function WorkOrdersPage() {
             <button
               type="button"
               onClick={() => setShowNewForm(true)}
-              className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800"
+              className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
             >
               <Plus className="h-4 w-4" />New Work Order
             </button>
@@ -171,7 +186,7 @@ export function WorkOrdersPage() {
             onClick={() => setTab(key as 'all' | 'queue')}
             className={cn(
               'inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium transition',
-              tab === key ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+              tab === key ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
             )}
           >
             {label}
@@ -181,13 +196,13 @@ export function WorkOrdersPage() {
 
       {tab === 'all' ? (
         <div className="flex flex-wrap items-center gap-3">
-          <div className="min-w-[16rem] flex-1 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="min-w-[16rem] flex-1 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <Funnel className="h-4 w-4 text-slate-400" />
               <input
                 value={state.search}
                 onChange={(event) => update({ search: event.target.value })}
-                placeholder="Search by WO number, client, site, or asset"
+                placeholder="Search by WO number, title, client, asset, or technician"
                 className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400"
               />
             </label>
@@ -201,15 +216,43 @@ export function WorkOrdersPage() {
       ) : null}
 
       {tab === 'all' ? (
-        state.view === 'table' ? (
+        isError ? (
+          resultsError
+        ) : !isTableView && isLoading ? (
+          <Spinner label="Loading work orders" />
+        ) : state.view === 'table' ? (
           <>
             <DataTable
               columns={columns}
               data={rows}
               loading={isLoading}
-              emptyTitle="No work orders"
-              emptyDescription="Once the work order API is connected, records will show here."
-              virtualise={rows.length > 100}
+              emptyTitle={activeFilterCount > 0 || state.search ? 'No matching work orders' : 'No work orders yet'}
+              emptyDescription={
+                activeFilterCount > 0 || state.search
+                  ? 'No work orders match the current search and filters. Clear them to see the full backlog.'
+                  : 'Raise the first work order to start tracking jobs, technicians, and service reports.'
+              }
+              emptyActionLabel={activeFilterCount > 0 || state.search ? 'Clear filters' : canCreate ? 'New Work Order' : undefined}
+              onEmptyAction={
+                activeFilterCount > 0 || state.search
+                  ? () => {
+                      clearFilters()
+                      update({ search: '' })
+                    }
+                  : canCreate
+                    ? () => setShowNewForm(true)
+                    : undefined
+              }
+              pagination={{
+                page,
+                pageSize,
+                total: pagedQuery.data?.totalCount ?? 0,
+                onPageChange: setPage,
+                onPageSizeChange: (size) => {
+                  setPageSize(size)
+                  setPage(1)
+                },
+              }}
               batchSelect
               onSelectionChange={setSelectedIds}
             />
@@ -249,11 +292,13 @@ export function WorkOrdersPage() {
         open={Boolean(completeTarget)}
         woNumber={completeTarget?.woNo}
         submitting={completeMutation.isPending}
+        arrivalRecorded={completeTarget?.hasRecordedArrival ?? false}
+        canAdminOverride={user?.role === 'admin'}
         onClose={() => setCompleteTarget(null)}
-        onSubmit={(workDoneNotes) => {
+        onSubmit={({ workDoneNotes, adminOverride, overrideReason }) => {
           if (!completeTarget) return
           completeMutation.mutate(
-            { id: completeTarget.id, workDoneNotes },
+            { id: completeTarget.id, workDoneNotes, adminOverride, overrideReason },
             {
               onSuccess: () => {
                 toast.success(`${completeTarget.woNo} completed`)

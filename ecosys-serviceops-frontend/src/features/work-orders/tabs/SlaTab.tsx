@@ -21,7 +21,7 @@ function ClockCard({
   paused: boolean
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="flex items-center justify-between gap-2">
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
         <SlaBadge deadline={deadline} breached={breached} paused={paused} />
@@ -64,7 +64,7 @@ export function SlaTab({ workOrderId }: { workOrderId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Applied Policy</div>
@@ -103,7 +103,7 @@ export function SlaTab({ workOrderId }: { workOrderId: string }) {
       </div>
 
       {(data.responseBreachedAt || data.resolutionBreachedAt) ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Breach History</div>
           <ul className="mt-3 space-y-2 text-sm text-slate-700">
             {data.responseBreachedAt ? <li>Response SLA breached at {formatDateTime(data.responseBreachedAt)}</li> : null}

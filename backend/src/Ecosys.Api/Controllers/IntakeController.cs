@@ -23,8 +23,11 @@ public sealed class IntakeController(
     [HttpPost("email/webhook")]
     public async Task<ActionResult<IntakeResponse>> EmailWebhook([FromBody] EmailIntakeRequest request, CancellationToken cancellationToken)
     {
-        await licenseGuardService.EnsureFeatureEnabledAsync(request.TenantId, LicenseFeatures.EmailIngestion, cancellationToken);
+        // Secret first, licence second. The other order is a pre-auth oracle: an unlicensed tenant
+        // answers differently from an unknown one, so a caller with no secret at all could probe
+        // which tenant ids exist and which features they hold.
         await ValidateSecretAsync(request.TenantId, request.Secret, cancellationToken);
+        await licenseGuardService.EnsureFeatureEnabledAsync(request.TenantId, LicenseFeatures.EmailIngestion, cancellationToken);
         var workOrder = await CreateWorkOrderAsync(request.TenantId, request.BranchId, request.ClientId, request.AssetId, request.Subject, request.Body, request.Priority, cancellationToken);
         return Ok(new IntakeResponse(workOrder.Id, workOrder.WorkOrderNumber));
     }
@@ -32,8 +35,8 @@ public sealed class IntakeController(
     [HttpPost("monitoring/webhook")]
     public async Task<ActionResult<IntakeResponse>> MonitoringWebhook([FromBody] MonitoringIntakeRequest request, CancellationToken cancellationToken)
     {
-        await licenseGuardService.EnsureFeatureEnabledAsync(request.TenantId, LicenseFeatures.MonitoringIntegration, cancellationToken);
         await ValidateSecretAsync(request.TenantId, request.Secret, cancellationToken);
+        await licenseGuardService.EnsureFeatureEnabledAsync(request.TenantId, LicenseFeatures.MonitoringIntegration, cancellationToken);
         var workOrder = await CreateWorkOrderAsync(request.TenantId, request.BranchId, request.ClientId, request.AssetId, request.Title, request.Description, request.Priority, cancellationToken);
         return Ok(new IntakeResponse(workOrder.Id, workOrder.WorkOrderNumber));
     }
@@ -113,6 +116,7 @@ public sealed class IntakeController(
     private async Task<Domain.Entities.WorkOrder> CreateWorkOrderAsync(Guid tenantId, Guid? branchId, Guid clientId, Guid? assetId, string title, string? description, string? priority, CancellationToken cancellationToken)
     {
         await licenseGuardService.EnsureCanCreateWorkOrderAsync(tenantId, cancellationToken);
+        await EnsureReferencesBelongToTenantAsync(tenantId, branchId, clientId, assetId, cancellationToken);
 
         var workOrder = new Domain.Entities.WorkOrder
         {
@@ -130,6 +134,40 @@ public sealed class IntakeController(
         dbContext.WorkOrders.Add(workOrder);
         await dbContext.SaveChangesAsync(cancellationToken);
         return workOrder;
+    }
+
+    /// <summary>
+    /// Every id on this controller arrives from the caller. The global tenant query filter is
+    /// bypassed for an unauthenticated principal and the work order has no composite tenant foreign
+    /// key, so without this check a holder of one tenant's webhook secret can attach another
+    /// tenant's client, asset or branch to a new work order — which every later
+    /// <c>.Include(x =&gt; x.Client)</c> then surfaces in the UI and in generated PDFs.
+    /// </summary>
+    private async Task EnsureReferencesBelongToTenantAsync(Guid tenantId, Guid? branchId, Guid clientId, Guid? assetId, CancellationToken cancellationToken)
+    {
+        var clientBelongs = await dbContext.Clients.AnyAsync(x => x.Id == clientId && x.TenantId == tenantId, cancellationToken);
+        if (!clientBelongs)
+        {
+            throw new BusinessRuleException("Client was not found for this tenant.");
+        }
+
+        if (assetId.HasValue)
+        {
+            var assetBelongs = await dbContext.Assets.AnyAsync(x => x.Id == assetId.Value && x.TenantId == tenantId, cancellationToken);
+            if (!assetBelongs)
+            {
+                throw new BusinessRuleException("Asset was not found for this tenant.");
+            }
+        }
+
+        if (branchId.HasValue)
+        {
+            var branchBelongs = await dbContext.Branches.AnyAsync(x => x.Id == branchId.Value && x.TenantId == tenantId, cancellationToken);
+            if (!branchBelongs)
+            {
+                throw new BusinessRuleException("Branch was not found for this tenant.");
+            }
+        }
     }
 
     private static string HashSecret(string secret) =>

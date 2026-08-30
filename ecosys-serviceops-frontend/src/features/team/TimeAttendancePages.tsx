@@ -27,6 +27,7 @@ import {
 import { useTechnicians } from './api'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { TeamTabNav } from './components/TeamTabNav'
+import { TimeAttendanceTabNav } from './components/TimeAttendanceTabNav'
 
 
 export function LiveAttendancePage() {
@@ -46,6 +47,7 @@ export function LiveAttendancePage() {
     <div className="space-y-6">
       <PageHeader title="Live Attendance" subtitle="Real-time clock status across the technician team." />
       <TeamTabNav />
+      <TimeAttendanceTabNav />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Clocked In" value={summary?.clockedIn ?? 0} icon={<CircleCheck className="h-5 w-5 text-emerald-500" />} tone="success" />
         <StatCard label="On Break" value={summary?.onBreak ?? 0} icon={<Coffee className="h-5 w-5 text-amber-500" />} tone="warning" />
@@ -87,22 +89,24 @@ export function TimesheetsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Timesheets" subtitle="Week, month, and custom-range timesheet views per technician." />
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <TeamTabNav />
+      <TimeAttendanceTabNav />
+      <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-3 shadow-sm">
         {viewOptions.map((option) => (
           <button
             key={option.id}
             type="button"
             onClick={() => setView(option.id)}
-            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${view === option.id ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${view === option.id ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
           >
             {option.label}
           </button>
         ))}
         {view === 'custom' ? (
           <div className="flex items-center gap-2">
-            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             <span className="text-sm text-slate-500">to</span>
-            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+            <input type="date" value={to} onChange={(event) => setTo(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         ) : null}
       </div>
@@ -132,7 +136,7 @@ export function TimesheetDetailPage() {
         <EmptyState title="No timesheet detail yet" description="No clock activity recorded for this technician in the selected period." />
       ) : (
         <>
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-left text-sm">
               <thead className="bg-slate-50">
                 <tr>
@@ -158,7 +162,7 @@ export function TimesheetDetailPage() {
               </tbody>
             </table>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Audit Trail</h2>
             <ul className="mt-4 space-y-3">
               {data.auditTrail.map((entry, index) => (
@@ -220,19 +224,21 @@ export function LeavePage() {
         subtitle="Leave requests, approvals, and balances."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowNewRequest(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowNewRequest(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Leave Request
             </button>
           ) : undefined
         }
       />
-      <div className="flex flex-wrap gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      <TeamTabNav />
+      <TimeAttendanceTabNav />
+      <div className="flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-3 shadow-sm">
         {leaveStatusOptions.map((status) => (
           <button
             key={status}
             type="button"
             onClick={() => setStatusFilter(status)}
-            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${statusFilter === status ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${statusFilter === status ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
           >
             {status}
           </button>
@@ -250,14 +256,14 @@ export function LeavePage() {
         <div className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Technician</label>
-            <select value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+            <select value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               <option value="">Select a technician…</option>
               {(technicians ?? []).map((t) => <option key={t.id} value={t.id}>{t.fullName}</option>)}
             </select>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Leave Type</label>
-            <select value={leaveType} onChange={(event) => setLeaveType(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900">
+            <select value={leaveType} onChange={(event) => setLeaveType(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               <option>Annual Leave</option>
               <option>Sick Leave</option>
               <option>Unpaid Leave</option>
@@ -266,22 +272,22 @@ export function LeavePage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">Start Date</label>
-              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">End Date</label>
-              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900" />
+              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
             </div>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Reason (optional)</label>
-            <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+            <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <button
             type="button"
             disabled={!technicianId.trim() || !startDate || !endDate || createLeave.isPending}
             onClick={() => void submitLeave()}
-            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+            className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60"
           >
             {createLeave.isPending ? 'Submitting…' : 'Submit Request'}
           </button>
@@ -347,6 +353,8 @@ export function TimeAttendanceReportsPage() {
           </button>
         }
       />
+      <TeamTabNav />
+      <TimeAttendanceTabNav />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label={data?.periodLabel ?? 'This Month'} value={`${(data?.totalWorkedHours ?? 0).toFixed(0)}h worked`} />
         <StatCard label="Overtime Hours" value={(data?.totalOvertimeHours ?? 0).toFixed(0)} tone="warning" />

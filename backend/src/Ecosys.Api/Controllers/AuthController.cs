@@ -1,3 +1,4 @@
+using Ecosys.Api.Common;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
@@ -21,8 +22,13 @@ public sealed class AuthController(
     IAuditLogService auditLogService,
     IPasswordResetService passwordResetService,
     IPasswordHasher<Domain.Entities.User> passwordHasher,
+    ITenantTimeZoneService tenantTimeZoneService,
     ITenantSecurityPolicyService tenantSecurityPolicyService) : ControllerBase
 {
+    // Public by design. Program.cs now applies a global FallbackPolicy requiring an authenticated
+    // user, so an endpoint with no authorization metadata is refused with 401 — which silently took
+    // out every way of obtaining a token. These five must opt out explicitly.
+    [AllowAnonymous]
     [HttpPost("signup")]
     public async Task<ActionResult<SignupResponse>> Signup([FromBody] SignupRequest request, CancellationToken cancellationToken)
     {
@@ -46,29 +52,40 @@ public sealed class AuthController(
             MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId))));
     }
 
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
         var result = await authService.LoginAsync(request.Email, request.Password, request.RememberMe, cancellationToken);
 
-        return Ok(BuildLoginResponse(result));
+        return Ok(await BuildLoginResponseAsync(result, cancellationToken));
     }
 
+    [AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<ActionResult<LoginResponse>> Refresh([FromBody] RefreshRequest request, CancellationToken cancellationToken)
     {
         var result = await authService.RefreshAsync(request.RefreshToken, cancellationToken);
 
-        return Ok(BuildLoginResponse(result));
+        return Ok(await BuildLoginResponseAsync(result, cancellationToken));
     }
 
-    private LoginResponse BuildLoginResponse(LoginResult result) =>
+    private async Task<LoginResponse> BuildLoginResponseAsync(LoginResult result, CancellationToken cancellationToken) =>
         new(
             result.Token,
             result.RefreshToken,
             new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId))),
-            new LoginTenantDto(result.TenantId, result.CompanyName, result.Country, result.Industry, result.LogoUrl, result.ShowPoweredByEcosys));
+            new LoginTenantDto(
+                result.TenantId,
+                result.CompanyName,
+                result.Country,
+                result.Industry,
+                result.LogoUrl,
+                result.ShowPoweredByEcosys,
+                await tenantTimeZoneService.GetTimeZoneIdAsync(result.TenantId, cancellationToken),
+                await ResolveTenantCurrencyAsync(result.TenantId, cancellationToken)));
 
+    [AllowAnonymous]
     [HttpPost("forgot-password")]
     public async Task<ActionResult<MessageResponse>> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -76,6 +93,7 @@ public sealed class AuthController(
         return Ok(new MessageResponse(message));
     }
 
+    [AllowAnonymous]
     [HttpPost("reset-password")]
     public async Task<ActionResult<MessageResponse>> ResetPassword([FromBody] SelfServiceResetPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -219,7 +237,9 @@ public sealed class AuthController(
                     user.Tenant?.Industry,
                     user.Tenant?.LogoUrl,
                     user.Tenant?.PrimaryColor ?? "#0F4C81",
-                    user.Tenant?.SecondaryColor ?? "#F4B942"),
+                    user.Tenant?.SecondaryColor ?? "#F4B942",
+                    await tenantTimeZoneService.GetTimeZoneIdAsync(user.TenantId, cancellationToken),
+                    await ResolveTenantCurrencyAsync(user.TenantId, cancellationToken)),
                 [],
                 impersonation));
         }
@@ -236,6 +256,11 @@ public sealed class AuthController(
                 .Select(x => new AuthenticatedBranchDto(x.Id, x.Name, x.Code, x.Location, x.IsActive))
                 .ToListAsync(cancellationToken);
 
+        // Resolve through the same path as login rather than mapping the stored user_permissions
+        // row. The two used to disagree, and because the SPA re-bootstraps its session from /me on
+        // every page load, a refresh could silently swap the user's effective permissions.
+        var permissions = await authService.ResolvePermissionsForUserAsync(user.Id, cancellationToken);
+
         return Ok(new AuthenticatedContextResponse(
             new AuthenticatedUserDto(
                 user.Id,
@@ -247,7 +272,7 @@ public sealed class AuthController(
                 user.HasAllBranchAccess,
                 user.DefaultBranchId,
                 user.MustChangePassword,
-                MapPermissions(user.Permission, isPlatformUser)),
+                MapPermissions(permissions, isPlatformUser)),
             new AuthenticatedTenantDto(
                 user.TenantId,
                 user.Tenant?.CompanyName ?? string.Empty,
@@ -255,10 +280,15 @@ public sealed class AuthController(
                 user.Tenant?.Industry,
                 user.Tenant?.LogoUrl,
                 user.Tenant?.PrimaryColor ?? "#0F4C81",
-                user.Tenant?.SecondaryColor ?? "#F4B942"),
+                user.Tenant?.SecondaryColor ?? "#F4B942",
+                await tenantTimeZoneService.GetTimeZoneIdAsync(user.TenantId, cancellationToken),
+                await ResolveTenantCurrencyAsync(user.TenantId, cancellationToken)),
             branches,
             impersonation));
     }
+
+    private Task<string?> ResolveTenantCurrencyAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        TenantCurrency.ResolveAsync(dbContext, tenantId, cancellationToken);
 
     private static PermissionResponse MapPermissions(UserPermissionsModel permissions, bool isPlatformOwner) =>
         new()
@@ -384,7 +414,12 @@ public sealed record LoginTenantDto(
     string Country,
     string? Industry,
     string? LogoUrl,
-    bool ShowPoweredByEcosys);
+    bool ShowPoweredByEcosys,
+    /// <summary>Effective IANA time zone the workspace's timestamps are displayed in.</summary>
+    string TimeZoneId,
+    /// <summary>Workspace currency for money the API returns without one. Null when unconfigured,
+    /// which lets the client fall back rather than silently rendering another tenant's currency.</summary>
+    string? DefaultCurrency);
 
 public sealed record PermissionResponse
 {
@@ -445,7 +480,12 @@ public sealed record AuthenticatedTenantDto(
     string? Industry,
     string? LogoUrl,
     string PrimaryColor,
-    string SecondaryColor);
+    string SecondaryColor,
+    /// <summary>Effective IANA time zone the workspace's timestamps are displayed in.</summary>
+    string TimeZoneId,
+    /// <summary>Workspace currency for money the API returns without one. Null when unconfigured,
+    /// which lets the client fall back rather than silently rendering another tenant's currency.</summary>
+    string? DefaultCurrency);
 
 public sealed record AuthenticatedBranchDto(
     Guid Id,

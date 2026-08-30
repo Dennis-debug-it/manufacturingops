@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useAuth } from '../../../shared/hooks/useAuth'
+import { getActiveCurrency } from '../../../shared/utils/currency'
 
 export interface DocumentPreviewConfig {
   fontFamily: string
@@ -107,7 +108,9 @@ export function DocumentPreview({ config, docType: controlledDocType, onDocTypeC
   const companyNameSize = config.companyNameFontSize ?? 18
   const bodyFontSize = config.bodyFontSize ?? 10
   const headerBg = config.headerBackgroundColor || undefined
-  const cur = (config.defaultCurrency || 'KES').toUpperCase()
+  // The tenant's own Document Templates setting, which is the one place this platform stores a
+  // configured currency. Blank until an admin fills it in — then the workspace currency stands in.
+  const cur = (config.defaultCurrency || getActiveCurrency()).toUpperCase()
   const currency = config.currencyDisplay === 'Symbol' ? currencySymbols[cur] ?? cur : cur
 
   const bankLines = [
@@ -445,7 +448,7 @@ export function DocumentPreview({ config, docType: controlledDocType, onDocTypeC
               type="button"
               onClick={() => setDocType(doc.id)}
               className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                docType === doc.id ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                docType === doc.id ? 'bg-[var(--app-primary)] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {doc.label}

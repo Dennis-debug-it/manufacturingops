@@ -111,6 +111,19 @@ export interface PlatformTenantUser {
   jobTitle: string | null
   createdAt: string
   lockedOutUntil: string | null
+  mustChangePassword: boolean
+  lastCredentialSentAt: string | null
+  /** Null means the account has never been signed into — its setup link is still pending. */
+  lastLoginAt: string | null
+}
+
+export interface PlatformTenantCredentialDelivery {
+  userId: string
+  email: string
+  success: boolean
+  status: string
+  message: string
+  lastCredentialSentAt: string | null
 }
 
 export function useTenantUsers(id: string | undefined) {
@@ -118,6 +131,52 @@ export function useTenantUsers(id: string | undefined) {
     queryKey: ['platform', 'tenants', id, 'users'],
     queryFn: () => api.get<PlatformTenantUser[]>(endpoints.platform.tenantUsers(id ?? '')),
     enabled: Boolean(id),
+  })
+}
+
+export interface CreateWorkspaceUserPayload {
+  fullName: string
+  email: string
+  phone: string | null
+  role: string
+  jobTitle: string | null
+}
+
+export interface CreatedWorkspaceUser {
+  user: PlatformTenantUser
+  invitationSent: boolean
+  invitationStatus: string
+  message: string
+}
+
+/**
+ * Creates an extra user inside a tenant workspace — most often a second tenant admin, since tenant
+ * creation only ever seeds one. Tenant roles only; platform staff are created under Platform → Users.
+ */
+export function useCreateTenantWorkspaceUser(tenantId: string | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreateWorkspaceUserPayload) =>
+      api.post<CreatedWorkspaceUser>(endpoints.platform.tenantUsers(tenantId ?? ''), payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', tenantId, 'users'] })
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', tenantId] })
+    },
+  })
+}
+
+/**
+ * Re-sends a workspace account-setup link. This is the recovery path for a tenant admin whose
+ * first-login invitation lapsed — they cannot request a new one without being able to sign in.
+ */
+export function useResendTenantUserInvitation(tenantId: string | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: string) =>
+      api.post<PlatformTenantCredentialDelivery>(endpoints.platform.tenantUserResendInvitation(tenantId ?? '', userId), {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', tenantId, 'users'] })
+    },
   })
 }
 

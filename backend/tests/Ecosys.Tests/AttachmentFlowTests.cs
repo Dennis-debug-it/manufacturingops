@@ -21,7 +21,10 @@ public sealed class AttachmentFlowTests
         var fileStorage = new FakeFileStorageService();
         var controller = CreateController(dbContext, fixture.Tenant.Id, fixture.User.Id, fileStorage);
 
-        var file = CreateFormFile("manual.pdf", "application/pdf", "pdf-content");
+        // Real PDF magic bytes. This used to be the string "pdf-content", which content validation
+        // (EC-029) now correctly rejects — the declared type has to match the actual bytes.
+        var file = CreateBinaryFormFile("manual.pdf", "application/pdf",
+            Encoding.UTF8.GetBytes("%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n%%EOF\n"));
         var result = await controller.Upload("WorkOrder", fixture.WorkOrder.Id.ToString(), file, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result.Result);

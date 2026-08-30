@@ -10,16 +10,21 @@ import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
+import { getActiveCurrency } from '../../shared/utils/currency'
 import { useClients } from '../clients/api'
+import { useDefaultTaxRate } from './api'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 import { useCreateCreditNote, useCreditNotes } from './creditNotesApi'
 import type { CreditNoteListItem } from './types'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 const reasons = ['Return', 'Overcharge', 'Goodwill', 'Cancellation', 'Other'] as const
 
-interface DraftLine { description: string; quantity: string; unitRate: string; taxRate: string }
+/** `taxRate: null` means "the user hasn't set one" — the tenant's configured rate is shown instead. */
+interface DraftLine { description: string; quantity: string; unitRate: string; taxRate: string | null }
+
+const emptyLine = (): DraftLine => ({ description: '', quantity: '1', unitRate: '0', taxRate: null })
 
 export function CreditNotesPage() {
   const canManage = usePermission('finance.manage')
@@ -55,7 +60,7 @@ export function CreditNotesPage() {
         subtitle="Reverse or reduce an invoice, or issue standalone customer credit that can be applied to open invoices."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />
               New Credit Note
             </button>
@@ -65,7 +70,7 @@ export function CreditNotesPage() {
 
       <FinanceWorkspaceNav />
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <Search className="h-4 w-4 text-slate-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search credit notes" className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400" />
@@ -89,18 +94,25 @@ function NewCreditNoteDrawer({ open, onClose }: { open: boolean; onClose: () => 
   const navigate = useNavigate()
   const { data: clients } = useClients()
   const createCreditNote = useCreateCreditNote()
+  // The rate the tenant configured on its default rate card. Null when it has configured none.
+  const { taxRate: tenantTaxRate } = useDefaultTaxRate()
 
   const [clientId, setClientId] = useState('')
   const [reason, setReason] = useState<(typeof reasons)[number]>('Return')
   const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10))
+  const [currency, setCurrency] = useState(getActiveCurrency)
   const [notes, setNotes] = useState('')
-  const [lines, setLines] = useState<DraftLine[]>([{ description: '', quantity: '1', unitRate: '0', taxRate: '16' }])
+  const [lines, setLines] = useState<DraftLine[]>([emptyLine()])
+
+  /** What the Tax % input shows: the user's own entry, else the tenant's configured rate. */
+  const displayedTaxRate = (line: DraftLine) => line.taxRate ?? (tenantTaxRate != null ? String(tenantTaxRate) : '')
 
   const close = () => {
     setClientId('')
     setReason('Return')
+    setCurrency(getActiveCurrency())
     setNotes('')
-    setLines([{ description: '', quantity: '1', unitRate: '0', taxRate: '16' }])
+    setLines([emptyLine()])
     onClose()
   }
 
@@ -122,6 +134,7 @@ function NewCreditNoteDrawer({ open, onClose }: { open: boolean; onClose: () => 
         clientId,
         reason,
         issueDate: new Date(issueDate).toISOString(),
+        currency: currency.trim().toUpperCase() || getActiveCurrency(),
         notes: notes.trim() || null,
         lines: cleaned.map((line) => ({
           description: line.description.trim(),
@@ -129,7 +142,7 @@ function NewCreditNoteDrawer({ open, onClose }: { open: boolean; onClose: () => 
           quantity: Number(line.quantity) || 1,
           unit: 'unit',
           unitRate: Number(line.unitRate) || 0,
-          taxRate: Number(line.taxRate) || 0,
+          taxRate: Number(displayedTaxRate(line)) || 0,
         })),
       })
       toast.success(`Credit note ${created.creditNoteNumber} created`)
@@ -148,7 +161,7 @@ function NewCreditNoteDrawer({ open, onClose }: { open: boolean; onClose: () => 
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={close} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={submit} disabled={createCreditNote.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={submit} disabled={createCreditNote.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {createCreditNote.isPending ? 'Creating…' : 'Create Draft'}
           </button>
         </div>
@@ -175,6 +188,10 @@ function NewCreditNoteDrawer({ open, onClose }: { open: boolean; onClose: () => 
           </div>
         </div>
         <div>
+          <label className={labelClass} htmlFor="cn-currency">Currency</label>
+          <input id="cn-currency" value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} className={fieldClass} />
+        </div>
+        <div>
           <label className={labelClass}>Line Items</label>
           <div className="space-y-3">
             {lines.map((line, index) => {
@@ -185,15 +202,15 @@ function NewCreditNoteDrawer({ open, onClose }: { open: boolean; onClose: () => 
                   <div className="mt-2 flex items-end gap-3">
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">Qty</span>
-                      <input type="number" min="0" value={line.quantity} onChange={(event) => updateLine(index, 'quantity', event.target.value)} aria-label="Quantity" className="h-10 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      <input type="number" min="0" value={line.quantity} onChange={(event) => updateLine(index, 'quantity', event.target.value)} aria-label="Quantity" className="h-10 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                     </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">Rate</span>
-                      <input type="number" min="0" value={line.unitRate} onChange={(event) => updateLine(index, 'unitRate', event.target.value)} aria-label="Unit rate" className="h-10 w-28 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      <input type="number" min="0" value={line.unitRate} onChange={(event) => updateLine(index, 'unitRate', event.target.value)} aria-label="Unit rate" className="h-10 w-28 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                     </label>
                     <label className="flex flex-col gap-1">
                       <span className="text-xs font-medium text-slate-500">Tax %</span>
-                      <input type="number" min="0" value={line.taxRate} onChange={(event) => updateLine(index, 'taxRate', event.target.value)} aria-label="Tax rate" className="h-10 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900" />
+                      <input type="number" min="0" value={displayedTaxRate(line)} onChange={(event) => updateLine(index, 'taxRate', event.target.value)} aria-label="Tax rate" className="h-10 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]" />
                     </label>
                     <div className="flex flex-1 flex-col gap-1 text-right">
                       <span className="text-xs font-medium text-slate-500">Subtotal</span>
@@ -207,13 +224,13 @@ function NewCreditNoteDrawer({ open, onClose }: { open: boolean; onClose: () => 
               )
             })}
           </div>
-          <button type="button" onClick={() => setLines((current) => [...current, { description: '', quantity: '1', unitRate: '0', taxRate: '16' }])} className="mt-3 text-xs font-medium text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-slate-900">
+          <button type="button" onClick={() => setLines((current) => [...current, emptyLine()])} className="mt-3 text-xs font-medium text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-slate-900">
             + Add line
           </button>
         </div>
         <div>
           <label className={labelClass} htmlFor="cn-notes">Notes</label>
-          <textarea id="cn-notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-900" />
+          <textarea id="cn-notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--app-primary)]" />
         </div>
       </div>
     </FormDrawer>

@@ -19,7 +19,7 @@ import {
 import { workTypeOptions, priorityOptions } from '../work-orders/schemas'
 import type { WorkOrderTemplate } from '../work-orders/types'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900 disabled:bg-slate-50'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)] disabled:bg-slate-50'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 interface MaterialDraft {
@@ -110,7 +110,7 @@ function TemplateEditor({ template, onClose }: { template: WorkOrderTemplate | n
         canManage ? (
           <div className="flex items-center justify-end gap-2">
             <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={save} disabled={isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+            <button type="button" onClick={save} disabled={isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {isPending ? 'Saving…' : 'Save'}
             </button>
           </div>
@@ -209,7 +209,7 @@ function TemplateEditor({ template, onClose }: { template: WorkOrderTemplate | n
                     value={material.quantity}
                     disabled={!canManage}
                     onChange={(event) => setMaterials((prev) => prev.map((m) => (m.key === material.key ? { ...m, quantity: Number(event.target.value) } : m)))}
-                    className="h-11 w-24 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-slate-900"
+                    className="h-11 w-24 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]"
                   />
                   {canManage ? (
                     <button type="button" onClick={() => removeMaterial(material.key)} className="rounded p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600">
@@ -262,19 +262,19 @@ export function WOTemplatesSettingsPage() {
         subtitle="Reusable job definitions technicians can start from when creating a work order."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setEditing('new')} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setEditing('new')} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Template
             </button>
           ) : undefined
         }
       />
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search templates…"
-          className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+          className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
         />
       </div>
 
@@ -286,7 +286,7 @@ export function WOTemplatesSettingsPage() {
             <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">{workTypeOptions.find((o) => o.value === type)?.label ?? type}</h3>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {items.map((template) => (
-                <div key={template.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div key={template.id} className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">{template.name}</p>

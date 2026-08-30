@@ -28,7 +28,16 @@ public sealed class SecurityHardeningTests
 
         var response = await client.GetAsync("/swagger/index.html");
 
-        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+        // Swashbuckle is registered only in Development, so nothing serves this route here. The
+        // global FallbackPolicy is evaluated before routing gives up, so an anonymous caller is
+        // turned away with 401 rather than 404 — either way the UI is never reached, and the body
+        // is what actually proves it.
+        Assert.Contains(
+            response.StatusCode,
+            new[] { System.Net.HttpStatusCode.NotFound, System.Net.HttpStatusCode.Unauthorized });
+
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("swagger-ui", body, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -186,13 +195,27 @@ public sealed class SecurityHardeningTests
         return new AppDbContext(options);
     }
 
+    /// <summary>
+    /// Connection string for the two tests that boot the real host. These exercise middleware
+    /// (the Swagger environment gate, the model-binding error shape), so they cannot use the
+    /// in-memory provider — the app migrates against PostgreSQL at startup.
+    /// <para>
+    /// Set <c>ECOSYS_TEST_DB_CONNECTION</c> to point CI at its own instance. The fallback is the
+    /// conventional local developer database; when nothing is reachable these two tests fail
+    /// rather than silently passing, which is the honest outcome for a test that must boot.
+    /// </para>
+    /// </summary>
+    private static string TestConnectionString =>
+        Environment.GetEnvironmentVariable("ECOSYS_TEST_DB_CONNECTION")
+        ?? "Host=localhost;Port=5432;Database=ecosys_test;Username=postgres;Password=postgres";
+
     private static WebApplicationFactory<Program> CreateFactory(Action<IWebHostBuilder>? configureBuilder = null)
     {
         return new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Production");
-                builder.UseSetting("ConnectionStrings:DefaultConnection", "Host=localhost;Port=5432;Database=ecosys_test;Username=postgres;Password=postgres");
+                builder.UseSetting("ConnectionStrings:DefaultConnection", TestConnectionString);
                 builder.UseSetting("Jwt:Issuer", "ecosys-tests");
                 builder.UseSetting("Jwt:Audience", "ecosys-tests");
                 builder.UseSetting("Jwt:SigningKey", "12345678901234567890123456789012");
@@ -287,5 +310,8 @@ public sealed class SecurityHardeningTests
 
         public Task<Domain.Entities.StockMovement> RecordVanConsumeAsync(Domain.Entities.MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default) =>
             Task.FromException<Domain.Entities.StockMovement>(new NotSupportedException());
+
+        public Task ExecuteAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default) =>
+            operation(cancellationToken);
     }
 }

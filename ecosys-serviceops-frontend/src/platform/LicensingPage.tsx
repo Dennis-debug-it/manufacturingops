@@ -135,7 +135,7 @@ export function LicensingPage() {
         title="Licensing"
         subtitle="Trial, paid, suspended, and deactivated tenant license lifecycle."
         secondaryActions={<LastUpdated at={usage.dataUpdatedAt} />}
-        primaryAction={<button type="button" className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800" onClick={() => { setShowPlan(true); setEditingPlan(emptyPlan) }}><Plus className="h-4 w-4" />New plan</button>}
+        primaryAction={<button type="button" className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => { setShowPlan(true); setEditingPlan(emptyPlan) }}><Plus className="h-4 w-4" />New plan</button>}
       />
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -146,7 +146,7 @@ export function LicensingPage() {
       </section>
 
       <div className="space-y-5">
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <SectionTitle title="Tenant usage" description="License and trial posture by tenant." />
           <div className="mt-4">
             <AsyncPanel query={usage} loadingLabel="Loading usage" errorTitle="Usage unavailable" errorDescription="Tenant usage snapshots could not be loaded.">
@@ -167,7 +167,7 @@ export function LicensingPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <SectionTitle title="Subscriptions" description="Lifecycle control for tenant subscriptions." />
           <div className="mt-4">
             <AsyncPanel query={subscriptions} loadingLabel="Loading subscriptions" errorTitle="Subscriptions unavailable" errorDescription="Subscription records could not be loaded.">
@@ -176,7 +176,7 @@ export function LicensingPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
           <SectionTitle title="License plans" description="Plan pricing and entitlements." />
           <div className="mt-4">
             <AsyncPanel query={plans} loadingLabel="Loading plans" errorTitle="Plans unavailable" errorDescription="License plans could not be loaded.">
@@ -190,17 +190,17 @@ export function LicensingPage() {
         open={showPlan || editingPlan.id !== null || editingPlan.name !== ''}
         title={editingPlan.id ? `Edit ${editingPlan.name}` : 'New license plan'}
         onClose={() => { setShowPlan(false); setEditingPlan(emptyPlan) }}
-        footer={<div className="flex justify-end gap-2"><button type="button" className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => { setShowPlan(false); setEditingPlan(emptyPlan) }}>Cancel</button><button type="button" className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800" onClick={() => void savePlan()}>Save</button></div>}
+        footer={<div className="flex justify-end gap-2"><button type="button" className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => { setShowPlan(false); setEditingPlan(emptyPlan) }}>Cancel</button><button type="button" className="rounded-lg bg-[var(--app-primary)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void savePlan()}>Save</button></div>}
       >
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Field label="Name"><input value={editingPlan.name} onChange={(event) => setEditingPlan((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Code"><input value={editingPlan.code} onChange={(event) => setEditingPlan((current) => ({ ...current, code: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Monthly price"><input type="number" value={editingPlan.monthlyPrice} onChange={(event) => setEditingPlan((current) => ({ ...current, monthlyPrice: Number(event.target.value) || 0 }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Annual price"><input type="number" value={editingPlan.annualPrice} onChange={(event) => setEditingPlan((current) => ({ ...current, annualPrice: Number(event.target.value) || 0 }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Max users"><input type="number" value={editingPlan.maxUsers ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxUsers: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Max assets"><input type="number" value={editingPlan.maxAssets ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxAssets: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Max work orders"><input type="number" value={editingPlan.maxWorkOrders ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxWorkOrders: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Modules included"><input value={editingPlan.modulesIncluded} onChange={(event) => setEditingPlan((current) => ({ ...current, modulesIncluded: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
+          <Field label="Name"><input value={editingPlan.name} onChange={(event) => setEditingPlan((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
+          <Field label="Code"><input value={editingPlan.code} onChange={(event) => setEditingPlan((current) => ({ ...current, code: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
+          <Field label="Monthly price"><input type="number" value={editingPlan.monthlyPrice} onChange={(event) => setEditingPlan((current) => ({ ...current, monthlyPrice: Number(event.target.value) || 0 }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
+          <Field label="Annual price"><input type="number" value={editingPlan.annualPrice} onChange={(event) => setEditingPlan((current) => ({ ...current, annualPrice: Number(event.target.value) || 0 }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
+          <Field label="Max users"><input type="number" value={editingPlan.maxUsers ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxUsers: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
+          <Field label="Max assets"><input type="number" value={editingPlan.maxAssets ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxAssets: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
+          <Field label="Max work orders"><input type="number" value={editingPlan.maxWorkOrders ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxWorkOrders: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
+          <Field label="Modules included"><input value={editingPlan.modulesIncluded} onChange={(event) => setEditingPlan((current) => ({ ...current, modulesIncluded: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" /></Field>
           <Field label="Active"><input type="checkbox" checked={editingPlan.isActive} onChange={(event) => setEditingPlan((current) => ({ ...current, isActive: event.target.checked }))} className="h-4 w-4 rounded border-slate-300" /></Field>
         </div>
       </FormDrawer>
@@ -219,7 +219,7 @@ export function LicensingPage() {
 
 function Kpi({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
     </div>

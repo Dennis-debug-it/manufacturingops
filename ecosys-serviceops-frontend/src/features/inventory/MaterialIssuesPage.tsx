@@ -22,7 +22,7 @@ import {
 import type { MaterialIssue } from './types'
 import { InventoryTabNav } from './components/InventoryTabNav'
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-slate-900'
+const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 
 type PendingAction = { type: 'approve' | 'reject' | 'issue' | 'cancel' } | null
@@ -63,7 +63,7 @@ function IssueActions({ issue }: { issue: MaterialIssue }) {
         </>
       ) : null}
       {canIssue && status === 'approved' ? (
-        <button type="button" onClick={() => setPending({ type: 'issue' })} className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800">Issue Stock</button>
+        <button type="button" onClick={() => setPending({ type: 'issue' })} className="rounded-lg bg-[var(--app-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--app-secondary)]">Issue Stock</button>
       ) : null}
       {canApprove && (status === 'draft' || status === 'pending_approval' || status === 'approved') ? (
         <button type="button" onClick={() => setPending({ type: 'cancel' })} className={buttonClass}>Cancel</button>
@@ -115,7 +115,7 @@ function ReturnDrawer({ issue, onClose }: { issue: MaterialIssue; onClose: () =>
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => void submit()} disabled={returnIssue.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={() => void submit()} disabled={returnIssue.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {returnIssue.isPending ? 'Saving…' : 'Record Return'}
           </button>
         </div>
@@ -193,7 +193,7 @@ function NewIssueDrawer({ open, onClose }: { open: boolean; onClose: () => void 
       footer={
         <div className="flex items-center justify-end gap-2">
           <button type="button" onClick={close} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => void submit()} disabled={createIssue.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button type="button" onClick={() => void submit()} disabled={createIssue.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             {createIssue.isPending ? 'Creating…' : 'Create Issue'}
           </button>
         </div>
@@ -248,7 +248,7 @@ function NewIssueDrawer({ open, onClose }: { open: boolean; onClose: () => void 
         </div>
         <div>
           <label className={labelClass} htmlFor="issue-notes">Notes</label>
-          <textarea id="issue-notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
+          <textarea id="issue-notes" value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
       </div>
     </FormDrawer>
@@ -292,7 +292,7 @@ export function MaterialIssuesPage() {
         subtitle="Issue slips: request stock, approve, issue against jobs, and record returns. Issuing deducts stock and writes the movement ledger."
         primaryAction={
           canRequest ? (
-            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
               <Plus className="h-4 w-4" />New Issue
             </button>
           ) : undefined

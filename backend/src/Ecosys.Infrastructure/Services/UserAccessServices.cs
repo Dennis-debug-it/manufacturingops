@@ -1,3 +1,5 @@
+using System.Data;
+using System.Data.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Auth;
@@ -233,6 +235,16 @@ internal sealed class UserAccessService(ITenantContext tenantContext) : IUserAcc
 
     public void EnsureTenantOperationalAccess()
     {
+        // A client-portal token carries a tenant_id claim so portal queries can be scoped to that
+        // tenant. That made every tenant-internal endpoint resolve a tenant for a portal caller and
+        // return the whole tenant's rows (EC-001). The real boundary is the TenantStaff policy on
+        // TenantAwareControllerBase; this is the defence-in-depth copy for anything that reaches a
+        // tenant service without passing an MVC authorization filter.
+        if (tenantContext.IsPortalClient)
+        {
+            throw new ForbiddenException("Client portal accounts cannot access tenant operational endpoints.");
+        }
+
         if (tenantContext.IsSuperAdmin)
         {
             throw new ForbiddenException("SuperAdmin accounts cannot access tenant operational endpoints.");
@@ -255,6 +267,30 @@ public interface IStockLedgerService
     Task RecordVanReturnAsync(MaterialItem material, Guid vanId, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default);
     /// <summary>Consume stock from a van (used on a job): decrements van balance and tenant total.</summary>
     Task<StockMovement> RecordVanConsumeAsync(MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs one stock mutation — issue, transfer, receipt, van move, material request fulfilment —
+    /// as a single atomic unit. Every Record* method above reads a balance, checks the negative-stock
+    /// guard against that read and writes the new balance back; the caller then saves. Without one
+    /// transaction around all of it a second caller reads the same balance between the guard and the
+    /// write, both pass, one update is lost, the part is oversold and the immutable
+    /// <see cref="StockMovement.BalanceAfter"/> ledger records a figure that was never true. Wrap
+    /// every stock-mutating action body in this (EC-P1-05).
+    /// </summary>
+    Task ExecuteAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Raised when a stock balance could not be written because a concurrent caller changed it first.
+/// Maps to HTTP 409 with the same <c>CONCURRENCY_CONFLICT</c> error code the global handler already
+/// uses for <see cref="DbUpdateConcurrencyException"/>, so a client sees one consistent "nothing was
+/// saved, send it again" signal whichever layer detected the collision (EC-P1-05).
+/// </summary>
+public sealed class StockContentionException(string message)
+    : AppException(message), ILocalizedErrorCode
+{
+    public override int StatusCode => 409;
+    public string ErrorCode => "CONCURRENCY_CONFLICT";
 }
 
 internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerService
@@ -271,6 +307,91 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
         "VanReturn",
         "VanConsume"
     };
+
+    /// <summary>PostgreSQL <c>serialization_failure</c>.</summary>
+    private const string SerializationFailure = "40001";
+
+    /// <summary>PostgreSQL <c>deadlock_detected</c>.</summary>
+    private const string DeadlockDetected = "40P01";
+
+    /// <summary>
+    /// Serializable is the isolation the guard actually needs: the check is "does the balance I just
+    /// read still allow this movement?", and only serializable stops another transaction committing a
+    /// balance change in between. The <c>xmin</c> tokens on MaterialItem, BranchMaterialStock and
+    /// VanMaterialStock catch the single-row collision on their own; the transaction is what extends
+    /// that guarantee across the several rows one movement touches — a transfer writes two branch
+    /// rows, a van load writes a branch row and a van row — and across actions that save more than
+    /// once, so a half-applied movement can never reach the ledger.
+    /// <para>
+    /// Deliberately no retry, unlike <see cref="DocumentNumberingService"/>. That service replays a
+    /// counter it owns end to end; here the delegate is a controller action holding entities loaded
+    /// before the transaction opened and an aggregate already staged on a request-scoped context, so
+    /// replaying it would re-apply stale in-memory state that the rollback has just discarded. A
+    /// stock movement is also a business document, not an idempotent reservation: silently repeating
+    /// it is worse than declining it. The client gets 409 <c>CONCURRENCY_CONFLICT</c> and re-sends
+    /// the whole request against fresh reads.
+    /// </para>
+    /// </summary>
+    public async Task ExecuteAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default)
+    {
+        // Providers without transaction support (the in-memory provider used by tests) cannot begin
+        // one, and there is no concurrency to serialise there either. An ambient transaction means an
+        // outer caller already owns the unit of work — leave the boundary where they put it.
+        var useTransaction = dbContext.Database.IsRelational() && dbContext.Database.CurrentTransaction is null;
+        var transaction = useTransaction
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : null;
+
+        try
+        {
+            await operation(cancellationToken);
+
+            // Callers stage the aggregate and its stock movements together and save once inside the
+            // delegate; this is a no-op when they did and the safety net when they did not.
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex) when (IsConcurrencyConflict(ex))
+        {
+            throw new StockContentionException(
+                "Another user changed this stock balance at the same moment. Nothing was saved — please reload and try again.");
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when the exception chain carries an optimistic-concurrency miss (the <c>xmin</c> token
+    /// moved) or a PostgreSQL serialization failure / deadlock — all three mean "this transaction
+    /// lost a race and nothing it did was applied".
+    /// </summary>
+    private static bool IsConcurrencyConflict(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is DbUpdateConcurrencyException)
+            {
+                return true;
+            }
+
+            if (current is DbException dbException
+                && dbException.SqlState is SerializationFailure or DeadlockDetected)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public Task<StockMovement> RecordReceiptAsync(MaterialItem material, Guid? branchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber, Guid? workOrderId = null, Guid? materialRequestId = null, CancellationToken cancellationToken = default) =>
         RecordAsync(material, branchId, "Receipt", quantity, createdByUserId, reason, referenceNumber, workOrderId, materialRequestId, false, cancellationToken);

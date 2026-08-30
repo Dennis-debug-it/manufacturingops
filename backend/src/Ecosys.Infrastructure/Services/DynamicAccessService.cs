@@ -13,8 +13,15 @@ public interface IDynamicAccessService
     Task<UserPermissionsModel> ResolveLegacyClaimsAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken = default);
 }
 
-internal sealed class DynamicAccessService(AppDbContext dbContext) : IDynamicAccessService
+internal sealed class DynamicAccessService(AppDbContext dbContext, IRolePermissionService rolePermissionService) : IDynamicAccessService
 {
+    /// <summary>
+    /// Effective access is layered: the tenant's role-permission matrix supplies the baseline for
+    /// the user's role, permission-group membership adds to it, and a per-user override is the last
+    /// word either way. The legacy <c>user_permissions</c> row is deliberately not consulted — the
+    /// role matrix replaced it as the source of truth, and reading it here made the Settings matrix
+    /// a no-op for everyone but Admin.
+    /// </summary>
     public async Task<IReadOnlyList<EffectiveCapability>> GetEffectiveAccessAsync(Guid tenantId, Guid userId, CancellationToken cancellationToken = default)
     {
         var user = await dbContext.Users.AsNoTracking().SingleAsync(x => x.TenantId == tenantId && x.Id == userId, cancellationToken);
@@ -23,18 +30,18 @@ internal sealed class DynamicAccessService(AppDbContext dbContext) : IDynamicAcc
         var overrides = await dbContext.UserPermissionOverrides.AsNoTracking().Where(x => x.TenantId == tenantId && x.UserId == userId).ToListAsync(cancellationToken);
         var scopes = await dbContext.AccessScopes.AsNoTracking().Where(x => x.TenantId == tenantId && (x.UserId == userId || (x.PermissionGroupId.HasValue && memberships.Contains(x.PermissionGroupId.Value)))).ToListAsync(cancellationToken);
         var thresholds = await dbContext.PermissionThresholds.AsNoTracking().Where(x => x.TenantId == tenantId && (x.UserId == userId || (x.PermissionGroupId.HasValue && memberships.Contains(x.PermissionGroupId.Value)))).ToListAsync(cancellationToken);
-        var legacyDirect = await dbContext.UserPermissions.AsNoTracking().SingleOrDefaultAsync(x => x.UserId == userId, cancellationToken);
-        var directGrants = legacyDirect is null ? [] : PermissionMap.FromLegacy(legacyDirect).Where(x => x.Value).Select(x => x.Key).ToArray();
-        var all = PermissionNames.All.Concat(groupGrants).Concat(directGrants).Concat(overrides.Select(x => x.Capability)).Distinct(StringComparer.OrdinalIgnoreCase);
+        var roleBaseline = await rolePermissionService.ResolveAsync(tenantId, user.Role, cancellationToken);
+        var roleGrants = PermissionMap.FromModel(roleBaseline).Where(x => x.Value).Select(x => x.Key).ToArray();
+        var all = PermissionNames.All.Concat(groupGrants).Concat(roleGrants).Concat(overrides.Select(x => x.Capability)).Distinct(StringComparer.OrdinalIgnoreCase);
 
         return all.Select(capability =>
         {
             var userOverride = overrides.FirstOrDefault(x => x.Capability.Equals(capability, StringComparison.OrdinalIgnoreCase));
             var inherited = groupGrants.Contains(capability, StringComparer.OrdinalIgnoreCase);
-            var direct = directGrants.Contains(capability, StringComparer.OrdinalIgnoreCase);
+            var fromRole = roleGrants.Contains(capability, StringComparer.OrdinalIgnoreCase);
             var tenantOwner = user.Role.Equals(AppRoles.Admin, StringComparison.OrdinalIgnoreCase);
-            var allowed = userOverride?.IsAllowed ?? (tenantOwner || direct || inherited);
-            var source = userOverride is not null ? (userOverride.IsAllowed ? "Direct allow" : "Explicit deny") : tenantOwner ? "Tenant owner" : direct ? "Direct permission" : inherited ? "Permission group" : "Not granted";
+            var allowed = userOverride?.IsAllowed ?? (tenantOwner || fromRole || inherited);
+            var source = userOverride is not null ? (userOverride.IsAllowed ? "Direct allow" : "Explicit deny") : tenantOwner ? "Tenant owner" : fromRole ? "Role permission" : inherited ? "Permission group" : "Not granted";
             var matchingScopes = scopes.Where(x => x.Capability == "*" || x.Capability.Equals(capability, StringComparison.OrdinalIgnoreCase)).ToArray();
             var limit = thresholds.Where(x => x.Capability.Equals(capability, StringComparison.OrdinalIgnoreCase)).OrderBy(x => x.MaximumAmount).FirstOrDefault();
             return new EffectiveCapability(capability, allowed, source, matchingScopes, limit?.MaximumAmount, limit?.Currency);
@@ -51,7 +58,7 @@ internal sealed class DynamicAccessService(AppDbContext dbContext) : IDynamicAcc
 
 internal static class PermissionMap
 {
-    public static Dictionary<string, bool> FromLegacy(UserPermission p) => new(StringComparer.OrdinalIgnoreCase)
+    public static Dictionary<string, bool> FromModel(UserPermissionsModel p) => new(StringComparer.OrdinalIgnoreCase)
     {
         [PermissionNames.CanViewWorkOrders] = p.CanViewWorkOrders, [PermissionNames.CanCreateWorkOrders] = p.CanCreateWorkOrders,
         [PermissionNames.CanAssignWorkOrders] = p.CanAssignWorkOrders, [PermissionNames.CanCompleteWorkOrders] = p.CanCompleteWorkOrders,
