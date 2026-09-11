@@ -232,6 +232,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => x.Slug).IsUnique();
         });
 
+        modelBuilder.Entity<MrrSnapshot>(entity =>
+        {
+            entity.ToTable("mrr_snapshots");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Mrr).HasPrecision(18, 2);
+            entity.HasIndex(x => x.SnapshotDate).IsUnique();
+        });
+
         modelBuilder.Entity<Branch>(entity =>
         {
             entity.ToTable("branches");
