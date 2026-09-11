@@ -4562,6 +4562,41 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("monitoring_webhook_integrations", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.MrrSnapshot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ActiveTenants")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Mrr")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("PaidTenants")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SnapshotDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TrialTenants")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SnapshotDate")
+                        .IsUnique();
+
+                    b.ToTable("mrr_snapshots", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.NotificationSetting", b =>
                 {
                     b.Property<Guid>("Id")
