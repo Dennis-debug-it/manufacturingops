@@ -1,1 +1,0 @@
-{"token":"test-session","user":{"userId":"plan-admin","fullName":"Plan Admin","email":"admin@example.test","role":"admin","mustChangePassword":false,"permissions":{},"hasAllBranchAccess":true},"tenant":{"tenantId":"plan-tenant","companyName":"Plan Tenant","country":"Kenya","timeZoneId":"Africa/Nairobi"},"branches":[]}

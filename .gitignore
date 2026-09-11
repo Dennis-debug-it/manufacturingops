@@ -32,5 +32,11 @@ appsettings.Development.json
 config.env
 
 # Test/build artifacts
-ecosys-serviceops-frontend/playwright-report/
-ecosys-serviceops-frontend/test-results/
+**/playwright-report/
+**/test-results/
+**/test-results-*/
+**/.playwright-artifacts-*/
+**/blob-report/
+**/*.trace
+**/*.network
+**/*.har

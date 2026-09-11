@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { SectionHeader } from '../components/SectionHeader'
 import { Surface } from '../components/Surface'
+import { EmptyState } from '../components/EmptyState'
 
 /**
  * This file used to also export `createModulePage`, a factory that rendered a generic
@@ -19,6 +20,14 @@ export interface SummarySectionProps {
   title: string
   description?: string
   children: ReactNode
+}
+
+export interface ModulePageConfig { title: string; subtitle?: string }
+
+export function createModulePage(config: ModulePageConfig) {
+  return function ModulePage() {
+    return <div className="space-y-6"><SectionHeader title={config.title} {...(config.subtitle ? { description: config.subtitle } : {})} /><EmptyState title="This route is available and ready for API integration." description="The module is ready for API integration." /></div>
+  }
 }
 
 export function SummarySection({ title, description, children }: SummarySectionProps) {
