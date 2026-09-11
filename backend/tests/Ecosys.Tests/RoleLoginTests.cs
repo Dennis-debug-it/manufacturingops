@@ -408,6 +408,10 @@ public sealed class RoleLoginTests
         public Task<string> RequestAsync(string email, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<string> ResetAsync(string token, string newPassword, string confirmPassword, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<string> ValidateInvitationAsync(string token, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<string> ResendInvitationAsync(string email, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     /// <summary>Constructor ballast: only signup provisions licences.</summary>

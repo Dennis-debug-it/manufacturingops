@@ -188,7 +188,12 @@ public sealed class SettingsController(
             settings.IsConfigured = HasConfiguredNotificationSecret(settings);
             await dbContext.SaveChangesAsync(cancellationToken);
             await AuditSettingsChangeAsync("Email notification test sent", nameof(EmailSetting), settings.Id, cancellationToken);
-            return Ok(new EmailNotificationTestResponse(true, settings.LastTestedAt, null));
+            return Ok(new EmailNotificationTestResponse(
+                true,
+                settings.LastTestedAt,
+                null,
+                settings.UsePlatformDefaults && !settings.OverrideSmtpSettings,
+                "Email notification test sent successfully."));
         }
         catch (Exception ex)
         {
@@ -198,7 +203,12 @@ public sealed class SettingsController(
                 : EmailErrorCategories.UnknownSmtpError;
             await dbContext.SaveChangesAsync(cancellationToken);
             logger.LogWarning(ex, "Tenant email notification test failed for tenant {TenantId}.", TenantId);
-            return Ok(new EmailNotificationTestResponse(false, settings.LastTestedAt, settings.LastError));
+            return Ok(new EmailNotificationTestResponse(
+                false,
+                settings.LastTestedAt,
+                settings.LastError,
+                settings.UsePlatformDefaults && !settings.OverrideSmtpSettings,
+                "Email notification test failed."));
         }
     }
 
@@ -938,6 +948,8 @@ public sealed class SettingsController(
             tenant.Country,
             tenant.Industry,
             tenant.Address,
+            tenant.TimeZoneId,
+            tenant.TimeZoneId,
             tenant.PrimaryColor,
             tenant.SecondaryColor,
             tenant.ShowPoweredByEcosys);
@@ -967,7 +979,10 @@ public sealed class SettingsController(
             HasConfiguredNotificationSecret(settings),
             settings.IsConfigured,
             settings.LastTestedAt,
-            settings.LastError);
+            settings.LastError,
+            settings.UsePlatformDefaults,
+            settings.UsePlatformDefaults && !settings.OverrideSmtpSettings,
+            settings.SenderAddress);
 
     private static EmailIntakeSettingsResponse MapEmailIntake(EmailIntakeSetting settings) =>
         new(

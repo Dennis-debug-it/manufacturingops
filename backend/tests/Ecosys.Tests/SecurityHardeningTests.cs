@@ -272,5 +272,8 @@ public sealed class SecurityHardeningTests
 
         public Task<Domain.Entities.StockMovement> RecordVanConsumeAsync(Domain.Entities.MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default) =>
             Task.FromException<Domain.Entities.StockMovement>(new NotSupportedException());
+
+        public Task ExecuteAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default) =>
+            operation(cancellationToken);
     }
 }

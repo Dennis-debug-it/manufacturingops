@@ -80,6 +80,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<NumberingSetting> NumberingSettings => Set<NumberingSetting>();
     public DbSet<LicensePlan> LicensePlans => Set<LicensePlan>();
     public DbSet<TenantLicense> TenantLicenses => Set<TenantLicense>();
+    public DbSet<MrrSnapshot> MrrSnapshots => Set<MrrSnapshot>();
     public DbSet<AssignmentGroup> AssignmentGroups => Set<AssignmentGroup>();
     public DbSet<AssignmentGroupMember> AssignmentGroupMembers => Set<AssignmentGroupMember>();
     public DbSet<CertificationDefinition> CertificationDefinitions => Set<CertificationDefinition>();

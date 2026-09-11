@@ -14,7 +14,7 @@ internal static class AccountSetupExpiry
 
     public static int ResolveHours(AuthSecurityOptions options)
     {
-        var configured = options.AccountSetupExpiryHours;
+        var configured = options.InvitationLifetimeHours;
         return configured <= 0 ? DefaultHours : Math.Max(MinimumHours, configured);
     }
 }
