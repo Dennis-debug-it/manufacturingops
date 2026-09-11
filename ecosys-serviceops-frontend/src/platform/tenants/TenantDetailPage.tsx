@@ -300,6 +300,8 @@ export function TenantDetailPage() {
             <SectionTitle title="Workspace users" description="Cross-tenant user listing is not exposed yet. We can safely show the tenant-side account summary we do have." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <InfoCard label="Tenant users" value={tenant.userCount} />
+              <InfoCard label="ServiceOps email" value={tenant.serviceOpsEmail ?? '—'} />
+              <InfoCard label="Timezone" value={tenant.timeZoneId ?? '—'} />
               <InfoCard label="Must change password" value={tenant.initialAdminInvitationSent ? 'First admin invited' : 'Check status'} />
               <InfoCard label="Initial admin invite" value={tenant.initialAdminInvitationSent ? 'Queued or sent' : 'Not sent'} />
               <InfoCard label="Initial admin note" value={tenant.initialAdminInvitationMessage ?? 'â€”'} />

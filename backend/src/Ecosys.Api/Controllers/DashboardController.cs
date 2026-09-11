@@ -134,7 +134,10 @@ public sealed class DashboardController(
                         && x.QuantityOnHand <= x.ReorderLevel,
                     cancellationToken);
 
-        var accessibleWorkOrderIds = await workOrders.Select(x => x.Id).ToListAsync(cancellationToken);
+        var accessibleWorkOrderIds = await workOrders
+            .Where(x => !NonOpenWorkOrderStatuses.Contains(x.Status ?? string.Empty))
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
         var accessibleAssignments = await workOrderAssignments
             .Include(x => x.AssignmentGroup)
             .Where(x => accessibleWorkOrderIds.Contains(x.WorkOrderId))

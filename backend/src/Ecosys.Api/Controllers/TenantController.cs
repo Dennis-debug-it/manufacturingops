@@ -59,6 +59,7 @@ public sealed class TenantController(
         tenant.Email = request.Email.Trim().ToLowerInvariant();
         tenant.Phone = request.Phone?.Trim();
         tenant.Country = request.Country.Trim();
+        if (request.TimeZoneId is not null) tenant.TimeZoneId = TenantTimeService.NormalizeTimeZone(request.TimeZoneId, tenant.Country);
         tenant.Industry = request.Industry?.Trim();
         tenant.Address = request.Address is null ? tenant.Address : NormalizeOptional(request.Address);
         tenant.LogoUrl = request.LogoUrl?.Trim();
@@ -76,6 +77,40 @@ public sealed class TenantController(
 
         return Ok(Map(tenant));
     }
+
+    [HttpGet("email-identity")]
+    public async Task<ActionResult<TenantEmailIdentityResponse>> GetEmailIdentity(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var identity = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken)
+            ?? throw new NotFoundException("Email identity was not found.");
+        return Ok(MapIdentity(identity));
+    }
+
+    [HttpPut("email-identity")]
+    public async Task<ActionResult<TenantEmailIdentityResponse>> UpdateEmailIdentity(UpdateTenantEmailIdentityRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var identity = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken)
+            ?? throw new NotFoundException("Email identity was not found.");
+        if (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 150)
+            throw new BusinessRuleException("Display name is required and must be at most 150 characters.");
+        var replyTo = NormalizeOptional(request.ReplyToAddress);
+        if (replyTo is not null && !System.Net.Mail.MailAddress.TryCreate(replyTo, out _))
+            throw new BusinessRuleException("Reply-to address must be a valid email address.");
+        if (request.EmailSignature?.Length > 4000) throw new BusinessRuleException("Email signature must be at most 4000 characters.");
+        identity.SenderName = request.DisplayName.Trim();
+        identity.ReplyToEmail = replyTo;
+        identity.InboundEnabled = request.InboundEnabled;
+        identity.IsEnabled = request.OutboundEnabled;
+        identity.EmailSignature = NormalizeOptional(request.EmailSignature);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "Tenant email identity updated", nameof(EmailSetting), identity.Id.ToString(), "Updated tenant-facing email preferences.", cancellationToken);
+        return Ok(MapIdentity(identity));
+    }
+
+    private static TenantEmailIdentityResponse MapIdentity(EmailSetting value) => new(value.ManagedEmailAddress,
+        value.SenderName, value.ReplyToEmail, value.InboundEnabled, value.IsEnabled, value.EmailSignature);
 
     [HttpPost("branding/logo")]
     [RequestSizeLimit(10_000_000)]
@@ -151,7 +186,8 @@ public sealed class TenantController(
             tenant.LogoUrl,
             tenant.PrimaryColor,
             tenant.SecondaryColor,
-            tenant.ShowPoweredByEcosys);
+            tenant.ShowPoweredByEcosys, tenant.Slug, tenant.TimeZoneId, tenant.Currency,
+            $"{tenant.Slug}@{TenantEmailIdentity.Domain}");
 }
 
 public sealed record TenantProfileResponse(
@@ -171,7 +207,11 @@ public sealed record TenantProfileResponse(
     string? LogoUrl,
     string PrimaryColor,
     string SecondaryColor,
-    bool ShowPoweredByEcosys);
+    bool ShowPoweredByEcosys,
+    string? Slug = null,
+    string TimeZoneId = "Africa/Nairobi",
+    string Currency = "KES",
+    string? ServiceOpsEmail = null);
 
 public sealed record UpdateTenantProfileRequest(
     string CompanyName,
@@ -190,8 +230,14 @@ public sealed record UpdateTenantProfileRequest(
     string? LogoUrl,
     string? PrimaryColor,
     string? SecondaryColor,
-    bool ShowPoweredByEcosys);
+    bool ShowPoweredByEcosys,
+    string? TimeZoneId = null);
 
 public sealed record LogoUploadRequest(IFormFile File);
 
 public sealed record LogoUploadResponse(string LogoUrl);
+
+public sealed record TenantEmailIdentityResponse(string? EmailAddress, string DisplayName, string? ReplyToAddress,
+    bool InboundEnabled, bool OutboundEnabled, string? EmailSignature);
+public sealed record UpdateTenantEmailIdentityRequest(string DisplayName, string? ReplyToAddress,
+    bool InboundEnabled, bool OutboundEnabled, string? EmailSignature);

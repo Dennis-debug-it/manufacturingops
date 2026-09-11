@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '../../../shared/utils/cn'
+import { useEntitlements } from '../../../shared/hooks/useEntitlements'
 
 const tabs = [
   { to: '/clients', label: 'Clients' },
@@ -9,9 +10,10 @@ const tabs = [
 
 export function TriTabNav() {
   const location = useLocation()
+  const { canAccessPath } = useEntitlements()
   return (
     <div className="flex flex-wrap gap-2">
-      {tabs.map((tab) => {
+      {tabs.filter((tab) => canAccessPath(tab.to)).map((tab) => {
         const active = location.pathname === tab.to
         return (
           <Link

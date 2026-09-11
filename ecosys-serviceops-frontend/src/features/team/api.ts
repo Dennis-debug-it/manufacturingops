@@ -76,7 +76,9 @@ export function useSetUserStatus(id: string) {
 }
 
 export function useResendCredentials(id: string) {
+  const queryClient = useQueryClient()
   return useMutation({
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team-users'] }),
     mutationFn: () => api.post<{ success: boolean; message: string | null }>(endpoints.users.resendCredentials(id)),
   })
 }

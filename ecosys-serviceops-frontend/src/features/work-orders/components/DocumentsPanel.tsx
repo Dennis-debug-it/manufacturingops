@@ -7,6 +7,7 @@ import { Spinner } from '../../../shared/components/Spinner'
 import { cn } from '../../../shared/utils/cn'
 import { useWorkOrderDocuments } from '../api'
 import type { WorkOrderDocument } from '../types'
+import { useEntitlements } from '../../../shared/hooks/useEntitlements'
 
 const documentMeta: Record<WorkOrderDocument['documentType'], { label: string; icon: typeof FileText; openTo: (doc: WorkOrderDocument, workOrderId: string) => string }> = {
   Quote: { label: 'Quote', icon: FileText, openTo: (doc) => `/finance/quotes/${doc.id}` },
@@ -16,6 +17,7 @@ const documentMeta: Record<WorkOrderDocument['documentType'], { label: string; i
 }
 
 export function DocumentsPanel({ workOrderId }: { workOrderId: string }) {
+  const { canAccessPath } = useEntitlements()
   const { data, isLoading } = useWorkOrderDocuments(workOrderId)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
@@ -41,7 +43,7 @@ export function DocumentsPanel({ workOrderId }: { workOrderId: string }) {
     return <Spinner label="Loading documents" />
   }
 
-  const documents = data ?? []
+  const documents = (data ?? []).filter((doc) => canAccessPath(documentMeta[doc.documentType].openTo(doc, workOrderId)))
 
   return (
     <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">

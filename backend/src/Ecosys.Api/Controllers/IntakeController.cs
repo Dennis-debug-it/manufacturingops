@@ -118,12 +118,35 @@ public sealed class IntakeController(
         await licenseGuardService.EnsureCanCreateWorkOrderAsync(tenantId, cancellationToken);
         await EnsureReferencesBelongToTenantAsync(tenantId, branchId, clientId, assetId, cancellationToken);
 
+        if (string.IsNullOrWhiteSpace(title))
+            throw new BusinessRuleException("A work order title is required.");
+        if (!await dbContext.Clients.AnyAsync(x => x.Id == clientId && x.TenantId == tenantId && x.IsActive, cancellationToken))
+            throw new BusinessRuleException("Client was not found for this tenant.");
+        if (branchId.HasValue && !await dbContext.Branches.AnyAsync(
+                x => x.Id == branchId && x.TenantId == tenantId && x.IsActive, cancellationToken))
+            throw new BusinessRuleException("Branch was not found for this tenant.");
+
+        Domain.Entities.Asset? asset = null;
+        if (assetId.HasValue)
+        {
+            asset = await dbContext.Assets.SingleOrDefaultAsync(
+                x => x.Id == assetId && x.TenantId == tenantId && x.ClientId == clientId, cancellationToken)
+                ?? throw new BusinessRuleException("Asset was not found for this client and tenant.");
+            if (branchId.HasValue && asset.BranchId != branchId)
+                throw new BusinessRuleException("Asset does not belong to the selected branch.");
+            branchId ??= asset.BranchId;
+            if (branchId.HasValue && !await dbContext.Branches.AnyAsync(
+                    x => x.Id == branchId && x.TenantId == tenantId && x.IsActive, cancellationToken))
+                throw new BusinessRuleException("Asset branch was not found for this tenant.");
+        }
+
         var workOrder = new Domain.Entities.WorkOrder
         {
             TenantId = tenantId,
             BranchId = branchId,
             ClientId = clientId,
             AssetId = assetId,
+            SiteId = asset?.SiteId,
             Title = title.Trim(),
             Description = description?.Trim(),
             Priority = string.IsNullOrWhiteSpace(priority) ? "Medium" : priority.Trim(),

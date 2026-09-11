@@ -18,7 +18,7 @@ export async function loginViaUi(page: Page, credentials: LoginCredentials) {
   await page.goto('/login')
   await page.getByLabel('Email').fill(credentials.email)
   await page.getByLabel('Password').fill(credentials.password)
-  await page.getByRole('button', { name: /^login$/i }).click()
+  await page.getByRole('button', { name: /^sign in$/i }).click()
   await expect(page).toHaveURL(/\/(dashboard|platform|command-centre)/)
 }
 

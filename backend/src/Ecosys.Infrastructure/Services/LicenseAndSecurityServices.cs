@@ -3,6 +3,7 @@ using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Infrastructure.Services;
@@ -57,7 +58,10 @@ public sealed record TenantLicenseSnapshot(
     bool MonitoringIntegration,
     bool AdvancedReports,
     bool ClientPortal,
-    string? WarningMessage);
+    string? WarningMessage)
+{
+    public IReadOnlyList<string> Modules { get; init; } = [];
+}
 
 public sealed record PlatformLicenseUsageSnapshot(
     Guid TenantId,
@@ -75,7 +79,11 @@ public sealed record PlatformLicenseUsageSnapshot(
     bool IsReadOnly,
     bool IsSuspended,
     DateTime? ExpiresAt,
-    DateTime? GraceEndsAt);
+    DateTime? GraceEndsAt,
+    string PlanName,
+    IReadOnlyList<string> Modules,
+    DateTime StartsAt,
+    DateTime? TrialEndsAt);
 
 public interface ILicenseGuardService
 {
@@ -88,6 +96,8 @@ public interface ILicenseGuardService
     Task EnsureCanCreateAssetAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task EnsureCanCreateWorkOrderAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task EnsureFeatureEnabledAsync(Guid tenantId, string featureName, CancellationToken cancellationToken = default);
+    Task EnsureModuleEnabledAsync(Guid tenantId, string moduleName, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException();
     Task<TenantLicense> GetOrCreateTenantLicenseAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }
 
@@ -150,7 +160,11 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
                 snapshot.IsReadOnly,
                 snapshot.IsSuspended,
                 snapshot.ExpiresAt,
-                snapshot.GraceEndsAt));
+                snapshot.GraceEndsAt,
+                snapshot.PlanName,
+                snapshot.Modules,
+                snapshot.StartsAt,
+                snapshot.TrialEndsAt));
         }
 
         return snapshots;
@@ -185,6 +199,8 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     public async Task EnsureFeatureEnabledAsync(Guid tenantId, string featureName, CancellationToken cancellationToken = default)
     {
         var snapshot = await GetSnapshotAsync(tenantId, cancellationToken);
+        if (featureName is LicenseFeatures.EmailIngestion or LicenseFeatures.MonitoringIntegration)
+            ServiceOpsPlans.EnsureModules(snapshot.Modules, [ServiceOpsPlans.Operations]);
         var enabled = featureName switch
         {
             LicenseFeatures.EmailIngestion => snapshot.EmailIngestion,
@@ -198,6 +214,18 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
         {
             throw new LicenseException($"The current plan does not include {featureName}.", $"license_feature_{featureName.ToLowerInvariant()}", 403);
         }
+    }
+
+    public async Task EnsureModuleEnabledAsync(Guid tenantId, string moduleName, CancellationToken cancellationToken = default)
+    {
+        var normalized = moduleName.Trim().ToLowerInvariant();
+        if (normalized is not (ServiceOpsPlans.Operations or ServiceOpsPlans.Finance))
+        {
+            throw new BusinessRuleException("Unknown ServiceOps module.");
+        }
+
+        var snapshot = await GetSnapshotAsync(tenantId, cancellationToken);
+        ServiceOpsPlans.EnsureModules(snapshot.Modules, [normalized]);
     }
 
     public async Task<TenantLicense> GetOrCreateTenantLicenseAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -308,7 +336,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             tenantLicense.MonitoringIntegrationOverride ?? plan.MonitoringIntegration,
             tenantLicense.AdvancedReportsOverride ?? plan.AdvancedReports,
             tenantLicense.ClientPortalOverride ?? plan.ClientPortal,
-            warning);
+            warning) { Modules = ServiceOpsPlans.Modules(plan) };
     }
 
     private static void NormalizeUtc(TenantLicense tenantLicense)
@@ -437,6 +465,8 @@ public sealed class TenantLicenseEnforcementMiddleware(RequestDelegate next)
         }
 
         var snapshot = await licenseGuardService.GetSnapshotAsync(tenantId, context.RequestAborted);
+        var action = context.GetEndpoint()?.Metadata.GetMetadata<ControllerActionDescriptor>();
+        ServiceOpsPlans.EnsureModules(snapshot.Modules, ServiceOpsPlans.RequiredModules(action?.ControllerName, path));
         if (!string.IsNullOrWhiteSpace(snapshot.WarningMessage))
         {
             context.Response.Headers["X-License-Warning"] = snapshot.WarningMessage;

@@ -9,6 +9,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
+import { useEntitlements } from '../../shared/hooks/useEntitlements'
 import { formatDate } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
 import { useContracts } from '../contracts/api'
@@ -21,9 +22,11 @@ import type { ClientSiteSummary } from './types'
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const canEdit = usePermission('clients.edit')
+  const { hasModule } = useEntitlements()
+  const hasOperations = hasModule('operations')
   const { data, isLoading, isError } = useClientSummary(id)
-  const { data: workOrders } = useWorkOrders()
-  const { data: contracts } = useContracts(id ? { clientId: id } : undefined)
+  const { data: workOrders } = useWorkOrders(undefined, hasOperations)
+  const { data: contracts } = useContracts(id ? { clientId: id } : undefined, hasOperations)
   const [showSiteForm, setShowSiteForm] = useState(false)
   const [showAssetForm, setShowAssetForm] = useState(false)
 
@@ -178,7 +181,7 @@ export function ClientDetailPage() {
             label: 'Portal Access',
             content: <ClientPortalContactsTab clientId={id} />,
           },
-        ]}
+        ].filter((tab) => hasOperations || !['sites', 'assets', 'work-orders', 'contracts'].includes(tab.id))}
       />
 
       <SiteFormDrawer open={showSiteForm} clientId={id} onClose={() => setShowSiteForm(false)} />

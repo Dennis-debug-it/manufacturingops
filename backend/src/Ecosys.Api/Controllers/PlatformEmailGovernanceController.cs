@@ -38,10 +38,11 @@ public sealed class PlatformEmailGovernanceController(
         [FromQuery] string? recipientEmail,
         [FromQuery] DateTime? dateFrom,
         [FromQuery] DateTime? dateTo,
+        [FromQuery] string? documentType,
         CancellationToken cancellationToken)
     {
         var logs = await emailDeliveryLogService.ListPlatformAsync(
-            new EmailDeliveryLogQuery(status, templateKey, eventKey, recipientEmail, dateFrom, dateTo),
+            new EmailDeliveryLogQuery(status, templateKey, eventKey, recipientEmail, dateFrom, dateTo, documentType),
             cancellationToken);
 
         return Ok(logs.Select(item => new PlatformEmailDeliveryLogResponse(
@@ -60,7 +61,10 @@ public sealed class PlatformEmailGovernanceController(
             item.TriggeredByUserId,
             item.CreatedAt,
             item.SentAt,
-            item.ProviderMessageId)).ToList());
+            item.ProviderMessageId,
+            item.DocumentType,
+            item.DocumentId,
+            item.TriggeredAutomatically)).ToList());
     }
 }
 
@@ -91,4 +95,7 @@ public sealed record PlatformEmailDeliveryLogResponse(
     Guid? TriggeredByUserId,
     DateTime CreatedAt,
     DateTime? SentAt,
-    string? ProviderMessageId);
+    string? ProviderMessageId,
+    string? DocumentType,
+    Guid? DocumentId,
+    bool TriggeredAutomatically);

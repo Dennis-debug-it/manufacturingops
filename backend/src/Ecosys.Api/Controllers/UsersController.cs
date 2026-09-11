@@ -9,7 +9,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
-using System.Security.Cryptography;
+using Ecosys.Shared.Options;
+using Microsoft.Extensions.Options;
 
 namespace Ecosys.Api.Controllers;
 
@@ -27,10 +28,8 @@ public sealed class UsersController(
     IAuditLogService auditLogService,
     IUserCredentialDeliveryService credentialDeliveryService,
     ITemporaryPasswordService temporaryPasswordService,
-    Microsoft.Extensions.Options.IOptions<Ecosys.Shared.Options.AuthSecurityOptions> authSecurityOptions,
-    IUserSessionService userSessionService) : TenantAwareControllerBase(tenantContext)
+    IOptions<AuthSecurityOptions>? authSecurityOptions = null) : TenantAwareControllerBase(tenantContext)
 {
-    private int InviteExpiryHours => AccountSetupExpiry.ResolveHours(authSecurityOptions.Value);
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<UserResponse>>> GetAll(CancellationToken cancellationToken)
     {
@@ -45,7 +44,8 @@ public sealed class UsersController(
             .ToListAsync(cancellationToken);
 
         var workforceProfiles = await LoadWorkforceProfilesAsync(users, cancellationToken);
-        return Ok(users.Select(user => Map(user, workforceProfiles)).ToList());
+        var invitations = await LoadLatestInvitationsAsync(users.Select(x => x.Id).ToArray(), cancellationToken);
+        return Ok(users.Select(user => WithInvitation(Map(user, workforceProfiles), invitations.GetValueOrDefault(user.Id))).ToList());
     }
 
     [HttpGet("{id:guid}")]
@@ -61,7 +61,8 @@ public sealed class UsersController(
             ?? throw new NotFoundException("User was not found.");
 
         var workforceProfiles = await LoadWorkforceProfilesAsync([user], cancellationToken);
-        return Ok(Map(user, workforceProfiles));
+        var invitations = await LoadLatestInvitationsAsync([user.Id], cancellationToken);
+        return Ok(WithInvitation(Map(user, workforceProfiles), invitations.GetValueOrDefault(user.Id)));
     }
 
     [HttpPost]
@@ -234,16 +235,9 @@ public sealed class UsersController(
             $"Updated user '{user.Email}'.",
             cancellationToken);
 
-        // Force fresh authorization: this endpoint re-applies the user's role, permission set and
-        // branch access, so revoke their existing sessions (they carry the now-stale permission
-        // claims baked into the JWT). Skip self-edits so an admin doesn't log themselves out.
-        if (id != UserId)
-        {
-            await userSessionService.RevokeAllForUserAsync(id, "Account updated by administrator", cancellationToken);
-        }
-
         var workforceProfiles = await LoadWorkforceProfilesAsync([user], cancellationToken);
-        return Ok(Map(user, workforceProfiles));
+        var invitations = await LoadLatestInvitationsAsync([user.Id], cancellationToken);
+        return Ok(WithInvitation(Map(user, workforceProfiles), invitations.GetValueOrDefault(user.Id)));
     }
 
     [HttpPatch("{id:guid}/status")]
@@ -282,25 +276,25 @@ public sealed class UsersController(
             $"{(request.IsActive ? "Activated" : "Deactivated")} user '{user.Email}'.",
             cancellationToken);
 
-        // Terminate all active sessions on deactivation so access is revoked immediately rather
-        // than lingering until the 8h JWT expires.
-        if (!request.IsActive)
-        {
-            await userSessionService.RevokeAllForUserAsync(id, "Account deactivated", cancellationToken);
-        }
-
         var workforceProfiles = await LoadWorkforceProfilesAsync([user], cancellationToken);
-        return Ok(Map(user, workforceProfiles));
+        var invitations = await LoadLatestInvitationsAsync([user.Id], cancellationToken);
+        return Ok(WithInvitation(Map(user, workforceProfiles), invitations.GetValueOrDefault(user.Id)));
     }
 
     [HttpPost("{id:guid}/resend-credentials")]
     [HttpPost("{id:guid}/resend-invite")]
+    [HttpPost("{id:guid}/resend-initial-invite")]
     public async Task<ActionResult<CredentialDeliveryResponse>> ResendCredentials(Guid id, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
 
         var user = await dbContext.Users.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("User was not found.");
+
+        if (!user.IsActive || !user.MustChangePassword)
+        {
+            throw new BusinessRuleException("Initial invitations can only be resent for users pending activation.");
+        }
 
         var delivery = await SendAccountSetupAsync(user, cancellationToken);
 
@@ -310,17 +304,17 @@ public sealed class UsersController(
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        if (delivery.Success)
-        {
-            await auditLogService.LogAsync(
-                TenantId,
-                UserId,
-                "User invitation sent",
-                nameof(User),
-                user.Id.ToString(),
-                $"Account setup invitation sent to '{user.Email}'.",
-                cancellationToken);
-        }
+        await auditLogService.LogAsync(
+            TenantId,
+            UserId,
+            "users.invitation.resent",
+            nameof(User),
+            user.Id.ToString(),
+            delivery.Success
+                ? $"Initial account setup invitation sent to '{user.Email}'. Delivery status: {delivery.Status}."
+                : $"Initial account setup invitation attempt for '{user.Email}' did not complete. Delivery status: {delivery.Status}.",
+            severity: delivery.Success ? "Info" : "Warning",
+            cancellationToken: cancellationToken);
 
         var message = delivery.Success
             ? delivery.Message
@@ -330,30 +324,37 @@ public sealed class UsersController(
     }
 
     [HttpPost("{id:guid}/reset-password")]
-    public async Task<ActionResult<CredentialDeliveryResponse>> ResetPassword(Guid id, [FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
+    [HttpPost("{id:guid}/send-password-reset")]
+    public async Task<ActionResult<CredentialDeliveryResponse>> ResetPassword(Guid id, [FromBody] ResetPasswordRequest? request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
-        var password = request.ResolvePasswordOrNull() ?? temporaryPasswordService.Generate();
-        await tenantSecurityPolicyService.ValidatePasswordAsync(TenantId, password, cancellationToken);
 
         var user = await dbContext.Users.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("User was not found.");
 
-        var delivery = await credentialDeliveryService.SendAsync(
+        if (!user.IsActive || user.MustChangePassword)
+        {
+            throw new BusinessRuleException("Password reset emails can only be sent for active users.");
+        }
+
+        var issued = await PasswordLinkTokens.IssueAsync(
+            dbContext,
+            user,
+            PasswordLinkPurposes.PasswordReset,
+            authSecurityOptions?.Value,
+            cancellationToken);
+
+        var delivery = await credentialDeliveryService.SendPasswordResetLinkAsync(
             TenantId,
             user,
-            new UserCredentialDeliveryRequest(
-                "password-reset",
-                credentialDeliveryService.BuildLoginUrl(),
-                password,
-                null,
-                true),
+            new PasswordResetLinkDeliveryRequest(
+                credentialDeliveryService.BuildResetPasswordUrl(issued.Token),
+                issued.ExpiresAt,
+                PasswordLinkDeliveryPurpose.PasswordReset),
             cancellationToken);
 
         if (delivery.Success)
         {
-            user.PasswordHash = passwordHasher.HashPassword(user, password);
-            user.MustChangePassword = true;
             user.LastCredentialSentAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
         }
@@ -361,25 +362,19 @@ public sealed class UsersController(
         await auditLogService.LogAsync(
             TenantId,
             UserId,
-            "Password reset",
+            "users.password-reset.requested",
             nameof(User),
             user.Id.ToString(),
-            $"Password reset for '{user.Email}'.",
-            cancellationToken);
+            delivery.Success
+                ? $"Password reset link sent to '{user.Email}'. Delivery status: {delivery.Status}."
+                : $"Password reset link attempt for '{user.Email}' did not complete. Delivery status: {delivery.Status}.",
+            severity: delivery.Success ? "Info" : "Warning",
+            cancellationToken: cancellationToken);
 
-        if (delivery.Success)
-        {
-            await auditLogService.LogAsync(
-                TenantId,
-                UserId,
-                "User credentials sent",
-                nameof(User),
-                user.Id.ToString(),
-                $"User credentials sent to '{user.Email}'.",
-                cancellationToken);
-        }
-
-        return Ok(new CredentialDeliveryResponse(user.Id, user.FullName, user.Email, delivery.Success, user.LastCredentialSentAt, delivery.Status, delivery.Message));
+        var message = delivery.Success
+            ? delivery.Message
+            : "Password reset email could not be sent. The user's password remains unchanged.";
+        return Ok(new CredentialDeliveryResponse(user.Id, user.FullName, user.Email, delivery.Success, user.LastCredentialSentAt, delivery.Status, message));
     }
 
     [HttpDelete("{id:guid}")]
@@ -404,10 +399,6 @@ public sealed class UsersController(
             user.Id.ToString(),
             $"Deleted user '{user.Email}'.",
             cancellationToken);
-
-        // Soft-delete deactivates the account — revoke active sessions so the deleted user loses
-        // access immediately.
-        await userSessionService.RevokeAllForUserAsync(id, "Account deleted", cancellationToken);
         return NoContent();
     }
 
@@ -731,6 +722,22 @@ public sealed class UsersController(
             credentialDelivery);
     }
 
+    private async Task<Dictionary<Guid, PasswordResetToken>> LoadLatestInvitationsAsync(Guid[] userIds, CancellationToken cancellationToken)
+    {
+        var tokens = await dbContext.PasswordResetTokens.AsNoTracking()
+            .Where(x => userIds.Contains(x.UserId) && x.User != null && x.User.TenantId == TenantId
+                && x.Purpose == PasswordLinkPurposes.Invitation)
+            .OrderByDescending(x => x.CreatedAt).ToListAsync(cancellationToken);
+        return tokens.GroupBy(x => x.UserId).ToDictionary(x => x.Key, x => x.First());
+    }
+
+    private static UserResponse WithInvitation(UserResponse response, PasswordResetToken? invitation) => response with
+    {
+        InvitationStatus = !response.MustChangePassword ? "Active"
+            : invitation?.ExpiresAt <= DateTime.UtcNow ? "Expired" : "Invited",
+        InvitationExpiresAt = response.MustChangePassword ? invitation?.ExpiresAt : null
+    };
+
     private static string NormalizeCredentialDeliveryMethod(string? value)
     {
         var normalized = string.IsNullOrWhiteSpace(value) ? "TemporaryPassword" : value.Trim();
@@ -753,45 +760,17 @@ public sealed class UsersController(
 
     private async Task<UserCredentialDeliveryResult> SendAccountSetupAsync(User user, CancellationToken cancellationToken)
     {
-        var now = DateTime.UtcNow;
-        var existingTokens = await dbContext.PasswordResetTokens
-            .Where(x => x.UserId == user.Id && !x.UsedAt.HasValue && x.ExpiresAt > now)
-            .ToListAsync(cancellationToken);
-
-        foreach (var existingToken in existingTokens)
-        {
-            existingToken.UsedAt = now;
-        }
-
-        var rawToken = CreatePasswordLinkToken();
-        var expiresAt = now.AddHours(InviteExpiryHours);
-        dbContext.PasswordResetTokens.Add(new PasswordResetToken
-        {
-            UserId = user.Id,
-            TokenHash = HashPasswordLinkToken(rawToken),
-            ExpiresAt = expiresAt,
-        });
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var issued = await PasswordLinkTokens.IssueAsync(dbContext, user, PasswordLinkPurposes.Invitation,
+            authSecurityOptions?.Value, cancellationToken);
 
         return await credentialDeliveryService.SendPasswordResetLinkAsync(
             TenantId,
             user,
             new PasswordResetLinkDeliveryRequest(
-                credentialDeliveryService.BuildInviteUrl(rawToken),
-                expiresAt,
+                credentialDeliveryService.BuildInviteUrl(issued.Token),
+                issued.ExpiresAt,
                 PasswordLinkDeliveryPurpose.AccountSetup),
             cancellationToken);
-    }
-
-    private static string CreatePasswordLinkToken() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-        .Replace('+', '-')
-        .Replace('/', '_')
-        .TrimEnd('=');
-
-    private static string HashPasswordLinkToken(string token)
-    {
-        var hash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
-        return Convert.ToHexString(hash);
     }
 
     private static string? NormalizeOptional(string? value) =>
@@ -905,7 +884,9 @@ public sealed record UserResponse(
     PermissionResponse Permissions,
     bool MustChangePassword,
     DateTime? LastCredentialSentAt,
-    CredentialDeliverySummaryResponse? CredentialDelivery);
+    CredentialDeliverySummaryResponse? CredentialDelivery,
+    string? InvitationStatus = null,
+    DateTime? InvitationExpiresAt = null);
 
 public sealed record CredentialDeliverySummaryResponse(
     bool Success,

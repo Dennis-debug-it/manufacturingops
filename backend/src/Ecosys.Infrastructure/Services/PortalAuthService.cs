@@ -45,7 +45,8 @@ internal sealed class PortalAuthService(
             .SingleOrDefaultAsync(x => x.Email.ToLower() == normalizedEmail && x.IsActive, cancellationToken);
 
         // Always return silently on a miss — do not reveal whether an email is registered.
-        if (portalUser is null || portalUser.Client is null || portalUser.Tenant is null || !portalUser.Tenant.IsActive)
+        if (portalUser is null || portalUser.Client is null || !portalUser.Client.IsActive
+            || portalUser.Client.TenantId != portalUser.TenantId || portalUser.Tenant is null || !portalUser.Tenant.IsActive)
         {
             return;
         }
@@ -122,6 +123,8 @@ internal sealed class PortalAuthService(
             || loginToken.ClientPortalUser is null
             || !loginToken.ClientPortalUser.IsActive
             || loginToken.ClientPortalUser.Client is null
+            || !loginToken.ClientPortalUser.Client.IsActive
+            || loginToken.ClientPortalUser.Client.TenantId != loginToken.ClientPortalUser.TenantId
             || loginToken.ClientPortalUser.Tenant is null
             || !loginToken.ClientPortalUser.Tenant.IsActive)
         {
@@ -129,7 +132,24 @@ internal sealed class PortalAuthService(
         }
 
         var portalUser = loginToken.ClientPortalUser;
-        loginToken.ConsumedAt = now;
+        // Claim in one database statement: simultaneous verification requests must
+        // never both exchange the same one-use link for a session.
+        var claimed = await dbContext.ClientPortalLoginTokens
+            .IgnoreQueryFilters()
+            .Where(x => x.Id == loginToken.Id && x.ConsumedAt == null && x.ExpiresAt > now
+                && x.ClientPortalUser != null && x.ClientPortalUser.IsActive
+                && x.ClientPortalUser.TenantId == portalUser.TenantId
+                && x.ClientPortalUser.ClientId == portalUser.ClientId
+                && x.ClientPortalUser.Tenant != null && x.ClientPortalUser.Tenant.IsActive
+                && x.ClientPortalUser.Client != null
+                && x.ClientPortalUser.Client.IsActive
+                && x.ClientPortalUser.Client.TenantId == x.ClientPortalUser.TenantId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.ConsumedAt, now), cancellationToken);
+        if (claimed != 1)
+        {
+            throw new ForbiddenException(invalidMessage);
+        }
+
         portalUser.LastLoginAt = now;
         await dbContext.SaveChangesAsync(cancellationToken);
 

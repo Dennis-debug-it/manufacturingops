@@ -40,7 +40,8 @@ public sealed record EmailMessage(
     string? FromAddress,
     string? ReplyToEmail = null,
     bool IsHtml = false,
-    IReadOnlyList<EmailAttachment>? Attachments = null);
+    IReadOnlyList<EmailAttachment>? Attachments = null,
+    IReadOnlyList<string>? CcAddresses = null);
 
 public sealed record EmailDeliverySettings(
     EmailDeliveryMode DeliveryMode,

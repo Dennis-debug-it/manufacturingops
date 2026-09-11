@@ -65,8 +65,9 @@ export function UserDetailPage() {
 
   const resend = async () => {
     try {
-      await resendCredentials.mutateAsync(undefined)
-      toast.success('Credentials resent')
+      const result = await resendCredentials.mutateAsync(undefined)
+      if (result.success) toast.success('Invitation sent')
+      else toast.error(result.message ?? 'Invitation delivery failed. Please try again.')
     } catch {
       // interceptor surfaces the error toast
     }
@@ -95,11 +96,11 @@ export function UserDetailPage() {
         title={user.fullName}
         subtitle={user.jobTitle ?? user.department ?? 'User'}
         breadcrumbs={[{ label: 'Users & Access', to: '/team/users' }, { label: user.fullName }]}
-        secondaryActions={<StatusBadge status={user.isActive ? 'Active' : 'Inactive'} />}
+        secondaryActions={<StatusBadge status={user.isActive ? (user.invitationStatus ?? (user.mustChangePassword ? 'Invited' : 'Active')) : 'Inactive'} />}
         primaryAction={
           canManage ? (
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={resend} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Resend Credentials</button>
+              {user.mustChangePassword || user.invitationStatus === 'Invited' || user.invitationStatus === 'Expired' ? <button type="button" onClick={resend} disabled={resendCredentials.isPending} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">{resendCredentials.isPending ? 'Sending�' : 'Resend Invite'}</button> : null}
               <button type="button" onClick={reset} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Reset Password</button>
               <button type="button" onClick={toggleStatus} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
                 {user.isActive ? 'Deactivate' : 'Activate'}
@@ -117,7 +118,7 @@ export function UserDetailPage() {
             ['Department', user.department ?? '—'],
             ['Branch Access', user.hasAllBranchAccess ? 'All Branches' : (user.defaultBranchName ?? '—')],
             ['Must Change Password', user.mustChangePassword ? 'Yes' : 'No'],
-            ['Last Credentials Sent', user.lastCredentialSentAt ? formatDateTime(user.lastCredentialSentAt) : 'Never'],
+            ['Last Invitation Sent', user.lastCredentialSentAt ? formatDateTime(user.lastCredentialSentAt) : 'Never'],
             ['Created', formatDateTime(user.createdAt)],
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl border border-slate-200 px-4 py-3">

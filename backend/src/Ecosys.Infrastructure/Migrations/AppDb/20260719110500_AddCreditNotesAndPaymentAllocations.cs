@@ -16,16 +16,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // tenant_payments is created by 20260606000003_AddTenantPayment through raw SQL, so its
-            // invoice foreign key is named "fk_tpay_invoice" (ON DELETE CASCADE) — not the EF-convention
-            // name "FK_tenant_payments_tenant_invoices_InvoiceId" that the scaffolder assumed here. A
-            // plain DropForeignKey on that convention name raises 42704 ("constraint ... does not exist")
-            // on every database. Drop whichever name is actually present; IF EXISTS keeps it a no-op when
-            // absent. The AddForeignKey below then recreates it under the EF-convention name with
-            // ON DELETE SET NULL, so the schema converges to the model snapshot afterwards.
+            // The original SQL-based payment migration used fk_tpay_invoice; databases
+            // created from the EF model used the generated name. Normalize either lineage.
             migrationBuilder.Sql("""
-                ALTER TABLE tenant_payments DROP CONSTRAINT IF EXISTS "fk_tpay_invoice";
                 ALTER TABLE tenant_payments DROP CONSTRAINT IF EXISTS "FK_tenant_payments_tenant_invoices_InvoiceId";
+                ALTER TABLE tenant_payments DROP CONSTRAINT IF EXISTS fk_tpay_invoice;
                 """);
 
             migrationBuilder.AlterColumn<Guid>(
@@ -211,12 +206,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // After Up() ran, the constraint carries the EF-convention name; drop whichever name is
-            // present so this reversal is safe regardless of how tenant_payments was originally created.
-            migrationBuilder.Sql("""
-                ALTER TABLE tenant_payments DROP CONSTRAINT IF EXISTS "FK_tenant_payments_tenant_invoices_InvoiceId";
-                ALTER TABLE tenant_payments DROP CONSTRAINT IF EXISTS "fk_tpay_invoice";
-                """);
+            migrationBuilder.DropForeignKey(
+                name: "FK_tenant_payments_tenant_invoices_InvoiceId",
+                table: "tenant_payments");
 
             migrationBuilder.DropTable(
                 name: "credit_note_lines");

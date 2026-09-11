@@ -40,9 +40,9 @@ public sealed class PlatformLicensingController(
     {
         ValidatePlanRequest(request);
 
-        var normalizedCode = string.IsNullOrWhiteSpace(request.Code)
-            ? request.Name.Trim().Replace(" ", string.Empty)
-            : request.Code.Trim();
+        var normalizedCode = request.Code?.Trim().ToLowerInvariant() ?? string.Empty;
+        if (!ServiceOpsPlans.IsCommercial(normalizedCode))
+            throw new BusinessRuleException("Select ServiceOps Operations, Finance, or Suite.");
 
         var exists = await dbContext.LicensePlans.AnyAsync(x => x.PlanCode.ToLower() == normalizedCode.ToLower(), cancellationToken);
         if (exists)
@@ -53,13 +53,14 @@ public sealed class PlatformLicensingController(
         var plan = new LicensePlan
         {
             PlanCode = normalizedCode,
-            DisplayName = request.Name.Trim(),
+            DisplayName = ServiceOpsPlans.DisplayName(normalizedCode),
             MonthlyPrice = request.MonthlyPrice,
             AnnualPrice = request.AnnualPrice,
             MaxUsers = request.MaxUsers,
+            MaxBranches = request.MaxBranches,
             MaxAssets = request.MaxAssets,
             MonthlyWorkOrders = request.MaxWorkOrders,
-            ModulesIncluded = NormalizeModules(request.ModulesIncluded),
+            ModulesIncluded = NormalizePlanModules(normalizedCode, request.ModulesIncluded),
             IsActive = request.IsActive,
             EmailIngestion = HasModule(request.ModulesIncluded, "EmailIngestion"),
             MonitoringIntegration = HasModule(request.ModulesIncluded, "MonitoringIntegration"),
@@ -90,14 +91,15 @@ public sealed class PlatformLicensingController(
         var plan = await dbContext.LicensePlans.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("License plan was not found.");
 
-        plan.DisplayName = request.Name.Trim();
+        plan.DisplayName = ServiceOpsPlans.IsCommercial(plan.PlanCode) ? ServiceOpsPlans.DisplayName(plan.PlanCode) : request.Name.Trim();
         plan.MonthlyPrice = request.MonthlyPrice;
         plan.AnnualPrice = request.AnnualPrice;
         plan.MaxUsers = request.MaxUsers;
+        plan.MaxBranches = request.MaxBranches;
         plan.MaxAssets = request.MaxAssets;
         plan.MonthlyWorkOrders = request.MaxWorkOrders;
-        plan.ModulesIncluded = NormalizeModules(request.ModulesIncluded);
-        plan.IsActive = request.IsActive;
+        plan.ModulesIncluded = NormalizePlanModules(plan.PlanCode, request.ModulesIncluded);
+        plan.IsActive = ServiceOpsPlans.IsCommercial(plan.PlanCode) && request.IsActive;
         plan.EmailIngestion = HasModule(request.ModulesIncluded, "EmailIngestion");
         plan.MonitoringIntegration = HasModule(request.ModulesIncluded, "MonitoringIntegration");
         plan.AdvancedReports = HasModule(request.ModulesIncluded, "AdvancedReports");
@@ -147,9 +149,13 @@ public sealed class PlatformLicensingController(
     {
         var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == request.TenantId, cancellationToken)
             ?? throw new NotFoundException("Tenant was not found.");
+        if (request.TenantId == PlatformConstants.RootTenantId)
+            throw new BusinessRuleException("The platform root tenant cannot receive a commercial ServiceOps subscription.");
 
         var plan = await dbContext.LicensePlans.SingleOrDefaultAsync(x => x.Id == request.PlanId, cancellationToken)
             ?? throw new NotFoundException("License plan was not found.");
+        if (!plan.IsActive || !ServiceOpsPlans.IsCommercial(plan.PlanCode))
+            throw new BusinessRuleException("Only active commercial ServiceOps plans can be assigned.");
 
         var existing = await dbContext.TenantLicenses.SingleOrDefaultAsync(x => x.TenantId == request.TenantId, cancellationToken);
         if (existing is not null)
@@ -197,10 +203,17 @@ public sealed class PlatformLicensingController(
 
         var plan = await dbContext.LicensePlans.SingleOrDefaultAsync(x => x.Id == request.PlanId, cancellationToken)
             ?? throw new NotFoundException("License plan was not found.");
+        var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == request.TenantId, cancellationToken)
+            ?? throw new NotFoundException("Tenant was not found.");
+        if (request.TenantId == PlatformConstants.RootTenantId)
+            throw new BusinessRuleException("The platform root tenant cannot receive a commercial ServiceOps subscription.");
+        if (!plan.IsActive || !ServiceOpsPlans.IsCommercial(plan.PlanCode))
+            throw new BusinessRuleException("Only active commercial ServiceOps plans can be assigned.");
 
         subscription.TenantId = request.TenantId;
         subscription.LicensePlanId = request.PlanId;
         subscription.LicensePlan = plan;
+        subscription.Tenant = tenant;
         subscription.Status = NormalizeSubscriptionStatus(request.Status);
         subscription.BillingCycle = NormalizeBillingCycle(request.BillingCycle);
         subscription.StartsAt = request.StartsAt;
@@ -268,6 +281,7 @@ public sealed class PlatformLicensingController(
             plan.MonthlyPrice,
             plan.AnnualPrice,
             plan.MaxUsers,
+            plan.MaxBranches,
             plan.MaxAssets,
             plan.MonthlyWorkOrders,
             SplitModules(plan.ModulesIncluded),
@@ -339,6 +353,13 @@ public sealed class PlatformLicensingController(
             .Distinct(StringComparer.OrdinalIgnoreCase));
     }
 
+    private static string NormalizePlanModules(string code, IReadOnlyCollection<string>? modules)
+    {
+        if (!ServiceOpsPlans.IsCommercial(code)) return NormalizeModules(modules);
+        var flags = (modules ?? []).Where(x => !string.Equals(x, "operations", StringComparison.OrdinalIgnoreCase) && !string.Equals(x, "finance", StringComparison.OrdinalIgnoreCase));
+        return NormalizeModules(flags.Concat(ServiceOpsPlans.Modules(new LicensePlan { PlanCode = code })).Prepend("Core").ToArray());
+    }
+
     private static IReadOnlyCollection<string> SplitModules(string? modulesIncluded)
     {
         if (string.IsNullOrWhiteSpace(modulesIncluded))
@@ -359,6 +380,7 @@ public sealed record UpsertPlatformLicensePlanRequest(
     decimal MonthlyPrice,
     decimal AnnualPrice,
     int? MaxUsers,
+    int? MaxBranches,
     int? MaxAssets,
     int? MaxWorkOrders,
     IReadOnlyCollection<string>? ModulesIncluded,
@@ -371,6 +393,7 @@ public sealed record PlatformLicensePlanResponse(
     decimal MonthlyPrice,
     decimal AnnualPrice,
     int? MaxUsers,
+    int? MaxBranches,
     int? MaxAssets,
     int? MaxWorkOrders,
     IReadOnlyCollection<string> ModulesIncluded,

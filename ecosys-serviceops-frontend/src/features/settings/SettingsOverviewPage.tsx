@@ -5,6 +5,7 @@ import {
   UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Send, Rocket,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
+import { useEntitlements } from '../../shared/hooks/useEntitlements'
 
 interface SettingsGroup {
   title: string
@@ -18,6 +19,8 @@ const groups: SettingsGroup[] = [
       { to: '/settings/company', label: 'Company Profile', description: 'Legal details, addresses, and contact info.', icon: Building2 },
       { to: '/settings/branding', label: 'Branding', description: 'Logo and brand colours.', icon: Palette },
       { to: '/settings/templates', label: 'Document Templates', description: 'Layout, sections, and boilerplate text.', icon: FileText },
+      { to: '/settings/email', label: 'Workspace Email', description: 'Managed email address, sender name, and preferences.', icon: Mail },
+      { to: '/settings/email/delivery-logs', label: 'Delivery Logs', description: 'Queued, sent, failed, and retried email deliveries.', icon: ScrollText },
       { to: '/settings/email-templates', label: 'Email Templates', description: 'Transactional email content.', icon: Mail },
       { to: '/settings/email-delivery', label: 'Email Delivery', description: 'Send through platform mail or your own SMTP server.', icon: Send },
     ],
@@ -75,10 +78,12 @@ const groups: SettingsGroup[] = [
 ]
 
 export function SettingsOverviewPage() {
+  const { canAccessPath } = useEntitlements()
+  const visibleGroups = groups.map((group) => ({ ...group, items: group.items.filter((item) => canAccessPath(item.to)) })).filter((group) => group.items.length > 0)
   return (
     <div className="space-y-8">
       <PageHeader title="Settings" subtitle="Company, branding, templates, integrations, and policies for this workspace." />
-      {groups.map((group) => (
+      {visibleGroups.map((group) => (
         <section key={group.title} className="space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">{group.title}</h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

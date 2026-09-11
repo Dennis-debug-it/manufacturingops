@@ -10,12 +10,10 @@ import {
   setAuthToken,
   setImpersonationSession,
   setLogoutHandler,
-  setRefreshToken,
   setSession,
 } from '../api/sessionStore'
+import { setTenantTimeZone } from '../utils/dates'
 import { normalizeRole } from '../utils/normalizeRole'
-import { setActiveCurrency } from '../utils/currency'
-import { setActiveTimeZone } from '../utils/timezone'
 import type { AuthSession, LoginRequest, LoginResponse, MeResponse } from '../types/auth'
 
 export interface AuthContextValue {
@@ -35,13 +33,7 @@ export interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 function toSession(response: LoginResponse | MeResponse): AuthSession {
-  // Every timestamp the app renders is formatted in this zone, so it is applied as soon as the
-  // session that carries it is built — before any page gets a chance to render a date.
-  setActiveTimeZone(response.tenant?.timeZoneId)
-  // Same for money: an amount that carries no currency of its own is rendered in the workspace
-  // currency — the tenant's configured setting where it has one, its country otherwise. Set here so
-  // it is in place before the first page formats an amount.
-  setActiveCurrency(response.tenant?.defaultCurrency, response.tenant?.country)
+  setTenantTimeZone(response.tenant?.timeZoneId, response.tenant?.country)
   return {
     token: response.token,
     user: { ...response.user, role: normalizeRole(response.user.role) },
@@ -144,7 +136,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const response = await api.post<LoginResponse>(endpoints.auth.login, credentials)
     const nextSession = toSession(response)
     setAuthToken(nextSession.token)
-    setRefreshToken(response.refreshToken)
     setSession(nextSession)
     setStateSession(nextSession)
     setIsReady(true)

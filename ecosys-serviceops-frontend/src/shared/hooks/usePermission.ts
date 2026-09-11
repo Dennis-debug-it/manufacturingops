@@ -67,6 +67,8 @@ const rolePermissions: Record<AppRole, string[]> = {
   ],
   finance: [
     'dashboard.view',
+    'clients.view',
+    'clients.edit',
     'finance.view',
     'reports.view',
     'contracts.view',

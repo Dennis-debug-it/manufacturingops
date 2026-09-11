@@ -124,6 +124,34 @@ internal static class StartupSecurityValidation
             throw new InvalidOperationException("Startup aborted: AuthSecurity:RateLimitQueueLimit must not be negative.");
         }
 
+        if (options.InvitationLifetimeHours is < 1 or > 720 || options.PasswordResetLifetimeMinutes is < 1 or > 1440)
+        {
+            throw new InvalidOperationException("AuthSecurity token lifetimes must be positive: invitations up to 720 hours and password resets up to 1440 minutes.");
+        }
+
+        return options;
+    }
+
+    public static PublicAppOptions ValidatePublicAppOptions(PublicAppOptions? options, bool isProduction)
+    {
+        options ??= new PublicAppOptions();
+        var configuredUrl = options.PublicUrl?.Trim() ?? string.Empty;
+
+        if (!Uri.TryCreate(configuredUrl, UriKind.Absolute, out var uri)
+            || uri.Scheme is not ("https" or "http")
+            || !string.IsNullOrEmpty(uri.UserInfo)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment))
+        {
+            throw new InvalidOperationException("Startup aborted: App:PublicUrl must be an absolute HTTP(S) URL without credentials, query, or fragment data.");
+        }
+
+        if (isProduction && (uri.Scheme != Uri.UriSchemeHttps || uri.IsLoopback || uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException("Startup aborted: App:PublicUrl must be a non-local HTTPS URL in production.");
+        }
+
+        options.PublicUrl = uri.AbsoluteUri.TrimEnd('/');
         return options;
     }
 }

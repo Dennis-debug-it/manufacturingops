@@ -1001,12 +1001,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<uint>("xmin")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId");
@@ -2511,8 +2505,18 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<int?>("AttemptCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("CcAddressesJson")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentType")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
 
                     b.Property<string>("ErrorCategory")
                         .HasMaxLength(120)
@@ -2566,6 +2570,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("TenantId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("TriggeredAutomatically")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid?>("TriggeredByUserId")
                         .HasColumnType("uuid");
 
@@ -2584,7 +2591,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("TemplateKey");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId", "DocumentType", "DocumentId");
 
                     b.ToTable("email_delivery_logs", (string)null);
                 });
@@ -2690,11 +2697,24 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AttachmentsJson")
+                        .HasColumnType("text");
+
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("CcAddressesJson")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentType")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
 
                     b.Property<string>("ErrorCategory")
                         .HasMaxLength(120)
@@ -2712,6 +2732,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<string>("HtmlBody")
                         .HasMaxLength(64000)
                         .HasColumnType("character varying(64000)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime?>("LastAttemptAt")
                         .HasColumnType("timestamp with time zone");
@@ -2768,6 +2792,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(32000)
                         .HasColumnType("character varying(32000)");
 
+                    b.Property<bool>("TriggeredAutomatically")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid?>("TriggeredByUserId")
                         .HasColumnType("uuid");
 
@@ -2778,9 +2805,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("CreatedAt");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
 
                     b.HasIndex("Status", "NextAttemptAt");
+
+                    b.HasIndex("TenantId", "DocumentType", "DocumentId");
 
                     b.ToTable("email_outbox_messages", (string)null);
                 });
@@ -2797,6 +2827,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("EmailSignature")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
                     b.Property<string>("EncryptedSecret")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
@@ -2805,6 +2839,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("InboundEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsConfigured")
                         .HasColumnType("boolean");
@@ -2818,6 +2855,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<DateTime?>("LastTestedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ManagedEmailAddress")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<bool>("OverrideSmtpSettings")
                         .HasColumnType("boolean");
@@ -2870,6 +2911,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("character varying(200)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ManagedEmailAddress")
+                        .IsUnique();
 
                     b.HasIndex("TenantId")
                         .IsUnique();
@@ -3122,9 +3166,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "ClaimNumber")
-                        .IsUnique();
 
                     b.HasIndex("TenantId", "Status");
 
@@ -3951,7 +3992,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Trial",
                             EmailIngestion = false,
-                            IsActive = true,
+                            IsActive = false,
                             MaxAssets = 25,
                             MaxBranches = 1,
                             MaxUsers = 5,
@@ -3970,7 +4011,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Starter",
                             EmailIngestion = true,
-                            IsActive = true,
+                            IsActive = false,
                             MaxAssets = 250,
                             MaxBranches = 3,
                             MaxUsers = 15,
@@ -3989,7 +4030,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Professional",
                             EmailIngestion = true,
-                            IsActive = true,
+                            IsActive = false,
                             MaxAssets = 2500,
                             MaxBranches = 10,
                             MaxUsers = 50,
@@ -4008,11 +4049,56 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Enterprise",
                             EmailIngestion = true,
-                            IsActive = true,
+                            IsActive = false,
                             ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
                             MonitoringIntegration = true,
                             MonthlyPrice = 99900m,
                             PlanCode = "Enterprise"
+                        },
+                        new
+                        {
+                            Id = new Guid("55555555-5555-5555-5555-555555555551"),
+                            AdvancedReports = true,
+                            AnnualPrice = 0m,
+                            ClientPortal = true,
+                            CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Ecosys ServiceOps Operations",
+                            EmailIngestion = true,
+                            IsActive = true,
+                            ModulesIncluded = "Core,operations,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
+                            MonitoringIntegration = true,
+                            MonthlyPrice = 0m,
+                            PlanCode = "operations"
+                        },
+                        new
+                        {
+                            Id = new Guid("55555555-5555-5555-5555-555555555552"),
+                            AdvancedReports = true,
+                            AnnualPrice = 0m,
+                            ClientPortal = false,
+                            CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Ecosys ServiceOps Finance",
+                            EmailIngestion = false,
+                            IsActive = true,
+                            ModulesIncluded = "Core,finance,AdvancedReports",
+                            MonitoringIntegration = false,
+                            MonthlyPrice = 0m,
+                            PlanCode = "finance"
+                        },
+                        new
+                        {
+                            Id = new Guid("55555555-5555-5555-5555-555555555553"),
+                            AdvancedReports = true,
+                            AnnualPrice = 0m,
+                            ClientPortal = true,
+                            CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Ecosys ServiceOps Suite",
+                            EmailIngestion = true,
+                            IsActive = true,
+                            ModulesIncluded = "Core,operations,finance,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
+                            MonitoringIntegration = true,
+                            MonthlyPrice = 0m,
+                            PlanCode = "suite"
                         });
                 });
 
@@ -4232,12 +4318,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<uint>("xmin")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
 
                     b.HasKey("Id");
 
@@ -4480,41 +4560,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsUnique();
 
                     b.ToTable("monitoring_webhook_integrations", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.MrrSnapshot", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("ActiveTenants")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("Mrr")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<int>("PaidTenants")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("SnapshotDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("TrialTenants")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SnapshotDate")
-                        .IsUnique();
-
-                    b.ToTable("mrr_snapshots", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.NotificationSetting", b =>
@@ -4807,9 +4852,22 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
                     b.Property<string>("RequestedIp")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SupersededAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
@@ -4820,6 +4878,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("UsedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UserAgent")
@@ -6238,57 +6297,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("rate_cards", (string)null);
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.RefreshToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ExpiresUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("RememberMe")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("ReplacedByTokenHash")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<DateTime?>("RevokedUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("SessionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SessionId");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
-                    b.HasIndex("UserId", "ExpiresUtc");
-
-                    b.ToTable("refresh_tokens", (string)null);
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.RolePermission", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6570,8 +6578,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("ClientId");
 
-                    b.HasIndex("TenantId", "SiteCode")
-                        .IsUnique();
+                    b.HasIndex("TenantId", "SiteCode");
 
                     b.ToTable("sites", (string)null);
                 });
@@ -7014,9 +7021,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("SupplierId");
 
-                    b.HasIndex("TenantId", "BillNumber")
-                        .IsUnique();
-
                     b.HasIndex("TenantId", "Status");
 
                     b.ToTable("supplier_bills", (string)null);
@@ -7256,6 +7260,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
                     b.Property<DateTime?>("DeactivatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -7364,8 +7373,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("character varying(100)");
 
                     b.Property<string>("TimeZoneId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("TradingName")
                         .HasMaxLength(200)
@@ -8782,12 +8792,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid>("VanId")
                         .HasColumnType("uuid");
 
-                    b.Property<uint>("xmin")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
                     b.HasKey("Id");
 
                     b.HasIndex("MaterialId");
@@ -9302,12 +9306,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("WorkflowStatusId")
                         .HasColumnType("uuid");
 
-                    b.Property<uint>("xmin")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
                     b.HasKey("Id");
 
                     b.HasIndex("AssetId");
@@ -9349,17 +9347,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("WorkflowStatusId");
 
-                    b.HasIndex("TenantId", "CreatedAt");
-
-                    b.HasIndex("TenantId", "DueDate");
-
-                    b.HasIndex("TenantId", "ScheduledStartAt")
-                        .HasFilter("\"ScheduledStartAt\" IS NOT NULL");
-
                     b.HasIndex("TenantId", "WorkOrderNumber")
                         .IsUnique();
-
-                    b.HasIndex("TenantId", "Status", "CreatedAt");
 
                     b.ToTable("work_orders", null, t =>
                         {
@@ -10984,7 +10973,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
                         .WithMany()
                         .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
@@ -11302,7 +11291,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.User", "UpdatedByUser")
                         .WithMany()
                         .HasForeignKey("UpdatedByUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Category");
 
@@ -11893,7 +11882,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
                         .WithMany()
                         .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
@@ -12221,25 +12210,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired();
 
                     b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.RefreshToken", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.UserSession", "Session")
-                        .WithMany()
-                        .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Session");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.RolePermission", b =>
@@ -12693,7 +12663,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
                         .WithMany("Payments")
                         .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
@@ -13318,7 +13288,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.WorkOrder", "WorkOrder")
                         .WithMany("BillableItems")
                         .HasForeignKey("WorkOrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("RateCard");

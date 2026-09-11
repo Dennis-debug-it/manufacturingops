@@ -2,18 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { brand } from '../../shared/config/brand'
 import { resolveErrorMessage } from '../../shared/api/apiError'
-import { BrandWordmark } from '../../shared/components/BrandWordmark'
-import { Crystal } from '../../shared/components/Crystal'
+import { Logo } from '../../shared/components/Logo'
 
 const loginSchema = z.object({
   email: z.string().email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
-  rememberMe: z.boolean().optional(),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
@@ -21,6 +19,8 @@ type LoginFormValues = z.infer<typeof loginSchema>
 export function LoginPage() {
   const { login, isAuthenticated, isReady } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const tenantDestination = searchParams.get('welcome') === '1' ? '/onboarding' : '/dashboard'
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const passwordVisibilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -56,7 +56,6 @@ export function LoginPage() {
     defaultValues: {
       email: '',
       password: '',
-      rememberMe: false,
     },
   })
 
@@ -64,14 +63,14 @@ export function LoginPage() {
     if (!isReady || !isAuthenticated) {
       return
     }
-    navigate('/dashboard', { replace: true })
-  }, [isAuthenticated, isReady, navigate])
+    navigate(tenantDestination, { replace: true })
+  }, [isAuthenticated, isReady, navigate, tenantDestination])
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null)
     try {
-      const session = await login({ email: values.email, password: values.password, rememberMe: values.rememberMe ?? false })
-      navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : '/dashboard', { replace: true })
+      const session = await login(values)
+      navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : tenantDestination, { replace: true })
     } catch (error) {
       setSubmitError(resolveErrorMessage(error))
     }
@@ -79,22 +78,10 @@ export function LoginPage() {
 
   return (
     <div className="grid min-h-screen bg-white lg:grid-cols-[1fr_1fr]">
-      <div className="flex flex-col">
-        {/* Mobile-only brand header — desktop gets the marketing panel instead (see below),
-            so without this the form would sit centered in a mostly-empty full-height column. */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-[#073F43] to-[#052D30] px-6 pb-8 pt-10 lg:hidden">
-          <Crystal variant="dashboard" className="absolute inset-0 opacity-60" />
-          <div className="relative">
-            <BrandWordmark tone="dark" />
-            <p className="mt-3 max-w-xs text-sm leading-6 text-white/70">
-              Command field service, finance, and platform operations from one system.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-1 items-start justify-center px-6 py-8 lg:items-center lg:py-12">
-          <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl">
-            <BrandWordmark className="hidden lg:flex" />
-            <h1 className="text-lg font-semibold tracking-tight text-slate-900 lg:mt-6">Sign in to your workspace</h1>
+      <div className="flex items-center justify-center px-6 py-12 lg:px-12">
+        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-8 shadow-xl">
+          <Logo className="h-12 w-auto" />
+          <h1 className="mt-6 text-lg font-semibold tracking-tight text-slate-900">Sign in to your workspace</h1>
 
           <form className="mt-8 space-y-4" onSubmit={onSubmit}>
             <div>
@@ -103,7 +90,7 @@ export function LoginPage() {
                 id="login-email"
                 type="email"
                 autoComplete="email"
-                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[var(--app-primary)]"
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900"
                 {...register('email')}
               />
               {errors.email ? <p className="mt-2 text-sm text-rose-600">{errors.email.message}</p> : null}
@@ -120,7 +107,7 @@ export function LoginPage() {
                   id="login-password"
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="current-password"
-                  className="h-12 w-full rounded-xl border border-slate-300 bg-white py-0 pl-4 pr-12 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[var(--app-primary)]"
+                  className="h-12 w-full rounded-xl border border-slate-300 bg-white py-0 pl-4 pr-12 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900"
                   {...register('password')}
                 />
                 <button
@@ -129,31 +116,22 @@ export function LoginPage() {
                   aria-label={showPassword ? 'Conceal entered characters' : 'Reveal entered characters'}
                   title={showPassword ? 'Hide password' : 'Show password'}
                   aria-pressed={showPassword}
-                  className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-slate-500 transition hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--app-primary)]"
+                  className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-slate-500 transition hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-slate-900"
                 >
                   {showPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}
                 </button>
               </div>
               {errors.password ? <p className="mt-2 text-sm text-rose-600">{errors.password.message}</p> : null}
             </div>
-            <label htmlFor="login-remember" className="flex items-center gap-2 text-sm text-slate-600">
-              <input
-                id="login-remember"
-                type="checkbox"
-                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-[var(--app-primary)]"
-                {...register('rememberMe')}
-              />
-              Keep me signed in on this device
-            </label>
             {submitError ? (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {submitError}
               </div>
             ) : null}
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--app-primary)] px-4 text-sm font-semibold text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               Sign in
@@ -165,7 +143,6 @@ export function LoginPage() {
               </Link>
             </p>
           </form>
-        </div>
         </div>
       </div>
 

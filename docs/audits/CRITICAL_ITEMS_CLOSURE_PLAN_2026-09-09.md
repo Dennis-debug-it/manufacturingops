@@ -1,0 +1,67 @@
+# Critical audit items: closure plan
+
+Prepared: 9 September 2026. Status: proposed execution plan; no findings closed by this document.
+
+## Scope and baseline
+
+Assumption pending audit identification: consolidate the latest written Frontend V5 audit (2 July), the June vision audit's C1–C4 findings, the May delivery-readiness critical blockers, and the remaining production blockers reported in the recent **Implement FSM production fixes** task. This is a closure plan, not a fresh full audit or authorization to deploy.
+
+Sources:
+- [Frontend V5 audit](../../ecosys-serviceops-frontend/FRONTEND_V5_AUDIT_REPORT.md), especially sections 11–13.
+- [Vision audit](SERVICEOPS_VISION_AUDIT_2026-06-03.md), especially C1–C4.
+- [Delivery readiness audit](../delivery-readiness-audit.md) and [fix register](../delivery-fix-list.md).
+- [PM scheduling status](../PM_SCHEDULING_STATUS.md) and [test baseline](../TEST_SUITE_BASELINE.md).
+- Recent task handoff: `01a07ddf-c0c2-75d0-9bfd-32edd5011f01`.
+
+Historical findings must be reconciled before new implementation. The active frontend has changed substantially since July. Limited source checks for this plan show that Request Demo now posts to the leads API, WorkOrdersPage calls usePermission, most routes have dedicated implementations, and the PWA configuration still defaults to generateSW with a separate custom worker and no sync-queue writer found under src/pwa. These checks do not establish runtime correctness.
+
+The recent handoff reports passing lint/build, 246 backend tests and 14 targeted browser tests, but an environment-dependent backend test, the full backend-dependent browser suite, production deployment, migrations, real email and document delivery remain unverified. These are prior reported results, not tests rerun for this plan.
+
+## Closure rules
+
+Use statuses: Open → In progress → Implemented / awaiting verification → Verified in staging → Closed after release verification. Track Blocked separately with its dependency and accountable owner.
+
+Each item needs a named implementer, independent verifier, source finding, change reference, tested commit, environment, test results, evidence link and closure date. Owners below are proposed roles, not assigned people. Product and release leads confirm names at kickoff.
+
+Code presence, mocked browser tests, a clean build, and hidden navigation alone do not close a functional or security finding. Scope deferral requires an explicit product decision and stays recorded as deferred; it is not a completed fix. All release-critical tests must pass. Do not use the older audit's 80% pass threshold as a release gate.
+
+## Work register
+
+| ID / priority | Source and work required | Proposed owner | Evidence required to close | Dependencies |
+|---|---|---|---|---|
+| CL-01 / P0 | Production handoff; May schema risk. Establish staging and the actual FSM release target, inventory configuration, compare applied migrations with the model, and rehearse upgrade and recovery. Review the modified historical July migration before release; preserve already-applied history and use corrective migrations where necessary. | Release engineer + backend lead | Exact release commit and artifacts; fresh-database and existing-database upgrade pass; restore rehearsal with measured recovery time; migration history and health checks recorded; no unexplained schema differences. | Deployment owner, database access, approved recovery objectives and test data. |
+| CL-02 / P0 | V5 priority 2; May tenant runtime blocker; production auth/licensing work. Verify login, onboarding, invitation/reset lifecycle, role checks, tenant/branch isolation and Operations/Finance/combined entitlements at UI and API boundaries. Fix only reproduced gaps. | Backend lead + frontend lead; security verifier | Real-backend matrix across platform admin, tenant admin, dispatcher, technician, finance and viewer, using two tenants. Forbidden direct API and cross-tenant requests rejected; expired/reused/wrong-purpose tokens rejected; revoked permissions and module access behave correctly. | CL-01 staging; accounts for each role and plan. |
+| CL-03 / P0 | May lead blocker; V5 priority 6. Reverify public lead creation and portal magic-link authentication; complete any remaining API/session wiring. Preserve truthful success and failure messages. | Full-stack engineer + QA | Public submission persists and appears once in platform lead management; failure does not show success. Portal email link establishes a real scoped session; invalid/expired/reused links and unauthenticated portal data access fail. | CL-01, CL-02; controlled mailboxes. |
+| CL-04 / P0 | June C2; V5 dashboard partial implementation. Reproduce dashboard queries on current PostgreSQL, remove any silent error-to-zero behaviour, and bind named widgets to validated metrics. | Backend engineer + frontend engineer | Seeded known counts match dashboard and API; empty tenant shows true zero values; forced query/API failure shows an error and retry state; no cross-tenant totals or translation exceptions. | CL-01 and tenant fixtures. |
+| CL-05 / P0 | June C1/C3; May sites/work-order critical rows; V5 priorities 3–4. Verify or complete client → site → asset selection, work-order creation, multi-technician dispatch and every execution tab: timeline, assignment, checklist, evidence, materials, signatures and report. | Operations full-stack lead | Browser-created work order retains correct links after reload; changing client/site clears incompatible selections; unauthorized assignments fail. Technician can start, hold with reason, resume, record work, capture evidence/signatures, complete and download a correct report. Invalid lifecycle transitions fail; report and history match persisted records. | CL-02; functional client/site/asset records; CL-06 for material steps. |
+| CL-06 / P1 release-blocking | June C4; V5 module/API gaps. Connect material request → approver inbox → approve/reject → issue/return → work-order usage. Enforce authorization and stock consistency server-side. | Inventory full-stack engineer | Requester and approver can complete the workflow in separate sessions; rejection prevents issue; concurrent/repeated issue cannot double-deduct stock; movement, work-order usage and audit records reconcile. | CL-02; CL-05 work order created. |
+| CL-07 / P0 | May email delivery/intake critical rows; production handoff. Verify supported sender configuration, invites/resets, notifications, email-to-work-order intake and invoice/receipt/statement PDFs using the real provider. Complete retries, recipient isolation and delivery visibility where gaps remain. | Backend/email lead + QA | Controlled mailbox receives each enabled message and correct attachment; tenant/default sender rules and billing/CC recipients are correct; rejected/time-out delivery logs failure and bounded retry; duplicate retry does not duplicate business transactions. Intake creates or links the correct tenant work order without replay duplicates. Unsupported delivery modes cannot be selected or accepted as valid settings. | CL-01/02; provider configuration, controlled mailbox, finance fixtures and CL-05 for WO messages. |
+| CL-08 / P1 release-blocking for offline promise | V5 priorities 1/9. Choose and implement one shipped service-worker strategy, wire supported offline actions to a persistent queue, replay safely and expose pending/failed/conflicted states. Consolidate connectivity detection. | Frontend/PWA lead + backend support | Test built production assets: offline reload, queued work surviving restart, reconnect replay, expired session, conflict and duplicate submission. Evidence/signatures survive retry; tenant switching/logout cannot expose another tenant's cached data. Every supported action has a documented outcome. | CL-02/05/06; explicit offline action list and idempotent API behaviour. |
+| CL-09 / P1 release-blocking | May settings placeholders; V5 priorities 5/7/10 and sections 11–12. Inventory all release routes and replace remaining critical placeholders or inert controls. Validate CRUD, API contracts, settings persistence, table sorting, PM, reports, team, licensed finance and platform administration. Track WhatsApp/report queue and portal pages explicitly. | Frontend lead + module owners; product verifier | Route/action inventory with an evidence link per required workflow; settings persist after reload; no false success, inert primary action or unexplained blank screen. PM generates on schedule without duplicates. Licensed finance remains available according to the current entitlement model; obsolete blanket hiding recommendations are not reinstated. | CL-02; agreed product scope; CL-05/06/07 for integrated flows. |
+| CL-10 / P0 release gate | May lint/browser blockers; V5 priority 8; production handoff test gap. Reconcile old tests with current behaviours, fix product regressions and test defects, run the complete required suite against PostgreSQL and the release build. | QA lead + release engineer | Lint, type-check, build, full backend suite including the previously blocked startup test, and complete release-scoped browser suite pass on the same commit. Desktop and mobile operational journeys pass. Quarantined tests have explicit rationale and equivalent evidence; no critical behaviour is skipped or covered only by mocks. | CL-01–09 complete or individually verified as already fixed. |
+
+## Sequence and indicative schedule
+
+Planning envelope: three working weeks with a backend engineer, frontend engineer, QA engineer and release engineer available. This is a provisional estimate, not a commitment. Re-estimate after the first two days; if broad module rebuilds remain, publish a longer schedule rather than weakening closure criteria. Day 1 means the agreed kickoff date, not an assumed start today.
+
+1. **Days 1–2 — establish the current baseline.** Assign owners; map every source critical/P0/P1 finding to the register; inspect current changes without overwriting ongoing work; identify release commit; provision staging and fixtures; reproduce each finding. Split large CL-05/09 work into module tickets. Record already-implemented items as awaiting verification. Exit: complete finding coverage, accessible environment and revised estimates.
+2. **Days 3–5 — secure entry points and data.** Complete CL-01–04 and establish CL-07 provider tests. Start CL-05 dependency checks. Exit: recoverable staging database, reliable tenant access, denied unauthorized access, real leads/portal sessions and correct dashboard counts.
+3. **Days 6–10 — close operational workflows.** Complete CL-05–09, ordered by dependencies. Email and offline work can proceed alongside operational UI implementation once contracts are stable. Exit: full dispatcher-to-technician journey, correct stock movements, real delivery and implemented release-scope routes; offline promise demonstrably works.
+4. **Days 11–13 — independent regression and release rehearsal.** Execute CL-10 on the frozen candidate; rehearse migration and restore; retest corrected failures and affected journeys. Exit: evidence packet complete and zero open release-critical defects.
+5. **Days 14–15 — controlled release and observation.** Release owner deploys through the established process after the concrete candidate and evidence are ready. Verify configuration, migrations, health, access controls, core work order, email/PDF delivery and logs on safe production accounts. Observe for 24–48 hours; extend the window if errors appear. Close findings individually only after their production evidence passes.
+
+## Release gate and recovery
+
+Release requires: zero open P0 items, all P1 items needed for the promised scope verified, complete required tests passing, a tested backup/restore path, correct environment configuration, and sign-off by engineering, QA and the product/release owner. A missing database, mailbox or deployment target is a blocking dependency, not a waived check.
+
+Stop release or roll back for authentication failure, unauthorized data exposure, incorrect financial/stock writes, migration failure, or failure of a core operational smoke test. Halt rollout and affected background processing where necessary. Release and database owners select the rehearsed recovery path: revert to a schema-compatible application artifact; restore only when required and according to the agreed data-loss/recovery objectives. Preserve diagnostics and account for writes made since backup.
+
+During observation, monitor API errors, login/reset failures, job completion failures, email queue age/retries, duplicate intake/PM generation, stock discrepancies and offline replay conflicts. Establish numeric alert thresholds from staging load and normal traffic before release; any tenant-isolation violation triggers immediate investigation.
+
+## Immediate next actions
+
+- Confirm which audit is authoritative and reconcile this consolidated scope with it.
+- Name implementers, verifiers and the release/database owner.
+- Obtain the actual staging/deployment target, configuration access and controlled test accounts through the normal secure channel; do not put secrets in this document.
+- Create CL-01 through CL-10 in the team's tracker, retaining source links and acceptance criteria.
+- Perform the two-day baseline and publish the updated open/implemented/verified count, estimates and dependencies. No production change is made as part of preparing this plan.

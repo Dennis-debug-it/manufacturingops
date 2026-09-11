@@ -272,6 +272,10 @@ function buildMockSession(options: MockAuthOptions): MockSession {
 export async function mockAuthSession(page: Page, options: MockAuthOptions) {
   const session = buildMockSession(options)
 
+  await page.route(`${E2E_API_URL}/api/tenant/license`, async (route) => {
+    await fulfillJson(route, { planCode: 'suite', planName: 'Ecosys ServiceOps Suite', modules: ['operations', 'finance'] })
+  })
+
   await page.route(`${E2E_API_URL}/api/auth/login`, async (route) => {
     await fulfillJson(route, session.loginResponse)
   })
@@ -311,7 +315,7 @@ async function performLogin(page: Page, email: string, password: string, expecta
   await page.goto('/login')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Password').fill(password)
-  await page.getByRole('button', { name: /^login$/i }).click()
+  await page.getByRole('button', { name: /^sign in$/i }).click()
 
   await page.waitForURL(expectation.expectedUrl, { timeout: 20000 })
 

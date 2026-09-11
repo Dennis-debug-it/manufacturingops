@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
@@ -6,10 +7,20 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
-import { useTeamUsers } from './api'
+import { useResendCredentials, useTeamUsers } from './api'
 import { NewUserFormDrawer } from './components/NewUserFormDrawer'
 import type { TeamUser } from './types'
 import { TeamTabNav } from './components/TeamTabNav'
+
+function ResendInviteButton({ userId }: { userId: string }) {
+  const resend = useResendCredentials(userId)
+  return <button type="button" disabled={resend.isPending} onClick={() => {
+    void resend.mutateAsync(undefined).then((result) => {
+      if (result.success) toast.success('Invitation sent')
+      else toast.error(result.message ?? 'Invitation delivery failed. Please try again.')
+    }).catch(() => { /* Interceptor displays the error. */ })
+  }} className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">{resend.isPending ? 'Sending�' : 'Resend Invite'}</button>
+}
 
 export function UsersPage() {
   const canManage = usePermission('team.manage')
@@ -29,7 +40,8 @@ export function UsersPage() {
     { key: 'department', header: 'Department', cell: (row) => row.department ?? '—' },
     { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? '—' },
     { key: 'defaultBranchName', header: 'Branch', cell: (row) => row.defaultBranchName ?? (row.hasAllBranchAccess ? 'All Branches' : '—') },
-    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? (row.invitationStatus ?? (row.mustChangePassword ? 'Invited' : 'Active')) : 'Inactive'} /> },
+    ...(canManage ? [{ key: 'invitation', header: 'Invitation', cell: (row: TeamUser) => row.mustChangePassword || row.invitationStatus === 'Invited' || row.invitationStatus === 'Expired' ? <ResendInviteButton userId={row.id} /> : null }] : []),
   ]
 
   return (

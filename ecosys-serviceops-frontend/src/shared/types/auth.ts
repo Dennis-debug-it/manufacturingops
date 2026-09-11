@@ -47,6 +47,7 @@ export interface AuthUser {
 }
 
 export interface AuthTenant {
+  timeZoneId?: string | null
   tenantId: string
   companyName: string
   country: string

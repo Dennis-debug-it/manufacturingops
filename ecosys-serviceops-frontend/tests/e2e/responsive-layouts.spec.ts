@@ -108,7 +108,7 @@ test.describe('Responsive layout hardening', () => {
     await page.getByTestId('user-menu-trigger').click()
     await page.getByTestId('logout-button').click()
     await expect(page).toHaveURL(/\/login/)
-    await expect(page.getByRole('button', { name: /^login$/i })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^sign in$/i })).toBeVisible()
     await assertNoHorizontalOverflow(page)
 
     await loginAsPlatformOwner(page)

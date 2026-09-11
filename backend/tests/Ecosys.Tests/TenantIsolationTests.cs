@@ -213,6 +213,64 @@ public sealed class TenantIsolationTests
     }
 
     [Fact]
+    public async Task Intake_RejectsForeignClientAssetAndBranchBeforeCreatingWork()
+    {
+        var databaseName = $"ecosys-intake-isolation-{Guid.NewGuid():N}";
+        var fixture = await SeedFixtureAsync(databaseName);
+        var tenantContext = new FakeTenantContext(fixture.TenantAId, fixture.TenantAAdminId);
+        await using var dbContext = CreateDbContext(databaseName, tenantContext);
+        dbContext.MonitoringSettings.Add(new MonitoringSetting
+        {
+            TenantId = fixture.TenantAId, WebhookSecret = "local-test-secret", IsEnabled = true
+        });
+        await dbContext.SaveChangesAsync();
+        var count = await dbContext.WorkOrders.CountAsync();
+        var controller = new IntakeController(dbContext, new NoOpLicenseGuardService(), new NoOpDocumentNumberingService());
+        foreach (var request in new[]
+        {
+            new EmailIntakeRequest(fixture.TenantAId, null, fixture.TenantBClientId, null, "Test", null, null, "local-test-secret"),
+            new EmailIntakeRequest(fixture.TenantAId, null, fixture.TenantAClientId, fixture.TenantBAssetId, "Test", null, null, "local-test-secret"),
+            new EmailIntakeRequest(fixture.TenantAId, Guid.NewGuid(), fixture.TenantAClientId, null, "Test", null, null, "local-test-secret")
+        })
+            await Assert.ThrowsAsync<BusinessRuleException>(() => controller.EmailWebhook(request, CancellationToken.None));
+        Assert.Equal(count, await dbContext.WorkOrders.CountAsync());
+    }
+
+    [Fact]
+    public async Task Dashboard_WorkloadExcludesTerminalOrders()
+    {
+        var databaseName = $"ecosys-dashboard-workload-{Guid.NewGuid():N}";
+        var fixture = await SeedFixtureAsync(databaseName);
+        var tenantContext = new FakeTenantContext(fixture.TenantAId, fixture.TenantAAdminId);
+        await using var dbContext = CreateDbContext(databaseName, tenantContext);
+        foreach (var status in new[] { "Completed", "Acknowledged", "Closed", "Cancelled" })
+        {
+            dbContext.WorkOrders.Add(new WorkOrder
+            {
+                TenantId = fixture.TenantAId,
+                ClientId = fixture.TenantAClientId,
+                WorkOrderNumber = $"TERMINAL-{status}",
+                Title = status,
+                Status = status,
+            });
+        }
+        await dbContext.SaveChangesAsync();
+        var controller = new DashboardController(dbContext, new NoOpUserAccessService(),
+            new NoOpBranchAccessService(), new NoOpLogger<DashboardController>(), tenantContext)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+
+        var result = await controller.GetSummary(null, CancellationToken.None);
+        var summary = Assert.IsType<DashboardSummaryDto>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(1, summary.OpenWorkOrders);
+        Assert.Equal(3, summary.ClosedWorkOrders);
+        Assert.Equal(1, summary.UnassignedWorkOrders);
+        Assert.Empty(summary.WorkOrdersByGroup);
+        Assert.Empty(summary.TechnicianWorkload);
+    }
+
+    [Fact]
     public async Task AssetCategoryFieldEndpoints_BlockCrossTenantFieldMutation()
     {
         var databaseName = $"ecosys-tenant-isolation-{Guid.NewGuid():N}";

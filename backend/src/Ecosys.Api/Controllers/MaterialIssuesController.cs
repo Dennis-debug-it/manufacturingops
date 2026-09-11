@@ -1,3 +1,4 @@
+using System.Data;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -39,11 +40,17 @@ public sealed class MaterialIssuesController(
             throw new BusinessRuleException("At least one issue line is required.");
         }
 
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
         Guid? workOrderBranchId = null;
         if (request.WorkOrderId.HasValue)
         {
-            workOrderBranchId = await dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.Id == request.WorkOrderId.Value).Select(x => x.BranchId).SingleOrDefaultAsync(cancellationToken)
+            var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+            var workOrder = await dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.Id == request.WorkOrderId.Value).WhereAccessible(scope, x => x.BranchId).SingleOrDefaultAsync(cancellationToken)
                 ?? throw new BusinessRuleException("Work order was not found for this tenant.");
+            workOrderBranchId = workOrder.BranchId;
+            if (request.BranchId.HasValue && request.BranchId != workOrderBranchId)
+                throw new BusinessRuleException("Issue branch must match the work order branch.");
         }
 
         var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId ?? workOrderBranchId, cancellationToken);
@@ -67,7 +74,7 @@ public sealed class MaterialIssuesController(
         var materials = await dbContext.MaterialItems.Where(x => x.TenantId == TenantId && materialIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, cancellationToken);
         foreach (var line in request.Lines)
         {
-            if (line.QuantityRequested <= 0)
+            if (line.QuantityRequested <= 0 || line.QuantityIssued < 0 || line.QuantityIssued > line.QuantityRequested)
             {
                 throw new BusinessRuleException("Quantity requested must be greater than zero.");
             }
@@ -99,13 +106,14 @@ public sealed class MaterialIssuesController(
             issue.IssueStatus = "pending_approval";
             await dbContext.SaveChangesAsync(cancellationToken);
         }
-        else if (IsAdmin || HasPermission(PermissionNames.CanIssueMaterials))
+        else if (tenantContext.IsAdmin || HasPermission(PermissionNames.CanIssueMaterials))
         {
             await IssueInternalAsync(issue, true, cancellationToken);
         }
 
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.created", nameof(MaterialIssue), issue.Id.ToString(), $"Created material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return CreatedAtAction(nameof(List), new { id = issue.Id }, Map(persisted));
     }
 
@@ -113,14 +121,20 @@ public sealed class MaterialIssuesController(
     public async Task<ActionResult<MaterialIssueResponse>> Approve(Guid id, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanApproveMaterials);
-        var issue = await dbContext.MaterialIssues.Include(x => x.Lines).SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        var issue = await Query(scope).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material issue was not found.");
+        if (issue.IssueStatus is not "draft" and not "pending_approval")
+            throw new BusinessRuleException("Only draft or pending approval issues can be approved.");
         issue.IssueStatus = "approved";
         issue.ApprovedByUserId = UserId;
         issue.ApprovedAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.approved", nameof(MaterialIssue), issue.Id.ToString(), $"Approved material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return Ok(Map(persisted));
     }
 
@@ -128,8 +142,14 @@ public sealed class MaterialIssuesController(
     public async Task<ActionResult<MaterialIssueResponse>> Reject(Guid id, [FromBody] RejectMaterialIssueRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanApproveMaterials);
-        var issue = await dbContext.MaterialIssues.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        var issue = await Query(scope).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material issue was not found.");
+        if (issue.IssueStatus is not "draft" and not "pending_approval")
+            throw new BusinessRuleException("Only draft or pending approval issues can be rejected.");
+        if (Normalize(request.Reason) is null) throw new BusinessRuleException("A rejection reason is required.");
         issue.IssueStatus = "rejected";
         issue.RejectedByUserId = UserId;
         issue.RejectedAt = DateTime.UtcNow;
@@ -137,6 +157,7 @@ public sealed class MaterialIssuesController(
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.rejected", nameof(MaterialIssue), issue.Id.ToString(), $"Rejected material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return Ok(Map(persisted));
     }
 
@@ -144,44 +165,64 @@ public sealed class MaterialIssuesController(
     public async Task<ActionResult<MaterialIssueResponse>> Issue(Guid id, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanIssueMaterials);
-        var issue = await dbContext.MaterialIssues.Include(x => x.Lines).SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        var issue = await Query(scope).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material issue was not found.");
         await IssueInternalAsync(issue, false, cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return Ok(Map(persisted));
     }
 
     [HttpPost("{id:guid}/return")]
     public async Task<ActionResult<MaterialIssueResponse>> Return(Guid id, [FromBody] ReturnMaterialIssueRequest request, CancellationToken cancellationToken)
     {
-        EnsureMaterialsRequestAccess();
-        var issue = await dbContext.MaterialIssues.Include(x => x.Lines).SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanIssueMaterials);
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        var issue = await Query(scope).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material issue was not found.");
         if (!string.Equals(issue.IssueStatus, "issued", StringComparison.OrdinalIgnoreCase))
         {
             throw new BusinessRuleException("Only issued material can be returned.");
         }
 
-        await stockLedgerService.ExecuteAsync(async ct =>
+        if (request.Lines.Count == 0 || request.Lines.Select(x => x.MaterialIssueLineId).Distinct().Count() != request.Lines.Count)
+            throw new BusinessRuleException("Provide distinct material issue lines to return.");
+        foreach (var line in request.Lines)
         {
-            foreach (var line in request.Lines)
+            var issueLine = issue.Lines.SingleOrDefault(x => x.Id == line.MaterialIssueLineId)
+                ?? throw new BusinessRuleException("Material issue line was not found.");
+            if (!line.ExpectedQuantityReturned.HasValue || line.ExpectedQuantityReturned.Value != issueLine.QuantityReturned)
+                throw new BusinessRuleException("Return quantities have changed or a version was not supplied. Reload the issue before returning stock.");
+            if (line.QuantityReturned <= 0 || issueLine.QuantityReturned + line.QuantityReturned > issueLine.QuantityIssued)
             {
-                var issueLine = issue.Lines.SingleOrDefault(x => x.Id == line.MaterialIssueLineId)
-                    ?? throw new BusinessRuleException("Material issue line was not found.");
-                if (line.QuantityReturned <= 0 || issueLine.QuantityReturned + line.QuantityReturned > issueLine.QuantityIssued)
-                {
-                    throw new BusinessRuleException("Returned quantity must be positive and cannot exceed the issued quantity.");
-                }
-                issueLine.QuantityReturned += line.QuantityReturned;
-                var material = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == issueLine.MaterialItemId, ct);
-                await stockLedgerService.RecordReturnAsync(material, issue.BranchId, line.QuantityReturned, UserId, $"Returned from material issue {issue.IssueNumber}", issue.IssueNumber, issue.WorkOrderId, null, ct);
+                throw new BusinessRuleException("Returned quantity must be positive and cannot exceed the issued quantity.");
             }
+            issueLine.QuantityReturned += line.QuantityReturned;
+            if (issue.WorkOrderId.HasValue)
+            {
+                var usage = await dbContext.WorkOrderMaterialUsages.SingleOrDefaultAsync(
+                    x => x.Id == issueLine.Id && x.TenantId == TenantId && x.WorkOrderId == issue.WorkOrderId && x.MaterialItemId == issueLine.MaterialItemId,
+                    cancellationToken);
+                if (usage is null)
+                    throw new BusinessRuleException("This historical issue requires work-order usage reconciliation before stock can be returned.");
+                if (usage.QuantityUsed < line.QuantityReturned)
+                    throw new BusinessRuleException("Returned quantity exceeds recorded work-order usage.");
+                usage.QuantityUsed -= line.QuantityReturned;
+            }
+            var material = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == issueLine.MaterialItemId, cancellationToken);
+            await stockLedgerService.RecordReturnAsync(material, issue.BranchId, line.QuantityReturned, UserId, $"Returned from material issue {issue.IssueNumber}", issue.IssueNumber, issue.WorkOrderId, null, cancellationToken);
+        }
 
-            issue.IssueStatus = "returned";
-            await dbContext.SaveChangesAsync(ct);
-        }, cancellationToken);
+        issue.IssueStatus = issue.Lines.All(x => x.QuantityReturned == x.QuantityIssued) ? "returned" : "issued";
+        await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.returned", nameof(MaterialIssue), issue.Id.ToString(), $"Returned material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return Ok(Map(persisted));
     }
 
@@ -189,7 +230,10 @@ public sealed class MaterialIssuesController(
     public async Task<ActionResult<MaterialIssueResponse>> Cancel(Guid id, CancellationToken cancellationToken)
     {
         EnsureMaterialsRequestAccess();
-        var issue = await dbContext.MaterialIssues.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        var issue = await Query(scope).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material issue was not found.");
         if (issue.IssueStatus is not "draft" and not "pending_approval")
         {
@@ -200,62 +244,61 @@ public sealed class MaterialIssuesController(
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.cancelled", nameof(MaterialIssue), issue.Id.ToString(), $"Cancelled material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return Ok(Map(persisted));
     }
 
     private async Task IssueInternalAsync(MaterialIssue issue, bool autoIssue, CancellationToken cancellationToken)
     {
-        if (!autoIssue && issue.IssueStatus is not "approved" and not "draft")
+        if (!autoIssue && issue.IssueStatus != "approved")
         {
-            throw new BusinessRuleException("Only approved or draft issues can be issued.");
+            throw new BusinessRuleException("Only approved issues can be issued.");
         }
 
         var allowNegativeStock = IsAdmin || HasPermission(PermissionNames.MaterialsOverrideStock);
-        await stockLedgerService.ExecuteAsync(async ct =>
+        var materialIds = issue.Lines.Select(x => x.MaterialItemId).Distinct().ToList();
+        var materials = await dbContext.MaterialItems.Where(x => x.TenantId == TenantId && materialIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, cancellationToken);
+        foreach (var line in issue.Lines)
         {
-            var materialIds = issue.Lines.Select(x => x.MaterialItemId).Distinct().ToList();
-            var materials = await dbContext.MaterialItems.Where(x => x.TenantId == TenantId && materialIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
-            foreach (var line in issue.Lines)
+            if (!materials.TryGetValue(line.MaterialItemId, out var material))
             {
-                if (!materials.TryGetValue(line.MaterialItemId, out var material))
-                {
-                    throw new BusinessRuleException("Material item was not found for this tenant.");
-                }
-
-                var quantityToIssue = line.QuantityIssued > 0 ? line.QuantityIssued : line.QuantityRequested;
-                if (quantityToIssue <= 0)
-                {
-                    continue;
-                }
-
-                await stockLedgerService.RecordIssueAsync(material, issue.BranchId, quantityToIssue, UserId, $"Issued via material issue {issue.IssueNumber}", issue.IssueNumber, issue.WorkOrderId, null, allowNegativeStock, ct);
-                line.QuantityIssued = quantityToIssue;
-                line.UnitCost ??= material.UnitCost;
-
-                if (issue.WorkOrderId.HasValue)
-                {
-                    dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
-                    {
-                        TenantId = TenantId,
-                        WorkOrderId = issue.WorkOrderId.Value,
-                        MaterialItemId = material.Id,
-                        AssetId = issue.AssetId,
-                        QuantityUsed = quantityToIssue,
-                        UnitCost = line.UnitCost,
-                        Chargeable = true,
-                        Notes = issue.Notes,
-                        UsedByUserId = UserId,
-                        UsedAt = DateTime.UtcNow
-                    });
-                }
+                throw new BusinessRuleException("Material item was not found for this tenant.");
             }
 
-            issue.IssueStatus = "issued";
-            issue.IssuedByUserId = UserId;
-            issue.IssuedAt = DateTime.UtcNow;
-            issue.TotalIssuedCost = issue.Lines.Sum(x => x.QuantityIssued * (x.UnitCost ?? 0));
-            await dbContext.SaveChangesAsync(ct);
-        }, cancellationToken);
+            var quantityToIssue = line.QuantityIssued > 0 ? line.QuantityIssued : line.QuantityRequested;
+            if (quantityToIssue <= 0)
+            {
+                continue;
+            }
+
+            await stockLedgerService.RecordIssueAsync(material, issue.BranchId, quantityToIssue, UserId, $"Issued via material issue {issue.IssueNumber}", issue.IssueNumber, issue.WorkOrderId, null, allowNegativeStock, cancellationToken);
+            line.QuantityIssued = quantityToIssue;
+            line.UnitCost ??= material.UnitCost;
+
+            if (issue.WorkOrderId.HasValue)
+            {
+                dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
+                {
+                    Id = line.Id,
+                    TenantId = TenantId,
+                    WorkOrderId = issue.WorkOrderId.Value,
+                    MaterialItemId = material.Id,
+                    AssetId = issue.AssetId,
+                    QuantityUsed = quantityToIssue,
+                    UnitCost = line.UnitCost,
+                    Chargeable = true,
+                    Notes = issue.Notes,
+                    UsedByUserId = UserId,
+                    UsedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        issue.IssueStatus = "issued";
+        issue.IssuedByUserId = UserId;
+        issue.IssuedAt = DateTime.UtcNow;
+        issue.TotalIssuedCost = issue.Lines.Sum(x => x.QuantityIssued * (x.UnitCost ?? 0));
+        await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, autoIssue ? "material_issue.issued_auto" : "material_issue.issued", nameof(MaterialIssue), issue.Id.ToString(), $"Issued material issue '{issue.IssueNumber}'.", cancellationToken);
     }
 
@@ -351,7 +394,7 @@ public sealed record CreateMaterialIssueRequest(
 public sealed record CreateMaterialIssueLineRequest(Guid MaterialItemId, decimal QuantityRequested, decimal? QuantityIssued, string? Notes);
 public sealed record RejectMaterialIssueRequest(string? Reason);
 public sealed record ReturnMaterialIssueRequest(IReadOnlyCollection<ReturnMaterialIssueLineRequest> Lines);
-public sealed record ReturnMaterialIssueLineRequest(Guid MaterialIssueLineId, decimal QuantityReturned);
+public sealed record ReturnMaterialIssueLineRequest(Guid MaterialIssueLineId, decimal QuantityReturned, decimal? ExpectedQuantityReturned = null);
 
 public sealed record MaterialIssueResponse(
     Guid Id,

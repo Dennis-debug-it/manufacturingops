@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
@@ -18,31 +17,12 @@ namespace Ecosys.Infrastructure.Services;
 public interface IMvpAuthService
 {
     Task<SignupResult> SignupAsync(string fullName, string email, string password, string companyName, string? industry, string country, CancellationToken cancellationToken = default);
-    Task<LoginResult> LoginAsync(string email, string password, bool rememberMe = false, CancellationToken cancellationToken = default);
-    Task<LoginResult> RefreshAsync(string refreshToken, CancellationToken cancellationToken = default);
+    Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default);
     Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Starts an impersonation session as the tenant's admin, recording the operator's stated
-    /// justification. <paramref name="reason"/> is written into both audit entries: "who impersonated
-    /// which tenant, and why" is the question an auditor actually asks (EC-028), and it cannot be
-    /// reconstructed after the fact. A separate overload rather than an added parameter so the
-    /// existing four-argument call sites keep binding to the overload above unchanged.
-    /// </summary>
-    Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, string? reason, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// The permissions the user would be issued by a fresh login, resolved through exactly the same
-    /// path login uses. Callers that echo a signed-in user's own context back to the client (notably
-    /// <c>GET /api/auth/me</c>) must use this instead of mapping the stored <c>user_permissions</c>
-    /// row, so a page refresh can never hand the client a different permission set than the token.
-    /// </summary>
-    Task<UserPermissionsModel> ResolvePermissionsForUserAsync(Guid userId, CancellationToken cancellationToken = default);
 }
 
 public sealed record SignupResult(
     string Token,
-    string RefreshToken,
     Guid TenantId,
     Guid UserId,
     string CompanyName,
@@ -52,7 +32,6 @@ public sealed record SignupResult(
 
 public sealed record LoginResult(
     string Token,
-    string RefreshToken,
     Guid TenantId,
     Guid UserId,
     string FullName,
@@ -66,7 +45,8 @@ public sealed record LoginResult(
     string Country,
     string? Industry,
     string? LogoUrl,
-    bool ShowPoweredByEcosys);
+    bool ShowPoweredByEcosys,
+    string TimeZoneId = "Africa/Nairobi");
 
 public sealed record ImpersonationResult(
     string Token,
@@ -128,6 +108,8 @@ internal sealed class MvpAuthService(
 
         tenantSecurityPolicyService.ValidatePassword(password, new TenantSecurityPolicy());
 
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
         var trimmedCompanyName = companyName.Trim();
         var slug = await GenerateUniqueSlugAsync(trimmedCompanyName, cancellationToken);
         var normalizedCountry = country.Trim();
@@ -140,10 +122,12 @@ internal sealed class MvpAuthService(
             Email = normalizedEmail,
             ContactEmail = normalizedEmail,
             Country = normalizedCountry,
+            TimeZoneId = TenantTimeService.DefaultTimeZone(normalizedCountry),
+            Currency = TenantEmailIdentity.DefaultCurrency(normalizedCountry),
             Industry = string.IsNullOrWhiteSpace(industry) ? null : industry.Trim(),
             Status = "Active",
             LicenseStatus = LicenseStatuses.Trial,
-            PlanName = "Trial",
+            PlanName = ServiceOpsPlans.DisplayName(ServiceOpsPlans.Suite),
             IsActive = true
         };
 
@@ -164,17 +148,7 @@ internal sealed class MvpAuthService(
 
         dbContext.Tenants.Add(tenant);
         dbContext.Users.Add(user);
-        dbContext.EmailSettings.Add(new EmailSetting
-        {
-            Tenant = tenant,
-            UsePlatformDefaults = true,
-            OverrideSmtpSettings = false,
-            Host = "localhost",
-            Port = 25,
-            UseSsl = false,
-            SenderName = tenant.CompanyName,
-            SenderAddress = normalizedEmail
-        });
+        dbContext.EmailSettings.Add(TenantEmailIdentity.Create(tenant));
 
         dbContext.NumberingSettings.AddRange(
             CreateNumberingSetting(tenant, null, DocumentTypes.WorkOrder, "WO"),
@@ -194,11 +168,12 @@ internal sealed class MvpAuthService(
             $"Tenant '{tenant.CompanyName}' created with first admin '{user.FullName}'.",
             cancellationToken);
 
-        var (token, refreshToken) = await CreateTokensAsync(user, tenant, permissions, rememberMe: false, cancellationToken);
-        return new SignupResult(token, refreshToken, tenant.Id, user.Id, tenant.CompanyName, user.Role, user.JobTitle, permissions);
+        var token = await CreateTokenAsync(user, tenant, permissions, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        return new SignupResult(token, tenant.Id, user.Id, tenant.CompanyName, user.Role, user.JobTitle, permissions);
     }
 
-    public async Task<LoginResult> LoginAsync(string email, string password, bool rememberMe = false, CancellationToken cancellationToken = default)
+    public async Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
         {
@@ -259,7 +234,7 @@ internal sealed class MvpAuthService(
 
         ResetFailedLoginState(user);
         var permissions = await ResolvePermissionsAsync(user, cancellationToken);
-        var (token, refreshToken) = await CreateTokensAsync(user, user.Tenant, permissions, rememberMe, cancellationToken, user.MustChangePassword);
+        var token = await CreateTokenAsync(user, user.Tenant, permissions, cancellationToken, user.MustChangePassword);
 
         await auditLogService.LogAsync(
             user.TenantId,
@@ -272,7 +247,6 @@ internal sealed class MvpAuthService(
 
         return new LoginResult(
             token,
-            refreshToken,
             user.TenantId,
             user.Id,
             user.FullName,
@@ -286,13 +260,11 @@ internal sealed class MvpAuthService(
             user.Tenant.Country,
             user.Tenant.Industry,
             user.Tenant.LogoUrl,
-            user.Tenant.ShowPoweredByEcosys);
+            user.Tenant.ShowPoweredByEcosys,
+            user.Tenant.TimeZoneId);
     }
 
-    public Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default) =>
-        ImpersonateTenantAdminAsync(tenantId, actingUserId, actingUserName, null, cancellationToken);
-
-    public async Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, string? reason, CancellationToken cancellationToken = default)
+    public async Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default)
     {
         var tenant = await dbContext.Tenants
             .SingleOrDefaultAsync(x => x.Id == tenantId && x.Id != PlatformConstants.RootTenantId, cancellationToken)
@@ -317,20 +289,13 @@ internal sealed class MvpAuthService(
         var token = CreateToken(targetUser, tenant, permissions, session.Id, jwtId, mustChangePassword: false, actingUserId, actingUserName);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        // EC-028: both entries name the acting platform user, the target tenant, and the stated
-        // reason. The reason is operator-supplied free text and is recorded verbatim; nothing about
-        // the issued session (token, jwt id, session id) is logged.
-        var reasonSuffix = string.IsNullOrWhiteSpace(reason)
-            ? " No reason was given."
-            : $" Reason: {reason.Trim()}";
-
         await auditLogService.LogAsync(
             tenantId,
             actingUserId,
             "impersonation.started",
             nameof(User),
             targetUser.Id.ToString(),
-            $"Platform admin '{actingUserName}' started an impersonation session in tenant '{tenant.Name}' as tenant admin '{targetUser.Email}'.{reasonSuffix}",
+            $"Platform admin '{actingUserName}' started an impersonation session as tenant admin '{targetUser.Email}'.",
             severity: "Warning",
             cancellationToken: cancellationToken);
 
@@ -340,7 +305,7 @@ internal sealed class MvpAuthService(
             "platform.tenant.impersonation.started",
             nameof(Tenant),
             tenantId.ToString(),
-            $"Platform admin '{actingUserName}' started impersonating tenant admin '{targetUser.Email}' in tenant '{tenant.Name}'.{reasonSuffix}",
+            $"Started impersonating '{targetUser.Email}' in tenant '{tenant.Name}'.",
             severity: "Warning",
             cancellationToken: cancellationToken);
 
@@ -433,119 +398,14 @@ internal sealed class MvpAuthService(
         user.LastFailedLoginAt = null;
     }
 
-    private async Task<(string AccessToken, string RefreshToken)> CreateTokensAsync(User user, Tenant tenant, UserPermissionsModel permissions, bool rememberMe, CancellationToken cancellationToken, bool mustChangePassword = false)
+    private async Task<string> CreateTokenAsync(User user, Tenant tenant, UserPermissionsModel permissions, CancellationToken cancellationToken, bool mustChangePassword = false)
     {
         var jwtId = Guid.NewGuid().ToString("N");
         var session = userSessionService.StartSession(user, jwtId);
         var token = CreateToken(user, tenant, permissions, session.Id, jwtId, mustChangePassword);
-        var refreshToken = CreateRefreshToken(user, session.Id, rememberMe);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return (token, refreshToken);
+        return token;
     }
-
-    /// <summary>
-    /// Exchanges a valid refresh token for a fresh access token, rotating the refresh token in the
-    /// process. Permissions are re-resolved here so the new access token carries the current matrix
-    /// (a session that was revoked on a role/permission change fails this call, forcing re-login).
-    /// </summary>
-    public async Task<LoginResult> RefreshAsync(string refreshToken, CancellationToken cancellationToken = default)
-    {
-        const string invalidMessage = "Your session is no longer valid. Please sign in again.";
-        if (string.IsNullOrWhiteSpace(refreshToken))
-        {
-            throw new UnauthorizedException(invalidMessage);
-        }
-
-        var hash = HashRefreshToken(refreshToken);
-        var existing = await dbContext.RefreshTokens.SingleOrDefaultAsync(x => x.TokenHash == hash, cancellationToken);
-        if (existing is null)
-        {
-            throw new UnauthorizedException(invalidMessage);
-        }
-
-        // Reuse detection: an already-rotated (revoked) token being presented again means the token
-        // family may be compromised — revoke every session for the user and refuse.
-        if (existing.RevokedUtc.HasValue)
-        {
-            await userSessionService.RevokeAllForUserAsync(existing.UserId, "Refresh token reuse detected", cancellationToken);
-            throw new UnauthorizedException(invalidMessage);
-        }
-
-        if (existing.ExpiresUtc <= DateTime.UtcNow)
-        {
-            throw new UnauthorizedException(invalidMessage);
-        }
-
-        var session = await userSessionService.GetAsync(existing.SessionId, cancellationToken);
-        if (session is null || session.IsRevoked || session.LogoutAt.HasValue)
-        {
-            throw new UnauthorizedException(invalidMessage);
-        }
-
-        var user = await dbContext.Users
-            .Include(x => x.Tenant)
-            .Include(x => x.Permission)
-            .SingleOrDefaultAsync(x => x.Id == existing.UserId, cancellationToken);
-        if (user is null || !user.IsActive || user.Tenant is null || !user.Tenant.IsActive)
-        {
-            throw new UnauthorizedException(invalidMessage);
-        }
-
-        var permissions = await ResolvePermissionsAsync(user, cancellationToken);
-
-        // Rotate: revoke the presented token and issue a replacement bound to the same session.
-        existing.RevokedUtc = DateTime.UtcNow;
-        var newRefreshToken = CreateRefreshToken(user, existing.SessionId, existing.RememberMe);
-        existing.ReplacedByTokenHash = HashRefreshToken(newRefreshToken);
-
-        var jwtId = Guid.NewGuid().ToString("N");
-        var accessToken = CreateToken(user, user.Tenant, permissions, existing.SessionId, jwtId, user.MustChangePassword);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        return new LoginResult(
-            accessToken,
-            newRefreshToken,
-            user.TenantId,
-            user.Id,
-            user.FullName,
-            user.Email,
-            user.Role,
-            user.JobTitle,
-            user.Department,
-            user.MustChangePassword,
-            permissions,
-            user.Tenant.CompanyName,
-            user.Tenant.Country,
-            user.Tenant.Industry,
-            user.Tenant.LogoUrl,
-            user.Tenant.ShowPoweredByEcosys);
-    }
-
-    /// <summary>Creates a refresh token bound to a session, persists only its hash, returns the raw value.</summary>
-    private string CreateRefreshToken(User user, Guid sessionId, bool rememberMe)
-    {
-        var raw = GenerateRefreshTokenValue();
-        var options = jwtOptions.Value;
-        dbContext.RefreshTokens.Add(new RefreshToken
-        {
-            TenantId = user.TenantId,
-            UserId = user.Id,
-            SessionId = sessionId,
-            TokenHash = HashRefreshToken(raw),
-            RememberMe = rememberMe,
-            ExpiresUtc = DateTime.UtcNow.AddDays(rememberMe ? options.RefreshTokenRememberMeDays : options.RefreshTokenDays)
-        });
-        return raw;
-    }
-
-    private static string GenerateRefreshTokenValue() =>
-        Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-            .Replace('+', '-')
-            .Replace('/', '_')
-            .TrimEnd('=');
-
-    private static string HashRefreshToken(string token) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
     private string CreateToken(
         User user,
@@ -604,20 +464,6 @@ internal sealed class MvpAuthService(
             signingCredentials: new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256));
 
         return new JwtSecurityTokenHandler().WriteToken(token);
-    }
-
-    /// <inheritdoc />
-    public async Task<UserPermissionsModel> ResolvePermissionsForUserAsync(Guid userId, CancellationToken cancellationToken = default)
-    {
-        // Query filters are bypassed deliberately: this resolves the caller's own account, and the
-        // ambient tenant filter is not applied on every path that needs this (login is anonymous).
-        var user = await dbContext.Users
-            .AsNoTracking()
-            .IgnoreQueryFilters()
-            .SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new NotFoundException("User was not found.");
-
-        return await ResolvePermissionsAsync(user, cancellationToken);
     }
 
     /// <summary>
@@ -740,28 +586,25 @@ internal sealed class MvpAuthService(
 
     private async Task<string> GenerateUniqueSlugAsync(string companyName, CancellationToken cancellationToken)
     {
-        var baseSlug = Slugify(companyName);
+        var baseSlug = TenantEmailIdentity.NormalizeSlug(companyName, fromCompanyName: true);
         var slug = baseSlug;
         var counter = 2;
 
         while (await dbContext.Tenants.AnyAsync(x => x.Slug == slug, cancellationToken))
         {
-            slug = $"{baseSlug}-{counter}";
+            slug = $"{baseSlug[..Math.Min(baseSlug.Length, 58)]}-{counter}";
             counter += 1;
         }
 
         return slug;
     }
 
-    private static string Slugify(string value)
-    {
-        var normalized = Regex.Replace(value.Trim().ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
-        return string.IsNullOrWhiteSpace(normalized) ? "tenant" : normalized;
-    }
-
     private async Task ProvisionTenantDefaultsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
-        await licenseGuardService.GetOrCreateTenantLicenseAsync(tenantId, cancellationToken);
+        var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenantId, cancellationToken);
+        var suite = await dbContext.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite && x.IsActive, cancellationToken);
+        license.LicensePlanId = suite.Id;
+        license.LicensePlan = suite;
         await tenantSecurityPolicyService.GetOrCreateAsync(tenantId, cancellationToken);
 
         if (!await dbContext.NotificationSettings.AnyAsync(x => x.TenantId == tenantId, cancellationToken))

@@ -3,11 +3,11 @@ export const brand = {
   tagline: 'automate.rely.scale',
   // Public asset paths (served from /public). The rosette + wordmark lockup.
   assets: {
-    lockup: '/ecosys-lockup.svg',
-    lockupDark: '/ecosys-lockup-dark.svg',
-    lockupMono: '/ecosys-lockup-mono.svg',
-    mark: '/ecosys-rosette.svg',
-    markMono: '/ecosys-rosette-mono.svg',
+    lockup: '/logo.svg',
+    lockupDark: '/logo.svg',
+    lockupMono: '/logo.svg',
+    mark: '/logo-icon.svg',
+    markMono: '/logo-icon.svg',
   },
   colors: {
     primary: '#15806A',

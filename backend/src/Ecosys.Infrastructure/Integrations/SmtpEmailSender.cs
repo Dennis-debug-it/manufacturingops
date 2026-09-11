@@ -58,6 +58,13 @@ internal sealed class SmtpEmailSender(IOptions<SmtpOptions> smtpOptions, ILogger
         var mimeMessage = new MimeMessage();
         mimeMessage.From.Add(new MailboxAddress(message.FromName ?? settings.SenderName ?? "Ecosys", message.FromAddress ?? settings.SenderEmail ?? username ?? "noreply@ecosys.local"));
         mimeMessage.To.Add(MailboxAddress.Parse(message.ToAddress));
+        if (message.CcAddresses is { Count: > 0 })
+        {
+            foreach (var ccAddress in message.CcAddresses.Where(address => !string.IsNullOrWhiteSpace(address)).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                mimeMessage.Cc.Add(MailboxAddress.Parse(ccAddress));
+            }
+        }
 
         var replyTo = message.ReplyToEmail ?? settings.ReplyToEmail;
         if (!string.IsNullOrWhiteSpace(replyTo))

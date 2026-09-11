@@ -69,6 +69,9 @@ export interface PlatformTenantListItem {
 }
 
 export interface PlatformTenantDetail extends PlatformTenantListItem {
+  serviceOpsEmail?: string | null
+  timeZoneId?: string | null
+  currency?: string | null
   contactPhone: string | null
   country: string | null
   county: string | null
@@ -147,6 +150,7 @@ export interface PlatformLicensePlan {
   monthlyPrice: number
   annualPrice: number
   maxUsers: number | null
+  maxBranches: number | null
   maxAssets: number | null
   maxWorkOrders: number | null
   modulesIncluded: string[]

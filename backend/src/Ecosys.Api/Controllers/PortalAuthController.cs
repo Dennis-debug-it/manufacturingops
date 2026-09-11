@@ -2,17 +2,19 @@ using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
+using Ecosys.Shared.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Ecosys.Api.Controllers;
 
 [ApiController]
 [EnableRateLimiting("AuthEndpoints")]
 [Route("api/portal/auth")]
-public sealed class PortalAuthController(IPortalAuthService portalAuthService, AppDbContext dbContext, IPortalContext portalContext) : ControllerBase
+public sealed class PortalAuthController(IPortalAuthService portalAuthService, AppDbContext dbContext, IPortalContext portalContext, IOptions<PublicAppOptions> publicAppOptions) : ControllerBase
 {
     [Authorize(Policy = "PortalAccess")]
     [HttpGet("me")]
@@ -25,7 +27,11 @@ public sealed class PortalAuthController(IPortalAuthService portalAuthService, A
             .SingleOrDefaultAsync(x => x.Id == portalUserId && x.IsActive, cancellationToken)
             ?? throw new UnauthorizedException("Portal session is no longer valid.");
 
-        if (portalUser.Client is null || portalUser.Tenant is null || !portalUser.Tenant.IsActive)
+        if (portalUser.Client is null || !portalUser.Client.IsActive
+            || portalUser.Client.TenantId != portalUser.TenantId
+            || portalUser.ClientId != portalContext.GetRequiredClientId()
+            || portalUser.TenantId != portalContext.GetRequiredTenantId()
+            || portalUser.Tenant is null || !portalUser.Tenant.IsActive)
         {
             throw new UnauthorizedException("Portal session is no longer valid.");
         }
@@ -74,13 +80,15 @@ public sealed class PortalAuthController(IPortalAuthService portalAuthService, A
 
     private string ResolveOrigin()
     {
-        var origin = Request.Headers.Origin.FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(origin))
+        var configuredUrl = publicAppOptions.Value.PublicUrl?.Trim();
+        if (Uri.TryCreate(configuredUrl, UriKind.Absolute, out var uri)
+            && uri.Scheme is "https" or "http" && string.IsNullOrEmpty(uri.UserInfo)
+            && string.IsNullOrEmpty(uri.Query) && string.IsNullOrEmpty(uri.Fragment))
         {
-            return origin.TrimEnd('/');
+            return uri.AbsoluteUri.TrimEnd('/');
         }
 
-        return $"{Request.Scheme}://{Request.Host.Value}".TrimEnd('/');
+        throw new InvalidOperationException("App:PublicUrl must be configured for authentication links.");
     }
 }
 
