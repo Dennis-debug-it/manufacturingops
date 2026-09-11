@@ -1,4 +1,6 @@
 using System;
+using Ecosys.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Ecosys.Infrastructure.Migrations.AppDb;
 
 [Migration("20260911120000_ReconcileServiceOpsProvisioningIdentityInvitations")]
+[DbContext(typeof(AppDbContext))]
 public partial class ReconcileServiceOpsProvisioningIdentityInvitations : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
