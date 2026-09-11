@@ -80,12 +80,12 @@ export function UsersPage() {
           <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => setActiveUser(row)}>
             {row.status === 'Active' ? 'Deactivate' : 'Activate'}
           </button>
-          <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => setResendUser(row)}>
-            Resend credentials
-          </button>
-          <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => setResetUser(row)}>
-            Reset password
-          </button>
+          {row.status === 'Active' && row.mustChangePassword ? <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => setResendUser(row)}>
+            Resend Initial Invite
+          </button> : null}
+          {row.status === 'Active' && !row.mustChangePassword ? <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => setResetUser(row)}>
+            Send Password Reset
+          </button> : null}
         </div>
       ),
     },
@@ -212,8 +212,8 @@ export function UsersPage() {
       </FormDrawer>
 
       <ConfirmDialog open={activeUser !== null} title={activeUser?.status === 'Active' ? 'Deactivate user' : 'Activate user'} message={activeUser ? `${activeUser.status === 'Active' ? 'Deactivate' : 'Activate'} ${activeUser.fullName}?` : ''} confirmLabel={activeUser?.status === 'Active' ? 'Deactivate' : 'Activate'} onCancel={() => setActiveUser(null)} onConfirm={() => void toggleActive()} />
-      <ConfirmDialog open={resetUser !== null} title="Reset password" message={resetUser ? `Reset password for ${resetUser.fullName}? A fresh credential email will be sent.` : ''} confirmLabel="Reset" onCancel={() => setResetUser(null)} onConfirm={() => void doReset()} />
-      <ConfirmDialog open={resendUser !== null} title="Resend credentials" message={resendUser ? `Resend credentials to ${resendUser.fullName}?` : ''} confirmLabel="Resend" onCancel={() => setResendUser(null)} onConfirm={() => void doResend()} />
+      <ConfirmDialog open={resetUser !== null} title="Send password reset" message={resetUser ? `Send a password reset link to ${resetUser.fullName}? Their current password will remain unchanged until the link is used.` : ''} confirmLabel="Send reset" onCancel={() => setResetUser(null)} onConfirm={() => void doReset()} />
+      <ConfirmDialog open={resendUser !== null} title="Resend initial invite" message={resendUser ? `Resend the account activation link to ${resendUser.fullName}?` : ''} confirmLabel="Resend invite" onCancel={() => setResendUser(null)} onConfirm={() => void doResend()} />
     </div>
   )
 }

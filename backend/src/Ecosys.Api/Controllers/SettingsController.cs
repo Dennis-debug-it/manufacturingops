@@ -91,6 +91,7 @@ public sealed class SettingsController(
     public async Task<ActionResult<EmailSettingsResponse>> GetEmail(CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
+        EnsurePlatformEmailAccess();
         var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
         return Ok(MapLegacyEmail(settings));
     }
@@ -99,6 +100,7 @@ public sealed class SettingsController(
     public async Task<ActionResult<EmailSettingsResponse>> UpdateEmail([FromBody] EmailSettingsRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
+        EnsurePlatformEmailAccess();
         var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
 
         ApplyEmailNotificationSettings(settings, new EmailNotificationSettingsRequest(
@@ -127,6 +129,7 @@ public sealed class SettingsController(
     public async Task<ActionResult<EmailNotificationSettingsResponse>> GetEmailNotifications(CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
+        EnsurePlatformEmailAccess();
         var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
         return Ok(MapEmailNotification(settings));
     }
@@ -135,6 +138,7 @@ public sealed class SettingsController(
     public async Task<ActionResult<EmailNotificationSettingsResponse>> UpdateEmailNotifications([FromBody] EmailNotificationSettingsRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
+        EnsurePlatformEmailAccess();
         ValidateEmailNotificationRequest(request);
 
         var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
@@ -149,6 +153,7 @@ public sealed class SettingsController(
     public async Task<ActionResult<EmailNotificationTestResponse>> TestEmailNotifications([FromBody] EmailNotificationTestRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
+        EnsurePlatformEmailAccess();
         var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
         var recipient = string.IsNullOrWhiteSpace(request.TestRecipientEmail) ? settings.SenderAddress : request.TestRecipientEmail.Trim();
 
@@ -592,6 +597,12 @@ public sealed class SettingsController(
         dbContext.EmailIntakeSettings.Add(settings);
         await dbContext.SaveChangesAsync(cancellationToken);
         return settings;
+    }
+
+    private void EnsurePlatformEmailAccess()
+    {
+        if (!tenantContext.IsSuperAdmin)
+            throw new ForbiddenException("Email infrastructure is managed by the platform. Use tenant email identity settings for display name and reply-to preferences.");
     }
 
     private static void ValidateEmailNotificationRequest(EmailNotificationSettingsRequest request)

@@ -2505,8 +2505,18 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<int?>("AttemptCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("CcAddressesJson")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentType")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
 
                     b.Property<string>("ErrorCategory")
                         .HasMaxLength(120)
@@ -2560,6 +2570,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("TenantId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("TriggeredAutomatically")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid?>("TriggeredByUserId")
                         .HasColumnType("uuid");
 
@@ -2578,7 +2591,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("TemplateKey");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId", "DocumentType", "DocumentId");
 
                     b.ToTable("email_delivery_logs", (string)null);
                 });
@@ -2684,11 +2697,24 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AttachmentsJson")
+                        .HasColumnType("text");
+
                     b.Property<int>("AttemptCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("CcAddressesJson")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentType")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
 
                     b.Property<string>("ErrorCategory")
                         .HasMaxLength(120)
@@ -2706,6 +2732,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<string>("HtmlBody")
                         .HasMaxLength(64000)
                         .HasColumnType("character varying(64000)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime?>("LastAttemptAt")
                         .HasColumnType("timestamp with time zone");
@@ -2762,6 +2792,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(32000)
                         .HasColumnType("character varying(32000)");
 
+                    b.Property<bool>("TriggeredAutomatically")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid?>("TriggeredByUserId")
                         .HasColumnType("uuid");
 
@@ -2772,9 +2805,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("CreatedAt");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
 
                     b.HasIndex("Status", "NextAttemptAt");
+
+                    b.HasIndex("TenantId", "DocumentType", "DocumentId");
 
                     b.ToTable("email_outbox_messages", (string)null);
                 });
@@ -2791,6 +2827,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("EmailSignature")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
                     b.Property<string>("EncryptedSecret")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
@@ -2799,6 +2839,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("InboundEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("IsConfigured")
                         .HasColumnType("boolean");
@@ -2812,6 +2855,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<DateTime?>("LastTestedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ManagedEmailAddress")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<bool>("OverrideSmtpSettings")
                         .HasColumnType("boolean");
@@ -2864,6 +2911,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("character varying(200)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ManagedEmailAddress")
+                        .IsUnique();
 
                     b.HasIndex("TenantId")
                         .IsUnique();
@@ -3942,7 +3992,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Trial",
                             EmailIngestion = false,
-                            IsActive = true,
+                            IsActive = false,
                             MaxAssets = 25,
                             MaxBranches = 1,
                             MaxUsers = 5,
@@ -3961,7 +4011,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Starter",
                             EmailIngestion = true,
-                            IsActive = true,
+                            IsActive = false,
                             MaxAssets = 250,
                             MaxBranches = 3,
                             MaxUsers = 15,
@@ -3980,7 +4030,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Professional",
                             EmailIngestion = true,
-                            IsActive = true,
+                            IsActive = false,
                             MaxAssets = 2500,
                             MaxBranches = 10,
                             MaxUsers = 50,
@@ -3999,11 +4049,56 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Enterprise",
                             EmailIngestion = true,
-                            IsActive = true,
+                            IsActive = false,
                             ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
                             MonitoringIntegration = true,
                             MonthlyPrice = 99900m,
                             PlanCode = "Enterprise"
+                        },
+                        new
+                        {
+                            Id = new Guid("55555555-5555-5555-5555-555555555551"),
+                            AdvancedReports = true,
+                            AnnualPrice = 0m,
+                            ClientPortal = true,
+                            CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Ecosys ServiceOps Operations",
+                            EmailIngestion = true,
+                            IsActive = true,
+                            ModulesIncluded = "Core,operations,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
+                            MonitoringIntegration = true,
+                            MonthlyPrice = 0m,
+                            PlanCode = "operations"
+                        },
+                        new
+                        {
+                            Id = new Guid("55555555-5555-5555-5555-555555555552"),
+                            AdvancedReports = true,
+                            AnnualPrice = 0m,
+                            ClientPortal = false,
+                            CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Ecosys ServiceOps Finance",
+                            EmailIngestion = false,
+                            IsActive = true,
+                            ModulesIncluded = "Core,finance,AdvancedReports",
+                            MonitoringIntegration = false,
+                            MonthlyPrice = 0m,
+                            PlanCode = "finance"
+                        },
+                        new
+                        {
+                            Id = new Guid("55555555-5555-5555-5555-555555555553"),
+                            AdvancedReports = true,
+                            AnnualPrice = 0m,
+                            ClientPortal = true,
+                            CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Ecosys ServiceOps Suite",
+                            EmailIngestion = true,
+                            IsActive = true,
+                            ModulesIncluded = "Core,operations,finance,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
+                            MonitoringIntegration = true,
+                            MonthlyPrice = 0m,
+                            PlanCode = "suite"
                         });
                 });
 
@@ -4757,9 +4852,22 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
                     b.Property<string>("RequestedIp")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SupersededAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("TokenHash")
                         .IsRequired()
@@ -4770,6 +4878,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("UsedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UserAgent")
@@ -7151,6 +7260,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("CreatedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
                     b.Property<DateTime?>("DeactivatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -7255,6 +7369,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("TaxPin")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("TimeZoneId")
+                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 

@@ -13,3 +13,10 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   event.respondWith(fetch(event.request))
 })
+
+self.addEventListener('sync', (event) => {
+  if (event.tag !== 'ecosys-sync') return
+  event.waitUntil(self.clients.matchAll({ type: 'window' }).then((clients) =>
+    Promise.all(clients.map((client) => client.postMessage({ type: 'ECOSYS_SYNC_REQUESTED' }))),
+  ))
+})

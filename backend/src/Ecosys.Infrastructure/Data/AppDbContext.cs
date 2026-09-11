@@ -201,6 +201,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
             entity.Property(x => x.Phone).HasMaxLength(50);
             entity.Property(x => x.Country).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.TimeZoneId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
             entity.Property(x => x.Industry).HasMaxLength(100);
             entity.Property(x => x.ContactName).HasMaxLength(200);
             entity.Property(x => x.ContactEmail).HasMaxLength(256);
@@ -330,6 +332,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("password_reset_tokens");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Purpose).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.UsedAt).IsConcurrencyToken();
+            entity.Property(x => x.SupersededAt).IsConcurrencyToken();
+            entity.Property(x => x.RevokedAt).IsConcurrencyToken();
             entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
             entity.Property(x => x.RequestedIp).HasMaxLength(100);
             entity.Property(x => x.UserAgent).HasMaxLength(1000);
@@ -1355,6 +1361,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("email_settings");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.ManagedEmailAddress).HasMaxLength(256);
+            entity.Property(x => x.EmailSignature).HasMaxLength(4000);
+            entity.HasIndex(x => x.ManagedEmailAddress).IsUnique();
             entity.Property(x => x.UsePlatformDefaults).HasDefaultValue(true);
             entity.Property(x => x.Provider).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Host).HasMaxLength(200).IsRequired();
@@ -1491,7 +1500,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                     MonitoringIntegration = false,
                     AdvancedReports = false,
                     ClientPortal = false,
-                    IsActive = true,
+                    IsActive = false,
                     CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
                 },
                 new LicensePlan
@@ -1510,7 +1519,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                     MonitoringIntegration = false,
                     AdvancedReports = false,
                     ClientPortal = false,
-                    IsActive = true,
+                    IsActive = false,
                     CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
                 },
                 new LicensePlan
@@ -1529,7 +1538,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                     MonitoringIntegration = true,
                     AdvancedReports = true,
                     ClientPortal = false,
-                    IsActive = true,
+                    IsActive = false,
                     CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
                 },
                 new LicensePlan
@@ -1548,8 +1557,28 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                     MonitoringIntegration = true,
                     AdvancedReports = true,
                     ClientPortal = true,
-                    IsActive = true,
+                    IsActive = false,
                     CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new LicensePlan
+                {
+                    Id = Guid.Parse("55555555-5555-5555-5555-555555555551"), PlanCode = "operations",
+                    DisplayName = "Ecosys ServiceOps Operations", ModulesIncluded = "Core,operations,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
+                    EmailIngestion = true, MonitoringIntegration = true, AdvancedReports = true, ClientPortal = true,
+                    IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new LicensePlan
+                {
+                    Id = Guid.Parse("55555555-5555-5555-5555-555555555552"), PlanCode = "finance",
+                    DisplayName = "Ecosys ServiceOps Finance", ModulesIncluded = "Core,finance,AdvancedReports",
+                    AdvancedReports = true, IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new LicensePlan
+                {
+                    Id = Guid.Parse("55555555-5555-5555-5555-555555555553"), PlanCode = "suite",
+                    DisplayName = "Ecosys ServiceOps Suite", ModulesIncluded = "Core,operations,finance,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
+                    EmailIngestion = true, MonitoringIntegration = true, AdvancedReports = true, ClientPortal = true,
+                    IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
                 });
         });
 
@@ -2059,6 +2088,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.ErrorCategory).HasMaxLength(120);
             entity.Property(x => x.ErrorMessage).HasMaxLength(4000);
+            entity.Property(x => x.DocumentType).HasMaxLength(80);
+            entity.HasIndex(x => new { x.TenantId, x.DocumentType, x.DocumentId });
             entity.Property(x => x.ProviderMessageId).HasMaxLength(200);
             entity.HasIndex(x => x.CreatedAt);
             entity.HasIndex(x => x.Status);
@@ -2092,6 +2123,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.ErrorCategory).HasMaxLength(120);
             entity.Property(x => x.ErrorMessage).HasMaxLength(4000);
+            entity.Property(x => x.CcAddressesJson).HasColumnType("text");
+            entity.Property(x => x.AttachmentsJson).HasColumnType("text");
+            entity.Property(x => x.DocumentType).HasMaxLength(80);
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(200);
+            entity.HasIndex(x => x.IdempotencyKey).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.DocumentType, x.DocumentId });
             entity.HasIndex(x => new { x.Status, x.NextAttemptAt });
             entity.HasIndex(x => x.CreatedAt);
             entity.HasOne(x => x.Tenant)

@@ -12,6 +12,7 @@ import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { MobileActionBar } from '../../shared/components/MobileActionBar'
 import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
+import { useEntitlements } from '../../shared/hooks/useEntitlements'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import {
   useCancelWorkOrder,
@@ -62,6 +63,7 @@ const summaryFields: Array<{ key: string; label: string; render?: (value: string
 ]
 
 export function WorkOrderDetailPage() {
+  const { hasModule } = useEntitlements()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: workOrder, isLoading, isError } = useWorkOrder(id)
@@ -205,7 +207,7 @@ export function WorkOrderDetailPage() {
           ) : (
             <StatusBadge status={status} />
           )}
-          {workOrder.quoteId && workOrder.quoteNumber ? (
+          {hasModule('finance') && workOrder.quoteId && workOrder.quoteNumber ? (
             <Link
               to={`/finance/quotes/${workOrder.quoteId}`}
               className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200 transition hover:bg-sky-100"

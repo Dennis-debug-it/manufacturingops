@@ -212,12 +212,12 @@ async function mockPlatformOwnerWorkspace(page: Page) {
     const request = route.request().postDataJSON() as Record<string, unknown>
     const created: TenantRecord = {
       tenantId: 'tenant-created-1',
-      name: String(request.name),
+      name: String(request.companyName),
       slug: String(request.slug),
-      contactName: String(request.primaryContactName),
-      contactEmail: String(request.primaryContactEmail),
+      contactName: String(request.adminFullName),
+      contactEmail: String(request.adminEmail),
       contactPhone: String(request.primaryContactPhone ?? ''),
-      planName: String(request.planName ?? 'Trial'),
+      planName: String(request.planCode ?? 'suite'),
       licenseStatus: 'Trial',
       userCount: 1,
       branchCount: 0,
@@ -266,27 +266,18 @@ test.describe('auth tenant onboarding', () => {
     await expect(page).toHaveURL(/\/platform\/tenants/)
     await expect(page.getByTestId('tenants-page')).toBeVisible()
 
-    await page.getByRole('button', { name: /add tenant/i }).click()
-    await expect(page.getByRole('heading', { name: /add tenant/i })).toBeVisible()
-
-    await page.getByRole('textbox', { name: 'Company Name', exact: true }).fill('Northwind ServiceOps')
-    await page.getByRole('textbox', { name: 'Company Email', exact: true }).fill('hello@northwind.test')
-    await page.getByRole('textbox', { name: 'Company Phone', exact: true }).fill('+254700001234')
-    await page.getByRole('textbox', { name: 'Country', exact: true }).fill('Kenya')
-    await page.getByRole('textbox', { name: 'Industry', exact: true }).fill('Facilities')
-    await page.getByRole('textbox', { name: 'Primary Contact Name', exact: true }).fill('Amina Hassan')
-    await page.getByRole('textbox', { name: 'Primary Contact Email', exact: true }).fill('amina@northwind.test')
-    await page.getByRole('textbox', { name: 'Primary Contact Phone', exact: true }).fill('+254700001235')
-    await page.getByRole('textbox', { name: 'Plan', exact: true }).fill('Growth')
-    await page.getByRole('spinbutton', { name: 'Max Users', exact: true }).fill('15')
-    await page.getByRole('spinbutton', { name: 'Max Branches', exact: true }).fill('3')
-
     await page.getByRole('button', { name: /create tenant/i }).click()
+    await expect(page.getByRole('heading', { name: /create tenant/i })).toBeVisible()
+    await page.getByRole('textbox', { name: 'Company Name', exact: true }).fill('Northwind ServiceOps')
+    await page.getByRole('textbox', { name: 'Tenant Slug', exact: true }).fill('northwind')
+    await page.getByRole('textbox', { name: 'Primary Admin Name', exact: true }).fill('Amina Hassan')
+    await page.getByRole('textbox', { name: 'Primary Admin Email', exact: true }).fill('amina@northwind.test')
+    await page.getByRole('radio', { name: 'ServiceOps Suite', exact: true }).check()
+    const creationRequest = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/platform/tenants')
+    await page.getByRole('button', { name: /create tenant/i }).last().click()
+    expect((await creationRequest).postDataJSON()).toMatchObject({ companyName: 'Northwind ServiceOps', slug: 'northwind', planCode: 'suite', adminFullName: 'Amina Hassan', adminEmail: 'amina@northwind.test', country: 'Kenya', timeZoneId: 'Africa/Nairobi' })
+    await expect(page).toHaveURL(/\/platform\/tenants\/tenant-created-1$/)
 
-    await expect(page.getByText('Tenant created', { exact: true })).toBeVisible()
-    await expect(page.getByText(/workspace admin invited/i)).toBeVisible()
-    await expect(page.getByRole('table').getByText('Northwind ServiceOps')).toBeVisible()
-    await expect(page.getByRole('table').getByText(/Trial active/i)).toBeVisible()
   })
 
   test('platform notification rules expose only the approved active hooks', async ({ page }) => {

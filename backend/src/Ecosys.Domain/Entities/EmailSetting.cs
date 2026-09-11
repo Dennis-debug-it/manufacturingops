@@ -18,6 +18,10 @@ public sealed class EmailSetting : AuditableEntity, ITenantEntity
     public string? EncryptedSecret { get; set; }
     public string SenderName { get; set; } = string.Empty;
     public string SenderAddress { get; set; } = string.Empty;
+    /// <summary>Platform-managed address; legacy custom sender configuration is retained separately.</summary>
+    public string? ManagedEmailAddress { get; set; }
+    public bool InboundEnabled { get; set; } = true;
+    public string? EmailSignature { get; set; }
     public bool IsConfigured { get; set; }
     public DateTime? LastTestedAt { get; set; }
     public string? LastError { get; set; }

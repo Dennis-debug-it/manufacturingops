@@ -9,4 +9,6 @@ public sealed class AuthSecurityOptions
     public int RateLimitPermitLimit { get; set; } = 20;
     public int RateLimitWindowSeconds { get; set; } = 60;
     public int RateLimitQueueLimit { get; set; } = 0;
+    public int InvitationLifetimeHours { get; set; } = 72;
+    public int PasswordResetLifetimeMinutes { get; set; } = 60;
 }

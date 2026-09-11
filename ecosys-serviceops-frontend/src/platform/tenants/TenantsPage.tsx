@@ -34,51 +34,28 @@ type TrialFilter = (typeof trialOptions)[number]
 type CreateTenantForm = {
   companyName: string
   slug: string
-  companyEmail: string
-  companyPhone: string
-  industry: string
-  contactName: string
-  contactEmail: string
-  contactPhone: string
-  country: string
-  county: string
-  city: string
-  address: string
-  taxPin: string
-  planName: string
-  maxUsers: number | null
-  maxBranches: number | null
-  trialLengthDays: number
-  createDefaultAdmin: boolean
-  usePrimaryContactAsWorkspaceAdmin: boolean
+  planCode: 'operations' | 'finance' | 'suite'
   adminFullName: string
   adminEmail: string
-  adminPhone: string
+  country: string
+  timeZoneId: string
+}
+
+const countryTimeZones: Record<string, string> = {
+  kenya: 'Africa/Nairobi', uganda: 'Africa/Kampala', rwanda: 'Africa/Kigali',
+  tanzania: 'Africa/Dar_es_Salaam', nigeria: 'Africa/Lagos',
+  'south africa': 'Africa/Johannesburg', 'united kingdom': 'Europe/London',
+}
+
+// A suggestion only: the server normalizes, validates and checks uniqueness.
+function suggestSlug(companyName: string) {
+  return companyName.toLowerCase().replace(/\b(ltd|limited|inc|llc)\.?$/g, '').trim()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
 
 const emptyForm: CreateTenantForm = {
-  companyName: '',
-  slug: '',
-  companyEmail: '',
-  companyPhone: '',
-  industry: '',
-  contactName: '',
-  contactEmail: '',
-  contactPhone: '',
-  country: '',
-  county: '',
-  city: '',
-  address: '',
-  taxPin: '',
-  planName: '',
-  maxUsers: 25,
-  maxBranches: 3,
-  trialLengthDays: 14,
-  createDefaultAdmin: true,
-  usePrimaryContactAsWorkspaceAdmin: true,
-  adminFullName: '',
-  adminEmail: '',
-  adminPhone: '',
+  companyName: '', slug: '', planCode: 'suite', adminFullName: '', adminEmail: '',
+  country: 'Kenya', timeZoneId: 'Africa/Nairobi',
 }
 
 export function TenantsPage() {
@@ -97,6 +74,7 @@ export function TenantsPage() {
 
   const [showCreate, setShowCreate] = useState(false)
   const [createForm, setCreateForm] = useState(emptyForm)
+  const [slugEdited, setSlugEdited] = useState(false)
   const [prefilledLeadId, setPrefilledLeadId] = useState<string | null>(null)
   const [showSuspend, setShowSuspend] = useState<PlatformTenantListItem | null>(null)
   const [showDeactivate, setShowDeactivate] = useState<PlatformTenantListItem | null>(null)
@@ -196,6 +174,7 @@ export function TenantsPage() {
   const closeCreate = () => {
     setShowCreate(false)
     setCreateForm(emptyForm)
+    setSlugEdited(false)
     setPrefilledLeadId(null)
   }
 
@@ -205,13 +184,12 @@ export function TenantsPage() {
       return
     }
 
-    if (createForm.usePrimaryContactAsWorkspaceAdmin) {
-      if (!createForm.contactName.trim() || !createForm.contactEmail.trim()) {
-        toast.error('Primary contact name and email are required for the first admin.')
-        return
-      }
-    } else if (!createForm.adminFullName.trim() || !createForm.adminEmail.trim()) {
-      toast.error('First admin full name and email are required.')
+    if (!createForm.adminFullName.trim() || !createForm.adminEmail.trim() || !createForm.country.trim() || !createForm.timeZoneId.trim()) {
+      toast.error('Primary administrator, country and timezone are required.')
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(createForm.adminEmail.trim())) {
+      toast.error('Enter a valid administrator email address.')
       return
     }
 
@@ -219,39 +197,18 @@ export function TenantsPage() {
       const payload = {
         companyName: createForm.companyName.trim(),
         slug: createForm.slug.trim(),
-        ...(createForm.companyEmail.trim() ? { companyEmail: createForm.companyEmail.trim() } : {}),
-        ...(createForm.companyPhone.trim() ? { companyPhone: createForm.companyPhone.trim() } : {}),
-        ...(createForm.industry.trim() ? { industry: createForm.industry.trim() } : {}),
-        ...(createForm.contactName.trim() ? { contactName: createForm.contactName.trim() } : {}),
-        ...(createForm.contactEmail.trim() ? { contactEmail: createForm.contactEmail.trim() } : {}),
-        ...(createForm.contactPhone.trim() ? { contactPhone: createForm.contactPhone.trim() } : {}),
-        ...(createForm.contactName.trim() ? { primaryContactName: createForm.contactName.trim() } : {}),
-        ...(createForm.contactEmail.trim() ? { primaryContactEmail: createForm.contactEmail.trim() } : {}),
-        ...(createForm.contactPhone.trim() ? { primaryContactPhone: createForm.contactPhone.trim() } : {}),
-        ...(createForm.country.trim() ? { country: createForm.country.trim() } : {}),
-        ...(createForm.county.trim() ? { county: createForm.county.trim() } : {}),
-        ...(createForm.city.trim() ? { city: createForm.city.trim() } : {}),
-        ...(createForm.address.trim() ? { address: createForm.address.trim() } : {}),
-        ...(createForm.taxPin.trim() ? { taxPin: createForm.taxPin.trim() } : {}),
-        ...(createForm.planName.trim() ? { planName: createForm.planName.trim() } : {}),
-        maxUsers: createForm.maxUsers,
-        maxBranches: createForm.maxBranches,
-        trialEndsAt: null,
-        subscriptionEndsAt: null,
-        startsAt: null,
-        expiresAt: null,
-        status: 'Active',
-        licenseStatus: 'Trial',
-        createDefaultAdmin: createForm.createDefaultAdmin,
-        usePrimaryContactAsWorkspaceAdmin: createForm.usePrimaryContactAsWorkspaceAdmin,
-        adminFullName: createForm.usePrimaryContactAsWorkspaceAdmin ? createForm.contactName.trim() : createForm.adminFullName.trim(),
-        adminEmail: createForm.usePrimaryContactAsWorkspaceAdmin ? createForm.contactEmail.trim() : createForm.adminEmail.trim(),
-        ...(createForm.usePrimaryContactAsWorkspaceAdmin
-          ? (createForm.contactPhone.trim() ? { adminPhone: createForm.contactPhone.trim() } : {})
-          : (createForm.adminPhone.trim() ? { adminPhone: createForm.adminPhone.trim() } : {})),
-      } as const
+        planCode: createForm.planCode,
+        adminFullName: createForm.adminFullName.trim(),
+        adminEmail: createForm.adminEmail.trim(),
+        country: createForm.country.trim(),
+        timeZoneId: createForm.timeZoneId.trim(),
+      }
       const created = await createTenant.mutateAsync(payload)
-      toast.success(`Tenant ${created.name} created. The first admin was created inside the workspace.`)
+      if (created.initialAdminInvitationSent === false) {
+        toast.error(`Tenant ${created.name} created. Invitation delivery failed; resend it from Users & Access.`)
+      } else {
+        toast.success(`Tenant ${created.name} created. Administrator invitation sent.`)
+      }
       closeCreate()
       navigate(`/platform/tenants/${created.tenantId}`)
     } catch {
@@ -267,15 +224,11 @@ export function TenantsPage() {
     setCreateForm((current) => ({
       ...current,
       companyName: lead.data.companyName,
-      slug: current.slug || lead.data.companyName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-      industry: lead.data.industry ?? current.industry,
-      contactName: lead.data.contactPersonName ?? current.contactName,
-      contactEmail: lead.data.email ?? current.contactEmail,
-      contactPhone: lead.data.phone ?? current.contactPhone,
+      slug: current.slug || suggestSlug(lead.data.companyName),
       country: lead.data.country ?? current.country,
+      timeZoneId: countryTimeZones[(lead.data.country ?? '').toLowerCase()] ?? current.timeZoneId,
       adminFullName: lead.data.contactPersonName ?? current.adminFullName,
       adminEmail: lead.data.email ?? current.adminEmail,
-      adminPhone: lead.data.phone ?? current.adminPhone,
     }))
     setPrefilledLeadId(lead.data.id)
   }, [lead.data, prefilledLeadId, showCreate])
@@ -362,68 +315,48 @@ export function TenantsPage() {
         }
       >
         <div className="space-y-5">
+          <p className="text-sm text-slate-600">Create a ready-to-use workspace and invite its administrator. Company details can be completed in Settings after sign-in.</p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <Field label="Company / tenant name">
-              <input value={createForm.companyName} onChange={(event) => setCreateForm((current) => ({ ...current, companyName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+            <Field label="Company Name">
+              <input required value={createForm.companyName} onChange={(event) => setCreateForm((current) => ({ ...current, companyName: event.target.value, slug: slugEdited ? current.slug : suggestSlug(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
             </Field>
-            <Field label="Workspace slug">
-              <input value={createForm.slug} onChange={(event) => setCreateForm((current) => ({ ...current, slug: event.target.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-') }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 font-mono text-sm outline-none focus:border-slate-900" />
+            <Field label="Tenant Slug">
+              <input required value={createForm.slug} onChange={(event) => { setSlugEdited(true); setCreateForm((current) => ({ ...current, slug: event.target.value })) }} className="h-11 w-full rounded-lg border border-slate-200 px-3 font-mono text-sm outline-none focus:border-slate-900" />
             </Field>
-            <Field label="Industry">
-              <input value={createForm.industry} onChange={(event) => setCreateForm((current) => ({ ...current, industry: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4" aria-live="polite">
+            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">ServiceOps Email</p>
+            <p className="mt-1 break-all text-sm font-medium text-emerald-950">{suggestSlug(createForm.slug) || '{tenant-slug}'}@serviceops.ecosysdigital.co.ke</p>
+            <p className="mt-1 text-xs text-emerald-800">Automatically provisioned. The server confirms the final address.</p>
+          </div>
+          <fieldset>
+            <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Plan</legend>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {(['operations', 'finance', 'suite'] as const).map((code) => (
+                <label key={code} className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm ${createForm.planCode === code ? 'border-slate-900 bg-slate-50 font-semibold text-slate-900' : 'border-slate-200 text-slate-600'}`}>
+                  <input type="radio" name="plan" value={code} checked={createForm.planCode === code} onChange={() => setCreateForm((current) => ({ ...current, planCode: code }))} />
+                  ServiceOps {code === 'suite' ? 'Suite' : code === 'finance' ? 'Finance' : 'Operations'}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Field label="Primary Admin Name">
+              <input required autoComplete="name" value={createForm.adminFullName} onChange={(event) => setCreateForm((current) => ({ ...current, adminFullName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
             </Field>
-            <Field label="Plan">
-              <input value={createForm.planName} onChange={(event) => setCreateForm((current) => ({ ...current, planName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" placeholder="Trial, Starter, Pro..." />
-            </Field>
-            <Field label="Contact name">
-              <input value={createForm.contactName} onChange={(event) => setCreateForm((current) => ({ ...current, contactName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
-            </Field>
-            <Field label="Contact email">
-              <input type="email" value={createForm.contactEmail} onChange={(event) => setCreateForm((current) => ({ ...current, contactEmail: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
-            </Field>
-            <Field label="Contact phone">
-              <input value={createForm.contactPhone} onChange={(event) => setCreateForm((current) => ({ ...current, contactPhone: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+            <Field label="Primary Admin Email">
+              <input required type="email" autoComplete="email" value={createForm.adminEmail} onChange={(event) => setCreateForm((current) => ({ ...current, adminEmail: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
             </Field>
             <Field label="Country">
-              <input value={createForm.country} onChange={(event) => setCreateForm((current) => ({ ...current, country: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <input required list="tenant-countries" value={createForm.country} onChange={(event) => setCreateForm((current) => ({ ...current, country: event.target.value, timeZoneId: countryTimeZones[event.target.value.trim().toLowerCase()] ?? current.timeZoneId }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <datalist id="tenant-countries">{['Kenya', 'Uganda', 'Rwanda', 'Tanzania', 'Nigeria', 'South Africa', 'United Kingdom'].map((country) => <option key={country} value={country} />)}</datalist>
             </Field>
-            <Field label="County">
-              <input value={createForm.county} onChange={(event) => setCreateForm((current) => ({ ...current, county: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
-            </Field>
-            <Field label="City">
-              <input value={createForm.city} onChange={(event) => setCreateForm((current) => ({ ...current, city: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
-            </Field>
-            <Field label="Max users">
-              <input type="number" value={createForm.maxUsers ?? ''} onChange={(event) => setCreateForm((current) => ({ ...current, maxUsers: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
-            </Field>
-            <Field label="Max branches / sites">
-              <input type="number" value={createForm.maxBranches ?? ''} onChange={(event) => setCreateForm((current) => ({ ...current, maxBranches: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+            <Field label="Timezone">
+              <input required list="tenant-timezones" value={createForm.timeZoneId} onChange={(event) => setCreateForm((current) => ({ ...current, timeZoneId: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+              <datalist id="tenant-timezones">{Object.values(countryTimeZones).map((zone) => <option key={zone} value={zone} />)}</datalist>
             </Field>
           </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <label className="flex items-center justify-between gap-3 text-sm text-slate-700">
-              <span>Use primary contact as first workspace admin</span>
-              <input type="checkbox" checked={createForm.usePrimaryContactAsWorkspaceAdmin} onChange={(event) => setCreateForm((current) => ({ ...current, usePrimaryContactAsWorkspaceAdmin: event.target.checked }))} className="h-4 w-4 rounded border-slate-300" />
-            </label>
-            <label className="mt-3 flex items-center justify-between gap-3 text-sm text-slate-700">
-              <span>Create default admin account</span>
-              <input type="checkbox" checked={createForm.createDefaultAdmin} onChange={(event) => setCreateForm((current) => ({ ...current, createDefaultAdmin: event.target.checked }))} className="h-4 w-4 rounded border-slate-300" />
-            </label>
-            {!createForm.usePrimaryContactAsWorkspaceAdmin ? (
-              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Field label="First admin full name">
-                  <input value={createForm.adminFullName} onChange={(event) => setCreateForm((current) => ({ ...current, adminFullName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
-                </Field>
-                <Field label="First admin email">
-                  <input type="email" value={createForm.adminEmail} onChange={(event) => setCreateForm((current) => ({ ...current, adminEmail: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
-                </Field>
-                <Field label="First admin phone">
-                  <input value={createForm.adminPhone} onChange={(event) => setCreateForm((current) => ({ ...current, adminPhone: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
-                </Field>
-              </div>
-            ) : null}
-          </div>
+          <p className="text-xs text-slate-500">Timezone is editable before saving. Currency is set from the country where a reliable default exists.</p>
         </div>
       </FormDrawer>
 

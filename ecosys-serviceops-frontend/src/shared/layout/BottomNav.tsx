@@ -4,6 +4,7 @@ import { Bell, CalendarDays, ClipboardList, MoreHorizontal, UserCircle2, Watch, 
 import { cn } from '../utils/cn'
 import { useAuth } from '../hooks/useAuth'
 import { tenantNavItems, type NavItem } from './navigation'
+import { useEntitlements } from '../hooks/useEntitlements'
 
 const technicianNav = [
   { label: 'Jobs', to: '/work-orders', icon: ClipboardList },
@@ -59,6 +60,7 @@ function MoreSheet({ items, onClose }: { items: Pick<NavItem, 'label' | 'to' | '
 
 export function BottomNav() {
   const { user } = useAuth()
+  const { canAccessPath } = useEntitlements()
   const location = useLocation()
   const [showMore, setShowMore] = useState(false)
 
@@ -66,9 +68,10 @@ export function BottomNav() {
     setShowMore(false)
   }, [location.pathname])
 
-  const allItems = user?.role === 'technician'
+  const allItems = (user?.role === 'technician'
     ? technicianNav
-    : tenantNavItems.filter((item) => item.roles.includes(user?.role ?? 'viewer'))
+    : tenantNavItems.filter((item) => item.roles.includes(user?.role ?? 'viewer')))
+      .filter((item) => canAccessPath(item.to))
 
   if (allItems.length === 0) {
     return null

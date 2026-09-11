@@ -73,7 +73,17 @@ public sealed class PlatformTenantCommunicationSettingsController(
         "Maintenance",
         "Assets",
         "Materials",
-        "SystemAlerts"
+        "SystemAlerts",
+        "Billing",
+        "Finance",
+        "Invoice",
+        "Receipt",
+        "Statement",
+        "BillingCC",
+        "InvoiceCC",
+        "ReceiptCC",
+        "StatementCC",
+        "Additional"
     ];
 
     [HttpGet("email-settings")]

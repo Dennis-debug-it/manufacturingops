@@ -30,8 +30,9 @@ export interface WorkOrderListFilters {
 
 const workOrdersKey = (filters?: WorkOrderListFilters) => ['work-orders', filters ?? {}] as const
 
-export function useWorkOrders(filters?: WorkOrderListFilters) {
+export function useWorkOrders(filters?: WorkOrderListFilters, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: workOrdersKey(filters),
     queryFn: () =>
       api.get<WorkOrder[]>(endpoints.workOrders.list, {

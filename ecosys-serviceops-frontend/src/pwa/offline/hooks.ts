@@ -30,7 +30,7 @@ export function useSyncQueue() {
       const db = await getOfflineDb()
       const entries = await db.getAll('sync_queue')
       if (active) {
-        setQueueLength(entries.filter((entry) => !entry.synced).length)
+        setQueueLength(entries.filter((entry) => !entry.synced && entry.status !== 'conflict').length)
       }
     })()
     return () => {
@@ -39,6 +39,16 @@ export function useSyncQueue() {
   }, [])
 
   return { queueLength }
+}
+
+export function useOfflineQueueMessages(onSyncRequested: () => void) {
+  useEffect(() => {
+    const handler = (event: MessageEvent<{ type?: string }>) => {
+      if (event.data?.type === 'ECOSYS_SYNC_REQUESTED') onSyncRequested()
+    }
+    navigator.serviceWorker?.addEventListener('message', handler)
+    return () => navigator.serviceWorker?.removeEventListener('message', handler)
+  }, [onSyncRequested])
 }
 
 export function useOfflineStatus() {

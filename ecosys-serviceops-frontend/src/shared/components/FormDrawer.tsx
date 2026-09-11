@@ -17,14 +17,14 @@ export function FormDrawer({ open, title, children, footer, onClose, closeOnOver
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4 sm:p-6">
       <button
         type="button"
         aria-label="Close drawer"
-        className="absolute inset-0 bg-slate-900/40"
+        className="absolute inset-0"
         onClick={closeOnOverlayClick ? onClose : undefined}
       />
-      <aside className="relative ml-auto flex h-full w-full max-w-2xl flex-col border-l border-slate-200 bg-white shadow-2xl md:w-[32rem]">
+      <aside className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
         <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
           <div>
             <h3 className="text-lg font-semibold text-slate-900">{title}</h3>

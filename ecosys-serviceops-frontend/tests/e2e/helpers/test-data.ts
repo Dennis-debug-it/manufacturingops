@@ -1,5 +1,5 @@
 export const E2E_BASE_URL = process.env.E2E_BASE_URL || 'http://127.0.0.1:4173'
-export const E2E_API_URL = process.env.E2E_API_URL || process.env.E2E_API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:5072'
+export const E2E_API_URL = process.env.E2E_API_URL || process.env.E2E_API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://127.0.0.1:5072'
 
 export const E2E_PLATFORM_EMAIL =
   process.env.E2E_PLATFORM_EMAIL ||

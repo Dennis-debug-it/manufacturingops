@@ -164,6 +164,8 @@ export function useTenantModuleSettings(id: string | undefined) {
 }
 
 export interface CreateTenantPayload {
+  planCode?: 'operations' | 'finance' | 'suite'
+  timeZoneId?: string
   companyName: string
   slug?: string
   companyEmail?: string
@@ -362,11 +364,17 @@ export interface LicenseUsageSnapshot {
   tenantId: string
   tenantName: string
   planName: string | null
+  planCode: string
+  modules: string[]
+  startsAt: string
   billingCycle: string
   status: string
   licenseStatus: string
   maxUsers: number | null
   maxBranches: number | null
+  maxAssets: number | null
+  monthlyWorkOrders: number
+  monthlyWorkOrdersLimit: number | null
   trialEndsAt: string | null
   expiresAt: string | null
   daysRemaining: number | null

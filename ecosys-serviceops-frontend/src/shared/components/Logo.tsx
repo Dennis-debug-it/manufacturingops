@@ -20,7 +20,7 @@ function src(variant: LogoVariant, tone: LogoTone): string {
   return brand.assets.lockup
 }
 
-/** Ecosys brand logo. Defaults to the full colour lockup for light surfaces. */
+/** Ecosys brand logo. Defaults to the supplied full-colour lockup. */
 export function Logo({ variant = 'lockup', tone = 'light', className }: LogoProps) {
   return <img src={src(variant, tone)} alt={brand.appName} className={className} draggable={false} />
 }

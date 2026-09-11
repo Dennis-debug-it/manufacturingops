@@ -15,10 +15,10 @@ using Microsoft.Extensions.Options;
 
 namespace Ecosys.Tests;
 
-public sealed class AuthEmailSafetyTests
+public sealed partial class AuthEmailSafetyTests
 {
     [Fact]
-    public async Task TenantResendCredentials_Success_UpdatesPasswordAndWritesSentLog()
+    public async Task TenantAdminPasswordReset_Success_SendsLinkWithoutChangingPassword()
     {
         await using var dbContext = CreateDbContext();
         var tenantId = Guid.NewGuid();
@@ -27,7 +27,7 @@ public sealed class AuthEmailSafetyTests
 
         var controller = CreateUsersController(dbContext, tenantId, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true));
 
-        var actionResult = await controller.ResendCredentials(user.Id, CancellationToken.None);
+        var actionResult = await controller.ResetPassword(user.Id, null, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(actionResult.Result);
         var response = Assert.IsType<CredentialDeliveryResponse>(ok.Value);
@@ -35,16 +35,16 @@ public sealed class AuthEmailSafetyTests
 
         var updatedUser = await dbContext.Users.SingleAsync(x => x.Id == user.Id);
         Assert.Equal(originalHash, updatedUser.PasswordHash);
-        Assert.Equal(user.MustChangePassword, updatedUser.MustChangePassword);
+        Assert.False(updatedUser.MustChangePassword);
         Assert.NotNull(updatedUser.LastCredentialSentAt);
 
         var log = await dbContext.EmailDeliveryLogs.SingleAsync(x => x.RecipientEmail == user.Email);
         Assert.Equal("Sent", log.Status);
-        Assert.Equal("account-setup-link", log.TemplateKey);
+        Assert.Equal("password-reset-link", log.TemplateKey);
     }
 
     [Fact]
-    public async Task TenantResendCredentials_Failure_DoesNotChangePasswordAndWritesFailedLog()
+    public async Task TenantAdminPasswordReset_Failure_DoesNotChangePasswordAndWritesFailedLog()
     {
         await using var dbContext = CreateDbContext();
         var tenantId = Guid.NewGuid();
@@ -54,12 +54,12 @@ public sealed class AuthEmailSafetyTests
 
         var controller = CreateUsersController(dbContext, tenantId, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: false));
 
-        var actionResult = await controller.ResendCredentials(user.Id, CancellationToken.None);
+        var actionResult = await controller.ResetPassword(user.Id, null, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(actionResult.Result);
         var response = Assert.IsType<CredentialDeliveryResponse>(ok.Value);
         Assert.False(response.Success);
-        Assert.Equal("Account setup link could not be sent. The user's access remains pending until an invitation is delivered.", response.Message);
+        Assert.Equal("Password reset email could not be sent. The user's password remains unchanged.", response.Message);
 
         var updatedUser = await dbContext.Users.SingleAsync(x => x.Id == user.Id);
         Assert.Equal(originalHash, updatedUser.PasswordHash);
@@ -68,24 +68,26 @@ public sealed class AuthEmailSafetyTests
 
         var log = await dbContext.EmailDeliveryLogs.SingleAsync(x => x.RecipientEmail == user.Email);
         Assert.Equal("Failed", log.Status);
-        Assert.Equal("account-setup-link", log.TemplateKey);
+        Assert.Equal("password-reset-link", log.TemplateKey);
     }
 
     [Fact]
-    public async Task PlatformResendCredentials_Failure_DoesNotChangePassword()
+    public async Task PlatformAdminPasswordReset_Failure_DoesNotChangePassword()
     {
         await using var dbContext = CreateDbContext();
         var user = await SeedPlatformUserAsync(dbContext, "platform.user@ecosys.test");
         var originalHash = user.PasswordHash;
+        user.MustChangePassword = false;
+        await dbContext.SaveChangesAsync();
 
         var controller = CreatePlatformUsersController(dbContext, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: false));
 
-        var actionResult = await controller.ResendCredentials(user.Id, CancellationToken.None);
+        var actionResult = await controller.ResetPassword(user.Id, null, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(actionResult.Result);
         var response = Assert.IsType<PlatformResetPasswordResponse>(ok.Value);
         Assert.False(response.Success);
-        Assert.Equal("Account setup link could not be sent. The user's access remains pending until an invitation is delivered.", response.Message);
+        Assert.Equal("Password reset email could not be sent.", response.Message);
 
         var updatedUser = await dbContext.Users.SingleAsync(x => x.Id == user.Id);
         Assert.Equal(originalHash, updatedUser.PasswordHash);
@@ -920,7 +922,9 @@ public sealed class AuthEmailSafetyTests
             .UseInMemoryDatabase($"ecosys-tests-{Guid.NewGuid():N}")
             .Options;
 
-        return new AppDbContext(options);
+        var db = new AppDbContext(options);
+        db.Database.EnsureCreated();
+        return db;
     }
 
     private static async Task SeedTenantAsync(AppDbContext dbContext, Guid tenantId, string companyName, string email)

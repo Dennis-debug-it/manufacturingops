@@ -24,6 +24,12 @@ public sealed class EmailOutboxMessage : AuditableEntity
     public string? ErrorCategory { get; set; }
     public string? ErrorMessage { get; set; }
     public Guid? TriggeredByUserId { get; set; }
+    public string? CcAddressesJson { get; set; }
+    public string? AttachmentsJson { get; set; }
+    public string? DocumentType { get; set; }
+    public Guid? DocumentId { get; set; }
+    public bool TriggeredAutomatically { get; set; }
+    public string? IdempotencyKey { get; set; }
 
     public Tenant? Tenant { get; set; }
 }

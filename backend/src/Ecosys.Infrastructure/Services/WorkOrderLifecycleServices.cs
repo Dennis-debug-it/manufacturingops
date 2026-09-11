@@ -415,6 +415,7 @@ internal sealed class WorkOrderLifecycleService(
                 .Select(x => x.FullName)
                 .SingleOrDefaultAsync(cancellationToken);
 
+            var tenant = await dbContext.Tenants.AsNoTracking().SingleOrDefaultAsync(x => x.Id == tenantId, cancellationToken);
             var template = await emailTemplateService.RenderTenantTemplateAsync(
                 tenantId,
                 "work-order.started",
@@ -422,7 +423,7 @@ internal sealed class WorkOrderLifecycleService(
                 {
                     ["WorkOrderNumber"] = workOrder.WorkOrderNumber,
                     ["TechnicianName"] = technicianName ?? "N/A",
-                    ["StartedAt"] = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm") + " UTC"
+                    ["StartedAt"] = TenantTimeService.Format(DateTime.UtcNow, tenant?.TimeZoneId, tenant?.Country)
                 },
                 cancellationToken);
 

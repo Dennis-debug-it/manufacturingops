@@ -250,7 +250,7 @@ public sealed class ScheduledReportService(
                 .OrderBy(r => r.Group).ToList()
         };
 
-        return BuildTablePdf(
+        return await BuildTablePdfAsync(report.TenantId, ct,
             $"Revenue Report — {FormatDateRange(start, end)}",
             new[] { "Period/Group", "Invoiced", "Collected", "Outstanding", "Count" },
             rows.Select(r => new[] { r.Group, $"{r.Invoiced:N2}", $"{r.Collected:N2}", $"{r.Outstanding:N2}", r.Count.ToString() }).ToList(),
@@ -279,7 +279,7 @@ public sealed class ScheduledReportService(
             .OrderByDescending(r => decimal.TryParse(r[6], out var v) ? v : 0)
             .ToList();
 
-        return BuildTablePdf(
+        return await BuildTablePdfAsync(report.TenantId, ct,
             $"Aging Analysis — {now:yyyy-MM-dd}",
             new[] { "Client", "Current", "1–30 days", "31–60 days", "61–90 days", "90+ days", "Total" },
             rows,
@@ -309,7 +309,7 @@ public sealed class ScheduledReportService(
         }).ToList();
 
         var clientLabel = invoices.FirstOrDefault()?.Client?.ClientName ?? "All Clients";
-        return BuildTablePdf(
+        return await BuildTablePdfAsync(report.TenantId, ct,
             $"Client Statement — {clientLabel} — {FormatDateRange(start, end)}",
             new[] { "Date", "Invoice #", "Client", "Status", "Total", "Paid", "Balance" },
             rows,
@@ -344,7 +344,7 @@ public sealed class ScheduledReportService(
         };
         summaryRows.AddRange(byStatus.Select(r => new[] { $"  Status: {r[0]}", r[1], "" }));
 
-        return BuildTablePdf(
+        return await BuildTablePdfAsync(report.TenantId, ct,
             $"Work Order Summary — {FormatDateRange(start, end)}",
             new[] { "Metric", "Value", "" },
             summaryRows,
@@ -370,7 +370,7 @@ public sealed class ScheduledReportService(
             $"{x.Balance:N2}"
         }).ToList();
 
-        return BuildTablePdf(
+        return await BuildTablePdfAsync(report.TenantId, ct,
             $"Invoice List — {FormatDateRange(start, end)}",
             new[] { "Date", "Invoice #", "Client", "Status", "Total", "Paid", "Balance" },
             rows,
@@ -384,8 +384,10 @@ public sealed class ScheduledReportService(
         var (start, end) = ResolveDateRange(report.DateRangePreset);
         var dateRangeLabel = FormatDateRange(start, end);
         var subject = $"{report.Name} — {dateRangeLabel}";
+        var tenant = await db.Tenants.AsNoTracking().SingleOrDefaultAsync(x => x.Id == report.TenantId, ct);
+        var generatedAt = TenantTimeService.Format(DateTime.UtcNow, tenant?.TimeZoneId, tenant?.Country);
         var body = $"<p>Please find attached your scheduled <strong>{report.ReportType}</strong> report for <strong>{dateRangeLabel}</strong>.</p>"
-            + $"<p>Report: <strong>{report.Name}</strong><br/>Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC</p>"
+            + $"<p>Report: <strong>{report.Name}</strong><br/>Generated: {generatedAt}</p>"
             + "<p>This email was sent automatically by Ecosys Scheduled Reports.</p>";
 
         var recipients = report.Recipients
@@ -542,12 +544,15 @@ public sealed class ScheduledReportService(
 
     // ── PDF builder (simple table) ───────────────────────────────────────────
 
-    private static byte[] BuildTablePdf(
+    private async Task<byte[]> BuildTablePdfAsync(
+        Guid tenantId, CancellationToken ct,
         string title,
         string[] headers,
         List<string[]> rows,
         string footer)
     {
+        var tenant = await db.Tenants.AsNoTracking().SingleOrDefaultAsync(x => x.Id == tenantId, ct);
+        var generatedAt = TenantTimeService.Format(DateTime.UtcNow, tenant?.TimeZoneId, tenant?.Country);
         QuestPDF.Settings.License = LicenseType.Community;
 
         return Document.Create(container =>
@@ -559,7 +564,7 @@ public sealed class ScheduledReportService(
                 page.Header().Column(h =>
                 {
                     h.Item().Text(title).FontSize(14).SemiBold();
-                    h.Item().Text($"Generated: {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC").FontSize(8).FontColor(Colors.Grey.Darken1);
+                    h.Item().Text($"Generated: {generatedAt}").FontSize(8).FontColor(Colors.Grey.Darken1);
                     h.Item().PaddingTop(4).BorderBottom(1).BorderColor(Colors.Grey.Lighten1);
                 });
 

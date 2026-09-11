@@ -30,6 +30,8 @@ export const endpoints = {
     logout: '/api/auth/logout',
     forgotPassword: '/api/auth/forgot-password',
     resetPassword: '/api/auth/reset-password',
+    validateInvitation: '/api/auth/validate-invitation',
+    resendInvitation: '/api/auth/resend-invitation',
     changePassword: '/api/auth/change-password',
   },
   tenant: {
@@ -149,6 +151,10 @@ export const endpoints = {
     resendCredentials: (id: string) => `/api/users/${id}/resend-credentials`,
     resetPassword: (id: string) => `/api/users/${id}/reset-password`,
     delete: (id: string) => `/api/users/${id}`,
+  },
+  tenantEmailDeliveryLogs: {
+    list: '/api/settings/email/delivery-logs',
+    resend: (id: string) => `/api/settings/email/delivery-logs/${id}/resend`,
   },
   teamManagement: {
     overview: '/api/team-management/overview',

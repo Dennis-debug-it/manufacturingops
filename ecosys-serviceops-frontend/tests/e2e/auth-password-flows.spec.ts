@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { CORS_HEADERS, json, loginWithMockSession, registerApiCatchAll } from './helpers/auth'
 
-const BASE = 'http://localhost:5072'
+const BASE = 'http://127.0.0.1:5072'
 
 async function mockForcedPasswordChange(page: Page, role: 'tenantAdmin' | 'platformOwner' = 'tenantAdmin') {
   await registerApiCatchAll(page)
@@ -20,15 +20,15 @@ test.describe('auth password flows', () => {
 
     await page.getByLabel('Email').fill('wrong@ecosys.test')
     await page.getByLabel('Password').fill('incorrect')
-    await page.getByRole('button', { name: /^login$/i }).click()
+    await page.getByRole('button', { name: /^sign in$/i }).click()
 
-    await expect(page.getByRole('alert')).toContainText('Wrong email or password. Please check your details and try again.')
+    await expect(page.getByRole('alert')).toContainText('Invalid email or password.')
     await expect(page.getByRole('alert')).not.toContainText('traceId')
     await expect(page.locator('body')).not.toContainText('https://tools.ietf.org/html/rfc9110')
     await expect(page).toHaveURL(/\/login$/)
-    await expect(page.getByRole('button', { name: /^login$/i })).toBeEnabled()
+    await expect(page.getByRole('button', { name: /^sign in$/i })).toBeEnabled()
     await expect(page.getByLabel('Email')).toHaveValue('wrong@ecosys.test')
-    await expect(page.getByLabel('Password')).toHaveValue('')
+    await expect(page.getByLabel('Password')).toHaveValue('incorrect')
   })
 
   test('legacy 403 login failure still shows the same friendly message', async ({ page }) => {
@@ -45,9 +45,9 @@ test.describe('auth password flows', () => {
     await page.goto('/login')
     await page.getByLabel('Email').fill('wrong@ecosys.test')
     await page.getByLabel('Password').fill('incorrect')
-    await page.getByRole('button', { name: /^login$/i }).click()
+    await page.getByRole('button', { name: /^sign in$/i }).click()
 
-    await expect(page.getByRole('alert')).toContainText('Wrong email or password. Please check your details and try again.')
+    await expect(page.getByRole('alert')).toContainText('Invalid email or password.')
     await expect(page.locator('body')).not.toContainText('traceId')
     await expect(page.locator('body')).not.toContainText('rfc9110')
   })
@@ -61,9 +61,9 @@ test.describe('auth password flows', () => {
     await page.goto('/login')
     await page.getByLabel('Email').fill('wrong@ecosys.test')
     await page.getByLabel('Password').fill('incorrect')
-    await page.getByRole('button', { name: /^login$/i }).click()
+    await page.getByRole('button', { name: /^sign in$/i }).click()
 
-    await expect(page.getByRole('alert')).toContainText('Unable to reach the server. Please check your connection and try again.')
+    await expect(page.getByRole('alert')).toContainText("Can't reach the server. Check your connection and try again.")
   })
 
   test('successful SuperAdmin login routes to /platform', async ({ page }) => {
@@ -170,7 +170,7 @@ test.describe('auth password flows', () => {
     await page.getByLabel('Confirm password').fill('DifferentPass123!')
     await page.getByRole('button', { name: /reset password/i }).click()
 
-    await expect(page.getByRole('alert')).toContainText('New password and confirmation password must match.')
+    await expect(page.getByText('Passwords do not match')).toBeVisible()
     expect(wasCalled).toBeFalsy()
   })
 
@@ -185,25 +185,29 @@ test.describe('auth password flows', () => {
     await page.getByLabel('Confirm password').fill('NewStrongPass123!')
     await page.getByRole('button', { name: /reset password/i }).click()
 
-    await expect(page.getByRole('status')).toContainText('Your password has been reset. You can now sign in.')
-    await expect(page.getByRole('link', { name: /back to login/i })).toBeVisible()
+    await expect(page.getByText(/Your password has been reset\. Redirecting you to sign in/)).toBeVisible()
+    await expect(page.getByRole('link', { name: /back to sign in/i })).toHaveCount(0)
   })
 
   test('invite mode shows account setup wording and success state', async ({ page }) => {
+    await page.route(`${BASE}/api/auth/validate-invitation`, async (route) => {
+      if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS_HEADERS })
+      await route.fulfill(json({ status: 'VALID' }))
+    })
     await page.route(`${BASE}/api/auth/reset-password`, async (route) => {
       if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS_HEADERS })
       await route.fulfill(json({ message: 'Your password has been reset. You can now sign in.' }))
     })
 
     await page.goto('/reset-password?token=invite-token&mode=invite')
-    await expect(page.getByRole('heading', { name: /set up your password/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /set your password/i })).toBeVisible()
     await expect(page.getByRole('button', { name: /^set password$/i })).toBeVisible()
 
     await page.getByLabel('New password').fill('NewStrongPass123!')
     await page.getByLabel('Confirm password').fill('NewStrongPass123!')
     await page.getByRole('button', { name: /^set password$/i }).click()
 
-    await expect(page.getByRole('status')).toContainText('Your password is set. You can now sign in.')
+    await expect(page.getByText(/Your password has been reset\. Redirecting you to sign in/)).toBeVisible()
   })
 
   test('invalid or expired reset link shows clear message', async ({ page }) => {
@@ -217,6 +221,6 @@ test.describe('auth password flows', () => {
     await page.getByLabel('Confirm password').fill('NewStrongPass123!')
     await page.getByRole('button', { name: /reset password/i }).click()
 
-    await expect(page.getByRole('alert')).toContainText('This password reset link is invalid or has expired. Please request a new one.')
+    await expect(page.getByText('This password reset link is invalid or has expired. Please request a new one.')).toBeVisible()
   })
 })

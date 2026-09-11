@@ -22,6 +22,7 @@ const emptyPlan = {
   monthlyPrice: 0,
   annualPrice: 0,
   maxUsers: null as number | null,
+  maxBranches: null as number | null,
   maxAssets: null as number | null,
   maxWorkOrders: null as number | null,
   modulesIncluded: '',
@@ -93,6 +94,7 @@ export function LicensingPage() {
         monthlyPrice: editingPlan.monthlyPrice,
         annualPrice: editingPlan.annualPrice,
         maxUsers: editingPlan.maxUsers,
+        maxBranches: editingPlan.maxBranches,
         maxAssets: editingPlan.maxAssets,
         maxWorkOrders: editingPlan.maxWorkOrders,
         modulesIncluded: editingPlan.modulesIncluded.split(',').map((item) => item.trim()).filter(Boolean),
@@ -154,10 +156,13 @@ export function LicensingPage() {
               <DataTable<LicenseUsageSnapshot> columns={[
                 { key: 'tenant', header: 'Tenant', cell: (row) => row.tenantName },
                 { key: 'plan', header: 'Plan', cell: (row) => row.planName ?? '—' },
+                { key: 'modules', header: 'Modules', cell: (row) => row.modules?.join(', ') || '—' },
                 { key: 'status', header: 'License', cell: (row) => licenseStatusBadge(row.licenseStatus) },
                 { key: 'trial', header: 'Trial', cell: (row) => trialStatusBadge(row.status) },
                 { key: 'maxUsers', header: 'Max users', cell: (row) => row.maxUsers ?? 'Unlimited' },
                 { key: 'maxBranches', header: 'Max branches', cell: (row) => row.maxBranches ?? 'Unlimited' },
+                { key: 'maxAssets', header: 'Max assets', cell: (row) => row.maxAssets ?? 'Unlimited' },
+                { key: 'monthlyWorkOrders', header: 'Work orders/mo', cell: (row) => row.monthlyWorkOrders ?? 'Unlimited' },
                 { key: 'trialEndsAt', header: 'Trial end', cell: (row) => (row.trialEndsAt ? formatDate(row.trialEndsAt) : '—') },
                 { key: 'expiresAt', header: 'Subscription end', cell: (row) => (row.expiresAt ? formatDate(row.expiresAt) : '—') },
                 { key: 'daysRemaining', header: 'Days remaining', cell: (row) => row.daysRemaining ?? '—' },
@@ -188,6 +193,7 @@ export function LicensingPage() {
           <Field label="Code"><input value={editingPlan.code} onChange={(event) => setEditingPlan((current) => ({ ...current, code: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
           <Field label="Monthly price"><input type="number" value={editingPlan.monthlyPrice} onChange={(event) => setEditingPlan((current) => ({ ...current, monthlyPrice: Number(event.target.value) || 0 }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
           <Field label="Annual price"><input type="number" value={editingPlan.annualPrice} onChange={(event) => setEditingPlan((current) => ({ ...current, annualPrice: Number(event.target.value) || 0 }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
+          <Field label="Max branches"><input type="number" value={editingPlan.maxBranches ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxBranches: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
           <Field label="Max users"><input type="number" value={editingPlan.maxUsers ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxUsers: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
           <Field label="Max assets"><input type="number" value={editingPlan.maxAssets ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxAssets: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
           <Field label="Max work orders"><input type="number" value={editingPlan.maxWorkOrders ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxWorkOrders: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>

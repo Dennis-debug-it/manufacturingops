@@ -88,6 +88,8 @@ import { SecuritySettingsPage as SettingsSecurityPageReal } from '../features/se
 import { NotificationsSettingsPage as SettingsNotificationsPageReal } from '../features/settings/NotificationsSettingsPage'
 import { NumberingSettingsPage as SettingsNumberingPageReal } from '../features/settings/NumberingSettingsPage'
 import { PmTemplatesSettingsPage as SettingsPmTemplatesPageReal } from '../features/settings/PmTemplatesSettingsPage'
+import { EmailIdentitySettingsPage } from '../features/settings/EmailIdentitySettingsPage'
+import { EmailDeliveryLogsPage } from '../features/settings/EmailDeliveryLogsPage'
 import { EmailTemplatesSettingsPage as SettingsEmailTemplatesPageReal } from '../features/settings/EmailTemplatesSettingsPage'
 import { AuditLogsSettingsPage as SettingsAuditLogsPageReal } from '../features/settings/AuditLogsSettingsPage'
 import { AccountSettingsPage as SettingsAccountPageReal } from '../features/settings/AccountSettingsPage'
@@ -328,6 +330,8 @@ export function AppRouter() {
       ['/settings/company', SettingsCompanyPage],
       ['/settings/branding', SettingsBrandingPage],
       ['/settings/templates', SettingsTemplatesPage],
+      ['/settings/email', EmailIdentitySettingsPage],
+      ['/settings/email/delivery-logs', EmailDeliveryLogsPage],
       ['/settings/email-templates', SettingsEmailTemplatesPage],
       ['/settings/email-templates/:id', SettingsEmailTemplatesPage],
       ['/settings/numbering', SettingsNumberingPage],

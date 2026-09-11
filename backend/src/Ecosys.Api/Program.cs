@@ -39,6 +39,9 @@ var authSecurityOptions = StartupSecurityValidation.ValidateAuthSecurityOptions(
     builder.Configuration.GetSection(AuthSecurityOptions.SectionName).Get<AuthSecurityOptions>());
 _ = StartupSecurityValidation.ValidatePlatformAdminOptions(
     builder.Configuration.GetSection(PlatformAdminOptions.SectionName).Get<PlatformAdminOptions>());
+_ = StartupSecurityValidation.ValidatePublicAppOptions(
+    builder.Configuration.GetSection(PublicAppOptions.SectionName).Get<PublicAppOptions>(),
+    builder.Environment.IsProduction());
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
@@ -174,8 +177,10 @@ builder.Services.AddAuthorization(options =>
     AddPlatformPolicy("PlatformFinanceAccess", AppRoles.SuperAdmin, AppRoles.PlatformOwner, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin, AppRoles.PlatformAdminRole, AppRoles.Finance, AppRoles.FinanceAdmin);
     AddPlatformPolicy("PlatformSettingsAccess", AppRoles.SuperAdmin, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin);
 
-    options.AddPolicy("PortalAccess", policy => policy.RequireRole(AppRoles.PortalClient));
+    options.AddPolicy("PortalAccess", policy => policy.RequireAuthenticatedUser()
+        .RequireRole(AppRoles.PortalClient).AddRequirements(new PortalSessionRequirement()));
 });
+builder.Services.AddScoped<IAuthorizationHandler, PortalSessionAuthorizationHandler>();
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -434,6 +439,7 @@ static Dictionary<string, string?> BuildEnvironmentOverrides()
     AddOverride("ECOSYS_PLATFORM_ADMIN_EMAIL", "PlatformAdmin:Email");
     AddOverride("ECOSYS_PLATFORM_ADMIN_PASSWORD", "PlatformAdmin:Password");
     AddOverride("ECOSYS_PLATFORM_ADMIN_FULL_NAME", "PlatformAdmin:FullName");
+    AddOverride("ECOSYS_PUBLIC_URL", "App:PublicUrl");
 
     var corsOrigins = Environment.GetEnvironmentVariable("ECOSYS_CORS_ALLOWED_ORIGINS");
     if (!string.IsNullOrWhiteSpace(corsOrigins))

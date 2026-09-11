@@ -8,6 +8,7 @@ public interface IEmailDeliveryLogService
 {
     Task<EmailDeliveryLog> LogAsync(EmailDeliveryLogWriteRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<EmailDeliveryLog>> ListPlatformAsync(EmailDeliveryLogQuery query, CancellationToken cancellationToken = default);
+    Task<IReadOnlyCollection<EmailDeliveryLog>> ListTenantAsync(Guid tenantId, EmailDeliveryLogQuery query, CancellationToken cancellationToken = default);
     Task UpdateOutboxStatusAsync(UpdateOutboxStatusRequest request, CancellationToken cancellationToken = default);
 }
 
@@ -26,7 +27,11 @@ public sealed record EmailDeliveryLogWriteRequest(
     Guid? OutboxMessageId = null,
     int? AttemptCount = null,
     DateTime? LastAttemptAt = null,
-    DateTime? NextAttemptAt = null);
+    DateTime? NextAttemptAt = null,
+    string? CcAddressesJson = null,
+    string? DocumentType = null,
+    Guid? DocumentId = null,
+    bool TriggeredAutomatically = false);
 
 public sealed record EmailDeliveryLogQuery(
     string? Status,
@@ -34,7 +39,8 @@ public sealed record EmailDeliveryLogQuery(
     string? EventKey,
     string? RecipientEmail,
     DateTime? DateFrom,
-    DateTime? DateTo);
+    DateTime? DateTo,
+    string? DocumentType = null);
 
 public sealed class EmailDeliveryLogService(AppDbContext dbContext) : IEmailDeliveryLogService
 {
@@ -57,6 +63,10 @@ public sealed class EmailDeliveryLogService(AppDbContext dbContext) : IEmailDeli
             TriggeredByUserId = request.TriggeredByUserId,
             SentAt = request.SentAt,
             ProviderMessageId = Normalize(request.ProviderMessageId),
+            CcAddressesJson = Normalize(request.CcAddressesJson),
+            DocumentType = Normalize(request.DocumentType),
+            DocumentId = request.DocumentId,
+            TriggeredAutomatically = request.TriggeredAutomatically,
         };
 
         dbContext.EmailDeliveryLogs.Add(log);
@@ -66,7 +76,19 @@ public sealed class EmailDeliveryLogService(AppDbContext dbContext) : IEmailDeli
 
     public async Task<IReadOnlyCollection<EmailDeliveryLog>> ListPlatformAsync(EmailDeliveryLogQuery query, CancellationToken cancellationToken = default)
     {
-        var logs = dbContext.EmailDeliveryLogs.AsNoTracking().AsQueryable();
+        return await ListAsync(dbContext.EmailDeliveryLogs.AsNoTracking(), query, cancellationToken);
+    }
+
+    public async Task<IReadOnlyCollection<EmailDeliveryLog>> ListTenantAsync(Guid tenantId, EmailDeliveryLogQuery query, CancellationToken cancellationToken = default)
+    {
+        return await ListAsync(dbContext.EmailDeliveryLogs.AsNoTracking().Where(x => x.TenantId == tenantId), query, cancellationToken);
+    }
+
+    private static async Task<IReadOnlyCollection<EmailDeliveryLog>> ListAsync(
+        IQueryable<EmailDeliveryLog> logs,
+        EmailDeliveryLogQuery query,
+        CancellationToken cancellationToken)
+    {
 
         if (!string.IsNullOrWhiteSpace(query.Status))
         {
@@ -90,6 +112,12 @@ public sealed class EmailDeliveryLogService(AppDbContext dbContext) : IEmailDeli
         {
             var recipient = query.RecipientEmail.Trim().ToLowerInvariant();
             logs = logs.Where(x => x.RecipientEmail.Contains(recipient) || x.Subject.ToLower().Contains(recipient));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.DocumentType))
+        {
+            var documentType = query.DocumentType.Trim();
+            logs = logs.Where(x => x.DocumentType == documentType);
         }
 
         if (query.DateFrom.HasValue)

@@ -8,6 +8,8 @@ using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Errors;
+using Ecosys.Shared.Options;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -29,7 +31,8 @@ public sealed class PlatformTenantsController(
     IPasswordHasher<User> passwordHasher,
     IUserPermissionTemplateService permissionTemplateService,
     IUserCredentialDeliveryService credentialDeliveryService,
-    IMvpAuthService authService) : ControllerBase
+    IMvpAuthService authService,
+    IOptions<AuthSecurityOptions>? authSecurityOptions = null) : ControllerBase
 {
     private const int TrialPeriodDays = 14;
     private const int TrialExpiringSoonDays = 3;
@@ -75,25 +78,49 @@ public sealed class PlatformTenantsController(
     }
 
     [HttpPost]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> Create([FromBody] UpsertPlatformTenantRequest request, CancellationToken cancellationToken)
     {
         var adminProfile = BuildInitialAdminProfile(request);
         ValidateInitialAdminRequest(adminProfile);
         await ValidateInitialAdminAvailabilityAsync(adminProfile.Email, cancellationToken);
 
-        var tenant = new Tenant
-        {
-            CreatedByUserId = tenantContext.GetRequiredUserId()
-        };
-
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
+        var tenant = new Tenant { CreatedByUserId = tenantContext.GetRequiredUserId() };
         dbContext.Tenants.Add(tenant);
         await ApplyTenantAsync(tenant, request, cancellationToken);
         await EnsureTenantSupportRecordsAsync(tenant, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-
-        var initialAdminDelivery = await CreateInitialAdminAsync(tenant, adminProfile, cancellationToken);
+        var admin = await CreateInitialAdminAsync(tenant, adminProfile, cancellationToken);
+        var invitation = await PasswordLinkTokens.IssueAsync(dbContext, admin, PasswordLinkPurposes.Invitation,
+            authSecurityOptions?.Value, cancellationToken);
         await WriteAuditAsync(tenant, "TenantCreated", $"Tenant '{tenant.Name}' was created.", cancellationToken);
-        await TryQueueTenantOnboardingEmailAsync(tenant, adminProfile, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+
+        // Delivery is attempted only after the tenant and invitation have committed.
+        UserCredentialDeliveryResult initialAdminDelivery;
+        try
+        {
+            initialAdminDelivery = await credentialDeliveryService.SendPasswordResetLinkAsync(tenant.Id, admin,
+                new PasswordResetLinkDeliveryRequest(credentialDeliveryService.BuildInviteUrl(invitation.Token),
+                    invitation.ExpiresAt, PasswordLinkDeliveryPurpose.AccountSetup), cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            initialAdminDelivery = new UserCredentialDeliveryResult(false, "DeliveryFailed",
+                "The workspace and invitation are saved. Email delivery failed; resend the invitation from Users.");
+            await WriteAuditAsync(tenant, "InvitationDeliveryFailed", "Initial administrator invitation delivery failed.", cancellationToken);
+        }
+        if (initialAdminDelivery.Success)
+        {
+            admin.LastCredentialSentAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        try { await TryQueueTenantOnboardingEmailAsync(tenant, adminProfile, cancellationToken); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        { await WriteAuditAsync(tenant, "OnboardingEmailQueueFailed", "Optional welcome email could not be queued.", cancellationToken); }
 
         var response = await BuildDetailResponseAsync(
             tenant,
@@ -104,6 +131,7 @@ public sealed class PlatformTenantsController(
     }
 
     [HttpPut("{tenantId:guid}")]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> Update(Guid tenantId, [FromBody] UpsertPlatformTenantRequest request, CancellationToken cancellationToken)
     {
         var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
@@ -356,7 +384,8 @@ public sealed class PlatformTenantsController(
         var now = DateTime.UtcNow;
         var todayUtc = StartOfUtcDay(now);
         var trimmedName = NormalizeRequired(request.Name ?? request.CompanyName, "Company name is required.");
-        var slug = await NormalizeAndValidateSlugAsync(request.Slug, trimmedName, tenant.Id, cancellationToken);
+        var slug = !isNewTenant && string.IsNullOrWhiteSpace(request.Slug) ? tenant.Slug
+            : await NormalizeAndValidateSlugAsync(request.Slug, trimmedName, tenant.Id, cancellationToken);
         var normalizedStatus = NormalizeTenantStatus(request.Status);
         var normalizedLicenseStatus = NormalizeLicenseStatus(request.LicenseStatus);
         var normalizedCompanyEmail = NormalizeEmail(request.CompanyEmail) ?? NormalizeEmail(request.ContactEmail);
@@ -384,7 +413,7 @@ public sealed class PlatformTenantsController(
         }
 
         LicensePlan? plan = null;
-        var requestedPlanName = NormalizeOptional(request.PlanName);
+        var requestedPlanName = NormalizeOptional(request.PlanCode) ?? NormalizeOptional(request.PlanName) ?? (isNewTenant ? "suite" : null);
         if (!string.IsNullOrWhiteSpace(requestedPlanName))
         {
             plan = await dbContext.LicensePlans
@@ -400,9 +429,17 @@ public sealed class PlatformTenantsController(
         tenant.ContactName = NormalizeOptional(request.PrimaryContactName ?? request.ContactName);
         tenant.ContactEmail = normalizedContactEmail;
         tenant.ContactPhone = NormalizeOptional(request.PrimaryContactPhone ?? request.ContactPhone);
-        tenant.Email = normalizedCompanyEmail ?? tenant.Email ?? $"{slug}@tenant.local";
+        tenant.Email = normalizedCompanyEmail ?? NormalizeOptional(tenant.Email) ?? NormalizeEmail(request.AdminEmail) ?? TenantEmailIdentity.Address(slug);
         tenant.Phone = NormalizeOptional(request.CompanyPhone) ?? tenant.Phone;
-        tenant.Country = NormalizeOptional(request.Country) ?? tenant.Country ?? "Kenya";
+        tenant.Country = NormalizeOptional(request.Country) ?? NormalizeOptional(tenant.Country) ?? "Kenya";
+        tenant.TimeZoneId = TenantTimeService.NormalizeTimeZone(NormalizeOptional(request.TimeZoneId) ?? (isNewTenant ? null : tenant.TimeZoneId), tenant.Country);
+        if (isNewTenant) tenant.Currency = TenantEmailIdentity.DefaultCurrency(tenant.Country);
+        var emailIdentity = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);
+        if (emailIdentity is not null && emailIdentity.ManagedEmailAddress is not null)
+        {
+            emailIdentity.ManagedEmailAddress = TenantEmailIdentity.Address(slug);
+            if (emailIdentity.UsePlatformDefaults && !emailIdentity.OverrideSmtpSettings) emailIdentity.SenderAddress = emailIdentity.ManagedEmailAddress;
+        }
         tenant.Industry = NormalizeOptional(request.Industry) ?? tenant.Industry;
         tenant.County = NormalizeOptional(request.County);
         tenant.City = NormalizeOptional(request.City);
@@ -490,8 +527,12 @@ public sealed class PlatformTenantsController(
 
     private async Task<string> NormalizeAndValidateSlugAsync(string? requestedSlug, string companyName, Guid currentTenantId, CancellationToken cancellationToken)
     {
-        var slug = NormalizeSlug(string.IsNullOrWhiteSpace(requestedSlug) ? companyName : requestedSlug);
-        var exists = await dbContext.Tenants.AnyAsync(x => x.Slug == slug && x.Id != currentTenantId, cancellationToken);
+        var slug = TenantEmailIdentity.NormalizeSlug(string.IsNullOrWhiteSpace(requestedSlug) ? companyName : requestedSlug, string.IsNullOrWhiteSpace(requestedSlug));
+        var address = TenantEmailIdentity.Address(slug);
+        var exists = await dbContext.Tenants.AnyAsync(x => x.Slug.ToLower() == slug && x.Id != currentTenantId, cancellationToken)
+            || await dbContext.EmailIntakeSettings.AnyAsync(x => x.TenantId != currentTenantId && x.IntakeEmailAddress != null && x.IntakeEmailAddress.ToLower() == address, cancellationToken)
+            || await dbContext.EmailSettings.AnyAsync(x => x.TenantId != currentTenantId &&
+                (x.ManagedEmailAddress == address || x.SenderAddress.ToLower() == address), cancellationToken);
         if (exists)
         {
             throw new BusinessRuleException("This workspace URL name is already in use. Please choose another.");
@@ -506,17 +547,7 @@ public sealed class PlatformTenantsController(
 
         if (!await dbContext.EmailSettings.AnyAsync(x => x.TenantId == tenant.Id, cancellationToken))
         {
-            dbContext.EmailSettings.Add(new EmailSetting
-            {
-                TenantId = tenant.Id,
-                UsePlatformDefaults = true,
-                OverrideSmtpSettings = false,
-                Host = "localhost",
-                Port = 25,
-                UseSsl = false,
-                SenderName = tenant.Name,
-                SenderAddress = tenant.ContactEmail ?? tenant.Email
-            });
+            dbContext.EmailSettings.Add(TenantEmailIdentity.Create(tenant));
         }
 
         if (!await dbContext.NotificationSettings.AnyAsync(x => x.TenantId == tenant.Id, cancellationToken))
@@ -545,17 +576,9 @@ public sealed class PlatformTenantsController(
         }
     }
 
-    private async Task<UserCredentialDeliveryResult> CreateInitialAdminAsync(Tenant tenant, InitialAdminProfile adminProfile, CancellationToken cancellationToken)
+    private async Task<User> CreateInitialAdminAsync(Tenant tenant, InitialAdminProfile adminProfile, CancellationToken cancellationToken)
     {
         var adminEmail = NormalizeEmail(adminProfile.Email)!;
-        var existingAdmin = await dbContext.Users.AnyAsync(
-            x => x.TenantId == tenant.Id && x.Email.ToLower() == adminEmail.ToLower(),
-            cancellationToken);
-        if (existingAdmin)
-        {
-            return new UserCredentialDeliveryResult(true, "AlreadyExists", "Initial admin already exists.");
-        }
-
         var password = GenerateTemporaryPassword();
         var permissions = permissionTemplateService.GetFullTenantPermissions();
         var adminUser = new User
@@ -576,63 +599,9 @@ public sealed class PlatformTenantsController(
         dbContext.Users.Add(adminUser);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var delivery = await SendInitialAdminSetupAsync(
-            tenant.Id,
-            adminUser,
-            cancellationToken);
-
-        if (delivery.Success)
-        {
-            adminUser.LastCredentialSentAt = DateTime.UtcNow;
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await auditLogService.LogAsync(
-            tenant.Id,
-            tenantContext.GetRequiredUserId(),
-            "User created",
-            nameof(User),
-            adminUser.Id.ToString(),
-            $"Created initial tenant workspace admin '{adminUser.Email}'.",
-            cancellationToken);
-
-        if (delivery.Success)
-        {
-            await auditLogService.LogAsync(
-                tenant.Id,
-                tenantContext.GetRequiredUserId(),
-                "User credentials sent",
-                nameof(User),
-                adminUser.Id.ToString(),
-                $"Tenant workspace admin invitation sent to '{adminUser.Email}'.",
-                cancellationToken);
-        }
-
-        return delivery;
-    }
-
-    private async Task<UserCredentialDeliveryResult> SendInitialAdminSetupAsync(Guid tenantId, User adminUser, CancellationToken cancellationToken)
-    {
-        var rawToken = CreateRawResetToken();
-        var expiresAt = DateTime.UtcNow.AddMinutes(45);
-
-        dbContext.PasswordResetTokens.Add(new PasswordResetToken
-        {
-            UserId = adminUser.Id,
-            TokenHash = HashToken(rawToken),
-            ExpiresAt = expiresAt
-        });
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        return await credentialDeliveryService.SendPasswordResetLinkAsync(
-            tenantId,
-            adminUser,
-            new PasswordResetLinkDeliveryRequest(
-                credentialDeliveryService.BuildInviteUrl(rawToken),
-                expiresAt,
-                PasswordLinkDeliveryPurpose.AccountSetup),
-            cancellationToken);
+        await auditLogService.LogAsync(tenant.Id, tenantContext.GetRequiredUserId(), "User created", nameof(User),
+            adminUser.Id.ToString(), $"Created initial tenant workspace admin '{adminUser.Email}'.", cancellationToken);
+        return adminUser;
     }
 
     private async Task TryQueueTenantOnboardingEmailAsync(Tenant tenant, InitialAdminProfile adminProfile, CancellationToken cancellationToken)
@@ -830,7 +799,9 @@ public sealed class PlatformTenantsController(
             summary.ActiveUsersNow,
             summary.LastActivityAt,
             initialAdminInvitationSent,
-            initialAdminInvitationMessage);
+            initialAdminInvitationMessage,
+            tenant.TimeZoneId, tenant.Currency,
+            await dbContext.EmailSettings.Where(x => x.TenantId == tenant.Id).Select(x => x.ManagedEmailAddress).SingleOrDefaultAsync(cancellationToken));
     }
 
     private async Task<PlatformTenantSummaryResponse> BuildSummaryResponseAsync(Tenant tenant, CancellationToken cancellationToken)
@@ -1075,40 +1046,6 @@ public sealed class PlatformTenantsController(
         }
     }
 
-    private static string NormalizeSlug(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            throw new BusinessRuleException("Workspace URL name is required.");
-        }
-
-        var normalized = value
-            .Trim()
-            .ToLowerInvariant()
-            .Replace("&", "-")
-            .Replace("'", string.Empty);
-
-        normalized = Regex.Replace(normalized, "[^a-z0-9-]+", "-");
-        normalized = Regex.Replace(normalized, "-{2,}", "-").Trim('-');
-
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            throw new BusinessRuleException("Workspace URL name is required.");
-        }
-
-        if (normalized.Length < 3)
-        {
-            throw new BusinessRuleException("Workspace URL name must be at least 3 characters long.");
-        }
-
-        if (!Regex.IsMatch(normalized, "^[a-z0-9]+(?:-[a-z0-9]+)*$"))
-        {
-            throw new BusinessRuleException("Workspace URL name can only contain lowercase letters, numbers, and hyphens.");
-        }
-
-        return normalized;
-    }
-
     private static string? NullIfWhiteSpace(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value;
 
@@ -1324,7 +1261,9 @@ public sealed record UpsertPlatformTenantRequest(
     bool UsePrimaryContactAsWorkspaceAdmin = false,
     string? AdminFullName = null,
     string? AdminEmail = null,
-    string? AdminPhone = null);
+    string? AdminPhone = null,
+    string? TimeZoneId = null,
+    string? PlanCode = null);
 
 public sealed record UpdatePlatformTenantStatusRequest(string Status, string? Reason);
 public sealed record UpdatePlatformTenantStatusReasonRequest(string? Reason);
@@ -1385,7 +1324,10 @@ public sealed record PlatformTenantDetailResponse(
     int ActiveUsersNow,
     DateTime? LastActivityAt,
     bool? InitialAdminInvitationSent,
-    string? InitialAdminInvitationMessage);
+    string? InitialAdminInvitationMessage,
+    string TimeZoneId = "Africa/Nairobi",
+    string Currency = "KES",
+    string? ServiceOpsEmail = null);
 
 public sealed record PlatformTenantSummaryResponse(
     Guid TenantId,

@@ -45,7 +45,8 @@ public sealed record LoginResult(
     string Country,
     string? Industry,
     string? LogoUrl,
-    bool ShowPoweredByEcosys);
+    bool ShowPoweredByEcosys,
+    string TimeZoneId = "Africa/Nairobi");
 
 public sealed record ImpersonationResult(
     string Token,
@@ -107,6 +108,8 @@ internal sealed class MvpAuthService(
 
         tenantSecurityPolicyService.ValidatePassword(password, new TenantSecurityPolicy());
 
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
         var trimmedCompanyName = companyName.Trim();
         var slug = await GenerateUniqueSlugAsync(trimmedCompanyName, cancellationToken);
         var normalizedCountry = country.Trim();
@@ -119,10 +122,12 @@ internal sealed class MvpAuthService(
             Email = normalizedEmail,
             ContactEmail = normalizedEmail,
             Country = normalizedCountry,
+            TimeZoneId = TenantTimeService.DefaultTimeZone(normalizedCountry),
+            Currency = TenantEmailIdentity.DefaultCurrency(normalizedCountry),
             Industry = string.IsNullOrWhiteSpace(industry) ? null : industry.Trim(),
             Status = "Active",
             LicenseStatus = LicenseStatuses.Trial,
-            PlanName = "Trial",
+            PlanName = ServiceOpsPlans.DisplayName(ServiceOpsPlans.Suite),
             IsActive = true
         };
 
@@ -143,17 +148,7 @@ internal sealed class MvpAuthService(
 
         dbContext.Tenants.Add(tenant);
         dbContext.Users.Add(user);
-        dbContext.EmailSettings.Add(new EmailSetting
-        {
-            Tenant = tenant,
-            UsePlatformDefaults = true,
-            OverrideSmtpSettings = false,
-            Host = "localhost",
-            Port = 25,
-            UseSsl = false,
-            SenderName = tenant.CompanyName,
-            SenderAddress = normalizedEmail
-        });
+        dbContext.EmailSettings.Add(TenantEmailIdentity.Create(tenant));
 
         dbContext.NumberingSettings.AddRange(
             CreateNumberingSetting(tenant, null, DocumentTypes.WorkOrder, "WO"),
@@ -174,6 +169,7 @@ internal sealed class MvpAuthService(
             cancellationToken);
 
         var token = await CreateTokenAsync(user, tenant, permissions, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return new SignupResult(token, tenant.Id, user.Id, tenant.CompanyName, user.Role, user.JobTitle, permissions);
     }
 
@@ -264,7 +260,8 @@ internal sealed class MvpAuthService(
             user.Tenant.Country,
             user.Tenant.Industry,
             user.Tenant.LogoUrl,
-            user.Tenant.ShowPoweredByEcosys);
+            user.Tenant.ShowPoweredByEcosys,
+            user.Tenant.TimeZoneId);
     }
 
     public async Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default)
@@ -589,28 +586,25 @@ internal sealed class MvpAuthService(
 
     private async Task<string> GenerateUniqueSlugAsync(string companyName, CancellationToken cancellationToken)
     {
-        var baseSlug = Slugify(companyName);
+        var baseSlug = TenantEmailIdentity.NormalizeSlug(companyName, fromCompanyName: true);
         var slug = baseSlug;
         var counter = 2;
 
         while (await dbContext.Tenants.AnyAsync(x => x.Slug == slug, cancellationToken))
         {
-            slug = $"{baseSlug}-{counter}";
+            slug = $"{baseSlug[..Math.Min(baseSlug.Length, 58)]}-{counter}";
             counter += 1;
         }
 
         return slug;
     }
 
-    private static string Slugify(string value)
-    {
-        var normalized = Regex.Replace(value.Trim().ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-');
-        return string.IsNullOrWhiteSpace(normalized) ? "tenant" : normalized;
-    }
-
     private async Task ProvisionTenantDefaultsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
-        await licenseGuardService.GetOrCreateTenantLicenseAsync(tenantId, cancellationToken);
+        var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenantId, cancellationToken);
+        var suite = await dbContext.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite && x.IsActive, cancellationToken);
+        license.LicensePlanId = suite.Id;
+        license.LicensePlan = suite;
         await tenantSecurityPolicyService.GetOrCreateAsync(tenantId, cancellationToken);
 
         if (!await dbContext.NotificationSettings.AnyAsync(x => x.TenantId == tenantId, cancellationToken))

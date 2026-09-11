@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using Ecosys.Shared.Options;
+using Microsoft.Extensions.Options;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Contracts.Integration;
@@ -17,6 +19,8 @@ public interface ITemporaryPasswordService
 public interface IPasswordResetService
 {
     Task<string> RequestAsync(string email, CancellationToken cancellationToken = default);
+    Task<string> ValidateInvitationAsync(string token, CancellationToken cancellationToken = default);
+    Task<string> ResendInvitationAsync(string email, CancellationToken cancellationToken = default);
     Task<string> ResetAsync(string token, string newPassword, string confirmPassword, CancellationToken cancellationToken = default);
 }
 
@@ -65,9 +69,9 @@ public sealed class PasswordResetService(
     ITenantSecurityPolicyService tenantSecurityPolicyService,
     IUserSessionService userSessionService,
     IUserCredentialDeliveryService credentialDeliveryService,
-    IAuditLogService auditLogService) : IPasswordResetService
+    IAuditLogService auditLogService,
+    IOptions<AuthSecurityOptions>? authSecurityOptions = null) : IPasswordResetService
 {
-    private const int ExpiryMinutes = 45;
     private const string GenericMessage = "If an account exists for this email, password reset instructions will be sent shortly.";
     private const string SuccessMessage = "Your password has been reset. You can now sign in.";
     private const string InvalidLinkMessage = "This password reset link is invalid or has expired. Please request a new one.";
@@ -89,28 +93,10 @@ public sealed class PasswordResetService(
             return GenericMessage;
         }
 
-        var now = DateTime.UtcNow;
-        var existingTokens = await dbContext.PasswordResetTokens
-            .Where(x => x.UserId == user.Id && !x.UsedAt.HasValue && x.ExpiresAt > now)
-            .ToListAsync(cancellationToken);
-
-        foreach (var existingToken in existingTokens)
-        {
-            existingToken.UsedAt = now;
-        }
-
-        var rawToken = CreateRawToken();
-        var expiresAt = now.AddMinutes(ExpiryMinutes);
-        dbContext.PasswordResetTokens.Add(new PasswordResetToken
-        {
-            UserId = user.Id,
-            TokenHash = HashToken(rawToken),
-            ExpiresAt = expiresAt,
-            RequestedIp = httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString(),
-            UserAgent = httpContextAccessor.HttpContext?.Request.Headers.UserAgent.ToString()
-        });
-
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var issued = await PasswordLinkTokens.IssueAsync(dbContext, user, PasswordLinkPurposes.PasswordReset,
+            authSecurityOptions?.Value, cancellationToken);
+        var rawToken = issued.Token;
+        var expiresAt = issued.ExpiresAt;
 
         var resetLink = credentialDeliveryService.BuildResetPasswordUrl(rawToken);
         var delivery = await credentialDeliveryService.SendPasswordResetLinkAsync(
@@ -149,10 +135,15 @@ public sealed class PasswordResetService(
         var tokenHash = HashToken(token.Trim());
         var now = DateTime.UtcNow;
         var resetToken = await dbContext.PasswordResetTokens
-            .Include(x => x.User)
+            .Include(x => x.User).ThenInclude(x => x!.Tenant)
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
 
-        if (resetToken is null || resetToken.User is null || resetToken.UsedAt.HasValue || resetToken.ExpiresAt <= now)
+        if (resetToken is null
+            || resetToken.User is null
+            || resetToken.Purpose is not (PasswordLinkPurposes.PasswordReset or PasswordLinkPurposes.Invitation)
+            || PasswordLinkTokens.Status(resetToken, now) != "VALID"
+            || !resetToken.User.IsActive
+            || resetToken.User.Tenant?.IsActive != true)
         {
             throw new Shared.Errors.ForbiddenException(InvalidLinkMessage);
         }
@@ -163,12 +154,13 @@ public sealed class PasswordResetService(
         resetToken.User.MustChangePassword = false;
         resetToken.UsedAt = now;
 
-        await userSessionService.RevokeAllForUserAsync(
-            resetToken.User.Id,
-            "Password reset completed.",
-            cancellationToken);
+        try
+        {
+            await userSessionService.RevokeAllForUserAsync(resetToken.User.Id, "Password reset completed.", cancellationToken);
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException) { throw new Shared.Errors.ForbiddenException(InvalidLinkMessage); }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
             resetToken.User.TenantId,
@@ -183,18 +175,40 @@ public sealed class PasswordResetService(
         return SuccessMessage;
     }
 
-    private static string CreateRawToken()
+    public async Task<string> ValidateInvitationAsync(string token, CancellationToken cancellationToken = default)
     {
-        var bytes = RandomNumberGenerator.GetBytes(32);
-        return Convert.ToBase64String(bytes)
-            .Replace('+', '-')
-            .Replace('/', '_')
-            .TrimEnd('=');
+        if (string.IsNullOrWhiteSpace(token) || token.Length > 512) return "INVALID";
+        var hash = PasswordLinkTokens.Hash(token.Trim());
+        var invitation = await dbContext.PasswordResetTokens.Include(x => x.User).ThenInclude(x => x!.Tenant)
+            .SingleOrDefaultAsync(x => x.TokenHash == hash, cancellationToken);
+        if (invitation?.User is null
+            || invitation.Purpose != PasswordLinkPurposes.Invitation
+            || !invitation.User.IsActive
+            || invitation.User.Tenant?.IsActive != true) return "INVALID";
+        return PasswordLinkTokens.Status(invitation, DateTime.UtcNow);
     }
 
-    private static string HashToken(string token)
+    public async Task<string> ResendInvitationAsync(string email, CancellationToken cancellationToken = default)
     {
-        var bytes = Encoding.UTF8.GetBytes(token);
-        return Convert.ToHexString(SHA256.HashData(bytes));
+        const string message = "If a pending ServiceOps invitation exists for this email, a new invitation has been sent.";
+        if (string.IsNullOrWhiteSpace(email)) return message;
+        var normalized = email.Trim().ToLowerInvariant();
+        var user = await dbContext.Users.Include(x => x.Tenant)
+            .SingleOrDefaultAsync(x => x.Email.ToLower() == normalized && x.IsActive && x.MustChangePassword, cancellationToken);
+        if (user?.Tenant?.IsActive != true) return message;
+        var recent = await dbContext.PasswordResetTokens.AnyAsync(x => x.UserId == user.Id
+            && x.Purpose == PasswordLinkPurposes.Invitation && x.CreatedAt > DateTime.UtcNow.AddMinutes(-1), cancellationToken);
+        if (recent) return message;
+        var issued = await PasswordLinkTokens.IssueAsync(dbContext, user, PasswordLinkPurposes.Invitation,
+            authSecurityOptions?.Value, cancellationToken);
+        var delivery = await credentialDeliveryService.SendPasswordResetLinkAsync(user.TenantId, user,
+            new PasswordResetLinkDeliveryRequest(credentialDeliveryService.BuildInviteUrl(issued.Token), issued.ExpiresAt,
+                PasswordLinkDeliveryPurpose.AccountSetup), cancellationToken);
+        if (delivery.Success) { user.LastCredentialSentAt = DateTime.UtcNow; await dbContext.SaveChangesAsync(cancellationToken); }
+        await auditLogService.LogAsync(user.TenantId, user.Id, "users.invitation.reissued", nameof(User), user.Id.ToString(),
+            "Self-service invitation recovery requested.", cancellationToken);
+        return message;
     }
+
+    private static string HashToken(string token) => PasswordLinkTokens.Hash(token);
 }

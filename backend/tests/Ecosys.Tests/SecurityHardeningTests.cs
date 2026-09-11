@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Identity;
 
 namespace Ecosys.Tests;
@@ -174,7 +175,9 @@ public sealed class SecurityHardeningTests
             .WithWebHostBuilder(builder =>
             {
                 builder.UseEnvironment("Production");
-                builder.UseSetting("ConnectionStrings:DefaultConnection", "Host=localhost;Port=5432;Database=ecosys_test;Username=postgres;Password=postgres");
+                builder.ConfigureLogging(logging => logging.ClearProviders().AddConsole());
+                builder.UseSetting("ConnectionStrings:DefaultConnection", Environment.GetEnvironmentVariable("ECOSYS_TEST_DB_CONNECTION")
+                    ?? "Host=localhost;Port=5432;Database=ecosys_test;Username=postgres;Password=postgres");
                 builder.UseSetting("Jwt:Issuer", "ecosys-tests");
                 builder.UseSetting("Jwt:Audience", "ecosys-tests");
                 builder.UseSetting("Jwt:SigningKey", "12345678901234567890123456789012");

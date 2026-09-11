@@ -4,6 +4,7 @@ import { Logo } from '../components/Logo'
 import { tenantNavItems, type NavItem } from './navigation'
 import { useAuth } from '../hooks/useAuth'
 import { usePermission } from '../hooks/usePermission'
+import { useEntitlements } from '../hooks/useEntitlements'
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const allowed = usePermission(item.permission ?? 'dashboard.view')
@@ -27,6 +28,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 
 export function Sidebar() {
   const { user, tenant } = useAuth()
+  const { canAccessPath } = useEntitlements()
   const location = useLocation()
 
   return (
@@ -37,7 +39,7 @@ export function Sidebar() {
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {tenantNavItems
-          .filter((item) => item.roles.includes(user?.role ?? 'viewer'))
+          .filter((item) => item.roles.includes(user?.role ?? 'viewer') && canAccessPath(item.to))
           .map((item) => {
             const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
             return <NavLink key={item.to} item={item} active={active} />

@@ -45,6 +45,8 @@ export interface TeamUser {
   createdAt: string
   updatedAt: string | null
   permissions: PermissionSetFields
+  invitationStatus?: 'Invited' | 'Expired' | 'Active'
+  invitationExpiresAt?: string | null
   mustChangePassword: boolean
   lastCredentialSentAt: string | null
 }

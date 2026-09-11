@@ -2,6 +2,7 @@ using System.Text.Json;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
+using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Options;
 using Microsoft.EntityFrameworkCore;
 
@@ -106,6 +107,41 @@ public sealed class EmailOutboxTests
         Assert.Equal(EmailOutboxStatuses.Pending, storedLog.Status);
         Assert.Equal(0, storedLog.AttemptCount);
         Assert.NotNull(storedLog.NextAttemptAt);
+    }
+
+    [Fact]
+    public async Task QueueEmailAsync_WithIdempotencyKey_IsSingleOutboxMessage_AndPreservesDeliveryMetadata()
+    {
+        await using var dbContext = CreateDbContext();
+        var logService = new EmailDeliveryLogService(dbContext);
+        var outboxService = new EmailOutboxService(dbContext, logService);
+        var idempotencyKey = $"invoice.sent:{Guid.NewGuid():N}";
+        var attachment = new EmailAttachment("invoice.pdf", [1, 2, 3], "application/pdf");
+
+        var request = new QueueEmailRequest(
+            Guid.NewGuid(), "invoice.sent", "invoice.sent", "billing@example.com", null,
+            "Ecosys", "noreply@example.com", null, "Invoice", "<p>Invoice</p>", "Invoice",
+            Guid.NewGuid(), Attachments: [attachment], CcAddresses: ["finance@example.com"],
+            DocumentType: "Invoice", DocumentId: Guid.NewGuid(), TriggeredAutomatically: true,
+            IdempotencyKey: idempotencyKey);
+
+        var first = await outboxService.QueueEmailAsync(request);
+        var second = await outboxService.QueueEmailAsync(request with { Subject = "Changed subject" });
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Single(await dbContext.EmailOutboxMessages.ToListAsync());
+        Assert.Single(await dbContext.EmailDeliveryLogs.ToListAsync());
+        var stored = await dbContext.EmailOutboxMessages.SingleAsync();
+        var log = await dbContext.EmailDeliveryLogs.SingleAsync();
+        Assert.Equal(idempotencyKey, stored.IdempotencyKey);
+        Assert.Equal("Invoice", stored.DocumentType);
+        Assert.Equal(first.DocumentId, stored.DocumentId);
+        Assert.Contains("finance@example.com", stored.CcAddressesJson);
+        Assert.Contains("invoice.pdf", stored.AttachmentsJson);
+        Assert.True(stored.TriggeredAutomatically);
+        Assert.Equal(stored.DocumentType, log.DocumentType);
+        Assert.Equal(stored.DocumentId, log.DocumentId);
+        Assert.True(log.TriggeredAutomatically);
     }
 
     [Fact]

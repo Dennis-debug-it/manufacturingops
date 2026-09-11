@@ -88,8 +88,8 @@ function TemplateEditor({ eventKey, onClose }: { eventKey: string; onClose: () =
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40">
-      <div className="h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/40 p-4 sm:p-6">
+      <div className="w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">{data.templateName}</h2>

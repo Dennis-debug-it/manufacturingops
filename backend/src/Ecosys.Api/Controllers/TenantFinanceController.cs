@@ -20,7 +20,9 @@ public sealed class TenantFinanceController(
     IUserAccessService userAccessService,
     IPdfRenderer pdfRenderer,
     IEmailSender emailSender,
-    ISecretEncryptionService secretEncryptionService) : TenantAwareControllerBase(tenantContext)
+    ISecretEncryptionService secretEncryptionService,
+    IEmailOutboxService emailOutbox,
+    IFinancialRecipientResolver financialRecipientResolver) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet("overview")]
     public async Task<ActionResult<TenantFinanceOverviewResponse>> GetOverview(CancellationToken cancellationToken)
@@ -581,9 +583,6 @@ public sealed class TenantFinanceController(
         var (pdfModel, clientCode) = await BuildStatementPdfModelAsync(
             request.ClientId, request.From, request.To, request.OverdueOnly, cancellationToken);
 
-        if (string.IsNullOrWhiteSpace(pdfModel.ClientEmail))
-            throw new BusinessRuleException("Client does not have an email address configured.");
-
         var pdfBytes = pdfRenderer.RenderClientStatementPdf(pdfModel);
         var filename = $"statement_{clientCode}_{DateTime.UtcNow:yyyyMMdd}.pdf";
 
@@ -591,7 +590,7 @@ public sealed class TenantFinanceController(
         var subject = $"Statement of Account — {pdfModel.CompanyName} — {period}";
 
         var outstanding = pdfModel.ClosingBalance;
-        var currency = "KES";
+        var currency = (await dbContext.Tenants.AsNoTracking().Where(x => x.Id == TenantId).Select(x => x.Currency).SingleOrDefaultAsync(cancellationToken)) ?? "KES";
         var defaultBody = $"<p>Please find your Statement of Account attached for the period {period}.</p>" +
                           $"<p><strong>Total Outstanding: {currency} {outstanding:N2}</strong></p>" +
                           $"<p>Please contact us if you have any queries.</p>";
@@ -600,38 +599,30 @@ public sealed class TenantFinanceController(
             ? defaultBody
             : $"<p>{System.Net.WebUtility.HtmlEncode(request.Message)}</p>{defaultBody}";
 
-        // Resolve email delivery settings for this tenant
-        var emailSettings = await ResolveEffectiveEmailSettingsAsync(TenantId, cancellationToken);
-        if (emailSettings is null)
-            throw new BusinessRuleException("Email delivery is not configured for this account. Please configure SMTP settings.");
+        var recipients = await financialRecipientResolver.ResolveAsync(TenantId, request.ClientId, "Statement", cancellationToken);
+        var additional = financialRecipientResolver.ValidateAdditionalRecipients(request.AdditionalRecipients);
+        var allTo = recipients.To.Concat(additional).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (allTo.Length == 0)
+            throw new BusinessRuleException("Statement cannot be dispatched because no valid billing recipient is configured.");
 
-        var delivery = CreateDeliverySettings(emailSettings);
-        if (delivery is null)
-            throw new BusinessRuleException("SMTP settings are incomplete. Please verify your email configuration.");
-
-        var recipients = new List<string> { pdfModel.ClientEmail };
-        if (request.AdditionalRecipients is { Length: > 0 })
-            recipients.AddRange(request.AdditionalRecipients.Where(e => !string.IsNullOrWhiteSpace(e)));
-
-        var attachment = new EmailAttachment(filename, pdfBytes, "application/pdf");
-
-        foreach (var recipient in recipients)
-        {
-            await emailSender.SendAsync(
-                new EmailMessage(
-                    recipient, subject, htmlBody,
-                    pdfModel.CompanyName, null,
-                    IsHtml: true,
-                    Attachments: [attachment]),
-                delivery,
-                cancellationToken);
-        }
+        var cc = allTo.Skip(1).Concat(recipients.Cc).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        await emailOutbox.QueueEmailAsync(
+            new QueueEmailRequest(
+                TenantId, "finance.statement.issued", "statement.issued",
+                allTo[0], pdfModel.CompanyName, null, null, null,
+                subject, htmlBody, $"Please find your Statement of Account attached for {period}.", UserId,
+                Attachments: [new EmailAttachment(filename, pdfBytes, "application/pdf")],
+                CcAddresses: cc,
+                DocumentType: "Statement",
+                DocumentId: request.ClientId,
+                TriggeredAutomatically: false),
+            cancellationToken);
 
         await auditLogService.LogAsync(
             TenantId, UserId,
             "finance.client_statement.emailed",
             "Client", request.ClientId.ToString(),
-            $"Emailed statement of account to {pdfModel.ClientEmail} for period {period}.",
+            $"Queued statement of account delivery to {allTo.Length} recipient(s) for period {period}.",
             cancellationToken);
 
         return NoContent();

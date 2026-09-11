@@ -10,6 +10,8 @@ public sealed class Tenant : AuditableEntity
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
     public string Country { get; set; } = string.Empty;
+    public string TimeZoneId { get; set; } = "Africa/Nairobi";
+    public string Currency { get; set; } = "KES";
     public string? Industry { get; set; }
     public string? ContactName { get; set; }
     public string? ContactEmail { get; set; }

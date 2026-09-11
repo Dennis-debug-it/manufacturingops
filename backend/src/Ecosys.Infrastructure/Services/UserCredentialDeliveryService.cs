@@ -59,9 +59,10 @@ internal sealed class UserCredentialDeliveryService(
     IEmailSubjectRuleService emailSubjectRuleService,
     ISecretEncryptionService secretEncryptionService,
     IOptions<PublicAppOptions> publicAppOptions,
-    ILogger<UserCredentialDeliveryService> logger) : IUserCredentialDeliveryService
+    ILogger<UserCredentialDeliveryService> logger,
+    IOptions<AuthSecurityOptions>? authSecurityOptions = null) : IUserCredentialDeliveryService
 {
-    public string BuildLoginUrl() => $"{ResolveBaseUrl()}/login";
+    public string BuildLoginUrl() => $"{ResolvePublicBaseUrl()}/login";
 
     public string BuildInviteUrl(string token) => $"{ResolvePublicBaseUrl()}/reset-password?token={Uri.EscapeDataString(token)}&mode=invite";
 
@@ -113,7 +114,7 @@ internal sealed class UserCredentialDeliveryService(
             return new UserCredentialDeliveryResult(false, "NotConfigured", "Credential email could not be sent because email settings are not configured.");
         }
 
-        if (!effectiveSettings.IsEnabled || string.Equals(effectiveSettings.Provider, EmailDeliveryMode.Disabled.ToString(), StringComparison.OrdinalIgnoreCase))
+        if (tenantSettings?.IsEnabled == false || !effectiveSettings.IsEnabled || string.Equals(effectiveSettings.Provider, EmailDeliveryMode.Disabled.ToString(), StringComparison.OrdinalIgnoreCase))
         {
             await WriteDeliveryLogAsync(
                 tenantId,
@@ -189,9 +190,10 @@ internal sealed class UserCredentialDeliveryService(
                     user.Email,
                     finalSubject,
                     template.HtmlBody,
-                    template.SenderNameOverride ?? effectiveSettings.SenderName,
-                    effectiveSettings.SenderAddress,
-                    template.ReplyToOverride ?? effectiveSettings.ReplyToEmail,
+                    template.SenderNameOverride ?? tenantSettings?.SenderName ?? effectiveSettings.SenderName,
+                    tenantSettings is { UsePlatformDefaults: true, OverrideSmtpSettings: false, ManagedEmailAddress: not null }
+                        ? tenantSettings.ManagedEmailAddress : effectiveSettings.SenderAddress,
+                    template.ReplyToOverride ?? tenantSettings?.ReplyToEmail ?? effectiveSettings.ReplyToEmail,
                     IsHtml: true),
                 delivery,
                 cancellationToken);
@@ -285,7 +287,7 @@ internal sealed class UserCredentialDeliveryService(
             return new UserCredentialDeliveryResult(false, "NotConfigured", $"{deliveryLabel} email could not be sent because email settings are not configured.");
         }
 
-        if (!effectiveSettings.IsEnabled || string.Equals(effectiveSettings.Provider, EmailDeliveryMode.Disabled.ToString(), StringComparison.OrdinalIgnoreCase))
+        if (tenantSettings?.IsEnabled == false || !effectiveSettings.IsEnabled || string.Equals(effectiveSettings.Provider, EmailDeliveryMode.Disabled.ToString(), StringComparison.OrdinalIgnoreCase))
         {
             await WriteDeliveryLogAsync(
                 tenantId,
@@ -328,7 +330,9 @@ internal sealed class UserCredentialDeliveryService(
                         ["activateAccountUrl"] = request.ResetLink,
                         ["supportEmail"] = supportEmail,
                         ["tenantName"] = tenant?.Name ?? tenant?.CompanyName ?? "Ecosys Workspace",
-                        ["expiresAt"] = request.ExpiresAt.ToString("u"),
+                        ["expiresAt"] = TenantTimeService.Format(request.ExpiresAt, tenant?.TimeZoneId, tenant?.Country),
+                        ["invitationLifetimeHours"] = Math.Clamp(authSecurityOptions?.Value.InvitationLifetimeHours ?? 72, 1, 720).ToString(),
+                        ["role"] = user.Role,
                     }),
                 cancellationToken);
             var finalSubject = await emailSubjectRuleService.BuildFinalSubjectAsync(
@@ -357,9 +361,10 @@ internal sealed class UserCredentialDeliveryService(
                     user.Email,
                     finalSubject,
                     template.HtmlBody,
-                    template.SenderNameOverride ?? effectiveSettings.SenderName,
-                    effectiveSettings.SenderAddress,
-                    template.ReplyToOverride ?? effectiveSettings.ReplyToEmail,
+                    template.SenderNameOverride ?? tenantSettings?.SenderName ?? effectiveSettings.SenderName,
+                    tenantSettings is { UsePlatformDefaults: true, OverrideSmtpSettings: false, ManagedEmailAddress: not null }
+                        ? tenantSettings.ManagedEmailAddress : effectiveSettings.SenderAddress,
+                    template.ReplyToOverride ?? tenantSettings?.ReplyToEmail ?? effectiveSettings.ReplyToEmail,
                     IsHtml: true),
                 delivery,
                 cancellationToken);
@@ -457,7 +462,7 @@ internal sealed class UserCredentialDeliveryService(
             return null;
         }
 
-        if (tenantSettings.UsePlatformDefaults && !tenantSettings.OverrideSmtpSettings && tenantId != PlatformConstants.RootTenantId)
+        if (tenantId != PlatformConstants.RootTenantId && tenantSettings.UsePlatformDefaults && !tenantSettings.OverrideSmtpSettings)
         {
             return await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
         }
@@ -502,31 +507,16 @@ internal sealed class UserCredentialDeliveryService(
 
         return EmailDeliveryMode.Smtp;
     }
-    private string ResolveBaseUrl()
-    {
-        var request = httpContextAccessor.HttpContext?.Request;
-        var origin = request?.Headers.Origin.FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(origin))
-        {
-            return origin.TrimEnd('/');
-        }
-
-        if (request is not null && request.Host.HasValue)
-        {
-            return $"{request.Scheme}://{request.Host.Value}".TrimEnd('/');
-        }
-
-        return "http://localhost";
-    }
-
     private string ResolvePublicBaseUrl()
     {
         var configuredUrl = publicAppOptions.Value.PublicUrl?.Trim();
-        if (!string.IsNullOrWhiteSpace(configuredUrl))
+        if (Uri.TryCreate(configuredUrl, UriKind.Absolute, out var uri)
+            && uri.Scheme is "https" or "http" && string.IsNullOrEmpty(uri.UserInfo)
+            && string.IsNullOrEmpty(uri.Query) && string.IsNullOrEmpty(uri.Fragment))
         {
-            return configuredUrl.TrimEnd('/');
+            return uri.AbsoluteUri.TrimEnd('/');
         }
 
-        return ResolveBaseUrl();
+        throw new InvalidOperationException("App:PublicUrl must be configured for authentication links.");
     }
 }

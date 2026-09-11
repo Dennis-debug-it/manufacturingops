@@ -7,7 +7,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
+using Ecosys.Shared.Options;
+using Microsoft.Extensions.Options;
 
 namespace Ecosys.Api.Controllers;
 
@@ -20,7 +21,8 @@ public sealed class PlatformUsersController(
     IAuditLogService auditLogService,
     IPasswordHasher<User> passwordHasher,
     IUserCredentialDeliveryService credentialDeliveryService,
-    ITemporaryPasswordService temporaryPasswordService) : ControllerBase
+    ITemporaryPasswordService temporaryPasswordService,
+    IOptions<AuthSecurityOptions>? authSecurityOptions = null) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<PlatformUserResponse>>> GetAll(CancellationToken cancellationToken)
@@ -175,30 +177,35 @@ public sealed class PlatformUsersController(
         UpdateStatusAsync(id, false, cancellationToken);
 
     [HttpPost("{id:guid}/reset-password")]
+    [HttpPost("{id:guid}/send-password-reset")]
     public async Task<ActionResult<PlatformResetPasswordResponse>> ResetPassword(Guid id, [FromBody] PlatformResetPasswordRequest? request, CancellationToken cancellationToken)
     {
         var user = await QueryPlatformUsers().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Platform user was not found.");
 
-        var nextPassword = string.IsNullOrWhiteSpace(request?.TemporaryPassword)
-            ? temporaryPasswordService.Generate()
-            : request.TemporaryPassword.Trim();
+        if (!user.IsActive || user.MustChangePassword)
+        {
+            throw new BusinessRuleException("Password reset emails can only be sent for active platform users.");
+        }
 
-        var delivery = await credentialDeliveryService.SendAsync(
+        var issued = await PasswordLinkTokens.IssueAsync(
+            dbContext,
+            user,
+            PasswordLinkPurposes.PasswordReset,
+            authSecurityOptions?.Value,
+            cancellationToken);
+
+        var delivery = await credentialDeliveryService.SendPasswordResetLinkAsync(
             PlatformConstants.RootTenantId,
             user,
-            new UserCredentialDeliveryRequest(
-                "password-reset",
-                credentialDeliveryService.BuildLoginUrl(),
-                nextPassword,
-                null,
-                true),
+            new PasswordResetLinkDeliveryRequest(
+                credentialDeliveryService.BuildResetPasswordUrl(issued.Token),
+                issued.ExpiresAt,
+                PasswordLinkDeliveryPurpose.PasswordReset),
             cancellationToken);
 
         if (delivery.Success)
         {
-            user.PasswordHash = passwordHasher.HashPassword(user, nextPassword);
-            user.MustChangePassword = true;
             user.LastCredentialSentAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
         }
@@ -209,31 +216,26 @@ public sealed class PlatformUsersController(
             "platform.user.password.reset",
             nameof(User),
             user.Id.ToString(),
-            $"Platform user '{user.Email}' password reset.",
+            delivery.Success
+                ? $"Password reset link sent to platform user '{user.Email}'. Delivery status: {delivery.Status}."
+                : $"Password reset link attempt for platform user '{user.Email}' did not complete. Delivery status: {delivery.Status}.",
             severity: "Warning",
             cancellationToken: cancellationToken);
-
-        if (delivery.Success)
-        {
-            await auditLogService.LogAsync(
-                PlatformConstants.RootTenantId,
-                tenantContext.GetRequiredUserId(),
-                "User invitation sent",
-                nameof(User),
-                user.Id.ToString(),
-                $"Account setup invitation sent to '{user.Email}'.",
-                severity: "Info",
-                cancellationToken: cancellationToken);
-        }
 
         return Ok(new PlatformResetPasswordResponse(user.Id, user.Email, delivery.Success, user.LastCredentialSentAt, delivery.Status, delivery.Message));
     }
 
     [HttpPost("{id:guid}/resend-credentials")]
+    [HttpPost("{id:guid}/resend-initial-invite")]
     public async Task<ActionResult<PlatformResetPasswordResponse>> ResendCredentials(Guid id, CancellationToken cancellationToken)
     {
         var user = await QueryPlatformUsers().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Platform user was not found.");
+
+        if (!user.IsActive || !user.MustChangePassword)
+        {
+            throw new BusinessRuleException("Initial invitations can only be resent for platform users pending activation.");
+        }
 
         var delivery = await SendAccountSetupAsync(user, cancellationToken);
 
@@ -243,18 +245,17 @@ public sealed class PlatformUsersController(
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        if (delivery.Success)
-        {
-            await auditLogService.LogAsync(
-                PlatformConstants.RootTenantId,
-                tenantContext.GetRequiredUserId(),
-                "User credentials sent",
-                nameof(User),
-                user.Id.ToString(),
-                $"User credentials sent to '{user.Email}'.",
-                severity: "Info",
-                cancellationToken: cancellationToken);
-        }
+        await auditLogService.LogAsync(
+            PlatformConstants.RootTenantId,
+            tenantContext.GetRequiredUserId(),
+            "platform.user.invitation.resent",
+            nameof(User),
+            user.Id.ToString(),
+            delivery.Success
+                ? $"Initial account setup invitation sent to '{user.Email}'. Delivery status: {delivery.Status}."
+                : $"Initial account setup invitation attempt for '{user.Email}' did not complete. Delivery status: {delivery.Status}.",
+            severity: delivery.Success ? "Info" : "Warning",
+            cancellationToken: cancellationToken);
 
         var message = delivery.Success
             ? delivery.Message
@@ -265,45 +266,17 @@ public sealed class PlatformUsersController(
 
     private async Task<UserCredentialDeliveryResult> SendAccountSetupAsync(User user, CancellationToken cancellationToken)
     {
-        var now = DateTime.UtcNow;
-        var existingTokens = await dbContext.PasswordResetTokens
-            .Where(x => x.UserId == user.Id && !x.UsedAt.HasValue && x.ExpiresAt > now)
-            .ToListAsync(cancellationToken);
-
-        foreach (var existingToken in existingTokens)
-        {
-            existingToken.UsedAt = now;
-        }
-
-        var rawToken = CreatePasswordLinkToken();
-        var expiresAt = now.AddHours(72);
-        dbContext.PasswordResetTokens.Add(new PasswordResetToken
-        {
-            UserId = user.Id,
-            TokenHash = HashPasswordLinkToken(rawToken),
-            ExpiresAt = expiresAt,
-        });
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var issued = await PasswordLinkTokens.IssueAsync(dbContext, user, PasswordLinkPurposes.Invitation,
+            authSecurityOptions?.Value, cancellationToken);
 
         return await credentialDeliveryService.SendPasswordResetLinkAsync(
             PlatformConstants.RootTenantId,
             user,
             new PasswordResetLinkDeliveryRequest(
-                credentialDeliveryService.BuildInviteUrl(rawToken),
-                expiresAt,
+                credentialDeliveryService.BuildInviteUrl(issued.Token),
+                issued.ExpiresAt,
                 PasswordLinkDeliveryPurpose.AccountSetup),
             cancellationToken);
-    }
-
-    private static string CreatePasswordLinkToken() => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
-        .Replace('+', '-')
-        .Replace('/', '_')
-        .TrimEnd('=');
-
-    private static string HashPasswordLinkToken(string token)
-    {
-        var hash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token));
-        return Convert.ToHexString(hash);
     }
 
     [HttpPost("{id:guid}/assign-role")]

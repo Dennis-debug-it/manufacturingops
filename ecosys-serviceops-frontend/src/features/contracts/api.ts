@@ -11,8 +11,9 @@ export interface ContractListFilters {
   expiringWithinDays?: number
 }
 
-export function useContracts(filters?: ContractListFilters) {
+export function useContracts(filters?: ContractListFilters, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: ['contracts', filters ?? {}],
     queryFn: () => api.get<ContractListItem[]>(endpoints.contracts.list, { status: filters?.status, renewalRisk: filters?.renewalRisk, clientId: filters?.clientId, contractType: filters?.contractType, expiringWithinDays: filters?.expiringWithinDays }),
     staleTime: 30_000,

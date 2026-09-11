@@ -16,9 +16,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_tenant_payments_tenant_invoices_InvoiceId",
-                table: "tenant_payments");
+            // The original SQL-based payment migration used fk_tpay_invoice; databases
+            // created from the EF model used the generated name. Normalize either lineage.
+            migrationBuilder.Sql("""
+                ALTER TABLE tenant_payments DROP CONSTRAINT IF EXISTS "FK_tenant_payments_tenant_invoices_InvoiceId";
+                ALTER TABLE tenant_payments DROP CONSTRAINT IF EXISTS fk_tpay_invoice;
+                """);
 
             migrationBuilder.AlterColumn<Guid>(
                 name: "InvoiceId",

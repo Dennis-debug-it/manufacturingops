@@ -189,7 +189,7 @@ internal sealed class EmailTemplateService(AppDbContext dbContext) : IEmailTempl
                 <p>An account has been created for you on {{tenantName}} / {{platformName}}.</p>
                 <p>To activate your account, please set your password using the link below.</p>
                 <p><a href="{{setPasswordUrl}}">Set your password</a></p>
-                <p>This link expires at {{expiresAt}}. If it expires, ask your administrator to resend the invitation.</p>
+                <p>This invitation is valid for {{invitationLifetimeHours}} hours. Expires: {{expiresAt}}. If it expires, request a new invitation or ask your administrator to resend it.</p>
                 <p>Need help? Contact {{supportEmail}}.</p>
                 """,
                 """
@@ -200,10 +200,10 @@ internal sealed class EmailTemplateService(AppDbContext dbContext) : IEmailTempl
 
                 Set your password: {{setPasswordUrl}}
 
-                This link expires at {{expiresAt}}. If it expires, ask your administrator to resend the invitation.
+                This invitation is valid for {{invitationLifetimeHours}} hours. Expires: {{expiresAt}}. If it expires, request a new invitation or ask your administrator to resend it.
                 Need help? Contact {{supportEmail}}.
                 """,
-                ["fullName", "tenantName", "platformName", "setPasswordUrl", "supportEmail", "expiresAt"],
+                ["fullName", "tenantName", "platformName", "setPasswordUrl", "supportEmail", "expiresAt", "invitationLifetimeHours", "role"],
                 ["fullName", "setPasswordUrl"],
                 true),
             ["workspace-request-received"] = new(

@@ -18,11 +18,11 @@ export default defineConfig({
         start_url: '/',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#F6F5EF',
-        theme_color: '#15806A',
+    background_color: '#F6F5EF',
+    theme_color: '#0F766E',
         icons: [
-          { src: '/ecosys-rosette.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: '/ecosys-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+          { src: '/logo-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/logo-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
         ],
       },
       workbox: {

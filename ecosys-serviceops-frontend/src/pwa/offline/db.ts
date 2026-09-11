@@ -9,6 +9,11 @@ export interface SyncQueueEntry {
   createdAt: string
   retryCount: number
   synced: boolean
+  status: 'pending' | 'processing' | 'failed' | 'conflict'
+  tenantId: string
+  lastError?: string
+  idempotencyKey: string
+  updatedAt: string
 }
 
 export interface EcosysOfflineDB extends DBSchema {
@@ -59,18 +64,20 @@ let dbPromise: Promise<IDBPDatabase<EcosysOfflineDB>> | null = null
 
 export function getOfflineDb() {
   if (!dbPromise) {
-    dbPromise = openDB<EcosysOfflineDB>('ecosys-offline', 1, {
-      upgrade(database) {
-        database.createObjectStore('work_orders', { keyPath: 'id' })
-        database.createObjectStore('work_order_details', { keyPath: 'id' })
-        database.createObjectStore('clients', { keyPath: 'id' })
-        database.createObjectStore('sites', { keyPath: 'id' })
-        database.createObjectStore('assets', { keyPath: 'id' })
-        database.createObjectStore('parts', { keyPath: 'id' })
-        database.createObjectStore('sync_queue', { keyPath: 'queueId', autoIncrement: true })
-        database.createObjectStore('time_entries', { keyPath: 'id' })
-        database.createObjectStore('user_profile', { keyPath: 'id' })
-        database.createObjectStore('settings', { keyPath: 'key' })
+    dbPromise = openDB<EcosysOfflineDB>('ecosys-offline', 2, {
+      upgrade(database, oldVersion) {
+        if (oldVersion < 1) {
+          database.createObjectStore('work_orders', { keyPath: 'id' })
+          database.createObjectStore('work_order_details', { keyPath: 'id' })
+          database.createObjectStore('clients', { keyPath: 'id' })
+          database.createObjectStore('sites', { keyPath: 'id' })
+          database.createObjectStore('assets', { keyPath: 'id' })
+          database.createObjectStore('parts', { keyPath: 'id' })
+          database.createObjectStore('sync_queue', { keyPath: 'queueId', autoIncrement: true })
+          database.createObjectStore('time_entries', { keyPath: 'id' })
+          database.createObjectStore('user_profile', { keyPath: 'id' })
+          database.createObjectStore('settings', { keyPath: 'key' })
+        }
       },
     })
   }

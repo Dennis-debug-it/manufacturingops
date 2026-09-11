@@ -47,7 +47,7 @@ export function ForgotPasswordPage() {
 
           {message ? (
             <div className="mt-8 space-y-4">
-              <div className="flex items-start gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+              <div role="status" className="flex items-start gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{message}</span>
               </div>
@@ -59,8 +59,9 @@ export function ForgotPasswordPage() {
             <form className="mt-8 space-y-4" onSubmit={onSubmit}>
               <p className="text-sm text-slate-300">Enter the email address on your account and we'll send you a link to reset your password.</p>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-200">Email</label>
+                <label htmlFor="forgot-password-email" className="mb-2 block text-sm font-medium text-slate-200">Email address</label>
                 <input
+                  id="forgot-password-email"
                   type="email"
                   autoComplete="email"
                   className="h-12 w-full rounded-xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none placeholder:text-slate-400 focus:border-white/30"
@@ -69,7 +70,7 @@ export function ForgotPasswordPage() {
                 {errors.email ? <p className="mt-2 text-sm text-rose-300">{errors.email.message}</p> : null}
               </div>
               {submitError ? (
-                <div className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                <div role="alert" className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
                   {submitError}
                 </div>
               ) : null}

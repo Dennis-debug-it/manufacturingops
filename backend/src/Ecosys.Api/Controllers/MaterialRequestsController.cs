@@ -1,3 +1,4 @@
+using System.Data;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -104,6 +105,8 @@ public sealed class MaterialRequestsController(
     public async Task<ActionResult<MaterialRequestResponse>> Approve(Guid id, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanApproveMaterials);
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
 
         var materialRequest = await dbContext.MaterialRequests
@@ -112,6 +115,8 @@ public sealed class MaterialRequestsController(
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Material request was not found.");
 
+        if (materialRequest.Status != "Pending")
+            throw new BusinessRuleException("Only pending requests can be approved.");
         materialRequest.Status = "Approved";
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -126,6 +131,7 @@ public sealed class MaterialRequestsController(
 
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, materialRequest.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == materialRequest.Id, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return Ok(Map(persisted));
     }
 
@@ -133,6 +139,8 @@ public sealed class MaterialRequestsController(
     public async Task<ActionResult<MaterialRequestResponse>> Issue(Guid id, [FromBody] IssueMaterialRequestRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanIssueMaterials);
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
 
         var materialRequest = await dbContext.MaterialRequests
@@ -143,13 +151,20 @@ public sealed class MaterialRequestsController(
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Material request was not found.");
 
+        if (materialRequest.Status != "Approved")
+            throw new BusinessRuleException("Only approved requests can be issued.");
+        if (request.Lines.Count == 0 || request.Lines.Select(x => x.MaterialRequestLineId).Distinct().Count() != request.Lines.Count)
+            throw new BusinessRuleException("Provide distinct material request lines to issue.");
         foreach (var issueLine in request.Lines)
         {
             var line = materialRequest.Lines.SingleOrDefault(x => x.Id == issueLine.MaterialRequestLineId)
                 ?? throw new BusinessRuleException("Material request line was not found.");
 
             var item = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == line.MaterialItemId, cancellationToken);
-            var quantityToIssue = issueLine.QuantityIssued <= 0 ? line.QuantityRequested - line.QuantityIssued : issueLine.QuantityIssued;
+            var quantityToIssue = issueLine.QuantityIssued == 0 ? line.QuantityRequested - line.QuantityIssued : issueLine.QuantityIssued;
+
+            if (quantityToIssue < 0 || quantityToIssue > line.QuantityRequested - line.QuantityIssued)
+                throw new BusinessRuleException("Issued quantity cannot exceed the approved remaining quantity or be negative.");
 
             if (quantityToIssue <= 0)
             {
@@ -184,13 +199,16 @@ public sealed class MaterialRequestsController(
 
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, materialRequest.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == materialRequest.Id, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return Ok(Map(persisted));
     }
 
     [HttpPost("{id:guid}/close")]
     public async Task<ActionResult<MaterialRequestResponse>> Close(Guid id, [FromBody] CloseMaterialRequestRequest request, CancellationToken cancellationToken)
     {
-        userAccessService.EnsureTenantOperationalAccess();
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanIssueMaterials);
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken) : null;
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
 
         var materialRequest = await dbContext.MaterialRequests
@@ -201,6 +219,10 @@ public sealed class MaterialRequestsController(
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Material request was not found.");
 
+        if (materialRequest.Status != "Issued")
+            throw new BusinessRuleException("Only issued requests can be closed.");
+        if (request.Lines.Count != materialRequest.Lines.Count || request.Lines.Select(x => x.MaterialRequestLineId).Distinct().Count() != request.Lines.Count)
+            throw new BusinessRuleException("Account for every material request line exactly once.");
         foreach (var closeLine in request.Lines)
         {
             var line = materialRequest.Lines.SingleOrDefault(x => x.Id == closeLine.MaterialRequestLineId)
@@ -211,13 +233,25 @@ public sealed class MaterialRequestsController(
                 throw new BusinessRuleException("Used and returned quantities cannot be negative.");
             }
 
-            if (closeLine.QuantityUsed + closeLine.QuantityReturned > line.QuantityIssued)
+            if (closeLine.QuantityUsed + closeLine.QuantityReturned != line.QuantityIssued)
             {
-                throw new BusinessRuleException("Used plus returned quantity cannot exceed issued quantity.");
+                throw new BusinessRuleException("Used plus returned quantity must equal issued quantity.");
             }
 
             line.QuantityUsed = closeLine.QuantityUsed;
             line.QuantityReturned = closeLine.QuantityReturned;
+
+            if (closeLine.QuantityUsed > 0)
+            {
+                var material = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == line.MaterialItemId, cancellationToken);
+                dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
+                {
+                    Id = line.Id, TenantId = TenantId, WorkOrderId = materialRequest.WorkOrderId,
+                    MaterialItemId = line.MaterialItemId, QuantityUsed = closeLine.QuantityUsed,
+                    UnitCost = material.UnitCost, Chargeable = true, UsedByUserId = UserId,
+                    Notes = $"Material request {materialRequest.RequestNumber}"
+                });
+            }
 
             if (closeLine.QuantityReturned > 0)
             {
@@ -249,6 +283,7 @@ public sealed class MaterialRequestsController(
 
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, materialRequest.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == materialRequest.Id, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return Ok(Map(persisted));
     }
 

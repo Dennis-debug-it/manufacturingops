@@ -53,7 +53,7 @@ public sealed class AuthController(
         return Ok(new LoginResponse(
             result.Token,
             new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId))),
-            new LoginTenantDto(result.TenantId, result.CompanyName, result.Country, result.Industry, result.LogoUrl, result.ShowPoweredByEcosys)));
+            new LoginTenantDto(result.TenantId, result.CompanyName, result.Country, result.Industry, result.LogoUrl, result.ShowPoweredByEcosys, result.TimeZoneId)));
     }
 
     [HttpPost("forgot-password")]
@@ -69,6 +69,14 @@ public sealed class AuthController(
         var message = await passwordResetService.ResetAsync(request.Token, request.NewPassword, request.ConfirmPassword, cancellationToken);
         return Ok(new MessageResponse(message));
     }
+
+    [HttpPost("validate-invitation")]
+    public async Task<ActionResult<InvitationValidationResponse>> ValidateInvitation([FromBody] InvitationValidationRequest request, CancellationToken cancellationToken) =>
+        Ok(new InvitationValidationResponse(await passwordResetService.ValidateInvitationAsync(request.Token, cancellationToken)));
+
+    [HttpPost("resend-invitation")]
+    public async Task<ActionResult<MessageResponse>> ResendInvitation([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken) =>
+        Ok(new MessageResponse(await passwordResetService.ResendInvitationAsync(request.Email, cancellationToken)));
 
     [Authorize]
     [HttpPost("change-password")]
@@ -190,7 +198,8 @@ public sealed class AuthController(
                     user.Tenant?.Industry,
                     user.Tenant?.LogoUrl,
                     user.Tenant?.PrimaryColor ?? "#0F4C81",
-                    user.Tenant?.SecondaryColor ?? "#F4B942"),
+                    user.Tenant?.SecondaryColor ?? "#F4B942",
+                    user.Tenant?.TimeZoneId ?? "Africa/Nairobi"),
                 [],
                 impersonation));
         }
@@ -226,7 +235,8 @@ public sealed class AuthController(
                 user.Tenant?.Industry,
                 user.Tenant?.LogoUrl,
                 user.Tenant?.PrimaryColor ?? "#0F4C81",
-                user.Tenant?.SecondaryColor ?? "#F4B942"),
+                user.Tenant?.SecondaryColor ?? "#F4B942",
+                    user.Tenant?.TimeZoneId ?? "Africa/Nairobi"),
             branches,
             impersonation));
     }
@@ -338,6 +348,8 @@ public sealed record ForgotPasswordRequest(string Email);
 public sealed record SelfServiceResetPasswordRequest(string Token, string NewPassword, string ConfirmPassword);
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword, string ConfirmPassword);
 public sealed record MessageResponse(string Message);
+public sealed record InvitationValidationRequest(string Token);
+public sealed record InvitationValidationResponse(string Status);
 
 public sealed record LoginResponse(
     string Token,
@@ -352,7 +364,8 @@ public sealed record LoginTenantDto(
     string Country,
     string? Industry,
     string? LogoUrl,
-    bool ShowPoweredByEcosys);
+    bool ShowPoweredByEcosys,
+    string TimeZoneId = "Africa/Nairobi");
 
 public sealed record PermissionResponse
 {
@@ -413,7 +426,8 @@ public sealed record AuthenticatedTenantDto(
     string? Industry,
     string? LogoUrl,
     string PrimaryColor,
-    string SecondaryColor);
+    string SecondaryColor,
+    string TimeZoneId = "Africa/Nairobi");
 
 public sealed record AuthenticatedBranchDto(
     Guid Id,

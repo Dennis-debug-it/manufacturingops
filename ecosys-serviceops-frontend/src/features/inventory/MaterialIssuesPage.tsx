@@ -92,7 +92,7 @@ function ReturnDrawer({ issue, onClose }: { issue: MaterialIssue; onClose: () =>
 
   const submit = async () => {
     const lines = issue.lines
-      .map((line) => ({ materialIssueLineId: line.id, quantityReturned: Number(quantities[line.id]) || 0 }))
+      .map((line) => ({ materialIssueLineId: line.id, quantityReturned: Number(quantities[line.id]) || 0, expectedQuantityReturned: line.quantityReturned }))
       .filter((line) => line.quantityReturned > 0)
     if (lines.length === 0) {
       toast.error('Enter a returned quantity for at least one line')

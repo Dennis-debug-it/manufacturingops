@@ -12,6 +12,7 @@ import {
   setLogoutHandler,
   setSession,
 } from '../api/sessionStore'
+import { setTenantTimeZone } from '../utils/dates'
 import { normalizeRole } from '../utils/normalizeRole'
 import type { AuthSession, LoginRequest, LoginResponse, MeResponse } from '../types/auth'
 
@@ -32,6 +33,7 @@ export interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
 function toSession(response: LoginResponse | MeResponse): AuthSession {
+  setTenantTimeZone(response.tenant?.timeZoneId, response.tenant?.country)
   return {
     token: response.token,
     user: { ...response.user, role: normalizeRole(response.user.role) },

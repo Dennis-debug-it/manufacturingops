@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { brand } from '../../shared/config/brand'
@@ -19,6 +19,8 @@ type LoginFormValues = z.infer<typeof loginSchema>
 export function LoginPage() {
   const { login, isAuthenticated, isReady } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const tenantDestination = searchParams.get('welcome') === '1' ? '/onboarding' : '/dashboard'
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const passwordVisibilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -61,14 +63,14 @@ export function LoginPage() {
     if (!isReady || !isAuthenticated) {
       return
     }
-    navigate('/dashboard', { replace: true })
-  }, [isAuthenticated, isReady, navigate])
+    navigate(tenantDestination, { replace: true })
+  }, [isAuthenticated, isReady, navigate, tenantDestination])
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null)
     try {
       const session = await login(values)
-      navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : '/dashboard', { replace: true })
+      navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : tenantDestination, { replace: true })
     } catch (error) {
       setSubmitError(resolveErrorMessage(error))
     }
@@ -122,7 +124,7 @@ export function LoginPage() {
               {errors.password ? <p className="mt-2 text-sm text-rose-600">{errors.password.message}</p> : null}
             </div>
             {submitError ? (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                 {submitError}
               </div>
             ) : null}

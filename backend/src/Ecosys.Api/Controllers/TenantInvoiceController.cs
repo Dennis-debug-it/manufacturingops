@@ -22,9 +22,11 @@ public sealed class TenantInvoiceController(
     IAuditLogService auditLogService,
     IUserAccessService userAccessService,
     IEmailOutboxService emailOutbox,
+    IEmailDeliveryLogService emailDeliveryLogs,
     IEmailTemplateService emailTemplateService,
     IEmailSubjectRuleService emailSubjectRuleService,
-    ILogger<TenantInvoiceController> logger) : TenantAwareControllerBase(tenantContext)
+    ILogger<TenantInvoiceController> logger,
+    IFinancialRecipientResolver financialRecipientResolver) : TenantAwareControllerBase(tenantContext)
 {
     // ── List ─────────────────────────────────────────────────────────────────
 
@@ -362,8 +364,17 @@ public sealed class TenantInvoiceController(
             throw new BusinessRuleException("Only Draft invoices can be sent.");
         invoice.Status = "Sent";
         await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(TenantId, UserId, "finance.invoice.sent", nameof(TenantInvoice), invoice.Id.ToString(), $"Sent invoice {invoice.InvoiceNumber}", cancellationToken);
-        await TryQueueInvoiceSentEmailAsync(invoice, cancellationToken);
+        try
+        {
+            await QueueInvoiceSentEmailAsync(invoice, cancellationToken);
+        }
+        catch
+        {
+            invoice.Status = "Draft";
+            await dbContext.SaveChangesAsync(cancellationToken);
+            throw;
+        }
+        await auditLogService.LogAsync(TenantId, UserId, "finance.invoice.sent", nameof(TenantInvoice), invoice.Id.ToString(), $"Sent invoice {invoice.InvoiceNumber}; delivery queued.", cancellationToken);
         return Ok(MapDetail(invoice));
     }
 
@@ -584,6 +595,7 @@ public sealed class TenantInvoiceController(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(TenantId, UserId, "finance.payment.recorded", nameof(TenantPayment), payment.Id.ToString(), $"Recorded payment {payment.PaymentNumber} for invoice {invoice.InvoiceNumber}", cancellationToken);
+        await TryQueueReceiptEmailAsync(payment.Id, cancellationToken);
 
         return CreatedAtAction(nameof(ListPayments), new { id }, MapPayment(payment));
     }
@@ -635,6 +647,7 @@ public sealed class TenantInvoiceController(
 
         await auditLogService.LogAsync(TenantId, UserId, "finance.payment.received", nameof(TenantPayment), payment.Id.ToString(),
             $"Received payment {payment.PaymentNumber} ({payment.Amount:N2}) for {client.ClientName}, allocated to {items.Count} invoice(s)", cancellationToken);
+        await TryQueueReceiptEmailAsync(payment.Id, cancellationToken);
 
         return Ok(MapPayment(payment));
     }
@@ -898,44 +911,135 @@ public sealed class TenantInvoiceController(
 
     // ── Email helpers ─────────────────────────────────────────────────────────
 
-    private async Task TryQueueInvoiceSentEmailAsync(TenantInvoice invoice, CancellationToken cancellationToken)
+    private async Task QueueInvoiceSentEmailAsync(TenantInvoice invoice, CancellationToken cancellationToken)
+    {
+        var recipients = await financialRecipientResolver.ResolveAsync(TenantId, invoice.ClientId, "Invoice", cancellationToken);
+        if (recipients.To.Count == 0)
+            throw new BusinessRuleException("Invoice cannot be dispatched because no valid billing recipient is configured.");
+
+        var template = await emailTemplateService.RenderTenantTemplateAsync(
+            TenantId,
+            "invoice.sent",
+            new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["InvoiceNumber"] = invoice.InvoiceNumber,
+                ["CompanyName"] = invoice.Client?.ClientName ?? "N/A",
+                ["TotalAmount"] = $"{invoice.Currency} {invoice.TotalAmount:N2}",
+                ["DueDate"] = invoice.DueDate.ToString("yyyy-MM-dd"),
+            },
+            cancellationToken);
+
+        if (!template.Enabled)
+            throw new BusinessRuleException("Invoice delivery is disabled for the invoice email template.");
+
+        var subject = await emailSubjectRuleService.BuildFinalSubjectAsync(
+            TenantId, "invoice.sent", template.Subject, cancellationToken: cancellationToken);
+        var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
+        var pdf = RenderInvoicePdf(invoice, tenant);
+        var cc = recipients.To.Skip(1).Concat(recipients.Cc).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+        await emailOutbox.QueueEmailAsync(
+            new QueueEmailRequest(
+                TenantId, "invoice.sent", "invoice.sent",
+                recipients.To.First(), invoice.Client?.ClientName,
+                template.SenderNameOverride, null, template.ReplyToOverride,
+                subject, template.HtmlBody, template.TextBody, UserId,
+                Attachments: [new EmailAttachment($"Invoice-{invoice.InvoiceNumber}.pdf", pdf, "application/pdf")],
+                CcAddresses: cc,
+                DocumentType: "Invoice",
+                DocumentId: invoice.Id,
+                TriggeredAutomatically: true,
+                IdempotencyKey: $"invoice.sent:{invoice.Id:N}"),
+            cancellationToken);
+    }
+
+    private byte[] RenderInvoicePdf(TenantInvoice invoice, Tenant? tenant)
+    {
+        var templateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "invoice");
+        var termsText = templateConfig?.ShowTerms == true
+            ? (!string.IsNullOrWhiteSpace(invoice.TermsAndConditions) ? invoice.TermsAndConditions : templateConfig.InvoiceTerms ?? templateConfig.DefaultTermsText)
+            : null;
+        var model = new InvoicePdfModel(
+            invoice.InvoiceNumber, invoice.Status, invoice.InvoiceDate, invoice.DueDate,
+            invoice.Client?.ClientName ?? "Unknown", null, null, invoice.Notes,
+            invoice.Lines.Select(l => new InvoiceLinePdfModel(l.Description, l.ItemType, l.Quantity, l.Unit, l.UnitRate, l.LineTotal, l.TaxRate, l.GrandTotal)).ToList(),
+            invoice.Subtotal, invoice.TaxAmount, invoice.TotalAmount, invoice.AmountPaid, invoice.Balance, invoice.Currency,
+            tenant?.CompanyName ?? "Ecosys", tenant?.Address, tenant?.Phone, tenant?.LogoUrl,
+            templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81", templateConfig?.FontFamily ?? "Helvetica",
+            PdfTemplateHelper.ResolveFooterText(templateConfig), templateConfig?.WatermarkText,
+            PdfTemplateHelper.ComposeBankDetails(templateConfig),
+            templateConfig?.ShowBankDetails == true ? templateConfig.PaymentInstructions : null,
+            termsText, templateConfig);
+        return pdfRenderer.RenderInvoicePdf(model);
+    }
+
+    private async Task TryQueueReceiptEmailAsync(Guid paymentId, CancellationToken cancellationToken)
     {
         try
         {
-            var clientEmail = invoice.Client?.Email;
-            if (string.IsNullOrWhiteSpace(clientEmail))
-                return;
+            var payment = await dbContext.TenantPayments
+                .Include(x => x.Invoice).ThenInclude(x => x!.Client)
+                .Include(x => x.Client)
+                .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == paymentId, cancellationToken);
+            if (payment is null || !string.Equals(payment.Status, "Confirmed", StringComparison.OrdinalIgnoreCase)) return;
 
-            var template = await emailTemplateService.RenderTenantTemplateAsync(
-                TenantId,
-                "invoice.sent",
-                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["InvoiceNumber"] = invoice.InvoiceNumber,
-                    ["CompanyName"] = invoice.Client?.ClientName ?? "N/A",
-                    ["TotalAmount"] = $"{invoice.Currency} {invoice.TotalAmount:N2}",
-                    ["DueDate"] = invoice.DueDate.ToString("yyyy-MM-dd"),
-                },
-                cancellationToken);
+            var client = payment.Client ?? payment.Invoice?.Client;
+            if (client is null) return;
+            var recipients = await financialRecipientResolver.ResolveAsync(TenantId, payment.ClientId, "Receipt", cancellationToken);
+            if (recipients.To.Count == 0) throw new BusinessRuleException("Receipt delivery was skipped because no valid billing recipient is configured.");
 
-            if (!template.Enabled)
-                return;
-
-            var subject = await emailSubjectRuleService.BuildFinalSubjectAsync(
-                TenantId, "invoice.sent", template.Subject, cancellationToken: cancellationToken);
+            var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
+            var pdf = RenderReceiptPdf(payment, client, tenant);
+            var subject = $"Receipt {payment.PaymentNumber} — {client.ClientName}";
+            var body = $"<p>Thank you. Receipt <strong>{System.Net.WebUtility.HtmlEncode(payment.PaymentNumber)}</strong> for <strong>{payment.Amount:N2}</strong> has been recorded.</p>";
+            var cc = recipients.To.Skip(1).Concat(recipients.Cc).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
             await emailOutbox.QueueEmailAsync(
                 new QueueEmailRequest(
-                    TenantId, "invoice.sent", "invoice-sent",
-                    clientEmail, invoice.Client?.ClientName,
-                    template.SenderNameOverride, null, null,
-                    subject, template.HtmlBody, template.TextBody, null),
+                    TenantId, "receipt.issued", "receipt.issued",
+                    recipients.To.First(), client.ClientName,
+                    null, null, null, subject, body,
+                    $"Receipt {payment.PaymentNumber} has been recorded.", UserId,
+                    Attachments: [new EmailAttachment($"Receipt-{payment.PaymentNumber}.pdf", pdf, "application/pdf")],
+                    CcAddresses: cc,
+                    DocumentType: "Receipt",
+                    DocumentId: payment.Id,
+                    TriggeredAutomatically: true,
+                    IdempotencyKey: $"receipt.issued:{payment.Id:N}"),
                 cancellationToken);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to queue invoice.sent email for invoice {InvoiceId}.", invoice.Id);
+            logger.LogWarning(ex, "Receipt delivery could not be queued for payment {PaymentId}.", paymentId);
+            await emailDeliveryLogs.LogAsync(
+                new EmailDeliveryLogWriteRequest(
+                    TenantId, "receipt.issued", "receipt.issued", "unknown@local",
+                    $"Receipt delivery {paymentId}", EmailOutboxStatuses.Failed,
+                    "QueueingFailed", "Receipt delivery could not be queued.", UserId,
+                    DocumentType: "Receipt", DocumentId: paymentId, TriggeredAutomatically: true),
+                cancellationToken);
         }
+    }
+
+    private byte[] RenderReceiptPdf(TenantPayment payment, Client client, Tenant? tenant)
+    {
+        var templateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "receipt");
+        return pdfRenderer.RenderReceiptPdf(new ReceiptPdfModel(
+            payment.PaymentNumber,
+            payment.Invoice?.InvoiceNumber ?? "N/A",
+            client.ClientName,
+            payment.PaymentDate,
+            payment.Amount,
+            payment.Invoice?.Currency ?? tenant?.Currency ?? "KES",
+            payment.Method,
+            payment.Reference,
+            tenant?.CompanyName ?? "Ecosys",
+            tenant?.LogoUrl,
+            templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
+            FontFamily: templateConfig?.FontFamily ?? "Helvetica",
+            FooterText: PdfTemplateHelper.ResolveFooterText(templateConfig),
+            WatermarkText: templateConfig?.WatermarkText,
+            TemplateConfig: templateConfig));
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
