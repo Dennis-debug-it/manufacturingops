@@ -76,7 +76,7 @@ export function UserDetailPage() {
   const reset = async () => {
     try {
       await resetPassword.mutateAsync(undefined)
-      toast.success('Password reset — new credentials sent')
+      toast.success('Password reset â€” new credentials sent')
     } catch {
       // interceptor surfaces the error toast
     }
@@ -100,7 +100,7 @@ export function UserDetailPage() {
         primaryAction={
           canManage ? (
             <div className="flex flex-wrap gap-2">
-              {user.mustChangePassword || user.invitationStatus === 'Invited' || user.invitationStatus === 'Expired' ? <button type="button" onClick={resend} disabled={resendCredentials.isPending} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">{resendCredentials.isPending ? 'Sending�' : 'Resend Invite'}</button> : null}
+              {user.mustChangePassword || user.invitationStatus === 'Invited' || user.invitationStatus === 'Expired' ? <button type="button" onClick={resend} disabled={resendCredentials.isPending} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">{resendCredentials.isPending ? 'Sending…' : 'Resend Invite'}</button> : null}
               <button type="button" onClick={reset} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Reset Password</button>
               <button type="button" onClick={toggleStatus} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
                 {user.isActive ? 'Deactivate' : 'Activate'}
@@ -114,9 +114,9 @@ export function UserDetailPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[
             ['Email', user.email],
-            ['Phone', user.phoneNumber ?? '—'],
-            ['Department', user.department ?? '—'],
-            ['Branch Access', user.hasAllBranchAccess ? 'All Branches' : (user.defaultBranchName ?? '—')],
+            ['Phone', user.phoneNumber ?? 'â€”'],
+            ['Department', user.department ?? 'â€”'],
+            ['Branch Access', user.hasAllBranchAccess ? 'All Branches' : (user.defaultBranchName ?? 'â€”')],
             ['Must Change Password', user.mustChangePassword ? 'Yes' : 'No'],
             ['Last Invitation Sent', user.lastCredentialSentAt ? formatDateTime(user.lastCredentialSentAt) : 'Never'],
             ['Created', formatDateTime(user.createdAt)],
@@ -147,7 +147,7 @@ export function UserDetailPage() {
               disabled={!permsDirty || updateUser.isPending}
               className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-5 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-50"
             >
-              {updateUser.isPending ? 'Saving…' : 'Save permissions'}
+              {updateUser.isPending ? 'Savingâ€¦' : 'Save permissions'}
             </button>
           </div>
         ) : null}

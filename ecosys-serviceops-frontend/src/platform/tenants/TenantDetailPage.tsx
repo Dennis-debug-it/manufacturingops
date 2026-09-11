@@ -97,7 +97,7 @@ export function TenantDetailPage() {
     { key: 'createdAt', header: 'When', cell: (row) => formatDateTime(row.createdAt) },
     { key: 'actor', header: 'Actor', cell: (row) => row.actor },
     { key: 'action', header: 'Action', cell: (row) => row.action },
-    { key: 'details', header: 'Details', cell: (row) => row.details ?? '—' },
+    { key: 'details', header: 'Details', cell: (row) => row.details ?? 'â€”' },
   ]
 
   const saveCommunication = async () => {
@@ -160,7 +160,7 @@ export function TenantDetailPage() {
     { key: 'fullName', header: 'Name', cell: (row) => <span className="font-medium text-slate-900">{row.fullName}</span> },
     { key: 'email', header: 'Email', cell: (row) => row.email },
     { key: 'role', header: 'Role', cell: (row) => row.role },
-    { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? '—' },
+    { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? 'â€”' },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
     {
       key: 'access',
@@ -172,7 +172,7 @@ export function TenantDetailPage() {
     {
       key: 'lastCredentialSentAt',
       header: 'Setup link sent',
-      cell: (row) => (row.lastCredentialSentAt ? formatDateTime(row.lastCredentialSentAt) : '—'),
+      cell: (row) => (row.lastCredentialSentAt ? formatDateTime(row.lastCredentialSentAt) : 'â€”'),
     },
     { key: 'createdAt', header: 'Joined', cell: (row) => formatDateTime(row.createdAt) },
     {
@@ -187,7 +187,7 @@ export function TenantDetailPage() {
           title={row.isActive ? 'Email this user a fresh account setup link' : 'Reactivate the account to resend its setup link'}
         >
           <Send className="h-3.5 w-3.5" />
-          {resendInvitation.isPending && resendInvitation.variables === row.id ? 'Sending…' : 'Resend setup link'}
+          {resendInvitation.isPending && resendInvitation.variables === row.id ? 'Sendingâ€¦' : 'Resend setup link'}
         </button>
       ),
     },
@@ -251,7 +251,7 @@ export function TenantDetailPage() {
               <InfoCard label="County" value={tenant.county ?? 'Not set'} />
               <InfoCard label="City" value={tenant.city ?? 'Not set'} />
               <InfoCard label="Trial ends" value={tenant.trialEndsAt ? formatDateTime(tenant.trialEndsAt) : 'Not set'} />
-              <InfoCard label="Days remaining" value={tenant.trialDaysRemaining != null ? String(tenant.trialDaysRemaining) : '—'} />
+              <InfoCard label="Days remaining" value={tenant.trialDaysRemaining != null ? String(tenant.trialDaysRemaining) : 'â€”'} />
               <InfoCard label="Subscription ends" value={tenant.subscriptionEndsAt ? formatDateTime(tenant.subscriptionEndsAt) : 'Not set'} />
               <InfoCard label="Created" value={formatDateTime(tenant.createdAt)} />
               <InfoCard label="Last activity" value={tenant.lastActivityAt ? formatDateTime(tenant.lastActivityAt) : 'Not set'} />
@@ -300,16 +300,16 @@ export function TenantDetailPage() {
             <SectionTitle title="Workspace users" description="Cross-tenant user listing is not exposed yet. We can safely show the tenant-side account summary we do have." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <InfoCard label="Tenant users" value={tenant.userCount} />
-              <InfoCard label="ServiceOps email" value={tenant.serviceOpsEmail ?? '�'} />
-              <InfoCard label="Timezone" value={tenant.timeZoneId ?? '�'} />
+              <InfoCard label="ServiceOps email" value={tenant.serviceOpsEmail ?? '—'} />
+              <InfoCard label="Timezone" value={tenant.timeZoneId ?? '—'} />
               <InfoCard label="Must change password" value={tenant.initialAdminInvitationSent ? 'First admin invited' : 'Check status'} />
               <InfoCard label="Initial admin invite" value={tenant.initialAdminInvitationSent ? 'Queued or sent' : 'Not sent'} />
-              <InfoCard label="Initial admin note" value={tenant.initialAdminInvitationMessage ?? '—'} />
+              <InfoCard label="Initial admin note" value={tenant.initialAdminInvitationMessage ?? 'â€”'} />
             </div>
           </section>
           <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <SectionTitle title="Workspace user list" description="Accounts inside this tenant. Add another admin here when the workspace needs more than the one seeded at creation, or resend a lapsed setup link — the only recovery path for an admin who has never signed in. Ecosys staff accounts live under Platform → Users." />
+              <SectionTitle title="Workspace user list" description="Accounts inside this tenant. Add another admin here when the workspace needs more than the one seeded at creation, or resend a lapsed setup link â€” the only recovery path for an admin who has never signed in. Ecosys staff accounts live under Platform â†’ Users." />
               <button
                 type="button"
                 onClick={() => setShowAddWorkspaceUser(true)}
@@ -593,7 +593,7 @@ export function TenantDetailPage() {
         header={
           <PageHeader
             title={tenant.name}
-            subtitle={`${tenant.slug} · ${tenant.contactEmail ?? 'No contact email'}`}
+            subtitle={`${tenant.slug} Â· ${tenant.contactEmail ?? 'No contact email'}`}
             breadcrumbs={[{ label: 'Tenants', to: '/platform/tenants' }, { label: tenant.name }]}
             secondaryActions={<div className="flex items-center gap-2">{tenantStatusBadge(tenant.status)}{licenseStatusBadge(tenant.licenseStatus)}</div>}
             primaryAction={

@@ -55,7 +55,7 @@ export function EmailIdentitySettingsPage() {
         <label className="block space-y-2 text-sm text-slate-700"><span>Email Signature</span><textarea rows={4} maxLength={4000} value={values.emailSignature ?? ''} onChange={(event) => set('emailSignature', event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" /></label>
         <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={values.inboundEnabled} onChange={(event) => set('inboundEnabled', event.target.checked)} />Enable inbound email</label>
         <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={values.outboundEnabled} onChange={(event) => set('outboundEnabled', event.target.checked)} />Enable outbound email</label>
-        <button disabled={save.isPending} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">{save.isPending ? 'Saving…' : 'Save Changes'}</button>
+        <button disabled={save.isPending} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">{save.isPending ? 'Savingâ€¦' : 'Save Changes'}</button>
       </form>}
   </div>
 }

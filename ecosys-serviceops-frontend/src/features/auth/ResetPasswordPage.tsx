@@ -138,14 +138,14 @@ export function ResetPasswordPage() {
             <div className="mt-8 space-y-4">
               {!invitationStatus ? (
                 validationFailed ? <div className="space-y-3"><p role="alert" className="text-sm text-rose-100">We could not check this invitation. Please try again.</p><button type="button" onClick={() => setValidationAttempt((attempt) => attempt + 1)} className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950">Try again</button></div>
-                  : <p role="status" className="flex items-center gap-2 text-sm text-slate-200"><Loader2 className="h-4 w-4 animate-spin" />Checking your invitation�</p>
+                  : <p role="status" className="flex items-center gap-2 text-sm text-slate-200"><Loader2 className="h-4 w-4 animate-spin" />Checking your invitation…</p>
               ) : <p role="alert" className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">{invitationMessages[invitationStatus]}</p>}
               {invitationStatus && invitationStatus !== 'USED' ? (
                 recoveryMessage ? <p role="status" className="text-sm text-emerald-100">{recoveryMessage}</p> : (
                   <form onSubmit={requestInvitation} className="space-y-3">
                     <label htmlFor="invitation-email" className="block text-sm font-medium text-slate-200">Your email address</label>
                     <input id="invitation-email" required type="email" autoComplete="email" value={recoveryEmail} onChange={(event) => setRecoveryEmail(event.target.value)} className="h-12 w-full rounded-xl border border-white/10 bg-white/10 px-4 text-sm text-white outline-none focus:border-white/30" />
-                    <button disabled={recovering} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 disabled:opacity-60">{recovering ? 'Requesting�' : 'Request new invitation'}</button>
+                    <button disabled={recovering} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 disabled:opacity-60">{recovering ? 'Requesting…' : 'Request new invitation'}</button>
                   </form>
                 )
               ) : null}
@@ -164,7 +164,7 @@ export function ResetPasswordPage() {
           ) : success ? (
             <div className="mt-8 flex items-start gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>Your password has been reset. Redirecting you to sign in…</span>
+              <span>Your password has been reset. Redirecting you to sign inâ€¦</span>
             </div>
           ) : (
             <form className="mt-8 space-y-4" onSubmit={onSubmit}>

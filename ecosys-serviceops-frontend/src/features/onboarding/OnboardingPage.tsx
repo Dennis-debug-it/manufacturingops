@@ -32,10 +32,10 @@ export function OnboardingPage() {
       <PageHeader title="Welcome to Ecosys ServiceOps" subtitle="Your workspace is ready. Start with what you need today." />
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900">{tenant?.companyName}</h2>
-        <p className="mt-1 text-sm text-slate-600">{planName ?? (isLoading ? 'Loading plan…' : 'ServiceOps')}</p>
+        <p className="mt-1 text-sm text-slate-600">{planName ?? (isLoading ? 'Loading planâ€¦' : 'ServiceOps')}</p>
         <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">Workspace email</p>
-          <p className="mt-1 break-all text-sm font-medium text-emerald-950">{profile.data?.serviceOpsEmail ?? (profile.isLoading ? 'Loading workspace email…' : 'Contact your platform administrator for your workspace email.')}</p>
+          <p className="mt-1 break-all text-sm font-medium text-emerald-950">{profile.data?.serviceOpsEmail ?? (profile.isLoading ? 'Loading workspace emailâ€¦' : 'Contact your platform administrator for your workspace email.')}</p>
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
           {canAddCustomer ? <button className={buttonClass} onClick={() => setAction('customer')}>Add Customer</button> : null}

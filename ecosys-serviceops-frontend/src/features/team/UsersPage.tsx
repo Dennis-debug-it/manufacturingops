@@ -19,7 +19,7 @@ function ResendInviteButton({ userId }: { userId: string }) {
       if (result.success) toast.success('Invitation sent')
       else toast.error(result.message ?? 'Invitation delivery failed. Please try again.')
     }).catch(() => { /* Interceptor displays the error. */ })
-  }} className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">{resend.isPending ? 'Sending�' : 'Resend Invite'}</button>
+  }} className="inline-flex min-h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60">{resend.isPending ? 'Sending…' : 'Resend Invite'}</button>
 }
 
 export function UsersPage() {
@@ -37,9 +37,9 @@ export function UsersPage() {
   const columns: DataTableColumn<TeamUser>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/team/users/${row.id}`}>{row.fullName}</Link> },
     { key: 'email', header: 'Email', cell: (row) => row.email },
-    { key: 'department', header: 'Department', cell: (row) => row.department ?? '—' },
-    { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? '—' },
-    { key: 'defaultBranchName', header: 'Branch', cell: (row) => row.defaultBranchName ?? (row.hasAllBranchAccess ? 'All Branches' : '—') },
+    { key: 'department', header: 'Department', cell: (row) => row.department ?? 'â€”' },
+    { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? 'â€”' },
+    { key: 'defaultBranchName', header: 'Branch', cell: (row) => row.defaultBranchName ?? (row.hasAllBranchAccess ? 'All Branches' : 'â€”') },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? (row.invitationStatus ?? (row.mustChangePassword ? 'Invited' : 'Active')) : 'Inactive'} /> },
     ...(canManage ? [{ key: 'invitation', header: 'Invitation', cell: (row: TeamUser) => row.mustChangePassword || row.invitationStatus === 'Invited' || row.invitationStatus === 'Expired' ? <ResendInviteButton userId={row.id} /> : null }] : []),
   ]

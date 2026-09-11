@@ -97,6 +97,17 @@ export interface CreateWorkOrderPayload {
   parentWorkOrderId?: string | null
 }
 
+export interface CompleteWorkOrderPayload {
+  workDoneNotes: string
+  completedAt?: string | null
+  technicianId?: string | null
+  assignmentGroupId?: string | null
+  reportSummary?: string | null
+  answersJson?: string | null
+  adminOverride?: boolean
+  overrideReason?: string | null
+}
+
 function invalidateWorkOrders(queryClient: ReturnType<typeof useQueryClient>, id?: string) {
   void queryClient.invalidateQueries({ queryKey: ['work-orders'] })
   if (id) {
@@ -132,7 +143,7 @@ export function useStartWorkOrder(id: string) {
 export function useCompleteWorkOrder(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { workDoneNotes: string; reportSummary?: string | null; adminOverride?: boolean; overrideReason?: string | null }) =>
+    mutationFn: (payload: CompleteWorkOrderPayload) =>
       api.post<WorkOrder>(endpoints.workOrders.complete(id), payload),
     onSuccess: () => invalidateWorkOrders(queryClient, id),
   })
