@@ -9,10 +9,17 @@ import { brand } from '../../shared/config/brand'
 import { resolveErrorMessage } from '../../shared/api/apiError'
 import { Logo } from '../../shared/components/Logo'
 
-const loginSchema = z.object({
-  email: z.string().email('Enter a valid email address'),
-  password: z.string().min(1, 'Password is required'),
-})
+const loginSchema = z
+  .object({
+    emailOrUsername: z.string().min(1, 'Enter your email or username'),
+    workspace: z.string().optional(),
+    password: z.string().min(1, 'Password is required'),
+  })
+  .superRefine((values, ctx) => {
+    if (!values.emailOrUsername.includes('@') && !values.workspace?.trim()) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['workspace'], message: 'Enter your company name to sign in with a username' })
+    }
+  })
 
 type LoginFormValues = z.infer<typeof loginSchema>
 
@@ -54,7 +61,8 @@ export function LoginPage() {
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: '',
+      emailOrUsername: '',
+      workspace: '',
       password: '',
     },
   })
@@ -69,7 +77,11 @@ export function LoginPage() {
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null)
     try {
-      const session = await login(values)
+      const session = await login({
+        emailOrUsername: values.emailOrUsername,
+        password: values.password,
+        ...(values.workspace?.trim() ? { workspace: values.workspace.trim() } : {}),
+      })
       navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : tenantDestination, { replace: true })
     } catch (error) {
       setSubmitError(resolveErrorMessage(error))
@@ -85,15 +97,28 @@ export function LoginPage() {
 
           <form className="mt-8 space-y-4" onSubmit={onSubmit}>
             <div>
-              <label htmlFor="login-email" className="mb-2 block text-sm font-medium text-slate-700">Email</label>
+              <label htmlFor="login-workspace" className="mb-2 block text-sm font-medium text-slate-700">Company Name</label>
               <input
-                id="login-email"
-                type="email"
-                autoComplete="email"
+                id="login-workspace"
+                type="text"
+                autoComplete="organization"
+                placeholder="e.g. Acme Corp"
                 className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900"
-                {...register('email')}
+                {...register('workspace')}
               />
-              {errors.email ? <p className="mt-2 text-sm text-rose-600">{errors.email.message}</p> : null}
+              <p className="mt-1.5 text-xs text-slate-500">Only required when signing in with a username instead of an email.</p>
+              {errors.workspace ? <p className="mt-2 text-sm text-rose-600">{errors.workspace.message}</p> : null}
+            </div>
+            <div>
+              <label htmlFor="login-identifier" className="mb-2 block text-sm font-medium text-slate-700">Email or username</label>
+              <input
+                id="login-identifier"
+                type="text"
+                autoComplete="username"
+                className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-slate-900"
+                {...register('emailOrUsername')}
+              />
+              {errors.emailOrUsername ? <p className="mt-2 text-sm text-rose-600">{errors.emailOrUsername.message}</p> : null}
             </div>
             <div>
               <div className="mb-2 flex items-center justify-between">

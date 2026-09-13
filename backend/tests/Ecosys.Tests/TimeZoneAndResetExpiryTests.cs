@@ -25,7 +25,7 @@ public sealed class TimeZoneAndResetExpiryTests
     {
         await using var dbContext = CreateDbContext();
         var user = await SeedUserAsync(dbContext, Guid.NewGuid(), "window@tenant.test");
-        var service = CreateResetService(dbContext, new AuthSecurityOptions { PasswordResetExpiryMinutes = 180 });
+        var service = CreateResetService(dbContext, new AuthSecurityOptions { PasswordResetLifetimeMinutes = 180 });
 
         var before = DateTime.UtcNow;
         await service.RequestAsync(user.Email, CancellationToken.None);
@@ -39,7 +39,7 @@ public sealed class TimeZoneAndResetExpiryTests
     {
         await using var dbContext = CreateDbContext();
         var user = await SeedUserAsync(dbContext, Guid.NewGuid(), "tooshort@tenant.test");
-        var service = CreateResetService(dbContext, new AuthSecurityOptions { PasswordResetExpiryMinutes = 1 });
+        var service = CreateResetService(dbContext, new AuthSecurityOptions { PasswordResetLifetimeMinutes = 1 });
 
         var before = DateTime.UtcNow;
         await service.RequestAsync(user.Email, CancellationToken.None);
@@ -168,8 +168,21 @@ public sealed class TimeZoneAndResetExpiryTests
             .UseInMemoryDatabase($"ecosys-timezone-{Guid.NewGuid():N}")
             .Options);
 
+    /// <summary>
+    /// TimeZoneId is a required column with an "Africa/Nairobi" default — a real row can never hold
+    /// NULL. <paramref name="timeZoneId"/> of null therefore doesn't persist a row at all: it
+    /// simulates "no tenant setting to inherit", which is exactly what makes
+    /// GetTimeZoneIdAsync's SingleOrDefaultAsync projection return null and fall through to its
+    /// own default/platform-setting fallback. Callers that need a real, persisted tenant (e.g. to
+    /// hang a User's foreign key off it) must pass an explicit value.
+    /// </summary>
     private static async Task SeedTenantAsync(AppDbContext dbContext, Guid tenantId, string? timeZoneId)
     {
+        if (timeZoneId is null)
+        {
+            return;
+        }
+
         dbContext.Tenants.Add(new Tenant
         {
             Id = tenantId,
@@ -187,7 +200,10 @@ public sealed class TimeZoneAndResetExpiryTests
 
     private static async Task<User> SeedUserAsync(AppDbContext dbContext, Guid tenantId, string email)
     {
-        await SeedTenantAsync(dbContext, tenantId, timeZoneId: null);
+        // Unlike the direct SeedTenantAsync(..., timeZoneId: null) calls above, this needs a real,
+        // persisted tenant for the user's Tenant navigation to resolve — password-reset checks
+        // user.Tenant.IsActive before issuing a token.
+        await SeedTenantAsync(dbContext, tenantId, timeZoneId: "Africa/Nairobi");
         var user = new User
         {
             TenantId = tenantId,

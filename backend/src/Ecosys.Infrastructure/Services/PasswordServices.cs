@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Ecosys.Shared.Options;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
@@ -14,6 +15,19 @@ namespace Ecosys.Infrastructure.Services;
 public interface ITemporaryPasswordService
 {
     string Generate(int minimumLength = 14);
+}
+
+/// <summary>
+/// Raised when self-service password reset cannot run because no mailbox is configured anywhere —
+/// neither the platform settings row nor <c>Smtp:*</c> / <c>ECOSYS_SMTP_*</c>. Deliberately raised
+/// before the account lookup and from the platform scope, so the answer depends only on the server's
+/// own configuration and never on whether the submitted address exists (EC-P1-06d).
+/// </summary>
+public sealed class PasswordResetUnavailableException(string message)
+    : Shared.Errors.AppException(message), Shared.Errors.ILocalizedErrorCode
+{
+    public override int StatusCode => 503;
+    public string ErrorCode => "EMAIL_NOT_CONFIGURED";
 }
 
 public interface IPasswordResetService
@@ -70,14 +84,28 @@ public sealed class PasswordResetService(
     IUserSessionService userSessionService,
     IUserCredentialDeliveryService credentialDeliveryService,
     IAuditLogService auditLogService,
-    IOptions<AuthSecurityOptions>? authSecurityOptions = null) : IPasswordResetService
+    IEmailSettingsResolver emailSettingsResolver,
+    IOptions<AuthSecurityOptions> authSecurityOptions,
+    IOptions<SmtpOptions> smtpOptions,
+    ILogger<PasswordResetService> logger) : IPasswordResetService
 {
     private const string GenericMessage = "If an account exists for this email, password reset instructions will be sent shortly.";
     private const string SuccessMessage = "Your password has been reset. You can now sign in.";
     private const string InvalidLinkMessage = "This password reset link is invalid or has expired. Please request a new one.";
+    private const string UnavailableMessage = "Password reset is temporarily unavailable because email delivery is not configured. Please contact your administrator.";
 
     public async Task<string> RequestAsync(string email, CancellationToken cancellationToken = default)
     {
+        // Deliverability is checked first, at platform scope, and its answer is the same for every
+        // caller: it depends on this server's configuration, not on the address that was submitted.
+        // Reporting success while no mailbox exists anywhere is what stranded reset requests
+        // silently, but the check has to stay address-independent or it becomes an account
+        // enumeration oracle — so it runs before the lookup below and cannot see the address at all.
+        // A per-recipient failure after this point (that mailbox rejected, that tenant's own SMTP
+        // broken) is address-dependent by nature and stays behind GenericMessage; it is logged and
+        // audited instead (EC-P1-06d).
+        await EnsureEmailDeliveryIsConfiguredAsync(cancellationToken);
+
         if (string.IsNullOrWhiteSpace(email))
         {
             return GenericMessage;
@@ -94,7 +122,7 @@ public sealed class PasswordResetService(
         }
 
         var issued = await PasswordLinkTokens.IssueAsync(dbContext, user, PasswordLinkPurposes.PasswordReset,
-            authSecurityOptions?.Value, cancellationToken);
+            authSecurityOptions.Value, cancellationToken);
         var rawToken = issued.Token;
         var expiresAt = issued.ExpiresAt;
 
@@ -200,7 +228,7 @@ public sealed class PasswordResetService(
             && x.Purpose == PasswordLinkPurposes.Invitation && x.CreatedAt > DateTime.UtcNow.AddMinutes(-1), cancellationToken);
         if (recent) return message;
         var issued = await PasswordLinkTokens.IssueAsync(dbContext, user, PasswordLinkPurposes.Invitation,
-            authSecurityOptions?.Value, cancellationToken);
+            authSecurityOptions.Value, cancellationToken);
         var delivery = await credentialDeliveryService.SendPasswordResetLinkAsync(user.TenantId, user,
             new PasswordResetLinkDeliveryRequest(credentialDeliveryService.BuildInviteUrl(issued.Token), issued.ExpiresAt,
                 PasswordLinkDeliveryPurpose.AccountSetup), cancellationToken);
@@ -208,6 +236,24 @@ public sealed class PasswordResetService(
         await auditLogService.LogAsync(user.TenantId, user.Id, "users.invitation.reissued", nameof(User), user.Id.ToString(),
             "Self-service invitation recovery requested.", cancellationToken);
         return message;
+    }
+
+    /// <summary>
+    /// Resolves the platform mailbox exactly as a send would — database row first, then the
+    /// <c>Smtp:*</c> configuration section — and refuses the request when neither supplies a host.
+    /// Platform mail is what every tenant without its own override sends through, so "nothing here"
+    /// means nothing can be delivered for anyone.
+    /// </summary>
+    private async Task EnsureEmailDeliveryIsConfiguredAsync(CancellationToken cancellationToken)
+    {
+        var platformSettings = (await emailSettingsResolver.ResolveAsync(null, cancellationToken)).Settings;
+
+        if (EmailDeliveryResolution.IsExplicitlyDisabled(platformSettings)
+            || EmailDeliveryResolution.Resolve(platformSettings, null, smtpOptions.Value) is null)
+        {
+            logger.LogError("Password reset was requested but no SMTP host is configured in the platform email settings or the Smtp configuration section.");
+            throw new PasswordResetUnavailableException(UnavailableMessage);
+        }
     }
 
     private static string HashToken(string token) => PasswordLinkTokens.Hash(token);

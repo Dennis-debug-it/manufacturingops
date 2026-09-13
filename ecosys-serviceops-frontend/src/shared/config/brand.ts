@@ -2,12 +2,15 @@ export const brand = {
   appName: 'ECOSYS',
   tagline: 'automate.rely.scale',
   // Public asset paths (served from /public). The rosette + wordmark lockup.
+  // `Dark` variants are light-coloured, for use on dark surfaces (e.g. the sidebar); `Mono`
+  // variants are flat white, for single-colour placement on any coloured background.
   assets: {
     lockup: '/logo.svg',
-    lockupDark: '/logo.svg',
-    lockupMono: '/logo.svg',
+    lockupDark: '/logo-dark.svg',
+    lockupMono: '/logo-mono.svg',
     mark: '/logo-icon.svg',
-    markMono: '/logo-icon.svg',
+    markDark: '/logo-icon-dark.svg',
+    markMono: '/logo-icon-mono.svg',
   },
   colors: {
     primary: '#15806A',

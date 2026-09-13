@@ -381,6 +381,7 @@ public sealed partial class AuthEmailSafetyTests
         {
             UserId = admin.Id,
             TokenHash = ToTokenHash("stale-invitation"),
+            Purpose = PasswordLinkPurposes.Invitation,
             ExpiresAt = DateTime.UtcNow.AddHours(1)
         });
         await dbContext.SaveChangesAsync();
@@ -396,9 +397,9 @@ public sealed partial class AuthEmailSafetyTests
         Assert.NotNull(response.LastCredentialSentAt);
 
         var stale = await dbContext.PasswordResetTokens.SingleAsync(x => x.TokenHash == ToTokenHash("stale-invitation"));
-        Assert.NotNull(stale.UsedAt);
+        Assert.NotNull(stale.SupersededAt);
 
-        var fresh = await dbContext.PasswordResetTokens.SingleAsync(x => x.UserId == admin.Id && !x.UsedAt.HasValue);
+        var fresh = await dbContext.PasswordResetTokens.SingleAsync(x => x.UserId == admin.Id && !x.UsedAt.HasValue && !x.SupersededAt.HasValue);
         Assert.True(fresh.ExpiresAt > DateTime.UtcNow.AddHours(24), "A resent setup link must use the invitation window, not the short reset window.");
 
         var log = await dbContext.EmailDeliveryLogs.SingleAsync(x => x.RecipientEmail == "pending.admin@tenant.test");
@@ -990,7 +991,7 @@ public sealed partial class AuthEmailSafetyTests
 
         var controller = CreatePlatformUsersController(dbContext, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true));
 
-        var result = Assert.IsType<OkObjectResult>(await controller.GetAll(null, null, null, null, null, CancellationToken.None));
+        var result = Assert.IsType<OkObjectResult>((await controller.GetAll(CancellationToken.None)).Result);
         var users = Assert.IsType<List<PlatformUserResponse>>(result.Value);
 
         Assert.Contains(users, x => x.Email == "staff@ecosys.test");
@@ -1029,8 +1030,8 @@ public sealed partial class AuthEmailSafetyTests
             new NoOpAuditLogService(),
             CreatePasswordResetService(dbContext, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true, resetSendSucceeds: true)),
             new PasswordHasher<User>(),
-            TestTimeZones.Create(dbContext),
-            new FakeTenantSecurityPolicyService());
+            new FakeTenantSecurityPolicyService(),
+            TestTimeZones.Create(dbContext));
     }
 
     private static PlatformUsersController CreatePlatformUsersController(AppDbContext dbContext, FakeUserCredentialDeliveryService deliveryService)
@@ -1041,8 +1042,8 @@ public sealed partial class AuthEmailSafetyTests
             new NoOpAuditLogService(),
             new PasswordHasher<User>(),
             deliveryService,
-            Options.Create(new AuthSecurityOptions()),
-            new TemporaryPasswordService());
+            new TemporaryPasswordService(),
+            Options.Create(new AuthSecurityOptions()));
     }
 
     private static PasswordResetService CreatePasswordResetService(

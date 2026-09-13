@@ -302,7 +302,13 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
         var isExplicitExpired = string.Equals(tenantLicense.Status, LicenseStatuses.Expired, StringComparison.OrdinalIgnoreCase)
             || string.Equals(tenantLicense.Status, LicenseStatuses.TrialExpired, StringComparison.OrdinalIgnoreCase);
         var isExpired = isExplicitExpired || (effectiveExpiry.HasValue && now > effectiveExpiry.Value);
-        var isGrace = isExpired && graceEndsAt.HasValue && now <= graceEndsAt.Value && !isSuspended && !isCancelled;
+        // The grace period only cushions the automatic, date-driven expiry — it must not shield an
+        // explicit Expired/TrialExpired status override. Without the isExplicitExpired guard, an
+        // operator force-expiring a license ahead of its scheduled ExpiresAt/TrialEndsAt (e.g. for a
+        // billing dispute) would have that override silently ignored until the original date, plus
+        // the grace period, actually passed — the tenant would keep full write access in the
+        // meantime despite being marked Expired.
+        var isGrace = !isExplicitExpired && isExpired && graceEndsAt.HasValue && now <= graceEndsAt.Value && !isSuspended && !isCancelled;
         var isReadOnly = (isExpired && !isGrace) || isCancelled;
 
         var warning = isSuspended

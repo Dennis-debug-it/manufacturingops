@@ -37,9 +37,13 @@ public static class PasswordLinkTokens
             .ToListAsync(cancellationToken);
         foreach (var token in previous) token.SupersededAt = now;
         var raw = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).Replace('+', '-').Replace('/', '_').TrimEnd('=');
+        // Reset links have to survive SMTP queueing and retry delays before the recipient ever opens
+        // the mail, so an operator-supplied window below this floor is treated as a misconfiguration
+        // rather than honoured — otherwise a link can expire before it is ever delivered.
+        const int MinimumPasswordResetMinutes = 15;
         var expires = purpose == PasswordLinkPurposes.Invitation
             ? now.AddHours(Math.Clamp(options.InvitationLifetimeHours, 1, 720))
-            : now.AddMinutes(Math.Clamp(options.PasswordResetLifetimeMinutes, 1, 1440));
+            : now.AddMinutes(Math.Max(MinimumPasswordResetMinutes, Math.Clamp(options.PasswordResetLifetimeMinutes, 1, 1440)));
         db.PasswordResetTokens.Add(new PasswordResetToken
         {
             UserId = user.Id, TokenHash = Hash(raw), Purpose = purpose, CreatedAt = now, ExpiresAt = expires

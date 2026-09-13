@@ -1,4 +1,5 @@
 import type { AuthSession } from '../types/auth'
+import { setLicenseWarning } from './licenseWarningStore'
 
 const storageKey = 'ecosys.serviceops.session'
 const tokenKey = 'ecosys.serviceops.token'
@@ -109,6 +110,9 @@ export function clearSession() {
   session = null
   authToken = null
   refreshTokenValue = null
+  // A stale read-only/expiring banner from this tenant must not bleed into whoever signs in
+  // next on the same tab.
+  setLicenseWarning(null)
   if (!hasWindow()) {
     return
   }
@@ -156,6 +160,7 @@ export function getImpersonationSession(): AuthSession | null {
 }
 
 export function clearImpersonationSession() {
+  setLicenseWarning(null)
   if (!hasWindow()) {
     return
   }

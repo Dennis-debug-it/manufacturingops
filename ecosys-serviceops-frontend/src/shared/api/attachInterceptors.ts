@@ -1,6 +1,7 @@
-import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
+import axios, { type AxiosInstance, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import toast from 'react-hot-toast'
 import { normalizeError } from './apiError'
+import { isLicenseWarningExemptPath, setLicenseWarning } from './licenseWarningStore'
 
 export interface AuthInterceptorConfig {
   /** Returns the current bearer token, or null when signed out. */
@@ -40,6 +41,18 @@ function refreshOnce(refresh: () => Promise<string | null>): Promise<string | nu
  * a 401 on an *authenticated* request ends the session, and a 401 on a sign-in
  * attempt is handed back to the form to display inline (no bogus logout/redirect).
  */
+/**
+ * Tracks the license-health banner from whichever response carries it. Endpoints the backend's
+ * license middleware never runs for (auth, platform-admin) carry no header either way and must
+ * leave whatever warning is already showing alone — see isLicenseWarningExemptPath.
+ */
+function trackLicenseWarning(response: AxiosResponse | undefined) {
+  if (!response || isLicenseWarningExemptPath(response.config?.url)) {
+    return
+  }
+  setLicenseWarning(response.headers?.['x-license-warning'] as string | undefined)
+}
+
 export function attachAuthInterceptors(client: AxiosInstance, config: AuthInterceptorConfig) {
   client.interceptors.request.use((request: InternalAxiosRequestConfig) => {
     const token = config.getToken()
@@ -50,8 +63,12 @@ export function attachAuthInterceptors(client: AxiosInstance, config: AuthInterc
   })
 
   client.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      trackLicenseWarning(response)
+      return response
+    },
     async (error: unknown) => {
+      trackLicenseWarning(axios.isAxiosError(error) ? error.response : undefined)
       const apiError = normalizeError(error)
       const originalRequest = axios.isAxiosError(error) ? error.config : undefined
       const authRequest = isAuthRequest(originalRequest?.url)

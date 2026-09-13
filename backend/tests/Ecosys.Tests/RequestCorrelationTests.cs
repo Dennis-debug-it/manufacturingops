@@ -47,6 +47,7 @@ public sealed class RequestCorrelationTests
                 builder.UseSetting("PlatformAdmin:Email", "platform.owner@ecosys.test");
                 builder.UseSetting("PlatformAdmin:Password", "ValidPlatformAdmin123!");
                 builder.UseSetting("PlatformAdmin:FullName", "Platform Owner");
+                builder.UseSetting("App:PublicUrl", "https://ecosys-tests.example.com");
                 builder.UseSetting($"{AuthSecurityOptions.SectionName}:FailedLoginThreshold", "5");
                 builder.UseSetting($"{AuthSecurityOptions.SectionName}:LockoutMinutes", "15");
                 builder.UseSetting($"{AuthSecurityOptions.SectionName}:RateLimitPermitLimit", "20");

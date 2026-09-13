@@ -13,7 +13,9 @@ export interface LogoProps {
 
 function src(variant: LogoVariant, tone: LogoTone): string {
   if (variant === 'mark') {
-    return tone === 'mono' ? brand.assets.markMono : brand.assets.mark
+    if (tone === 'mono') return brand.assets.markMono
+    if (tone === 'dark') return brand.assets.markDark
+    return brand.assets.mark
   }
   if (tone === 'dark') return brand.assets.lockupDark
   if (tone === 'mono') return brand.assets.lockupMono

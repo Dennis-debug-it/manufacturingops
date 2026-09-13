@@ -34,6 +34,10 @@ public sealed class MaterialInventoryClosureTests
             db.WorkOrders.Add(wo);
             issue.WorkOrderId = wo.Id;
         }
+        // RequestedByUserId is a required FK, so Query()'s Include(x => x.RequestedByUser) compiles to
+        // an inner join — omitting the row it points at (as this seed previously did) silently drops
+        // every issue from the result, which a real FK constraint would never allow in the first place.
+        db.Users.Add(new User { Id = userId, TenantId = tenantId, FullName = "Requester", Email = "requester@tenant.test", Role = AppRoles.Admin, PasswordHash = string.Empty, IsActive = true });
         db.MaterialItems.Add(item);
         db.MaterialIssues.Add(issue);
         await db.SaveChangesAsync();
@@ -129,6 +133,9 @@ public sealed class MaterialInventoryClosureTests
         var wo = new WorkOrder { TenantId = tenantId, WorkOrderNumber = "WO-2" };
         var request = new MaterialRequest { TenantId = tenantId, WorkOrderId = wo.Id, RequestedByUserId = userId,
             RequestNumber = "MR-1", Status = "Pending", Lines = [new MaterialRequestLine { MaterialItemId = item.Id, QuantityRequested = 5 }] };
+        // RequestedByUserId is a required FK — Query()'s Include(x => x.RequestedByUser) is an inner
+        // join, so a real matching User row is needed, same as SeedIssue above.
+        db.Users.Add(new User { Id = userId, TenantId = tenantId, FullName = "Requester", Email = "requester@tenant.test", Role = AppRoles.Admin, PasswordHash = string.Empty, IsActive = true });
         db.MaterialItems.Add(item); db.WorkOrders.Add(wo); db.MaterialRequests.Add(request); await db.SaveChangesAsync();
         var controller = Requests(db);
         var line = request.Lines.Single();

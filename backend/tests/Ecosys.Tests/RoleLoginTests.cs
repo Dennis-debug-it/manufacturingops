@@ -235,7 +235,6 @@ public sealed class RoleLoginTests
             new NoOpAuditLogService(),
             new UnusedPasswordResetService(),
             new PasswordHasher<User>(),
-            TestTimeZones.Create(dbContext),
             new FakeTenantSecurityPolicyService());
 
     private static MvpAuthService CreateAuthService(AppDbContext dbContext) =>

@@ -40,7 +40,9 @@ export async function loginViaApi(
   credentials: LoginCredentials,
 ) {
   const response = await request.post(`${apiBaseUrl}/api/auth/login`, {
-    data: credentials,
+    // Backend contract is { emailOrUsername, password, workspace? } — this helper's own public
+    // shape stays { email, password } since every E2E credential is a real email address.
+    data: { emailOrUsername: credentials.email, password: credentials.password },
   })
   expect(response.ok(), `Login API failed with status ${response.status()}`).toBeTruthy()
   const data = (await response.json()) as { token?: string }

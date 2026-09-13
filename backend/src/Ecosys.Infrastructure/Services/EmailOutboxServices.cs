@@ -58,6 +58,16 @@ public interface IEmailOutboxService
     Task<EmailOutboxMessage> QueueEmailAsync(QueueEmailRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<EmailOutboxMessage>> GetPendingBatchAsync(int batchSize, DateTime utcNow, CancellationToken cancellationToken = default);
     Task<bool> MarkSendingAsync(Guid outboxMessageId, DateTime utcNow, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns messages whose <c>Sending</c> claim is older than <paramref name="claimTimeout"/> to
+    /// the queue. <see cref="MarkSendingAsync"/> moves a row to <c>Sending</c> and the batch query
+    /// only ever selects <c>Pending</c>, so an instance that stopped mid-send left its claimed rows
+    /// unreachable for ever — verified live with three messages stuck in <c>Sending</c>. Each rescue
+    /// counts an attempt, so a message that kills whichever worker picks it up still reaches the
+    /// terminal <c>Failed</c> state instead of looping (EC-P1-06d).
+    /// </summary>
+    Task<int> ReleaseAbandonedClaimsAsync(TimeSpan claimTimeout, DateTime utcNow, CancellationToken cancellationToken = default);
     Task MarkSentAsync(Guid outboxMessageId, DateTime utcNow, string? providerMessageId, CancellationToken cancellationToken = default);
     Task MarkFailedAsync(Guid outboxMessageId, string? errorCategory, string? errorMessage, DateTime utcNow, CancellationToken cancellationToken = default);
     Task RetryAsync(Guid outboxMessageId, DateTime nextAttemptAt, string? errorMessage, CancellationToken cancellationToken = default);
@@ -179,6 +189,59 @@ public sealed class EmailOutboxService(
         return updated > 0;
     }
 
+    public async Task<int> ReleaseAbandonedClaimsAsync(TimeSpan claimTimeout, DateTime utcNow, CancellationToken cancellationToken = default)
+    {
+        var cutoff = utcNow - claimTimeout;
+        var abandoned = await dbContext.EmailOutboxMessages
+            .Where(x => x.Status == EmailOutboxStatuses.Sending
+                && (!x.LastAttemptAt.HasValue || x.LastAttemptAt < cutoff))
+            .ToListAsync(cancellationToken);
+
+        if (abandoned.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (var message in abandoned)
+        {
+            // Same ladder MarkFailedAsync uses: count the attempt, retire the message once it has
+            // used up MaxAttempts, otherwise put it back with the normal backoff.
+            message.AttemptCount += 1;
+            message.ErrorCategory = "Abandoned";
+            message.ErrorMessage = "Delivery was claimed but never completed. The sending instance stopped before it finished.";
+
+            if (message.AttemptCount >= message.MaxAttempts)
+            {
+                message.Status = EmailOutboxStatuses.Failed;
+                message.NextAttemptAt = null;
+            }
+            else
+            {
+                message.Status = EmailOutboxStatuses.Pending;
+                message.NextAttemptAt = GetNextAttemptAt(message.AttemptCount, utcNow);
+            }
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        foreach (var message in abandoned)
+        {
+            await emailDeliveryLogService.UpdateOutboxStatusAsync(
+                new UpdateOutboxStatusRequest(
+                    message.Id,
+                    message.Status == EmailOutboxStatuses.Failed ? EmailOutboxStatuses.Failed : "Retrying",
+                    message.ErrorCategory,
+                    message.ErrorMessage,
+                    message.AttemptCount,
+                    message.LastAttemptAt,
+                    message.NextAttemptAt,
+                    null),
+                cancellationToken);
+        }
+
+        return abandoned.Count;
+    }
+
     public async Task MarkSentAsync(Guid outboxMessageId, DateTime utcNow, string? providerMessageId, CancellationToken cancellationToken = default)
     {
         var message = await dbContext.EmailOutboxMessages.SingleAsync(x => x.Id == outboxMessageId, cancellationToken);
@@ -298,9 +361,23 @@ public sealed class EmailOutboxProcessor(
     ISecretEncryptionService secretEncryptionService,
     ILogger<EmailOutboxProcessor> logger) : IEmailOutboxProcessor
 {
+    /// <summary>
+    /// How long a <c>Sending</c> claim may stand before it is treated as abandoned. Comfortably
+    /// beyond the 30s SMTP timeout a single send can take, short enough that a replica restart costs
+    /// one cycle rather than a stranded message.
+    /// </summary>
+    private static readonly TimeSpan ClaimTimeout = TimeSpan.FromMinutes(15);
+
     public async Task<int> ProcessPendingBatchAsync(int batchSize, CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;
+
+        var released = await emailOutboxService.ReleaseAbandonedClaimsAsync(ClaimTimeout, now, cancellationToken);
+        if (released > 0)
+        {
+            logger.LogWarning("Returned {ReleasedCount} abandoned email outbox message(s) from Sending to the queue.", released);
+        }
+
         var pending = await emailOutboxService.GetPendingBatchAsync(batchSize, now, cancellationToken);
         var processed = 0;
 

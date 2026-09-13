@@ -12,8 +12,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Ecosys.Tests;
 
 /// <summary>
-/// A tenant admin can move their own workspace between platform mail and their own SMTP relay. The
-/// two stored flags are a single mode, and the screen must always report the mailbox really in force.
+/// A platform SuperAdmin can move a tenant's workspace between platform mail and its own SMTP relay
+/// (email infrastructure is platform-managed; tenant admins only customize display name/reply-to via
+/// the separate tenant email identity settings — see <c>SettingsController.EnsurePlatformEmailAccess</c>).
+/// The two stored flags are a single mode, and the screen must always report the mailbox really in force.
 /// </summary>
 public sealed class TenantEmailDeliveryModeTests
 {
@@ -344,6 +346,14 @@ public sealed class TenantEmailDeliveryModeTests
         public bool IsAuthenticated => true;
         public bool IsSuperAdmin => false;
         public bool IsAdmin => true;
+
+        // Email infrastructure (SMTP host/mode) is platform-managed, not tenant self-service — see
+        // SettingsController.EnsurePlatformEmailAccess. A platform admin reaches it by impersonating
+        // this tenant (IsSuperAdmin is false during impersonation — TenantAwareControllerBase
+        // otherwise blocks SuperAdmin from ever resolving TenantId, EC-020), so these tests simulate
+        // that impersonated session rather than a tenant admin's own access.
+        public Guid? ImpersonatedByUserId => Guid.NewGuid();
+        public string? ImpersonatedByName => "Platform Admin";
         public bool HasRole(string role) => string.Equals(role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase);
         public bool HasPermission(string permissionName) => true;
         public Guid GetRequiredTenantId() => tenantId;

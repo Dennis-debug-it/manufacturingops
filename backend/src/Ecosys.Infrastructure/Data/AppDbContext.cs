@@ -269,6 +269,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasKey(x => x.Id);
             entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.HasEmail).HasDefaultValue(true);
+            entity.Property(x => x.Username).HasMaxLength(100);
             entity.Property(x => x.PasswordHash).HasMaxLength(2000).IsRequired();
             entity.Property(x => x.Role).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Phone).HasMaxLength(50);
@@ -277,6 +279,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.InviteTokenHash).HasMaxLength(512);
             entity.Property(x => x.FailedLoginCount).HasDefaultValue(0);
             entity.HasIndex(x => x.Email).IsUnique();
+            // Username is unique per tenant, not globally — two tenants may each have a "jsmith".
+            // Filtered so accounts without a username (there shouldn't be any going forward, but
+            // the column stays nullable for defensiveness) never collide on NULL.
+            entity.HasIndex(x => new { x.TenantId, x.Username })
+                .IsUnique()
+                .HasFilter("\"Username\" IS NOT NULL");
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.Users)
                 .HasForeignKey(x => x.TenantId)

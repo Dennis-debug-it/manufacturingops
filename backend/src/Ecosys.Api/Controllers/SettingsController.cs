@@ -25,6 +25,8 @@ public sealed class SettingsController(
     IDocumentNumberingService documentNumberingService,
     IAuditLogService auditLogService,
     ISecretEncryptionService secretEncryptionService,
+    ITenantTimeZoneService tenantTimeZoneService,
+    IEmailSettingsResolver emailSettingsResolver,
     IEmailSender emailSender,
     ILogger<SettingsController> logger) : TenantAwareControllerBase(tenantContext)
 {
@@ -51,7 +53,7 @@ public sealed class SettingsController(
     {
         userAccessService.EnsureAdmin();
         var tenant = await GetTenantAsync(cancellationToken);
-        return Ok(MapCompany(tenant));
+        return Ok(await MapCompanyAsync(tenant, cancellationToken));
     }
 
     [HttpPut("company")]
@@ -80,11 +82,20 @@ public sealed class SettingsController(
         tenant.Country = request.Country.Trim();
         tenant.Industry = NormalizeOptional(request.Industry);
         tenant.Address = request.Address is null ? tenant.Address : NormalizeOptional(request.Address);
+        // Null leaves the current override untouched; an explicit blank clears it back to the platform
+        // default. Tenant.TimeZoneId is a required column (it always carries a concrete zone), so
+        // "cleared" means baked in as whatever the platform default resolves to right now, not null.
+        if (request.TimeZoneId is not null)
+        {
+            tenant.TimeZoneId = tenantTimeZoneService.NormalizeTimeZoneId(request.TimeZoneId)
+                ?? await tenantTimeZoneService.GetPlatformTimeZoneIdAsync(cancellationToken);
+        }
         tenant.PrimaryColor = string.IsNullOrWhiteSpace(request.PrimaryColor) ? tenant.PrimaryColor : request.PrimaryColor.Trim();
         tenant.SecondaryColor = string.IsNullOrWhiteSpace(request.SecondaryColor) ? tenant.SecondaryColor : request.SecondaryColor.Trim();
         tenant.ShowPoweredByEcosys = request.ShowPoweredByEcosys;
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(MapCompany(tenant));
+        tenantTimeZoneService.Invalidate(tenant.Id);
+        return Ok(await MapCompanyAsync(tenant, cancellationToken));
     }
 
     [HttpGet("email")]
@@ -131,7 +142,7 @@ public sealed class SettingsController(
         userAccessService.EnsureAdmin();
         EnsurePlatformEmailAccess();
         var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
-        return Ok(MapEmailNotification(settings));
+        return Ok(await MapEmailNotificationAsync(settings, cancellationToken));
     }
 
     [HttpPut("email-notifications")]
@@ -146,7 +157,7 @@ public sealed class SettingsController(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await AuditSettingsChangeAsync("Email notifications updated", nameof(EmailSetting), settings.Id, cancellationToken);
-        return Ok(MapEmailNotification(settings));
+        return Ok(await MapEmailNotificationAsync(settings, cancellationToken));
     }
 
     [HttpPost("email-notifications/test")]
@@ -154,7 +165,16 @@ public sealed class SettingsController(
     {
         userAccessService.EnsureAdmin();
         EnsurePlatformEmailAccess();
-        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
+        var storedSettings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
+
+        // Test what actually sends. A workspace on platform mail never uses its own row, so testing that
+        // row would report a pass or a failure that says nothing about whether its email works.
+        var effective = await emailSettingsResolver.ResolveAsync(TenantId, cancellationToken);
+        var settings = effective.Settings ?? storedSettings;
+        var scopeNote = effective.UsesPlatformMail
+            ? "Tested platform mail — this workspace has no SMTP override of its own."
+            : "Tested this workspace's own SMTP settings.";
+
         var recipient = string.IsNullOrWhiteSpace(request.TestRecipientEmail) ? settings.SenderAddress : request.TestRecipientEmail.Trim();
 
         if (string.IsNullOrWhiteSpace(recipient))
@@ -183,32 +203,38 @@ public sealed class SettingsController(
                 delivery,
                 cancellationToken);
 
-            settings.LastTestedAt = DateTime.UtcNow;
-            settings.LastError = null;
-            settings.IsConfigured = HasConfiguredNotificationSecret(settings);
+            // The outcome is recorded against the tenant's own row even when platform mail was used —
+            // it is this workspace's test history, not the platform's.
+            storedSettings.LastTestedAt = DateTime.UtcNow;
+            storedSettings.LastError = null;
+            storedSettings.IsConfigured = HasConfiguredNotificationSecret(storedSettings);
             await dbContext.SaveChangesAsync(cancellationToken);
-            await AuditSettingsChangeAsync("Email notification test sent", nameof(EmailSetting), settings.Id, cancellationToken);
+            await AuditSettingsChangeAsync("Email notification test sent", nameof(EmailSetting), storedSettings.Id, cancellationToken);
             return Ok(new EmailNotificationTestResponse(
                 true,
-                settings.LastTestedAt,
+                storedSettings.LastTestedAt,
                 null,
-                settings.UsePlatformDefaults && !settings.OverrideSmtpSettings,
-                "Email notification test sent successfully."));
+                effective.UsesPlatformMail,
+                $"Test email sent to {recipient}. {scopeNote}"));
         }
         catch (Exception ex)
         {
-            settings.LastTestedAt = DateTime.UtcNow;
-            settings.LastError = ex is EmailDeliveryException deliveryException
+            storedSettings.LastTestedAt = DateTime.UtcNow;
+            storedSettings.LastError = ex is EmailDeliveryException deliveryException
                 ? deliveryException.ErrorCategory
                 : EmailErrorCategories.UnknownSmtpError;
             await dbContext.SaveChangesAsync(cancellationToken);
-            logger.LogWarning(ex, "Tenant email notification test failed for tenant {TenantId}.", TenantId);
+            logger.LogWarning(
+                ex,
+                "Tenant email notification test failed for tenant {TenantId}. Used platform mail: {UsedPlatformMail}.",
+                TenantId,
+                effective.UsesPlatformMail);
             return Ok(new EmailNotificationTestResponse(
                 false,
-                settings.LastTestedAt,
-                settings.LastError,
-                settings.UsePlatformDefaults && !settings.OverrideSmtpSettings,
-                "Email notification test failed."));
+                storedSettings.LastTestedAt,
+                storedSettings.LastError,
+                effective.UsesPlatformMail,
+                $"Test email to {recipient} failed. {scopeNote}"));
         }
     }
 
@@ -566,16 +592,18 @@ public sealed class SettingsController(
         }
 
         var tenant = await GetTenantAsync(cancellationToken);
+        // Matches how every other creation path seeds a tenant (platform-created, self-signup, seeder):
+        // inherit platform mail. Seeding an override pointed at localhost:25 would silently route the
+        // workspace's mail into a relay that does not exist.
         settings = new EmailSetting
         {
             TenantId = TenantId,
-            UsePlatformDefaults = false,
-            OverrideSmtpSettings = true,
+            UsePlatformDefaults = true,
+            OverrideSmtpSettings = false,
             IsEnabled = true,
             Provider = EmailDeliveryMode.Smtp.ToString(),
-            Host = "localhost",
-            Port = 25,
-            UseSsl = false,
+            Port = 587,
+            UseSsl = true,
             SenderName = tenant.CompanyName,
             SenderAddress = tenant.Email
         };
@@ -611,20 +639,29 @@ public sealed class SettingsController(
 
     private void EnsurePlatformEmailAccess()
     {
-        if (!tenantContext.IsSuperAdmin)
+        // A literal IsSuperAdmin caller can never reach this: TenantAwareControllerBase's
+        // EnsureTenantOperationalAccess() (which TenantId — read just below by every one of these
+        // actions — always calls first) unconditionally rejects IsSuperAdmin (EC-020). The caller who
+        // can legitimately manage a tenant's SMTP mode is a platform admin impersonating that tenant,
+        // which is why this checks ImpersonatedByUserId rather than IsSuperAdmin.
+        if (!tenantContext.ImpersonatedByUserId.HasValue)
             throw new ForbiddenException("Email infrastructure is managed by the platform. Use tenant email identity settings for display name and reply-to preferences.");
     }
 
     private static void ValidateEmailNotificationRequest(EmailNotificationSettingsRequest request)
     {
+        // Own-SMTP-only: a workspace on platform mail supplies no host of its own, so these checks
+        // don't apply when UsePlatformDefaults is set.
+        var requiresOwnSmtp = !request.UsePlatformDefaults && request.IsEnabled && request.DeliveryMode == EmailDeliveryMode.Smtp;
+
         if (string.IsNullOrWhiteSpace(request.FromName) ||
             string.IsNullOrWhiteSpace(request.FromEmail) ||
-            (request.IsEnabled && request.DeliveryMode == EmailDeliveryMode.Smtp && string.IsNullOrWhiteSpace(request.SmtpHost)))
+            (requiresOwnSmtp && string.IsNullOrWhiteSpace(request.SmtpHost)))
         {
             throw new BusinessRuleException("From name, from email, and SMTP host are required when SMTP delivery is enabled.");
         }
 
-        if (request.IsEnabled && request.DeliveryMode == EmailDeliveryMode.Smtp && request.SmtpPort <= 0)
+        if (requiresOwnSmtp && request.SmtpPort <= 0)
         {
             throw new BusinessRuleException("SMTP port must be greater than zero.");
         }
@@ -646,6 +683,8 @@ public sealed class SettingsController(
     private void ApplyEmailNotificationSettings(EmailSetting settings, EmailNotificationSettingsRequest request, bool preserveExistingSecretWhenMissing)
     {
         settings.IsEnabled = request.IsEnabled;
+        settings.UsePlatformDefaults = request.UsePlatformDefaults;
+        settings.OverrideSmtpSettings = !request.UsePlatformDefaults;
         settings.Provider = request.DeliveryMode.ToString();
         settings.Host = string.IsNullOrWhiteSpace(request.SmtpHost) ? string.Empty : request.SmtpHost.Trim();
         settings.Port = request.SmtpPort;
@@ -933,7 +972,7 @@ public sealed class SettingsController(
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static CompanySettingsResponse MapCompany(Tenant tenant) =>
+    private async Task<CompanySettingsResponse> MapCompanyAsync(Tenant tenant, CancellationToken cancellationToken) =>
         new(
             tenant.CompanyName,
             tenant.LegalName,
@@ -949,15 +988,25 @@ public sealed class SettingsController(
             tenant.Industry,
             tenant.Address,
             tenant.TimeZoneId,
-            tenant.TimeZoneId,
+            await tenantTimeZoneService.GetTimeZoneIdAsync(tenant.Id, cancellationToken),
             tenant.PrimaryColor,
             tenant.SecondaryColor,
-            tenant.ShowPoweredByEcosys);
+            tenant.ShowPoweredByEcosys,
+            tenant.Slug);
 
     private static EmailSettingsResponse MapLegacyEmail(EmailSetting settings) =>
         new(settings.Host, settings.Port, settings.UseSsl, settings.Username, null, settings.SenderName, settings.SenderAddress);
 
-    private static EmailNotificationSettingsResponse MapEmailNotification(EmailSetting settings) =>
+    private async Task<EmailNotificationSettingsResponse> MapEmailNotificationAsync(EmailSetting settings, CancellationToken cancellationToken)
+    {
+        var effective = await emailSettingsResolver.ResolveAsync(settings.TenantId, cancellationToken);
+        return MapEmailNotification(settings, effective.UsesPlatformMail, effective.Settings?.SenderAddress);
+    }
+
+    private static EmailNotificationSettingsResponse MapEmailNotification(
+        EmailSetting settings,
+        bool usesPlatformMail,
+        string? effectiveFromEmail) =>
         new(
             settings.Id,
             settings.TenantId,
@@ -981,8 +1030,8 @@ public sealed class SettingsController(
             settings.LastTestedAt,
             settings.LastError,
             settings.UsePlatformDefaults,
-            settings.UsePlatformDefaults && !settings.OverrideSmtpSettings,
-            settings.SenderAddress);
+            usesPlatformMail,
+            effectiveFromEmail);
 
     private static EmailIntakeSettingsResponse MapEmailIntake(EmailIntakeSetting settings) =>
         new(

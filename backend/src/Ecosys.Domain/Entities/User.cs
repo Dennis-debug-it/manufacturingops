@@ -8,6 +8,22 @@ public sealed class User : AuditableEntity, ITenantEntity
     public Guid? DefaultBranchId { get; set; }
     public string FullName { get; set; } = string.Empty;
     public string Email { get; set; } = string.Empty;
+
+    /// <summary>
+    /// False when <see cref="Email"/> holds a system-generated placeholder rather than a real
+    /// mailbox — for staff who have no email address, login happens via <see cref="Username"/>
+    /// instead, and credential delivery must never attempt to send mail to this address.
+    /// </summary>
+    public bool HasEmail { get; set; } = true;
+
+    /// <summary>
+    /// Sign-in handle unique within the tenant (not globally, unlike <see cref="Email"/>), so a
+    /// username-based login also needs the tenant's slug to know which workspace to look in. Every
+    /// user gets one; it is required for accounts with no email since it becomes their only way to
+    /// sign in.
+    /// </summary>
+    public string? Username { get; set; }
+
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
     public string? Phone { get; set; }

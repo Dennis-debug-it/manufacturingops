@@ -21,8 +21,16 @@ public sealed class AuthController(
     IAuditLogService auditLogService,
     IPasswordResetService passwordResetService,
     IPasswordHasher<Domain.Entities.User> passwordHasher,
-    ITenantSecurityPolicyService tenantSecurityPolicyService) : ControllerBase
+    ITenantSecurityPolicyService tenantSecurityPolicyService,
+    ITenantTimeZoneService? tenantTimeZoneService = null) : ControllerBase
 {
+    private const string DefaultTimeZoneId = "Africa/Nairobi";
+
+    private Task<string> ResolveTimeZoneIdAsync(Guid tenantId, CancellationToken cancellationToken) =>
+        tenantTimeZoneService is not null
+            ? tenantTimeZoneService.GetTimeZoneIdAsync(tenantId, cancellationToken)
+            : Task.FromResult(DefaultTimeZoneId);
+
     [HttpPost("signup")]
     public async Task<ActionResult<SignupResponse>> Signup([FromBody] SignupRequest request, CancellationToken cancellationToken)
     {
@@ -48,12 +56,19 @@ public sealed class AuthController(
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        var result = await authService.LoginAsync(request.Email, request.Password, cancellationToken);
+        var result = await authService.LoginAsync(request.EmailOrUsername, request.Password, request.Workspace, cancellationToken);
 
         return Ok(new LoginResponse(
             result.Token,
-            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId))),
-            new LoginTenantDto(result.TenantId, result.CompanyName, result.Country, result.Industry, result.LogoUrl, result.ShowPoweredByEcosys, result.TimeZoneId)));
+            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId)), result.Username, result.HasEmail),
+            new LoginTenantDto(
+                result.TenantId,
+                result.CompanyName,
+                result.Country,
+                result.Industry,
+                result.LogoUrl,
+                result.ShowPoweredByEcosys,
+                await ResolveTimeZoneIdAsync(result.TenantId, cancellationToken))));
     }
 
     [HttpPost("forgot-password")]
@@ -167,11 +182,14 @@ public sealed class AuthController(
         var userId = tenantContext.GetRequiredUserId();
         var user = await dbContext.Users
             .Include(x => x.Tenant)
-            .Include(x => x.Permission)
             .Include(x => x.BranchAssignments)
             .SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
             ?? throw new UnauthorizedAccessException("User context was not found.");
 
+        // The role-permission matrix (plus group grants and overrides) is the source of truth, same
+        // as Login — user.Permission is the legacy per-user row the matrix replaced and is not kept
+        // in sync, so reading it here would silently disagree with what Login just returned.
+        var permissions = await authService.ResolveCurrentPermissionsAsync(user, cancellationToken);
         var isPlatformUser = IsPlatformUser(user.Role, user.TenantId);
         var impersonation = tenantContext.ImpersonatedByUserId.HasValue
             ? new ImpersonationInfoDto(tenantContext.ImpersonatedByUserId.Value, tenantContext.ImpersonatedByName ?? "Platform admin")
@@ -190,7 +208,9 @@ public sealed class AuthController(
                     user.HasAllBranchAccess,
                     user.DefaultBranchId,
                     user.MustChangePassword,
-                    MapPermissions(user.Permission, true)),
+                    MapPermissions(permissions, true),
+                    user.Username,
+                    user.HasEmail),
                 new AuthenticatedTenantDto(
                     user.TenantId,
                     user.Tenant?.CompanyName ?? "Platform",
@@ -199,7 +219,7 @@ public sealed class AuthController(
                     user.Tenant?.LogoUrl,
                     user.Tenant?.PrimaryColor ?? "#0F4C81",
                     user.Tenant?.SecondaryColor ?? "#F4B942",
-                    user.Tenant?.TimeZoneId ?? "Africa/Nairobi"),
+                    await ResolveTimeZoneIdAsync(user.TenantId, cancellationToken)),
                 [],
                 impersonation));
         }
@@ -227,7 +247,9 @@ public sealed class AuthController(
                 user.HasAllBranchAccess,
                 user.DefaultBranchId,
                 user.MustChangePassword,
-                MapPermissions(user.Permission, isPlatformUser)),
+                MapPermissions(permissions, isPlatformUser),
+                user.Username,
+                user.HasEmail),
             new AuthenticatedTenantDto(
                 user.TenantId,
                 user.Tenant?.CompanyName ?? string.Empty,
@@ -236,7 +258,7 @@ public sealed class AuthController(
                 user.Tenant?.LogoUrl,
                 user.Tenant?.PrimaryColor ?? "#0F4C81",
                 user.Tenant?.SecondaryColor ?? "#F4B942",
-                    user.Tenant?.TimeZoneId ?? "Africa/Nairobi"),
+                await ResolveTimeZoneIdAsync(user.TenantId, cancellationToken)),
             branches,
             impersonation));
     }
@@ -274,48 +296,6 @@ public sealed class AuthController(
             CanDeactivatePlatformTenants = isPlatformOwner
         };
 
-    private static PermissionResponse MapPermissions(Domain.Entities.UserPermission? permission, bool isPlatformOwner) =>
-        permission is null
-            ? new PermissionResponse
-            {
-                CanViewPlatformTenants = isPlatformOwner,
-                CanCreatePlatformTenants = isPlatformOwner,
-                CanEditPlatformTenants = isPlatformOwner,
-                CanUpdatePlatformTenantStatus = isPlatformOwner,
-                CanDeactivatePlatformTenants = isPlatformOwner
-            }
-            : new PermissionResponse
-            {
-                CanViewWorkOrders = permission.CanViewWorkOrders,
-                CanCreateWorkOrders = permission.CanCreateWorkOrders,
-                CanAssignWorkOrders = permission.CanAssignWorkOrders,
-                CanCompleteWorkOrders = permission.CanCompleteWorkOrders,
-                CanViewKnowledge = permission.CanViewKnowledge,
-                CanManageKnowledge = permission.CanManageKnowledge,
-                CanViewMaterials = permission.CanViewMaterials,
-                CanRequestMaterials = permission.CanRequestMaterials,
-                CanManageMaterials = permission.CanManageMaterials,
-                CanApproveMaterials = permission.CanApproveMaterials,
-                CanIssueMaterials = permission.CanIssueMaterials,
-                CanManageAssets = permission.CanManageAssets,
-                CanManageSettings = permission.CanManageSettings,
-                CanViewReports = permission.CanViewReports,
-                CanViewFinance = permission.CanViewFinance,
-                CanManageFinance = permission.CanManageFinance,
-                CanViewFinanceRates = permission.CanViewFinanceRates,
-                CanManageFinanceRates = permission.CanManageFinanceRates,
-                CanViewFinanceApprovals = permission.CanViewFinanceApprovals,
-                CanManageFinanceApprovals = permission.CanManageFinanceApprovals,
-                CanViewBillableWork = permission.CanViewBillableWork,
-                CanManageBillableWork = permission.CanManageBillableWork,
-                CanOverrideMaterialStock = permission.CanOverrideMaterialStock,
-                CanViewPlatformTenants = isPlatformOwner,
-                CanCreatePlatformTenants = isPlatformOwner,
-                CanEditPlatformTenants = isPlatformOwner,
-                CanUpdatePlatformTenantStatus = isPlatformOwner,
-                CanDeactivatePlatformTenants = isPlatformOwner
-            };
-
     /// <summary>
     /// Platform and tenant roles share a string namespace (e.g. "Finance" exists in both),
     /// so a role name alone is never sufficient — the user must also live in the platform
@@ -343,7 +323,12 @@ public sealed record SignupResponse(
     string? JobTitle,
     PermissionResponse Permissions);
 
-public sealed record LoginRequest(string Email, string Password);
+/// <summary>
+/// <see cref="EmailOrUsername"/> is either an email (globally unique) or a username (unique only
+/// within a tenant); <see cref="Workspace"/> — the user's company name, matched against the
+/// tenant's slug — disambiguates the latter and is ignored when signing in with an email.
+/// </summary>
+public sealed record LoginRequest(string EmailOrUsername, string Password, string? Workspace = null);
 public sealed record ForgotPasswordRequest(string Email);
 public sealed record SelfServiceResetPasswordRequest(string Token, string NewPassword, string ConfirmPassword);
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword, string ConfirmPassword);
@@ -356,7 +341,17 @@ public sealed record LoginResponse(
     LoginUserDto User,
     LoginTenantDto Tenant);
 
-public sealed record LoginUserDto(Guid UserId, string FullName, string Email, string Role, string? JobTitle, string? Department, bool MustChangePassword, PermissionResponse Permissions);
+public sealed record LoginUserDto(
+    Guid UserId,
+    string FullName,
+    string Email,
+    string Role,
+    string? JobTitle,
+    string? Department,
+    bool MustChangePassword,
+    PermissionResponse Permissions,
+    string? Username = null,
+    bool HasEmail = true);
 
 public sealed record LoginTenantDto(
     Guid TenantId,
@@ -417,7 +412,9 @@ public sealed record AuthenticatedUserDto(
     bool HasAllBranchAccess,
     Guid? DefaultBranchId,
     bool MustChangePassword,
-    PermissionResponse Permissions);
+    PermissionResponse Permissions,
+    string? Username = null,
+    bool HasEmail = true);
 
 public sealed record AuthenticatedTenantDto(
     Guid TenantId,

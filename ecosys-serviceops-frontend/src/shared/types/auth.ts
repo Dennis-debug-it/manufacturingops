@@ -37,6 +37,10 @@ export interface AuthUser {
   userId: string
   fullName: string
   email: string
+  /** Sign-in handle unique within the tenant. Null only for accounts created before usernames existed. */
+  username: string | null
+  /** False when `email` is a system-generated placeholder — this account signs in with `username` instead. */
+  hasEmail: boolean
   role: AppRole
   jobTitle: string | null
   department: string | null
@@ -84,8 +88,11 @@ export interface AuthSession {
 }
 
 export interface LoginRequest {
-  email: string
+  /** Either an email (globally unique) or a username (unique only within a tenant). */
+  emailOrUsername: string
   password: string
+  /** The tenant's workspace code — required only when signing in with a username, not an email. */
+  workspace?: string
   rememberMe?: boolean
 }
 

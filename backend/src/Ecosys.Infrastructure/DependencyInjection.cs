@@ -6,6 +6,7 @@ using Ecosys.Infrastructure.Security;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Contracts.Integration;
+using Ecosys.Shared.Observability;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -30,6 +31,8 @@ public static class DependencyInjection
         services.AddScoped<ITenantContext, HttpTenantContext>();
         services.AddScoped<IPortalContext, HttpPortalContext>();
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+
+        services.AddSingleton<IRuntimeMetrics, RuntimeMetrics>();
 
         services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
         services.AddHealthChecks()

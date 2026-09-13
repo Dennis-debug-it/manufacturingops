@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Reflection;
-using Ecosys.Api.Observability;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Auth;
+using Ecosys.Shared.Observability;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;

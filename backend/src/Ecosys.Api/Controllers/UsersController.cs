@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using System.Text.RegularExpressions;
 using Ecosys.Shared.Options;
 using Microsoft.Extensions.Options;
 
@@ -28,7 +29,8 @@ public sealed class UsersController(
     IAuditLogService auditLogService,
     IUserCredentialDeliveryService credentialDeliveryService,
     ITemporaryPasswordService temporaryPasswordService,
-    IOptions<AuthSecurityOptions>? authSecurityOptions = null) : TenantAwareControllerBase(tenantContext)
+    IOptions<AuthSecurityOptions> authSecurityOptions,
+    IUserSessionService userSessionService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<UserResponse>>> GetAll(CancellationToken cancellationToken)
@@ -69,30 +71,40 @@ public sealed class UsersController(
     public async Task<ActionResult<UserResponse>> Create([FromBody] CreateUserRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
-        ValidateRequest(request.FullName, request.Email, request.CredentialDeliveryMethod);
+        ValidateRequest(request.FullName, request.CredentialDeliveryMethod);
         var transaction = await TryBeginSerializableTransactionAsync(cancellationToken);
 
         await licenseGuardService.EnsureCanCreateUserAsync(TenantId, cancellationToken);
         var normalizedRole = NormalizeRole(request.Role);
         var deliveryMethod = NormalizeCredentialDeliveryMethod(request.CredentialDeliveryMethod);
 
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-        var emailExists = await dbContext.Users.AnyAsync(x => x.Email.ToLower() == normalizedEmail, cancellationToken);
-        if (emailExists)
+        var (normalizedEmail, hasEmail) = await ResolveEmailAsync(request.Email, excludeUserId: null, cancellationToken);
+        if (!hasEmail && !string.Equals(deliveryMethod, "None", StringComparison.OrdinalIgnoreCase))
         {
-            throw new BusinessRuleException("Email is already in use.");
+            throw new BusinessRuleException("This user has no email address. Set credential delivery to None and either set a password or let the system generate one to share with them directly.");
         }
+
+        var username = await ResolveUsernameAsync(request.Username, request.FullName, excludeUserId: null, cancellationToken);
 
         var permissions = permissionTemplateService.Merge(normalizedRole, request.JobTitle, request.Permissions?.ToModel());
         var normalizedBranchIds = NormalizeBranchIds(request.BranchIds);
         var resolvedDefaultBranchId = await ResolveDefaultBranchIdAsync(normalizedRole, normalizedBranchIds, request.DefaultBranchId, request.HasAllBranchAccess, cancellationToken);
-        var bootstrapPassword = temporaryPasswordService.Generate();
+
+        string? adminSuppliedPassword = null;
+        if (!string.IsNullOrWhiteSpace(request.Password))
+        {
+            await tenantSecurityPolicyService.ValidatePasswordAsync(TenantId, request.Password, cancellationToken);
+            adminSuppliedPassword = request.Password;
+        }
+        var bootstrapPassword = adminSuppliedPassword ?? temporaryPasswordService.Generate();
 
         var user = new User
         {
             TenantId = TenantId,
             FullName = request.FullName.Trim(),
             Email = normalizedEmail,
+            HasEmail = hasEmail,
+            Username = username,
             Role = normalizedRole,
             JobTitle = request.JobTitle?.Trim(),
             Department = request.Department?.Trim(),
@@ -118,8 +130,11 @@ public sealed class UsersController(
             await transaction.CommitAsync(cancellationToken);
         }
 
-        var credentialDelivery = new CredentialDeliverySummaryResponse(false, "NotRequested", null);
-        if (!string.Equals(deliveryMethod, "None", StringComparison.OrdinalIgnoreCase))
+        // An invite link only makes sense when there's an inbox to send it to, and only when the
+        // admin actually asked for one — "None" means the admin is handling delivery some other way.
+        var willEmailInvite = hasEmail && !string.Equals(deliveryMethod, "None", StringComparison.OrdinalIgnoreCase);
+        CredentialDeliverySummaryResponse credentialDelivery;
+        if (willEmailInvite)
         {
             var deliveryResult = await SendAccountSetupAsync(user, cancellationToken);
             credentialDelivery = new CredentialDeliverySummaryResponse(deliveryResult.Success, deliveryResult.Status, deliveryResult.Message);
@@ -130,6 +145,17 @@ public sealed class UsersController(
                 await dbContext.SaveChangesAsync(cancellationToken);
             }
         }
+        else if (adminSuppliedPassword is not null)
+        {
+            // The admin already knows the password they just typed — nothing to reveal or send.
+            credentialDelivery = new CredentialDeliverySummaryResponse(true, "PasswordSetByAdmin", "Password set. Share the username, workspace, and password with the user directly — no email was sent.");
+        }
+        else
+        {
+            // Nobody else will ever see this password: no invite link went out, and the admin didn't
+            // choose one themselves. Hand it back once so it isn't lost.
+            credentialDelivery = new CredentialDeliverySummaryResponse(true, "GeneratedPassword", "A temporary password was generated since no email was sent. Copy it now and share it with the user directly — it will not be shown again.", bootstrapPassword);
+        }
 
         await auditLogService.LogAsync(
             TenantId,
@@ -137,10 +163,10 @@ public sealed class UsersController(
             "User created",
             nameof(User),
             user.Id.ToString(),
-            $"Created user '{user.Email}'.",
+            $"Created user '{DisplayIdentifier(user)}'.",
             cancellationToken);
 
-        if (credentialDelivery.Success)
+        if (willEmailInvite && credentialDelivery.Success)
         {
             await auditLogService.LogAsync(
                 TenantId,
@@ -160,7 +186,7 @@ public sealed class UsersController(
     public async Task<ActionResult<UserResponse>> Update(Guid id, [FromBody] UpdateUserRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
-        ValidateUpdateRequest(request.FullName, request.Email);
+        ValidateUpdateRequest(request.FullName);
 
         var transaction = await TryBeginSerializableTransactionAsync(cancellationToken);
 
@@ -182,12 +208,14 @@ public sealed class UsersController(
             await licenseGuardService.EnsureCanCreateUserAsync(TenantId, cancellationToken);
         }
 
-        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-        var emailExists = await dbContext.Users.AnyAsync(x => x.Email.ToLower() == normalizedEmail && x.Id != id, cancellationToken);
-        if (emailExists)
-        {
-            throw new BusinessRuleException("Email is already in use.");
-        }
+        var (normalizedEmail, hasEmail) = await ResolveEmailAsync(request.Email, excludeUserId: id, cancellationToken);
+
+        // Unlike Create, a blank Username here means "the caller didn't send one" (e.g. saving
+        // permissions from a form that only knows role/capabilities) rather than "generate a new
+        // one" — the existing value already satisfies the uniqueness constraint, so keep it.
+        var username = string.IsNullOrWhiteSpace(request.Username) && !string.IsNullOrWhiteSpace(user.Username)
+            ? user.Username
+            : await ResolveUsernameAsync(request.Username, request.FullName, excludeUserId: id, cancellationToken);
 
         var permissions = permissionTemplateService.Merge(normalizedRole, request.JobTitle, request.Permissions?.ToModel());
         var normalizedBranchIds = NormalizeBranchIds(request.BranchIds);
@@ -195,6 +223,8 @@ public sealed class UsersController(
 
         user.FullName = request.FullName.Trim();
         user.Email = normalizedEmail;
+        user.HasEmail = hasEmail;
+        user.Username = username;
         user.Role = normalizedRole;
         user.JobTitle = request.JobTitle?.Trim();
         user.Department = request.Department?.Trim();
@@ -232,8 +262,16 @@ public sealed class UsersController(
             "User updated",
             nameof(User),
             user.Id.ToString(),
-            $"Updated user '{user.Email}'.",
+            $"Updated user '{DisplayIdentifier(user)}'.",
             cancellationToken);
+
+        // Force fresh authorization: this endpoint re-applies the user's role, permission set and
+        // branch access, so revoke their existing sessions (they carry the now-stale permission
+        // claims baked into the JWT). Skip self-edits so an admin doesn't log themselves out.
+        if (id != UserId)
+        {
+            await userSessionService.RevokeAllForUserAsync(id, "Account updated by administrator", cancellationToken);
+        }
 
         var workforceProfiles = await LoadWorkforceProfilesAsync([user], cancellationToken);
         var invitations = await LoadLatestInvitationsAsync([user.Id], cancellationToken);
@@ -273,8 +311,15 @@ public sealed class UsersController(
             request.IsActive ? "User activated" : "User deactivated",
             nameof(User),
             user.Id.ToString(),
-            $"{(request.IsActive ? "Activated" : "Deactivated")} user '{user.Email}'.",
+            $"{(request.IsActive ? "Activated" : "Deactivated")} user '{DisplayIdentifier(user)}'.",
             cancellationToken);
+
+        // Terminate all active sessions on deactivation so access is revoked immediately rather
+        // than lingering until the 8h JWT expires.
+        if (!request.IsActive)
+        {
+            await userSessionService.RevokeAllForUserAsync(id, "Account deactivated", cancellationToken);
+        }
 
         var workforceProfiles = await LoadWorkforceProfilesAsync([user], cancellationToken);
         var invitations = await LoadLatestInvitationsAsync([user.Id], cancellationToken);
@@ -296,6 +341,11 @@ public sealed class UsersController(
             throw new BusinessRuleException("Initial invitations can only be resent for users pending activation.");
         }
 
+        if (!user.HasEmail)
+        {
+            throw new BusinessRuleException("This user has no email address, so an invitation link cannot be sent. Use 'reset password' to generate a new temporary password instead.");
+        }
+
         var delivery = await SendAccountSetupAsync(user, cancellationToken);
 
         if (delivery.Success)
@@ -311,8 +361,8 @@ public sealed class UsersController(
             nameof(User),
             user.Id.ToString(),
             delivery.Success
-                ? $"Initial account setup invitation sent to '{user.Email}'. Delivery status: {delivery.Status}."
-                : $"Initial account setup invitation attempt for '{user.Email}' did not complete. Delivery status: {delivery.Status}.",
+                ? $"Initial account setup invitation sent to '{DisplayIdentifier(user)}'. Delivery status: {delivery.Status}."
+                : $"Initial account setup invitation attempt for '{DisplayIdentifier(user)}' did not complete. Delivery status: {delivery.Status}.",
             severity: delivery.Success ? "Info" : "Warning",
             cancellationToken: cancellationToken);
 
@@ -337,11 +387,50 @@ public sealed class UsersController(
             throw new BusinessRuleException("Password reset emails can only be sent for active users.");
         }
 
+        // The admin's choice: type a password directly, or generate one and have it revealed once —
+        // either way nothing is emailed, so this branch works even for users with no email address.
+        var adminSuppliedPassword = request?.ResolvePasswordOrNull();
+        var generateAndReveal = request?.GenerateAndReveal ?? false;
+        if (adminSuppliedPassword is not null || generateAndReveal)
+        {
+            var newPassword = adminSuppliedPassword ?? temporaryPasswordService.Generate();
+            await tenantSecurityPolicyService.ValidatePasswordAsync(TenantId, newPassword, cancellationToken);
+            user.PasswordHash = passwordHasher.HashPassword(user, newPassword);
+            user.MustChangePassword = true;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await userSessionService.RevokeAllForUserAsync(user.Id, "Password reset by administrator", cancellationToken);
+
+            await auditLogService.LogAsync(
+                TenantId,
+                UserId,
+                "users.password-reset.set-directly",
+                nameof(User),
+                user.Id.ToString(),
+                adminSuppliedPassword is not null
+                    ? $"Password reset directly for '{DisplayIdentifier(user)}' by an administrator. No email was sent."
+                    : $"A new temporary password was generated for '{DisplayIdentifier(user)}' by an administrator. No email was sent.",
+                severity: "Warning",
+                cancellationToken: cancellationToken);
+
+            var directMessage = adminSuppliedPassword is not null
+                ? "Password reset. Share the new password with the user directly."
+                : "A new temporary password was generated. Copy it now and share it with the user directly — it will not be shown again.";
+
+            return Ok(new CredentialDeliveryResponse(
+                user.Id, user.FullName, user.Email, true, user.LastCredentialSentAt, "PasswordResetDirectly", directMessage,
+                TemporaryPassword: generateAndReveal ? newPassword : null));
+        }
+
+        if (!user.HasEmail)
+        {
+            throw new BusinessRuleException("This user has no email address. Generate a temporary password or set one directly instead of sending a reset email.");
+        }
+
         var issued = await PasswordLinkTokens.IssueAsync(
             dbContext,
             user,
             PasswordLinkPurposes.PasswordReset,
-            authSecurityOptions?.Value,
+            authSecurityOptions.Value,
             cancellationToken);
 
         var delivery = await credentialDeliveryService.SendPasswordResetLinkAsync(
@@ -366,8 +455,8 @@ public sealed class UsersController(
             nameof(User),
             user.Id.ToString(),
             delivery.Success
-                ? $"Password reset link sent to '{user.Email}'. Delivery status: {delivery.Status}."
-                : $"Password reset link attempt for '{user.Email}' did not complete. Delivery status: {delivery.Status}.",
+                ? $"Password reset link sent to '{DisplayIdentifier(user)}'. Delivery status: {delivery.Status}."
+                : $"Password reset link attempt for '{DisplayIdentifier(user)}' did not complete. Delivery status: {delivery.Status}.",
             severity: delivery.Success ? "Info" : "Warning",
             cancellationToken: cancellationToken);
 
@@ -397,28 +486,111 @@ public sealed class UsersController(
             "User deleted",
             nameof(User),
             user.Id.ToString(),
-            $"Deleted user '{user.Email}'.",
+            $"Deleted user '{DisplayIdentifier(user)}'.",
             cancellationToken);
+
+        // Soft-delete deactivates the account — revoke active sessions so the deleted user loses
+        // access immediately.
+        await userSessionService.RevokeAllForUserAsync(id, "Account deleted", cancellationToken);
         return NoContent();
     }
 
-    private static void ValidateRequest(string fullName, string email, string? credentialDeliveryMethod)
+    private static void ValidateRequest(string fullName, string? credentialDeliveryMethod)
     {
-        if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email))
+        if (string.IsNullOrWhiteSpace(fullName))
         {
-            throw new BusinessRuleException("Full name and email are required.");
+            throw new BusinessRuleException("Full name is required.");
         }
 
         _ = NormalizeCredentialDeliveryMethod(credentialDeliveryMethod);
     }
 
-    private static void ValidateUpdateRequest(string fullName, string email)
+    private static void ValidateUpdateRequest(string fullName)
     {
-        if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email))
+        if (string.IsNullOrWhiteSpace(fullName))
         {
-            throw new BusinessRuleException("Full name and email are required.");
+            throw new BusinessRuleException("Full name is required.");
         }
     }
+
+    private const string NoEmailDomain = "no-email.invalid";
+
+    /// <summary>
+    /// A blank <paramref name="requestedEmail"/> means this person has no email address at all —
+    /// not uncommon for field staff — so they sign in by <see cref="User.Username"/> instead. The
+    /// stored placeholder is GUID-based so it can never collide with a real address and never needs
+    /// the uniqueness check a real email gets.
+    /// </summary>
+    private async Task<(string Email, bool HasEmail)> ResolveEmailAsync(string? requestedEmail, Guid? excludeUserId, CancellationToken cancellationToken)
+    {
+        // A caller that round-trips the current record unchanged (e.g. saving permissions without
+        // touching the email field) hands this placeholder straight back — treat that exactly like
+        // a blank submission instead of "fixing" the account back to HasEmail=true.
+        if (string.IsNullOrWhiteSpace(requestedEmail) ||
+            requestedEmail.Trim().EndsWith($"@{NoEmailDomain}", StringComparison.OrdinalIgnoreCase))
+        {
+            return ($"user-{Guid.NewGuid():N}@{NoEmailDomain}", false);
+        }
+
+        var normalizedEmail = requestedEmail.Trim().ToLowerInvariant();
+        var emailExists = await dbContext.Users.AnyAsync(
+            x => x.Email.ToLower() == normalizedEmail && x.Id != (excludeUserId ?? Guid.Empty),
+            cancellationToken);
+        if (emailExists)
+        {
+            throw new BusinessRuleException("Email is already in use.");
+        }
+
+        return (normalizedEmail, true);
+    }
+
+    private static string SlugifyUsername(string seed)
+    {
+        var normalized = Regex.Replace(seed.Trim().ToLowerInvariant(), "[^a-z0-9]+", ".").Trim('.');
+        return string.IsNullOrEmpty(normalized) ? "user" : normalized[..Math.Min(normalized.Length, 80)];
+    }
+
+    /// <summary>Unique within the tenant only — <see cref="User.Username"/> is not unique platform-wide.</summary>
+    private async Task<string> GenerateUniqueUsernameAsync(string seed, Guid? excludeUserId, CancellationToken cancellationToken)
+    {
+        var baseUsername = SlugifyUsername(seed);
+        var username = baseUsername;
+        var counter = 2;
+
+        while (await dbContext.Users.AnyAsync(
+            x => x.TenantId == TenantId && x.Username == username && x.Id != (excludeUserId ?? Guid.Empty),
+            cancellationToken))
+        {
+            username = $"{baseUsername[..Math.Min(baseUsername.Length, 90)]}.{counter}";
+            counter += 1;
+        }
+
+        return username;
+    }
+
+    private async Task<string> ResolveUsernameAsync(string? requestedUsername, string fallbackSeed, Guid? excludeUserId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(requestedUsername))
+        {
+            return await GenerateUniqueUsernameAsync(fallbackSeed, excludeUserId, cancellationToken);
+        }
+
+        var normalized = SlugifyUsername(requestedUsername);
+        var exists = await dbContext.Users.AnyAsync(
+            x => x.TenantId == TenantId && x.Username == normalized && x.Id != (excludeUserId ?? Guid.Empty),
+            cancellationToken);
+        if (exists)
+        {
+            throw new BusinessRuleException("Username is already in use in this tenant.");
+        }
+
+        return normalized;
+    }
+
+    /// <summary>What to show in audit trails: a no-email account's <see cref="User.Email"/> is a
+    /// system-generated placeholder, so its username reads far better in log messages.</summary>
+    private static string DisplayIdentifier(User user) =>
+        !user.HasEmail && !string.IsNullOrWhiteSpace(user.Username) ? user.Username : user.Email;
 
     private static string NormalizeRole(string role)
     {
@@ -695,6 +867,8 @@ public sealed class UsersController(
             user.Id,
             user.FullName,
             user.Email,
+            user.Username,
+            user.HasEmail,
             workforceProfile?.Phone,
             user.Role,
             user.JobTitle,
@@ -746,22 +920,15 @@ public sealed class UsersController(
             "InviteEmail" => "InviteEmail",
             "TemporaryPassword" => "TemporaryPassword",
             "Both" => "Both",
-            _ => throw new BusinessRuleException("Credential delivery method must be InviteEmail, TemporaryPassword, or Both.")
+            "None" => "None",
+            _ => throw new BusinessRuleException("Credential delivery method must be InviteEmail, TemporaryPassword, Both, or None.")
         };
     }
-
-    private static bool RequiresTemporaryPassword(string credentialDeliveryMethod) =>
-        string.Equals(credentialDeliveryMethod, "TemporaryPassword", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(credentialDeliveryMethod, "Both", StringComparison.OrdinalIgnoreCase);
-
-    private static bool RequiresInvite(string credentialDeliveryMethod) =>
-        string.Equals(credentialDeliveryMethod, "InviteEmail", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(credentialDeliveryMethod, "Both", StringComparison.OrdinalIgnoreCase);
 
     private async Task<UserCredentialDeliveryResult> SendAccountSetupAsync(User user, CancellationToken cancellationToken)
     {
         var issued = await PasswordLinkTokens.IssueAsync(dbContext, user, PasswordLinkPurposes.Invitation,
-            authSecurityOptions?.Value, cancellationToken);
+            authSecurityOptions.Value, cancellationToken);
 
         return await credentialDeliveryService.SendPasswordResetLinkAsync(
             TenantId,
@@ -777,9 +944,11 @@ public sealed class UsersController(
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
 
+/// <summary>A blank <see cref="Email"/> means this person has no email address — they sign in with
+/// <see cref="Username"/> (auto-generated from <see cref="FullName"/> when left blank) instead.</summary>
 public sealed record CreateUserRequest(
     string FullName,
-    string Email,
+    string? Email,
     string? PhoneNumber,
     string? Password,
     string Role,
@@ -791,11 +960,12 @@ public sealed record CreateUserRequest(
     IReadOnlyCollection<Guid>? BranchIds,
     Guid? DefaultBranchId,
     bool HasAllBranchAccess,
-    IReadOnlyCollection<Guid>? AssignmentGroupIds);
+    IReadOnlyCollection<Guid>? AssignmentGroupIds,
+    string? Username = null);
 
 public sealed record UpdateUserRequest(
     string FullName,
-    string Email,
+    string? Email,
     string? PhoneNumber,
     string? Password,
     string Role,
@@ -806,7 +976,8 @@ public sealed record UpdateUserRequest(
     IReadOnlyCollection<Guid>? BranchIds,
     Guid? DefaultBranchId,
     bool HasAllBranchAccess,
-    IReadOnlyCollection<Guid>? AssignmentGroupIds);
+    IReadOnlyCollection<Guid>? AssignmentGroupIds,
+    string? Username = null);
 
 public sealed record PermissionRequest(
     bool CanViewWorkOrders,
@@ -868,6 +1039,8 @@ public sealed record UserResponse(
     Guid Id,
     string FullName,
     string Email,
+    string? Username,
+    bool HasEmail,
     string? PhoneNumber,
     string Role,
     string? JobTitle,
@@ -891,7 +1064,8 @@ public sealed record UserResponse(
 public sealed record CredentialDeliverySummaryResponse(
     bool Success,
     string Status,
-    string? Message);
+    string? Message,
+    string? TemporaryPassword = null);
 
 public sealed record CredentialDeliveryResponse(
     Guid Id,
@@ -900,11 +1074,18 @@ public sealed record CredentialDeliveryResponse(
     bool Success,
     DateTime? LastCredentialSentAt,
     string Status,
-    string? Message);
+    string? Message,
+    string? TemporaryPassword = null);
 
 public sealed record UpdateUserStatusRequest(bool IsActive);
 
-public sealed record ResetPasswordRequest(string? TemporaryPassword, string? NewPassword)
+/// <summary>
+/// <see cref="TemporaryPassword"/>/<see cref="NewPassword"/> (an admin typing a password directly)
+/// and <see cref="GenerateAndReveal"/> (the server generating one and handing it back once) are the
+/// two "admin's choice" ways to set a password without emailing a reset link — useful for any user,
+/// essential for one with no email address at all.
+/// </summary>
+public sealed record ResetPasswordRequest(string? TemporaryPassword, string? NewPassword, bool GenerateAndReveal = false)
 {
     public string? ResolvePasswordOrNull()
     {

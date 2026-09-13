@@ -4575,6 +4575,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("Mrr")
+                        .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
                     b.Property<int>("PaidTenants")
@@ -8350,6 +8351,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("HasAllBranchAccess")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("HasEmail")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<DateTime?>("InviteAcceptedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -8399,6 +8405,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Username")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DefaultBranchId");
@@ -8406,7 +8416,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId", "Username")
+                        .IsUnique()
+                        .HasFilter("\"Username\" IS NOT NULL");
 
                     b.ToTable("users", (string)null);
                 });

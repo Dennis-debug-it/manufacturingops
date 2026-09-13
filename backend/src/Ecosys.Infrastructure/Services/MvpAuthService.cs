@@ -17,8 +17,34 @@ namespace Ecosys.Infrastructure.Services;
 public interface IMvpAuthService
 {
     Task<SignupResult> SignupAsync(string fullName, string email, string password, string companyName, string? industry, string country, CancellationToken cancellationToken = default);
-    Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// <paramref name="identifier"/> is either an email (globally unique, resolved directly) or a
+    /// username (unique only within a tenant, per EC-041 — two tenants may each have a "jsmith").
+    /// A username-shaped identifier therefore also needs <paramref name="workspace"/> — the user's
+    /// company name, normalised and matched against the tenant's slug — to know which tenant to look
+    /// in; an email-shaped identifier ignores it.
+    /// </summary>
+    Task<LoginResult> LoginAsync(string identifier, string password, string? workspace = null, CancellationToken cancellationToken = default);
     Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Starts an impersonation session as the tenant's admin, recording the operator's stated
+    /// justification. <paramref name="reason"/> is written into both audit entries: "who impersonated
+    /// which tenant, and why" is the question an auditor actually asks (EC-028), and it cannot be
+    /// reconstructed after the fact. A separate overload rather than an added parameter so the
+    /// existing four-argument call sites keep binding to the overload above unchanged.
+    /// </summary>
+    Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, string? reason, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The tenant's role-permission matrix (plus group grants and per-user overrides) for
+    /// <paramref name="user"/> — the same resolution <see cref="LoginAsync"/> uses. Callers that
+    /// already hold a loaded <see cref="User"/> (e.g. the "current user" endpoint) must go through
+    /// this rather than reading <see cref="User.Permission"/> directly: that stored row is the
+    /// legacy per-user grant the role matrix replaced, and is no longer kept in sync.
+    /// </summary>
+    Task<UserPermissionsModel> ResolveCurrentPermissionsAsync(User user, CancellationToken cancellationToken = default);
 }
 
 public sealed record SignupResult(
@@ -46,7 +72,9 @@ public sealed record LoginResult(
     string? Industry,
     string? LogoUrl,
     bool ShowPoweredByEcosys,
-    string TimeZoneId = "Africa/Nairobi");
+    string TimeZoneId = "Africa/Nairobi",
+    string? Username = null,
+    bool HasEmail = true);
 
 public sealed record ImpersonationResult(
     string Token,
@@ -173,27 +201,70 @@ internal sealed class MvpAuthService(
         return new SignupResult(token, tenant.Id, user.Id, tenant.CompanyName, user.Role, user.JobTitle, permissions);
     }
 
-    public async Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default)
+    public async Task<LoginResult> LoginAsync(string identifier, string password, string? workspace = null, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        if (string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(password))
         {
-            throw new BusinessRuleException("Email and password are required.");
+            throw new BusinessRuleException("Your sign-in details and password are required.");
         }
 
-        var normalizedEmail = email.Trim().ToLowerInvariant();
-        var user = await dbContext.Users
-            .Include(x => x.Tenant)
-            .Include(x => x.Permission)
-            .SingleOrDefaultAsync(x => x.Email.ToLower() == normalizedEmail, cancellationToken);
+        var trimmedIdentifier = identifier.Trim();
+        User? user;
+        string failureEntityId;
+
+        if (trimmedIdentifier.Contains('@'))
+        {
+            var normalizedEmail = trimmedIdentifier.ToLowerInvariant();
+            failureEntityId = normalizedEmail;
+            user = await dbContext.Users
+                .Include(x => x.Tenant)
+                .Include(x => x.Permission)
+                .SingleOrDefaultAsync(x => x.Email.ToLower() == normalizedEmail, cancellationToken);
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(workspace))
+            {
+                throw new BusinessRuleException("Enter your company name to sign in with a username.");
+            }
+
+            var normalizedUsername = trimmedIdentifier.ToLowerInvariant();
+
+            // The field is labelled "Company Name" to users, but the tenant lookup still needs to
+            // land on the guaranteed-unique Slug column (CompanyName isn't unique). Normalising the
+            // typed value the same way signup turns a company name into a slug (TenantEmailIdentity
+            // .NormalizeSlug) means "Acme Corp" and "acme-corp" both resolve — they were the same
+            // input at signup time. A malformed/too-short value can't be a real slug, so it's treated
+            // as a lookup miss rather than surfacing NormalizeSlug's validation message.
+            string? normalizedWorkspace;
+            try
+            {
+                normalizedWorkspace = TenantEmailIdentity.NormalizeSlug(workspace, fromCompanyName: true);
+            }
+            catch (BusinessRuleException)
+            {
+                normalizedWorkspace = null;
+            }
+
+            failureEntityId = $"{normalizedUsername}@{normalizedWorkspace ?? workspace.Trim().ToLowerInvariant()}";
+            user = normalizedWorkspace is null
+                ? null
+                : await dbContext.Users
+                    .Include(x => x.Tenant)
+                    .Include(x => x.Permission)
+                    .SingleOrDefaultAsync(
+                        x => x.Username == normalizedUsername && x.Tenant != null && x.Tenant.Slug == normalizedWorkspace,
+                        cancellationToken);
+        }
 
         if (user is null)
         {
             await LogFailedLoginAsync(
                 tenantId: null,
                 userId: null,
-                entityId: normalizedEmail,
-                actorName: normalizedEmail,
-                details: $"Failed login attempt for '{normalizedEmail}'.",
+                entityId: failureEntityId,
+                actorName: failureEntityId,
+                details: $"Failed login attempt for '{failureEntityId}'.",
                 cancellationToken: cancellationToken);
             throw new UnauthorizedException(GenericLoginFailureMessage);
         }
@@ -207,8 +278,8 @@ internal sealed class MvpAuthService(
                 user.TenantId,
                 user.Id,
                 user.Id.ToString(),
-                user.Email,
-                $"Login attempt blocked for '{user.Email}' because the account is temporarily locked.",
+                DisplayIdentifier(user),
+                $"Login attempt blocked for '{DisplayIdentifier(user)}' because the account is temporarily locked.",
                 cancellationToken);
             throw new UnauthorizedException(GenericLoginFailureMessage);
         }
@@ -242,7 +313,7 @@ internal sealed class MvpAuthService(
             "Login",
             nameof(User),
             user.Id.ToString(),
-            $"User '{user.Email}' signed in.",
+            $"User '{DisplayIdentifier(user)}' signed in.",
             cancellationToken);
 
         return new LoginResult(
@@ -261,10 +332,15 @@ internal sealed class MvpAuthService(
             user.Tenant.Industry,
             user.Tenant.LogoUrl,
             user.Tenant.ShowPoweredByEcosys,
-            user.Tenant.TimeZoneId);
+            user.Tenant.TimeZoneId,
+            user.Username,
+            user.HasEmail);
     }
 
-    public async Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default)
+    public Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, CancellationToken cancellationToken = default) =>
+        ImpersonateTenantAdminAsync(tenantId, actingUserId, actingUserName, null, cancellationToken);
+
+    public async Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, string? reason, CancellationToken cancellationToken = default)
     {
         var tenant = await dbContext.Tenants
             .SingleOrDefaultAsync(x => x.Id == tenantId && x.Id != PlatformConstants.RootTenantId, cancellationToken)
@@ -289,13 +365,20 @@ internal sealed class MvpAuthService(
         var token = CreateToken(targetUser, tenant, permissions, session.Id, jwtId, mustChangePassword: false, actingUserId, actingUserName);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        // EC-028: both entries name the acting platform user, the target tenant, and the stated
+        // reason. The reason is operator-supplied free text and is recorded verbatim; nothing about
+        // the issued session (token, jwt id, session id) is logged.
+        var reasonSuffix = string.IsNullOrWhiteSpace(reason)
+            ? " No reason was given."
+            : $" Reason: {reason.Trim()}";
+
         await auditLogService.LogAsync(
             tenantId,
             actingUserId,
             "impersonation.started",
             nameof(User),
             targetUser.Id.ToString(),
-            $"Platform admin '{actingUserName}' started an impersonation session as tenant admin '{targetUser.Email}'.",
+            $"Platform admin '{actingUserName}' started an impersonation session in tenant '{tenant.Name}' as tenant admin '{targetUser.Email}'.{reasonSuffix}",
             severity: "Warning",
             cancellationToken: cancellationToken);
 
@@ -305,7 +388,7 @@ internal sealed class MvpAuthService(
             "platform.tenant.impersonation.started",
             nameof(Tenant),
             tenantId.ToString(),
-            $"Started impersonating '{targetUser.Email}' in tenant '{tenant.Name}'.",
+            $"Platform admin '{actingUserName}' started impersonating tenant admin '{targetUser.Email}' in tenant '{tenant.Name}'.{reasonSuffix}",
             severity: "Warning",
             cancellationToken: cancellationToken);
 
@@ -343,15 +426,16 @@ internal sealed class MvpAuthService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        var displayIdentifier = DisplayIdentifier(user);
         var details = user.LockedOutUntil.HasValue && user.LockedOutUntil.Value > utcNow
-            ? $"Failed login attempt for '{user.Email}'. {reason}. Account locked temporarily."
-            : $"Failed login attempt for '{user.Email}'. {reason}.";
+            ? $"Failed login attempt for '{displayIdentifier}'. {reason}. Account locked temporarily."
+            : $"Failed login attempt for '{displayIdentifier}'. {reason}.";
 
         await LogFailedLoginAsync(
             user.TenantId,
             user.Id,
             user.Id.ToString(),
-            user.Email,
+            displayIdentifier,
             details,
             cancellationToken);
     }
@@ -375,6 +459,13 @@ internal sealed class MvpAuthService(
             actorName: actorName,
             cancellationToken: cancellationToken);
     }
+
+    /// <summary>
+    /// What to show in audit trails and log messages: <see cref="User.Email"/> is a system-generated
+    /// placeholder for a no-email account, so <see cref="User.Username"/> reads far better there.
+    /// </summary>
+    private static string DisplayIdentifier(User user) =>
+        !user.HasEmail && !string.IsNullOrWhiteSpace(user.Username) ? user.Username : user.Email;
 
     private static bool IsLockedOut(User user, DateTime utcNow) =>
         user.LockedOutUntil.HasValue && user.LockedOutUntil.Value > utcNow;
@@ -485,6 +576,9 @@ internal sealed class MvpAuthService(
 
         return await dynamicAccessService.ResolveLegacyClaimsAsync(user.TenantId, user.Id, cancellationToken);
     }
+
+    public Task<UserPermissionsModel> ResolveCurrentPermissionsAsync(User user, CancellationToken cancellationToken = default) =>
+        ResolvePermissionsAsync(user, cancellationToken);
 
     private static UserPermission ToEntity(UserPermissionsModel permissions) =>
         new()

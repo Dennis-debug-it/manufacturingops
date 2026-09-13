@@ -31,6 +31,10 @@ export interface TeamUser {
   id: string
   fullName: string
   email: string
+  /** Sign-in handle unique within the tenant. */
+  username: string | null
+  /** False when `email` is a system-generated placeholder for a user with no real address. */
+  hasEmail: boolean
   phoneNumber: string | null
   role: TenantUserRole
   jobTitle: string | null

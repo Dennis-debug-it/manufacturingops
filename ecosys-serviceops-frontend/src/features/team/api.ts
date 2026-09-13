@@ -21,8 +21,13 @@ export function useTeamUser(id: string | undefined) {
 
 export interface CreateUserPayload {
   fullName: string
-  email: string
+  /** Omit (or leave blank) for a user with no email address — they sign in with `username` instead. */
+  email?: string | null
+  /** Auto-generated from `fullName` when omitted. Unique within the tenant. */
+  username?: string | null
   phoneNumber?: string | null
+  /** Set an initial password directly instead of emailing an invite link — required when there's no email. */
+  password?: string | null
   role: TenantUserRole
   jobTitle?: string | null
   department?: string | null
@@ -31,18 +36,24 @@ export interface CreateUserPayload {
   permissions?: PermissionSetFields | null
 }
 
+export interface CreatedUserResponse extends TeamUser {
+  credentialDelivery?: { success: boolean; status: string; message: string | null; temporaryPassword?: string | null } | null
+}
+
 export function useCreateTeamUser() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: CreateUserPayload) => api.post<TeamUser>(endpoints.users.create, payload),
+    mutationFn: (payload: CreateUserPayload) => api.post<CreatedUserResponse>(endpoints.users.create, payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team-users'] }),
   })
 }
 
 export interface UpdateUserPayload {
   fullName: string
-  email: string
+  email?: string | null
+  username?: string | null
   phoneNumber?: string | null
+  password?: string | null
   role: TenantUserRole
   jobTitle?: string | null
   department?: string | null
@@ -83,9 +94,23 @@ export function useResendCredentials(id: string) {
   })
 }
 
+export interface ResetPasswordPayload {
+  /** Admin types the new password directly. */
+  newPassword?: string
+  /** Server generates one and hands it back once in the response — nothing is emailed either way. */
+  generateAndReveal?: boolean
+}
+
+export interface ResetPasswordResult {
+  success: boolean
+  message: string | null
+  /** Only present when `generateAndReveal` was requested — shown once, never stored. */
+  temporaryPassword?: string | null
+}
+
 export function useResetUserPassword(id: string) {
   return useMutation({
-    mutationFn: () => api.post<{ success: boolean; message: string | null }>(endpoints.users.resetPassword(id)),
+    mutationFn: (payload?: ResetPasswordPayload) => api.post<ResetPasswordResult>(endpoints.users.resetPassword(id), payload ?? null),
   })
 }
 

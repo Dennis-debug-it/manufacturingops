@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
@@ -31,8 +32,9 @@ public sealed class PlatformTenantsController(
     IPasswordHasher<User> passwordHasher,
     IUserPermissionTemplateService permissionTemplateService,
     IUserCredentialDeliveryService credentialDeliveryService,
-    IMvpAuthService authService,
-    IOptions<AuthSecurityOptions>? authSecurityOptions = null) : ControllerBase
+    IOptions<AuthSecurityOptions> authSecurityOptions,
+    ITenantTimeZoneService tenantTimeZoneService,
+    IMvpAuthService authService) : ControllerBase
 {
     private const int TrialPeriodDays = 14;
     private const int TrialExpiringSoonDays = 3;
@@ -94,7 +96,7 @@ public sealed class PlatformTenantsController(
         await dbContext.SaveChangesAsync(cancellationToken);
         var admin = await CreateInitialAdminAsync(tenant, adminProfile, cancellationToken);
         var invitation = await PasswordLinkTokens.IssueAsync(dbContext, admin, PasswordLinkPurposes.Invitation,
-            authSecurityOptions?.Value, cancellationToken);
+            authSecurityOptions.Value, cancellationToken);
         await WriteAuditAsync(tenant, "TenantCreated", $"Tenant '{tenant.Name}' was created.", cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
@@ -253,18 +255,32 @@ public sealed class PlatformTenantsController(
 
     [HttpPost("{tenantId:guid}/impersonate")]
     [Authorize(Policy = "PlatformAdminAccess")]
-    public async Task<ActionResult<TenantImpersonationResponse>> Impersonate(Guid tenantId, CancellationToken cancellationToken)
+    public async Task<ActionResult<TenantImpersonationResponse>> Impersonate(
+        Guid tenantId,
+        [FromBody] ImpersonateTenantRequest? request,
+        CancellationToken cancellationToken)
     {
         var actingUserId = tenantContext.GetRequiredUserId();
         var actingUser = await dbContext.Users.SingleOrDefaultAsync(x => x.Id == actingUserId, cancellationToken)
             ?? throw new NotFoundException("Acting platform user was not found.");
 
-        var result = await authService.ImpersonateTenantAdminAsync(tenantId, actingUserId, actingUser.FullName, cancellationToken);
+        // EC-028: the reason is what makes an impersonation record answer "why", which is the whole
+        // point of auditing it. The body is optional so existing callers that post nothing still
+        // work — the service records "No reason was given." in that case rather than failing.
+        var result = await authService.ImpersonateTenantAdminAsync(
+            tenantId, actingUserId, actingUser.FullName, request?.Reason, cancellationToken);
 
         return Ok(new TenantImpersonationResponse(
             result.Token,
             new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, null, false, MapPermissions(result.Permissions)),
-            new LoginTenantDto(result.TenantId, result.CompanyName, result.Country, result.Industry, result.LogoUrl, result.ShowPoweredByEcosys),
+            new LoginTenantDto(
+                result.TenantId,
+                result.CompanyName,
+                result.Country,
+                result.Industry,
+                result.LogoUrl,
+                result.ShowPoweredByEcosys,
+                await tenantTimeZoneService.GetTimeZoneIdAsync(result.TenantId, cancellationToken)),
             result.ImpersonatedByUserId,
             result.ImpersonatedByName,
             result.StartedAt));
@@ -306,10 +322,210 @@ public sealed class PlatformTenantsController(
         var users = await dbContext.Users
             .Where(x => x.TenantId == tenantId && x.Role != AppRoles.SuperAdmin)
             .OrderBy(x => x.FullName)
-            .Select(x => new PlatformTenantUserResponse(x.Id, x.FullName, x.Email, x.Role, x.IsActive, x.JobTitle, x.CreatedAt, x.LockedOutUntil))
+            .Select(x => new PlatformTenantUserResponse(
+                x.Id,
+                x.FullName,
+                x.Email,
+                x.Role,
+                x.IsActive,
+                x.JobTitle,
+                x.CreatedAt,
+                x.LockedOutUntil,
+                x.MustChangePassword,
+                x.LastCredentialSentAt,
+                dbContext.UserSessions
+                    .Where(session => session.UserId == x.Id)
+                    .Max(session => (DateTime?)session.LoginAt)))
             .ToListAsync(cancellationToken);
 
         return Ok(users);
+    }
+
+    /// <summary>
+    /// Creates an additional workspace user — typically a second or third tenant admin, since tenant
+    /// creation only ever seeds one. The account lives in the tenant and can only hold a tenant role;
+    /// platform staff are created separately under /api/platform/users.
+    /// </summary>
+    [Authorize(Policy = "PlatformAdminAccess")]
+    [HttpPost("{tenantId:guid}/users")]
+    public async Task<ActionResult<PlatformTenantUserCreatedResponse>> CreateWorkspaceUser(
+        Guid tenantId,
+        [FromBody] CreatePlatformTenantUserRequest request,
+        CancellationToken cancellationToken)
+    {
+        var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
+
+        var fullName = NormalizeRequired(request.FullName, "Full name is required.");
+        var email = NormalizeEmail(request.Email)
+            ?? throw new BusinessRuleException("A valid email address is required.");
+        var role = NormalizeWorkspaceRole(request.Role);
+
+        // Seats are a tenant-level entitlement — creating from the platform side must not bypass it.
+        await licenseGuardService.EnsureCanCreateUserAsync(tenant.Id, cancellationToken);
+
+        var emailInUse = await dbContext.Users.AnyAsync(x => x.Email.ToLower() == email.ToLower(), cancellationToken);
+        if (emailInUse)
+        {
+            throw new BusinessRuleException("Email is already in use.");
+        }
+
+        var isAdmin = string.Equals(role, AppRoles.Admin, StringComparison.Ordinal);
+        var permissions = isAdmin
+            ? permissionTemplateService.GetFullTenantPermissions()
+            : permissionTemplateService.GetDefaultPermissions(role, NormalizeOptional(request.JobTitle));
+
+        var user = new User
+        {
+            TenantId = tenant.Id,
+            FullName = fullName,
+            Email = email,
+            Phone = NormalizeOptional(request.Phone),
+            Role = role,
+            JobTitle = NormalizeOptional(request.JobTitle) ?? (isAdmin ? "Tenant workspace admin" : null),
+            IsActive = true,
+            HasAllBranchAccess = isAdmin,
+            MustChangePassword = true,
+            Permission = ToEntity(permissions)
+        };
+        user.PasswordHash = passwordHasher.HashPassword(user, GenerateTemporaryPassword());
+
+        dbContext.Users.Add(user);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var delivery = await SendWorkspaceUserSetupAsync(tenant.Id, user, cancellationToken);
+        if (delivery.Success)
+        {
+            user.LastCredentialSentAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await auditLogService.LogAsync(
+            tenant.Id,
+            tenantContext.GetRequiredUserId(),
+            "User created",
+            nameof(User),
+            user.Id.ToString(),
+            $"Platform created workspace {role.ToLowerInvariant()} '{user.Email}' for tenant '{tenant.CompanyName}'.",
+            severity: "Warning",
+            cancellationToken: cancellationToken);
+
+        var message = delivery.Success
+            ? $"Account setup link sent to {user.Email}."
+            : "The account was created, but its setup link could not be sent. Resend it once email delivery is working.";
+
+        return Ok(new PlatformTenantUserCreatedResponse(
+            new PlatformTenantUserResponse(
+                user.Id,
+                user.FullName,
+                user.Email,
+                user.Role,
+                user.IsActive,
+                user.JobTitle,
+                user.CreatedAt,
+                user.LockedOutUntil,
+                user.MustChangePassword,
+                user.LastCredentialSentAt,
+                LastLoginAt: null),
+            delivery.Success,
+            delivery.Status,
+            message));
+    }
+
+    /// <summary>
+    /// Canonicalises against the tenant role list only, so a platform caller cannot drop a platform
+    /// role name into a tenant workspace and have it inherit platform meaning at login.
+    /// </summary>
+    private static string NormalizeWorkspaceRole(string? role)
+    {
+        if (string.IsNullOrWhiteSpace(role))
+        {
+            return AppRoles.Admin;
+        }
+
+        var trimmed = role.Trim();
+        if (string.Equals(trimmed, AppRoles.SuperAdmin, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ForbiddenException("SuperAdmin is a platform role and cannot be assigned inside a tenant workspace.");
+        }
+
+        var match = Array.Find(AppRoles.TenantRoles, candidate => string.Equals(candidate, trimmed, StringComparison.OrdinalIgnoreCase));
+        return match ?? throw new BusinessRuleException($"Role must be one of: {string.Join(", ", AppRoles.TenantRoles)}.");
+    }
+
+    /// <summary>
+    /// Re-issues a workspace account-setup link. This is the only way to recover a tenant admin whose
+    /// first-login invitation lapsed: they cannot sign in to request one themselves, and the tenant-side
+    /// resend endpoint requires an admin already inside the workspace.
+    /// </summary>
+    [Authorize(Policy = "PlatformAdminAccess")]
+    [HttpPost("{tenantId:guid}/users/{userId:guid}/resend-invitation")]
+    public async Task<ActionResult<PlatformTenantCredentialDeliveryResponse>> ResendWorkspaceUserInvitation(
+        Guid tenantId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
+
+        var user = await dbContext.Users
+            .SingleOrDefaultAsync(x => x.Id == userId && x.TenantId == tenantId && x.Role != AppRoles.SuperAdmin, cancellationToken)
+            ?? throw new NotFoundException("Workspace user was not found for this tenant.");
+
+        if (!user.IsActive)
+        {
+            throw new BusinessRuleException("This user is deactivated. Reactivate the account before resending its setup link.");
+        }
+
+        var delivery = await SendWorkspaceUserSetupAsync(tenant.Id, user, cancellationToken);
+
+        if (delivery.Success)
+        {
+            user.LastCredentialSentAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await auditLogService.LogAsync(
+            tenant.Id,
+            tenantContext.GetRequiredUserId(),
+            delivery.Success ? "User credentials sent" : "User credentials send failed",
+            nameof(User),
+            user.Id.ToString(),
+            delivery.Success
+                ? $"Workspace account setup link resent to '{user.Email}'."
+                : $"Workspace account setup link to '{user.Email}' could not be delivered ({delivery.Status}).",
+            severity: "Warning",
+            cancellationToken: cancellationToken);
+
+        var message = delivery.Success
+            ? $"Account setup link sent to {user.Email}."
+            : "Account setup link could not be sent. Check the platform email settings and try again.";
+
+        return Ok(new PlatformTenantCredentialDeliveryResponse(
+            user.Id,
+            user.Email,
+            delivery.Success,
+            delivery.Status,
+            message,
+            user.LastCredentialSentAt));
+    }
+
+    /// <summary>
+    /// Shared delivery path for both a freshly created workspace user and a resent invitation — issues a
+    /// fresh account-setup token via the shared token store and hands it to the credential delivery
+    /// service, matching the pattern used for the initial tenant admin invitation in <see cref="Create"/>.
+    /// </summary>
+    private async Task<UserCredentialDeliveryResult> SendWorkspaceUserSetupAsync(Guid tenantId, User user, CancellationToken cancellationToken)
+    {
+        var issued = await PasswordLinkTokens.IssueAsync(dbContext, user, PasswordLinkPurposes.Invitation,
+            authSecurityOptions.Value, cancellationToken);
+
+        return await credentialDeliveryService.SendPasswordResetLinkAsync(
+            tenantId,
+            user,
+            new PasswordResetLinkDeliveryRequest(
+                credentialDeliveryService.BuildInviteUrl(issued.Token),
+                issued.ExpiresAt,
+                PasswordLinkDeliveryPurpose.AccountSetup),
+            cancellationToken);
     }
 
     [HttpGet("{tenantId:guid}/numbering")]
@@ -1337,6 +1553,14 @@ public sealed record PlatformTenantSummaryResponse(
     int ActiveUsersNow,
     DateTime? LastActivityAt);
 
+/// <summary>
+/// Optional body for an impersonation request. The reason is operator-supplied free text, recorded
+/// verbatim in both audit entries (tenant-side and platform-side) so the record answers "why", not
+/// only "who and when". Attributes sit on the constructor parameter, not the property — a
+/// <c>[property:]</c> target throws at model binding on a positional record (EC-003).
+/// </summary>
+public sealed record ImpersonateTenantRequest([StringLength(500)] string? Reason = null);
+
 public sealed record TenantImpersonationResponse(
     string Token,
     LoginUserDto User,
@@ -1354,7 +1578,41 @@ public sealed record PlatformTenantAuditLogResponse(
 
 public sealed record PlatformTenantBrandingResponse(string CompanyName, string? LogoUrl, string PrimaryColor, string SecondaryColor, bool ShowPoweredByEcosys);
 
-public sealed record PlatformTenantUserResponse(Guid Id, string FullName, string Email, string Role, bool IsActive, string? JobTitle, DateTime CreatedAt, DateTime? LockedOutUntil);
+public sealed record PlatformTenantUserResponse(
+    Guid Id,
+    string FullName,
+    string Email,
+    string Role,
+    bool IsActive,
+    string? JobTitle,
+    DateTime CreatedAt,
+    DateTime? LockedOutUntil,
+    bool MustChangePassword,
+    DateTime? LastCredentialSentAt,
+    /// <summary>Null means the account has never been signed into — its setup link is still pending.</summary>
+    DateTime? LastLoginAt);
+
+public sealed record CreatePlatformTenantUserRequest(
+    string FullName,
+    string Email,
+    string? Phone,
+    /// <summary>Tenant role; defaults to Admin. Platform roles are rejected.</summary>
+    string? Role,
+    string? JobTitle);
+
+public sealed record PlatformTenantUserCreatedResponse(
+    PlatformTenantUserResponse User,
+    bool InvitationSent,
+    string InvitationStatus,
+    string Message);
+
+public sealed record PlatformTenantCredentialDeliveryResponse(
+    Guid UserId,
+    string Email,
+    bool Success,
+    string Status,
+    string Message,
+    DateTime? LastCredentialSentAt);
 
 public sealed record PlatformTenantNumberingResponse(Guid Id, string DocumentType, string Prefix, string? Suffix, long NextNumber, int PaddingLength, string ResetFrequency, bool IsActive, DateTime? LastResetAt);
 

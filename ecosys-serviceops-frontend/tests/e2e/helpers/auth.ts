@@ -390,7 +390,7 @@ async function getTenantSession(): Promise<TenantSession> {
       if (E2E_TENANT_EMAIL && E2E_TENANT_PASSWORD) {
         const loginRes = await apiContext.post('/api/auth/login', {
           data: {
-            email: E2E_TENANT_EMAIL,
+            emailOrUsername: E2E_TENANT_EMAIL,
             password: E2E_TENANT_PASSWORD,
           },
         })

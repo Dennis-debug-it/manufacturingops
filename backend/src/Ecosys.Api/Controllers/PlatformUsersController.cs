@@ -337,7 +337,7 @@ public sealed class PlatformUsersController(
     }
 
     private IQueryable<User> QueryPlatformUsers() =>
-        dbContext.Users.Where(x => x.TenantId == PlatformConstants.RootTenantId && !x.Role.Equals(AppRoles.Admin));
+        dbContext.Users.Where(x => x.TenantId == PlatformConstants.RootTenantId && AppRoles.PlatformRoles.Contains(x.Role));
 
     private static PlatformUserResponse MapUser(User user, DateTime? lastLoginAt, PlatformCredentialDeliverySummaryResponse? credentialDelivery = null) =>
         new(

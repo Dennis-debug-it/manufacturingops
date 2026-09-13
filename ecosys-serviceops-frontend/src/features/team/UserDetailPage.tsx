@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useParams } from 'react-router-dom'
+import { Copy } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
@@ -23,6 +24,7 @@ export function UserDetailPage() {
   const updateUser = useUpdateTeamUser(id ?? '')
 
   const [caps, setCaps] = useState<RoleCapabilities | null>(null)
+  const [revealedPassword, setRevealedPassword] = useState<string | null>(null)
   useEffect(() => {
     if (user) setCaps({ ...user.permissions })
   }, [user])
@@ -35,7 +37,8 @@ export function UserDetailPage() {
     try {
       await updateUser.mutateAsync({
         fullName: user.fullName,
-        email: user.email,
+        email: user.hasEmail ? user.email : null,
+        username: user.username,
         phoneNumber: user.phoneNumber,
         role: user.role,
         jobTitle: user.jobTitle,
@@ -75,10 +78,28 @@ export function UserDetailPage() {
 
   const reset = async () => {
     try {
+      if (user && !user.hasEmail) {
+        // Nothing to email — generate a new temporary password and reveal it once instead.
+        const result = await resetPassword.mutateAsync({ generateAndReveal: true })
+        if (result.temporaryPassword) setRevealedPassword(result.temporaryPassword)
+        else toast.error(result.message ?? 'Could not reset the password. Please try again.')
+        return
+      }
+
       await resetPassword.mutateAsync(undefined)
-      toast.success('Password reset â€” new credentials sent')
+      toast.success('Password reset — new credentials sent')
     } catch {
       // interceptor surfaces the error toast
+    }
+  }
+
+  const copyRevealedPassword = async () => {
+    if (!revealedPassword) return
+    try {
+      await navigator.clipboard.writeText(revealedPassword)
+      toast.success('Password copied')
+    } catch {
+      toast.error('Could not copy — select and copy the password manually')
     }
   }
 
@@ -100,8 +121,8 @@ export function UserDetailPage() {
         primaryAction={
           canManage ? (
             <div className="flex flex-wrap gap-2">
-              {user.mustChangePassword || user.invitationStatus === 'Invited' || user.invitationStatus === 'Expired' ? <button type="button" onClick={resend} disabled={resendCredentials.isPending} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">{resendCredentials.isPending ? 'Sending…' : 'Resend Invite'}</button> : null}
-              <button type="button" onClick={reset} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Reset Password</button>
+              {user.hasEmail && (user.mustChangePassword || user.invitationStatus === 'Invited' || user.invitationStatus === 'Expired') ? <button type="button" onClick={resend} disabled={resendCredentials.isPending} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">{resendCredentials.isPending ? 'Sending…' : 'Resend Invite'}</button> : null}
+              <button type="button" onClick={reset} disabled={resetPassword.isPending} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">{resetPassword.isPending ? 'Working…' : user.hasEmail ? 'Reset Password' : 'Generate Password'}</button>
               <button type="button" onClick={toggleStatus} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
                 {user.isActive ? 'Deactivate' : 'Activate'}
               </button>
@@ -110,10 +131,26 @@ export function UserDetailPage() {
         }
       />
 
+      {revealedPassword ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="text-sm text-amber-900">
+            New temporary password: <span className="font-mono font-semibold">{revealedPassword}</span>
+            <span className="ml-2 text-xs text-amber-700">Share it with the user directly — it will not be shown again.</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={copyRevealedPassword} className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100">
+              <Copy className="h-3.5 w-3.5" /> Copy
+            </button>
+            <button type="button" onClick={() => setRevealedPassword(null)} className="text-xs font-medium text-amber-700 hover:text-amber-900">Dismiss</button>
+          </div>
+        </div>
+      ) : null}
+
       <SummarySection title="Profile" description="Contact and organization details.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[
-            ['Email', user.email],
+            ['Email', user.hasEmail ? user.email : 'No email address'],
+            ['Username', user.username ?? 'â€”'],
             ['Phone', user.phoneNumber ?? 'â€”'],
             ['Department', user.department ?? 'â€”'],
             ['Branch Access', user.hasAllBranchAccess ? 'All Branches' : (user.defaultBranchName ?? 'â€”')],

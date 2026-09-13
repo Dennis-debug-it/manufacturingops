@@ -40,7 +40,7 @@ function buildLeadPayload(suffix: string) {
 
 test('backend smoke: auth endpoints are reachable', async ({ request }) => {
   const response = await request.post(`${E2E_API_BASE_URL}/api/auth/login`, {
-    data: { email: 'invalid@example.com', password: 'invalid' },
+    data: { emailOrUsername: 'invalid@example.com', password: 'invalid' },
   })
 
   // Invalid credentials are expected, but backend must not crash.

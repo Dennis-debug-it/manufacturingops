@@ -21,13 +21,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                 nullable: false,
                 defaultValue: "");
 
-            migrationBuilder.AddColumn<string>(
-                name: "TimeZoneId",
-                table: "tenants",
-                type: "character varying(100)",
-                maxLength: 100,
-                nullable: false,
-                defaultValue: "");
+            // TimeZoneId is NOT added here: migration 20260823151434_AddTenantTimeZoneAndMrrSnapshots
+            // already added it (nullable varchar(64)) three commits earlier, so an unconditional
+            // AddColumn here would fail with "column already exists" on any database migrating from
+            // empty. 20260911120000_ReconcileServiceOpsProvisioningIdentityInvitations widens it to
+            // varchar(100) NOT NULL and backfills values — that migration already assumed this one
+            // wouldn't re-add the column; this just makes that assumption true.
 
             migrationBuilder.AddColumn<string>(
                 name: "Purpose",
@@ -198,9 +197,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                 name: "Currency",
                 table: "tenants");
 
-            migrationBuilder.DropColumn(
-                name: "TimeZoneId",
-                table: "tenants");
+            // TimeZoneId isn't dropped here — this migration never added it (see Up()).
 
             migrationBuilder.DropColumn(
                 name: "Purpose",

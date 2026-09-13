@@ -40,7 +40,10 @@ public sealed record CompanySettingsResponse(
     string EffectiveTimeZoneId,
     string PrimaryColor,
     string SecondaryColor,
-    bool ShowPoweredByEcosys);
+    bool ShowPoweredByEcosys,
+    /// <summary>The workspace code staff enter alongside a username to sign in — needed by anyone
+    /// without an email address, since a username alone doesn't say which tenant to look in.</summary>
+    string WorkspaceCode);
 
 public sealed record EmailSettingsRequest(
     string Host,
