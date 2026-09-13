@@ -49,7 +49,17 @@ public sealed class PostgresAdvisoryLockLease(
 
     public async Task<bool> TryAcquireAsync(string workName, CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await _gate.WaitAsync(cancellationToken);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Shutdown disposed this lease out from under a caller that raced it — the process is on
+            // its way down either way, so there is nothing left to acquire.
+            return false;
+        }
+
         try
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
@@ -85,7 +95,15 @@ public sealed class PostgresAdvisoryLockLease(
 
     public async Task<bool> IsHeldAsync(string workName, CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await _gate.WaitAsync(cancellationToken);
+        }
+        catch (ObjectDisposedException)
+        {
+            return false;
+        }
+
         try
         {
             if (!_held.Contains(workName) || _connection is null)
@@ -113,7 +131,18 @@ public sealed class PostgresAdvisoryLockLease(
 
     public async Task ReleaseAsync(string workName, CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await _gate.WaitAsync(cancellationToken);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Nothing to repair here either: a lease disposed before a straggling worker's shutdown
+            // call reaches it has already dropped its connection, and Postgres releases the advisory
+            // lock the moment that session closes.
+            return;
+        }
+
         try
         {
             if (!_held.Remove(workName) || _connection is null)

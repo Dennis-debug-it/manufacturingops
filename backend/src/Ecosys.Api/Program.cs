@@ -16,6 +16,7 @@ using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Errors;
 using Ecosys.Shared.Options;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -230,6 +231,11 @@ builder.Services.AddSwaggerGen(options =>
 
 var app = builder.Build();
 
+// First in the pipeline: the trace id must be on the response even for a failure raised by the
+// global exception handler below, and the logging scope it opens must wrap that handler's own
+// LogWarning/LogError calls — otherwise a user-reported trace id has no matching log line (EC-P2-09).
+app.UseMiddleware<RequestCorrelationMiddleware>();
+
 app.Use(async (context, next) =>
 {
     var headers = context.Response.Headers;
@@ -414,7 +420,17 @@ app.UseMiddleware<RequestMetricsMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ServiceOpsHub>("/hubs/serviceops");
-app.MapHealthChecks("/health");
+// /health/ready is database-backed (includes the "postgres" check) so orchestration can gate
+// traffic/dependents on it; /health/live never depends on the database, so a DB outage doesn't
+// make Docker/Kubernetes kill and restart an otherwise-healthy process.
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = _ => false
+});
 
 app.Run();
 

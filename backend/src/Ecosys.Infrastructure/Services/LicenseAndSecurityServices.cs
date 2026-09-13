@@ -355,6 +355,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
         tenantLicense.NextBillingDate = EnsureUtc(tenantLicense.NextBillingDate);
         tenantLicense.SuspendedAt = EnsureUtc(tenantLicense.SuspendedAt);
         tenantLicense.CancelledAt = EnsureUtc(tenantLicense.CancelledAt);
+        tenantLicense.OverdueWarningSentAt = EnsureUtc(tenantLicense.OverdueWarningSentAt);
     }
 
     private static DateTime EnsureUtc(DateTime value)

@@ -36,7 +36,7 @@ public static class DependencyInjection
 
         services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
         services.AddHealthChecks()
-            .AddDbContextCheck<AppDbContext>("postgres");
+            .AddDbContextCheck<AppDbContext>("postgres", tags: ["ready"]);
 
         services.AddScoped<IMvpAuthService, MvpAuthService>();
         services.AddScoped<IPortalAuthService, PortalAuthService>();
@@ -86,7 +86,8 @@ public static class DependencyInjection
         services.AddSingleton<IPdfRenderer, QuestPdfRenderer>();
         services.AddScoped<IScheduledReportService, ScheduledReportService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
-        // Every one of these nine workers generates work orders, sends customer email or writes
+        services.AddScoped<IPlatformBillingLifecycleService, PlatformBillingLifecycleService>();
+        // Every one of these ten workers generates work orders, sends customer email or writes
         // snapshots on a timer. Registered plainly they ran on every replica, so `--scale api=2`
         // produced duplicate preventive-maintenance work orders and duplicate customer emails. The
         // lease is applied here, once, for all of them rather than inside each worker — a worker
@@ -103,6 +104,7 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<ScheduledReportWorker>();
         services.AddSingleInstanceHostedService<ApprovalReminderWorker>();
         services.AddSingleInstanceHostedService<EscalationRuleWorker>();
+        services.AddSingleInstanceHostedService<SubscriptionLifecycleWorker>();
 
         return services;
     }

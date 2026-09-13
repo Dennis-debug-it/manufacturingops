@@ -180,6 +180,23 @@ export function useResendTenantUserInvitation(tenantId: string | undefined) {
   })
 }
 
+/**
+ * Forces a password reset for a workspace user who has already completed account setup. This is
+ * the recovery path for a locked-out or forgetful tenant admin when the tenant has no other admin
+ * available to trigger the tenant-side reset — resend-invitation only covers a user still pending
+ * their first sign-in.
+ */
+export function useResetTenantUserPassword(tenantId: string | undefined) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: string) =>
+      api.post<PlatformTenantCredentialDelivery>(endpoints.platform.tenantUserResetPassword(tenantId ?? '', userId), {}),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', tenantId, 'users'] })
+    },
+  })
+}
+
 export interface PlatformTenantNumbering {
   id: string
   documentType: string

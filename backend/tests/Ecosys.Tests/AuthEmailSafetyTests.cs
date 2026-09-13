@@ -1098,7 +1098,12 @@ public sealed partial class AuthEmailSafetyTests
         return new PlatformFinanceController(
             dbContext,
             new FakeTenantContext(PlatformConstants.RootTenantId, Guid.NewGuid(), isAdmin: true, isSuperAdmin: true),
-            new NoOpAuditLogService());
+            new NoOpAuditLogService(),
+            new PlatformBillingLifecycleService(
+                dbContext,
+                new FakeEmailTemplateService(),
+                new FakeEmailSubjectRuleService(),
+                new EmailOutboxService(dbContext, new EmailDeliveryLogService(dbContext))));
     }
 
     private static MvpAuthService CreateAuthService(AppDbContext dbContext)

@@ -509,6 +509,73 @@ public sealed class PlatformTenantsController(
     }
 
     /// <summary>
+    /// Forces a password reset for a workspace user who has already completed account setup. This is
+    /// the recovery path for a tenant admin who is locked out or has forgotten their password when the
+    /// tenant has no other admin available to trigger the tenant-side reset — resend-invitation above
+    /// only covers a user still pending their first sign-in and would otherwise be the only lever.
+    /// </summary>
+    [Authorize(Policy = "PlatformAdminAccess")]
+    [HttpPost("{tenantId:guid}/users/{userId:guid}/reset-password")]
+    public async Task<ActionResult<PlatformTenantCredentialDeliveryResponse>> ResetWorkspaceUserPassword(
+        Guid tenantId,
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
+
+        var user = await dbContext.Users
+            .SingleOrDefaultAsync(x => x.Id == userId && x.TenantId == tenantId && x.Role != AppRoles.SuperAdmin, cancellationToken)
+            ?? throw new NotFoundException("Workspace user was not found for this tenant.");
+
+        if (!user.IsActive || user.MustChangePassword)
+        {
+            throw new BusinessRuleException("Password reset links can only be sent to workspace users who have already completed account setup. Use resend-invitation for a user still pending activation.");
+        }
+
+        var issued = await PasswordLinkTokens.IssueAsync(dbContext, user, PasswordLinkPurposes.PasswordReset,
+            authSecurityOptions.Value, cancellationToken);
+
+        var delivery = await credentialDeliveryService.SendPasswordResetLinkAsync(
+            tenant.Id,
+            user,
+            new PasswordResetLinkDeliveryRequest(
+                credentialDeliveryService.BuildResetPasswordUrl(issued.Token),
+                issued.ExpiresAt,
+                PasswordLinkDeliveryPurpose.PasswordReset),
+            cancellationToken);
+
+        if (delivery.Success)
+        {
+            user.LastCredentialSentAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await auditLogService.LogAsync(
+            tenant.Id,
+            tenantContext.GetRequiredUserId(),
+            delivery.Success ? "User password reset link sent" : "User password reset link send failed",
+            nameof(User),
+            user.Id.ToString(),
+            delivery.Success
+                ? $"Password reset link sent to workspace user '{user.Email}'."
+                : $"Password reset link to '{user.Email}' could not be delivered ({delivery.Status}).",
+            severity: "Warning",
+            cancellationToken: cancellationToken);
+
+        var message = delivery.Success
+            ? $"Password reset link sent to {user.Email}."
+            : "Password reset link could not be sent. Check the platform email settings and try again.";
+
+        return Ok(new PlatformTenantCredentialDeliveryResponse(
+            user.Id,
+            user.Email,
+            delivery.Success,
+            delivery.Status,
+            message,
+            user.LastCredentialSentAt));
+    }
+
+    /// <summary>
     /// Shared delivery path for both a freshly created workspace user and a resent invitation — issues a
     /// fresh account-setup token via the shared token store and hands it to the credential delivery
     /// service, matching the pattern used for the initial tenant admin invitation in <see cref="Create"/>.

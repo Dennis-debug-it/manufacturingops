@@ -16,7 +16,8 @@ namespace Ecosys.Api.Controllers;
 public sealed class PlatformFinanceController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
-    IAuditLogService auditLogService) : ControllerBase
+    IAuditLogService auditLogService,
+    IPlatformBillingLifecycleService billingLifecycleService) : ControllerBase
 {
     private const string TaxSettingsCategory = "platform-finance-taxes";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -154,6 +155,7 @@ public sealed class PlatformFinanceController(
         await dbContext.SaveChangesAsync(cancellationToken);
         quotation.ConvertedInvoiceId = invoice.Id;
         await dbContext.SaveChangesAsync(cancellationToken);
+        await billingLifecycleService.QueueInvoiceIssuedEmailAsync(invoice, tenantContext.UserId, cancellationToken);
         return Ok(MapInvoice(invoice));
     }
 
@@ -178,6 +180,7 @@ public sealed class PlatformFinanceController(
         await ApplyInvoiceAsync(invoice, request, true, cancellationToken);
         dbContext.PlatformInvoices.Add(invoice);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await billingLifecycleService.QueueInvoiceIssuedEmailAsync(invoice, tenantContext.UserId, cancellationToken);
         return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id }, MapInvoice(invoice));
     }
 
@@ -277,6 +280,7 @@ public sealed class PlatformFinanceController(
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        await billingLifecycleService.ApplyPaymentReceivedAsync(payment, invoice, tenantContext.UserId, cancellationToken);
         return CreatedAtAction(nameof(GetPayment), new { id = payment.Id }, MapPayment(payment));
     }
 

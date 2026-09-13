@@ -38,6 +38,11 @@ public sealed class EmailSubjectRuleService(AppDbContext dbContext) : IEmailSubj
             ["pm.due"] = "[Maintenance]",
             ["material.request.submitted"] = "[Materials]",
             ["smtp.failure"] = "[System]",
+            ["platform.invoice.issued"] = "[Invoice]",
+            ["platform.payment.received"] = "[Receipt]",
+            ["platform.subscription.extended"] = "[Subscription]",
+            ["platform.subscription.grace-warning"] = "[Billing]",
+            ["platform.subscription.suspended"] = "[Suspended]",
         };
 
     public async Task<EmailSubjectRuleOptions> GetSettingsAsync(CancellationToken cancellationToken = default)

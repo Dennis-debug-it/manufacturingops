@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
-import { Send, Trash2, UserCog, UserPlus } from 'lucide-react'
+import { KeyRound, Send, Trash2, UserCog, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
@@ -28,6 +28,7 @@ import {
   useTenantNumbering,
   useTenantUsers,
   useResendTenantUserInvitation,
+  useResetTenantUserPassword,
   useUpdateTenantCommunicationSettings,
   useDeactivateTenant,
 } from '../api'
@@ -70,6 +71,7 @@ export function TenantDetailPage() {
   const deleteTenant = useDeleteTenant()
   const impersonate = useImpersonateTenant(id ?? '')
   const resendInvitation = useResendTenantUserInvitation(id)
+  const resetPassword = useResetTenantUserPassword(id)
   const [showAddWorkspaceUser, setShowAddWorkspaceUser] = useState(false)
 
   const [showDelete, setShowDelete] = useState(false)
@@ -156,6 +158,19 @@ export function TenantDetailPage() {
     }
   }
 
+  const handleResetPassword = async (user: PlatformTenantUser) => {
+    try {
+      const result = await resetPassword.mutateAsync(user.id)
+      if (result.success) {
+        toast.success(result.message)
+      } else {
+        toast.error(result.message)
+      }
+    } catch {
+      // handled by interceptor
+    }
+  }
+
   const tenantUserColumns: DataTableColumn<PlatformTenantUser>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <span className="font-medium text-slate-900">{row.fullName}</span> },
     { key: 'email', header: 'Email', cell: (row) => row.email },
@@ -178,18 +193,30 @@ export function TenantDetailPage() {
     {
       key: 'actions',
       header: '',
-      cell: (row) => (
-        <button
-          type="button"
-          onClick={() => void handleResendInvitation(row)}
-          disabled={!row.isActive || resendInvitation.isPending}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:border-[var(--app-primary)] hover:text-[var(--app-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-          title={row.isActive ? 'Email this user a fresh account setup link' : 'Reactivate the account to resend its setup link'}
-        >
-          <Send className="h-3.5 w-3.5" />
-          {resendInvitation.isPending && resendInvitation.variables === row.id ? 'Sendingâ€¦' : 'Resend setup link'}
-        </button>
-      ),
+      cell: (row) =>
+        row.mustChangePassword ? (
+          <button
+            type="button"
+            onClick={() => void handleResendInvitation(row)}
+            disabled={!row.isActive || resendInvitation.isPending}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:border-[var(--app-primary)] hover:text-[var(--app-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+            title={row.isActive ? 'Email this user a fresh account setup link' : 'Reactivate the account to resend its setup link'}
+          >
+            <Send className="h-3.5 w-3.5" />
+            {resendInvitation.isPending && resendInvitation.variables === row.id ? 'Sendingâ€¦' : 'Resend setup link'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void handleResetPassword(row)}
+            disabled={!row.isActive || resetPassword.isPending}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 transition hover:border-[var(--app-primary)] hover:text-[var(--app-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+            title={row.isActive ? 'Email this user a password reset link' : 'Reactivate the account to reset its password'}
+          >
+            <KeyRound className="h-3.5 w-3.5" />
+            {resetPassword.isPending && resetPassword.variables === row.id ? 'Sendingâ€¦' : 'Reset password'}
+          </button>
+        ),
     },
   ]
 

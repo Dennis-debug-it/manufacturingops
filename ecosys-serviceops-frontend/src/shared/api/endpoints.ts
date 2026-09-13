@@ -457,6 +457,7 @@ export const endpoints = {
     tenantBranding: (id: string) => `/api/platform/tenants/${id}/branding`,
     tenantUsers: (id: string) => `/api/platform/tenants/${id}/users`,
     tenantUserResendInvitation: (id: string, userId: string) => `/api/platform/tenants/${id}/users/${userId}/resend-invitation`,
+    tenantUserResetPassword: (id: string, userId: string) => `/api/platform/tenants/${id}/users/${userId}/reset-password`,
     tenantNumbering: (id: string) => `/api/platform/tenants/${id}/numbering`,
     tenantDocumentDesigns: (id: string) => `/api/platform/tenants/${id}/document-designs`,
     tenantFinanceSummary: (id: string) => `/api/platform/tenants/${id}/finance-summary`,

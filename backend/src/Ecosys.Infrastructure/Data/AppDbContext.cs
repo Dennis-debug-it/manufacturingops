@@ -3639,6 +3639,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entry.Entity.NextBillingDate = EnsureUtc(entry.Entity.NextBillingDate);
             entry.Entity.SuspendedAt = EnsureUtc(entry.Entity.SuspendedAt);
             entry.Entity.CancelledAt = EnsureUtc(entry.Entity.CancelledAt);
+            entry.Entity.OverdueWarningSentAt = EnsureUtc(entry.Entity.OverdueWarningSentAt);
         }
 
         foreach (var entry in ChangeTracker.Entries<PlatformQuotation>())

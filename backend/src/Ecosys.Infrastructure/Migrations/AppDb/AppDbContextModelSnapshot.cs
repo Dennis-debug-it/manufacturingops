@@ -7719,6 +7719,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<DateTime?>("OverdueWarningSentAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("StartsAt")
                         .HasColumnType("timestamp with time zone");
 

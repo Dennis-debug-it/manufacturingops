@@ -16,6 +16,13 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
     public DateTime? CancelledAt { get; set; }
     public string? Notes { get; set; }
     public int GracePeriodDays { get; set; } = 7;
+
+    /// <summary>
+    /// When the grace-period overdue warning email was last sent. Cleared whenever the subscription
+    /// is extended so the next unpaid cycle gets its own warning instead of staying permanently
+    /// suppressed by a stale timestamp from a prior overdue period.
+    /// </summary>
+    public DateTime? OverdueWarningSentAt { get; set; }
     public int? MaxUsersOverride { get; set; }
     public int? MaxBranchesOverride { get; set; }
     public int? MaxAssetsOverride { get; set; }
