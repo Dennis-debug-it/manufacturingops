@@ -44,7 +44,7 @@ export function LiveAttendancePage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Live Attendance" subtitle="Real-time clock status across the technician team." />
       <TeamTabNav />
       <TimeAttendanceTabNav />
@@ -87,7 +87,7 @@ export function TimesheetsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Timesheets" subtitle="Week, month, and custom-range timesheet views per technician." />
       <TeamTabNav />
       <TimeAttendanceTabNav />
@@ -126,7 +126,7 @@ export function TimesheetDetailPage() {
   const { data, isLoading } = useTimesheetDetail(id)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={data?.technicianName ?? 'Timesheet Detail'}
         subtitle="Daily breakdown and audit trail."
@@ -162,7 +162,7 @@ export function TimesheetDetailPage() {
               </tbody>
             </table>
           </div>
-          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Audit Trail</h2>
             <ul className="mt-4 space-y-3">
               {data.auditTrail.map((entry, index) => (
@@ -218,7 +218,7 @@ export function LeavePage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Leave"
         subtitle="Leave requests, approvals, and balances."
@@ -339,7 +339,7 @@ export function TimeAttendanceReportsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Time & Attendance Reports"
         subtitle="Payroll-ready hours, overtime, and leave summaries."

@@ -53,7 +53,7 @@ export function CreditControlPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Credit Control"
         subtitle="Stages, hold state, and follow-up actions. Stages are derived from credit limit vs. overdue balance; send a statement straight from any row."

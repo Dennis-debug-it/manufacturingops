@@ -98,7 +98,7 @@ export function CompliancePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="PM Compliance"
         subtitle="Compliance rates by client, asset type, and technician."
@@ -138,7 +138,7 @@ export function CompliancePage() {
         />
       </div>
 
-      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionHeader title="By Client" description="PM completion rate per client for the selected period." />
         {complianceUnavailable ? (
           <ErrorState
@@ -156,7 +156,7 @@ export function CompliancePage() {
         )}
       </section>
 
-      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionHeader title="By Asset Category" description="Average PM compliance grouped by asset category." />
         {assetReliabilityQuery.isError ? (
           <ErrorState
@@ -169,7 +169,7 @@ export function CompliancePage() {
         )}
       </section>
 
-      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionHeader title="By Technician" description="PM job volume and on-time rate per technician." />
         {technicianQuery.isError ? (
           <ErrorState
@@ -188,7 +188,7 @@ export function CompliancePage() {
         )}
       </section>
 
-      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionHeader title="Missed PMs" description="Overdue preventive maintenance plans." />
         {complianceUnavailable ? (
           <ErrorState

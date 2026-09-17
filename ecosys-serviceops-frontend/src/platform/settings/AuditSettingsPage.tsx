@@ -51,7 +51,7 @@ export function AuditSettingsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Platform Audit Log"
         subtitle="Cross-tenant record of administrative and system actions, most recent 500 entries."

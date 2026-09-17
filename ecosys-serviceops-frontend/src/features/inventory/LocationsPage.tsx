@@ -27,7 +27,7 @@ export function LocationsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Locations"
         subtitle="Warehouse and branch stock locations. Inventory location tracking is branch-scoped — there is no separate warehouse/van entity in the backend yet."

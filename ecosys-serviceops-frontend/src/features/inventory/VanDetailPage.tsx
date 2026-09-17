@@ -101,7 +101,7 @@ export function VanDetailPage() {
   const drawerTitle = mode === 'load' ? 'Load Stock onto Van' : mode === 'return' ? 'Return Stock to Branch' : 'Consume Stock'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={van.name}
         subtitle={[van.registrationNumber, van.technicianName, van.homeBranchName].filter(Boolean).join(' · ') || 'Mobile stock location'}
@@ -131,7 +131,7 @@ export function VanDetailPage() {
         }
       />
 
-      <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <h3 className="mb-4 text-sm font-semibold text-slate-900">Stock on this van</h3>
         {stockLoading ? (
           <Spinner label="Loading van stock" />

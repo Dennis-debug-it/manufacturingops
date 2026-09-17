@@ -31,7 +31,7 @@ function ApprovalCard({ request }: { request: ApprovalRequest }) {
   }
 
   return (
-    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -103,7 +103,7 @@ export function MyApprovalsPage() {
   const { data, isLoading, isError } = usePendingApprovals()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="My Approvals" subtitle="Documents awaiting your approval across purchasing and finance." />
       {isLoading ? (
         <Spinner label="Loading approvals" />

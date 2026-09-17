@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { KeyRound, Send, Trash2, UserCog, UserPlus } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -14,6 +14,9 @@ import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import {
   useActivateTenant,
+  useRenewTenantLicense,
+  useExtendTenantLicense,
+  useReactivateTenantLicense,
   useDeleteTenant,
   useExtendTenantTrial,
   useImpersonateTenant,
@@ -29,16 +32,14 @@ import {
   useTenantUsers,
   useResendTenantUserInvitation,
   useResetTenantUserPassword,
-  useUpdateTenantCommunicationSettings,
   useDeactivateTenant,
 } from '../api'
-import { Field, SectionTitle, licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
+import { SectionTitle, licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
 import { NewWorkspaceUserDrawer } from './NewWorkspaceUserDrawer'
-import type { PlatformTenantAuditLog, TenantCommunicationSettings } from '../types'
+import { LicenseTermDialog } from './LicenseTermDialog'
+import type { PlatformTenantAuditLog } from '../types'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import type { PlatformTenantNumbering, PlatformTenantUser } from '../api'
-
-type CommunicationForm = TenantCommunicationSettings
 
 const communicationGroups = [
   'Admin',
@@ -63,8 +64,10 @@ export function TenantDetailPage() {
   const { data: financeSummary, isLoading: financeSummaryLoading } = useTenantFinanceSummary(id)
   const { data: moduleSettings, isLoading: moduleSettingsLoading } = useTenantModuleSettings(id)
   const { data: communication } = useTenantCommunicationSettings(id)
-  const updateCommunication = useUpdateTenantCommunicationSettings(id ?? '')
   const activate = useActivateTenant(id ?? '')
+  const renewLicense = useRenewTenantLicense(id ?? '')
+  const extendLicense = useExtendTenantLicense(id ?? '')
+  const reactivateLicense = useReactivateTenantLicense(id ?? '')
   const suspend = useSuspendTenant(id ?? '')
   const deactivate = useDeactivateTenant(id ?? '')
   const extendTrial = useExtendTenantTrial(id ?? '')
@@ -78,14 +81,13 @@ export function TenantDetailPage() {
   const [showSuspend, setShowSuspend] = useState(false)
   const [showDeactivate, setShowDeactivate] = useState(false)
   const [showExtend, setShowExtend] = useState(false)
-  const [communicationForm, setCommunicationForm] = useState<CommunicationForm | null>(null)
+  const [showActivateDialog, setShowActivateDialog] = useState(false)
+  const [showRenewDialog, setShowRenewDialog] = useState(false)
+  const [showExtendLicenseDialog, setShowExtendLicenseDialog] = useState(false)
+  const [extendLicenseTarget, setExtendLicenseTarget] = useState('')
   const [testRecipient, setTestRecipient] = useState('')
-
-  useEffect(() => {
-    if (communication) {
-      setCommunicationForm(communication)
-    }
-  }, [communication])
+  const [showResetNumbering, setShowResetNumbering] = useState<{ documentType: string } | null>(null)
+  const [resetNumberingReason, setResetNumberingReason] = useState('')
 
   if (isLoading) {
     return <Spinner label="Loading tenant" />
@@ -101,16 +103,6 @@ export function TenantDetailPage() {
     { key: 'action', header: 'Action', cell: (row) => row.action },
     { key: 'details', header: 'Details', cell: (row) => row.details ?? 'â€”' },
   ]
-
-  const saveCommunication = async () => {
-    if (!communicationForm) return
-    try {
-      await updateCommunication.mutateAsync(communicationForm)
-      toast.success('Communication settings saved')
-    } catch {
-      // handled by interceptor
-    }
-  }
 
   const sendTestEmail = async () => {
     if (!tenant.tenantId) return
@@ -129,17 +121,6 @@ export function TenantDetailPage() {
     try {
       await api.post(`${endpoints.platform.tenant(tenant.tenantId)}/email-settings/verify`)
       toast.success('SMTP verification completed')
-    } catch {
-      // handled by interceptor
-    }
-  }
-
-  const resetCommunication = async () => {
-    if (!tenant.tenantId) return
-    try {
-      const result = await api.post<TenantCommunicationSettings>(`${endpoints.platform.tenant(tenant.tenantId)}/email-settings/reset-to-defaults`)
-      setCommunicationForm(result)
-      toast.success('Communication settings reset to defaults')
     } catch {
       // handled by interceptor
     }
@@ -220,14 +201,17 @@ export function TenantDetailPage() {
     },
   ]
 
-  const resetNumbering = async (documentType: string) => {
+  const resetNumbering = async (documentType: string, reason: string) => {
     if (!tenant) return
     try {
-      await api.post(`/api/platform/support/tenants/${tenant.tenantId}/reset-numbering`, { documentType })
+      await api.post(`/api/platform/support/tenants/${tenant.tenantId}/reset-numbering`, { documentType, reason: reason.trim() || null })
       toast.success(`${documentType} numbering reset`)
       void refetchNumbering()
     } catch {
       // handled by interceptor
+    } finally {
+      setShowResetNumbering(null)
+      setResetNumberingReason('')
     }
   }
 
@@ -242,7 +226,11 @@ export function TenantDetailPage() {
       key: 'actions',
       header: '',
       cell: (row) => (
-        <button type="button" className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => void resetNumbering(row.documentType)}>
+        <button
+          type="button"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          onClick={() => setShowResetNumbering({ documentType: row.documentType })}
+        >
           Reset to 1
         </button>
       ),
@@ -262,7 +250,7 @@ export function TenantDetailPage() {
             <MiniStat label="Active now" value={tenant.activeUsersNow} />
           </section>
 
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <SectionTitle title="Tenant profile" description="Workspace details and lifecycle summary." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <InfoCard label="Tenant name" value={tenant.name} />
@@ -293,7 +281,7 @@ export function TenantDetailPage() {
       content: brandingLoading ? (
         <Spinner label="Loading branding" />
       ) : branding ? (
-        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <SectionTitle title="Tenant branding" description="Read-only view. Branding is edited from within the tenant's own workspace settings." />
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <InfoCard label="Company name" value={branding.companyName} />
@@ -323,7 +311,7 @@ export function TenantDetailPage() {
       label: 'Users',
       content: (
         <div className="space-y-5">
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <SectionTitle title="Workspace users" description="Cross-tenant user listing is not exposed yet. We can safely show the tenant-side account summary we do have." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <InfoCard label="Tenant users" value={tenant.userCount} />
@@ -334,7 +322,7 @@ export function TenantDetailPage() {
               <InfoCard label="Initial admin note" value={tenant.initialAdminInvitationMessage ?? 'â€”'} />
             </div>
           </section>
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <SectionTitle title="Workspace user list" description="Accounts inside this tenant. Add another admin here when the workspace needs more than the one seeded at creation, or resend a lapsed setup link â€” the only recovery path for an admin who has never signed in. Ecosys staff accounts live under Platform â†’ Users." />
               <button
@@ -364,7 +352,7 @@ export function TenantDetailPage() {
       label: 'Modules',
       content: (
         <div className="space-y-5">
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <SectionTitle title="Configured module settings" description="Module-level configuration this tenant has saved (executive dashboard, inventory, payments, portal, integrations, etc). Full module enable/disable entitlement is governed by licensing, not a per-module toggle." />
             <div className="mt-4">
               {moduleSettingsLoading ? (
@@ -394,7 +382,7 @@ export function TenantDetailPage() {
       label: 'Subscription / Licensing',
       content: (
         <div className="space-y-5">
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <SectionTitle title="Subscription state" description="Lifecycle controls available from the platform owner workspace." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <InfoCard label="License status" value={licenseStatusBadge(tenant.licenseStatus)} />
@@ -406,7 +394,27 @@ export function TenantDetailPage() {
             </div>
           </section>
           <div className="flex flex-wrap gap-2">
-            {tenant.status !== 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void activate.mutateAsync(undefined)}>Activate</button> : null}
+            {tenant.status === 'Trial' || tenant.status === 'Inactive' ? (
+              <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => setShowActivateDialog(true)}>Activate</button>
+            ) : null}
+            {tenant.status === 'Suspended' ? (
+              <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void reactivateLicense.mutateAsync(undefined).then(() => toast.success('Tenant reactivated')).catch(() => undefined)}>Reactivate</button>
+            ) : null}
+            {tenant.status === 'Active' || tenant.status === 'Suspended' ? (
+              <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setShowRenewDialog(true)}>Renew</button>
+            ) : null}
+            {tenant.status === 'Active' ? (
+              <button
+                type="button"
+                className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => {
+                  setExtendLicenseTarget(tenant.subscriptionEndsAt ? tenant.subscriptionEndsAt.slice(0, 10) : '')
+                  setShowExtendLicenseDialog(true)
+                }}
+              >
+                Extend
+              </button>
+            ) : null}
             {tenant.status === 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-800 hover:bg-amber-100" onClick={() => setShowSuspend(true)}>Suspend</button> : null}
             {!tenant.trialExtensionUsed ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setShowExtend(true)}>Extend trial</button> : null}
             {tenant.status !== 'Inactive' ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 hover:bg-rose-100" onClick={() => setShowDeactivate(true)}>Deactivate</button> : null}
@@ -417,76 +425,29 @@ export function TenantDetailPage() {
     {
       id: 'communication',
       label: 'Communication',
-      content: communicationForm ? (
+      content: communication ? (
         <div className="space-y-5">
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
-            <SectionTitle title="Email settings" description="Tenant communication settings with platform defaults and explicit overrides." />
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label="Use platform defaults">
-                <input
-                  type="checkbox"
-                  checked={communicationForm.emailSettings.usePlatformDefaults}
-                  onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, usePlatformDefaults: event.target.checked } } : current)}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-              </Field>
-              <Field label="Override SMTP settings">
-                <input
-                  type="checkbox"
-                  checked={communicationForm.emailSettings.overrideSmtpSettings}
-                  onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, overrideSmtpSettings: event.target.checked } } : current)}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-              </Field>
-              <Field label="SMTP host">
-                <input value={communicationForm.emailSettings.smtpHost ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpHost: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-              </Field>
-              <Field label="SMTP port">
-                <input type="number" value={communicationForm.emailSettings.smtpPort ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpPort: event.target.value ? Number(event.target.value) : null } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-              </Field>
-              <Field label="SMTP username">
-                <input value={communicationForm.emailSettings.smtpUsername ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpUsername: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-              </Field>
-              <Field label="SMTP password">
-                <input type="password" placeholder={communicationForm.emailSettings.smtpPasswordMasked ?? 'Leave blank to keep existing'} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, smtpPasswordMasked: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-              </Field>
-              <Field label="Sender name">
-                <input value={communicationForm.emailSettings.senderName ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, senderName: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-              </Field>
-              <Field label="Sender email">
-                <input value={communicationForm.emailSettings.senderEmail ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, senderEmail: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-              </Field>
-              <Field label="Reply-to email">
-                <input value={communicationForm.emailSettings.replyToEmail ?? ''} onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, replyToEmail: event.target.value } } : current)} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-              </Field>
-              <Field label="Enable tenant notifications">
-                <input
-                  type="checkbox"
-                  checked={communicationForm.emailSettings.enableTenantEmailNotifications}
-                  onChange={(event) => setCommunicationForm((current) => current ? { ...current, emailSettings: { ...current.emailSettings, enableTenantEmailNotifications: event.target.checked } } : current)}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-              </Field>
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
+            <SectionTitle title="Email settings" description="Read-only — SMTP is global platform infrastructure. This tenant's own Workspace Email settings page is where display name, reply-to, and notification preferences are changed." />
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <InfoCard label="Sender name" value={communication.emailSettings.senderName || 'â€”'} />
+              <InfoCard label="Sender email" value={communication.emailSettings.senderEmail || 'â€”'} />
+              <InfoCard label="Reply-to email" value={communication.emailSettings.replyToEmail || 'â€”'} />
+              <InfoCard label="Tenant notifications" value={communication.emailSettings.enableTenantEmailNotifications ? 'Enabled' : 'Disabled'} />
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void saveCommunication()}>
-                Save communication
-              </button>
               <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => void sendTestEmail()}>
                 Send test email
               </button>
               <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => void verifySmtp()}>
                 Verify SMTP
               </button>
-              <button type="button" className="inline-flex h-11 items-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-800 hover:bg-amber-100" onClick={() => void resetCommunication()}>
-                Reset defaults
-              </button>
               <input value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder="Test recipient email" className="h-11 rounded-lg border border-slate-200 px-3 text-sm outline-none" />
             </div>
           </section>
 
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <SectionTitle title="Notification groups" description="Default recipient groups and switches." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
               {communicationGroups.map((group) => (
@@ -506,7 +467,7 @@ export function TenantDetailPage() {
       id: 'numbering',
       label: 'Numbering',
       content: (
-        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <SectionTitle title="Document numbering" description="Tenant-wide numbering sequences. Reset uses the same support tool available from Platform Support." />
           <div className="mt-4">
             <DataTable<PlatformTenantNumbering>
@@ -524,7 +485,7 @@ export function TenantDetailPage() {
       id: 'templates',
       label: 'Templates',
       content: (
-        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <SectionTitle title="Document designs" description="Which document types this tenant has customized via the Document Designer. Editing happens from within the tenant's own workspace." />
           <div className="mt-4">
             {documentDesignsLoading ? (
@@ -583,7 +544,7 @@ export function TenantDetailPage() {
       label: 'Account Management',
       content: (
         <section className="space-y-4">
-          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <SectionTitle title="Account management" description="Lifecycle controls that are safe to expose from the platform owner workspace." />
             <div className="mt-4 flex flex-wrap gap-2">
               {tenant.status !== 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void activate.mutateAsync(undefined)}>Activate tenant</button> : null}
@@ -640,6 +601,80 @@ export function TenantDetailPage() {
         tenantName={tenant.name}
         onClose={() => setShowAddWorkspaceUser(false)}
       />
+
+      <LicenseTermDialog
+        open={showActivateDialog}
+        title="Activate tenant"
+        tenantName={tenant.name}
+        confirmLabel="Activate Tenant"
+        submitting={activate.isPending}
+        onCancel={() => setShowActivateDialog(false)}
+        onConfirm={(term) => {
+          void activate.mutateAsync(term)
+            .then(() => toast.success('Tenant activated'))
+            .then(() => setShowActivateDialog(false))
+            .catch(() => undefined)
+        }}
+      />
+
+      <LicenseTermDialog
+        open={showRenewDialog}
+        title="Renew license"
+        tenantName={tenant.name}
+        confirmLabel="Renew"
+        submitting={renewLicense.isPending}
+        onCancel={() => setShowRenewDialog(false)}
+        onConfirm={(term) => {
+          void renewLicense.mutateAsync(term)
+            .then(() => toast.success('License renewed'))
+            .then(() => setShowRenewDialog(false))
+            .catch(() => undefined)
+        }}
+      />
+
+      <ConfirmDialog
+        open={showExtendLicenseDialog}
+        title="Extend license"
+        message={`Push ${tenant.name}'s license expiry further out. Current expiry: ${tenant.subscriptionEndsAt ? formatDateTime(tenant.subscriptionEndsAt) : 'not set'}.`}
+        confirmLabel="Extend"
+        confirmDisabled={!extendLicenseTarget || extendLicense.isPending}
+        onCancel={() => setShowExtendLicenseDialog(false)}
+        onConfirm={() => {
+          if (!extendLicenseTarget) return
+          void extendLicense.mutateAsync(new Date(extendLicenseTarget).toISOString())
+            .then(() => toast.success('License extended'))
+            .then(() => setShowExtendLicenseDialog(false))
+            .catch(() => undefined)
+        }}
+      >
+        <div className="mt-4 space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {[{ label: '1 month', months: 1 }, { label: '3 months', months: 3 }, { label: '6 months', months: 6 }, { label: '1 year', months: 12 }].map((shortcut) => (
+              <button
+                key={shortcut.label}
+                type="button"
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+                onClick={() => {
+                  const base = tenant.subscriptionEndsAt ? new Date(tenant.subscriptionEndsAt) : new Date()
+                  base.setUTCMonth(base.getUTCMonth() + shortcut.months)
+                  setExtendLicenseTarget(base.toISOString().slice(0, 10))
+                }}
+              >
+                +{shortcut.label}
+              </button>
+            ))}
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">New expiry date</label>
+            <input
+              type="date"
+              value={extendLicenseTarget}
+              onChange={(event) => setExtendLicenseTarget(event.target.value)}
+              className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
+            />
+          </div>
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={showSuspend}
@@ -700,6 +735,40 @@ export function TenantDetailPage() {
             .finally(() => setShowDelete(false))
         }}
       />
+
+      <ConfirmDialog
+        open={showResetNumbering !== null}
+        title="Reset numbering"
+        message={
+          showResetNumbering
+            ? `Reset ${showResetNumbering.documentType} numbering to 1 for ${tenant.name}? Any numbers already issued will conflict with the next document created.`
+            : ''
+        }
+        confirmLabel="Reset"
+        {...(showResetNumbering ? { confirmText: showResetNumbering.documentType } : {})}
+        confirmDisabled={!resetNumberingReason.trim()}
+        danger
+        onCancel={() => {
+          setShowResetNumbering(null)
+          setResetNumberingReason('')
+        }}
+        onConfirm={() => {
+          if (showResetNumbering) {
+            void resetNumbering(showResetNumbering.documentType, resetNumberingReason)
+          }
+        }}
+      >
+        <div className="mt-4">
+          <label className="mb-2 block text-sm font-medium text-slate-700">Reason (required)</label>
+          <textarea
+            value={resetNumberingReason}
+            onChange={(event) => setResetNumberingReason(event.target.value)}
+            rows={2}
+            placeholder="Why is this sequence being reset?"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--app-primary)]"
+          />
+        </div>
+      </ConfirmDialog>
     </>
   )
 }

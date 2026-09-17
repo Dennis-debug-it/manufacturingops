@@ -163,6 +163,8 @@ public sealed class PlatformLicensingController(
             throw new BusinessRuleException("Tenant already has a subscription. Use update instead.");
         }
 
+        ValidateSubscriptionDates(request);
+
         var subscription = new TenantLicense
         {
             TenantId = request.TenantId,
@@ -209,6 +211,8 @@ public sealed class PlatformLicensingController(
             throw new BusinessRuleException("The platform root tenant cannot receive a commercial ServiceOps subscription.");
         if (!plan.IsActive || !ServiceOpsPlans.IsCommercial(plan.PlanCode))
             throw new BusinessRuleException("Only active commercial ServiceOps plans can be assigned.");
+
+        ValidateSubscriptionDates(request);
 
         subscription.TenantId = request.TenantId;
         subscription.LicensePlanId = request.PlanId;
@@ -258,6 +262,18 @@ public sealed class PlatformLicensingController(
         subscription.Status = NormalizeSubscriptionStatus(status);
         subscription.SuspendedAt = status.Equals("Suspended", StringComparison.OrdinalIgnoreCase) ? DateTime.UtcNow : null;
         subscription.CancelledAt = status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase) ? DateTime.UtcNow : null;
+
+        // Keep Tenant.LicenseStatus/IsActive in step with the license row this action just changed —
+        // this endpoint used to leave them untouched, so a tenant suspended from this page still
+        // showed and behaved as fully active everywhere that reads Tenant.IsActive directly, which
+        // disagreed with the same action taken from the Tenants page (PlatformTenantsController).
+        if (subscription.Tenant is { } tenant)
+        {
+            tenant.LicenseStatus = subscription.Status;
+            tenant.SuspendedAt = subscription.SuspendedAt;
+            tenant.IsActive = !status.Equals("Suspended", StringComparison.OrdinalIgnoreCase)
+                && !status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase);
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -314,6 +330,19 @@ public sealed class PlatformLicensingController(
         }
     }
 
+    private static void ValidateSubscriptionDates(UpsertPlatformSubscriptionRequest request)
+    {
+        if (request.EndsAt.HasValue && request.EndsAt.Value <= request.StartsAt)
+        {
+            throw new BusinessRuleException("License expiry must be after the license start date.");
+        }
+
+        if (request.NextBillingDate.HasValue && request.NextBillingDate.Value < request.StartsAt)
+        {
+            throw new BusinessRuleException("Next billing date cannot be before the license start date.");
+        }
+    }
+
     private static string NormalizeSubscriptionStatus(string? status)
     {
         var normalized = string.IsNullOrWhiteSpace(status) ? "Active" : status.Trim();
@@ -328,17 +357,7 @@ public sealed class PlatformLicensingController(
         };
     }
 
-    private static string NormalizeBillingCycle(string? billingCycle)
-    {
-        var normalized = string.IsNullOrWhiteSpace(billingCycle) ? "Monthly" : billingCycle.Trim();
-        return normalized switch
-        {
-            "Monthly" => "Monthly",
-            "Annual" => "Annual",
-            "Quarterly" => "Quarterly",
-            _ => throw new BusinessRuleException("Billing cycle must be Monthly, Quarterly, or Annual.")
-        };
-    }
+    private static string NormalizeBillingCycle(string? billingCycle) => BillingCycles.Normalize(billingCycle);
 
     private static string NormalizeModules(IReadOnlyCollection<string>? modulesIncluded)
     {

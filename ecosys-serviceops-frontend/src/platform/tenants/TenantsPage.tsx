@@ -11,10 +11,9 @@ import { FormDrawer } from '../../shared/components/FormDrawer'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
-import { api } from '../../shared/api/apiClient'
-import { endpoints } from '../../shared/api/endpoints'
 import { Field } from '../common'
 import {
+  useActivateTenant,
   useCreateTenant,
   useDeactivateTenant,
   useExtendTenantTrial,
@@ -23,6 +22,7 @@ import {
   useTenants,
 } from '../api'
 import { licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
+import { LicenseTermDialog } from './LicenseTermDialog'
 import type { PlatformTenantListItem } from '../types'
 
 const statusOptions = ['All', 'Active', 'Trial', 'Suspended', 'Inactive'] as const
@@ -79,11 +79,13 @@ export function TenantsPage() {
   const [showSuspend, setShowSuspend] = useState<PlatformTenantListItem | null>(null)
   const [showDeactivate, setShowDeactivate] = useState<PlatformTenantListItem | null>(null)
   const [trialTarget, setTrialTarget] = useState<PlatformTenantListItem | null>(null)
+  const [activateTarget, setActivateTarget] = useState<PlatformTenantListItem | null>(null)
 
   const createTenant = useCreateTenant()
   const suspendTenant = useSuspendTenant(showSuspend?.tenantId ?? '')
   const deactivateTenant = useDeactivateTenant(showDeactivate?.tenantId ?? '')
   const extendTenantTrial = useExtendTenantTrial(trialTarget?.tenantId ?? '')
+  const activateTenant = useActivateTenant(activateTarget?.tenantId ?? '')
 
   const rows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase()
@@ -147,7 +149,7 @@ export function TenantsPage() {
       cell: (row) => (
         <div className="flex flex-wrap gap-2">
           {row.status !== 'Active' ? (
-            <button type="button" className="inline-flex h-9 items-center rounded-lg bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800" onClick={() => void api.post(endpoints.platform.tenantActivate(row.tenantId)).then(() => toast.success('Tenant activated'))}>
+            <button type="button" className="inline-flex h-9 items-center rounded-lg bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800" onClick={() => setActivateTarget(row)}>
               Activate
             </button>
           ) : null}
@@ -405,6 +407,22 @@ export function TenantsPage() {
             toast.success('Trial extended')
             setTrialTarget(null)
           })
+        }}
+      />
+
+      <LicenseTermDialog
+        open={activateTarget !== null}
+        title="Activate tenant"
+        tenantName={activateTarget?.name ?? ''}
+        confirmLabel="Activate Tenant"
+        submitting={activateTenant.isPending}
+        onCancel={() => setActivateTarget(null)}
+        onConfirm={(term) => {
+          if (!activateTarget) return
+          void activateTenant.mutateAsync(term)
+            .then(() => toast.success('Tenant activated'))
+            .then(() => setActivateTarget(null))
+            .catch(() => undefined)
         }}
       />
     </div>

@@ -285,7 +285,7 @@ export function PermissionGroupsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Permission Groups"
         subtitle="Reusable capability bundles. A user can belong to several groups and receives the union of their capabilities."

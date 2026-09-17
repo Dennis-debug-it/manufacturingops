@@ -5,8 +5,6 @@ namespace Ecosys.Domain.Entities;
 public sealed class EmailSetting : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
-    public bool UsePlatformDefaults { get; set; } = true;
-    public bool OverrideSmtpSettings { get; set; }
     public bool IsEnabled { get; set; } = true;
     public string Provider { get; set; } = "Smtp";
     public string Host { get; set; } = string.Empty;

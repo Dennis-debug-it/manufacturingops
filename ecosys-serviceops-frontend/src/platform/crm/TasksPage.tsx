@@ -39,7 +39,7 @@ export function TasksPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Tasks"
         subtitle="Follow-ups and to-dos tracked against CRM contacts and leads."

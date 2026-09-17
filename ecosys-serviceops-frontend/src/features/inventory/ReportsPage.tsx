@@ -73,7 +73,7 @@ export function ReportsPage() {
   }, [materials, issues])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Inventory Reports" subtitle="Stock valuation, usage, purchase order, and movement reports." />
       <InventoryTabNav />
 

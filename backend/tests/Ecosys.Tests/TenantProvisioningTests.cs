@@ -35,8 +35,6 @@ public sealed partial class AuthEmailSafetyTests
         Assert.Equal("acme-engineering@serviceops.ecosysdigital.co.ke", identity.ManagedEmailAddress);
         Assert.Equal(identity.ManagedEmailAddress, response.ServiceOpsEmail);
         Assert.Equal(identity.ManagedEmailAddress, identity.SenderAddress);
-        Assert.True(identity.UsePlatformDefaults);
-        Assert.False(identity.OverrideSmtpSettings);
         Assert.True(identity.InboundEnabled);
         Assert.Equal("admin@acme.test", admin.Email);
         Assert.Equal(AppRoles.Admin, admin.Role);

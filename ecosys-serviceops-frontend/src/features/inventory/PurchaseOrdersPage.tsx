@@ -75,7 +75,7 @@ export function PurchaseOrdersPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Purchase Orders"
         subtitle="Draft, sent, received, and cancelled purchase orders."
@@ -216,7 +216,7 @@ export function PurchaseOrderDetailPage() {
   const canTransition = data && data.status !== 'Received' && data.status !== 'Cancelled'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={data?.poNumber ?? 'Purchase Order'}
         subtitle="Line items, receiving, and documents."
@@ -282,7 +282,7 @@ export function PurchaseOrderDetailPage() {
               </tbody>
             </table>
           </div>
-          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Receiving History</h2>
             {data.receivingHistory.length === 0 ? (
               <p className="mt-3 text-sm text-slate-500">No receipts recorded yet.</p>

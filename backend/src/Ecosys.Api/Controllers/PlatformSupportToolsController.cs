@@ -65,6 +65,7 @@ public sealed class PlatformSupportToolsController(
         await LoadTenantAsync(tenantId, cancellationToken);
         var docType = DocumentTypes.Normalize(request.DocumentType);
         var nextNumber = request.NextNumber is { } n && n > 0 ? n : 1;
+        var reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim();
 
         var setting = await dbContext.NumberingSettings
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.DocumentType == docType && x.BranchId == null, cancellationToken)
@@ -75,7 +76,8 @@ public sealed class PlatformSupportToolsController(
         var previous = setting.NextNumber;
         setting.NextNumber = nextNumber;
         await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(null, tenantContext.UserId, "platform.support.numbering-reset", nameof(NumberingSetting), setting.Id.ToString(), $"{docType} numbering reset from {previous} to {nextNumber}.", cancellationToken);
+        var details = $"{docType} numbering reset from {previous} to {nextNumber}." + (reason is null ? "" : $" Reason: {reason}");
+        await auditLogService.LogAsync(null, tenantContext.UserId, "platform.support.numbering-reset", nameof(NumberingSetting), setting.Id.ToString(), details, cancellationToken);
         return Ok(new SupportActionResult(true, $"{docType} numbering reset to {nextNumber} (was {previous})."));
     }
 
@@ -141,6 +143,6 @@ public sealed class PlatformSupportToolsController(
 }
 
 public sealed record SupportActionResult(bool Success, string Message);
-public sealed record ResetNumberingRequest([Required] string DocumentType, long? NextNumber);
+public sealed record ResetNumberingRequest([Required] string DocumentType, long? NextNumber, string? Reason = null);
 public sealed record TenantRecordCounts(int WorkOrders, int Clients, int Assets, int Invoices, int Contracts, int Users);
 public sealed record TenantReindexResult(bool Success, DateTime RecomputedAt, TenantRecordCounts Counts);

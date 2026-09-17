@@ -76,7 +76,7 @@ export function FeaturesSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Feature Flags" subtitle="Module entitlements per license plan. Toggling a module here changes what tenants on that plan can access." />
       {(data ?? []).length === 0 ? (
         <EmptyState title="No license plans configured" description="Create license plans on the Plans page before assigning module entitlements." />

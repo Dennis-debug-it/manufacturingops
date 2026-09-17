@@ -122,7 +122,7 @@ export function EmailTemplatesSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Email Templates" subtitle="Platform-wide defaults for transactional emails. Tenants may override these for their own workspace." />
       {(data ?? []).length === 0 ? (
         <EmptyState icon={Mail} title="No email templates found" description="No configured platform email template events were returned by the backend." />

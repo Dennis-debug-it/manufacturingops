@@ -187,7 +187,7 @@ export function DocumentTemplatesSettingsPage() {
     try {
       // Persist the current edits first so the sample reflects exactly what's on screen.
       if (dirty && canManage) await save.mutateAsync()
-      const response = await apiClient.get(`/api/settings/document-designs/${selectedType}/sample-pdf`, { responseType: 'blob' })
+      const response = await apiClient.get(`/api/settings/document-designs/${selectedType}/sample-pdf`, { responseType: 'blob', suppressGlobalErrorToast: true })
       const url = URL.createObjectURL(response.data as Blob)
       window.open(url, '_blank', 'noopener,noreferrer')
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
@@ -262,7 +262,7 @@ export function DocumentTemplatesSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Document Designer"
         subtitle="Design every generated document independently — branding, colours, fonts, watermark, sections, and boilerplate — with a live preview and real sample PDFs."
@@ -317,8 +317,8 @@ export function DocumentTemplatesSettingsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="min-w-0 space-y-6">
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="min-w-0 space-y-4">
           <Collapsible title="Branding & Typography" defaultOpen>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>

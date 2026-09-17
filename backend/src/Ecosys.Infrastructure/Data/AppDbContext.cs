@@ -99,6 +99,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<PmReport> PmReports => Set<PmReport>();
     public DbSet<TenantSecurityPolicy> TenantSecurityPolicies => Set<TenantSecurityPolicy>();
     public DbSet<TenantOperationsPolicy> TenantOperationsPolicies => Set<TenantOperationsPolicy>();
+    public DbSet<TenantFinanceDefaults> TenantFinanceDefaults => Set<TenantFinanceDefaults>();
     public DbSet<IntakeProtocol> IntakeProtocols => Set<IntakeProtocol>();
     public DbSet<MonitoringSetting> MonitoringSettings => Set<MonitoringSetting>();
     public DbSet<MonitoringWebhookIntegration> MonitoringWebhookIntegrations => Set<MonitoringWebhookIntegration>();
@@ -1381,7 +1382,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.ManagedEmailAddress).HasMaxLength(256);
             entity.Property(x => x.EmailSignature).HasMaxLength(4000);
             entity.HasIndex(x => x.ManagedEmailAddress).IsUnique();
-            entity.Property(x => x.UsePlatformDefaults).HasDefaultValue(true);
             entity.Property(x => x.Provider).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Host).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Username).HasMaxLength(200);
@@ -1606,6 +1606,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
             entity.Property(x => x.BillingCycle).HasMaxLength(30).IsRequired();
             entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.IsPerpetual).HasDefaultValue(false);
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.TenantLicenses)
@@ -1959,6 +1960,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.TenantOperationsPolicies)
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TenantFinanceDefaults>(entity =>
+        {
+            entity.ToTable("tenant_finance_defaults");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TenantId).IsUnique();
+            entity.Property(x => x.TaxName).HasMaxLength(50);
+            entity.Property(x => x.DefaultPaymentTerms).HasMaxLength(50);
+            entity.Property(x => x.DefaultVatRate).HasPrecision(5, 2);
+            entity.HasOne(x => x.Tenant)
+                .WithMany(x => x.TenantFinanceDefaults)
                 .HasForeignKey(x => x.TenantId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

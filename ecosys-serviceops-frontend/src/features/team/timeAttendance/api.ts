@@ -200,7 +200,7 @@ export function useTimeAttendanceSettings() {
 export function useSaveTimeAttendanceSettings() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (settings: TimeAttendanceSettings) => api.put<void>('/api/settings/time-attendance', settings),
+    mutationFn: (settings: TimeAttendanceSettings) => api.put<void>('/api/settings/time-attendance', settings, { suppressGlobalErrorToast: true }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['settings', 'time-attendance'] }),
   })
 }

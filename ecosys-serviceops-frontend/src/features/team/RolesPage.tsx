@@ -50,7 +50,7 @@ export function RolesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Roles & Permissions" subtitle="Check or uncheck each capability to define what a role can do." />
       <TeamTabNav />
 

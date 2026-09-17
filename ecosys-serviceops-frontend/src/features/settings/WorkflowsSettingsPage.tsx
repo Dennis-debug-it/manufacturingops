@@ -379,7 +379,7 @@ export function WorkflowsSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Status Workflows"
         subtitle="Define custom status chains for work orders, with per-status transitions, colours, and initial/final markers."
@@ -400,7 +400,7 @@ export function WorkflowsSettingsPage() {
       {workflows.length === 0 ? (
         <EmptyState icon={GitBranch} title="No workflows yet" description="Create a workflow to define a custom status chain." />
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[16rem_1fr]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[16rem_1fr]">
           <div className="space-y-2">
             {workflows.map((workflow) => (
               <button

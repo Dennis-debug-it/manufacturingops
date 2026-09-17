@@ -26,7 +26,7 @@ export interface ModulePageConfig { title: string; subtitle?: string }
 
 export function createModulePage(config: ModulePageConfig) {
   return function ModulePage() {
-    return <div className="space-y-6"><SectionHeader title={config.title} {...(config.subtitle ? { description: config.subtitle } : {})} /><EmptyState title="This route is available and ready for API integration." description="The module is ready for API integration." /></div>
+    return <div className="space-y-4"><SectionHeader title={config.title} {...(config.subtitle ? { description: config.subtitle } : {})} /><EmptyState title="This route is available and ready for API integration." description="The module is ready for API integration." /></div>
   }
 }
 

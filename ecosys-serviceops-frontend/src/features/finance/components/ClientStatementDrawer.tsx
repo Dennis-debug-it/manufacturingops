@@ -40,6 +40,7 @@ export function ClientStatementDrawer({ open, clientId, clientName, onClose }: C
       const response = await apiClient.get(endpoints.finance.clientStatementPreviewPdf, {
         responseType: 'blob',
         params: { clientId, from, to, overdueOnly },
+        suppressGlobalErrorToast: true,
       })
       const url = URL.createObjectURL(response.data as Blob)
       window.open(url, '_blank', 'noopener')

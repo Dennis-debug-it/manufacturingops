@@ -156,7 +156,7 @@ export function WorkOrdersPage() {
   )
 
   return (
-    <div className={cn('space-y-6', user?.role === 'technician' ? 'pb-20' : '')}>
+    <div className={cn('space-y-4', user?.role === 'technician' ? 'pb-20' : '')}>
       <PageHeader
         title="Work Orders"
         subtitle="Operational backlog, execution, and service reporting."

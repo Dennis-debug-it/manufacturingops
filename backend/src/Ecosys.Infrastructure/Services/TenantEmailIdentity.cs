@@ -32,7 +32,7 @@ public static class TenantEmailIdentity
 
     public static EmailSetting Create(Tenant tenant) => new()
     {
-        TenantId = tenant.Id, Tenant = tenant, UsePlatformDefaults = true, OverrideSmtpSettings = false,
+        TenantId = tenant.Id, Tenant = tenant,
         SenderName = tenant.CompanyName[..Math.Min(tenant.CompanyName.Length, 150)], SenderAddress = Address(tenant.Slug),
         ManagedEmailAddress = Address(tenant.Slug), InboundEnabled = true, IsEnabled = true
     };

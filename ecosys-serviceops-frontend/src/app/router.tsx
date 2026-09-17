@@ -109,6 +109,8 @@ import { ApprovalMatrixSettingsPage } from '../features/settings/ApprovalMatrixS
 import { NotificationTemplatesPage } from '../features/settings/NotificationTemplatesPage'
 import { SlaPoliciesPage } from '../features/settings/SlaPoliciesPage'
 import { WorkflowsSettingsPage } from '../features/settings/WorkflowsSettingsPage'
+import { OperationalDefaultsSettingsPage } from '../features/settings/OperationalDefaultsSettingsPage'
+import { FinanceDefaultsSettingsPage } from '../features/settings/FinanceDefaultsSettingsPage'
 import { EscalationRulesSettingsPage } from '../features/settings/EscalationRulesSettingsPage'
 import { WOTemplatesSettingsPage } from '../features/settings/WOTemplatesSettingsPage'
 import { MyApprovalsPage } from '../features/approvals/MyApprovalsPage'
@@ -355,6 +357,8 @@ export function AppRouter() {
       ['/settings/notification-templates', NotificationTemplatesPage],
       ['/settings/sla-policies', SlaPoliciesPage],
       ['/settings/workflows', WorkflowsSettingsPage],
+      ['/settings/operational-defaults', OperationalDefaultsSettingsPage],
+      ['/settings/finance-defaults', FinanceDefaultsSettingsPage],
       ['/settings/escalation-rules', EscalationRulesSettingsPage],
       ['/settings/wo-templates', WOTemplatesSettingsPage],
       ['/approvals', MyApprovalsPage],

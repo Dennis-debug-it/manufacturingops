@@ -54,7 +54,7 @@ export function CreditNotesPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Credit Notes"
         subtitle="Reverse or reduce an invoice, or issue standalone customer credit that can be applied to open invoices."

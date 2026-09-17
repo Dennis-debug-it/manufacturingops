@@ -87,7 +87,7 @@ export function NumberingSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Numbering Rules" subtitle="Document prefixes, start numbers, and padding — with live preview." />
       <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
         <table className="min-w-full divide-y divide-slate-200 text-left text-sm">

@@ -14,8 +14,8 @@ export interface SurfaceProps {
 const paddingClasses: Record<NonNullable<SurfaceProps['padding']>, string> = {
   none: '',
   sm: 'p-4',
-  md: 'p-5',
-  lg: 'p-6',
+  md: 'p-4',
+  lg: 'p-5',
 }
 
 // Shared card/panel surface. `solid` is the conventional-UI default used for tables,

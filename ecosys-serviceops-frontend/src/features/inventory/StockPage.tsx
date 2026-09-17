@@ -68,7 +68,7 @@ export function StockPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Stock Levels"
         subtitle="Stock overview across all branches."
@@ -116,9 +116,9 @@ export function StockPage() {
       {view === 'all' ? (
         <DataTable columns={columns} data={materials} emptyTitle="No stock records" emptyDescription="Active parts will appear here." virtualise={materials.length > 100} />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {byBranch.map(([branch, items]) => (
-            <section key={branch} className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+            <section key={branch} className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">{branch}</h3>
               <DataTable columns={columns} data={items} emptyTitle="No items" emptyDescription="No stock at this branch." />
             </section>

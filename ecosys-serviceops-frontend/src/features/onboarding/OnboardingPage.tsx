@@ -28,7 +28,7 @@ export function OnboardingPage() {
   const buttonClass = 'inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Welcome to Ecosys ServiceOps" subtitle="Your workspace is ready. Start with what you need today." />
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-slate-900">{tenant?.companyName}</h2>

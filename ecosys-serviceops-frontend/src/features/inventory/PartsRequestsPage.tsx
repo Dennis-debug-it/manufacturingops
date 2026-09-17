@@ -116,7 +116,7 @@ export function PartsRequestsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Parts Requests" subtitle="Approval workflow: Pending → Approved → Dispatched → Delivered." />
       <InventoryTabNav />
 

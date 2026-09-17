@@ -44,7 +44,7 @@ export function WhatsAppSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="WhatsApp"
         subtitle="WhatsApp Business API integration for client and technician messaging."
@@ -57,14 +57,14 @@ export function WhatsAppSettingsPage() {
         }
       />
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <input type="checkbox" checked={values.isEnabled} disabled={!canManage} onChange={(event) => setField('isEnabled', event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
           Enable WhatsApp Integration
         </label>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm sm:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Business Account ID</label>
           <input value={values.businessAccountId} disabled={!canManage} onChange={(event) => setField('businessAccountId', event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
@@ -87,7 +87,7 @@ export function WhatsAppSettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
           <input type="checkbox" checked={values.autoReplyEnabled} disabled={!canManage} onChange={(event) => setField('autoReplyEnabled', event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
           Enable Auto-Reply
@@ -101,7 +101,7 @@ export function WhatsAppSettingsPage() {
         />
       </div>
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Message Templates</h2>
         {templatesError ? (
           <div className="mt-4">

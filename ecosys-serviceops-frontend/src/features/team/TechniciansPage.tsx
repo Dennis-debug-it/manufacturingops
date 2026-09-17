@@ -29,7 +29,7 @@ export function TechniciansPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Technicians" subtitle="Technician list, skills, and availability." />
       <TeamTabNav />
 

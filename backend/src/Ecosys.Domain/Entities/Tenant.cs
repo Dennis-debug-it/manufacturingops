@@ -81,6 +81,7 @@ public sealed class Tenant : AuditableEntity
     public ICollection<TenantTemplatePackInstallation> TemplatePackInstallations { get; set; } = new List<TenantTemplatePackInstallation>();
     public ICollection<TenantSecurityPolicy> TenantSecurityPolicies { get; set; } = new List<TenantSecurityPolicy>();
     public ICollection<TenantOperationsPolicy> TenantOperationsPolicies { get; set; } = new List<TenantOperationsPolicy>();
+    public ICollection<TenantFinanceDefaults> TenantFinanceDefaults { get; set; } = new List<TenantFinanceDefaults>();
     public ICollection<EmailSetting> EmailSettings { get; set; } = new List<EmailSetting>();
     public ICollection<TenantNotificationSetting> TenantNotificationSettings { get; set; } = new List<TenantNotificationSetting>();
     public ICollection<TenantNotificationRecipient> TenantNotificationRecipients { get; set; } = new List<TenantNotificationRecipient>();

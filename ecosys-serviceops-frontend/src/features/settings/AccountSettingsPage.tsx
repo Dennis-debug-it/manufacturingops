@@ -62,7 +62,7 @@ export function AccountSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Account" subtitle="Subscription status, plan limits, and license period. Read-only — contact your Ecosys account manager to make changes." />
 
       {data.warningMessage ? (
@@ -87,7 +87,7 @@ export function AccountSettingsPage() {
         </div>
       ) : null}
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900">Plan Features</h2>
         <div className="mt-3">
           <FeatureRow label="Email Ingestion" enabled={data.emailIngestion} />
@@ -97,7 +97,7 @@ export function AccountSettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 text-sm text-slate-600 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-sm text-slate-600 shadow-sm">
         Plan changes, seat additions, and billing details are managed by Ecosys platform administrators. Contact support to request a change.
       </div>
     </div>

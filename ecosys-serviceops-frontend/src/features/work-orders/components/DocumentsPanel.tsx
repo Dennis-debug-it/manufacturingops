@@ -25,7 +25,7 @@ export function DocumentsPanel({ workOrderId }: { workOrderId: string }) {
     if (!doc.pdfUrl) return
     setDownloadingId(doc.id)
     try {
-      const response = await apiClient.get(doc.pdfUrl, { responseType: 'blob' })
+      const response = await apiClient.get(doc.pdfUrl, { responseType: 'blob', suppressGlobalErrorToast: true })
       const url = URL.createObjectURL(response.data as Blob)
       const link = document.createElement('a')
       link.href = url

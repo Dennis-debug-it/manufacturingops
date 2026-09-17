@@ -45,7 +45,7 @@ export function UsersPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Users & Access"
         subtitle="Manage people, their capabilities, and where access applies."

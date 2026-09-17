@@ -56,7 +56,7 @@ function RevenueTrendChart({ rows }: { rows: RevenueReportRow[] }) {
   const gridLines = [0, 0.25, 0.5, 0.75, 1]
 
   return (
-    <div className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+    <div className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-slate-900">Invoiced vs collected by month</h3>
         <div className="flex items-center gap-4 text-xs text-slate-600">
@@ -147,7 +147,7 @@ export function FinanceReportsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Finance Reports" subtitle="Revenue trend, collections, per-client performance, and aging." />
 
       <FinanceWorkspaceNav />

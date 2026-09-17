@@ -42,13 +42,13 @@ export function SupportSettingsPage() {
   const set = <K extends keyof SupportSettings>(key: K, value: SupportSettings[K]) => setValues((current) => (current ? { ...current, [key]: value } : current))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Support"
         subtitle="Support contact details, escalation routing, and admin tools."
         primaryAction={canManage ? <button type="button" onClick={() => save.mutate(values)} disabled={save.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">{save.isPending ? 'Saving…' : 'Save Changes'}</button> : undefined}
       />
-      <div className="space-y-5 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="space-y-5 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionTitle title="Contact & Escalation" description="Where tenant support requests and escalations are routed." />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Support Email">
@@ -116,7 +116,7 @@ function SupportTools() {
     if (!requireTenant()) return
     setBusy('export')
     try {
-      const response = await apiClient.get(`/api/platform/support/tenants/${tenantId}/export`, { responseType: 'blob' })
+      const response = await apiClient.get(`/api/platform/support/tenants/${tenantId}/export`, { responseType: 'blob', suppressGlobalErrorToast: true })
       const url = URL.createObjectURL(response.data as Blob)
       const link = document.createElement('a')
       link.href = url
@@ -133,7 +133,7 @@ function SupportTools() {
   const buttonClass = 'inline-flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60'
 
   return (
-    <div className="space-y-5 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+    <div className="space-y-5 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <SectionTitle title="Support Tools" description="Run maintenance actions against a specific tenant workspace." />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Tenant">

@@ -81,7 +81,7 @@ export function CreditControlSettingsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Credit Control"
         subtitle="Payment terms and credit limits applied to clients. Per-client escalation/hold stages are computed live on the Finance → Credit Control page from these terms and outstanding balances."

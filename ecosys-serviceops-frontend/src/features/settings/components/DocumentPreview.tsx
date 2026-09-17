@@ -191,7 +191,7 @@ export function DocumentPreview({ config, docType: controlledDocType, onDocTypeC
   const signatureBlock = config.showSignatureBlock || config.showStampArea ? (
     <div className="flex items-end justify-between gap-4 pt-2 text-[9px] text-slate-500">
       {config.showSignatureBlock ? (
-        <div className="flex flex-1 flex-wrap gap-6">
+        <div className="flex flex-1 flex-wrap gap-4">
           {signatureLabels.map((label, i) => (
             <div key={`${label}-${i}`}>
               <div className="w-28 border-b border-slate-400 pb-4" />

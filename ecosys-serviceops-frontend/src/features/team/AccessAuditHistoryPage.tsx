@@ -117,7 +117,7 @@ export function AccessAuditHistoryPage() {
 
   if (!canView) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PageHeader title="Audit History" subtitle="Who changed access, when, and what they changed." />
         <TeamTabNav />
         <EmptyState
@@ -132,7 +132,7 @@ export function AccessAuditHistoryPage() {
   const rows = data?.items ?? []
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Audit History" subtitle="Who changed access, when, and what they changed." />
       <TeamTabNav />
 

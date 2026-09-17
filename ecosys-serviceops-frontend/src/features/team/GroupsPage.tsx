@@ -91,7 +91,7 @@ function ManageGroupDrawer({ group, onClose }: { group: AssignmentGroup; onClose
         </div>
       }
     >
-      <div className="space-y-6">
+      <div className="space-y-4">
         <div className="space-y-4">
           <div>
             <label className={labelClass} htmlFor="group-edit-name">Name</label>
@@ -229,7 +229,7 @@ export function GroupsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Groups"
         subtitle="Default assignment groups and members. Click a group to edit details and manage members."

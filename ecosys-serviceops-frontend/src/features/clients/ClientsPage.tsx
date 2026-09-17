@@ -120,7 +120,7 @@ export function ClientsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Clients"
         subtitle="Client registry, filters, and hierarchy entry point."

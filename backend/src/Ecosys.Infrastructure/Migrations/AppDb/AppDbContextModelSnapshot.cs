@@ -2860,9 +2860,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
-                    b.Property<bool>("OverrideSmtpSettings")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Password")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -2897,11 +2894,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<Guid?>("UpdatedByUserId")
                         .HasColumnType("uuid");
-
-                    b.Property<bool>("UsePlatformDefaults")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
 
                     b.Property<bool>("UseSsl")
                         .HasColumnType("boolean");
@@ -7500,6 +7492,55 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("tenant_api_keys", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.TenantFinanceDefaults", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("DefaultExpenseApprovalRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("DefaultInvoiceDueDays")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("DefaultPaymentTerms")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("DefaultQuotationValidityDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("DefaultVatRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<bool>("EnableVat")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TaxName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.ToTable("tenant_finance_defaults", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantInvoice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7693,6 +7734,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<int>("GracePeriodDays")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("IsPerpetual")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<Guid>("LicensePlanId")
                         .HasColumnType("uuid");
@@ -12588,6 +12634,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.TenantFinanceDefaults", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany("TenantFinanceDefaults")
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantInvoice", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Client", "Client")
@@ -14048,6 +14105,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Technicians");
 
                     b.Navigation("TemplatePackInstallations");
+
+                    b.Navigation("TenantFinanceDefaults");
 
                     b.Navigation("TenantLicenses");
 

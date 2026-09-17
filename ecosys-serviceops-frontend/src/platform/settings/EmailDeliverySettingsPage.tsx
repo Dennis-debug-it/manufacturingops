@@ -124,7 +124,7 @@ export function EmailDeliverySettingsPage() {
     )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Email Delivery"
         subtitle="Platform SMTP configuration, notification email flags, and subject line rules."

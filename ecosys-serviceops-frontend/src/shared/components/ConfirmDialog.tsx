@@ -15,6 +15,8 @@ export interface ConfirmDialogProps {
   danger?: boolean
   icon?: ReactNode
   confirmDisabled?: boolean
+  /** Extra content rendered between the message and the confirm text prompt (e.g. a reason field). */
+  children?: ReactNode
 }
 
 export function ConfirmDialog({
@@ -29,6 +31,7 @@ export function ConfirmDialog({
   danger = false,
   icon,
   confirmDisabled = false,
+  children,
 }: ConfirmDialogProps) {
   const [typedValue, setTypedValue] = useState('')
 
@@ -76,6 +79,7 @@ export function ConfirmDialog({
             <X className="h-4 w-4" />
           </button>
         </div>
+        {children}
         {confirmText ? (
           <div className="mt-4">
             <label className="mb-2 block text-sm font-medium text-slate-700">

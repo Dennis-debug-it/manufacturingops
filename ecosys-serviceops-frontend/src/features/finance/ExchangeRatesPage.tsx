@@ -62,7 +62,7 @@ export function ExchangeRatesPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Exchange Rates"
         subtitle="Currency pairs and manual rates used for multi-currency invoicing."

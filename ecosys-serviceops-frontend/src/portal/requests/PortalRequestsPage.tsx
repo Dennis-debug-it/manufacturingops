@@ -21,7 +21,7 @@ export function PortalRequestsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Service Requests"
         subtitle="Track requests submitted for your sites and assets."

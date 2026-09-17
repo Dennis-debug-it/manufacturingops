@@ -40,7 +40,7 @@ export function ContactsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Contacts"
         subtitle="People associated with prospective and existing tenant accounts."

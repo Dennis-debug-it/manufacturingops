@@ -76,7 +76,7 @@ export function AlertsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Stock Alerts" subtitle="Critical and low stock items with suggested replenishment." />
       <InventoryTabNav />
       <DataTable columns={columns} data={rows} loading={isLoading} emptyTitle={isError ? 'Alerts unavailable' : 'No low stock items'} emptyDescription={isError ? 'Low-stock materials could not be loaded.' : 'All parts are above their reorder level.'} />

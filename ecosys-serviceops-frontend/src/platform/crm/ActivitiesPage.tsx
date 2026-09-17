@@ -35,7 +35,7 @@ export function ActivitiesPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Activities"
         subtitle="Calls, emails, meetings, and notes logged against CRM contacts."

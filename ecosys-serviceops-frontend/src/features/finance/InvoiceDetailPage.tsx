@@ -91,7 +91,7 @@ export function InvoiceDetailPage() {
   const downloadReceipt = async (payment: Payment) => {
     setDownloadingReceiptId(payment.id)
     try {
-      const response = await apiClient.get(endpoints.invoices.receiptPdf(payment.id), { responseType: 'blob' })
+      const response = await apiClient.get(endpoints.invoices.receiptPdf(payment.id), { responseType: 'blob', suppressGlobalErrorToast: true })
       const url = URL.createObjectURL(response.data as Blob)
       const link = document.createElement('a')
       link.href = url
@@ -109,7 +109,7 @@ export function InvoiceDetailPage() {
     if (!id) return
     setDownloading(true)
     try {
-      const response = await apiClient.get(endpoints.invoices.pdf(id), { responseType: 'blob' })
+      const response = await apiClient.get(endpoints.invoices.pdf(id), { responseType: 'blob', suppressGlobalErrorToast: true })
       const url = URL.createObjectURL(response.data as Blob)
       const link = document.createElement('a')
       link.href = url
@@ -191,7 +191,7 @@ export function InvoiceDetailPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={invoice.invoiceNumber}
         subtitle={invoice.clientName ?? undefined}

@@ -55,7 +55,7 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
   const downloadPdf = async () => {
     setDownloading(true)
     try {
-      const response = await apiClient.get(endpoints.workOrders.serviceReportPdf(workOrder.id), { responseType: 'blob' })
+      const response = await apiClient.get(endpoints.workOrders.serviceReportPdf(workOrder.id), { responseType: 'blob', suppressGlobalErrorToast: true })
       const url = URL.createObjectURL(response.data as Blob)
       const link = document.createElement('a')
       link.href = url

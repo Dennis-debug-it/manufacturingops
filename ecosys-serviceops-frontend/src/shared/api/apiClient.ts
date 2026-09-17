@@ -1,4 +1,4 @@
-import axios from 'axios'
+import axios, { type AxiosRequestConfig } from 'axios'
 import { endpoints } from './endpoints'
 import {
   clearSession,
@@ -64,16 +64,16 @@ attachAuthInterceptors(apiClient, {
 })
 
 export const api = {
-  get: <T>(url: string, params?: Record<string, string | number | boolean | null | undefined>) =>
-    apiClient.get<T>(url, { params }).then((response) => response.data),
-  post: <T>(url: string, data?: unknown) =>
-    apiClient.post<T>(url, data).then((response) => response.data),
-  put: <T>(url: string, data?: unknown) =>
-    apiClient.put<T>(url, data).then((response) => response.data),
-  patch: <T>(url: string, data?: unknown) =>
-    apiClient.patch<T>(url, data).then((response) => response.data),
-  delete: <T>(url: string) =>
-    apiClient.delete<T>(url).then((response) => response.data),
+  get: <T>(url: string, params?: Record<string, string | number | boolean | null | undefined>, config?: AxiosRequestConfig) =>
+    apiClient.get<T>(url, { ...config, params }).then((response) => response.data),
+  post: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    apiClient.post<T>(url, data, config).then((response) => response.data),
+  put: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    apiClient.put<T>(url, data, config).then((response) => response.data),
+  patch: <T>(url: string, data?: unknown, config?: AxiosRequestConfig) =>
+    apiClient.patch<T>(url, data, config).then((response) => response.data),
+  delete: <T>(url: string, config?: AxiosRequestConfig) =>
+    apiClient.delete<T>(url, config).then((response) => response.data),
 }
 
 export const authEndpoints = endpoints.auth

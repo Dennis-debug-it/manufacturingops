@@ -145,7 +145,7 @@ export function PlansSettingsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="License Plans"
         subtitle="Pricing tiers and entitlement limits offered to tenant workspaces."

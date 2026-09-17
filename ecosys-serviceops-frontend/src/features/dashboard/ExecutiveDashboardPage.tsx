@@ -121,7 +121,7 @@ export function ExecutiveDashboardPage() {
   const isLoading = summaryLoading || performanceLoading
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Executive Dashboard"
         subtitle="Period analysis, KPI strip, and operational trends."
@@ -186,8 +186,8 @@ export function ExecutiveDashboardPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <SectionHeader title="Work Order Health" description="Status breakdown for the selected period." />
               <DataTable
                 columns={statusColumns}
@@ -197,7 +197,7 @@ export function ExecutiveDashboardPage() {
               />
             </section>
 
-            <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+            <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <SectionHeader title="Technician Utilisation" description="Active load and on-site status (all-time snapshot)." />
               <DataTable
                 columns={[
@@ -212,7 +212,7 @@ export function ExecutiveDashboardPage() {
             </section>
           </div>
 
-          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <SectionHeader title="Contract Health" description="Renewal risk and expiry pipeline." />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl border border-slate-200 px-4 py-3">
@@ -234,8 +234,8 @@ export function ExecutiveDashboardPage() {
             </div>
           </section>
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <SectionHeader title="Top 10 Clients" description="Ranked by amount invoiced in the selected period." />
               {revenueByClient.isError ? (
                 <ErrorState
@@ -254,7 +254,7 @@ export function ExecutiveDashboardPage() {
               )}
             </section>
 
-            <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+            <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <SectionHeader title="PM Compliance" description="Preventive maintenance plans due and completed on time in the selected period." />
               {pmCompliance.isError ? (
                 <ErrorState

@@ -256,7 +256,7 @@ export function WOTemplatesSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Work Order Templates"
         subtitle="Reusable job definitions technicians can start from when creating a work order."

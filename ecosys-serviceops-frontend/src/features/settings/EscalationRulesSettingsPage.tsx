@@ -247,7 +247,7 @@ export function EscalationRulesSettingsPage() {
   const rules = data ?? []
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Escalation Rules"
         subtitle="Automatically notify or escalate work orders that are stuck, unassigned, or at risk of breaching SLA."

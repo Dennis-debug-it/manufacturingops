@@ -824,8 +824,6 @@ public sealed class PlatformSettingsController(
         setting = new EmailSetting
         {
             TenantId = PlatformConstants.RootTenantId,
-            UsePlatformDefaults = false,
-            OverrideSmtpSettings = true,
             IsEnabled = true,
             Provider = EmailDeliveryMode.Smtp.ToString(),
             Host = "localhost",

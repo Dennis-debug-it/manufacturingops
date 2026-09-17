@@ -22,7 +22,7 @@ export function PortalInvoicesPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Invoices" subtitle="View invoices and payment history." />
       <DataTable
         columns={columns}

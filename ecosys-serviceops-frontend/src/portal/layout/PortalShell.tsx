@@ -55,7 +55,7 @@ export function PortalShell({ children }: PortalShellProps) {
           </div>
         </div>
       </header>
-      <div className="mx-auto flex max-w-7xl gap-6 px-4 py-4 sm:px-6">
+      <div className="mx-auto flex max-w-7xl gap-4 px-4 py-4 sm:px-6">
         <aside className="hidden w-64 shrink-0 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-3 backdrop-blur-[var(--glass-blur-md)] lg:block">
           <nav className="space-y-1">
             {portalNav.map((item) => {

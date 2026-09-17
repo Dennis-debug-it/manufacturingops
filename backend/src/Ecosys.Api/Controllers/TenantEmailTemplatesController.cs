@@ -14,13 +14,13 @@ namespace Ecosys.Api.Controllers;
 [Authorize]
 [Route("api/settings/email-templates")]
 public sealed class TenantEmailTemplatesController(
-    AppDbContext dbContext,
     ITenantContext tenantContext,
     IUserAccessService userAccessService,
     IEmailTemplateService emailTemplateService,
     IEmailSubjectRuleService emailSubjectRuleService,
     IEmailOutboxService emailOutboxService,
     ITenantTimeZoneService tenantTimeZoneService,
+    IEmailSettingsResolver emailSettingsResolver,
     IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
@@ -85,7 +85,7 @@ public sealed class TenantEmailTemplatesController(
     public async Task<ActionResult<EmailTemplateTestResponse>> SendTest(string eventKey, [FromBody] EmailTemplateTestRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
-        var settings = await ResolveEffectiveEmailSettingsAsync(cancellationToken)
+        var settings = (await emailSettingsResolver.ResolveAsync(TenantId, cancellationToken)).Settings
             ?? throw new BusinessRuleException("Email settings are not configured.");
 
         var rendered = await emailTemplateService.RenderTenantTemplateAsync(TenantId, eventKey, BuildSampleValues(request.SampleData, await SampleExpiryAsync(cancellationToken)), cancellationToken);
@@ -130,17 +130,6 @@ public sealed class TenantEmailTemplatesController(
     {
         userAccessService.EnsureAdmin();
         return Ok(Map(await emailTemplateService.ResetTenantTemplateAsync(TenantId, eventKey, cancellationToken)));
-    }
-
-    private async Task<EmailSetting?> ResolveEffectiveEmailSettingsAsync(CancellationToken cancellationToken)
-    {
-        var tenantSetting = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
-        if (tenantSetting is not null && (!tenantSetting.UsePlatformDefaults || tenantSetting.OverrideSmtpSettings))
-        {
-            return tenantSetting;
-        }
-
-        return await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
     }
 
     private Task<string> SampleExpiryAsync(CancellationToken cancellationToken) =>

@@ -5,10 +5,12 @@ using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Errors;
+using Ecosys.Shared.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Ecosys.Infrastructure.Services;
 
@@ -98,7 +100,9 @@ public sealed class EmailOutboxService(
         }
         var identity = request.TenantId.HasValue && request.TenantId != PlatformConstants.RootTenantId
             ? await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == request.TenantId.Value, cancellationToken) : null;
-        var useManagedIdentity = identity?.ManagedEmailAddress is not null && identity.UsePlatformDefaults && !identity.OverrideSmtpSettings;
+        // SMTP is always platform infrastructure now (no per-tenant override survives) — a tenant's
+        // managed sender identity is used whenever it has one, unconditionally.
+        var useManagedIdentity = identity?.ManagedEmailAddress is not null;
         var message = new EmailOutboxMessage
         {
             TenantId = request.TenantId,
@@ -359,6 +363,8 @@ public sealed class EmailOutboxProcessor(
     IEmailOutboxService emailOutboxService,
     IEmailSender emailSender,
     ISecretEncryptionService secretEncryptionService,
+    IEmailSettingsResolver emailSettingsResolver,
+    IOptions<SmtpOptions> smtpOptions,
     ILogger<EmailOutboxProcessor> logger) : IEmailOutboxProcessor
 {
     /// <summary>
@@ -398,19 +404,8 @@ public sealed class EmailOutboxProcessor(
                     await emailOutboxService.MarkFailedAsync(message.Id, "Disabled", "Outbound email is disabled for this tenant.", DateTime.UtcNow, cancellationToken);
                     continue;
                 }
-                var emailSettings = await ResolveEffectiveEmailSettingsAsync(message.TenantId, cancellationToken);
-                if (emailSettings is null)
-                {
-                    await emailOutboxService.MarkFailedAsync(
-                        message.Id,
-                        "Not configured",
-                        "Email delivery could not start because email settings are not configured.",
-                        DateTime.UtcNow,
-                        cancellationToken);
-                    continue;
-                }
-
-                if (!emailSettings.IsEnabled || string.Equals(emailSettings.Provider, EmailDeliveryMode.Disabled.ToString(), StringComparison.OrdinalIgnoreCase))
+                var emailSettings = (await emailSettingsResolver.ResolveAsync(message.TenantId, cancellationToken)).Settings;
+                if (EmailDeliveryResolution.IsExplicitlyDisabled(emailSettings))
                 {
                     await emailOutboxService.MarkFailedAsync(
                         message.Id,
@@ -443,9 +438,9 @@ public sealed class EmailOutboxProcessor(
                         message.RecipientEmail,
                         message.Subject,
                         cleanBody,
-                        message.SenderName ?? emailSettings.SenderName,
-                        message.SenderEmail ?? emailSettings.SenderAddress,
-                        message.ReplyToEmail ?? emailSettings.ReplyToEmail,
+                        message.SenderName ?? delivery.SenderName,
+                        message.SenderEmail ?? delivery.SenderEmail,
+                        message.ReplyToEmail ?? delivery.ReplyToEmail,
                         IsHtml: !string.IsNullOrWhiteSpace(message.HtmlBody),
                         Attachments: attachments.Count > 0 ? attachments : null,
                         CcAddresses: ccAddresses.Count > 0 ? ccAddresses.ToList() : null),
@@ -467,23 +462,6 @@ public sealed class EmailOutboxProcessor(
         }
 
         return processed;
-    }
-
-    private async Task<EmailSetting?> ResolveEffectiveEmailSettingsAsync(Guid? tenantId, CancellationToken cancellationToken)
-    {
-        var scopeTenantId = tenantId ?? PlatformConstants.RootTenantId;
-        var tenantSetting = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == scopeTenantId, cancellationToken);
-        if (tenantSetting is null)
-        {
-            return await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-        }
-
-        if (scopeTenantId != PlatformConstants.RootTenantId && tenantSetting.UsePlatformDefaults && !tenantSetting.OverrideSmtpSettings)
-        {
-            return await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-        }
-
-        return tenantSetting;
     }
 
     // Parses <!-- attachment:filename:base64 --> comments injected by ScheduledReportService,
@@ -537,32 +515,12 @@ public sealed class EmailOutboxProcessor(
         catch (JsonException) { return []; }
     }
 
-    private EmailDeliverySettings? CreateDeliveryOptions(EmailSetting settings)
-    {
-        var mode = Enum.TryParse<EmailDeliveryMode>(settings.Provider, true, out var parsed) ? parsed : EmailDeliveryMode.Smtp;
-        var secret = secretEncryptionService.Decrypt(settings.EncryptedSecret) ?? settings.Password;
-        if (mode == EmailDeliveryMode.Smtp && string.IsNullOrWhiteSpace(settings.Host))
-        {
-            return null;
-        }
-
-        return new EmailDeliverySettings(
-            mode,
-            settings.Host,
-            settings.Port,
-            settings.Username,
-            secret,
-            settings.SenderName,
-            settings.SenderAddress,
-            settings.ReplyToEmail,
-            settings.UseSsl,
-            EmailDeliveryModeResolver.ResolveSecureMode(settings.Port, settings.UseSsl),
-            null,
-            null,
-            null,
-            30,
-            0);
-    }
+    /// <summary>Delegates to the one shared resolver/merge pipeline — see EmailSettingsResolver.cs.</summary>
+    private EmailDeliverySettings? CreateDeliveryOptions(EmailSetting? settings) =>
+        EmailDeliveryResolution.Resolve(
+            settings,
+            secretEncryptionService.Decrypt(settings?.EncryptedSecret) ?? settings?.Password,
+            smtpOptions.Value);
 }
 
 public sealed class EmailOutboxWorker(IServiceScopeFactory serviceScopeFactory, ILogger<EmailOutboxWorker> logger) : BackgroundService

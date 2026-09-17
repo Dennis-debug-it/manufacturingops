@@ -23,6 +23,47 @@ public static class LicenseStatuses
         string.Equals(status, TrialExpiringSoon, StringComparison.OrdinalIgnoreCase);
 }
 
+/// <summary>
+/// Billing frequency is distinct from license validity (see TenantLicense.StartsAt/ExpiresAt) — this
+/// only governs how often the tenant is billed. The single definition, replacing what used to be
+/// hardcoded independently in PlatformBillingLifecycleService and PlatformLicensingController.
+/// </summary>
+public static class BillingCycles
+{
+    public const string Monthly = "Monthly";
+    public const string Quarterly = "Quarterly";
+    public const string SemiAnnual = "SemiAnnual";
+    public const string Annual = "Annual";
+    public const string Custom = "Custom";
+
+    private static readonly string[] All = [Monthly, Quarterly, SemiAnnual, Annual, Custom];
+
+    /// <summary>
+    /// Approximate cycle lengths in days, used to stack a full-cycle extension and prorate a partial
+    /// payment against it. <see cref="Custom"/> has no fixed length — its NextBillingDate is
+    /// administrator-supplied rather than computed, so it is deliberately absent here.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, double> FixedCycleDays =
+        new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+        {
+            [Monthly] = 30,
+            [Quarterly] = 90,
+            [SemiAnnual] = 182,
+            [Annual] = 365,
+        };
+
+    public static bool TryGetFixedCycleDays(string? billingCycle, out double days) =>
+        FixedCycleDays.TryGetValue(billingCycle ?? string.Empty, out days);
+
+    /// <summary>Validates and canonicalizes a billing cycle value, defaulting to Monthly when blank.</summary>
+    public static string Normalize(string? billingCycle)
+    {
+        var candidate = string.IsNullOrWhiteSpace(billingCycle) ? Monthly : billingCycle.Trim();
+        var match = Array.Find(All, x => string.Equals(x, candidate, StringComparison.OrdinalIgnoreCase));
+        return match ?? throw new BusinessRuleException($"Billing cycle must be one of: {string.Join(", ", All)}.");
+    }
+}
+
 public static class LicenseFeatures
 {
     public const string EmailIngestion = "EmailIngestion";

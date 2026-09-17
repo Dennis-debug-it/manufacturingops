@@ -43,7 +43,7 @@ export function ExpensesPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Expenses"
         subtitle="Expense claims and reimbursements."
@@ -125,7 +125,7 @@ export function ExpenseDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={data?.claimNumber ?? 'Expense'}
         subtitle="Expense review and status changes."

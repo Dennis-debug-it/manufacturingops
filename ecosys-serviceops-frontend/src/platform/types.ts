@@ -346,26 +346,17 @@ export interface PlatformReportsAuditRow {
   severity: string
 }
 
+/**
+ * Identity only — SMTP transport is global platform infrastructure with no per-tenant override, so
+ * there is nothing transport-related left here. What differentiates a tenant's outbound mail is this
+ * sender identity, layered on the platform's transport.
+ */
 export interface TenantEmailSettings {
   id: string
   tenantId: string
-  usePlatformDefaults: boolean
-  overrideSmtpSettings: boolean
-  deliveryMode: 'Disabled' | 'Smtp' | 'Api'
-  smtpHost: string | null
-  smtpPort: number | null
-  smtpUsername: string | null
-  smtpPasswordMasked: string | null
   senderName: string | null
   senderEmail: string | null
   replyToEmail: string | null
-  enableSslTls: boolean
-  secureMode: 'None' | 'StartTls' | 'SslOnConnect'
-  apiEndpoint: string | null
-  apiKeyMasked: string | null
-  apiProviderName: string | null
-  timeoutSeconds: number
-  maxRetries: number
   enableTenantEmailNotifications: boolean
   lastTestedAt: string | null
   lastError: string | null

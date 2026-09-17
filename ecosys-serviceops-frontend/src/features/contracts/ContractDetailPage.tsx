@@ -153,7 +153,7 @@ export function ContractDetailPage() {
             id: 'overview',
             label: 'Overview',
             content: (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <SummarySection title="Contract Overview" description="Core terms and ownership.">
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     {[
@@ -185,7 +185,7 @@ export function ContractDetailPage() {
             id: 'coverage',
             label: 'Covered Sites/Assets',
             content: (
-              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <DataTable
                   columns={[{ key: 'siteName', header: 'Site', cell: (row) => row.siteName ?? row.siteCode ?? '—' }]}
                   data={contract.sites.map((site) => ({ ...site, id: site.siteId }))}

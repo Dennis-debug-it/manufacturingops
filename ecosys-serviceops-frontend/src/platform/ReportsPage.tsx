@@ -98,7 +98,7 @@ function Kpi({ label, value }: { label: string; value: string | number }) {
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <p className="text-base font-semibold text-slate-900">{title}</p>
       <div className="mt-4">{children}</div>
     </section>

@@ -181,7 +181,7 @@ export function ExecutionTab({ workOrderId }: { workOrderId: string }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {sections.map(([sectionName, items]) => (
         <div key={sectionName}>
           <div className="mb-3 text-sm font-semibold text-slate-900">{sectionName}</div>

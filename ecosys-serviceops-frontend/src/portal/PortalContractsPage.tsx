@@ -17,7 +17,7 @@ export function PortalContractsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Contracts" subtitle="Service coverage and contract terms for your account." />
       <DataTable
         columns={columns}

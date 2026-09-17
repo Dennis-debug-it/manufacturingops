@@ -286,7 +286,7 @@ export function MaterialIssuesPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Material Issues"
         subtitle="Issue slips: request stock, approve, issue against jobs, and record returns. Issuing deducts stock and writes the movement ledger."

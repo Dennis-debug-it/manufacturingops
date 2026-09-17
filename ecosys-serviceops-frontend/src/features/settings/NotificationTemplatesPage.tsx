@@ -120,7 +120,7 @@ export function NotificationTemplatesPage() {
   const selectedSetting = rows.find((row) => row.eventType === selected) ?? null
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Notification Templates"
         subtitle="Automatic client emails for work order milestones — assigned, en route, arrived, and completed."

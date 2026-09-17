@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '../shared/contexts/AuthContext'
 import { TenantProvider } from '../shared/contexts/TenantContext'
+import { normalizeError } from '../shared/api/apiError'
 
 export interface ProvidersProps {
   children: ReactNode
@@ -15,7 +16,16 @@ export function Providers({ children }: ProvidersProps) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            retry: 3,
+            // 401 (session) and 403 (permission/license) won't be fixed by retrying — and retrying
+            // a suspended-license query 3x just multiplies how many identical failures the alert
+            // pipeline has to dedupe. Everything else keeps bounded retries for transient failures.
+            retry: (failureCount, error) => {
+              const status = normalizeError(error).status
+              if (status === 401 || status === 403) {
+                return false
+              }
+              return failureCount < 3
+            },
             staleTime: 30_000,
             refetchOnWindowFocus: false,
           },

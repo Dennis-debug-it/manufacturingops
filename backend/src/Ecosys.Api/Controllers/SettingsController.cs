@@ -10,7 +10,6 @@ using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 
 namespace Ecosys.Api.Controllers;
 
@@ -25,10 +24,7 @@ public sealed class SettingsController(
     IDocumentNumberingService documentNumberingService,
     IAuditLogService auditLogService,
     ISecretEncryptionService secretEncryptionService,
-    ITenantTimeZoneService tenantTimeZoneService,
-    IEmailSettingsResolver emailSettingsResolver,
-    IEmailSender emailSender,
-    ILogger<SettingsController> logger) : TenantAwareControllerBase(tenantContext)
+    ITenantTimeZoneService tenantTimeZoneService) : TenantAwareControllerBase(tenantContext)
 {
     private static readonly string[] RequiredNumberingDocumentTypes =
     [
@@ -96,146 +92,6 @@ public sealed class SettingsController(
         await dbContext.SaveChangesAsync(cancellationToken);
         tenantTimeZoneService.Invalidate(tenant.Id);
         return Ok(await MapCompanyAsync(tenant, cancellationToken));
-    }
-
-    [HttpGet("email")]
-    public async Task<ActionResult<EmailSettingsResponse>> GetEmail(CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        EnsurePlatformEmailAccess();
-        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
-        return Ok(MapLegacyEmail(settings));
-    }
-
-    [HttpPut("email")]
-    public async Task<ActionResult<EmailSettingsResponse>> UpdateEmail([FromBody] EmailSettingsRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        EnsurePlatformEmailAccess();
-        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
-
-        ApplyEmailNotificationSettings(settings, new EmailNotificationSettingsRequest(
-            true,
-            EmailDeliveryMode.Smtp,
-            request.SenderName,
-            request.SenderAddress,
-            null,
-            request.Host,
-            request.Port,
-            request.UseSsl,
-            request.UseSsl ? EmailSecureMode.StartTls : EmailSecureMode.None,
-            request.Username,
-            request.Password,
-            null,
-            null,
-            null,
-            30,
-            0), preserveExistingSecretWhenMissing: false);
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(MapLegacyEmail(settings));
-    }
-
-    [HttpGet("email-notifications")]
-    public async Task<ActionResult<EmailNotificationSettingsResponse>> GetEmailNotifications(CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        EnsurePlatformEmailAccess();
-        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
-        return Ok(await MapEmailNotificationAsync(settings, cancellationToken));
-    }
-
-    [HttpPut("email-notifications")]
-    public async Task<ActionResult<EmailNotificationSettingsResponse>> UpdateEmailNotifications([FromBody] EmailNotificationSettingsRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        EnsurePlatformEmailAccess();
-        ValidateEmailNotificationRequest(request);
-
-        var settings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
-        ApplyEmailNotificationSettings(settings, request, preserveExistingSecretWhenMissing: true);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        await AuditSettingsChangeAsync("Email notifications updated", nameof(EmailSetting), settings.Id, cancellationToken);
-        return Ok(await MapEmailNotificationAsync(settings, cancellationToken));
-    }
-
-    [HttpPost("email-notifications/test")]
-    public async Task<ActionResult<EmailNotificationTestResponse>> TestEmailNotifications([FromBody] EmailNotificationTestRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        EnsurePlatformEmailAccess();
-        var storedSettings = await GetOrCreateEmailNotificationSettingAsync(cancellationToken);
-
-        // Test what actually sends. A workspace on platform mail never uses its own row, so testing that
-        // row would report a pass or a failure that says nothing about whether its email works.
-        var effective = await emailSettingsResolver.ResolveAsync(TenantId, cancellationToken);
-        var settings = effective.Settings ?? storedSettings;
-        var scopeNote = effective.UsesPlatformMail
-            ? "Tested platform mail — this workspace has no SMTP override of its own."
-            : "Tested this workspace's own SMTP settings.";
-
-        var recipient = string.IsNullOrWhiteSpace(request.TestRecipientEmail) ? settings.SenderAddress : request.TestRecipientEmail.Trim();
-
-        if (string.IsNullOrWhiteSpace(recipient))
-        {
-            throw new BusinessRuleException("A test recipient email is required.");
-        }
-
-        try
-        {
-            var delivery = CreateEmailDeliveryOptions(settings);
-            logger.LogInformation(
-                "Tenant email notification test requested. Mode {DeliveryMode}, host {Host}, port {Port}, secure mode {SecureMode}, sender {SenderEmail}.",
-                delivery.DeliveryMode,
-                delivery.SmtpHost,
-                delivery.SmtpPort,
-                delivery.SecureMode,
-                delivery.SenderEmail);
-            await emailSender.SendAsync(
-                new EmailMessage(
-                    recipient,
-                    "Ecosys ServiceOps email notification test",
-                    "This is a test email from the Ecosys ServiceOps notification settings page.",
-                    settings.SenderName,
-                    settings.SenderAddress,
-                    settings.ReplyToEmail),
-                delivery,
-                cancellationToken);
-
-            // The outcome is recorded against the tenant's own row even when platform mail was used —
-            // it is this workspace's test history, not the platform's.
-            storedSettings.LastTestedAt = DateTime.UtcNow;
-            storedSettings.LastError = null;
-            storedSettings.IsConfigured = HasConfiguredNotificationSecret(storedSettings);
-            await dbContext.SaveChangesAsync(cancellationToken);
-            await AuditSettingsChangeAsync("Email notification test sent", nameof(EmailSetting), storedSettings.Id, cancellationToken);
-            return Ok(new EmailNotificationTestResponse(
-                true,
-                storedSettings.LastTestedAt,
-                null,
-                effective.UsesPlatformMail,
-                $"Test email sent to {recipient}. {scopeNote}"));
-        }
-        catch (Exception ex)
-        {
-            storedSettings.LastTestedAt = DateTime.UtcNow;
-            storedSettings.LastError = ex is EmailDeliveryException deliveryException
-                ? deliveryException.ErrorCategory
-                : EmailErrorCategories.UnknownSmtpError;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            logger.LogWarning(
-                ex,
-                "Tenant email notification test failed for tenant {TenantId}. Used platform mail: {UsedPlatformMail}.",
-                TenantId,
-                effective.UsesPlatformMail);
-            return Ok(new EmailNotificationTestResponse(
-                false,
-                storedSettings.LastTestedAt,
-                storedSettings.LastError,
-                effective.UsesPlatformMail,
-                $"Test email to {recipient} failed. {scopeNote}"));
-        }
     }
 
     [HttpGet("email-intake")]
@@ -583,36 +439,6 @@ public sealed class SettingsController(
         await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
         ?? throw new NotFoundException("Tenant settings were not found.");
 
-    private async Task<EmailSetting> GetOrCreateEmailNotificationSettingAsync(CancellationToken cancellationToken)
-    {
-        var settings = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
-        if (settings is not null)
-        {
-            return settings;
-        }
-
-        var tenant = await GetTenantAsync(cancellationToken);
-        // Matches how every other creation path seeds a tenant (platform-created, self-signup, seeder):
-        // inherit platform mail. Seeding an override pointed at localhost:25 would silently route the
-        // workspace's mail into a relay that does not exist.
-        settings = new EmailSetting
-        {
-            TenantId = TenantId,
-            UsePlatformDefaults = true,
-            OverrideSmtpSettings = false,
-            IsEnabled = true,
-            Provider = EmailDeliveryMode.Smtp.ToString(),
-            Port = 587,
-            UseSsl = true,
-            SenderName = tenant.CompanyName,
-            SenderAddress = tenant.Email
-        };
-
-        dbContext.EmailSettings.Add(settings);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return settings;
-    }
-
     private async Task<EmailIntakeSetting> GetOrCreateEmailIntakeSettingAsync(CancellationToken cancellationToken)
     {
         var settings = await dbContext.EmailIntakeSettings.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
@@ -637,36 +463,6 @@ public sealed class SettingsController(
         return settings;
     }
 
-    private void EnsurePlatformEmailAccess()
-    {
-        // A literal IsSuperAdmin caller can never reach this: TenantAwareControllerBase's
-        // EnsureTenantOperationalAccess() (which TenantId — read just below by every one of these
-        // actions — always calls first) unconditionally rejects IsSuperAdmin (EC-020). The caller who
-        // can legitimately manage a tenant's SMTP mode is a platform admin impersonating that tenant,
-        // which is why this checks ImpersonatedByUserId rather than IsSuperAdmin.
-        if (!tenantContext.ImpersonatedByUserId.HasValue)
-            throw new ForbiddenException("Email infrastructure is managed by the platform. Use tenant email identity settings for display name and reply-to preferences.");
-    }
-
-    private static void ValidateEmailNotificationRequest(EmailNotificationSettingsRequest request)
-    {
-        // Own-SMTP-only: a workspace on platform mail supplies no host of its own, so these checks
-        // don't apply when UsePlatformDefaults is set.
-        var requiresOwnSmtp = !request.UsePlatformDefaults && request.IsEnabled && request.DeliveryMode == EmailDeliveryMode.Smtp;
-
-        if (string.IsNullOrWhiteSpace(request.FromName) ||
-            string.IsNullOrWhiteSpace(request.FromEmail) ||
-            (requiresOwnSmtp && string.IsNullOrWhiteSpace(request.SmtpHost)))
-        {
-            throw new BusinessRuleException("From name, from email, and SMTP host are required when SMTP delivery is enabled.");
-        }
-
-        if (requiresOwnSmtp && request.SmtpPort <= 0)
-        {
-            throw new BusinessRuleException("SMTP port must be greater than zero.");
-        }
-    }
-
     private static void ValidateEmailIntakeRequest(EmailIntakeSettingsRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.MailboxProvider))
@@ -678,35 +474,6 @@ public sealed class SettingsController(
         {
             throw new BusinessRuleException("Host and port are required when email intake is enabled.");
         }
-    }
-
-    private void ApplyEmailNotificationSettings(EmailSetting settings, EmailNotificationSettingsRequest request, bool preserveExistingSecretWhenMissing)
-    {
-        settings.IsEnabled = request.IsEnabled;
-        settings.UsePlatformDefaults = request.UsePlatformDefaults;
-        settings.OverrideSmtpSettings = !request.UsePlatformDefaults;
-        settings.Provider = request.DeliveryMode.ToString();
-        settings.Host = string.IsNullOrWhiteSpace(request.SmtpHost) ? string.Empty : request.SmtpHost.Trim();
-        settings.Port = request.SmtpPort;
-        settings.UseSsl = request.SecureMode is EmailSecureMode.StartTls or EmailSecureMode.SslOnConnect || request.EnableSslTls;
-        settings.Username = NormalizeOptional(request.SmtpUsername);
-        settings.ReplyToEmail = NormalizeOptional(request.ReplyToEmail);
-        settings.SenderName = request.FromName.Trim();
-        settings.SenderAddress = request.FromEmail.Trim().ToLowerInvariant();
-
-        var encryptedSecret = secretEncryptionService.Encrypt(request.SmtpPasswordSecret ?? request.ApiKeySecret);
-        if (!string.IsNullOrWhiteSpace(encryptedSecret))
-        {
-            settings.EncryptedSecret = encryptedSecret;
-            settings.Password = null;
-        }
-        else if (!preserveExistingSecretWhenMissing)
-        {
-            settings.EncryptedSecret = null;
-            settings.Password = null;
-        }
-
-        settings.IsConfigured = HasConfiguredNotificationSecret(settings);
     }
 
     private async Task ApplyEmailIntakeSettingsAsync(EmailIntakeSetting settings, EmailIntakeSettingsRequest request, CancellationToken cancellationToken)
@@ -731,30 +498,6 @@ public sealed class SettingsController(
         {
             settings.EncryptedPassword = encryptedPassword;
         }
-    }
-
-    private static bool HasConfiguredNotificationSecret(EmailSetting settings) =>
-        !string.IsNullOrWhiteSpace(settings.EncryptedSecret) || !string.IsNullOrWhiteSpace(settings.Password);
-
-    private EmailDeliverySettings CreateEmailDeliveryOptions(EmailSetting settings)
-    {
-        var secret = secretEncryptionService.Decrypt(settings.EncryptedSecret) ?? settings.Password;
-        return new EmailDeliverySettings(
-            ParseDeliveryMode(settings.Provider),
-            settings.Host,
-            settings.Port,
-            settings.Username,
-            secret,
-            settings.SenderName,
-            settings.SenderAddress,
-            settings.ReplyToEmail,
-            settings.UseSsl,
-            EmailDeliveryModeResolver.ResolveSecureMode(settings.Port, settings.UseSsl),
-            null,
-            null,
-            null,
-            30,
-            0);
     }
 
     private async Task ApplyMonitoringWebhookAsync(MonitoringWebhookIntegration item, UpsertMonitoringWebhookIntegrationRequest request, CancellationToken cancellationToken)
@@ -959,16 +702,6 @@ public sealed class SettingsController(
         await auditLogService.LogAsync(TenantId, UserId, action, entityName, entityId.ToString(), action, cancellationToken);
     }
 
-    private static EmailDeliveryMode ParseDeliveryMode(string? value)
-    {
-        if (Enum.TryParse<EmailDeliveryMode>(value, true, out var parsed))
-        {
-            return parsed;
-        }
-
-        return EmailDeliveryMode.Smtp;
-    }
-
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
@@ -993,45 +726,6 @@ public sealed class SettingsController(
             tenant.SecondaryColor,
             tenant.ShowPoweredByEcosys,
             tenant.Slug);
-
-    private static EmailSettingsResponse MapLegacyEmail(EmailSetting settings) =>
-        new(settings.Host, settings.Port, settings.UseSsl, settings.Username, null, settings.SenderName, settings.SenderAddress);
-
-    private async Task<EmailNotificationSettingsResponse> MapEmailNotificationAsync(EmailSetting settings, CancellationToken cancellationToken)
-    {
-        var effective = await emailSettingsResolver.ResolveAsync(settings.TenantId, cancellationToken);
-        return MapEmailNotification(settings, effective.UsesPlatformMail, effective.Settings?.SenderAddress);
-    }
-
-    private static EmailNotificationSettingsResponse MapEmailNotification(
-        EmailSetting settings,
-        bool usesPlatformMail,
-        string? effectiveFromEmail) =>
-        new(
-            settings.Id,
-            settings.TenantId,
-            settings.IsEnabled,
-            ParseDeliveryMode(settings.Provider),
-            settings.SenderName,
-            settings.SenderAddress,
-            settings.ReplyToEmail,
-            settings.Host,
-            settings.Port,
-            settings.UseSsl,
-            EmailDeliveryModeResolver.ResolveSecureMode(settings.Port, settings.UseSsl),
-            settings.Username,
-            null,
-            null,
-            null,
-            30,
-            0,
-            HasConfiguredNotificationSecret(settings),
-            settings.IsConfigured,
-            settings.LastTestedAt,
-            settings.LastError,
-            settings.UsePlatformDefaults,
-            usesPlatformMail,
-            effectiveFromEmail);
 
     private static EmailIntakeSettingsResponse MapEmailIntake(EmailIntakeSetting settings) =>
         new(

@@ -50,7 +50,7 @@ export function PayablesPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Payables"
         subtitle="Bills to pay and supplier invoices."
@@ -139,7 +139,7 @@ export function PayableDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={data?.billNumber ?? 'Payable'}
         subtitle="Supplier bill detail and payment history."
@@ -174,7 +174,7 @@ export function PayableDetailPage() {
               </div>
             ))}
           </div>
-          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Payment History</h2>
             {data.paymentHistory.length === 0 ? (
               <p className="mt-3 text-sm text-slate-500">No payments recorded yet.</p>

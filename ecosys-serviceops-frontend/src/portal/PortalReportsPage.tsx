@@ -18,7 +18,7 @@ export function PortalReportsPage() {
   const totalPaid = (invoices ?? []).reduce((sum, invoice) => sum + invoice.amountPaid, 0)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Reports" subtitle="A quick summary composed from your requests and invoices — a dedicated portal reporting endpoint doesn't exist yet, so these figures are derived client-side from the same data shown on Requests and Invoices." />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total Requests" value={(workOrders ?? []).length} />

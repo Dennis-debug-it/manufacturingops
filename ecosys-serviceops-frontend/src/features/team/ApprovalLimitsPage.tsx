@@ -72,7 +72,7 @@ export function ApprovalLimitsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Approval Limits"
         subtitle="Monetary ceilings on sensitive approvals. Above the limit the action is refused even when the capability is granted."

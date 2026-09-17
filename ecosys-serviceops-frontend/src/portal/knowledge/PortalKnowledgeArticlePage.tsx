@@ -36,7 +36,7 @@ export function PortalKnowledgeArticlePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link to="/portal/knowledge" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
         <ArrowLeft className="h-3.5 w-3.5" />
         Help Center

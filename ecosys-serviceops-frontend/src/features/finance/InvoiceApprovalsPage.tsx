@@ -29,11 +29,11 @@ export function InvoiceApprovalsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Invoice Approvals" subtitle="Contract invoice approval queue, driven by finance approval rules." />
 
       <FinanceWorkspaceNav />
-      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionHeader title="Approval Rules" description="Thresholds that route invoices for approval." />
         {rulesQuery.isError ? (
           <ErrorState
@@ -46,7 +46,7 @@ export function InvoiceApprovalsPage() {
         )}
       </section>
 
-      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionHeader title="Pending Invoices" description="Draft invoices awaiting review before sending." />
         {invoicesQuery.isError ? (
           <ErrorState

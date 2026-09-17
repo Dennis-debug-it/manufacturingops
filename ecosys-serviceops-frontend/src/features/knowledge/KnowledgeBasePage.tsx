@@ -347,7 +347,7 @@ export function KnowledgeBasePage() {
   const categoryList = categories ?? []
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Knowledge Base"
         subtitle="Internal reference articles and client-facing help center content."

@@ -36,7 +36,7 @@ export function NotesTab({ workOrderId }: { workOrderId: string }) {
   const notes = data ?? []
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-2xl space-y-4">
       <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label htmlFor="wo-note" className="mb-2 block text-sm font-medium text-slate-700">Add Note</label>
         <textarea

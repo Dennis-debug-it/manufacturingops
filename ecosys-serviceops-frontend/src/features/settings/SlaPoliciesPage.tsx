@@ -282,7 +282,7 @@ export function SlaPoliciesPage() {
   const byPriority = new Map(policies.map((p) => [p.priority, p]))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="SLA Policies" subtitle="Response and resolution targets per priority, with automatic breach detection and escalation." />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

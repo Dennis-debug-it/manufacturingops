@@ -57,7 +57,7 @@ export function VansPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Vans"
         subtitle="Mobile stock locations. Load parts from a branch, consume on jobs, return the rest."

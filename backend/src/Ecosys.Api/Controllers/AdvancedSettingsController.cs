@@ -195,6 +195,52 @@ public sealed class AdvancedSettingsController(
         return Ok(policy);
     }
 
+    [HttpGet("finance-defaults")]
+    public async Task<ActionResult<TenantFinanceDefaults>> GetFinanceDefaults(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var defaults = await dbContext.TenantFinanceDefaults.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken)
+            ?? new TenantFinanceDefaults { TenantId = TenantId };
+        return Ok(defaults);
+    }
+
+    [HttpPut("finance-defaults")]
+    public async Task<ActionResult<TenantFinanceDefaults>> UpdateFinanceDefaults([FromBody] TenantFinanceDefaultsRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+
+        if (string.IsNullOrWhiteSpace(request.TaxName))
+        {
+            throw new BusinessRuleException("Tax name is required.");
+        }
+        if (request.DefaultVatRate < 0 || request.DefaultVatRate > 100)
+        {
+            throw new BusinessRuleException("Default tax rate must be between 0 and 100.");
+        }
+        if (request.DefaultInvoiceDueDays < 0 || request.DefaultQuotationValidityDays < 0)
+        {
+            throw new BusinessRuleException("Due days and validity days cannot be negative.");
+        }
+
+        var defaults = await dbContext.TenantFinanceDefaults.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
+        if (defaults is null)
+        {
+            defaults = new TenantFinanceDefaults { TenantId = TenantId };
+            dbContext.TenantFinanceDefaults.Add(defaults);
+        }
+
+        defaults.EnableVat = request.EnableVat;
+        defaults.TaxName = request.TaxName.Trim();
+        defaults.DefaultVatRate = request.DefaultVatRate;
+        defaults.DefaultPaymentTerms = string.IsNullOrWhiteSpace(request.DefaultPaymentTerms) ? "30 days" : request.DefaultPaymentTerms.Trim();
+        defaults.DefaultInvoiceDueDays = request.DefaultInvoiceDueDays;
+        defaults.DefaultQuotationValidityDays = request.DefaultQuotationValidityDays;
+        defaults.DefaultExpenseApprovalRequired = request.DefaultExpenseApprovalRequired;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(defaults);
+    }
+
     [HttpGet("security")]
     public async Task<ActionResult<TenantSecurityPolicy>> GetSecurity(CancellationToken cancellationToken)
     {
@@ -650,3 +696,12 @@ public sealed record TenantSecurityPolicyRequest(int MinPasswordLength, bool Req
 public sealed record NotificationSettingsRequest(bool EmailAlertsEnabled, bool SmsAlertsEnabled, bool WorkOrderAssignmentAlerts, bool LicenseExpiryAlerts, bool DailyDigestEnabled);
 public sealed record MonitoringSettingsRequest(string ProviderName, string? EndpointLabel, string? WebhookSecret, Guid? DefaultBranchId, string DefaultPriority, bool AutoCreateWorkOrders, bool IsEnabled);
 public sealed record TenantOperationsPolicyRequest(bool RequireTechnicianSignature, bool RequireClientSignature, bool AllowRemoteCompletion);
+
+public sealed record TenantFinanceDefaultsRequest(
+    bool EnableVat,
+    string TaxName,
+    decimal DefaultVatRate,
+    string DefaultPaymentTerms,
+    int DefaultInvoiceDueDays,
+    int DefaultQuotationValidityDays,
+    bool DefaultExpenseApprovalRequired);

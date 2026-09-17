@@ -26,7 +26,7 @@ function WorkspaceCodeCard() {
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div>
         <div className="text-sm font-medium text-slate-700">Workspace Code</div>
         <div className="mt-1 font-mono text-sm text-slate-900">{data.workspaceCode}</div>
@@ -41,7 +41,7 @@ function WorkspaceCodeCard() {
 
 export function CompanySettingsPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <WorkspaceCodeCard />
       <SettingsForm
         title="Company Profile"

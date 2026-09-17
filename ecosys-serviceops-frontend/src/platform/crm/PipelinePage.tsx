@@ -53,7 +53,7 @@ export function PipelinePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="CRM Pipeline" subtitle="Lead flow from demo request to conversion. Drag a card to change its stage." />
       <CrmSubNav />
       <div className="grid grid-cols-1 gap-4 overflow-x-auto pb-2 lg:grid-cols-6">

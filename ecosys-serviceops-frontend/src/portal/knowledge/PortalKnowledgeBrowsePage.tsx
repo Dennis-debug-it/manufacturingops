@@ -24,7 +24,7 @@ export function PortalKnowledgeBrowsePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <Link to="/portal/knowledge" className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900">
           <ArrowLeft className="h-3.5 w-3.5" />
@@ -66,7 +66,7 @@ export function PortalKnowledgeBrowsePage() {
             <Link
               key={article.id}
               to={`/portal/knowledge/articles/${article.slug}`}
-              className="block rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm transition hover:border-slate-300 hover:shadow-md"
+              className="block rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md"
             >
               <div className="font-medium text-slate-900">{article.title}</div>
               {article.summary ? <p className="mt-1 text-sm text-slate-600">{article.summary}</p> : null}

@@ -23,6 +23,18 @@
       "autoPort": false
     },
     {
+      "name": "ecosys-digital-site",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:\\Users\\useruuuserrv jjjjAAA\\Downloads\\ecosys-digital-site\\node_modules\\vite\\bin\\vite.js",
+        "--host",
+        "--config",
+        "C:\\Users\\useruuuserrv jjjjAAA\\Downloads\\ecosys-digital-site\\vite.config.ts"
+      ],
+      "port": 3000,
+      "autoPort": false
+    },
+    {
       "name": "backend-api",
       "runtimeExecutable": "dotnet",
       "runtimeArgs": ["run", "--project", "backend/src/Ecosys.Api", "--urls", "http://localhost:5072"],

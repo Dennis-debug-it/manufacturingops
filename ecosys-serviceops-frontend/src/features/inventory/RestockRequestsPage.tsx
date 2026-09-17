@@ -70,7 +70,7 @@ export function RestockRequestsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Restock Requests" subtitle="Approval workflow: Pending → Approved → Issued → Closed." />
       <InventoryTabNav />
       <DataTable columns={columns} data={data ?? []} loading={isLoading} emptyTitle={isError ? 'Requests unavailable' : 'No restock requests'} emptyDescription={isError ? 'Material requests could not be loaded.' : 'Requests raised against work orders will appear here.'} />

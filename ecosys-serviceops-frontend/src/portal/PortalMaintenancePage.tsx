@@ -16,7 +16,7 @@ export function PortalMaintenancePage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Preventive Maintenance" subtitle="Scheduled maintenance coverage for your assets." />
       <DataTable
         columns={columns}

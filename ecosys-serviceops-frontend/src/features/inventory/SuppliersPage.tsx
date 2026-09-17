@@ -43,7 +43,7 @@ export function SuppliersPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Suppliers"
         subtitle="Supplier list and performance metrics."
@@ -103,7 +103,7 @@ export function SupplierDetailPage() {
   const { data, isLoading, isError, refetch } = useSupplier(id)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={data?.supplierName ?? 'Supplier'}
         subtitle="Parts, purchase orders, and supplier performance."
@@ -134,7 +134,7 @@ export function SupplierDetailPage() {
             ))}
           </div>
 
-          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Supplied Parts</h2>
             {data.suppliedParts.length === 0 ? (
               <p className="mt-3 text-sm text-slate-500">No parts recorded for this supplier yet.</p>
@@ -150,7 +150,7 @@ export function SupplierDetailPage() {
             )}
           </div>
 
-          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Recent Purchase Orders</h2>
             {data.recentPurchaseOrders.length === 0 ? (
               <p className="mt-3 text-sm text-slate-500">No purchase orders yet.</p>

@@ -97,7 +97,7 @@ export function AuditLogsSettingsPage() {
     'h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-[var(--app-primary)]'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Audit Logs"
         subtitle="Tenant-wide record of settings, security, and administrative changes."

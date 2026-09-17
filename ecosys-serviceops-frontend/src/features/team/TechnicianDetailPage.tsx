@@ -25,7 +25,7 @@ export function TechnicianDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={technician.fullName}
         subtitle={technician.skillCategory ?? 'Technician'}

@@ -1,5 +1,3 @@
-using Ecosys.Shared.Contracts.Integration;
-
 namespace Ecosys.Api.Controllers;
 
 public sealed record CompanySettingsRequest(
@@ -44,85 +42,6 @@ public sealed record CompanySettingsResponse(
     /// <summary>The workspace code staff enter alongside a username to sign in — needed by anyone
     /// without an email address, since a username alone doesn't say which tenant to look in.</summary>
     string WorkspaceCode);
-
-public sealed record EmailSettingsRequest(
-    string Host,
-    int Port,
-    bool UseSsl,
-    string? Username,
-    string? Password,
-    string SenderName,
-    string SenderAddress);
-
-public sealed record EmailSettingsResponse(
-    string Host,
-    int Port,
-    bool UseSsl,
-    string? Username,
-    string? Password,
-    string SenderName,
-    string SenderAddress);
-
-public sealed record EmailNotificationSettingsRequest(
-    bool IsEnabled,
-    EmailDeliveryMode DeliveryMode,
-    string FromName,
-    string FromEmail,
-    string? ReplyToEmail,
-    string SmtpHost,
-    int SmtpPort,
-    bool EnableSslTls,
-    EmailSecureMode SecureMode,
-    string? SmtpUsername,
-    string? SmtpPasswordSecret,
-    string? ApiEndpoint,
-    string? ApiKeySecret,
-    string? ApiProviderName,
-    int TimeoutSeconds,
-    int MaxRetries,
-    /// <summary>
-    /// True sends this workspace's mail through the platform's mailbox and leaves the SMTP fields
-    /// below inert; false switches the workspace onto the SMTP server configured here.
-    /// </summary>
-    bool UsePlatformDefaults = true);
-
-public sealed record EmailNotificationSettingsResponse(
-    Guid Id,
-    Guid TenantId,
-    bool IsEnabled,
-    EmailDeliveryMode DeliveryMode,
-    string FromName,
-    string FromEmail,
-    string? ReplyToEmail,
-    string SmtpHost,
-    int SmtpPort,
-    bool EnableSslTls,
-    EmailSecureMode SecureMode,
-    string? SmtpUsername,
-    string? ApiEndpoint,
-    string? ApiKeyMasked,
-    string? ApiProviderName,
-    int TimeoutSeconds,
-    int MaxRetries,
-    bool HasSecret,
-    bool IsConfigured,
-    DateTime? LastTestedAt,
-    string? LastError,
-    bool UsePlatformDefaults,
-    /// <summary>Mailbox mail is really leaving through right now — the fields above are inert when true.</summary>
-    bool UsesPlatformMail,
-    /// <summary>Address recipients will actually see in the From header.</summary>
-    string? EffectiveFromEmail);
-
-public sealed record EmailNotificationTestRequest(string? TestRecipientEmail);
-
-public sealed record EmailNotificationTestResponse(
-    bool Success,
-    DateTime? LastTestedAt,
-    string? LastError,
-    /// <summary>True when the test ran against platform mail because this workspace has no SMTP override.</summary>
-    bool UsedPlatformMail,
-    string Message);
 
 public sealed record EmailIntakeSettingsRequest(
     bool IsEnabled,

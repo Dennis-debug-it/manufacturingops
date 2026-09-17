@@ -34,7 +34,7 @@ export function WhatsAppInboxPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="WhatsApp Inbox"
         subtitle="Two-way WhatsApp Business conversations with clients and technicians."

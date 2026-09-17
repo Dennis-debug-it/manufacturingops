@@ -44,7 +44,11 @@ export async function replayOfflineQueue(send: (entry: SyncQueueEntry) => Promis
       const conflict = status === 409 || status === 412
       const next = { ...entry, status: conflict ? 'conflict' as const : 'failed' as const, retryCount: entry.retryCount + 1, lastError: String(error), updatedAt: new Date().toISOString() }
       await db.put('sync_queue', next)
-      conflict ? result.conflicts++ : result.failed++
+      if (conflict) {
+        result.conflicts++
+      } else {
+        result.failed++
+      }
       if (transient(error)) break
     }
   }

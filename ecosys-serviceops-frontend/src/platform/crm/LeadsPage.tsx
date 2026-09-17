@@ -203,12 +203,12 @@ function LeadDrawerContent({
         <InfoCard label="Converted tenant" value={lead.convertedTenantId ?? 'Not converted'} />
       </section>
 
-      <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionTitle title="Request details" description="What the prospective customer submitted." />
         <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-700">{lead.message ?? 'No message provided.'}</p>
       </section>
 
-      <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionTitle title="Lead actions" description="Advance the lead through the platform owner's follow-up flow." />
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => setStatusDraft('Contacted')}>

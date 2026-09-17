@@ -7,6 +7,7 @@ import { BottomNav } from './BottomNav'
 import { FirstLoginModal } from '../components/FirstLoginModal'
 import { ImpersonationBanner } from '../components/ImpersonationBanner'
 import { LicenseWarningBanner } from '../components/LicenseWarningBanner'
+import { ConnectivityBanner } from '../components/ConnectivityBanner'
 import { Crystal } from '../components/Crystal'
 import { crystalForScreen } from './crystalForScreen'
 
@@ -28,6 +29,7 @@ export function AppShell({ children }: AppShellProps) {
         <Crystal variant={crystalForScreen(location.pathname)} className="absolute inset-0" />
       </div>
       <ImpersonationBanner />
+      <ConnectivityBanner />
       <LicenseWarningBanner />
       <div className="flex min-h-0 flex-1">
         <Sidebar />

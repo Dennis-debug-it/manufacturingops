@@ -1,7 +1,30 @@
 import axios, { type AxiosInstance, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import toast from 'react-hot-toast'
-import { normalizeError } from './apiError'
+import { normalizeError, type ApiError } from './apiError'
 import { isLicenseWarningExemptPath, setLicenseWarning } from './licenseWarningStore'
+import { setConnectivityOffline } from './connectivityStore'
+import { notifyOnce } from './notifyOnce'
+
+declare module 'axios' {
+  interface AxiosRequestConfig {
+    /**
+     * Skip the global background-failure toast for this one request. For an explicit user-action
+     * request (a PDF download, a save, a test action) whose call site already shows its own
+     * contextual message on failure — the interceptor's generic toast would otherwise double up
+     * with it (Phase 22: choose the most useful single presentation, not several at once).
+     */
+    suppressGlobalErrorToast?: boolean
+  }
+}
+
+/**
+ * License failures already reach the user via the X-License-Warning response header (set by the
+ * same middleware, on the same response, before it throws) → licenseWarningStore → the one global
+ * banner. Toasting these too would double-present the identical fact. See
+ * TenantLicenseEnforcementMiddleware / LicenseGuardService.EnsureTenantCanMutateAsync on the backend
+ * for the only two codes it ever throws.
+ */
+const LICENSE_ERROR_CODES = new Set(['license_suspended', 'license_read_only'])
 
 export interface AuthInterceptorConfig {
   /** Returns the current bearer token, or null when signed out. */
@@ -65,11 +88,18 @@ export function attachAuthInterceptors(client: AxiosInstance, config: AuthInterc
   client.interceptors.response.use(
     (response) => {
       trackLicenseWarning(response)
+      // Any response at all, even one we're about to treat as an error elsewhere, proves the
+      // server was reachable.
+      setConnectivityOffline(false)
       return response
     },
     async (error: unknown) => {
-      trackLicenseWarning(axios.isAxiosError(error) ? error.response : undefined)
+      const axiosResponse = axios.isAxiosError(error) ? error.response : undefined
+      trackLicenseWarning(axiosResponse)
       const apiError = normalizeError(error)
+      // A transport failure (no response reached the server) is a systemic, single connectivity
+      // problem, not a per-request one — see connectivityStore.ts / ConnectivityBanner.
+      setConnectivityOffline(apiError.isNetworkError)
       const originalRequest = axios.isAxiosError(error) ? error.config : undefined
       const authRequest = isAuthRequest(originalRequest?.url)
       const hadToken = axios.isAxiosError(error) && Boolean(originalRequest?.headers?.Authorization)
@@ -103,9 +133,32 @@ export function attachAuthInterceptors(client: AxiosInstance, config: AuthInterc
         return Promise.reject(apiError)
       }
 
-      // Unhandled/background failure → surface a friendly toast so nothing fails silently.
-      toast.error(apiError.message)
+      if (!originalRequest?.suppressGlobalErrorToast) {
+        presentBackgroundFailure(apiError)
+      }
       return Promise.reject(apiError)
     },
   )
+}
+
+/**
+ * Unhandled/background failure → surface a friendly toast so nothing fails silently, but exactly
+ * once per underlying cause rather than once per failed request:
+ *  - A genuine connectivity failure already has its own single banner (see setConnectivityOffline
+ *    above) — no toast at all, or every failing request in an outage would add another.
+ *  - A suspended/read-only license already has its own single banner (see trackLicenseWarning
+ *    above, fed from the same response) — no toast, so the fact isn't presented twice.
+ *  - Everything else keeps a toast, keyed by cause so concurrent identical failures (e.g. a
+ *    dashboard's parallel queries all hitting the same dead endpoint) collapse into one.
+ */
+export function presentBackgroundFailure(apiError: ApiError) {
+  if (apiError.isNetworkError) {
+    return
+  }
+  if (apiError.errorCode && LICENSE_ERROR_CODES.has(apiError.errorCode)) {
+    return
+  }
+
+  const key = apiError.errorCode ?? (apiError.status ? String(apiError.status) : 'unknown')
+  notifyOnce(key, () => toast.error(apiError.message, { id: key }))
 }

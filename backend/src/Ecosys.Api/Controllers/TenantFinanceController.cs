@@ -20,7 +20,6 @@ public sealed class TenantFinanceController(
     IUserAccessService userAccessService,
     IPdfRenderer pdfRenderer,
     IEmailSender emailSender,
-    ISecretEncryptionService secretEncryptionService,
     IEmailOutboxService emailOutbox,
     IFinancialRecipientResolver financialRecipientResolver) : TenantAwareControllerBase(tenantContext)
 {
@@ -727,46 +726,6 @@ public sealed class TenantFinanceController(
 
         return (model, clientCode);
     }
-
-    private async Task<EmailSetting?> ResolveEffectiveEmailSettingsAsync(Guid tenantId, CancellationToken cancellationToken)
-    {
-        var tenantSetting = await dbContext.EmailSettings
-            .SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
-
-        if (tenantSetting is null)
-            return await dbContext.EmailSettings
-                .SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-
-        if (tenantSetting.UsePlatformDefaults && !tenantSetting.OverrideSmtpSettings)
-            return await dbContext.EmailSettings
-                .SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-
-        return tenantSetting;
-    }
-
-    private EmailDeliverySettings? CreateDeliverySettings(EmailSetting settings)
-    {
-        var mode = Enum.TryParse<EmailDeliveryMode>(settings.Provider, true, out var parsed)
-            ? parsed : EmailDeliveryMode.Smtp;
-
-        if (mode == EmailDeliveryMode.Disabled) return null;
-        if (mode == EmailDeliveryMode.Smtp && string.IsNullOrWhiteSpace(settings.Host)) return null;
-
-        var secret = secretEncryptionService.Decrypt(settings.EncryptedSecret) ?? settings.Password;
-
-        return new EmailDeliverySettings(
-            mode,
-            settings.Host,
-            settings.Port,
-            settings.Username,
-            secret,
-            settings.SenderName,
-            settings.SenderAddress,
-            settings.ReplyToEmail,
-            settings.UseSsl,
-            EmailDeliveryModeResolver.ResolveSecureMode(settings.Port, settings.UseSsl));
-    }
-
 
 }
 

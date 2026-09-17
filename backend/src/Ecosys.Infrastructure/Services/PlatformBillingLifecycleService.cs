@@ -26,17 +26,6 @@ internal sealed class PlatformBillingLifecycleService(
     IEmailSubjectRuleService emailSubjectRuleService,
     IEmailOutboxService emailOutboxService) : IPlatformBillingLifecycleService
 {
-    // Approximate cycle lengths in days, used both to stack a full-cycle extension and to prorate
-    // a partial payment against it. Calendar-accurate AddMonths isn't used here because prorating
-    // "50% of a calendar month" needs a fixed unit to divide, not a variable 28-31 day span.
-    private static readonly IReadOnlyDictionary<string, double> BillingCycleDays =
-        new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["Monthly"] = 30,
-            ["Quarterly"] = 90,
-            ["Annual"] = 365,
-        };
-
     public async Task QueueInvoiceIssuedEmailAsync(PlatformInvoice invoice, Guid? triggeredByUserId, CancellationToken cancellationToken = default)
     {
         Tenant? tenant = invoice.TenantId.HasValue
@@ -94,7 +83,9 @@ internal sealed class PlatformBillingLifecycleService(
             return;
         }
 
-        var cycleDays = BillingCycleDays.TryGetValue(license.BillingCycle, out var days) ? days : BillingCycleDays["Monthly"];
+        // An unrecognized or Custom cycle (no fixed length) falls back to a monthly-equivalent step.
+        BillingCycles.TryGetFixedCycleDays(BillingCycles.Monthly, out var monthlyDays);
+        var cycleDays = BillingCycles.TryGetFixedCycleDays(license.BillingCycle, out var days) ? days : monthlyDays;
         var invoiceTotal = invoice?.Total ?? payment.Amount;
         var fraction = invoiceTotal <= 0 ? 1d : Math.Min(1d, (double)(payment.Amount / invoiceTotal));
         var extensionDays = cycleDays * fraction;

@@ -92,7 +92,7 @@ export function ReportsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Reports" subtitle="Operational analytics for the last 30 days." />
 
       <div className="flex flex-wrap gap-2">
@@ -251,7 +251,7 @@ export function ReportsPage() {
         ) : !csat || csat.sentCount === 0 ? (
           <EmptyState title="No surveys sent yet" description="CSAT surveys are emailed to clients automatically when work orders are completed. Results will appear here." />
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatCard label="Average Score" value={csat.averageScore != null ? `${csat.averageScore} / 5` : '—'} tone={csat.averageScore != null && csat.averageScore >= 4 ? 'success' : csat.averageScore != null && csat.averageScore < 3 ? 'warning' : 'default'} />
               <StatCard label="Surveys Sent" value={csat.sentCount} />
@@ -259,8 +259,8 @@ export function ReportsPage() {
               <StatCard label="Response Rate" value={`${csat.responseRate}%`} />
             </div>
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
                 <h3 className="text-sm font-semibold text-slate-900">Score Distribution</h3>
                 <div className="mt-4 space-y-2">
                   {csat.scoreDistribution.slice().reverse().map((row) => {
@@ -278,7 +278,7 @@ export function ReportsPage() {
                 </div>
               </section>
 
-              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
                 <h3 className="text-sm font-semibold text-slate-900">Monthly Trend</h3>
                 <DataTable
                   className="mt-4"
@@ -294,7 +294,7 @@ export function ReportsPage() {
               </section>
             </div>
 
-            <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+            <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">By Technician</h3>
               <DataTable
                 className="mt-4"
@@ -310,7 +310,7 @@ export function ReportsPage() {
             </section>
 
             {csat.recentComments.length > 0 ? (
-              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
                 <h3 className="text-sm font-semibold text-slate-900">Recent Comments</h3>
                 <ul className="mt-4 space-y-3">
                   {csat.recentComments.map((row, index) => (

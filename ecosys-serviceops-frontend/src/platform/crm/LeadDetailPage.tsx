@@ -61,7 +61,7 @@ export function LeadDetailPage() {
         contactEmail: lead.email,
         contactPhone: lead.phone,
         country: lead.country ?? undefined,
-      })
+      }, { suppressGlobalErrorToast: true })
       toast.success('Tenant workspace created')
       navigate(`/platform/tenants/${tenant.tenantId}`)
     } catch {
@@ -79,7 +79,7 @@ export function LeadDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={lead.companyName}
         subtitle={lead.contactPersonName}
@@ -96,8 +96,8 @@ export function LeadDetailPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <section className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <section className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900">Contact Details</h3>
           <dl className="space-y-2 text-sm">
             {[
@@ -120,7 +120,7 @@ export function LeadDetailPage() {
           ) : null}
         </section>
 
-        <section className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+        <section className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900">Notes</h3>
           <textarea
             defaultValue={lead.notes ?? ''}

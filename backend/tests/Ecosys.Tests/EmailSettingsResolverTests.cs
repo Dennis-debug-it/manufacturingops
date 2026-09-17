@@ -14,33 +14,21 @@ namespace Ecosys.Tests;
 public sealed class EmailSettingsResolverTests
 {
     [Fact]
-    public async Task TenantOnPlatformDefaults_SendsThroughPlatformMail()
+    public async Task Tenant_AlwaysSendsThroughPlatformTransport_WithItsOwnSenderIdentity()
     {
+        // SMTP is global platform infrastructure with no per-tenant override, even though the tenant's
+        // own row still names a (now-inert) host — only its sender identity is layered on top.
         await using var dbContext = CreateDbContext();
         var tenantId = Guid.NewGuid();
-        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", usePlatformDefaults: false, overrideSmtp: true);
-        SeedSettings(dbContext, tenantId, "smtp.tenant-typed-this.test", usePlatformDefaults: true, overrideSmtp: false);
+        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", "noreply@platform.test");
+        SeedSettings(dbContext, tenantId, "smtp.tenant-typed-this.test", "noreply@tenant.test");
         await dbContext.SaveChangesAsync();
 
         var result = await new EmailSettingsResolver(dbContext).ResolveAsync(tenantId, CancellationToken.None);
 
         Assert.True(result.UsesPlatformMail);
         Assert.Equal("smtp.platform.test", result.Settings!.Host);
-    }
-
-    [Fact]
-    public async Task TenantWithGrantedOverride_SendsThroughItsOwnSmtp()
-    {
-        await using var dbContext = CreateDbContext();
-        var tenantId = Guid.NewGuid();
-        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", usePlatformDefaults: false, overrideSmtp: true);
-        SeedSettings(dbContext, tenantId, "smtp.tenant.test", usePlatformDefaults: false, overrideSmtp: true);
-        await dbContext.SaveChangesAsync();
-
-        var result = await new EmailSettingsResolver(dbContext).ResolveAsync(tenantId, CancellationToken.None);
-
-        Assert.False(result.UsesPlatformMail);
-        Assert.Equal("smtp.tenant.test", result.Settings!.Host);
+        Assert.Equal("noreply@tenant.test", result.Settings!.SenderAddress);
     }
 
     [Fact]
@@ -49,7 +37,7 @@ public sealed class EmailSettingsResolverTests
         // Previously the credential path returned "not configured" here, which stranded password reset
         // and invitation emails for any tenant missing a row.
         await using var dbContext = CreateDbContext();
-        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", usePlatformDefaults: false, overrideSmtp: true);
+        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", "noreply@platform.test");
         await dbContext.SaveChangesAsync();
 
         var result = await new EmailSettingsResolver(dbContext).ResolveAsync(Guid.NewGuid(), CancellationToken.None);
@@ -62,8 +50,7 @@ public sealed class EmailSettingsResolverTests
     public async Task RootTenant_AlwaysUsesItsOwnRow()
     {
         await using var dbContext = CreateDbContext();
-        // Flags that would mean "inherit" for a tenant must not send the platform looking for a parent.
-        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", usePlatformDefaults: true, overrideSmtp: false);
+        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", "noreply@platform.test");
         await dbContext.SaveChangesAsync();
 
         var result = await new EmailSettingsResolver(dbContext).ResolveAsync(PlatformConstants.RootTenantId, CancellationToken.None);
@@ -76,7 +63,7 @@ public sealed class EmailSettingsResolverTests
     public async Task NullTenant_IsTreatedAsThePlatform()
     {
         await using var dbContext = CreateDbContext();
-        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", usePlatformDefaults: false, overrideSmtp: true);
+        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", "noreply@platform.test");
         await dbContext.SaveChangesAsync();
 
         var result = await new EmailSettingsResolver(dbContext).ResolveAsync(null, CancellationToken.None);
@@ -96,7 +83,7 @@ public sealed class EmailSettingsResolverTests
         Assert.True(result.UsesPlatformMail);
     }
 
-    private static void SeedSettings(AppDbContext dbContext, Guid tenantId, string host, bool usePlatformDefaults, bool overrideSmtp) =>
+    private static void SeedSettings(AppDbContext dbContext, Guid tenantId, string host, string senderAddress) =>
         dbContext.EmailSettings.Add(new EmailSetting
         {
             TenantId = tenantId,
@@ -106,9 +93,7 @@ public sealed class EmailSettingsResolverTests
             IsEnabled = true,
             Provider = "Smtp",
             SenderName = "Ecosys",
-            SenderAddress = $"noreply@{host}",
-            UsePlatformDefaults = usePlatformDefaults,
-            OverrideSmtpSettings = overrideSmtp
+            SenderAddress = senderAddress,
         });
 
     [Fact]

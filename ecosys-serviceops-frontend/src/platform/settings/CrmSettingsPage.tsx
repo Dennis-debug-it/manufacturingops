@@ -40,13 +40,13 @@ export function CrmSettingsPage() {
   const set = <K extends keyof CrmSettings>(key: K, value: CrmSettings[K]) => setValues((current) => (current ? { ...current, [key]: value } : current))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="CRM"
         subtitle="Pipeline and lead routing configuration."
         primaryAction={canManage ? <button type="button" onClick={() => save.mutate(values)} disabled={save.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">{save.isPending ? 'Saving…' : 'Save Changes'}</button> : undefined}
       />
-      <div className="space-y-5 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="space-y-5 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionTitle title="Lead Routing" description="Control how new inbound leads are assigned to sales owners." />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">

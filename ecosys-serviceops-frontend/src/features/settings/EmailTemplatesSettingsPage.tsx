@@ -164,7 +164,7 @@ export function EmailTemplatesSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Email Templates" subtitle="Tenant-editable communication templates. Falls back to the platform default until overridden." />
       {(data ?? []).length === 0 ? (
         <EmptyState icon={Mail} title="No email templates found" description="No configured email template events were returned by the backend." />

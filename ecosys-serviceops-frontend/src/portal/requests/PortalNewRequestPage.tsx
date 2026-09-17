@@ -32,9 +32,9 @@ export function PortalNewRequestPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="New Service Request" subtitle="Tell us what needs attention and we'll get it scheduled." breadcrumbs={[{ label: 'Requests', to: '/portal/requests' }, { label: 'New' }]} />
-      <div className="max-w-xl space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="max-w-xl space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">What's the issue? *</label>
           <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. AC not cooling in Ward A" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />

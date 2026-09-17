@@ -100,7 +100,7 @@ function MatrixEditor({ matrix }: { matrix: ApprovalMatrix }) {
   }
 
   return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-slate-900">{documentTypeLabels[matrix.documentType] ?? matrix.documentType}</h2>
@@ -210,7 +210,7 @@ export function ApprovalMatrixSettingsPage() {
   const { data, isLoading, isError, refetch } = useApprovalMatrices()
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Approval Matrix"
         subtitle="Route purchase orders and expenses through amount-based approval chains. With no active matrix, documents keep their current single-step approval."
@@ -225,7 +225,7 @@ export function ApprovalMatrixSettingsPage() {
           onRetry={() => void refetch()}
         />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4">
           {data.map((matrix) => (
             <MatrixEditor key={matrix.documentType} matrix={matrix} />
           ))}

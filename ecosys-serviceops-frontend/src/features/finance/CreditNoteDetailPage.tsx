@@ -26,7 +26,7 @@ export function CreditNoteDetailPage() {
   const canApply = note.status === 'Issued' || note.status === 'PartiallyApplied'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link to="/finance/credit-notes" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900">
         <ArrowLeft className="h-4 w-4" /> Credit Notes
       </Link>

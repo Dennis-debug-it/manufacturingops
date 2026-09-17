@@ -4,7 +4,7 @@ import { IntakeRulesSection } from './components/IntakeRulesSection'
 
 export function EmailIntakeSettingsPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
     <p className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Email is routed through your ServiceOps-managed address. <Link to="/settings/email" className="font-medium text-slate-900 underline">View workspace email</Link></p>
     <SettingsForm
       title="Email Intake"

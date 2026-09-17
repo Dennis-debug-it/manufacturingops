@@ -40,7 +40,7 @@ export function EnginePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Engine Status" subtitle="Maintenance generation engine health and rules." />
       <MaintenanceTabNav />
 
@@ -66,7 +66,7 @@ export function EnginePage() {
         <StatCard label="Manual Trigger Only" value={activePlans.filter((plan) => !plan.autoSchedule).length} />
       </div>
 
-      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <SectionHeader title="Generation Rules" description="How the current PM plans are configured to fire." />
         <p className="text-sm leading-6 text-slate-600">
           Each PM plan generates a work order via <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">POST /api/preventive-maintenance/{'{id}'}/generate-workorder</code>,

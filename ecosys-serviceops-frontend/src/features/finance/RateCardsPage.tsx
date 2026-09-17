@@ -58,7 +58,7 @@ export function RateCardsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Rate Cards"
         subtitle="Labour and material rate tables."

@@ -19,7 +19,7 @@ export function MovementsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Stock Movements"
         subtitle="Branch-to-branch stock transfers. Per-part movement history (receipts, adjustments, job usage) lives on each Part Detail page's Movement History tab — there is no single global movement feed on the backend, so this page shows the transfer log, which is the only tenant-wide movement resource."

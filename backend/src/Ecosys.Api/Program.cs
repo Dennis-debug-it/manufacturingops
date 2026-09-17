@@ -179,6 +179,10 @@ builder.Services.AddAuthorization(options =>
     AddPlatformPolicy("PlatformFinanceAccess", AppRoles.SuperAdmin, AppRoles.PlatformOwner, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin, AppRoles.PlatformAdminRole, AppRoles.Finance, AppRoles.FinanceAdmin);
     AddPlatformPolicy("PlatformSettingsAccess", AppRoles.SuperAdmin, AppRoles.PlatformSuperAdmin, AppRoles.PlatformAdmin);
 
+    options.AddPolicy(AuthorizationPolicies.TenantStaff, policy => policy
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context => AppRoles.IsTenantWorkspacePrincipal(context.User)));
+
     options.AddPolicy("PortalAccess", policy => policy.RequireAuthenticatedUser()
         .RequireRole(AppRoles.PortalClient).AddRequirements(new PortalSessionRequirement()));
 });

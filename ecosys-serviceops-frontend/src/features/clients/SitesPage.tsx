@@ -40,7 +40,7 @@ export function SitesPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Sites"
         subtitle="Sites across all clients with search and filters."

@@ -314,7 +314,45 @@ function useTenantAction(id: string, url: string) {
   })
 }
 
-export const useActivateTenant = (id: string) => useTenantAction(id, endpoints.platform.tenantActivate(id))
+/** Mirrors ActivateTenantLicenseRequest / RenewTenantLicenseRequest on the backend. */
+export interface TenantLicenseTermInput {
+  startsAt: string
+  expiresAt: string | null
+  isPerpetual: boolean
+  billingCycle: string
+  nextBillingDate: string | null
+  gracePeriodDays: number | null
+  /** Leaves the tenant's current plan untouched when null. */
+  planId: string | null
+}
+
+function useTenantLicenseAction(id: string, url: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload?: TenantLicenseTermInput) => api.post<PlatformTenantDetail>(url, payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants'] })
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', id] })
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'dashboard-summary'] })
+    },
+  })
+}
+
+export const useActivateTenant = (id: string) => useTenantLicenseAction(id, endpoints.platform.tenantActivate(id))
+export const useRenewTenantLicense = (id: string) => useTenantLicenseAction(id, endpoints.platform.tenantLicenseRenew(id))
+export const useReactivateTenantLicense = (id: string) => useTenantLicenseAction(id, endpoints.platform.tenantLicenseReactivate(id))
+
+export function useExtendTenantLicense(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (newExpiresAt: string) => api.post<PlatformTenantDetail>(endpoints.platform.tenantLicenseExtend(id), { newExpiresAt }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants'] })
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', id] })
+    },
+  })
+}
+
 export const useSuspendTenant = (id: string) => useTenantAction(id, endpoints.platform.tenantSuspend(id))
 export const useDeactivateTenant = (id: string) => useTenantAction(id, endpoints.platform.tenantDeactivate(id))
 export const useExtendTenantTrial = (id: string) => useTenantAction(id, endpoints.platform.tenantExtendTrial(id))
@@ -341,17 +379,6 @@ export function useTenantCommunicationSettings(id: string | undefined) {
   })
 }
 
-export function useUpdateTenantCommunicationSettings(id: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: TenantCommunicationSettings) =>
-      api.put<TenantCommunicationSettings>(`${endpoints.platform.tenant(id)}/communication-settings`, payload),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', id, 'communication'] })
-      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', id] })
-    },
-  })
-}
 
 /** `refetchInterval` lets operational pages opt into polling; dropdown consumers omit it. */
 export function useLeads(options?: { refetchInterval?: number }) {

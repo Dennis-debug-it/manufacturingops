@@ -92,7 +92,7 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Dashboard"
         subtitle="Operational command centre for daily field service work."
@@ -143,7 +143,7 @@ export function DashboardPage() {
         })}
       </div>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Surface as="section" variant="glass" padding="lg" className="space-y-4">
           <SectionHeader title="Work Orders by Group" description="Open work order load per assignment group." />
           <DataTable

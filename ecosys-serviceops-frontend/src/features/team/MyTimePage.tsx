@@ -54,7 +54,7 @@ function ClockCard() {
   const isClockedIn = status.status !== 'NotClockedIn'
 
   return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -133,7 +133,7 @@ function LeaveSection() {
 
   return (
     <section className="space-y-4">
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <h2 className="text-base font-semibold text-slate-900">Apply for leave</h2>
         <p className="mt-1 text-sm text-slate-500">Submit a request for your manager to approve.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -165,7 +165,7 @@ function LeaveSection() {
         </div>
       </div>
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <h2 className="text-base font-semibold text-slate-900">My requests</h2>
         {isLoading ? (
           <div className="mt-4"><Spinner label="Loading your leave requests" /></div>
@@ -192,7 +192,7 @@ function LeaveSection() {
 function TimesheetSection() {
   const { data, isLoading } = useMyTimesheet('week')
   return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
       <div className="flex items-center gap-2 text-base font-semibold text-slate-900">
         <CalendarClock className="h-4 w-4 text-slate-500" /> My timesheet
       </div>
@@ -235,7 +235,7 @@ function TimesheetSection() {
 
 export function MyTimePage() {
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-4 pb-24">
       <PageHeader title="My Time & Leave" subtitle="Clock in, apply for leave, and check your hours." />
       <ClockCard />
       <LeaveSection />

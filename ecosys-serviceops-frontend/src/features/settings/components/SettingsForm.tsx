@@ -82,7 +82,7 @@ export function SettingsForm({ title, subtitle, queryKey, fetchUrl, saveUrl, fie
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={title}
         subtitle={subtitle}
@@ -94,7 +94,7 @@ export function SettingsForm({ title, subtitle, queryKey, fetchUrl, saveUrl, fie
           ) : undefined
         }
       />
-      <div className="grid grid-cols-1 gap-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm sm:grid-cols-2">
         {fields.map((field) => {
           const value = values[field.key]
           if (field.type === 'checkbox') {

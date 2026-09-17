@@ -100,8 +100,6 @@ internal sealed class TestDataSeeder(
         dbContext.EmailSettings.Add(new EmailSetting
         {
             TenantId             = DemoTenantId,
-            UsePlatformDefaults  = true,
-            OverrideSmtpSettings = false,
             Host                 = "localhost",
             Port                 = 25,
             UseSsl               = false,

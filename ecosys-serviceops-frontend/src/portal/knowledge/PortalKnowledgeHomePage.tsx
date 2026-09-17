@@ -58,7 +58,7 @@ export function PortalKnowledgeHomePage() {
                 key={category.id}
                 type="button"
                 onClick={() => navigate(`/portal/knowledge/browse?category=${category.id}`)}
-                className="flex items-start gap-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
+                className="flex items-start gap-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-left shadow-sm transition hover:border-slate-300 hover:shadow-md"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700">
                   <Icon className="h-5 w-5" />

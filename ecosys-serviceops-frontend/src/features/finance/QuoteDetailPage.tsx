@@ -50,7 +50,7 @@ export function QuoteDetailPage() {
     if (!id) return
     setDownloading(true)
     try {
-      const response = await apiClient.get(endpoints.quotations.pdf(id), { responseType: 'blob' })
+      const response = await apiClient.get(endpoints.quotations.pdf(id), { responseType: 'blob', suppressGlobalErrorToast: true })
       const url = URL.createObjectURL(response.data as Blob)
       const link = document.createElement('a')
       link.href = url
@@ -80,7 +80,7 @@ export function QuoteDetailPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={quote.quoteNumber}
         subtitle={quote.subject ?? quote.clientName ?? undefined}

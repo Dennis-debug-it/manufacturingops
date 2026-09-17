@@ -83,7 +83,7 @@ export function HealthSettingsPage() {
   const downCount = (services ?? []).filter((s) => s.status === 'Down').length
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="System Health" subtitle={`Background jobs and service status${data ? ` · v${data.version}` : ''}.`} />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -95,7 +95,7 @@ export function HealthSettingsPage() {
       </div>
 
       {data?.infrastructure ? (
-        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Infrastructure</h2>
           <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
             <StatCard label="Uptime" value={formatUptime(data.infrastructure.uptimeSeconds)} />
@@ -124,7 +124,7 @@ export function HealthSettingsPage() {
         </div>
       ) : null}
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Services</h2>
         {(services ?? []).length === 0 ? (
           <p className="mt-3 text-sm text-slate-500">Loading service health…</p>
@@ -149,7 +149,7 @@ export function HealthSettingsPage() {
         )}
       </div>
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Background Jobs</h2>
         {(jobs ?? []).length === 0 ? (
           <p className="mt-3 text-sm text-slate-500">Loading background job history…</p>

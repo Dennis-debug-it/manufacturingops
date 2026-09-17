@@ -255,7 +255,7 @@ export interface UpdatePortalProfilePayload {
 export function useUpdatePortalProfile() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: UpdatePortalProfilePayload) => portalApi.put<PortalProfile>(endpoints.portal.profile, payload),
+    mutationFn: (payload: UpdatePortalProfilePayload) => portalApi.put<PortalProfile>(endpoints.portal.profile, payload, { suppressGlobalErrorToast: true }),
     onSuccess: (data) => void queryClient.setQueryData(['portal', 'profile'], data),
   })
 }

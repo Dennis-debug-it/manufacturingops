@@ -38,7 +38,7 @@ export function TimelineTab({ workOrderId }: { workOrderId: string }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {canComment ? (
         <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <label htmlFor="timeline-update" className="mb-2 block text-sm font-medium text-slate-700">Add Update</label>

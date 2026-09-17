@@ -31,7 +31,7 @@ export function PortalQuoteDetailPage() {
   const canRespond = data.status === 'Sent'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={data.quoteNumber}
         subtitle={data.subject ?? `Valid until ${formatDate(data.validUntil)}`}

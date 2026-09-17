@@ -63,7 +63,7 @@ export function TimeAttendanceSettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Time & Attendance Settings"
         subtitle="Work hours, rounding rules, overtime thresholds, and leave types."
@@ -75,7 +75,7 @@ export function TimeAttendanceSettingsPage() {
           ) : undefined
         }
       />
-      <div className="grid grid-cols-1 gap-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm sm:grid-cols-2">
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Clock Rounding (minutes)</label>
           <input
@@ -125,7 +125,7 @@ export function TimeAttendanceSettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Leave Types</h2>
           {canManage ? (

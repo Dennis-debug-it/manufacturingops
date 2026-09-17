@@ -109,33 +109,51 @@ public static class EmailDeliveryResolution
         string.IsNullOrWhiteSpace(preferred) ? (string.IsNullOrWhiteSpace(fallback) ? null : fallback) : preferred;
 }
 
+/// <summary>
+/// SMTP transport is global platform infrastructure — there is no per-tenant SMTP server, and no
+/// per-tenant override of it, even via platform-admin impersonation. What differentiates a tenant is
+/// its managed sender identity (the {slug}@serviceops... address — see TenantEmailIdentity), which is
+/// layered on top of the platform's transport for every send.
+/// </summary>
 public sealed class EmailSettingsResolver(AppDbContext dbContext) : IEmailSettingsResolver
 {
     public async Task<EffectiveEmailSettings> ResolveAsync(Guid? tenantId, CancellationToken cancellationToken = default)
     {
         var scopeTenantId = tenantId ?? PlatformConstants.RootTenantId;
+        var platformSettings = await LoadAsync(PlatformConstants.RootTenantId, cancellationToken);
 
         if (scopeTenantId == PlatformConstants.RootTenantId)
         {
-            var platformOwnSettings = await LoadAsync(PlatformConstants.RootTenantId, cancellationToken);
-            return new EffectiveEmailSettings(platformOwnSettings, UsesPlatformMail: true);
+            return new EffectiveEmailSettings(platformSettings, UsesPlatformMail: true);
         }
 
         var tenantSettings = await LoadAsync(scopeTenantId, cancellationToken);
-
-        // A tenant with no row of its own has never been configured either way — platform mail is the
-        // safe reading, and the alternative (refusing to send) silently strands password reset and
-        // invitation emails.
-        var inheritsPlatformMail = tenantSettings is null
-            || (tenantSettings.UsePlatformDefaults && !tenantSettings.OverrideSmtpSettings);
-
-        if (!inheritsPlatformMail)
+        if (tenantSettings is null || platformSettings is null)
         {
-            return new EffectiveEmailSettings(tenantSettings, UsesPlatformMail: false);
+            return new EffectiveEmailSettings(tenantSettings ?? platformSettings, UsesPlatformMail: true);
         }
 
-        var platformSettings = await LoadAsync(PlatformConstants.RootTenantId, cancellationToken);
-        return new EffectiveEmailSettings(platformSettings, UsesPlatformMail: true);
+        var merged = new EmailSetting
+        {
+            Id = platformSettings.Id,
+            TenantId = tenantSettings.TenantId,
+            IsEnabled = tenantSettings.IsEnabled,
+            Provider = platformSettings.Provider,
+            Host = platformSettings.Host,
+            Port = platformSettings.Port,
+            UseSsl = platformSettings.UseSsl,
+            Username = platformSettings.Username,
+            Password = platformSettings.Password,
+            EncryptedSecret = platformSettings.EncryptedSecret,
+            SenderName = tenantSettings.SenderName,
+            SenderAddress = tenantSettings.SenderAddress,
+            ReplyToEmail = tenantSettings.ReplyToEmail,
+            ManagedEmailAddress = tenantSettings.ManagedEmailAddress,
+            InboundEnabled = tenantSettings.InboundEnabled,
+            EmailSignature = tenantSettings.EmailSignature,
+        };
+
+        return new EffectiveEmailSettings(merged, UsesPlatformMail: true);
     }
 
     private Task<EmailSetting?> LoadAsync(Guid tenantId, CancellationToken cancellationToken) =>

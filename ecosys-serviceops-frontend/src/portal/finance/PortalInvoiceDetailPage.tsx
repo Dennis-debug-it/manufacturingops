@@ -23,7 +23,7 @@ export function PortalInvoiceDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={data.invoiceNumber}
         subtitle={`Due ${formatDate(data.dueDate)}`}
@@ -61,7 +61,7 @@ export function PortalInvoiceDetailPage() {
       </div>
 
       {data.payments.length > 0 ? (
-        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">Payment History</h2>
           <div className="mt-3 space-y-2">
             {data.payments.map((payment) => (
@@ -75,7 +75,7 @@ export function PortalInvoiceDetailPage() {
       ) : null}
 
       {data.notes ? (
-        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-900">Notes</h2>
           <p className="mt-2 whitespace-pre-line text-sm text-slate-700">{data.notes}</p>
         </div>

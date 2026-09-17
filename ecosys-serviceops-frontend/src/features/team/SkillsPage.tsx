@@ -69,7 +69,7 @@ export function SkillsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Skills"
         subtitle="Skill and certification catalogue mapped to the technician certification tracking backend."

@@ -67,7 +67,7 @@ export function PmTemplatesSettingsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="PM Templates"
         subtitle="Reusable preventive maintenance checklists used when scheduling PM plans."

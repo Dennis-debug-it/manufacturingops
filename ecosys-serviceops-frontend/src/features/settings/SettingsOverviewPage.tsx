@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
   Radio, MessageCircle, CreditCard, ShieldCheck, Users, Bell, Plug, LineChart,
-  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Send, Rocket,
+  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Send, Rocket, Percent,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
@@ -29,6 +29,7 @@ const groups: SettingsGroup[] = [
     title: 'Operations',
     items: [
       { to: '/settings/numbering', label: 'Numbering Rules', description: 'Document prefixes and sequences.', icon: Hash },
+      { to: '/settings/operational-defaults', label: 'Operational Defaults', description: 'Signature and completion rules new work orders follow.', icon: ClipboardList },
       { to: '/settings/pm-templates', label: 'PM Templates', description: 'Preventive maintenance checklists.', icon: ClipboardList },
       { to: '/settings/wo-templates', label: 'Work Order Templates', description: 'Reusable job types with default tasks and materials.', icon: ClipboardList },
       { to: '/settings/inventory', label: 'Inventory Settings', description: 'Stock alerts and deduction rules.', icon: Boxes },
@@ -50,6 +51,7 @@ const groups: SettingsGroup[] = [
   {
     title: 'Finance',
     items: [
+      { to: '/settings/finance-defaults', label: 'Finance Defaults', description: 'Default tax rate, payment terms, and approval rules.', icon: Percent },
       { to: '/settings/payments', label: 'Payments', description: 'M-Pesa, Stripe, and bank transfer settings.', icon: CreditCard },
       { to: '/settings/credit-control', label: 'Credit Control', description: 'Payment terms and credit limits.', icon: ShieldCheck },
       { to: '/settings/approval-matrix', label: 'Approval Matrix', description: 'Amount-based approval chains for POs and expenses.', icon: GitBranch },
@@ -81,7 +83,7 @@ export function SettingsOverviewPage() {
   const { canAccessPath } = useEntitlements()
   const visibleGroups = groups.map((group) => ({ ...group, items: group.items.filter((item) => canAccessPath(item.to)) })).filter((group) => group.items.length > 0)
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       <PageHeader title="Settings" subtitle="Company, branding, templates, integrations, and policies for this workspace." />
       {visibleGroups.map((group) => (
         <section key={group.title} className="space-y-3">

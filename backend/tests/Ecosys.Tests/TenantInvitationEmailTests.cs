@@ -34,6 +34,7 @@ public sealed class TenantInvitationEmailTests
         http.Request.Headers.Origin = "https://untrusted.test";
         var delivery = new UserCredentialDeliveryService(db, new HttpContextAccessor { HttpContext = http }, capture,
             new EmailTemplateService(db), new EmailDeliveryLogService(db), new EmailSubjectRuleService(db), new NoSecrets(),
+            new EmailSettingsResolver(db), Options.Create(new SmtpOptions()),
             Options.Create(new PublicAppOptions { PublicUrl = "https://serviceops.example.test" }),
             NullLogger<UserCredentialDeliveryService>.Instance);
         var link = delivery.BuildInviteUrl("opaque+/=token");

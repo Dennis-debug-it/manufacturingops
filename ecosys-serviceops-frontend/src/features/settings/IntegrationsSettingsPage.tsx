@@ -101,7 +101,7 @@ function useDeleteWebhook() {
 function useTestWebhook() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) => api.post<WebhookDelivery>(`/api/settings/webhooks/${id}/test`),
+    mutationFn: (id: string) => api.post<WebhookDelivery>(`/api/settings/webhooks/${id}/test`, undefined, { suppressGlobalErrorToast: true }),
     onSuccess: (_data, id) => void queryClient.invalidateQueries({ queryKey: ['settings', 'integrations', 'webhooks', id, 'delivery-log'] }),
   })
 }
@@ -271,7 +271,7 @@ export function IntegrationsSettingsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Integrations" subtitle="API access keys and outbound webhooks for third-party integrations." />
 
       {revealedKey ? (
@@ -300,7 +300,7 @@ export function IntegrationsSettingsPage() {
         </div>
       ) : null}
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <KeyRound className="h-4 w-4 text-slate-400" />
@@ -317,7 +317,7 @@ export function IntegrationsSettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Webhook className="h-4 w-4 text-slate-400" />

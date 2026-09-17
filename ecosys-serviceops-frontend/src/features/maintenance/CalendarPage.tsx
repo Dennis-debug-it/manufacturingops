@@ -119,7 +119,7 @@ export function CalendarPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="PM Calendar"
         subtitle="Preventive maintenance schedule across all active plans."

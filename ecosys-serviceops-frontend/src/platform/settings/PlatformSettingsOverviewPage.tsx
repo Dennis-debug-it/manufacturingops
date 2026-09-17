@@ -22,7 +22,7 @@ const items: Array<{ to: string; label: string; description: string; icon: typeo
 
 export function PlatformSettingsOverviewPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Platform Settings" subtitle="Configuration that applies across every tenant workspace." />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {items.map((item) => (

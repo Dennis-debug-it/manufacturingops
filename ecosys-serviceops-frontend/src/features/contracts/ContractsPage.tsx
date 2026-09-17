@@ -42,7 +42,7 @@ export function ContractsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Contracts"
         subtitle="Contract list, expiry, and renewal filters."

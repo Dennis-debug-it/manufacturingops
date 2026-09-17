@@ -89,7 +89,7 @@ export function AnnouncementsSettingsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Announcements"
         subtitle="Platform-wide banners and release notes shown to tenant workspaces."

@@ -34,7 +34,7 @@ export function PartsPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Parts Catalogue"
         subtitle="Searchable parts catalogue and stock metadata."

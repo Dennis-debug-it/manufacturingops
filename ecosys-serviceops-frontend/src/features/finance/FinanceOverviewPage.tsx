@@ -61,7 +61,7 @@ export function FinanceOverviewPage() {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title="Finance"
         subtitle="Revenue, receivables, pricing controls, and billing operations in one workspace."
@@ -90,9 +90,9 @@ export function FinanceOverviewPage() {
         <StatCard label="Outstanding" value={invoicesLoading || invoicesError ? '—' : formatCurrency(outstandingBalance, invoiceCurrency)} tone={invoicesError ? 'default' : outstandingBalance > 0 ? 'warning' : 'success'} icon={<StatIcon tone={outstandingBalance > 0 ? 'warning' : 'success'}><Clock className="h-4 w-4" /></StatIcon>} />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <div className="space-y-6">
-          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Recent invoices</h2>
@@ -103,7 +103,7 @@ export function FinanceOverviewPage() {
             <DataTable columns={invoiceColumns} data={invoiceRows} loading={invoicesLoading} emptyTitle={invoicesError ? 'Invoices unavailable' : 'No invoices yet'} emptyDescription={invoicesError ? 'Invoice data could not be loaded.' : 'Create your first invoice to start tracking collections.'} />
           </section>
 
-          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Recent quotes</h2>
@@ -115,8 +115,8 @@ export function FinanceOverviewPage() {
           </section>
         </div>
 
-        <div className="space-y-6">
-          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+        <div className="space-y-4">
+          <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Receivables watchlist</h2>
@@ -127,7 +127,7 @@ export function FinanceOverviewPage() {
             <DataTable columns={agingColumns} data={agingRows.map((row) => ({ ...row, id: row.clientId }))} loading={agingLoading} emptyTitle={agingError ? 'Aging unavailable' : 'No overdue balances'} emptyDescription={agingError ? 'Receivables aging could not be loaded.' : 'Outstanding client balances will appear here when invoices age.'} />
           </section>
 
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-5 shadow-sm">
+          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-900">Pricing and controls</h2>
             <p className="mt-1 text-sm text-slate-600">Jump straight to the places that affect rate application, approvals, and collection follow-up.</p>
             <div className="mt-4 grid gap-3">

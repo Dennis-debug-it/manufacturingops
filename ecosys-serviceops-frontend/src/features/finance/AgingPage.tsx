@@ -60,7 +60,7 @@ export function AgingPage() {
   )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader title="Aging" subtitle="Receivables aging buckets, colour-coded by days overdue. Send a statement straight from any row." />
       <FinanceWorkspaceNav />
       <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 text-sm text-slate-600 shadow-sm">

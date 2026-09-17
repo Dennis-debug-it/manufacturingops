@@ -37,7 +37,7 @@ export function EmailIdentitySettingsPage() {
   const set = <K extends keyof EmailIdentity>(key: K, value: EmailIdentity[K]) => { if (values) setDraft({ ...values, [key]: value }) }
   const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900'
 
-  return <div className="space-y-6">
+  return <div className="space-y-4">
     <PageHeader title="Workspace Email" subtitle="Your ServiceOps-managed email identity and communication preferences." />
     {!canManage ? <p className="text-sm text-slate-600">Your workspace administrator manages these email preferences.</p>
       : identity.isLoading ? <Spinner label="Loading workspace email" />

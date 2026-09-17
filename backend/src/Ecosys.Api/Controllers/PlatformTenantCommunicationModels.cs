@@ -1,50 +1,19 @@
-using Ecosys.Shared.Contracts.Integration;
-
 namespace Ecosys.Api.Controllers;
 
+/// <summary>
+/// Identity only — SMTP transport is global platform infrastructure with no per-tenant override (not
+/// even via impersonation), so there is nothing transport-related left to show or edit here. What
+/// differentiates a tenant's outbound mail is this sender identity, layered on the platform's transport.
+/// </summary>
 public sealed record TenantEmailSettingsResponse(
     Guid Id,
     Guid TenantId,
-    bool UsePlatformDefaults,
-    bool OverrideSmtpSettings,
-    EmailDeliveryMode DeliveryMode,
-    string? SmtpHost,
-    int? SmtpPort,
-    string? SmtpUsername,
-    string? SmtpPasswordMasked,
     string? SenderName,
     string? SenderEmail,
     string? ReplyToEmail,
-    bool EnableSslTls,
-    EmailSecureMode SecureMode,
-    string? ApiEndpoint,
-    string? ApiKeyMasked,
-    string? ApiProviderName,
-    int TimeoutSeconds,
-    int MaxRetries,
     bool EnableTenantEmailNotifications,
     DateTime? LastTestedAt,
     string? LastError);
-
-public sealed record TenantEmailSettingsRequest(
-    bool UsePlatformDefaults,
-    bool OverrideSmtpSettings,
-    EmailDeliveryMode DeliveryMode,
-    string? SmtpHost,
-    int? SmtpPort,
-    string? SmtpUsername,
-    string? SmtpPasswordSecret,
-    string? SenderName,
-    string? SenderEmail,
-    string? ReplyToEmail,
-    bool EnableSslTls,
-    EmailSecureMode SecureMode,
-    string? ApiEndpoint,
-    string? ApiKeySecret,
-    string? ApiProviderName,
-    int TimeoutSeconds,
-    int MaxRetries,
-    bool EnableTenantEmailNotifications);
 
 public sealed record TenantNotificationSettingResponse(
     string NotificationKey,
@@ -82,11 +51,6 @@ public sealed record TenantCommunicationSettingsResponse(
     TenantEmailSettingsResponse EmailSettings,
     IReadOnlyCollection<TenantNotificationSettingResponse> NotificationSettings,
     IReadOnlyCollection<TenantNotificationRecipientResponse> Recipients);
-
-public sealed record TenantCommunicationSettingsRequest(
-    TenantEmailSettingsRequest EmailSettings,
-    IReadOnlyCollection<TenantNotificationSettingRequest> NotificationSettings,
-    IReadOnlyCollection<TenantNotificationRecipientRequest> Recipients);
 
 public sealed record TenantCommunicationActionRequest(string? TestRecipientEmail);
 

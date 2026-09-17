@@ -112,7 +112,7 @@ export function UserDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <PageHeader
         title={user.fullName}
         subtitle={user.jobTitle ?? user.department ?? 'User'}
