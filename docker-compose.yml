@@ -58,6 +58,7 @@ services:
       Storage__BaseUrl: ${ECOSYS_PUBLIC_URL}/files
     volumes:
       - uploads:/app/storage/uploads
+      - data-protection-keys:/home/app/.aspnet/DataProtection-Keys
       # Tenant branding logos, written by TenantController to {WebRootPath}/uploads/logos
       # (EC-P2-12). Mounted at the logos subdirectory *only* - mounting all of /app/wwwroot
       # would shadow the app's own static assets. The Dockerfile creates and chowns this
@@ -128,3 +129,4 @@ volumes:
   pgdata:
   uploads:
   tenant-logos:
+  data-protection-keys:
