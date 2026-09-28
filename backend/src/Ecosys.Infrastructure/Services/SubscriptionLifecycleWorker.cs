@@ -58,11 +58,12 @@ public sealed class SubscriptionLifecycleWorker(
 
                 if (now > graceEndsAt)
                 {
-                    license.Status = LicenseStatuses.Suspended;
-                    license.SuspendedAt = now;
+                    // A non-payment suspension, recorded as such so payment, extension or Reactivate can lift
+                    // it, and projected onto the tenant row so the platform shows it as Suspended (TM-P1-01).
+                    TenantLifecycleState.Suspend(license, LicenseSuspensionReasons.NonPayment, now);
                     if (license.Tenant is not null)
                     {
-                        license.Tenant.LicenseStatus = LicenseStatuses.Suspended;
+                        TenantLifecycleState.Sync(license.Tenant, license, now);
                     }
 
                     suspendedCount++;

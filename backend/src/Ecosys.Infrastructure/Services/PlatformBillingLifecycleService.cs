@@ -104,18 +104,23 @@ internal sealed class PlatformBillingLifecycleService(
         license.NextBillingDate = newExpiry;
         license.OverdueWarningSentAt = null;
 
-        var wasSuspendedOrLapsed = LicenseStatuses.IsTrialStatus(license.Status)
-            || string.Equals(license.Status, LicenseStatuses.Suspended, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(license.Status, LicenseStatuses.Expired, StringComparison.OrdinalIgnoreCase);
+        // Payment converts any trial (including a lapsed TrialExpired one — TM-P1-05), an expired term and
+        // a non-payment suspension to Active. A manual suspension is an operator decision that payment
+        // must not override; its term is still extended so Reactivate can lift it later.
+        var wasSuspendedOrLapsed = TenantLifecycleState.IsAnyTrialStatus(license.Status)
+            || string.Equals(license.Status, LicenseStatuses.Expired, StringComparison.OrdinalIgnoreCase)
+            || (TenantLifecycleState.IsSuspended(license) && !TenantLifecycleState.IsManualSuspension(license));
 
         if (wasSuspendedOrLapsed)
         {
             license.Status = LicenseStatuses.Active;
             license.SuspendedAt = null;
-            if (license.Tenant is not null)
-            {
-                license.Tenant.LicenseStatus = LicenseStatuses.Active;
-            }
+            license.SuspensionReason = null;
+        }
+
+        if (license.Tenant is not null)
+        {
+            TenantLifecycleState.Sync(license.Tenant, license, now);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

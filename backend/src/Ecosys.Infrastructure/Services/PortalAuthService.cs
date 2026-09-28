@@ -19,6 +19,12 @@ public interface IPortalAuthService
 {
     Task RequestMagicLinkAsync(string email, string magicLinkBaseUrl, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default);
     Task<PortalMagicLinkResult> VerifyMagicLinkAsync(string token, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Issues a one-time sign-in link for an active portal contact and returns it to the caller instead of
+    /// emailing it. Only for platform-operated workspaces (the demo) whose contacts have no real mailbox.
+    /// </summary>
+    Task<string> IssueSignInLinkAsync(Guid portalUserId, string magicLinkBaseUrl, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default);
 }
 
 internal sealed class PortalAuthService(
@@ -51,19 +57,7 @@ internal sealed class PortalAuthService(
             return;
         }
 
-        var now = DateTime.UtcNow;
-        var rawToken = CreateRawToken();
-        dbContext.ClientPortalLoginTokens.Add(new ClientPortalLoginToken
-        {
-            ClientPortalUserId = portalUser.Id,
-            TokenHash = HashToken(rawToken),
-            ExpiresAt = now.AddMinutes(LinkExpiryMinutes),
-            RequestedIp = ipAddress,
-            UserAgent = userAgent,
-        });
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        var link = $"{magicLinkBaseUrl.TrimEnd('/')}/portal/verify#{rawToken}";
+        var link = await CreateLinkAsync(portalUser, magicLinkBaseUrl, ipAddress, userAgent, cancellationToken);
         var html = $"""
             <p>Hello {System.Net.WebUtility.HtmlEncode(portalUser.FullName)},</p>
             <p>Use the link below to sign in to the {System.Net.WebUtility.HtmlEncode(portalUser.Tenant.CompanyName)} client portal. This link expires in {LinkExpiryMinutes} minutes and can only be used once.</p>
@@ -96,6 +90,51 @@ internal sealed class PortalAuthService(
             $"Magic link requested for portal contact '{portalUser.Email}'.",
             actorName: portalUser.FullName,
             cancellationToken: cancellationToken);
+    }
+
+    public async Task<string> IssueSignInLinkAsync(Guid portalUserId, string magicLinkBaseUrl, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default)
+    {
+        var portalUser = await dbContext.ClientPortalUsers
+            .IgnoreQueryFilters()
+            .Include(x => x.Client)
+            .Include(x => x.Tenant)
+            .SingleOrDefaultAsync(x => x.Id == portalUserId, cancellationToken);
+
+        // Same eligibility as an emailed link: the link must not open a door the login page would keep shut.
+        if (portalUser is null || !portalUser.IsActive || portalUser.Client is null || !portalUser.Client.IsActive
+            || portalUser.Client.TenantId != portalUser.TenantId || portalUser.Tenant is null || !portalUser.Tenant.IsActive)
+        {
+            throw new BusinessRuleException("This portal contact cannot sign in.");
+        }
+
+        var link = await CreateLinkAsync(portalUser, magicLinkBaseUrl, ipAddress, userAgent, cancellationToken);
+
+        await auditLogService.LogAsync(
+            portalUser.TenantId,
+            null,
+            "portal.auth.link-issued",
+            nameof(ClientPortalUser),
+            portalUser.Id.ToString(),
+            $"Sign-in link issued directly (not emailed) for portal contact '{portalUser.Email}'.",
+            cancellationToken: cancellationToken);
+
+        return link;
+    }
+
+    private async Task<string> CreateLinkAsync(ClientPortalUser portalUser, string magicLinkBaseUrl, string? ipAddress, string? userAgent, CancellationToken cancellationToken)
+    {
+        var rawToken = CreateRawToken();
+        dbContext.ClientPortalLoginTokens.Add(new ClientPortalLoginToken
+        {
+            ClientPortalUserId = portalUser.Id,
+            TokenHash = HashToken(rawToken),
+            ExpiresAt = DateTime.UtcNow.AddMinutes(LinkExpiryMinutes),
+            RequestedIp = ipAddress,
+            UserAgent = userAgent,
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return $"{magicLinkBaseUrl.TrimEnd('/')}/portal/verify#{rawToken}";
     }
 
     public async Task<PortalMagicLinkResult> VerifyMagicLinkAsync(string token, CancellationToken cancellationToken = default)

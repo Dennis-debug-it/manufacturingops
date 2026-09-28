@@ -118,6 +118,13 @@ internal sealed class MvpAuthService(
         string country,
         CancellationToken cancellationToken = default)
     {
+        // Production tenants are provisioned from the platform so plan, seats and the invitation are
+        // always set; an anonymous caller must not be able to mint an active workspace.
+        if (!authSecurityOptions.Value.AllowSelfSignup)
+        {
+            throw new NotFoundException("Self-service signup is not available.");
+        }
+
         if (string.IsNullOrWhiteSpace(fullName) ||
             string.IsNullOrWhiteSpace(email) ||
             string.IsNullOrWhiteSpace(password) ||

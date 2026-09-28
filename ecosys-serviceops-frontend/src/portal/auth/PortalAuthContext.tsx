@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { endpoints } from '../../shared/api/endpoints'
 import { portalApi } from '../api/portalApiClient'
 import {
@@ -34,8 +35,13 @@ function toSession(response: PortalVerifyResponse, fallbackToken?: string): Port
 }
 
 export function PortalAuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
   const [session, setStateSession] = useState<PortalSession | null>(null)
   const [isReady, setIsReady] = useState(false)
+  // Bumped whenever the signed-in contact changes (a new link is verified, or sign-out). The start-up /me
+  // check was sent with whatever token was stored before; if a newer sign-in lands first, that stale answer
+  // must not overwrite it — otherwise opening a new link over an old session showed the previous contact.
+  const sessionVersion = useRef(0)
 
   useEffect(() => {
     setPortalLogoutHandler(() => {
@@ -55,15 +61,16 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      const startedAt = sessionVersion.current
       try {
         const me = await portalApi.get<PortalVerifyResponse>(endpoints.portal.me)
-        if (!mounted) return
+        if (!mounted || sessionVersion.current !== startedAt) return
         // /me never returns a token — carry the existing one forward.
         const nextSession = toSession(me, stored.token)
         setStateSession(nextSession)
         setPortalSession(nextSession)
       } catch {
-        if (!mounted) return
+        if (!mounted || sessionVersion.current !== startedAt) return
         clearPortalSession()
         setStateSession(null)
       } finally {
@@ -84,6 +91,9 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
   const verify = async (token: string) => {
     const response = await portalApi.post<PortalVerifyResponse>(endpoints.portal.verify, { token })
     const nextSession = toSession(response)
+    sessionVersion.current += 1
+    // Data cached for a previous contact must never show under the new one.
+    queryClient.removeQueries({ queryKey: ['portal'] })
     setPortalAuthToken(nextSession.token)
     setPortalSession(nextSession)
     setStateSession(nextSession)
@@ -97,6 +107,8 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // interceptor already surfaced the error toast
     } finally {
+      sessionVersion.current += 1
+      queryClient.removeQueries({ queryKey: ['portal'] })
       clearPortalSession()
       setPortalAuthToken(null)
       setStateSession(null)

@@ -1,7 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 import { CORS_HEADERS, json, loginWithMockSession, registerApiCatchAll } from './helpers/auth'
+import { E2E_API_URL } from './helpers/test-data'
 
-const API = 'http://localhost:5072'
+// Must match the API origin the app under test calls (E2E_API_URL).
+const API = E2E_API_URL
 const WORK_ORDER_ID = 'auth-smoke-wo-1'
 
 async function mockProtectedWorkOrder(page: Page) {

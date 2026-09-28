@@ -63,7 +63,7 @@ export function PlatformShell({ children }: PlatformShellProps) {
         <Crystal variant="command-centre" className="absolute inset-0" />
       </div>
       <div className="mx-auto flex min-h-screen max-w-[1900px]">
-        <aside className="hidden w-72 shrink-0 bg-gradient-to-b from-[#073F43] to-[#052D30] lg:flex lg:flex-col">
+        <aside data-testid="command-centre-sidebar" className="hidden w-72 shrink-0 bg-gradient-to-b from-[#073F43] to-[#052D30] lg:flex lg:flex-col">
           <div className="border-b border-white/10 px-6 py-5">
             <div>
               <Logo tone="dark" className="h-8 w-auto" />

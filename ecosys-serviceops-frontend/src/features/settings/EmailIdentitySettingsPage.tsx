@@ -10,6 +10,8 @@ interface EmailIdentity {
   emailAddress: string | null
   displayName: string
   replyToAddress: string | null
+  financeReplyToAddress: string | null
+  operationsReplyToAddress: string | null
   inboundEnabled: boolean
   outboundEnabled: boolean
   emailSignature: string | null
@@ -25,6 +27,8 @@ export function EmailIdentitySettingsPage() {
   const save = useMutation({
     mutationFn: (value: EmailIdentity) => api.put<EmailIdentity>('/api/tenant/email-identity', {
       displayName: value.displayName.trim(), replyToAddress: value.replyToAddress?.trim() || null,
+      financeReplyToAddress: value.financeReplyToAddress?.trim() || null,
+      operationsReplyToAddress: value.operationsReplyToAddress?.trim() || null,
       inboundEnabled: value.inboundEnabled, outboundEnabled: value.outboundEnabled,
       emailSignature: value.emailSignature?.trim() || null,
     }),
@@ -51,6 +55,8 @@ export function EmailIdentitySettingsPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-2 text-sm text-slate-700"><span>Display Name</span><input required maxLength={150} value={values.displayName} onChange={(event) => set('displayName', event.target.value)} className={inputClass} /></label>
           <label className="space-y-2 text-sm text-slate-700"><span>Reply-to Address</span><input type="email" value={values.replyToAddress ?? ''} onChange={(event) => set('replyToAddress', event.target.value)} className={inputClass} /></label>
+          <label className="space-y-2 text-sm text-slate-700"><span>Finance Reply-to Address</span><input type="email" placeholder="Uses Reply-to Address when blank" value={values.financeReplyToAddress ?? ''} onChange={(event) => set('financeReplyToAddress', event.target.value)} className={inputClass} /><span className="block text-xs text-slate-500">Invoices, receipts, statements and quotations.</span></label>
+          <label className="space-y-2 text-sm text-slate-700"><span>Operations Reply-to Address</span><input type="email" placeholder="Uses Reply-to Address when blank" value={values.operationsReplyToAddress ?? ''} onChange={(event) => set('operationsReplyToAddress', event.target.value)} className={inputClass} /><span className="block text-xs text-slate-500">Work orders, SLA, maintenance and technician updates.</span></label>
         </div>
         <label className="block space-y-2 text-sm text-slate-700"><span>Email Signature</span><textarea rows={4} maxLength={4000} value={values.emailSignature ?? ''} onChange={(event) => set('emailSignature', event.target.value)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" /></label>
         <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={values.inboundEnabled} onChange={(event) => set('inboundEnabled', event.target.checked)} />Enable inbound email</label>

@@ -22,6 +22,7 @@ import { PortalProfilePage } from './PortalProfilePage'
 import { PortalKnowledgeHomePage } from './knowledge/PortalKnowledgeHomePage'
 import { PortalKnowledgeBrowsePage } from './knowledge/PortalKnowledgeBrowsePage'
 import { PortalKnowledgeArticlePage } from './knowledge/PortalKnowledgeArticlePage'
+import { PortalFeatureGate, portalFeatures } from './components/PortalFeatureGate'
 
 function PortalShellRoute({ children }: { children: React.ReactNode }) {
   return (
@@ -41,16 +42,16 @@ export function PortalApp() {
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<PortalShellRoute><PortalDashboardPage /></PortalShellRoute>} />
           <Route path="requests" element={<PortalShellRoute><PortalRequestsPage /></PortalShellRoute>} />
-          <Route path="requests/new" element={<PortalShellRoute><PortalNewRequestPage /></PortalShellRoute>} />
+          <Route path="requests/new" element={<PortalShellRoute><PortalFeatureGate feature={portalFeatures.requestSubmission}><PortalNewRequestPage /></PortalFeatureGate></PortalShellRoute>} />
           <Route path="requests/:id" element={<PortalShellRoute><PortalRequestDetailPage /></PortalShellRoute>} />
-          <Route path="assets" element={<PortalShellRoute><PortalAssetsPage /></PortalShellRoute>} />
+          <Route path="assets" element={<PortalShellRoute><PortalFeatureGate feature={portalFeatures.assetRegister}><PortalAssetsPage /></PortalFeatureGate></PortalShellRoute>} />
           <Route path="maintenance" element={<PortalShellRoute><PortalMaintenancePage /></PortalShellRoute>} />
           <Route path="reports" element={<PortalShellRoute><PortalReportsPage /></PortalShellRoute>} />
-          <Route path="invoices" element={<PortalShellRoute><PortalInvoicesPage /></PortalShellRoute>} />
-          <Route path="invoices/:id" element={<PortalShellRoute><PortalInvoiceDetailPage /></PortalShellRoute>} />
+          <Route path="invoices" element={<PortalShellRoute><PortalFeatureGate feature={portalFeatures.invoices}><PortalInvoicesPage /></PortalFeatureGate></PortalShellRoute>} />
+          <Route path="invoices/:id" element={<PortalShellRoute><PortalFeatureGate feature={portalFeatures.invoices}><PortalInvoiceDetailPage /></PortalFeatureGate></PortalShellRoute>} />
           <Route path="quotes" element={<PortalShellRoute><PortalQuotesPage /></PortalShellRoute>} />
           <Route path="quotes/:id" element={<PortalShellRoute><PortalQuoteDetailPage /></PortalShellRoute>} />
-          <Route path="contracts" element={<PortalShellRoute><PortalContractsPage /></PortalShellRoute>} />
+          <Route path="contracts" element={<PortalShellRoute><PortalFeatureGate feature={portalFeatures.contracts}><PortalContractsPage /></PortalFeatureGate></PortalShellRoute>} />
           <Route path="knowledge" element={<PortalShellRoute><PortalKnowledgeHomePage /></PortalShellRoute>} />
           <Route path="knowledge/browse" element={<PortalShellRoute><PortalKnowledgeBrowsePage /></PortalShellRoute>} />
           <Route path="knowledge/articles/:slug" element={<PortalShellRoute><PortalKnowledgeArticlePage /></PortalShellRoute>} />

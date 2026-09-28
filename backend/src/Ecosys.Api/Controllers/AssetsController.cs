@@ -140,7 +140,7 @@ public sealed class AssetsController(
     public async Task<ActionResult<AssetResponse>> Create([FromBody] UpsertAssetRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
-        await licenseGuardService.EnsureCanCreateAssetAsync(TenantId, cancellationToken);
+        await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
         Validate(request);
         await EnsureClientExistsAsync(request.ClientId, cancellationToken);
         await EnsureSiteIsValidAsync(request.ClientId, request.SiteId, cancellationToken);

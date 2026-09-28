@@ -150,10 +150,10 @@ export function UserDetailPage() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[
             ['Email', user.hasEmail ? user.email : 'No email address'],
-            ['Username', user.username ?? 'â€”'],
-            ['Phone', user.phoneNumber ?? 'â€”'],
-            ['Department', user.department ?? 'â€”'],
-            ['Branch Access', user.hasAllBranchAccess ? 'All Branches' : (user.defaultBranchName ?? 'â€”')],
+            ['Username', user.username ?? '—'],
+            ['Phone', user.phoneNumber ?? '—'],
+            ['Department', user.department ?? '—'],
+            ['Branch Access', user.hasAllBranchAccess ? 'All Branches' : (user.defaultBranchName ?? '—')],
             ['Must Change Password', user.mustChangePassword ? 'Yes' : 'No'],
             ['Last Invitation Sent', user.lastCredentialSentAt ? formatDateTime(user.lastCredentialSentAt) : 'Never'],
             ['Created', formatDateTime(user.createdAt)],
@@ -184,7 +184,7 @@ export function UserDetailPage() {
               disabled={!permsDirty || updateUser.isPending}
               className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-5 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-50"
             >
-              {updateUser.isPending ? 'Savingâ€¦' : 'Save permissions'}
+              {updateUser.isPending ? 'Saving…' : 'Save permissions'}
             </button>
           </div>
         ) : null}

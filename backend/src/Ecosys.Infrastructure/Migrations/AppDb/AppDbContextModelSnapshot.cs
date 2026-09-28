@@ -1221,6 +1221,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsPendingApproval")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2835,6 +2838,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<string>("FinanceReplyToEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<string>("Host")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -2857,6 +2864,24 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ManagedEmailAddress")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ManagedEmailStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<DateTime?>("ManagedEmailStatusCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ManagedEmailStatusDetail")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("OperationsReplyToEmail")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
@@ -3912,15 +3937,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("AdvancedReports")
-                        .HasColumnType("boolean");
-
                     b.Property<decimal>("AnnualPrice")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
-
-                    b.Property<bool>("ClientPortal")
-                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -3935,9 +3954,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
-
-                    b.Property<int?>("MaxAssets")
-                        .HasColumnType("integer");
 
                     b.Property<int?>("MaxBranches")
                         .HasColumnType("integer");
@@ -3955,9 +3971,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<decimal>("MonthlyPrice")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
-
-                    b.Property<int?>("MonthlyWorkOrders")
-                        .HasColumnType("integer");
 
                     b.Property<string>("PlanCode")
                         .IsRequired()
@@ -3978,71 +3991,57 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         new
                         {
                             Id = new Guid("d220965a-38b4-45d0-9870-a8e45627e21a"),
-                            AdvancedReports = false,
                             AnnualPrice = 0m,
-                            ClientPortal = false,
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Trial",
                             EmailIngestion = false,
                             IsActive = false,
-                            MaxAssets = 25,
                             MaxBranches = 1,
                             MaxUsers = 5,
                             ModulesIncluded = "Core",
                             MonitoringIntegration = false,
                             MonthlyPrice = 0m,
-                            MonthlyWorkOrders = 50,
                             PlanCode = "Trial"
                         },
                         new
                         {
                             Id = new Guid("7e2bc113-bc77-4206-8c53-4696402f69c0"),
-                            AdvancedReports = false,
                             AnnualPrice = 149000m,
-                            ClientPortal = false,
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Starter",
                             EmailIngestion = true,
                             IsActive = false,
-                            MaxAssets = 250,
                             MaxBranches = 3,
                             MaxUsers = 15,
                             ModulesIncluded = "Core,EmailIngestion",
                             MonitoringIntegration = false,
                             MonthlyPrice = 14900m,
-                            MonthlyWorkOrders = 500,
                             PlanCode = "Starter"
                         },
                         new
                         {
                             Id = new Guid("4df8af7d-8514-45e7-ad42-f5d7b745fe71"),
-                            AdvancedReports = true,
                             AnnualPrice = 399000m,
-                            ClientPortal = false,
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Professional",
                             EmailIngestion = true,
                             IsActive = false,
-                            MaxAssets = 2500,
                             MaxBranches = 10,
                             MaxUsers = 50,
-                            ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration,AdvancedReports",
+                            ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration",
                             MonitoringIntegration = true,
                             MonthlyPrice = 39900m,
-                            MonthlyWorkOrders = 5000,
                             PlanCode = "Professional"
                         },
                         new
                         {
                             Id = new Guid("33fe16d8-5b55-45aa-89e2-1af0f2e7367d"),
-                            AdvancedReports = true,
                             AnnualPrice = 999000m,
-                            ClientPortal = true,
                             CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Enterprise",
                             EmailIngestion = true,
                             IsActive = false,
-                            ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
+                            ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration",
                             MonitoringIntegration = true,
                             MonthlyPrice = 99900m,
                             PlanCode = "Enterprise"
@@ -4050,14 +4049,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         new
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555551"),
-                            AdvancedReports = true,
                             AnnualPrice = 0m,
-                            ClientPortal = true,
                             CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Ecosys ServiceOps Operations",
                             EmailIngestion = true,
                             IsActive = true,
-                            ModulesIncluded = "Core,operations,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
+                            ModulesIncluded = "Core,operations,EmailIngestion,MonitoringIntegration",
                             MonitoringIntegration = true,
                             MonthlyPrice = 0m,
                             PlanCode = "operations"
@@ -4065,14 +4062,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         new
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555552"),
-                            AdvancedReports = true,
                             AnnualPrice = 0m,
-                            ClientPortal = false,
                             CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Ecosys ServiceOps Finance",
                             EmailIngestion = false,
                             IsActive = true,
-                            ModulesIncluded = "Core,finance,AdvancedReports",
+                            ModulesIncluded = "Core,finance",
                             MonitoringIntegration = false,
                             MonthlyPrice = 0m,
                             PlanCode = "finance"
@@ -4080,14 +4075,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         new
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555553"),
-                            AdvancedReports = true,
                             AnnualPrice = 0m,
-                            ClientPortal = true,
                             CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Ecosys ServiceOps Suite",
                             EmailIngestion = true,
                             IsActive = true,
-                            ModulesIncluded = "Core,operations,finance,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
+                            ModulesIncluded = "Core,operations,finance,EmailIngestion,MonitoringIntegration",
                             MonitoringIntegration = true,
                             MonthlyPrice = 0m,
                             PlanCode = "suite"
@@ -7709,9 +7702,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<bool?>("AdvancedReportsOverride")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("BillingCycle")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -7719,9 +7709,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<DateTime?>("CancelledAt")
                         .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool?>("ClientPortalOverride")
-                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -7743,9 +7730,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid>("LicensePlanId")
                         .HasColumnType("uuid");
 
-                    b.Property<int?>("MaxAssetsOverride")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("MaxBranchesOverride")
                         .HasColumnType("integer");
 
@@ -7754,9 +7738,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<bool?>("MonitoringIntegrationOverride")
                         .HasColumnType("boolean");
-
-                    b.Property<int?>("MonthlyWorkOrdersOverride")
-                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("NextBillingDate")
                         .HasColumnType("timestamp with time zone");
@@ -7778,6 +7759,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<DateTime?>("SuspendedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SuspensionReason")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");

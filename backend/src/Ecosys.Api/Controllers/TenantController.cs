@@ -95,12 +95,14 @@ public sealed class TenantController(
             ?? throw new NotFoundException("Email identity was not found.");
         if (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 150)
             throw new BusinessRuleException("Display name is required and must be at most 150 characters.");
-        var replyTo = NormalizeOptional(request.ReplyToAddress);
-        if (replyTo is not null && !System.Net.Mail.MailAddress.TryCreate(replyTo, out _))
-            throw new BusinessRuleException("Reply-to address must be a valid email address.");
+        var replyTo = ValidateReplyTo(request.ReplyToAddress, "Reply-to address");
+        var financeReplyTo = ValidateReplyTo(request.FinanceReplyToAddress, "Finance reply-to address");
+        var operationsReplyTo = ValidateReplyTo(request.OperationsReplyToAddress, "Operations reply-to address");
         if (request.EmailSignature?.Length > 4000) throw new BusinessRuleException("Email signature must be at most 4000 characters.");
         identity.SenderName = request.DisplayName.Trim();
         identity.ReplyToEmail = replyTo;
+        identity.FinanceReplyToEmail = financeReplyTo;
+        identity.OperationsReplyToEmail = operationsReplyTo;
         identity.InboundEnabled = request.InboundEnabled;
         identity.IsEnabled = request.OutboundEnabled;
         identity.EmailSignature = NormalizeOptional(request.EmailSignature);
@@ -110,7 +112,16 @@ public sealed class TenantController(
     }
 
     private static TenantEmailIdentityResponse MapIdentity(EmailSetting value) => new(value.ManagedEmailAddress,
-        value.SenderName, value.ReplyToEmail, value.InboundEnabled, value.IsEnabled, value.EmailSignature);
+        value.SenderName, value.ReplyToEmail, value.InboundEnabled, value.IsEnabled, value.EmailSignature,
+        value.ManagedEmailStatus, value.ManagedEmailStatusCheckedAt, value.FinanceReplyToEmail, value.OperationsReplyToEmail);
+
+    private static string? ValidateReplyTo(string? value, string label)
+    {
+        var normalized = NormalizeOptional(value);
+        if (normalized is not null && (normalized.Length > 256 || !System.Net.Mail.MailAddress.TryCreate(normalized, out _)))
+            throw new BusinessRuleException($"{label} must be a valid email address.");
+        return normalized;
+    }
 
     [HttpPost("branding/logo")]
     [RequestSizeLimit(10_000_000)]
@@ -237,7 +248,11 @@ public sealed record LogoUploadRequest(IFormFile File);
 
 public sealed record LogoUploadResponse(string LogoUrl);
 
+/// <summary><c>ManagedEmailStatus</c> says whether the mail server has actually accepted the address — see ManagedEmailStatuses.</summary>
 public sealed record TenantEmailIdentityResponse(string? EmailAddress, string DisplayName, string? ReplyToAddress,
-    bool InboundEnabled, bool OutboundEnabled, string? EmailSignature);
+    bool InboundEnabled, bool OutboundEnabled, string? EmailSignature,
+    string ManagedEmailStatus = ManagedEmailStatuses.Pending, DateTime? ManagedEmailStatusCheckedAt = null,
+    string? FinanceReplyToAddress = null, string? OperationsReplyToAddress = null);
 public sealed record UpdateTenantEmailIdentityRequest(string DisplayName, string? ReplyToAddress,
-    bool InboundEnabled, bool OutboundEnabled, string? EmailSignature);
+    bool InboundEnabled, bool OutboundEnabled, string? EmailSignature,
+    string? FinanceReplyToAddress = null, string? OperationsReplyToAddress = null);

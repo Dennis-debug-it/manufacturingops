@@ -27,6 +27,7 @@ public sealed class IntakeController(
         // answers differently from an unknown one, so a caller with no secret at all could probe
         // which tenant ids exist and which features they hold.
         await ValidateSecretAsync(request.TenantId, request.Secret, cancellationToken);
+        await EnsureTenantAcceptsIntakeAsync(request.TenantId, cancellationToken);
         await licenseGuardService.EnsureFeatureEnabledAsync(request.TenantId, LicenseFeatures.EmailIngestion, cancellationToken);
         var workOrder = await CreateWorkOrderAsync(request.TenantId, request.BranchId, request.ClientId, request.AssetId, request.Subject, request.Body, request.Priority, cancellationToken);
         return Ok(new IntakeResponse(workOrder.Id, workOrder.WorkOrderNumber));
@@ -36,6 +37,7 @@ public sealed class IntakeController(
     public async Task<ActionResult<IntakeResponse>> MonitoringWebhook([FromBody] MonitoringIntakeRequest request, CancellationToken cancellationToken)
     {
         await ValidateSecretAsync(request.TenantId, request.Secret, cancellationToken);
+        await EnsureTenantAcceptsIntakeAsync(request.TenantId, cancellationToken);
         await licenseGuardService.EnsureFeatureEnabledAsync(request.TenantId, LicenseFeatures.MonitoringIntegration, cancellationToken);
         var workOrder = await CreateWorkOrderAsync(request.TenantId, request.BranchId, request.ClientId, request.AssetId, request.Title, request.Description, request.Priority, cancellationToken);
         return Ok(new IntakeResponse(workOrder.Id, workOrder.WorkOrderNumber));
@@ -59,6 +61,7 @@ public sealed class IntakeController(
             throw new ForbiddenException("Webhook secret is invalid.");
         }
 
+        await EnsureTenantAcceptsIntakeAsync(integration.TenantId, cancellationToken);
         await licenseGuardService.EnsureFeatureEnabledAsync(integration.TenantId, LicenseFeatures.MonitoringIntegration, cancellationToken);
 
         integration.LastReceivedAt = DateTime.UtcNow;
@@ -89,6 +92,22 @@ public sealed class IntakeController(
         return Ok(new IntakeResponse(workOrder.Id, workOrder.WorkOrderNumber));
     }
 
+    /// <summary>
+    /// Anonymous webhooks never pass through TenantLicenseEnforcementMiddleware (it only runs for
+    /// authenticated tenant requests), so the same access rules are applied here: a deactivated,
+    /// suspended or read-only (expired) tenant must not keep receiving new work orders (TM-P2-04).
+    /// </summary>
+    private async Task EnsureTenantAcceptsIntakeAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var tenantIsActive = await dbContext.Tenants.Where(x => x.Id == tenantId).Select(x => x.IsActive).SingleOrDefaultAsync(cancellationToken);
+        if (!tenantIsActive)
+        {
+            throw new ForbiddenException("This workspace is not accepting new requests.");
+        }
+
+        await licenseGuardService.EnsureTenantCanMutateAsync(tenantId, cancellationToken);
+    }
+
     private async Task ValidateSecretAsync(Guid tenantId, string secret, CancellationToken cancellationToken)
     {
         var secretHash = HashSecret(secret);
@@ -115,7 +134,7 @@ public sealed class IntakeController(
 
     private async Task<Domain.Entities.WorkOrder> CreateWorkOrderAsync(Guid tenantId, Guid? branchId, Guid clientId, Guid? assetId, string title, string? description, string? priority, CancellationToken cancellationToken)
     {
-        await licenseGuardService.EnsureCanCreateWorkOrderAsync(tenantId, cancellationToken);
+        await licenseGuardService.EnsureTenantCanMutateAsync(tenantId, cancellationToken);
         await EnsureReferencesBelongToTenantAsync(tenantId, branchId, clientId, assetId, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(title))

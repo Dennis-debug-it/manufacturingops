@@ -83,4 +83,14 @@ public interface IEmailSender
     Task<EmailVerificationResult> VerifyAsync(
         EmailDeliverySettings settings,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Asks the mail server whether the authenticated transport may send as <paramref name="senderAddress"/>
+    /// (MAIL FROM + RCPT TO, then RSET — no message is sent). Connection and login succeeding says nothing
+    /// about this: servers that verify senders only refuse an unknown sender at this stage.
+    /// </summary>
+    Task<EmailVerificationResult> VerifySenderAsync(
+        EmailDeliverySettings settings,
+        string senderAddress,
+        CancellationToken cancellationToken = default);
 }

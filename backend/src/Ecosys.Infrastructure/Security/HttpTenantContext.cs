@@ -18,7 +18,17 @@ internal sealed class HttpTenantContext(IHttpContextAccessor httpContextAccessor
     public Guid? ImpersonatedByUserId => TryGetGuid(TenantClaimTypes.ImpersonatedByUserId);
     public string? ImpersonatedByName => User?.FindFirstValue(TenantClaimTypes.ImpersonatedByName);
     public bool IsAuthenticated => User?.Identity?.IsAuthenticated == true;
+    /// <summary>
+    /// Platform staff: bypasses the tenant query filters, so a role claim alone is not enough — the
+    /// token must also belong to the platform root tenant (the same rule the Platform* authorization
+    /// policies apply). Platform and tenant roles share a string namespace, so without this a single
+    /// role-assignment bug inside a tenant would expose every tenant's data.
+    /// </summary>
     public bool IsSuperAdmin =>
+        TenantId == PlatformConstants.RootTenantId
+        && IsPlatformRole;
+
+    private bool IsPlatformRole =>
         HasRole(AppRoles.SuperAdmin)
         || HasRole(AppRoles.PlatformOwner)
         || HasRole(AppRoles.PlatformSuperAdmin)

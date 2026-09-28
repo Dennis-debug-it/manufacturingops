@@ -1380,12 +1380,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.ToTable("email_settings");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.ManagedEmailAddress).HasMaxLength(256);
+            entity.Property(x => x.ManagedEmailStatus).HasMaxLength(32).IsRequired().HasDefaultValue(ManagedEmailStatuses.Pending);
+            entity.Property(x => x.ManagedEmailStatusDetail).HasMaxLength(1000);
             entity.Property(x => x.EmailSignature).HasMaxLength(4000);
             entity.HasIndex(x => x.ManagedEmailAddress).IsUnique();
             entity.Property(x => x.Provider).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Host).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Username).HasMaxLength(200);
             entity.Property(x => x.ReplyToEmail).HasMaxLength(256);
+            entity.Property(x => x.FinanceReplyToEmail).HasMaxLength(256);
+            entity.Property(x => x.OperationsReplyToEmail).HasMaxLength(256);
             entity.Property(x => x.Password).HasMaxLength(500);
             entity.Property(x => x.EncryptedSecret).HasMaxLength(4000);
             entity.Property(x => x.SenderName).HasMaxLength(150).IsRequired();
@@ -1510,13 +1514,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                     AnnualPrice = 0,
                     MaxUsers = 5,
                     MaxBranches = 1,
-                    MaxAssets = 25,
-                    MonthlyWorkOrders = 50,
                     ModulesIncluded = "Core",
                     EmailIngestion = false,
                     MonitoringIntegration = false,
-                    AdvancedReports = false,
-                    ClientPortal = false,
                     IsActive = false,
                     CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
                 },
@@ -1529,13 +1529,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                     AnnualPrice = 149000,
                     MaxUsers = 15,
                     MaxBranches = 3,
-                    MaxAssets = 250,
-                    MonthlyWorkOrders = 500,
                     ModulesIncluded = "Core,EmailIngestion",
                     EmailIngestion = true,
                     MonitoringIntegration = false,
-                    AdvancedReports = false,
-                    ClientPortal = false,
                     IsActive = false,
                     CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
                 },
@@ -1548,13 +1544,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                     AnnualPrice = 399000,
                     MaxUsers = 50,
                     MaxBranches = 10,
-                    MaxAssets = 2500,
-                    MonthlyWorkOrders = 5000,
-                    ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration,AdvancedReports",
+                    ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration",
                     EmailIngestion = true,
                     MonitoringIntegration = true,
-                    AdvancedReports = true,
-                    ClientPortal = false,
                     IsActive = false,
                     CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
                 },
@@ -1567,34 +1559,29 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                     AnnualPrice = 999000,
                     MaxUsers = null,
                     MaxBranches = null,
-                    MaxAssets = null,
-                    MonthlyWorkOrders = null,
-                    ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
+                    ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration",
                     EmailIngestion = true,
                     MonitoringIntegration = true,
-                    AdvancedReports = true,
-                    ClientPortal = true,
                     IsActive = false,
                     CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
                 },
                 new LicensePlan
                 {
                     Id = Guid.Parse("55555555-5555-5555-5555-555555555551"), PlanCode = "operations",
-                    DisplayName = "Ecosys ServiceOps Operations", ModulesIncluded = "Core,operations,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
-                    EmailIngestion = true, MonitoringIntegration = true, AdvancedReports = true, ClientPortal = true,
+                    DisplayName = "Ecosys ServiceOps Operations", ModulesIncluded = "Core,operations,EmailIngestion,MonitoringIntegration",
+                    EmailIngestion = true, MonitoringIntegration = true,
                     IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
                 },
                 new LicensePlan
                 {
                     Id = Guid.Parse("55555555-5555-5555-5555-555555555552"), PlanCode = "finance",
-                    DisplayName = "Ecosys ServiceOps Finance", ModulesIncluded = "Core,finance,AdvancedReports",
-                    AdvancedReports = true, IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
+                    DisplayName = "Ecosys ServiceOps Finance", ModulesIncluded = "Core,finance", IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
                 },
                 new LicensePlan
                 {
                     Id = Guid.Parse("55555555-5555-5555-5555-555555555553"), PlanCode = "suite",
-                    DisplayName = "Ecosys ServiceOps Suite", ModulesIncluded = "Core,operations,finance,EmailIngestion,MonitoringIntegration,AdvancedReports,ClientPortal",
-                    EmailIngestion = true, MonitoringIntegration = true, AdvancedReports = true, ClientPortal = true,
+                    DisplayName = "Ecosys ServiceOps Suite", ModulesIncluded = "Core,operations,finance,EmailIngestion,MonitoringIntegration",
+                    EmailIngestion = true, MonitoringIntegration = true,
                     IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
                 });
         });
@@ -1606,6 +1593,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
             entity.Property(x => x.BillingCycle).HasMaxLength(30).IsRequired();
             entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.SuspensionReason).HasMaxLength(30);
             entity.Property(x => x.IsPerpetual).HasDefaultValue(false);
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)

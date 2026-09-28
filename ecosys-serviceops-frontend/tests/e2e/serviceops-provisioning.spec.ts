@@ -14,6 +14,8 @@ async function session(page: Page, role = 'admin', modules = ['operations', 'fin
   await page.addInitScript((value) => {
     localStorage.setItem('ecosys.serviceops.session', JSON.stringify(value))
     localStorage.setItem('ecosys.serviceops.token', value.token)
+    // The first-login welcome tour is a full-screen overlay; these specs exercise the pages behind it.
+    localStorage.setItem(`ecosys.first-login-shown.${value.user.userId}`, '1')
   }, data)
   await page.route(`${E2E_API_URL}/api/**`, async (route) => {
     if (route.request().method() === 'OPTIONS') { await route.fulfill({ status: 204, headers }); return }
@@ -38,6 +40,7 @@ test('tenant creation asks only essential fields and sends stable plan code', as
   await expect(page.getByLabel('Tenant Slug', { exact: true })).toHaveValue('acme')
   await expect(page.getByText('acme@serviceops.ecosysdigital.co.ke', { exact: true })).toBeVisible()
   await page.getByRole('radio', { name: 'ServiceOps Finance', exact: true }).check()
+  await page.getByLabel('Licensed Users', { exact: true }).fill('15')
   await page.getByLabel('Primary Admin Name', { exact: true }).fill('John Kamau')
   await page.getByLabel('Primary Admin Email', { exact: true }).fill('john@acme.test')
   await expect(page.getByLabel('Timezone', { exact: true })).toHaveValue('Africa/Nairobi')
@@ -49,7 +52,7 @@ test('tenant creation asks only essential fields and sends stable plan code', as
   await expect(page.getByText('SMTP', { exact: true })).toHaveCount(0)
   const request = page.waitForRequest((req) => req.method() === 'POST' && new URL(req.url()).pathname === '/api/platform/tenants')
   await page.getByRole('button', { name: 'Create tenant', exact: true }).last().click()
-  expect((await request).postDataJSON()).toEqual({ companyName: 'Acme Engineering Limited', slug: 'acme', planCode: 'finance', adminFullName: 'John Kamau', adminEmail: 'john@acme.test', country: 'Nigeria', timeZoneId: 'Africa/Nairobi' })
+  expect((await request).postDataJSON()).toEqual({ companyName: 'Acme Engineering Limited', slug: 'acme', planCode: 'finance', maxUsers: 15, adminFullName: 'John Kamau', adminEmail: 'john@acme.test', country: 'Nigeria', timeZoneId: 'Africa/Nairobi' })
 })
 
 for (const modules of [['operations'], ['finance'], ['operations', 'finance']]) {
@@ -124,15 +127,17 @@ test('central dates use tenant timezone and preserve date-only calendar dates', 
 
 test('managed workspace email saves only tenant-facing preferences', async ({ page }) => {
   await session(page, 'admin', ['finance'])
-  const identity = { emailAddress: 'acme@serviceops.ecosysdigital.co.ke', displayName: 'Acme', replyToAddress: null, emailSignature: null, inboundEnabled: true, outboundEnabled: true }
+  const identity = { emailAddress: 'acme@serviceops.ecosysdigital.co.ke', displayName: 'Acme', replyToAddress: null, financeReplyToAddress: null, operationsReplyToAddress: null, emailSignature: null, inboundEnabled: true, outboundEnabled: true }
   await page.route('**/api/tenant/email-identity', (route) => route.fulfill(respond(identity)))
   await page.goto('/settings/email')
   await expect(page.getByText(identity.emailAddress, { exact: true })).toBeVisible()
   await expect(page.getByLabel('SMTP Host')).toHaveCount(0)
-  await expect(page.getByRole('textbox')).toHaveCount(3)
+  await expect(page.getByRole('textbox')).toHaveCount(5)
   await page.getByLabel('Display Name').fill('Acme Service Team')
-  await page.getByLabel('Reply-to Address').fill('replies@acme.test')
+  await page.getByLabel('Reply-to Address', { exact: true }).fill('replies@acme.test')
+  await page.getByLabel('Finance Reply-to Address').fill('accounts@acme.test')
+  await page.getByLabel('Operations Reply-to Address').fill('service@acme.test')
   const request = page.waitForRequest((req) => req.method() === 'PUT' && new URL(req.url()).pathname === '/api/tenant/email-identity')
   await page.getByRole('button', { name: 'Save Changes' }).click()
-  expect((await request).postDataJSON()).toEqual({ displayName: 'Acme Service Team', replyToAddress: 'replies@acme.test', emailSignature: null, inboundEnabled: true, outboundEnabled: true })
+  expect((await request).postDataJSON()).toEqual({ displayName: 'Acme Service Team', replyToAddress: 'replies@acme.test', financeReplyToAddress: 'accounts@acme.test', operationsReplyToAddress: 'service@acme.test', emailSignature: null, inboundEnabled: true, outboundEnabled: true })
 })

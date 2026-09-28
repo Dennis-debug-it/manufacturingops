@@ -22,12 +22,8 @@ interface TenantLicenseSnapshot {
   isGracePeriod: boolean
   maxUsers: number | null
   maxBranches: number | null
-  maxAssets: number | null
-  monthlyWorkOrders: number | null
   emailIngestion: boolean
   monitoringIntegration: boolean
-  advancedReports: boolean
-  clientPortal: boolean
   warningMessage: string | null
 }
 
@@ -74,8 +70,6 @@ export function AccountSettingsPage() {
         <StatCard label="Status" value={<StatusBadge status={data.status} />} tone={data.isSuspended ? 'danger' : 'default'} />
         <StatCard label="Max Users" value={data.maxUsers ?? 'Unlimited'} />
         <StatCard label="Max Branches" value={data.maxBranches ?? 'Unlimited'} />
-        <StatCard label="Max Assets" value={data.maxAssets ?? 'Unlimited'} />
-        <StatCard label="Monthly Work Orders" value={data.monthlyWorkOrders ?? 'Unlimited'} />
         <StatCard label="Started" value={formatDate(data.startsAt)} />
         <StatCard label={data.trialEndsAt ? 'Trial Ends' : 'Expires'} value={(data.trialEndsAt ?? data.expiresAt) ? formatDate((data.trialEndsAt ?? data.expiresAt) as string) : 'No expiry'} />
       </div>
@@ -92,8 +86,6 @@ export function AccountSettingsPage() {
         <div className="mt-3">
           <FeatureRow label="Email Ingestion" enabled={data.emailIngestion} />
           <FeatureRow label="Monitoring Integration" enabled={data.monitoringIntegration} />
-          <FeatureRow label="Advanced Reports" enabled={data.advancedReports} />
-          <FeatureRow label="Client Portal" enabled={data.clientPortal} />
         </div>
       </div>
 

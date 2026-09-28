@@ -25,7 +25,8 @@ public sealed class ImportController(
     IPasswordHasher<User> passwordHasher,
     IUserCredentialDeliveryService credentialDeliveryService,
     ITemporaryPasswordService temporaryPasswordService,
-    IDocumentNumberingService documentNumberingService) : TenantAwareControllerBase(tenantContext)
+    IDocumentNumberingService documentNumberingService,
+    ILicenseGuardService licenseGuardService) : TenantAwareControllerBase(tenantContext)
 {
     private static readonly string[] ClientHeaders =
     [
@@ -538,6 +539,12 @@ public sealed class ImportController(
     {
         EnsureCanImportUsers();
         var rows = await BuildUserPreviewAsync(request.File, cancellationToken);
+
+        // Bulk import is subject to the same licensed-seat rule as every other way of adding a user: the
+        // whole batch's active rows must fit, checked before any row is written (TM-P1-07).
+        var incomingActiveUsers = rows.Count(row => row.IsValid && IsActiveStatus(row.RawValues["Status"]));
+        await licenseGuardService.EnsureCanAddUsersAsync(TenantId, incomingActiveUsers, cancellationToken);
+
         var branchLookup = await dbContext.Branches
             .Where(x => x.TenantId == TenantId && x.IsActive)
             .ToDictionaryAsync(x => x.Name.ToLower(), x => x.Id, cancellationToken);
@@ -1348,7 +1355,8 @@ public sealed class ImportController(
         var normalized = value?.Trim().ToLowerInvariant();
         return normalized switch
         {
-            null or "" or "user" or "technician" or "supervisor" or "normaluser" or "normal user" or "requester" => AppRoles.User,
+            "technician" => AppRoles.Technician,
+            null or "" or "user" or "supervisor" or "normaluser" or "normal user" or "requester" => AppRoles.User,
             "tenantadmin" or "tenant admin" or "admin" => AppRoles.Admin,
             "platformowner" or "platform owner" or "superadmin" or "super admin" => throw new ForbiddenException("Only platform owners can create PlatformOwner accounts."),
             _ => throw new BusinessRuleException("Role must be TenantAdmin, Supervisor, Technician, NormalUser, or User.")

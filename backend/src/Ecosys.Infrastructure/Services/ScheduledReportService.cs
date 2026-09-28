@@ -62,6 +62,18 @@ public sealed class ScheduledReportService(
     private static readonly HashSet<string> ValidReportTypes = new(StringComparer.OrdinalIgnoreCase)
         { "Revenue", "Aging", "ClientStatement", "WorkOrderSummary", "Invoices" };
 
+    private static readonly HashSet<string> FinanceReportTypes = new(StringComparer.OrdinalIgnoreCase)
+        { "Revenue", "Aging", "ClientStatement", "Invoices" };
+
+    /// <summary>
+    /// The event key carries the report's area so the email takes the tenant's finance or operations
+    /// Reply-To (see TenantEmailIdentity.Categorize); the template key stays "scheduled-report".
+    /// </summary>
+    internal static string ResolveReportEventKey(string reportType) =>
+        FinanceReportTypes.Contains(reportType) ? "scheduled-report.finance"
+        : string.Equals(reportType, "WorkOrderSummary", StringComparison.OrdinalIgnoreCase) ? "scheduled-report.operations"
+        : "scheduled-report";
+
     private static readonly HashSet<string> ValidFrequencies = new(StringComparer.OrdinalIgnoreCase)
         { "Daily", "Weekly", "Monthly", "Quarterly" };
 
@@ -405,7 +417,7 @@ public sealed class ScheduledReportService(
             await emailOutbox.QueueEmailAsync(
                 new QueueEmailRequest(
                     report.TenantId,
-                    "scheduled-report",
+                    ResolveReportEventKey(report.ReportType),
                     "scheduled-report",
                     recipientEmail,
                     null,

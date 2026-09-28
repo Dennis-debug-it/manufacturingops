@@ -74,7 +74,8 @@ public sealed class UsersController(
         ValidateRequest(request.FullName, request.CredentialDeliveryMethod);
         var transaction = await TryBeginSerializableTransactionAsync(cancellationToken);
 
-        await licenseGuardService.EnsureCanCreateUserAsync(TenantId, cancellationToken);
+        // Only an active account consumes a licensed seat; the guard row-locks the license inside this transaction.
+        await licenseGuardService.EnsureCanAddUsersAsync(TenantId, request.IsActive ? 1 : 0, cancellationToken);
         var normalizedRole = NormalizeRole(request.Role);
         var deliveryMethod = NormalizeCredentialDeliveryMethod(request.CredentialDeliveryMethod);
 

@@ -7,6 +7,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
+import { useEntitlements } from '../../shared/hooks/useEntitlements'
 import { useResendCredentials, useTeamUsers } from './api'
 import { NewUserFormDrawer } from './components/NewUserFormDrawer'
 import type { TeamUser } from './types'
@@ -28,6 +29,10 @@ export function UsersPage() {
   const debouncedSearch = useDebounce(search, 300)
   const [showForm, setShowForm] = useState(false)
   const { data, isLoading, isError } = useTeamUsers()
+  const { maxUsers } = useEntitlements()
+  // Same rule the backend enforces: every active account, including pending invitations, uses a seat.
+  const seatsUsed = (data ?? []).filter((user) => user.isActive).length
+  const seatsFull = maxUsers != null && seatsUsed >= maxUsers
 
   const rows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase()
@@ -37,9 +42,9 @@ export function UsersPage() {
   const columns: DataTableColumn<TeamUser>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/team/users/${row.id}`}>{row.fullName}</Link> },
     { key: 'email', header: 'Email', cell: (row) => row.email },
-    { key: 'department', header: 'Department', cell: (row) => row.department ?? 'â€”' },
-    { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? 'â€”' },
-    { key: 'defaultBranchName', header: 'Branch', cell: (row) => row.defaultBranchName ?? (row.hasAllBranchAccess ? 'All Branches' : 'â€”') },
+    { key: 'department', header: 'Department', cell: (row) => row.department ?? '—' },
+    { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? '—' },
+    { key: 'defaultBranchName', header: 'Branch', cell: (row) => row.defaultBranchName ?? (row.hasAllBranchAccess ? 'All Branches' : '—') },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? (row.invitationStatus ?? (row.mustChangePassword ? 'Invited' : 'Active')) : 'Inactive'} /> },
     ...(canManage ? [{ key: 'invitation', header: 'Invitation', cell: (row: TeamUser) => row.mustChangePassword || row.invitationStatus === 'Invited' || row.invitationStatus === 'Expired' ? <ResendInviteButton userId={row.id} /> : null }] : []),
   ]
@@ -51,13 +56,20 @@ export function UsersPage() {
         subtitle="Manage people, their capabilities, and where access applies."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
+            <button type="button" onClick={() => setShowForm(true)} disabled={seatsFull} title={seatsFull ? 'All licensed user seats are in use' : undefined} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60">
               <Plus className="h-4 w-4" />Invite User
             </button>
           ) : undefined
         }
       />
       <TeamTabNav />
+
+      {maxUsers != null && data ? (
+        <div data-testid="licensed-seats" className={`rounded-xl border px-4 py-3 text-sm ${seatsFull ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-white text-slate-700'}`}>
+          <span className="font-semibold">Licensed users: {seatsUsed} / {maxUsers}</span>
+          {seatsFull ? <span> — all seats are in use. Deactivate a user or contact Ecosys to add seats.</span> : <span className="text-slate-500"> — active users and pending invitations use a seat; deactivated users do not.</span>}
+        </div>
+      ) : null}
 
       <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">

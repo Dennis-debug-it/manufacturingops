@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test'
 import { json, loginWithMockSession, registerApiCatchAll } from './helpers/auth'
+import { E2E_API_URL } from './helpers/test-data'
 
-const API = 'http://localhost:5072'
+// Must match the API origin the app under test calls (E2E_API_URL).
+const API = E2E_API_URL
 
 test.describe('security and production hardening', () => {
   test('tenant admin is blocked from platform pages', async ({ page }) => {

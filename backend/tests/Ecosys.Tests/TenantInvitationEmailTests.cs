@@ -66,5 +66,7 @@ public sealed class TenantInvitationEmailTests
         { Message = message; Settings = settings; return Task.CompletedTask; }
         public Task<EmailVerificationResult> VerifyAsync(EmailDeliverySettings settings, CancellationToken cancellationToken = default) =>
             Task.FromResult(new EmailVerificationResult(true));
+        public Task<EmailVerificationResult> VerifySenderAsync(EmailDeliverySettings settings, string senderAddress, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new EmailVerificationResult(true));
     }
 }

@@ -68,15 +68,11 @@ public static class LicenseFeatures
 {
     public const string EmailIngestion = "EmailIngestion";
     public const string MonitoringIntegration = "MonitoringIntegration";
-    public const string AdvancedReports = "AdvancedReports";
-    public const string ClientPortal = "ClientPortal";
 }
 
 public sealed record LicenseUsageSnapshot(
     int ActiveUsers,
-    int ActiveBranches,
-    int ActiveAssets,
-    int MonthlyWorkOrders);
+    int ActiveBranches);
 
 public sealed record TenantLicenseSnapshot(
     Guid TenantId,
@@ -93,12 +89,8 @@ public sealed record TenantLicenseSnapshot(
     bool IsGracePeriod,
     int? MaxUsers,
     int? MaxBranches,
-    int? MaxAssets,
-    int? MonthlyWorkOrders,
     bool EmailIngestion,
     bool MonitoringIntegration,
-    bool AdvancedReports,
-    bool ClientPortal,
     string? WarningMessage)
 {
     public IReadOnlyList<string> Modules { get; init; } = [];
@@ -111,12 +103,8 @@ public sealed record PlatformLicenseUsageSnapshot(
     string Status,
     int ActiveUsers,
     int ActiveBranches,
-    int ActiveAssets,
-    int MonthlyWorkOrders,
     int? MaxUsers,
     int? MaxBranches,
-    int? MaxAssets,
-    int? MonthlyWorkOrdersLimit,
     bool IsReadOnly,
     bool IsSuspended,
     DateTime? ExpiresAt,
@@ -133,9 +121,16 @@ public interface ILicenseGuardService
     Task<IReadOnlyCollection<PlatformLicenseUsageSnapshot>> GetPlatformUsageAsync(CancellationToken cancellationToken = default);
     Task EnsureTenantCanMutateAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task EnsureCanCreateUserAsync(Guid tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The single licensed-seat rule for every path that adds or reactivates workspace users (tenant
+    /// create/reactivate, platform add-user, CSV import). Active users — including invitees who have not
+    /// signed in yet — consume a seat; deactivated users and client-portal contacts do not. When called
+    /// inside a transaction it row-locks the tenant's license so concurrent callers are serialised.
+    /// </summary>
+    Task EnsureCanAddUsersAsync(Guid tenantId, int count, CancellationToken cancellationToken = default) =>
+        count <= 0 ? Task.CompletedTask : EnsureCanCreateUserAsync(tenantId, cancellationToken);
     Task EnsureCanCreateBranchAsync(Guid tenantId, CancellationToken cancellationToken = default);
-    Task EnsureCanCreateAssetAsync(Guid tenantId, CancellationToken cancellationToken = default);
-    Task EnsureCanCreateWorkOrderAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task EnsureFeatureEnabledAsync(Guid tenantId, string featureName, CancellationToken cancellationToken = default);
     Task EnsureModuleEnabledAsync(Guid tenantId, string moduleName, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
@@ -160,15 +155,10 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
 
     public async Task<LicenseUsageSnapshot> GetUsageAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
-        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
-
         var activeUsers = await dbContext.Users.CountAsync(x => x.TenantId == tenantId && x.IsActive, cancellationToken);
         var activeBranches = await dbContext.Branches.CountAsync(x => x.TenantId == tenantId && x.IsActive, cancellationToken);
-        var activeAssets = await dbContext.Assets.CountAsync(x => x.TenantId == tenantId && x.Status != "Inactive", cancellationToken);
-        var monthlyWorkOrders = await dbContext.WorkOrders.CountAsync(x => x.TenantId == tenantId && x.CreatedAt >= monthStart, cancellationToken);
 
-        return new LicenseUsageSnapshot(activeUsers, activeBranches, activeAssets, monthlyWorkOrders);
+        return new LicenseUsageSnapshot(activeUsers, activeBranches);
     }
 
     public async Task<IReadOnlyCollection<PlatformLicenseUsageSnapshot>> GetPlatformUsageAsync(CancellationToken cancellationToken = default)
@@ -192,12 +182,8 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
                 snapshot.Status,
                 usage.ActiveUsers,
                 usage.ActiveBranches,
-                usage.ActiveAssets,
-                usage.MonthlyWorkOrders,
                 snapshot.MaxUsers,
                 snapshot.MaxBranches,
-                snapshot.MaxAssets,
-                snapshot.MonthlyWorkOrders,
                 snapshot.IsReadOnly,
                 snapshot.IsSuspended,
                 snapshot.ExpiresAt,
@@ -226,16 +212,61 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     }
 
     public Task EnsureCanCreateUserAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
-        EnsureWithinLimitAsync(tenantId, "users", cancellationToken);
+        EnsureCanAddUsersAsync(tenantId, 1, cancellationToken);
+
+    public async Task EnsureCanAddUsersAsync(Guid tenantId, int count, CancellationToken cancellationToken = default)
+    {
+        if (count <= 0)
+        {
+            return;
+        }
+
+        await EnsureTenantCanMutateAsync(tenantId, cancellationToken);
+        await LockLicenseRowAsync(tenantId, cancellationToken);
+
+        var snapshot = await GetSnapshotAsync(tenantId, cancellationToken);
+        if (!snapshot.MaxUsers.HasValue)
+        {
+            return;
+        }
+
+        var used = await CountSeatsUsedAsync(tenantId, cancellationToken);
+        var limit = snapshot.MaxUsers.Value;
+        if (used + count > limit)
+        {
+            var remaining = Math.Max(0, limit - used);
+            throw new LicenseException(
+                count == 1
+                    ? $"Licensed user capacity reached: {used} of {limit} seats are in use. Deactivate a user or contact Ecosys to add seats."
+                    : $"Licensed user capacity exceeded: this would add {count} active users but only {remaining} of {limit} seats remain. Deactivate users or contact Ecosys to add seats.",
+                "license_users_limit_reached",
+                409);
+        }
+    }
+
+    /// <summary>Seats in use: every active workspace user of the tenant (pending invitees included).</summary>
+    public Task<int> CountSeatsUsedAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+        dbContext.Users.CountAsync(x => x.TenantId == tenantId && x.IsActive, cancellationToken);
+
+    /// <summary>
+    /// Serialises seat checks for one tenant. Only meaningful inside a caller-owned transaction on a
+    /// relational provider; elsewhere (EF InMemory in unit tests) it is a no-op.
+    /// </summary>
+    private async Task LockLicenseRowAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (!dbContext.Database.IsRelational() || dbContext.Database.CurrentTransaction is null)
+        {
+            return;
+        }
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM tenant_licenses WHERE \"TenantId\" = {tenantId} FOR UPDATE",
+            cancellationToken);
+    }
 
     public Task EnsureCanCreateBranchAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
         EnsureWithinLimitAsync(tenantId, "branches", cancellationToken);
 
-    public Task EnsureCanCreateAssetAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
-        EnsureWithinLimitAsync(tenantId, "assets", cancellationToken);
-
-    public Task EnsureCanCreateWorkOrderAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
-        EnsureWithinLimitAsync(tenantId, "workorders", cancellationToken);
 
     public async Task EnsureFeatureEnabledAsync(Guid tenantId, string featureName, CancellationToken cancellationToken = default)
     {
@@ -246,8 +277,6 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
         {
             LicenseFeatures.EmailIngestion => snapshot.EmailIngestion,
             LicenseFeatures.MonitoringIntegration => snapshot.MonitoringIntegration,
-            LicenseFeatures.AdvancedReports => snapshot.AdvancedReports,
-            LicenseFeatures.ClientPortal => snapshot.ClientPortal,
             _ => false
         };
 
@@ -312,10 +341,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
 
         (int current, int? limit, string code, string label) = resourceType switch
         {
-            "users" => (usage.ActiveUsers, snapshot.MaxUsers, "license_users_limit_reached", "users"),
             "branches" => (usage.ActiveBranches, snapshot.MaxBranches, "license_branches_limit_reached", "branches"),
-            "assets" => (usage.ActiveAssets, snapshot.MaxAssets, "license_assets_limit_reached", "assets"),
-            "workorders" => (usage.MonthlyWorkOrders, snapshot.MonthlyWorkOrders, "license_monthly_workorders_limit_reached", "monthly work orders"),
             _ => (0, null, "license_limit_reached", resourceType)
         };
 
@@ -377,12 +403,8 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             isGrace,
             tenantLicense.MaxUsersOverride ?? plan.MaxUsers,
             tenantLicense.MaxBranchesOverride ?? plan.MaxBranches,
-            tenantLicense.MaxAssetsOverride ?? plan.MaxAssets,
-            tenantLicense.MonthlyWorkOrdersOverride ?? plan.MonthlyWorkOrders,
             tenantLicense.EmailIngestionOverride ?? plan.EmailIngestion,
             tenantLicense.MonitoringIntegrationOverride ?? plan.MonitoringIntegration,
-            tenantLicense.AdvancedReportsOverride ?? plan.AdvancedReports,
-            tenantLicense.ClientPortalOverride ?? plan.ClientPortal,
             warning) { Modules = ServiceOpsPlans.Modules(plan) };
     }
 
@@ -507,14 +529,7 @@ public sealed class TenantLicenseEnforcementMiddleware(RequestDelegate next)
             .Where(x => x.Id == tenantId)
             .Select(x => x.IsActive)
             .SingleOrDefaultAsync(context.RequestAborted);
-        if (!tenantIsActive)
-        {
-            throw new ForbiddenException("Tenant access is deactivated. Contact Ecosys platform support.");
-        }
-
         var snapshot = await licenseGuardService.GetSnapshotAsync(tenantId, context.RequestAborted);
-        var action = context.GetEndpoint()?.Metadata.GetMetadata<ControllerActionDescriptor>();
-        ServiceOpsPlans.EnsureModules(snapshot.Modules, ServiceOpsPlans.RequiredModules(action?.ControllerName, path));
         if (!string.IsNullOrWhiteSpace(snapshot.WarningMessage))
         {
             context.Response.Headers["X-License-Warning"] = snapshot.WarningMessage;
@@ -524,10 +539,23 @@ public sealed class TenantLicenseEnforcementMiddleware(RequestDelegate next)
             path.StartsWith("/api/tenant/license", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/api/settings/license", StringComparison.OrdinalIgnoreCase);
 
-        if (snapshot.IsSuspended && !isLicenseReadEndpoint)
+        // One business state, one message: a suspended tenant (operator or non-payment) always gets
+        // license_suspended — which the frontend shows once as a banner — and can still read its license.
+        // Only a deactivated (cancelled) tenant gets the deactivated error.
+        if (snapshot.IsSuspended)
         {
-            throw new LicenseException("Tenant license is suspended. Contact Ecosys to restore access.", "license_suspended", 403);
+            if (!isLicenseReadEndpoint)
+            {
+                throw new LicenseException("Tenant license is suspended. Contact Ecosys to restore access.", "license_suspended", 403);
+            }
         }
+        else if (!tenantIsActive)
+        {
+            throw new ForbiddenException("Tenant access is deactivated. Contact Ecosys platform support.");
+        }
+
+        var action = context.GetEndpoint()?.Metadata.GetMetadata<ControllerActionDescriptor>();
+        ServiceOpsPlans.EnsureModules(snapshot.Modules, ServiceOpsPlans.RequiredModules(action?.ControllerName, path));
 
         if (!HttpMethods.IsGet(context.Request.Method)
             && !HttpMethods.IsHead(context.Request.Method)

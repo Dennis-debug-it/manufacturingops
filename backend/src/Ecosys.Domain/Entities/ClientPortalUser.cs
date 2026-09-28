@@ -10,6 +10,8 @@ public sealed class ClientPortalUser : AuditableEntity, ITenantEntity
     public string Email { get; set; } = string.Empty;
     public string? Phone { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Created by non-admin staff while the tenant requires approval; cannot sign in until an admin activates it.</summary>
+    public bool IsPendingApproval { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public Guid? InvitedByUserId { get; set; }
 

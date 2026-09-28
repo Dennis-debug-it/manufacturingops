@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useCreatePortalWorkOrder, usePortalAssets } from '../api'
+import { portalFeatures, usePortalFeature } from '../components/PortalFeatureGate'
 
 const priorities = ['Low', 'Medium', 'High', 'Urgent']
 
 export function PortalNewRequestPage() {
   const navigate = useNavigate()
-  const { data: assets } = usePortalAssets()
+  const showAssets = usePortalFeature(portalFeatures.assetRegister)
+  const { data: assets } = usePortalAssets(showAssets)
   const createRequest = useCreatePortalWorkOrder()
 
   const [title, setTitle] = useState('')
@@ -43,20 +45,22 @@ export function PortalNewRequestPage() {
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Details</label>
           <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} placeholder="Any additional detail that helps our technicians" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
+        <div className={showAssets ? 'grid grid-cols-2 gap-4' : 'grid grid-cols-1 gap-4'}>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Priority</label>
             <select value={priority} onChange={(event) => setPriority(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               {priorities.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Related Asset (optional)</label>
-            <select value={assetId} onChange={(event) => setAssetId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
-              <option value="">None</option>
-              {(assets ?? []).map((asset) => <option key={asset.id} value={asset.id}>{asset.assetName}</option>)}
-            </select>
-          </div>
+          {showAssets ? (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Related Asset (optional)</label>
+              <select value={assetId} onChange={(event) => setAssetId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
+                <option value="">None</option>
+                {(assets ?? []).map((asset) => <option key={asset.id} value={asset.id}>{asset.assetName}</option>)}
+              </select>
+            </div>
+          ) : null}
         </div>
         <button
           type="button"

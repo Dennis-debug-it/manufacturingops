@@ -66,9 +66,21 @@ export interface PlatformTenantListItem {
   trialDaysRemaining: number | null
   trialStatus: TrialStatus | string
   createdAt: string
+  /** Effective licensed seats (what the backend enforces). Null = unlimited. */
+  seatLimit?: number | null
+  /** ServiceOps modules the plan entitles: 'operations' | 'finance'. */
+  modules?: string[]
+  licenseExpiresAt?: string | null
+  primaryAdminEmail?: string | null
 }
 
 export interface PlatformTenantDetail extends PlatformTenantListItem {
+  /** Active workspace users, pending invitees included — the count seats are enforced against. */
+  seatsUsed?: number
+  planCode?: string | null
+  isPerpetual?: boolean
+  /** 'Manual' (operator) or 'NonPayment' (subscription lapsed) while suspended. */
+  suspensionReason?: string | null
   serviceOpsEmail?: string | null
   timeZoneId?: string | null
   currency?: string | null
@@ -151,8 +163,6 @@ export interface PlatformLicensePlan {
   annualPrice: number
   maxUsers: number | null
   maxBranches: number | null
-  maxAssets: number | null
-  maxWorkOrders: number | null
   modulesIncluded: string[]
   isActive: boolean
 }

@@ -160,7 +160,18 @@ public sealed class AuthController(
         var sessionId = tenantContext.GetRequiredSessionId();
         await userSessionService.LogoutAsync(tenantContext.GetRequiredSessionId(), cancellationToken);
 
-        if (!tenantContext.IsSuperAdmin && tenantContext.TenantId.HasValue && tenantContext.UserId.HasValue)
+        if (tenantContext.ImpersonatedByUserId is { } impersonatorId && tenantContext.TenantId.HasValue && tenantContext.UserId.HasValue)
+        {
+            // Closes the pair opened by impersonation.started, in both the tenant's and the platform's log.
+            var details = $"Platform admin '{tenantContext.ImpersonatedByName}' ended the impersonation session as '{tenantContext.Email}'.";
+            await auditLogService.LogAsync(
+                tenantContext.TenantId.Value, impersonatorId, "impersonation.ended", nameof(Domain.Entities.User),
+                tenantContext.UserId.Value.ToString(), details, severity: "Warning", cancellationToken: cancellationToken);
+            await auditLogService.LogAsync(
+                PlatformConstants.RootTenantId, impersonatorId, "platform.tenant.impersonation.ended", nameof(Domain.Entities.Tenant),
+                tenantContext.TenantId.Value.ToString(), details, severity: "Warning", cancellationToken: cancellationToken);
+        }
+        else if (!tenantContext.IsSuperAdmin && tenantContext.TenantId.HasValue && tenantContext.UserId.HasValue)
         {
             await auditLogService.LogAsync(
                 tenantContext.TenantId.Value,

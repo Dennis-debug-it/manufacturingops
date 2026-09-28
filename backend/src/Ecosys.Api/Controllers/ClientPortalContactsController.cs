@@ -56,6 +56,9 @@ public sealed class ClientPortalContactsController(
             throw new BusinessRuleException("A portal contact with this email already exists.");
         }
 
+        var settings = await PortalModuleSettings.LoadAsync(dbContext, TenantId, cancellationToken);
+        var needsApproval = settings.RequireApprovalForNewContacts && !tenantContext.IsAdmin;
+
         var contact = new ClientPortalUser
         {
             TenantId = TenantId,
@@ -63,17 +66,22 @@ public sealed class ClientPortalContactsController(
             FullName = request.FullName.Trim(),
             Email = normalizedEmail,
             Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
-            IsActive = true,
+            IsActive = !needsApproval,
+            IsPendingApproval = needsApproval,
             InvitedByUserId = UserId,
         };
 
         dbContext.ClientPortalUsers.Add(contact);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await auditLogService.LogAsync(TenantId, UserId, "portal.contact.created", nameof(ClientPortalUser), contact.Id.ToString(), $"Portal contact '{contact.Email}' created.", cancellationToken);
+        if (needsApproval)
+        {
+            await auditLogService.LogAsync(TenantId, UserId, "portal.contact.pending-approval", nameof(ClientPortalUser), contact.Id.ToString(), $"Portal contact '{contact.Email}' created and awaiting admin approval.", cancellationToken);
+            return CreatedAtAction(nameof(List), new { clientId }, Map(contact));
+        }
 
-        var origin = Request.Headers.Origin.FirstOrDefault() ?? $"{Request.Scheme}://{Request.Host.Value}";
-        await portalAuthService.RequestMagicLinkAsync(contact.Email, origin, HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "portal.contact.created", nameof(ClientPortalUser), contact.Id.ToString(), $"Portal contact '{contact.Email}' created.", cancellationToken);
+        await SendSignInLinkAsync(contact, cancellationToken);
 
         return CreatedAtAction(nameof(List), new { clientId }, Map(contact));
     }
@@ -86,9 +94,29 @@ public sealed class ClientPortalContactsController(
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.ClientId == clientId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Portal contact was not found.");
 
+        var approving = request.IsActive && contact.IsPendingApproval;
+        if (approving && !tenantContext.IsAdmin)
+        {
+            throw new ForbiddenException("Only an administrator can approve a new portal contact.");
+        }
+
         contact.IsActive = request.IsActive;
+        if (approving)
+        {
+            contact.IsPendingApproval = false;
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(TenantId, UserId, contact.IsActive ? "portal.contact.activated" : "portal.contact.deactivated", nameof(ClientPortalUser), contact.Id.ToString(), $"Portal contact '{contact.Email}' {(contact.IsActive ? "activated" : "deactivated")}.", cancellationToken);
+
+        if (approving)
+        {
+            await auditLogService.LogAsync(TenantId, UserId, "portal.contact.approved", nameof(ClientPortalUser), contact.Id.ToString(), $"Portal contact '{contact.Email}' approved.", cancellationToken);
+            await SendSignInLinkAsync(contact, cancellationToken);
+        }
+        else
+        {
+            await auditLogService.LogAsync(TenantId, UserId, contact.IsActive ? "portal.contact.activated" : "portal.contact.deactivated", nameof(ClientPortalUser), contact.Id.ToString(), $"Portal contact '{contact.Email}' {(contact.IsActive ? "activated" : "deactivated")}.", cancellationToken);
+        }
 
         return Ok(Map(contact));
     }
@@ -101,11 +129,21 @@ public sealed class ClientPortalContactsController(
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.ClientId == clientId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Portal contact was not found.");
 
-        var origin = Request.Headers.Origin.FirstOrDefault() ?? $"{Request.Scheme}://{Request.Host.Value}";
-        await portalAuthService.RequestMagicLinkAsync(contact.Email, origin, HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), cancellationToken);
+        if (contact.IsPendingApproval)
+        {
+            throw new BusinessRuleException("This contact is awaiting admin approval. A sign-in link is sent once they are approved.");
+        }
+
+        await SendSignInLinkAsync(contact, cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "portal.contact.link-resent", nameof(ClientPortalUser), contact.Id.ToString(), $"Sign-in link resent to portal contact '{contact.Email}'.", cancellationToken);
 
         return Ok(Map(contact));
+    }
+
+    private Task SendSignInLinkAsync(ClientPortalUser contact, CancellationToken cancellationToken)
+    {
+        var origin = Request.Headers.Origin.FirstOrDefault() ?? $"{Request.Scheme}://{Request.Host.Value}";
+        return portalAuthService.RequestMagicLinkAsync(contact.Email, origin, HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), cancellationToken);
     }
 
     private async Task EnsureClientExistsAsync(Guid clientId, CancellationToken cancellationToken)
@@ -118,9 +156,9 @@ public sealed class ClientPortalContactsController(
     }
 
     private static ClientPortalContactResponse Map(ClientPortalUser x) =>
-        new(x.Id, x.FullName, x.Email, x.Phone, x.IsActive, x.LastLoginAt, x.CreatedAt);
+        new(x.Id, x.FullName, x.Email, x.Phone, x.IsActive, x.IsPendingApproval, x.LastLoginAt, x.CreatedAt);
 }
 
-public sealed record ClientPortalContactResponse(Guid Id, string FullName, string Email, string? Phone, bool IsActive, DateTime? LastLoginAt, DateTime CreatedAt);
+public sealed record ClientPortalContactResponse(Guid Id, string FullName, string Email, string? Phone, bool IsActive, bool IsPendingApproval, DateTime? LastLoginAt, DateTime CreatedAt);
 public sealed record CreateClientPortalContactRequest(string FullName, string Email, string? Phone);
 public sealed record UpdateClientPortalContactStatusRequest(bool IsActive);

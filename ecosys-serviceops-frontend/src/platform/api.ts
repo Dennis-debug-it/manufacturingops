@@ -2,6 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '../shared/api/apiClient'
 import { endpoints } from '../shared/api/endpoints'
 import type { PagedResult } from '../shared/types/pagination'
+import type { TenantImpersonationResponse } from '../shared/types/auth'
 import type {
   PlatformAuditLog,
   PlatformDashboardSummary,
@@ -115,6 +116,9 @@ export interface PlatformTenantUser {
   lastCredentialSentAt: string | null
   /** Null means the account has never been signed into — its setup link is still pending. */
   lastLoginAt: string | null
+  /** Active (setup complete), Invited, Expired (setup link lapsed) or NotSent (never delivered). */
+  invitationStatus?: 'Active' | 'Invited' | 'Expired' | 'NotSent' | string
+  invitationExpiresAt?: string | null
 }
 
 export interface PlatformTenantCredentialDelivery {
@@ -349,6 +353,7 @@ export function useExtendTenantLicense(id: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants'] })
       void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', id] })
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'dashboard-summary'] })
     },
   })
 }
@@ -357,17 +362,26 @@ export const useSuspendTenant = (id: string) => useTenantAction(id, endpoints.pl
 export const useDeactivateTenant = (id: string) => useTenantAction(id, endpoints.platform.tenantDeactivate(id))
 export const useExtendTenantTrial = (id: string) => useTenantAction(id, endpoints.platform.tenantExtendTrial(id))
 
-export function useDeleteTenant() {
-  const queryClient = useQueryClient()
+/**
+ * Starts an audited impersonation session. The caller must hand the returned session to
+ * openImpersonationTab — the backend has already created and audited it, so discarding the token
+ * leaves an orphaned session behind (audit TM-P1-10).
+ */
+export function useImpersonateTenant(id: string) {
   return useMutation({
-    mutationFn: (id: string) => api.delete<void>(endpoints.platform.tenant(id)),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants'] }),
+    mutationFn: (reason: string) => api.post<TenantImpersonationResponse>(endpoints.platform.tenantImpersonate(id), { reason }),
   })
 }
 
-export function useImpersonateTenant(id: string) {
+/** Sets the tenant's licensed seats (the limit the backend enforces on every way of adding users). */
+export function useUpdateTenantSeats(id: string) {
+  const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => api.post(endpoints.platform.tenantImpersonate(id)),
+    mutationFn: (maxUsers: number) => api.put<PlatformTenantDetail>(endpoints.platform.tenantLicenseSeats(id), { maxUsers }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants'] })
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', id] })
+    },
   })
 }
 
@@ -522,9 +536,6 @@ export interface LicenseUsageSnapshot {
   licenseStatus: string
   maxUsers: number | null
   maxBranches: number | null
-  maxAssets: number | null
-  monthlyWorkOrders: number
-  monthlyWorkOrdersLimit: number | null
   trialEndsAt: string | null
   expiresAt: string | null
   daysRemaining: number | null

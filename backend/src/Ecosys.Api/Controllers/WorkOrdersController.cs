@@ -324,7 +324,7 @@ public sealed class WorkOrdersController(
     public async Task<ActionResult<WorkOrderResponse>> Create([FromBody] CreateWorkOrderRequest rawRequest, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanCreateWorkOrders);
-        await licenseGuardService.EnsureCanCreateWorkOrderAsync(TenantId, cancellationToken);
+        await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
 
         var template = await ResolveWorkOrderTemplateAsync(rawRequest.TemplateId, cancellationToken);
         var request = ApplyTemplateDefaults(rawRequest, template);
@@ -1342,7 +1342,7 @@ public sealed class WorkOrdersController(
     public async Task<ActionResult<WorkOrderResponse>> CreateFromQuote([FromBody] CreateWorkOrderFromQuoteRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanCreateWorkOrders);
-        await licenseGuardService.EnsureCanCreateWorkOrderAsync(TenantId, cancellationToken);
+        await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
 
         var quote = await dbContext.TenantQuotations
             .Include(x => x.Client)
@@ -1428,7 +1428,7 @@ public sealed class WorkOrdersController(
     public async Task<ActionResult<WorkOrderResponse>> Duplicate(Guid id, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanCreateWorkOrders);
-        await licenseGuardService.EnsureCanCreateWorkOrderAsync(TenantId, cancellationToken);
+        await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
 
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
         var source = await QueryWorkOrders(scope).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)

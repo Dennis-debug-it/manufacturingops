@@ -1,7 +1,9 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
 import { CORS_HEADERS, json, loginWithMockSession, registerApiCatchAll } from './helpers/auth'
+import { E2E_API_URL } from './helpers/test-data'
 
-const API = 'http://localhost:5072'
+// The app under test calls E2E_API_URL; a hardcoded host here never matched its requests.
+const API = E2E_API_URL
 
 type TenantRecord = {
   tenantId: string
@@ -273,9 +275,10 @@ test.describe('auth tenant onboarding', () => {
     await page.getByRole('textbox', { name: 'Primary Admin Name', exact: true }).fill('Amina Hassan')
     await page.getByRole('textbox', { name: 'Primary Admin Email', exact: true }).fill('amina@northwind.test')
     await page.getByRole('radio', { name: 'ServiceOps Suite', exact: true }).check()
+    await page.getByRole('spinbutton', { name: 'Licensed Users', exact: true }).fill('25')
     const creationRequest = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/platform/tenants')
     await page.getByRole('button', { name: /create tenant/i }).last().click()
-    expect((await creationRequest).postDataJSON()).toMatchObject({ companyName: 'Northwind ServiceOps', slug: 'northwind', planCode: 'suite', adminFullName: 'Amina Hassan', adminEmail: 'amina@northwind.test', country: 'Kenya', timeZoneId: 'Africa/Nairobi' })
+    expect((await creationRequest).postDataJSON()).toMatchObject({ companyName: 'Northwind ServiceOps', slug: 'northwind', planCode: 'suite', maxUsers: 25, adminFullName: 'Amina Hassan', adminEmail: 'amina@northwind.test', country: 'Kenya', timeZoneId: 'Africa/Nairobi' })
     await expect(page).toHaveURL(/\/platform\/tenants\/tenant-created-1$/)
 
   })

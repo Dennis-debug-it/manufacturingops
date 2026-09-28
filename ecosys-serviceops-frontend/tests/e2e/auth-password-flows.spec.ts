@@ -1,7 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 import { CORS_HEADERS, json, loginWithMockSession, registerApiCatchAll } from './helpers/auth'
+import { E2E_API_URL } from './helpers/test-data'
 
-const BASE = 'http://127.0.0.1:5072'
+// Must match the API origin the app under test calls (E2E_API_URL).
+const BASE = E2E_API_URL
 
 async function mockForcedPasswordChange(page: Page, role: 'tenantAdmin' | 'platformOwner' = 'tenantAdmin') {
   await registerApiCatchAll(page)

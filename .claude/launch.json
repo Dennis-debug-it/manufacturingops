@@ -47,6 +47,20 @@
         "PlatformAdmin__Password": "PlatformAdmin123!",
         "ASPNETCORE_ENVIRONMENT": "Development"
       }
+    },
+    {
+      "name": "backend-api-portal-verify",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/src/Ecosys.Api", "--urls", "http://localhost:5072"],
+      "port": 5072,
+      "autoPort": false,
+      "env": {
+        "ConnectionStrings__DefaultConnection": "Host=localhost;Port=5432;Database=ecosys_portal_verify;Username=postgres;Password=postgres",
+        "Jwt__SigningKey": "local-dev-only-signing-key-not-for-production-use-32chars",
+        "PlatformAdmin__Email": "platform.owner@ecosys.test",
+        "PlatformAdmin__Password": "PlatformAdmin123!",
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
     }
   ]
 }

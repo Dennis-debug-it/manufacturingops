@@ -5,6 +5,7 @@ import { DataTable, type DataTableColumn } from '../../../shared/components/Data
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { usePermission } from '../../../shared/hooks/usePermission'
+import { useAuth } from '../../../shared/hooks/useAuth'
 import { formatDateTime } from '../../../shared/utils/dates'
 import {
   useClientPortalContacts,
@@ -22,8 +23,8 @@ function NewContactDrawer({ open, clientId, onClose }: { open: boolean; clientId
 
   const submit = async () => {
     try {
-      await createContact.mutateAsync({ fullName, email, phone: phone || undefined })
-      toast.success(`Portal invite sent to ${email}`)
+      const created = await createContact.mutateAsync({ fullName, email, phone: phone || undefined })
+      toast.success(created.isPendingApproval ? `${created.email} added — awaiting admin approval before an invite is sent` : `Portal invite sent to ${created.email}`)
       onClose()
       setFullName('')
       setEmail('')
@@ -48,7 +49,7 @@ function NewContactDrawer({ open, clientId, onClose }: { open: boolean; clientId
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Phone (optional)</label>
           <input value={phone} onChange={(event) => setPhone(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
-        <p className="text-xs text-slate-500">A one-time sign-in link will be emailed to this contact immediately.</p>
+        <p className="text-xs text-slate-500">A one-time sign-in link is emailed to this contact immediately — or, if your portal requires admin approval for new contacts, once an admin approves them.</p>
         <button
           type="button"
           disabled={!fullName.trim() || !email.trim() || createContact.isPending}
@@ -64,10 +65,38 @@ function NewContactDrawer({ open, clientId, onClose }: { open: boolean; clientId
 
 function ContactRowActions({ clientId, contact }: { clientId: string; contact: ClientPortalContact }) {
   const canManage = usePermission('clients.edit')
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
   const updateStatus = useUpdateClientPortalContactStatus(clientId)
   const resendLink = useResendClientPortalLink(clientId)
 
   if (!canManage) return null
+
+  if (contact.isPendingApproval) {
+    return (
+      <div className="flex justify-end gap-2">
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await updateStatus.mutateAsync({ id: contact.id, isActive: true })
+                toast.success(`${contact.email} approved — sign-in link sent`)
+              } catch {
+                // interceptor surfaces the error toast
+              }
+            }}
+            disabled={updateStatus.isPending}
+            className="rounded-lg bg-[var(--app-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60"
+          >
+            Approve
+          </button>
+        ) : (
+          <span className="text-xs text-slate-500">Awaiting admin approval</span>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex justify-end gap-2">
@@ -114,7 +143,7 @@ export function ClientPortalContactsTab({ clientId }: { clientId: string }) {
     { key: 'fullName', header: 'Name', cell: (row) => <span className="font-medium text-slate-900">{row.fullName}</span> },
     { key: 'email', header: 'Email', cell: (row) => row.email },
     { key: 'phone', header: 'Phone', cell: (row) => row.phone ?? '—' },
-    { key: 'isActive', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
+    { key: 'isActive', header: 'Status', cell: (row) => <StatusBadge status={row.isPendingApproval ? 'Pending Approval' : row.isActive ? 'Active' : 'Inactive'} /> },
     { key: 'lastLoginAt', header: 'Last Sign-In', cell: (row) => (row.lastLoginAt ? formatDateTime(row.lastLoginAt) : 'Never') },
     { key: 'actions', header: '', cell: (row) => <ContactRowActions clientId={clientId} contact={row} /> },
   ]

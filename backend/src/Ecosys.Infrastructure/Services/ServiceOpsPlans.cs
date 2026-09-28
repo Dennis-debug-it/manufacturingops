@@ -46,6 +46,32 @@ public static class ServiceOpsPlans
         "TenantFinance", "TenantInvoice", "TenantQuotation"
     };
 
+    /// <summary>
+    /// Tenant controllers deliberately available to every ServiceOps plan (identity, workspace settings,
+    /// clients, knowledge base, audit, attachments…). Listed explicitly so that a new controller is never
+    /// ungated by omission: <c>ServiceOpsModuleClassificationTests</c> fails for any controller that is in
+    /// none of the Operations/Finance/Shared/route-classified sets (audit TM-P2-03).
+    /// </summary>
+    public static readonly IReadOnlySet<string> SharedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "AccessControl", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "ClientPortalContacts",
+        "Clients", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "PortalAuth", "PortalKnowledge",
+        "PublicWorkOrder", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDeliveryLogs",
+        "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users"
+    };
+
+    /// <summary>Controllers whose module requirement is decided per route inside <see cref="RequiredModules"/>.</summary>
+    public static readonly IReadOnlySet<string> RouteClassifiedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "Portal", "WorkOrderBilling", "Import", "Settings"
+    };
+
+    public static bool IsClassified(string controller) =>
+        OperationsControllers.Contains(controller)
+        || FinanceControllers.Contains(controller)
+        || SharedControllers.Contains(controller)
+        || RouteClassifiedControllers.Contains(controller);
+
     public static IReadOnlyList<string> RequiredModules(string? controller, string path)
     {
         var route = path.ToLowerInvariant();

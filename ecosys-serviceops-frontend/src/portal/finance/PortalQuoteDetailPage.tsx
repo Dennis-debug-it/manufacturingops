@@ -8,6 +8,9 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { formatDate } from '../../shared/utils/dates'
 import { useAcceptPortalQuotation, usePortalQuotation, useRejectPortalQuotation } from '../api'
+import { portalFeatures, usePortalFeature } from '../components/PortalFeatureGate'
+
+const MAX_REASON_LENGTH = 1000
 
 function money(amount: number, currency: string) {
   return amount.toLocaleString(undefined, { style: 'currency', currency })
@@ -18,7 +21,9 @@ export function PortalQuoteDetailPage() {
   const { data, isLoading, isError } = usePortalQuotation(id)
   const accept = useAcceptPortalQuotation(id ?? '')
   const reject = useRejectPortalQuotation(id ?? '')
+  const canRespondInPortal = usePortalFeature(portalFeatures.quoteResponses)
   const [showReject, setShowReject] = useState(false)
+  const [reason, setReason] = useState('')
 
   if (isLoading) {
     return <Spinner label="Loading quote" />
@@ -28,7 +33,13 @@ export function PortalQuoteDetailPage() {
     return <EmptyState title="Quote unavailable" description="This quotation could not be loaded." />
   }
 
-  const canRespond = data.status === 'Sent'
+  const canRespond = canRespondInPortal && data.status === 'Sent'
+  const trimmedReason = reason.trim()
+
+  const closeReject = () => {
+    setShowReject(false)
+    setReason('')
+  }
 
   return (
     <div className="space-y-4">
@@ -97,20 +108,36 @@ export function PortalQuoteDetailPage() {
       <ConfirmDialog
         open={showReject}
         title="Decline Quote"
-        message="Are you sure you want to decline this quotation? You can add a reason for our team."
-        confirmLabel="Decline Quote"
+        message="Please let our team know why you are declining this quotation."
+        confirmLabel={reject.isPending ? 'Declining…' : 'Decline Quote'}
+        confirmDisabled={!trimmedReason || reject.isPending}
         danger
-        onCancel={() => setShowReject(false)}
+        onCancel={closeReject}
         onConfirm={async () => {
+          if (!trimmedReason) return
           try {
-            await reject.mutateAsync(undefined)
+            await reject.mutateAsync(trimmedReason)
             toast.success('Quote declined')
-            setShowReject(false)
+            closeReject()
           } catch {
-            setShowReject(false)
+            // interceptor surfaces the error toast; keep the dialog open so the reason isn't lost
           }
         }}
-      />
+      >
+        <div className="mt-4">
+          <label htmlFor="quote-decline-reason" className="mb-1.5 block text-sm font-medium text-slate-700">Reason for declining *</label>
+          <textarea
+            id="quote-decline-reason"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            rows={4}
+            maxLength={MAX_REASON_LENGTH}
+            placeholder="e.g. The price is above our budget for this quarter"
+            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]"
+          />
+          <div className="mt-1 text-right text-xs text-slate-400">{reason.length}/{MAX_REASON_LENGTH}</div>
+        </div>
+      </ConfirmDialog>
     </div>
   )
 }

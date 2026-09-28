@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
-import { KeyRound, Send, Trash2, UserCog, UserPlus } from 'lucide-react'
+import { KeyRound, Send, UserCog, UserPlus, Users } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
@@ -8,16 +8,16 @@ import { EmptyState } from '../../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { DetailLayout } from '../../shared/components/DetailLayout'
-import { formatDateTime } from '../../shared/utils/dates'
+import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
+import { openImpersonationTab } from '../../shared/api/sessionStore'
 import {
   useActivateTenant,
   useRenewTenantLicense,
   useExtendTenantLicense,
   useReactivateTenantLicense,
-  useDeleteTenant,
   useExtendTenantTrial,
   useImpersonateTenant,
   useSuspendTenant,
@@ -33,6 +33,7 @@ import {
   useResendTenantUserInvitation,
   useResetTenantUserPassword,
   useDeactivateTenant,
+  useUpdateTenantSeats,
 } from '../api'
 import { SectionTitle, licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
 import { NewWorkspaceUserDrawer } from './NewWorkspaceUserDrawer'
@@ -51,6 +52,30 @@ const communicationGroups = [
   'Materials',
   'SystemAlerts',
 ] as const
+
+const moduleLabels: Record<string, string> = {
+  operations: 'Operations',
+  finance: 'Finance',
+}
+
+const primaryButton = 'inline-flex h-11 items-center gap-1.5 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
+const secondaryButton = 'inline-flex h-11 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50'
+const warningButton = 'inline-flex h-11 items-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-800 hover:bg-amber-100'
+const dangerButton = 'inline-flex h-11 items-center rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 hover:bg-rose-100'
+const panelClass = 'rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm'
+const inputClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
+
+/** Seats are shown as "used / limit"; a null limit means the tenant predates required seat limits. */
+function formatSeats(used: number, limit: number | null | undefined) {
+  return limit != null ? `${used} / ${limit}` : `${used} / unlimited`
+}
+
+const invitationLabels: Record<string, { label: string; className: string }> = {
+  Active: { label: 'Set up', className: 'text-slate-600' },
+  Invited: { label: 'Invitation sent', className: 'font-medium text-sky-700' },
+  Expired: { label: 'Setup link expired', className: 'font-medium text-amber-700' },
+  NotSent: { label: 'Invitation not delivered', className: 'font-medium text-rose-700' },
+}
 
 export function TenantDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -71,20 +96,25 @@ export function TenantDetailPage() {
   const suspend = useSuspendTenant(id ?? '')
   const deactivate = useDeactivateTenant(id ?? '')
   const extendTrial = useExtendTenantTrial(id ?? '')
-  const deleteTenant = useDeleteTenant()
   const impersonate = useImpersonateTenant(id ?? '')
+  const updateSeats = useUpdateTenantSeats(id ?? '')
   const resendInvitation = useResendTenantUserInvitation(id)
   const resetPassword = useResetTenantUserPassword(id)
   const [showAddWorkspaceUser, setShowAddWorkspaceUser] = useState(false)
 
-  const [showDelete, setShowDelete] = useState(false)
   const [showSuspend, setShowSuspend] = useState(false)
+  const [suspendReason, setSuspendReason] = useState('')
   const [showDeactivate, setShowDeactivate] = useState(false)
-  const [showExtend, setShowExtend] = useState(false)
+  const [deactivateReason, setDeactivateReason] = useState('')
+  const [showExtendTrial, setShowExtendTrial] = useState(false)
   const [showActivateDialog, setShowActivateDialog] = useState(false)
   const [showRenewDialog, setShowRenewDialog] = useState(false)
   const [showExtendLicenseDialog, setShowExtendLicenseDialog] = useState(false)
   const [extendLicenseTarget, setExtendLicenseTarget] = useState('')
+  const [showSeatsDialog, setShowSeatsDialog] = useState(false)
+  const [seatsInput, setSeatsInput] = useState('')
+  const [showImpersonate, setShowImpersonate] = useState(false)
+  const [impersonateReason, setImpersonateReason] = useState('')
   const [testRecipient, setTestRecipient] = useState('')
   const [showResetNumbering, setShowResetNumbering] = useState<{ documentType: string } | null>(null)
   const [resetNumberingReason, setResetNumberingReason] = useState('')
@@ -97,11 +127,21 @@ export function TenantDetailPage() {
     return <EmptyState title="Tenant unavailable" description="This tenant could not be loaded." {...(id ? { actionLabel: 'Retry', onAction: () => { void refetchTenant() } } : {})} />
   }
 
+  const seatsUsed = tenant.seatsUsed ?? tenant.userCount
+  const seatLimit = tenant.seatLimit ?? tenant.maxUsers
+  const seatsFull = seatLimit != null && seatsUsed >= seatLimit
+  const modules = tenant.modules ?? []
+  const isTrial = tenant.status === 'Trial'
+  const isSuspended = tenant.status === 'Suspended'
+  const isInactive = tenant.status === 'Inactive'
+  const isActive = tenant.status === 'Active'
+  const licenseExpiresAt = tenant.licenseExpiresAt ?? tenant.subscriptionEndsAt
+
   const auditColumns: DataTableColumn<PlatformTenantAuditLog>[] = [
     { key: 'createdAt', header: 'When', cell: (row) => formatDateTime(row.createdAt) },
     { key: 'actor', header: 'Actor', cell: (row) => row.actor },
     { key: 'action', header: 'Action', cell: (row) => row.action },
-    { key: 'details', header: 'Details', cell: (row) => row.details ?? 'â€”' },
+    { key: 'details', header: 'Details', cell: (row) => row.details ?? '—' },
   ]
 
   const sendTestEmail = async () => {
@@ -152,25 +192,61 @@ export function TenantDetailPage() {
     }
   }
 
+  const startImpersonation = async () => {
+    try {
+      const result = await impersonate.mutateAsync(impersonateReason.trim())
+      openImpersonationTab({
+        token: result.token,
+        user: result.user,
+        tenant: result.tenant,
+        branches: [],
+        impersonation: {
+          impersonatedByUserId: result.impersonatedByUserId,
+          impersonatedByName: result.impersonatedByName,
+          startedAt: result.startedAt,
+        },
+      })
+      toast.success('Impersonation session opened in a new tab.')
+      setShowImpersonate(false)
+      setImpersonateReason('')
+    } catch {
+      // handled by interceptor
+    }
+  }
+
+  const openSeatsDialog = () => {
+    setSeatsInput(seatLimit != null ? String(seatLimit) : String(Math.max(seatsUsed, 1)))
+    setShowSeatsDialog(true)
+  }
+
+  const parsedSeats = Number(seatsInput)
+  const seatsValid = Number.isInteger(parsedSeats) && parsedSeats > 0
+
   const tenantUserColumns: DataTableColumn<PlatformTenantUser>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <span className="font-medium text-slate-900">{row.fullName}</span> },
     { key: 'email', header: 'Email', cell: (row) => row.email },
     { key: 'role', header: 'Role', cell: (row) => row.role },
-    { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? 'â€”' },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
     {
-      key: 'access',
-      header: 'Access',
-      // A never-signed-in account is the case this table exists to rescue: its setup link may have
-      // lapsed, and the user cannot request a new one without being able to log in.
-      cell: (row) => (row.lastLoginAt ? <span className="text-slate-600">Signed in {formatDateTime(row.lastLoginAt)}</span> : <span className="font-medium text-amber-700">Never signed in</span>),
+      key: 'invitation',
+      header: 'Account setup',
+      cell: (row) => {
+        const state = invitationLabels[row.invitationStatus ?? (row.mustChangePassword ? 'Invited' : 'Active')] ?? invitationLabels.Invited!
+        return (
+          <div>
+            <span className={state.className}>{state.label}</span>
+            {row.invitationStatus === 'Invited' && row.invitationExpiresAt ? (
+              <div className="text-xs text-slate-500">Expires {formatDateTime(row.invitationExpiresAt)}</div>
+            ) : null}
+          </div>
+        )
+      },
     },
     {
-      key: 'lastCredentialSentAt',
-      header: 'Setup link sent',
-      cell: (row) => (row.lastCredentialSentAt ? formatDateTime(row.lastCredentialSentAt) : 'â€”'),
+      key: 'access',
+      header: 'Last sign-in',
+      cell: (row) => (row.lastLoginAt ? <span className="text-slate-600">{formatDateTime(row.lastLoginAt)}</span> : <span className="text-slate-500">Never</span>),
     },
-    { key: 'createdAt', header: 'Joined', cell: (row) => formatDateTime(row.createdAt) },
     {
       key: 'actions',
       header: '',
@@ -184,7 +260,7 @@ export function TenantDetailPage() {
             title={row.isActive ? 'Email this user a fresh account setup link' : 'Reactivate the account to resend its setup link'}
           >
             <Send className="h-3.5 w-3.5" />
-            {resendInvitation.isPending && resendInvitation.variables === row.id ? 'Sendingâ€¦' : 'Resend setup link'}
+            {resendInvitation.isPending && resendInvitation.variables === row.id ? 'Sending…' : 'Resend setup link'}
           </button>
         ) : (
           <button
@@ -195,7 +271,7 @@ export function TenantDetailPage() {
             title={row.isActive ? 'Email this user a password reset link' : 'Reactivate the account to reset its password'}
           >
             <KeyRound className="h-3.5 w-3.5" />
-            {resetPassword.isPending && resetPassword.variables === row.id ? 'Sendingâ€¦' : 'Reset password'}
+            {resetPassword.isPending && resetPassword.variables === row.id ? 'Sending…' : 'Reset password'}
           </button>
         ),
     },
@@ -237,6 +313,30 @@ export function TenantDetailPage() {
     },
   ]
 
+  const seatsPanel = (
+    <section className={panelClass} data-testid="tenant-seats">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <SectionTitle
+          title="Licensed users"
+          description="Active workspace users, including invitees who have not signed in yet, use a seat. Deactivated users and client-portal contacts do not."
+        />
+        <button type="button" className={secondaryButton} onClick={openSeatsDialog}>
+          <Users className="h-4 w-4" />
+          Edit licensed users
+        </button>
+      </div>
+      <div className="mt-3 flex flex-wrap items-baseline gap-2">
+        <span className="text-2xl font-semibold text-slate-900">{formatSeats(seatsUsed, seatLimit)}</span>
+        <span className="text-sm text-slate-500">seats in use</span>
+      </div>
+      {seatLimit == null ? (
+        <p className="mt-2 text-sm text-amber-700">No seat limit is set for this tenant. Set licensed users so capacity is enforced.</p>
+      ) : seatsFull ? (
+        <p className="mt-2 text-sm text-amber-700">Licensed user capacity is reached. New users and reactivations are blocked until a seat is freed or the limit is raised.</p>
+      ) : null}
+    </section>
+  )
+
   const tabs = [
     {
       id: 'overview',
@@ -244,35 +344,233 @@ export function TenantDetailPage() {
       content: (
         <div className="space-y-5">
           <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <MiniStat label="Users" value={tenant.userCount} />
+            <MiniStat label="Licensed users" value={formatSeats(seatsUsed, seatLimit)} />
             <MiniStat label="Sites" value={tenant.branchCount} />
             <MiniStat label="Work orders" value={tenant.workOrderCount} />
             <MiniStat label="Active now" value={tenant.activeUsersNow} />
           </section>
 
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
+          <section className={panelClass}>
             <SectionTitle title="Tenant profile" description="Workspace details and lifecycle summary." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <InfoCard label="Tenant name" value={tenant.name} />
-              <InfoCard label="Workspace slug" value={tenant.slug} mono />
               <InfoCard label="Status" value={tenantStatusBadge(tenant.status)} />
-              <InfoCard label="Plan" value={tenant.planName ?? 'No plan'} />
               <InfoCard label="License" value={licenseStatusBadge(tenant.licenseStatus)} />
-              <InfoCard label="Trial" value={trialStatusBadge(tenant.trialStatus)} />
+              <InfoCard label="Plan" value={tenant.planName ?? 'No plan'} />
+              <InfoCard label="Modules" value={modules.length ? modules.map((m) => moduleLabels[m] ?? m).join(' + ') : 'None'} />
+              <InfoCard label="License expires" value={tenant.isPerpetual ? 'Never (perpetual)' : licenseExpiresAt ? formatDate(licenseExpiresAt) : 'Not set'} />
+              <InfoCard label="Workspace slug" value={tenant.slug} mono />
               <InfoCard label="Primary contact" value={tenant.contactName ?? 'Not set'} />
               <InfoCard label="Contact email" value={tenant.contactEmail ?? 'Not set'} />
-              <InfoCard label="Contact phone" value={tenant.contactPhone ?? 'Not set'} />
               <InfoCard label="Country" value={tenant.country ?? 'Not set'} />
-              <InfoCard label="County" value={tenant.county ?? 'Not set'} />
-              <InfoCard label="City" value={tenant.city ?? 'Not set'} />
-              <InfoCard label="Trial ends" value={tenant.trialEndsAt ? formatDateTime(tenant.trialEndsAt) : 'Not set'} />
-              <InfoCard label="Days remaining" value={tenant.trialDaysRemaining != null ? String(tenant.trialDaysRemaining) : 'â€”'} />
-              <InfoCard label="Subscription ends" value={tenant.subscriptionEndsAt ? formatDateTime(tenant.subscriptionEndsAt) : 'Not set'} />
               <InfoCard label="Created" value={formatDateTime(tenant.createdAt)} />
-              <InfoCard label="Last activity" value={tenant.lastActivityAt ? formatDateTime(tenant.lastActivityAt) : 'Not set'} />
+              <InfoCard label="Last activity" value={tenant.lastActivityAt ? formatDateTime(tenant.lastActivityAt) : 'No activity yet'} />
             </div>
           </section>
         </div>
+      ),
+    },
+    {
+      id: 'users',
+      label: 'Users',
+      content: (
+        <div className="space-y-5">
+          {seatsPanel}
+          <section className={panelClass}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <SectionTitle title="Workspace users" description="Accounts inside this tenant. Resend a lapsed setup link here — it is the only recovery path for an admin who has never signed in. Ecosys staff accounts live under Platform → Users." />
+              <button
+                type="button"
+                onClick={() => setShowAddWorkspaceUser(true)}
+                disabled={seatsFull}
+                title={seatsFull ? 'Licensed user capacity is reached' : undefined}
+                className={primaryButton}
+              >
+                <UserPlus className="h-4 w-4" />
+                Add workspace user
+              </button>
+            </div>
+            <div className="mt-4">
+              <DataTable<PlatformTenantUser>
+                columns={tenantUserColumns}
+                data={tenantUsers ?? []}
+                loading={tenantUsersLoading}
+                emptyTitle="No users yet"
+                emptyDescription="This tenant has no workspace users."
+              />
+            </div>
+          </section>
+        </div>
+      ),
+    },
+    {
+      id: 'modules',
+      label: 'Modules',
+      content: (
+        <div className="space-y-5">
+          <section className={panelClass}>
+            <SectionTitle title="Licensed modules" description="What this tenant's plan entitles. The backend blocks every API of a module that is not licensed; change the plan from Subscription → Renew." />
+            <div className="mt-4 flex flex-wrap gap-2">
+              {['operations', 'finance'].map((module) => (
+                <span
+                  key={module}
+                  className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium ${modules.includes(module) ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-400 line-through'}`}
+                >
+                  {moduleLabels[module]}
+                </span>
+              ))}
+            </div>
+            <p className="mt-3 text-sm text-slate-600">Plan: {tenant.planName ?? 'No plan'}</p>
+          </section>
+          <section className={panelClass}>
+            <SectionTitle title="Module preferences" description="Settings this tenant has saved inside its own workspace (dashboard targets, inventory, payments, portal, integrations). These are tenant-owned and do not grant access." />
+            <div className="mt-4">
+              {moduleSettingsLoading ? (
+                <Spinner label="Loading module preferences" />
+              ) : (moduleSettings ?? []).length === 0 ? (
+                <p className="text-sm text-slate-500">This tenant has not customised any module preferences.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {(moduleSettings ?? []).map((setting) => (
+                    <InfoCard key={setting.moduleKey} label={setting.moduleKey} value={`Updated ${formatDateTime(setting.updatedAt)}`} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      ),
+    },
+    {
+      id: 'licensing',
+      label: 'Subscription',
+      content: (
+        <div className="space-y-5">
+          <section className={panelClass}>
+            <SectionTitle title="Subscription and access" description="The license is the single source of truth for access. Every action below is recorded in the audit trail." />
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <InfoCard label="Tenant status" value={tenantStatusBadge(tenant.status)} />
+              <InfoCard label="License" value={licenseStatusBadge(tenant.licenseStatus)} />
+              {isSuspended ? (
+                <InfoCard label="Suspension" value={tenant.suspensionReason === 'NonPayment' ? 'Unpaid subscription (automatic)' : 'Suspended by Ecosys'} />
+              ) : (
+                <InfoCard label="Trial" value={trialStatusBadge(tenant.trialStatus)} />
+              )}
+              <InfoCard label="License expires" value={tenant.isPerpetual ? 'Never (perpetual)' : licenseExpiresAt ? formatDate(licenseExpiresAt) : 'Not set'} />
+              <InfoCard label="Licensed users" value={formatSeats(seatsUsed, seatLimit)} />
+              <InfoCard label="Plan" value={tenant.planName ?? 'No plan'} />
+            </div>
+          </section>
+          <div className="flex flex-wrap gap-2" data-testid="tenant-lifecycle-actions">
+            {isTrial || isInactive ? <button type="button" className={primaryButton} onClick={() => setShowActivateDialog(true)}>Activate</button> : null}
+            {isSuspended ? (
+              <button
+                type="button"
+                className={primaryButton}
+                disabled={reactivateLicense.isPending}
+                onClick={() => void reactivateLicense.mutateAsync(undefined).then(() => toast.success('Tenant reactivated')).catch(() => undefined)}
+              >
+                Reactivate
+              </button>
+            ) : null}
+            {isActive || isSuspended ? <button type="button" className={secondaryButton} onClick={() => setShowRenewDialog(true)}>Renew</button> : null}
+            {(isActive || isSuspended) && !tenant.isPerpetual ? (
+              <button
+                type="button"
+                className={secondaryButton}
+                onClick={() => {
+                  setExtendLicenseTarget(licenseExpiresAt ? licenseExpiresAt.slice(0, 10) : '')
+                  setShowExtendLicenseDialog(true)
+                }}
+              >
+                Extend
+              </button>
+            ) : null}
+            {isTrial && !tenant.trialExtensionUsed ? <button type="button" className={secondaryButton} onClick={() => setShowExtendTrial(true)}>Extend trial</button> : null}
+            <button type="button" className={secondaryButton} onClick={openSeatsDialog}>Edit licensed users</button>
+            {isActive || isTrial ? <button type="button" className={warningButton} onClick={() => setShowSuspend(true)}>Suspend</button> : null}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'communication',
+      label: 'Communication',
+      content: communication ? (
+        <div className="space-y-5">
+          <section className={panelClass}>
+            <SectionTitle title="Email settings" description="Read-only — SMTP is global platform infrastructure. This tenant's own Workspace Email settings page is where display name, reply-to, and notification preferences are changed." />
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <InfoCard label="Sender name" value={communication.emailSettings.senderName || '—'} />
+              <InfoCard label="Sender email" value={communication.emailSettings.senderEmail || '—'} />
+              <InfoCard label="Reply-to email" value={communication.emailSettings.replyToEmail || '—'} />
+              <InfoCard label="Tenant notifications" value={communication.emailSettings.enableTenantEmailNotifications ? 'Enabled' : 'Disabled'} />
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button type="button" className={secondaryButton} onClick={() => void sendTestEmail()}>
+                Send test email
+              </button>
+              <button type="button" className={secondaryButton} onClick={() => void verifySmtp()}>
+                Verify SMTP
+              </button>
+              <input value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder="Test recipient email" className="h-11 rounded-lg border border-slate-200 px-3 text-sm outline-none" />
+            </div>
+          </section>
+
+          <section className={panelClass}>
+            <SectionTitle title="Notification groups" description="Default recipient groups and switches." />
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {communicationGroups.map((group) => (
+                <div key={group} className="rounded-xl border border-slate-200 px-4 py-3">
+                  <p className="font-medium text-slate-900">{group}</p>
+                  <p className="mt-1 text-sm text-slate-600">Managed by tenant notification settings.</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      ) : (
+        <Spinner label="Loading communication settings" />
+      ),
+    },
+    {
+      id: 'numbering',
+      label: 'Numbering',
+      content: (
+        <section className={panelClass}>
+          <SectionTitle title="Document numbering" description="Tenant-owned numbering sequences. Reset uses the same support tool available from Platform Support." />
+          <div className="mt-4">
+            <DataTable<PlatformTenantNumbering>
+              columns={numberingColumns}
+              data={numbering ?? []}
+              loading={numberingLoading}
+              emptyTitle="No numbering rules configured"
+              emptyDescription="This tenant has not set up any document numbering sequences yet."
+            />
+          </div>
+        </section>
+      ),
+    },
+    {
+      id: 'templates',
+      label: 'Templates',
+      content: (
+        <section className={panelClass}>
+          <SectionTitle title="Document designs" description="Which document types this tenant has customized via the Document Designer. Editing happens from within the tenant's own workspace." />
+          <div className="mt-4">
+            {documentDesignsLoading ? (
+              <Spinner label="Loading document designs" />
+            ) : (documentDesigns ?? []).length === 0 ? (
+              <EmptyState title="No customized document designs" description="This tenant is using the default document design for every document type." />
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {(documentDesigns ?? []).map((entry) => (
+                  <InfoCard key={entry.documentType} label={entry.documentType} value="Customized" />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       ),
     },
     {
@@ -281,7 +579,7 @@ export function TenantDetailPage() {
       content: brandingLoading ? (
         <Spinner label="Loading branding" />
       ) : branding ? (
-        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
+        <section className={panelClass}>
           <SectionTitle title="Tenant branding" description="Read-only view. Branding is edited from within the tenant's own workspace settings." />
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             <InfoCard label="Company name" value={branding.companyName} />
@@ -307,203 +605,6 @@ export function TenantDetailPage() {
       ),
     },
     {
-      id: 'users',
-      label: 'Users',
-      content: (
-        <div className="space-y-5">
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-            <SectionTitle title="Workspace users" description="Cross-tenant user listing is not exposed yet. We can safely show the tenant-side account summary we do have." />
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <InfoCard label="Tenant users" value={tenant.userCount} />
-              <InfoCard label="ServiceOps email" value={tenant.serviceOpsEmail ?? '—'} />
-              <InfoCard label="Timezone" value={tenant.timeZoneId ?? '—'} />
-              <InfoCard label="Must change password" value={tenant.initialAdminInvitationSent ? 'First admin invited' : 'Check status'} />
-              <InfoCard label="Initial admin invite" value={tenant.initialAdminInvitationSent ? 'Queued or sent' : 'Not sent'} />
-              <InfoCard label="Initial admin note" value={tenant.initialAdminInvitationMessage ?? 'â€”'} />
-            </div>
-          </section>
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <SectionTitle title="Workspace user list" description="Accounts inside this tenant. Add another admin here when the workspace needs more than the one seeded at creation, or resend a lapsed setup link â€” the only recovery path for an admin who has never signed in. Ecosys staff accounts live under Platform â†’ Users." />
-              <button
-                type="button"
-                onClick={() => setShowAddWorkspaceUser(true)}
-                className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[var(--app-primary)] px-3 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
-              >
-                <UserPlus className="h-4 w-4" />
-                Add workspace user
-              </button>
-            </div>
-            <div className="mt-4">
-              <DataTable<PlatformTenantUser>
-                columns={tenantUserColumns}
-                data={tenantUsers ?? []}
-                loading={tenantUsersLoading}
-                emptyTitle="No users yet"
-                emptyDescription="This tenant has no workspace users."
-              />
-            </div>
-          </section>
-        </div>
-      ),
-    },
-    {
-      id: 'modules',
-      label: 'Modules',
-      content: (
-        <div className="space-y-5">
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-            <SectionTitle title="Configured module settings" description="Module-level configuration this tenant has saved (executive dashboard, inventory, payments, portal, integrations, etc). Full module enable/disable entitlement is governed by licensing, not a per-module toggle." />
-            <div className="mt-4">
-              {moduleSettingsLoading ? (
-                <Spinner label="Loading module settings" />
-              ) : (moduleSettings ?? []).length === 0 ? (
-                <EmptyState title="No module settings configured" description="This tenant has not customized any module-level settings yet." />
-              ) : (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  {(moduleSettings ?? []).map((setting) => (
-                    <InfoCard key={setting.moduleKey} label={setting.moduleKey} value={formatDateTime(setting.updatedAt)} />
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-          <UnsupportedTab
-            title="Licensing & entitlement"
-            description="Max users, max branches, and plan-level feature gates are managed from Subscription / Licensing."
-            linkLabel="Open licensing"
-            onAction={() => navigate('/platform/licensing')}
-          />
-        </div>
-      ),
-    },
-    {
-      id: 'licensing',
-      label: 'Subscription / Licensing',
-      content: (
-        <div className="space-y-5">
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-            <SectionTitle title="Subscription state" description="Lifecycle controls available from the platform owner workspace." />
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <InfoCard label="License status" value={licenseStatusBadge(tenant.licenseStatus)} />
-              <InfoCard label="Trial status" value={trialStatusBadge(tenant.trialStatus)} />
-              <InfoCard label="Max users" value={tenant.maxUsers != null ? String(tenant.maxUsers) : 'Unlimited'} />
-              <InfoCard label="Max branches" value={tenant.maxBranches != null ? String(tenant.maxBranches) : 'Unlimited'} />
-              <InfoCard label="Trial started" value={tenant.trialStartsAt ? formatDateTime(tenant.trialStartsAt) : 'Not set'} />
-              <InfoCard label="Trial extended" value={tenant.trialExtendedAt ? formatDateTime(tenant.trialExtendedAt) : 'Not used'} />
-            </div>
-          </section>
-          <div className="flex flex-wrap gap-2">
-            {tenant.status === 'Trial' || tenant.status === 'Inactive' ? (
-              <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => setShowActivateDialog(true)}>Activate</button>
-            ) : null}
-            {tenant.status === 'Suspended' ? (
-              <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void reactivateLicense.mutateAsync(undefined).then(() => toast.success('Tenant reactivated')).catch(() => undefined)}>Reactivate</button>
-            ) : null}
-            {tenant.status === 'Active' || tenant.status === 'Suspended' ? (
-              <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setShowRenewDialog(true)}>Renew</button>
-            ) : null}
-            {tenant.status === 'Active' ? (
-              <button
-                type="button"
-                className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                onClick={() => {
-                  setExtendLicenseTarget(tenant.subscriptionEndsAt ? tenant.subscriptionEndsAt.slice(0, 10) : '')
-                  setShowExtendLicenseDialog(true)
-                }}
-              >
-                Extend
-              </button>
-            ) : null}
-            {tenant.status === 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-800 hover:bg-amber-100" onClick={() => setShowSuspend(true)}>Suspend</button> : null}
-            {!tenant.trialExtensionUsed ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setShowExtend(true)}>Extend trial</button> : null}
-            {tenant.status !== 'Inactive' ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 hover:bg-rose-100" onClick={() => setShowDeactivate(true)}>Deactivate</button> : null}
-          </div>
-        </div>
-      ),
-    },
-    {
-      id: 'communication',
-      label: 'Communication',
-      content: communication ? (
-        <div className="space-y-5">
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-            <SectionTitle title="Email settings" description="Read-only — SMTP is global platform infrastructure. This tenant's own Workspace Email settings page is where display name, reply-to, and notification preferences are changed." />
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <InfoCard label="Sender name" value={communication.emailSettings.senderName || 'â€”'} />
-              <InfoCard label="Sender email" value={communication.emailSettings.senderEmail || 'â€”'} />
-              <InfoCard label="Reply-to email" value={communication.emailSettings.replyToEmail || 'â€”'} />
-              <InfoCard label="Tenant notifications" value={communication.emailSettings.enableTenantEmailNotifications ? 'Enabled' : 'Disabled'} />
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => void sendTestEmail()}>
-                Send test email
-              </button>
-              <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => void verifySmtp()}>
-                Verify SMTP
-              </button>
-              <input value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder="Test recipient email" className="h-11 rounded-lg border border-slate-200 px-3 text-sm outline-none" />
-            </div>
-          </section>
-
-          <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-            <SectionTitle title="Notification groups" description="Default recipient groups and switches." />
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-              {communicationGroups.map((group) => (
-                <div key={group} className="rounded-xl border border-slate-200 px-4 py-3">
-                  <p className="font-medium text-slate-900">{group}</p>
-                  <p className="mt-1 text-sm text-slate-600">Managed by tenant notification settings.</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-      ) : (
-        <Spinner label="Loading communication settings" />
-      ),
-    },
-    {
-      id: 'numbering',
-      label: 'Numbering',
-      content: (
-        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-          <SectionTitle title="Document numbering" description="Tenant-wide numbering sequences. Reset uses the same support tool available from Platform Support." />
-          <div className="mt-4">
-            <DataTable<PlatformTenantNumbering>
-              columns={numberingColumns}
-              data={numbering ?? []}
-              loading={numberingLoading}
-              emptyTitle="No numbering rules configured"
-              emptyDescription="This tenant has not set up any document numbering sequences yet."
-            />
-          </div>
-        </section>
-      ),
-    },
-    {
-      id: 'templates',
-      label: 'Templates',
-      content: (
-        <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-          <SectionTitle title="Document designs" description="Which document types this tenant has customized via the Document Designer. Editing happens from within the tenant's own workspace." />
-          <div className="mt-4">
-            {documentDesignsLoading ? (
-              <Spinner label="Loading document designs" />
-            ) : (documentDesigns ?? []).length === 0 ? (
-              <EmptyState title="No customized document designs" description="This tenant is using the default document design for every document type." />
-            ) : (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {(documentDesigns ?? []).map((entry) => (
-                  <InfoCard key={entry.documentType} label={entry.documentType} value="Customized" />
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      ),
-    },
-    {
       id: 'finance',
       label: 'Finance',
       content: financeSummaryLoading ? (
@@ -516,12 +617,10 @@ export function TenantDetailPage() {
             <InfoCard label="Total invoiced" value={formatCurrency(financeSummary.totalInvoiced)} />
             <InfoCard label="Outstanding balance" value={formatCurrency(financeSummary.outstandingBalance)} />
           </div>
-          <UnsupportedTab
-            title="Detailed invoices"
-            description="Tenant-level invoices and billing live in the tenant workspace. The platform finance tab aggregates platform-wide records only."
-            linkLabel="Open platform finance"
-            onAction={() => navigate('/platform/finance')}
-          />
+          <p className="text-sm text-slate-600">
+            Summary of the tenant's own invoicing. Individual invoices are managed inside the tenant workspace; Ecosys billing for this tenant is under{' '}
+            <button type="button" className="font-medium text-[var(--app-primary)] underline" onClick={() => navigate('/platform/finance')}>Platform finance</button>.
+          </p>
         </section>
       ) : (
         <EmptyState title="Finance summary unavailable" description="Could not load this tenant's finance summary." />
@@ -541,31 +640,29 @@ export function TenantDetailPage() {
     },
     {
       id: 'account',
-      label: 'Account Management',
+      label: 'Support & danger zone',
       content: (
         <section className="space-y-4">
-          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-            <SectionTitle title="Account management" description="Lifecycle controls that are safe to expose from the platform owner workspace." />
-            <div className="mt-4 flex flex-wrap gap-2">
-              {tenant.status !== 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => void activate.mutateAsync(undefined)}>Activate tenant</button> : null}
-              {tenant.status === 'Active' ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-amber-200 bg-amber-50 px-4 text-sm font-medium text-amber-800 hover:bg-amber-100" onClick={() => setShowSuspend(true)}>Suspend tenant</button> : null}
-              {tenant.status !== 'Inactive' ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-rose-50 px-4 text-sm font-medium text-rose-700 hover:bg-rose-100" onClick={() => setShowDeactivate(true)}>Deactivate tenant</button> : null}
-              {!tenant.trialExtensionUsed ? <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setShowExtend(true)}>Extend trial</button> : null}
-              <button type="button" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => void impersonate.mutateAsync(undefined).then(() => toast.success('Impersonation session started.'))}>
+          <div className={panelClass}>
+            <SectionTitle title="Support access" description="Sign in as this tenant's primary admin in a new tab. The session is clearly marked, has an Exit button, and its start and end are recorded in both the tenant and platform audit logs." />
+            <div className="mt-4">
+              <button type="button" className={secondaryButton} disabled={!tenant || isSuspended || isInactive} onClick={() => setShowImpersonate(true)}>
                 <UserCog className="h-4 w-4" />
                 Impersonate admin
               </button>
+              {isSuspended || isInactive ? <p className="mt-2 text-sm text-slate-500">Reactivate the tenant before starting an impersonation session.</p> : null}
             </div>
           </div>
 
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
-            <p className="text-sm font-semibold text-rose-900">Delete tenant</p>
-            <p className="mt-2 text-sm text-rose-800">Deletion is permanent and only shown here for platform owners. It requires explicit confirmation text.</p>
-            <button type="button" className="mt-4 inline-flex h-11 items-center rounded-lg bg-rose-600 px-4 text-sm font-medium text-white hover:bg-rose-700" onClick={() => setShowDelete(true)}>
-              <Trash2 className="h-4 w-4" />
-              Delete tenant
-            </button>
-          </div>
+          {!isInactive ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
+              <p className="text-sm font-semibold text-rose-900">Deactivate tenant</p>
+              <p className="mt-2 text-sm text-rose-800">Cancels the license and takes the workspace offline. No tenant data is deleted; the tenant can be restored later with Activate or Renew.</p>
+              <button type="button" className={`mt-4 ${dangerButton}`} onClick={() => setShowDeactivate(true)}>
+                Deactivate tenant
+              </button>
+            </div>
+          ) : null}
         </section>
       ),
     },
@@ -581,11 +678,11 @@ export function TenantDetailPage() {
         header={
           <PageHeader
             title={tenant.name}
-            subtitle={`${tenant.slug} Â· ${tenant.contactEmail ?? 'No contact email'}`}
+            subtitle={`${tenant.slug} · ${tenant.contactEmail ?? 'No contact email'}`}
             breadcrumbs={[{ label: 'Tenants', to: '/platform/tenants' }, { label: tenant.name }]}
             secondaryActions={<div className="flex items-center gap-2">{tenantStatusBadge(tenant.status)}{licenseStatusBadge(tenant.licenseStatus)}</div>}
             primaryAction={
-              <Link to="/platform/tenants" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              <Link to="/platform/tenants" className={secondaryButton}>
                 Back to tenants
               </Link>
             }
@@ -635,7 +732,7 @@ export function TenantDetailPage() {
       <ConfirmDialog
         open={showExtendLicenseDialog}
         title="Extend license"
-        message={`Push ${tenant.name}'s license expiry further out. Current expiry: ${tenant.subscriptionEndsAt ? formatDateTime(tenant.subscriptionEndsAt) : 'not set'}.`}
+        message={`Push ${tenant.name}'s license expiry further out. Current expiry: ${licenseExpiresAt ? formatDate(licenseExpiresAt) : 'not set'}.${isSuspended && tenant.suspensionReason === 'NonPayment' ? ' Extending to a future date also lifts the unpaid-subscription suspension.' : ''}`}
         confirmLabel="Extend"
         confirmDisabled={!extendLicenseTarget || extendLicense.isPending}
         onCancel={() => setShowExtendLicenseDialog(false)}
@@ -655,7 +752,7 @@ export function TenantDetailPage() {
                 type="button"
                 className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
                 onClick={() => {
-                  const base = tenant.subscriptionEndsAt ? new Date(tenant.subscriptionEndsAt) : new Date()
+                  const base = licenseExpiresAt && new Date(licenseExpiresAt) > new Date() ? new Date(licenseExpiresAt) : new Date()
                   base.setUTCMonth(base.getUTCMonth() + shortcut.months)
                   setExtendLicenseTarget(base.toISOString().slice(0, 10))
                 }}
@@ -666,75 +763,97 @@ export function TenantDetailPage() {
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">New expiry date</label>
-            <input
-              type="date"
-              value={extendLicenseTarget}
-              onChange={(event) => setExtendLicenseTarget(event.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-            />
+            <input type="date" value={extendLicenseTarget} onChange={(event) => setExtendLicenseTarget(event.target.value)} className={inputClass} />
           </div>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={showSeatsDialog}
+        title="Licensed users"
+        message={`How many workspace users may ${tenant.name} have? ${seatsUsed} seat${seatsUsed === 1 ? ' is' : 's are'} in use. Lowering the limit below usage never deactivates anyone; it only blocks new users until usage falls.`}
+        confirmLabel="Save"
+        confirmDisabled={!seatsValid || updateSeats.isPending}
+        onCancel={() => setShowSeatsDialog(false)}
+        onConfirm={() => {
+          if (!seatsValid) return
+          void updateSeats.mutateAsync(parsedSeats)
+            .then(() => toast.success('Licensed users updated'))
+            .then(() => setShowSeatsDialog(false))
+            .catch(() => undefined)
+        }}
+      >
+        <div className="mt-4">
+          <label htmlFor="tenant-seats-input" className="mb-1.5 block text-sm font-medium text-slate-700">Licensed users</label>
+          <input id="tenant-seats-input" type="number" min={1} step={1} value={seatsInput} onChange={(event) => setSeatsInput(event.target.value)} className={inputClass} />
+          {seatsValid && parsedSeats < seatsUsed ? (
+            <p className="mt-2 text-sm text-amber-700">This is below the {seatsUsed} users already active. Nobody is deactivated; new additions stay blocked until usage is under {parsedSeats}.</p>
+          ) : null}
         </div>
       </ConfirmDialog>
 
       <ConfirmDialog
         open={showSuspend}
         title="Suspend tenant"
-        message={`Suspend ${tenant.name}? This blocks access until reactivated.`}
+        message={`Suspend ${tenant.name}? All of its users lose access until the tenant is reactivated.`}
         confirmLabel="Suspend"
+        confirmDisabled={!suspendReason.trim() || suspend.isPending}
         danger
-        onCancel={() => setShowSuspend(false)}
+        onCancel={() => { setShowSuspend(false); setSuspendReason('') }}
         onConfirm={() => {
-          void suspend.mutateAsync('Suspended by platform owner')
+          void suspend.mutateAsync(suspendReason.trim())
             .then(() => toast.success('Tenant suspended'))
-            .finally(() => setShowSuspend(false))
+            .catch(() => undefined)
+            .finally(() => { setShowSuspend(false); setSuspendReason('') })
         }}
-      />
+      >
+        <ReasonField value={suspendReason} onChange={setSuspendReason} placeholder="Why is this tenant being suspended?" />
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={showDeactivate}
         title="Deactivate tenant"
-        message={`Deactivate ${tenant.name}? The workspace will be taken offline.`}
+        message={`Deactivate ${tenant.name}? The license is cancelled and the workspace goes offline. No data is deleted.`}
         confirmLabel="Deactivate"
         confirmText={tenant.slug}
+        confirmDisabled={!deactivateReason.trim() || deactivate.isPending}
         danger
-        onCancel={() => setShowDeactivate(false)}
+        onCancel={() => { setShowDeactivate(false); setDeactivateReason('') }}
         onConfirm={() => {
-          void deactivate.mutateAsync('Deactivated by platform owner')
+          void deactivate.mutateAsync(deactivateReason.trim())
             .then(() => toast.success('Tenant deactivated'))
-            .finally(() => setShowDeactivate(false))
+            .catch(() => undefined)
+            .finally(() => { setShowDeactivate(false); setDeactivateReason('') })
         }}
-      />
+      >
+        <ReasonField value={deactivateReason} onChange={setDeactivateReason} placeholder="Why is this tenant being deactivated?" />
+      </ConfirmDialog>
 
       <ConfirmDialog
-        open={showExtend}
+        open={showExtendTrial}
         title="Extend trial"
         message={`Extend the ${tenant.name} trial by 14 days? This can only be done once.`}
         confirmLabel="Extend"
-        onCancel={() => setShowExtend(false)}
+        onCancel={() => setShowExtendTrial(false)}
         onConfirm={() => {
           void extendTrial.mutateAsync(undefined)
             .then(() => toast.success('Trial extended'))
-            .finally(() => setShowExtend(false))
+            .catch(() => undefined)
+            .finally(() => setShowExtendTrial(false))
         }}
       />
 
       <ConfirmDialog
-        open={showDelete}
-        title="Delete tenant"
-        message={`This permanently deletes ${tenant.name}. This action cannot be undone.`}
-        confirmLabel="Delete"
-        confirmText={tenant.slug}
-        danger
-        onCancel={() => setShowDelete(false)}
-        onConfirm={() => {
-          void deleteTenant.mutateAsync(tenant.tenantId)
-            .then(() => {
-              toast.success('Tenant deleted')
-              navigate('/platform/tenants')
-            })
-            .finally(() => setShowDelete(false))
-        }}
-      />
+        open={showImpersonate}
+        title="Impersonate tenant admin"
+        message={`Open ${tenant.name}'s workspace as its primary admin in a new tab. The reason is recorded in the audit trail.`}
+        confirmLabel="Start session"
+        confirmDisabled={!impersonateReason.trim() || impersonate.isPending}
+        onCancel={() => { setShowImpersonate(false); setImpersonateReason('') }}
+        onConfirm={() => void startImpersonation()}
+      >
+        <ReasonField value={impersonateReason} onChange={setImpersonateReason} placeholder="e.g. Support ticket #1234: reproduce invoice issue" />
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={showResetNumbering !== null}
@@ -758,24 +877,30 @@ export function TenantDetailPage() {
           }
         }}
       >
-        <div className="mt-4">
-          <label className="mb-2 block text-sm font-medium text-slate-700">Reason (required)</label>
-          <textarea
-            value={resetNumberingReason}
-            onChange={(event) => setResetNumberingReason(event.target.value)}
-            rows={2}
-            placeholder="Why is this sequence being reset?"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--app-primary)]"
-          />
-        </div>
+        <ReasonField value={resetNumberingReason} onChange={setResetNumberingReason} placeholder="Why is this sequence being reset?" />
       </ConfirmDialog>
     </>
   )
 }
 
-function MiniStat({ label, value }: { label: string; value: number }) {
+function ReasonField({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
+    <div className="mt-4">
+      <label className="mb-2 block text-sm font-medium text-slate-700">Reason (required)</label>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={2}
+        placeholder={placeholder}
+        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--app-primary)]"
+      />
+    </div>
+  )
+}
+
+function MiniStat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className={panelClass}>
       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
     </div>
@@ -788,26 +913,5 @@ function InfoCard({ label, value, mono = false }: { label: string; value: React.
       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
       <div className={`mt-2 text-sm text-slate-900 ${mono ? 'font-mono' : ''}`}>{value}</div>
     </div>
-  )
-}
-
-function UnsupportedTab({
-  title,
-  description,
-  linkLabel,
-  onAction,
-}: {
-  title: string
-  description: string
-  linkLabel: string
-  onAction: () => void
-}) {
-  return (
-    <EmptyState
-      title={title}
-      description={description}
-      actionLabel={linkLabel}
-      onAction={onAction}
-    />
   )
 }

@@ -1,18 +1,70 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { portalApi } from './api/portalApiClient'
 import { endpoints } from '../shared/api/endpoints'
+import { formatCurrency } from '../shared/utils/format'
+
+/** What the tenant allows this portal to show and do (Settings → Client Portal). Enforced by the API too. */
+export interface PortalSettings {
+  allowRequestSubmission: boolean
+  allowQuoteResponses: boolean
+  showInvoices: boolean
+  showContracts: boolean
+  showAssetRegister: boolean
+  welcomeMessage: string | null
+}
+
+export function usePortalSettings() {
+  return useQuery({ queryKey: ['portal', 'settings'], queryFn: () => portalApi.get<PortalSettings>(endpoints.portal.settings), staleTime: 5 * 60_000 })
+}
+
+export interface PortalCurrencyAmount {
+  currency: string
+  amount: number
+}
+
+/** Money is never summed across currencies; each currency is shown on its own. */
+export function formatCurrencyAmounts(amounts: PortalCurrencyAmount[], fallbackCurrency: string) {
+  return amounts.length === 0
+    ? formatCurrency(0, fallbackCurrency)
+    : amounts.map((entry) => formatCurrency(entry.amount, entry.currency)).join(' · ')
+}
 
 export interface PortalDashboardSummary {
   openWorkOrders: number
   overdueWorkOrders: number
   assetCount: number
   upcomingPmCount: number
-  outstandingInvoiceBalance: number
+  /** One entry per currency with an outstanding balance; empty when nothing is owed or invoices are hidden. */
+  outstandingBalances: PortalCurrencyAmount[]
   pendingQuotations: number
+  /** The tenant's default currency, used to render a zero balance. */
+  currency: string
 }
 
 export function usePortalDashboardSummary() {
   return useQuery({ queryKey: ['portal', 'dashboard'], queryFn: () => portalApi.get<PortalDashboardSummary>(endpoints.portal.dashboardSummary), staleTime: 30_000 })
+}
+
+export interface PortalInvoiceCurrencyTotals {
+  currency: string
+  invoiced: number
+  paid: number
+  outstanding: number
+}
+
+export interface PortalReportSummary {
+  totalRequests: number
+  openRequests: number
+  completedRequests: number
+  closedRequests: number
+  cancelledRequests: number
+  overdueRequests: number
+  currency: string
+  invoiceTotals: PortalInvoiceCurrencyTotals[]
+}
+
+export function usePortalReportSummary() {
+  return useQuery({ queryKey: ['portal', 'reports'], queryFn: () => portalApi.get<PortalReportSummary>(endpoints.portal.reportSummary), staleTime: 30_000 })
 }
 
 export interface PortalWorkOrderListItem {
@@ -95,8 +147,8 @@ export interface PortalAssetListItem {
   nextPmDate: string | null
 }
 
-export function usePortalAssets() {
-  return useQuery({ queryKey: ['portal', 'assets'], queryFn: () => portalApi.get<PortalAssetListItem[]>(endpoints.portal.assets), staleTime: 60_000 })
+export function usePortalAssets(enabled = true) {
+  return useQuery({ queryKey: ['portal', 'assets'], queryFn: () => portalApi.get<PortalAssetListItem[]>(endpoints.portal.assets), staleTime: 60_000, enabled })
 }
 
 export interface PortalMaintenancePlanItem {
@@ -207,6 +259,7 @@ export function useAcceptPortalQuotation(id: string) {
     mutationFn: () => portalApi.post<PortalQuotationDetail>(endpoints.portal.quotationAccept(id)),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['portal', 'quotations'] })
+      void queryClient.invalidateQueries({ queryKey: ['portal', 'dashboard'] })
     },
   })
 }
@@ -214,9 +267,10 @@ export function useAcceptPortalQuotation(id: string) {
 export function useRejectPortalQuotation(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (reason?: string) => portalApi.post<PortalQuotationDetail>(endpoints.portal.quotationReject(id), { reason }),
+    mutationFn: (reason: string) => portalApi.post<PortalQuotationDetail>(endpoints.portal.quotationReject(id), { reason }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['portal', 'quotations'] })
+      void queryClient.invalidateQueries({ queryKey: ['portal', 'dashboard'] })
     },
   })
 }

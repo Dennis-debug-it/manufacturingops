@@ -1,7 +1,9 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { CORS_HEADERS, json, loginWithMockSession, registerApiCatchAll } from './helpers/auth'
+import { E2E_API_URL } from './helpers/test-data'
 
-const BASE = 'http://localhost:5072'
+// The app under test calls E2E_API_URL; a hardcoded host here never matched its requests.
+const BASE = E2E_API_URL
 
 async function mockPlatformAuthSession(page: Page) {
   const tenants = [
@@ -83,8 +85,8 @@ async function assertNoBlockingOverlays(page: Page) {
 }
 
 async function logoutFromTopbar(page: Page) {
-  await page.getByTestId('user-menu-trigger').click()
-  await page.getByTestId('logout-button').click()
+  // The platform shell has a direct Logout button (sidebar/topbar) rather than a user menu.
+  await page.getByRole('button', { name: 'Logout', exact: true }).first().click()
   await expect(page).toHaveURL(/\/login/)
 }
 
@@ -96,23 +98,23 @@ test.describe('auth clickability regression', () => {
   test('platform UI stays clickable after logout and login again', async ({ page }) => {
     await openPlatformTenants(page)
 
-    const addTenantButton = page.getByRole('button', { name: /add tenant/i })
+    const addTenantButton = page.getByRole('button', { name: 'Create tenant', exact: true })
     await assertButtonIsClickable(page, addTenantButton)
     await addTenantButton.click()
-    await expect(page.getByRole('heading', { name: /add tenant/i })).toBeVisible()
-    await page.getByRole('button', { name: /close modal/i }).click()
+    await expect(page.getByRole('heading', { name: 'Create tenant' })).toBeVisible()
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
     await assertNoBlockingOverlays(page)
 
     await logoutFromTopbar(page)
     await loginWithMockSession(page, { role: 'platformOwner', email: 'superadmin@ecosys.local', fullName: 'Lena Atieno' })
     await openPlatformTenants(page)
 
-    const addTenantButtonAgain = page.getByRole('button', { name: /add tenant/i })
+    const addTenantButtonAgain = page.getByRole('button', { name: 'Create tenant', exact: true })
     await assertNoBlockingOverlays(page)
     await assertButtonIsClickable(page, addTenantButtonAgain)
     await addTenantButtonAgain.click()
-    await expect(page.getByRole('heading', { name: /add tenant/i })).toBeVisible()
-    await page.getByRole('button', { name: /close modal/i }).click()
+    await expect(page.getByRole('heading', { name: 'Create tenant' })).toBeVisible()
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
     await assertNoBlockingOverlays(page)
   })
 })

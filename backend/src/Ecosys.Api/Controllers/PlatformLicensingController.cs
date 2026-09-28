@@ -58,14 +58,10 @@ public sealed class PlatformLicensingController(
             AnnualPrice = request.AnnualPrice,
             MaxUsers = request.MaxUsers,
             MaxBranches = request.MaxBranches,
-            MaxAssets = request.MaxAssets,
-            MonthlyWorkOrders = request.MaxWorkOrders,
             ModulesIncluded = NormalizePlanModules(normalizedCode, request.ModulesIncluded),
             IsActive = request.IsActive,
             EmailIngestion = HasModule(request.ModulesIncluded, "EmailIngestion"),
-            MonitoringIntegration = HasModule(request.ModulesIncluded, "MonitoringIntegration"),
-            AdvancedReports = HasModule(request.ModulesIncluded, "AdvancedReports"),
-            ClientPortal = HasModule(request.ModulesIncluded, "ClientPortal")
+            MonitoringIntegration = HasModule(request.ModulesIncluded, "MonitoringIntegration")
         };
 
         dbContext.LicensePlans.Add(plan);
@@ -96,14 +92,10 @@ public sealed class PlatformLicensingController(
         plan.AnnualPrice = request.AnnualPrice;
         plan.MaxUsers = request.MaxUsers;
         plan.MaxBranches = request.MaxBranches;
-        plan.MaxAssets = request.MaxAssets;
-        plan.MonthlyWorkOrders = request.MaxWorkOrders;
         plan.ModulesIncluded = NormalizePlanModules(plan.PlanCode, request.ModulesIncluded);
         plan.IsActive = ServiceOpsPlans.IsCommercial(plan.PlanCode) && request.IsActive;
         plan.EmailIngestion = HasModule(request.ModulesIncluded, "EmailIngestion");
         plan.MonitoringIntegration = HasModule(request.ModulesIncluded, "MonitoringIntegration");
-        plan.AdvancedReports = HasModule(request.ModulesIncluded, "AdvancedReports");
-        plan.ClientPortal = HasModule(request.ModulesIncluded, "ClientPortal");
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -179,7 +171,13 @@ public sealed class PlatformLicensingController(
             Tenant = tenant
         };
 
+        if (subscription.Status == LicenseStatuses.Suspended)
+        {
+            TenantLifecycleState.Suspend(subscription, LicenseSuspensionReasons.Manual, DateTime.UtcNow);
+        }
+
         dbContext.TenantLicenses.Add(subscription);
+        TenantLifecycleState.Sync(tenant, subscription, DateTime.UtcNow);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
@@ -212,18 +210,25 @@ public sealed class PlatformLicensingController(
         if (!plan.IsActive || !ServiceOpsPlans.IsCommercial(plan.PlanCode))
             throw new BusinessRuleException("Only active commercial ServiceOps plans can be assigned.");
 
+        if (request.TenantId != subscription.TenantId)
+        {
+            // A license row is the tenant's entitlement record; re-pointing it would silently strip one
+            // tenant's access and hand it to another.
+            throw new BusinessRuleException("A subscription cannot be moved to a different tenant.");
+        }
+
         ValidateSubscriptionDates(request);
 
-        subscription.TenantId = request.TenantId;
         subscription.LicensePlanId = request.PlanId;
         subscription.LicensePlan = plan;
         subscription.Tenant = tenant;
-        subscription.Status = NormalizeSubscriptionStatus(request.Status);
+        ApplyStatus(subscription, NormalizeSubscriptionStatus(request.Status), DateTime.UtcNow);
         subscription.BillingCycle = NormalizeBillingCycle(request.BillingCycle);
         subscription.StartsAt = request.StartsAt;
         subscription.ExpiresAt = request.EndsAt;
         subscription.TrialEndsAt = request.TrialEndsAt;
         subscription.NextBillingDate = request.NextBillingDate;
+        TenantLifecycleState.Sync(tenant, subscription, DateTime.UtcNow);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -259,20 +264,14 @@ public sealed class PlatformLicensingController(
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Subscription was not found.");
 
-        subscription.Status = NormalizeSubscriptionStatus(status);
-        subscription.SuspendedAt = status.Equals("Suspended", StringComparison.OrdinalIgnoreCase) ? DateTime.UtcNow : null;
-        subscription.CancelledAt = status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase) ? DateTime.UtcNow : null;
+        var now = DateTime.UtcNow;
+        ApplyStatus(subscription, NormalizeSubscriptionStatus(status), now);
 
-        // Keep Tenant.LicenseStatus/IsActive in step with the license row this action just changed —
-        // this endpoint used to leave them untouched, so a tenant suspended from this page still
-        // showed and behaved as fully active everywhere that reads Tenant.IsActive directly, which
-        // disagreed with the same action taken from the Tenants page (PlatformTenantsController).
+        // Same projection every other lifecycle writer uses (TM-P1-02): Status, IsActive and
+        // LicenseStatus on the tenant row all follow the license.
         if (subscription.Tenant is { } tenant)
         {
-            tenant.LicenseStatus = subscription.Status;
-            tenant.SuspendedAt = subscription.SuspendedAt;
-            tenant.IsActive = !status.Equals("Suspended", StringComparison.OrdinalIgnoreCase)
-                && !status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase);
+            TenantLifecycleState.Sync(tenant, subscription, now);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -289,6 +288,25 @@ public sealed class PlatformLicensingController(
         return Ok(MapSubscription(subscription));
     }
 
+    private static void ApplyStatus(TenantLicense subscription, string status, DateTime now)
+    {
+        if (string.Equals(subscription.Status, status, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (status == LicenseStatuses.Suspended)
+        {
+            TenantLifecycleState.Suspend(subscription, LicenseSuspensionReasons.Manual, now);
+            return;
+        }
+
+        subscription.Status = status;
+        subscription.SuspendedAt = null;
+        subscription.SuspensionReason = null;
+        subscription.CancelledAt = status == LicenseStatuses.Cancelled ? now : null;
+    }
+
     private static PlatformLicensePlanResponse MapPlan(LicensePlan plan) =>
         new(
             plan.Id,
@@ -298,8 +316,6 @@ public sealed class PlatformLicensingController(
             plan.AnnualPrice,
             plan.MaxUsers,
             plan.MaxBranches,
-            plan.MaxAssets,
-            plan.MonthlyWorkOrders,
             SplitModules(plan.ModulesIncluded),
             plan.IsActive);
 
@@ -359,6 +375,9 @@ public sealed class PlatformLicensingController(
 
     private static string NormalizeBillingCycle(string? billingCycle) => BillingCycles.Normalize(billingCycle);
 
+    /// <summary>Plan features that were retired (never enforced); dropped if an old client still sends them.</summary>
+    private static readonly HashSet<string> RetiredModules = new(StringComparer.OrdinalIgnoreCase) { "AdvancedReports", "ClientPortal" };
+
     private static string NormalizeModules(IReadOnlyCollection<string>? modulesIncluded)
     {
         if (modulesIncluded is null || modulesIncluded.Count == 0)
@@ -367,7 +386,7 @@ public sealed class PlatformLicensingController(
         }
 
         return string.Join(',', modulesIncluded
-            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Where(x => !string.IsNullOrWhiteSpace(x) && !RetiredModules.Contains(x.Trim()))
             .Select(x => x.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase));
     }
@@ -400,8 +419,6 @@ public sealed record UpsertPlatformLicensePlanRequest(
     decimal AnnualPrice,
     int? MaxUsers,
     int? MaxBranches,
-    int? MaxAssets,
-    int? MaxWorkOrders,
     IReadOnlyCollection<string>? ModulesIncluded,
     bool IsActive);
 
@@ -413,8 +430,6 @@ public sealed record PlatformLicensePlanResponse(
     decimal AnnualPrice,
     int? MaxUsers,
     int? MaxBranches,
-    int? MaxAssets,
-    int? MaxWorkOrders,
     IReadOnlyCollection<string> ModulesIncluded,
     bool IsActive);
 

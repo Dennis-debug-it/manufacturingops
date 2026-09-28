@@ -40,6 +40,7 @@ public static class DependencyInjection
 
         services.AddScoped<IMvpAuthService, MvpAuthService>();
         services.AddScoped<IPortalAuthService, PortalAuthService>();
+        services.AddScoped<IDemoWorkspaceService, DemoWorkspaceService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<IDocumentNumberingService, DocumentNumberingService>();
         services.AddScoped<IKnowledgeDocumentProcessingService, KnowledgeDocumentProcessingService>();

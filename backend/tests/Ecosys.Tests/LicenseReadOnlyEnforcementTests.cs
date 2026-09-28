@@ -189,8 +189,6 @@ public sealed class LicenseReadOnlyEnforcementTests
             DisplayName = "Suite",
             MaxUsers = 50,
             MaxBranches = 10,
-            MaxAssets = 500,
-            MonthlyWorkOrders = 1000,
             IsActive = true
         };
         dbContext.LicensePlans.Add(plan);

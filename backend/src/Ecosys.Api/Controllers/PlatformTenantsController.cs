@@ -62,11 +62,23 @@ public sealed class PlatformTenantsController(
             .Select(group => new { TenantId = group.Key, Count = group.Count() })
             .ToDictionaryAsync(x => x.TenantId, x => x.Count, cancellationToken);
 
+        // Primary admin = the earliest active Admin in each tenant (the account seeded at provisioning).
+        var admins = await dbContext.Users
+            .Where(x => tenantIds.Contains(x.TenantId) && x.IsActive && x.Role == AppRoles.Admin)
+            .Select(x => new { x.TenantId, x.Email, x.CreatedAt })
+            .ToListAsync(cancellationToken);
+        var primaryAdmins = admins
+            .GroupBy(x => x.TenantId)
+            .ToDictionary(x => x.Key, x => x.OrderBy(a => a.CreatedAt).First().Email);
+
         var response = tenants
             .Select(tenant => MapListItem(
                 tenant,
                 userCounts.GetValueOrDefault(tenant.Id),
-                branchCounts.GetValueOrDefault(tenant.Id)))
+                branchCounts.GetValueOrDefault(tenant.Id)) with
+            {
+                PrimaryAdminEmail = primaryAdmins.GetValueOrDefault(tenant.Id)
+            })
             .ToList();
 
         return Ok(response);
@@ -148,6 +160,7 @@ public sealed class PlatformTenantsController(
     }
 
     [HttpPatch("{tenantId:guid}/status")]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> UpdateStatus(Guid tenantId, [FromBody] UpdatePlatformTenantStatusRequest request, CancellationToken cancellationToken)
     {
         var status = NormalizeTenantStatus(request.Status);
@@ -161,6 +174,7 @@ public sealed class PlatformTenantsController(
     }
 
     [HttpPost("{tenantId:guid}/activate")]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> Activate(Guid tenantId, [FromBody] ActivateTenantLicenseRequest request, CancellationToken cancellationToken)
     {
         ValidateLicenseTerm(request.StartsAt, request.ExpiresAt, request.IsPerpetual, request.NextBillingDate, request.GracePeriodDays);
@@ -169,6 +183,7 @@ public sealed class PlatformTenantsController(
     }
 
     [HttpPost("{tenantId:guid}/license/renew")]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> RenewLicense(Guid tenantId, [FromBody] RenewTenantLicenseRequest request, CancellationToken cancellationToken)
     {
         ValidateLicenseTerm(request.StartsAt, request.ExpiresAt, request.IsPerpetual, request.NextBillingDate, request.GracePeriodDays);
@@ -187,6 +202,7 @@ public sealed class PlatformTenantsController(
         }
         license.CancelledAt = null;
         license.SuspendedAt = null;
+        license.SuspensionReason = null;
         license.OverdueWarningSentAt = null;
         license.Status = LicenseStatuses.Active;
 
@@ -195,18 +211,9 @@ public sealed class PlatformTenantsController(
             var selectedPlan = await LoadActivePlanAsync(request.PlanId.Value, cancellationToken);
             license.LicensePlanId = selectedPlan.Id;
             license.LicensePlan = selectedPlan;
-            tenant.PlanName = selectedPlan.DisplayName;
         }
 
-        tenant.Status = PlatformTenantStatuses.Active;
-        tenant.IsActive = true;
-        tenant.SuspendedAt = null;
-        tenant.DeactivatedAt = null;
-        tenant.DeactivatedByUserId = null;
-        tenant.DeactivationReason = null;
-        tenant.LicenseStatus = LicenseStatuses.Active;
-        tenant.SubscriptionStartsAt = license.StartsAt;
-        tenant.SubscriptionEndsAt = license.ExpiresAt;
+        TenantLifecycleState.Sync(tenant, license, DateTime.UtcNow);
         tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -220,6 +227,7 @@ public sealed class PlatformTenantsController(
     }
 
     [HttpPost("{tenantId:guid}/license/extend")]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> ExtendLicense(Guid tenantId, [FromBody] ExtendTenantLicenseRequest request, CancellationToken cancellationToken)
     {
         var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
@@ -238,30 +246,86 @@ public sealed class PlatformTenantsController(
         }
 
         var previousExpiry = license.ExpiresAt;
+        var previousStatus = license.Status;
         license.ExpiresAt = newExpiresAt;
-        tenant.SubscriptionEndsAt = newExpiresAt;
+        license.OverdueWarningSentAt = null;
+
+        // Extending an unpaid subscription to a future date settles the reason it was suspended or
+        // expired; a manual (operator) suspension is deliberately left in place for Reactivate.
+        var now = DateTime.UtcNow;
+        if (newExpiresAt > now)
+        {
+            if (TenantLifecycleState.IsSuspended(license) && !TenantLifecycleState.IsManualSuspension(license))
+            {
+                TenantLifecycleState.LiftSuspension(license);
+            }
+            else if (string.Equals(license.Status, LicenseStatuses.Expired, StringComparison.OrdinalIgnoreCase))
+            {
+                license.Status = LicenseStatuses.Active;
+            }
+        }
+
+        TenantLifecycleState.Sync(tenant, license, now);
         tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await WriteAuditAsync(
             tenant,
             "platform.tenant.license.extended",
-            $"License expiry extended from {DescribeDate(previousExpiry)} to {newExpiresAt:yyyy-MM-dd}.",
+            $"License expiry extended from {DescribeDate(previousExpiry)} to {newExpiresAt:yyyy-MM-dd}."
+                + (previousStatus != license.Status ? $" Status {previousStatus} → {license.Status}." : string.Empty),
+            cancellationToken);
+
+        return Ok(await BuildDetailResponseAsync(tenant, cancellationToken));
+    }
+
+    /// <summary>
+    /// Sets the tenant's licensed seat count (TenantLicense.MaxUsersOverride — the value LicenseGuardService
+    /// enforces). Lowering it below current usage never deactivates anyone: existing users keep access and
+    /// new additions/reactivations are refused until usage falls under the limit.
+    /// </summary>
+    [HttpPut("{tenantId:guid}/license/seats")]
+    [Authorize(Policy = "PlatformAdminAccess")]
+    public async Task<ActionResult<PlatformTenantDetailResponse>> UpdateSeats(Guid tenantId, [FromBody] UpdateTenantSeatsRequest request, CancellationToken cancellationToken)
+    {
+        if (request.MaxUsers <= 0)
+        {
+            throw new BusinessRuleException("Licensed users must be greater than zero.");
+        }
+
+        var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
+        var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
+        var before = EffectiveSeatLimit(license);
+        license.MaxUsersOverride = request.MaxUsers;
+        TenantLifecycleState.Sync(tenant, license, DateTime.UtcNow);
+        tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var used = await dbContext.Users.CountAsync(x => x.TenantId == tenant.Id && x.IsActive, cancellationToken);
+        await WriteAuditAsync(
+            tenant,
+            "platform.tenant.license.seats.updated",
+            $"Licensed users changed from {(before.HasValue ? before.Value.ToString() : "unlimited")} to {request.MaxUsers} ({used} in use)."
+                + (used > request.MaxUsers ? " Usage exceeds the new limit; no users were deactivated, new additions are blocked until usage falls." : string.Empty),
             cancellationToken);
 
         return Ok(await BuildDetailResponseAsync(tenant, cancellationToken));
     }
 
     [HttpPost("{tenantId:guid}/license/reactivate")]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> ReactivateLicense(Guid tenantId, CancellationToken cancellationToken)
     {
         var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
-        if (tenant.Status != PlatformTenantStatuses.Suspended)
+        var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
+
+        // Any suspension — operator or non-payment — is reactivated here. The license decides, not the
+        // tenant row, which previously made worker-suspended tenants impossible to reactivate (TM-P1-01).
+        if (!TenantLifecycleState.IsSuspended(license))
         {
-            throw new BusinessRuleException("Only a manually suspended tenant can be reactivated. Use Renew if the license itself has expired.");
+            throw new BusinessRuleException("Only a suspended tenant can be reactivated. Use Renew if the license itself has expired.");
         }
 
-        var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
         var now = DateTime.UtcNow;
         var effectiveExpiry = license.ExpiresAt ?? license.TrialEndsAt;
         if (!license.IsPerpetual && effectiveExpiry.HasValue && effectiveExpiry.Value <= now)
@@ -269,11 +333,21 @@ public sealed class PlatformTenantsController(
             throw new BusinessRuleException("This tenant's license has expired. Renew or extend it before reactivating.");
         }
 
-        var reactivated = await SetTenantStatusAsync(tenantId, PlatformTenantStatuses.Active, null, cancellationToken);
-        return Ok(await BuildDetailResponseAsync(reactivated, cancellationToken));
+        var previousReason = license.SuspensionReason;
+        TenantLifecycleState.LiftSuspension(license);
+        TenantLifecycleState.Sync(tenant, license, now);
+        tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await WriteAuditAsync(
+            tenant,
+            "platform.tenant.reactivated",
+            $"Tenant '{tenant.Name}' reactivated ({previousReason ?? "unspecified"} suspension lifted); license is now {license.Status}.",
+            cancellationToken);
+        return Ok(await BuildDetailResponseAsync(tenant, cancellationToken));
     }
 
     [HttpPost("{tenantId:guid}/suspend")]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> Suspend(Guid tenantId, [FromBody] UpdatePlatformTenantStatusReasonRequest? request, CancellationToken cancellationToken)
     {
         var tenant = await SetTenantStatusAsync(tenantId, PlatformTenantStatuses.Suspended, request?.Reason, cancellationToken);
@@ -281,6 +355,7 @@ public sealed class PlatformTenantsController(
     }
 
     [HttpPost("{tenantId:guid}/deactivate")]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> DeactivatePost(Guid tenantId, [FromBody] UpdatePlatformTenantStatusReasonRequest? request, CancellationToken cancellationToken)
     {
         var tenant = await SetTenantStatusAsync(tenantId, PlatformTenantStatuses.Inactive, request?.Reason, cancellationToken);
@@ -288,6 +363,7 @@ public sealed class PlatformTenantsController(
     }
 
     [HttpDelete("{tenantId:guid}")]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<IActionResult> Deactivate(Guid tenantId, CancellationToken cancellationToken)
     {
         await SetTenantStatusAsync(tenantId, PlatformTenantStatuses.Inactive, "Tenant deactivated by platform owner.", cancellationToken);
@@ -303,6 +379,7 @@ public sealed class PlatformTenantsController(
     }
 
     [HttpPost("{tenantId:guid}/extend-trial")]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> ExtendTrial(Guid tenantId, CancellationToken cancellationToken)
     {
         var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
@@ -312,41 +389,36 @@ public sealed class PlatformTenantsController(
         }
 
         var now = DateTime.UtcNow;
-        var currentEnd = EnsureUtc(tenant.TrialEndsAt);
+        var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
+
+        // A trial extension rewrites the license to a 14-day trial term, so it must never reach a paid,
+        // suspended or cancelled license — it used to silently cut a paying customer to 14 days (TM-P1-03).
+        if (!TenantLifecycleState.IsAnyTrialStatus(license.Status))
+        {
+            throw new BusinessRuleException(TenantLifecycleState.IsSuspended(license)
+                ? "Reactivate the tenant before extending its trial."
+                : "Extend trial is only available while the tenant is on a trial. Use Extend or Renew for a paid license.");
+        }
+
+        var currentEnd = EnsureUtc(license.TrialEndsAt ?? tenant.TrialEndsAt);
         var extensionBase = currentEnd.HasValue && currentEnd.Value > now
             ? currentEnd.Value
             : now;
         var extendedEnd = extensionBase.AddDays(TrialPeriodDays);
-        var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
 
         tenant.TrialStartsAt ??= tenant.CreatedAt == default ? now : EnsureUtc(tenant.CreatedAt);
-        tenant.TrialEndsAt = extendedEnd;
         tenant.TrialExtensionUsed = true;
         tenant.TrialExtendedAt = now;
         tenant.TrialExtendedByUserId = tenantContext.GetRequiredUserId();
         tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
         tenant.UpdatedAt = now;
 
-        if (tenant.Status != PlatformTenantStatuses.Suspended)
-        {
-            tenant.Status = PlatformTenantStatuses.Trial;
-            tenant.IsActive = true;
-            tenant.SuspendedAt = null;
-            tenant.DeactivatedAt = null;
-            tenant.DeactivatedByUserId = null;
-            tenant.DeactivationReason = null;
-        }
-
-        tenant.LicenseStatus = tenant.Status == PlatformTenantStatuses.Suspended
-            ? LicenseStatuses.Suspended
-            : LicenseStatuses.Trial;
-
-        license.Status = tenant.LicenseStatus;
+        license.Status = LicenseStatuses.Trial;
         license.TrialEndsAt = extendedEnd;
         license.ExpiresAt = extendedEnd;
-        license.SuspendedAt = tenant.Status == PlatformTenantStatuses.Suspended ? tenant.SuspendedAt : null;
         license.CancelledAt = null;
         license.UpdatedAt = now;
+        TenantLifecycleState.Sync(tenant, license, now);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -444,7 +516,30 @@ public sealed class PlatformTenantsController(
                     .Max(session => (DateTime?)session.LoginAt)))
             .ToListAsync(cancellationToken);
 
-        return Ok(users);
+        var userIds = users.Select(x => x.Id).ToArray();
+        var invitationTokens = await dbContext.PasswordResetTokens.AsNoTracking()
+            .Where(x => userIds.Contains(x.UserId) && x.Purpose == PasswordLinkPurposes.Invitation)
+            .Select(x => new { x.UserId, x.ExpiresAt, x.CreatedAt })
+            .ToListAsync(cancellationToken);
+        var latestInvitations = invitationTokens
+            .GroupBy(x => x.UserId)
+            .ToDictionary(x => x.Key, x => x.OrderByDescending(t => t.CreatedAt).First().ExpiresAt);
+
+        var now = DateTime.UtcNow;
+        return Ok(users.Select(user =>
+        {
+            var expiresAt = latestInvitations.TryGetValue(user.Id, out var value) ? value : (DateTime?)null;
+            return user with
+            {
+                // Same vocabulary as the tenant-side user list, plus NotSent: the link was issued but no
+                // delivery ever succeeded (LastCredentialSentAt is only stamped on a successful send).
+                InvitationStatus = !user.MustChangePassword ? "Active"
+                    : expiresAt.HasValue && expiresAt.Value <= now ? "Expired"
+                    : user.LastCredentialSentAt is null ? "NotSent"
+                    : "Invited",
+                InvitationExpiresAt = user.MustChangePassword ? expiresAt : null,
+            };
+        }).ToList());
     }
 
     /// <summary>
@@ -466,7 +561,11 @@ public sealed class PlatformTenantsController(
             ?? throw new BusinessRuleException("A valid email address is required.");
         var role = NormalizeWorkspaceRole(request.Role);
 
-        // Seats are a tenant-level entitlement — creating from the platform side must not bypass it.
+        // Seats are a tenant-level entitlement — creating from the platform side must not bypass it. The
+        // check and the insert share one transaction so the guard's license-row lock stops two concurrent
+        // adds from both seeing the last free seat (TM-P1-08).
+        await using var transaction = dbContext.Database.IsRelational()
+            ? await dbContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, cancellationToken) : null;
         await licenseGuardService.EnsureCanCreateUserAsync(tenant.Id, cancellationToken);
 
         var emailInUse = await dbContext.Users.AnyAsync(x => x.Email.ToLower() == email.ToLower(), cancellationToken);
@@ -497,6 +596,7 @@ public sealed class PlatformTenantsController(
 
         dbContext.Users.Add(user);
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
 
         var delivery = await SendWorkspaceUserSetupAsync(tenant.Id, user, cancellationToken);
         if (delivery.Success)
@@ -784,7 +884,13 @@ public sealed class PlatformTenantsController(
         var normalizedStartsAt = EnsureUtc(request.StartsAt);
         var normalizedExpiresAt = EnsureUtc(request.ExpiresAt);
 
-        ValidatePositive(request.MaxUsers, "Max users");
+        ValidatePositive(request.MaxUsers, "Licensed users");
+        if (isNewTenant && request.MaxUsers is null)
+        {
+            // Every tenant is provisioned with an explicit seat count; commercial plans carry no default,
+            // so omitting it used to create unlimited workspaces (TM-P1-06).
+            throw new BusinessRuleException("Licensed users is required. Enter how many workspace users this tenant may have.");
+        }
         ValidatePositive(request.MaxBranches, "Max branches");
         ValidateNotInPast(normalizedTrialEndsAt, todayUtc, "Trial end date");
         ValidateNotInPast(normalizedSubscriptionEndsAt, todayUtc, "Subscription end date");
@@ -826,7 +932,14 @@ public sealed class PlatformTenantsController(
         var emailIdentity = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);
         if (emailIdentity is not null && emailIdentity.ManagedEmailAddress is not null)
         {
-            emailIdentity.ManagedEmailAddress = TenantEmailIdentity.Address(slug);
+            var renamedAddress = TenantEmailIdentity.Address(slug);
+            if (!string.Equals(emailIdentity.ManagedEmailAddress, renamedAddress, StringComparison.OrdinalIgnoreCase))
+            {
+                // A new address has not been provisioned on the mail server just because it was generated.
+                TenantEmailIdentity.MarkPending(emailIdentity);
+            }
+
+            emailIdentity.ManagedEmailAddress = renamedAddress;
             emailIdentity.SenderAddress = emailIdentity.ManagedEmailAddress;
         }
         tenant.Industry = NormalizeOptional(request.Industry) ?? tenant.Industry;
@@ -835,8 +948,6 @@ public sealed class PlatformTenantsController(
         tenant.Address = NormalizeOptional(request.Address);
         tenant.TaxPin = NormalizeOptional(request.TaxPin);
         tenant.PlanName = plan?.DisplayName ?? requestedPlanName;
-        tenant.MaxUsers = request.MaxUsers;
-        tenant.MaxBranches = request.MaxBranches;
         tenant.CreatedByUserId ??= tenantContext.GetRequiredUserId();
         tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
         tenant.CreatedAt = EnsureUtc(tenant.CreatedAt);
@@ -872,34 +983,45 @@ public sealed class PlatformTenantsController(
             tenant.TrialExtendedByUserId = null;
         }
 
-        tenant.Status = normalizedStatus;
-        tenant.LicenseStatus = normalizedLicenseStatus;
         tenant.TrialStartsAt = trialStartsAt;
         tenant.TrialEndsAt = trialEndsAt;
-        tenant.SubscriptionStartsAt = normalizedStartsAt ?? tenant.SubscriptionStartsAt ?? trialStartsAt;
-        tenant.SubscriptionEndsAt = normalizedSubscriptionEndsAt;
-        tenant.IsActive = ComputeIsActive(normalizedStatus, normalizedLicenseStatus);
-        tenant.SuspendedAt = normalizedStatus == PlatformTenantStatuses.Suspended ? now : null;
-        tenant.DeactivatedAt = normalizedStatus == PlatformTenantStatuses.Inactive ? now : null;
-        tenant.DeactivatedByUserId = normalizedStatus == PlatformTenantStatuses.Inactive ? tenantContext.GetRequiredUserId() : null;
-        tenant.DeactivationReason = normalizedStatus == PlatformTenantStatuses.Inactive ? tenant.DeactivationReason : null;
-        tenant.SubscriptionStartsAt = EnsureUtc(tenant.SubscriptionStartsAt);
+        if (normalizedStatus == PlatformTenantStatuses.Inactive)
+        {
+            tenant.DeactivatedByUserId ??= tenantContext.GetRequiredUserId();
+        }
 
         var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
         if (plan is not null)
         {
             license.LicensePlanId = plan.Id;
             license.LicensePlan = plan;
-            tenant.PlanName = plan.DisplayName;
         }
 
-        license.Status = normalizedLicenseStatus;
-        license.StartsAt = normalizedStartsAt ?? tenant.SubscriptionStartsAt ?? license.StartsAt;
+        // Status only changes when the caller asked for it (or on creation). An edit that omits it must
+        // not silently reset a suspended/expired tenant to Active — lifecycle changes belong to the
+        // dedicated actions (TM-P2-13).
+        var statusRequested = isNewTenant || request.Status is not null || request.LicenseStatus is not null;
+        if (statusRequested && !string.Equals(license.Status, normalizedLicenseStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            if (normalizedLicenseStatus == LicenseStatuses.Suspended)
+            {
+                TenantLifecycleState.Suspend(license, LicenseSuspensionReasons.Manual, now);
+            }
+            else
+            {
+                license.Status = normalizedLicenseStatus;
+                license.SuspendedAt = null;
+                license.SuspensionReason = null;
+                license.CancelledAt = normalizedLicenseStatus == LicenseStatuses.Cancelled ? now : null;
+            }
+        }
+
+        license.StartsAt = normalizedStartsAt ?? (isNewTenant ? trialStartsAt : license.StartsAt);
         license.TrialEndsAt = trialEndsAt;
-        license.ExpiresAt = normalizedExpiresAt ?? normalizedSubscriptionEndsAt ?? trialEndsAt;
-        license.MaxUsersOverride = request.MaxUsers;
-        license.MaxBranchesOverride = request.MaxBranches;
-        license.SuspendedAt = normalizedLicenseStatus == LicenseStatuses.Suspended ? now : null;
+        license.ExpiresAt = normalizedExpiresAt ?? normalizedSubscriptionEndsAt ?? (isNewTenant ? trialEndsAt : license.ExpiresAt);
+        // Omitted seat/branch limits keep the current licensed value; clearing a limit is not an edit side effect.
+        license.MaxUsersOverride = isNewTenant ? request.MaxUsers : request.MaxUsers ?? license.MaxUsersOverride;
+        license.MaxBranchesOverride = isNewTenant ? request.MaxBranches : request.MaxBranches ?? license.MaxBranchesOverride;
         license.CreatedAt = EnsureUtc(license.CreatedAt);
         license.UpdatedAt = EnsureUtc(license.UpdatedAt);
         license.StartsAt = EnsureUtc(license.StartsAt);
@@ -908,9 +1030,10 @@ public sealed class PlatformTenantsController(
         license.SuspendedAt = EnsureUtc(license.SuspendedAt);
         license.CancelledAt = EnsureUtc(license.CancelledAt);
 
-        if (string.IsNullOrWhiteSpace(tenant.PlanName) && license.LicensePlan is not null)
+        TenantLifecycleState.Sync(tenant, license, now);
+        if (string.IsNullOrWhiteSpace(tenant.PlanName))
         {
-            tenant.PlanName = license.LicensePlan.DisplayName;
+            tenant.PlanName = plan?.DisplayName ?? requestedPlanName;
         }
     }
 
@@ -1076,24 +1199,11 @@ public sealed class PlatformTenantsController(
         }
 
         var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
-        tenant.Status = status;
-        tenant.IsActive = status == PlatformTenantStatuses.Active;
-        tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
 
+        // The license is changed first and the tenant row projected from it (TenantLifecycleState), so
+        // Status/IsActive/LicenseStatus can never disagree with what the enforcement middleware reads.
         if (status == PlatformTenantStatuses.Active || status == PlatformTenantStatuses.Trial)
         {
-            tenant.SuspendedAt = null;
-            tenant.DeactivatedAt = null;
-            tenant.DeactivatedByUserId = null;
-            tenant.DeactivationReason = null;
-            tenant.LicenseStatus = status == PlatformTenantStatuses.Trial
-                ? LicenseStatuses.Trial
-                : ResolveLicenseStatus(tenant, license) == LicenseStatuses.Expired
-                    ? LicenseStatuses.Expired
-                    : LicenseStatuses.Active;
-            license.Status = tenant.LicenseStatus;
-            license.SuspendedAt = null;
-
             // The activation dialog's explicit license term (Phase 4) — only applied on a genuine
             // activation, not on every internal Active/Trial transition this method also handles.
             if (activation is not null)
@@ -1107,46 +1217,47 @@ public sealed class PlatformTenantsController(
                 {
                     license.GracePeriodDays = activation.GracePeriodDays.Value;
                 }
-                license.CancelledAt = null;
                 license.OverdueWarningSentAt = null;
-                tenant.SubscriptionStartsAt = license.StartsAt;
-                tenant.SubscriptionEndsAt = license.ExpiresAt;
 
                 if (activation.PlanId.HasValue)
                 {
                     var selectedPlan = await LoadActivePlanAsync(activation.PlanId.Value, cancellationToken);
                     license.LicensePlanId = selectedPlan.Id;
                     license.LicensePlan = selectedPlan;
-                    tenant.PlanName = selectedPlan.DisplayName;
                 }
             }
+
+            var effectiveExpiry = license.ExpiresAt ?? license.TrialEndsAt;
+            var termLapsed = !license.IsPerpetual && effectiveExpiry.HasValue && effectiveExpiry.Value <= now;
+            license.Status = status == PlatformTenantStatuses.Trial
+                ? LicenseStatuses.Trial
+                : termLapsed ? LicenseStatuses.Expired : LicenseStatuses.Active;
+            license.SuspendedAt = null;
+            license.SuspensionReason = null;
+            license.CancelledAt = null;
+            TenantLifecycleState.Sync(tenant, license, now);
         }
         else if (status == PlatformTenantStatuses.Suspended)
         {
-            tenant.SuspendedAt = now;
-            tenant.DeactivatedAt = null;
-            tenant.DeactivatedByUserId = null;
+            TenantLifecycleState.Suspend(license, LicenseSuspensionReasons.Manual, now);
+            TenantLifecycleState.Sync(tenant, license, now);
             tenant.DeactivationReason = normalizedReason;
-            tenant.LicenseStatus = LicenseStatuses.Suspended;
-            license.Status = LicenseStatuses.Suspended;
-            license.SuspendedAt = now;
         }
         else
         {
-            tenant.IsActive = false;
-            tenant.DeactivatedAt = now;
-            tenant.DeactivatedByUserId = tenantContext.GetRequiredUserId();
-            tenant.DeactivationReason = normalizedReason;
-            tenant.LicenseStatus = LicenseStatuses.Cancelled;
+            // Deactivation only removes access. It no longer rewrites the tenant's own asset records
+            // (they used to be bulk-set Inactive and were never restored on reactivation — TM-P2-11).
             license.Status = LicenseStatuses.Cancelled;
             license.CancelledAt = now;
             license.SuspendedAt = null;
-
-            await dbContext.Assets
-                .Where(x => x.TenantId == tenant.Id && x.Status != "Inactive")
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.Status, _ => "Inactive"), cancellationToken);
+            license.SuspensionReason = null;
+            TenantLifecycleState.Sync(tenant, license, now);
+            tenant.DeactivatedAt = now;
+            tenant.DeactivatedByUserId = tenantContext.GetRequiredUserId();
+            tenant.DeactivationReason = normalizedReason;
         }
 
+        tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
         license.Notes = normalizedReason;
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -1177,6 +1288,7 @@ public sealed class PlatformTenantsController(
     {
         var summary = await BuildSummaryResponseAsync(tenant, cancellationToken);
         var trial = BuildTrialSnapshot(tenant);
+        var license = tenant.TenantLicenses.OrderByDescending(x => x.CreatedAt).FirstOrDefault();
 
         return new PlatformTenantDetailResponse(
             tenant.Id,
@@ -1192,8 +1304,8 @@ public sealed class PlatformTenantsController(
             tenant.TaxPin,
             ResolveTenantStatus(tenant),
             tenant.PlanName,
-            ResolveLicenseStatus(tenant, tenant.TenantLicenses.OrderByDescending(x => x.CreatedAt).FirstOrDefault()),
-            tenant.MaxUsers,
+            ResolveLicenseStatus(tenant, license),
+            EffectiveSeatLimit(license),
             tenant.MaxBranches,
             trial.StartsAt,
             tenant.TrialEndsAt,
@@ -1217,8 +1329,21 @@ public sealed class PlatformTenantsController(
             initialAdminInvitationSent,
             initialAdminInvitationMessage,
             tenant.TimeZoneId, tenant.Currency,
-            await dbContext.EmailSettings.Where(x => x.TenantId == tenant.Id).Select(x => x.ManagedEmailAddress).SingleOrDefaultAsync(cancellationToken));
+            await dbContext.EmailSettings.Where(x => x.TenantId == tenant.Id).Select(x => x.ManagedEmailAddress).SingleOrDefaultAsync(cancellationToken))
+        {
+            SeatsUsed = summary.UserCount,
+            SeatLimit = EffectiveSeatLimit(license),
+            Modules = license?.LicensePlan is { } plan ? ServiceOpsPlans.Modules(plan) : [],
+            PlanCode = license?.LicensePlan?.PlanCode,
+            LicenseExpiresAt = license?.ExpiresAt,
+            IsPerpetual = license?.IsPerpetual ?? false,
+            SuspensionReason = license is not null && TenantLifecycleState.IsSuspended(license) ? license.SuspensionReason : null,
+        };
     }
+
+    /// <summary>The seat limit LicenseGuardService enforces: the tenant override, else the plan's.</summary>
+    private static int? EffectiveSeatLimit(TenantLicense? license) =>
+        license is null ? null : license.MaxUsersOverride ?? license.LicensePlan?.MaxUsers;
 
     private async Task<PlatformTenantSummaryResponse> BuildSummaryResponseAsync(Tenant tenant, CancellationToken cancellationToken)
     {
@@ -1284,7 +1409,12 @@ public sealed class PlatformTenantsController(
             tenant.TrialExtendedAt,
             trial.DaysRemaining,
             trial.Status,
-            tenant.CreatedAt);
+            tenant.CreatedAt)
+        {
+            SeatLimit = EffectiveSeatLimit(license),
+            Modules = license?.LicensePlan is { } plan ? ServiceOpsPlans.Modules(plan) : [],
+            LicenseExpiresAt = license?.ExpiresAt,
+        };
     }
 
     private static string ResolveTenantStatus(Tenant tenant)
@@ -1299,19 +1429,21 @@ public sealed class PlatformTenantsController(
 
     private static string ResolveLicenseStatus(Tenant tenant, TenantLicense? license)
     {
-        if (IsTrialExpired(tenant))
-        {
-            return LicenseStatuses.Expired;
-        }
-
-        if (!string.IsNullOrWhiteSpace(tenant.LicenseStatus))
-        {
-            return tenant.LicenseStatus!;
-        }
-
+        // The license row is authoritative (it is what TenantLicenseEnforcementMiddleware enforces);
+        // Tenant.LicenseStatus is only a fallback for a tenant that has no license row yet.
         if (license is null)
         {
-            return LicenseStatuses.Trial;
+            if (IsTrialExpired(tenant))
+            {
+                return LicenseStatuses.Expired;
+            }
+
+            return string.IsNullOrWhiteSpace(tenant.LicenseStatus) ? LicenseStatuses.Trial : tenant.LicenseStatus!;
+        }
+
+        if (string.Equals(license.Status, LicenseStatuses.TrialExpired, StringComparison.OrdinalIgnoreCase))
+        {
+            return LicenseStatuses.Expired;
         }
 
         if (string.Equals(license.Status, LicenseStatuses.Suspended, StringComparison.OrdinalIgnoreCase))
@@ -1342,11 +1474,6 @@ public sealed class PlatformTenantsController(
             ? LicenseStatuses.Trial
             : LicenseStatuses.Active;
     }
-
-    private static bool ComputeIsActive(string status, string licenseStatus) =>
-        (status == PlatformTenantStatuses.Active || status == PlatformTenantStatuses.Trial)
-        && licenseStatus != LicenseStatuses.Suspended
-        && licenseStatus != LicenseStatuses.Cancelled;
 
     private static TrialSnapshot BuildTrialSnapshot(Tenant tenant)
     {
@@ -1740,6 +1867,8 @@ public sealed record RenewTenantLicenseRequest(
 /// <summary>Pushes an existing, still-active entitlement's expiry further out without changing anything else.</summary>
 public sealed record ExtendTenantLicenseRequest(DateTime NewExpiresAt);
 
+public sealed record UpdateTenantSeatsRequest(int MaxUsers);
+
 public sealed record PlatformTenantListResponse(
     Guid TenantId,
     string Name,
@@ -1757,7 +1886,14 @@ public sealed record PlatformTenantListResponse(
     DateTime? TrialExtendedAt,
     int? TrialDaysRemaining,
     string TrialStatus,
-    DateTime CreatedAt);
+    DateTime CreatedAt)
+{
+    /// <summary>Effective licensed seats (license override, else plan). Null = unlimited.</summary>
+    public int? SeatLimit { get; init; }
+    public IReadOnlyList<string> Modules { get; init; } = [];
+    public DateTime? LicenseExpiresAt { get; init; }
+    public string? PrimaryAdminEmail { get; init; }
+}
 
 public sealed record PlatformTenantDetailResponse(
     Guid TenantId,
@@ -1799,7 +1935,23 @@ public sealed record PlatformTenantDetailResponse(
     string? InitialAdminInvitationMessage,
     string TimeZoneId = "Africa/Nairobi",
     string Currency = "KES",
-    string? ServiceOpsEmail = null);
+    string? ServiceOpsEmail = null)
+{
+    /// <summary>Seats in use: active workspace users, pending invitees included (the enforced count).</summary>
+    public int SeatsUsed { get; init; }
+
+    /// <summary>Effective licensed seats — what LicenseGuardService enforces. Null = unlimited.</summary>
+    public int? SeatLimit { get; init; }
+
+    /// <summary>ServiceOps modules the plan entitles (operations / finance).</summary>
+    public IReadOnlyList<string> Modules { get; init; } = [];
+    public string? PlanCode { get; init; }
+    public DateTime? LicenseExpiresAt { get; init; }
+    public bool IsPerpetual { get; init; }
+
+    /// <summary>Manual or NonPayment while suspended; null otherwise.</summary>
+    public string? SuspensionReason { get; init; }
+}
 
 public sealed record PlatformTenantSummaryResponse(
     Guid TenantId,
@@ -1846,7 +1998,12 @@ public sealed record PlatformTenantUserResponse(
     bool MustChangePassword,
     DateTime? LastCredentialSentAt,
     /// <summary>Null means the account has never been signed into — its setup link is still pending.</summary>
-    DateTime? LastLoginAt);
+    DateTime? LastLoginAt)
+{
+    /// <summary>Active (setup complete), Invited, Expired (setup link lapsed) or NotSent (link never delivered).</summary>
+    public string InvitationStatus { get; init; } = "Active";
+    public DateTime? InvitationExpiresAt { get; init; }
+}
 
 public sealed record CreatePlatformTenantUserRequest(
     string FullName,

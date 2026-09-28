@@ -98,11 +98,14 @@ public sealed class EmailOutboxService(
                 return existing;
             }
         }
-        var identity = request.TenantId.HasValue && request.TenantId != PlatformConstants.RootTenantId
-            ? await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == request.TenantId.Value, cancellationToken) : null;
-        // SMTP is always platform infrastructure now (no per-tenant override survives) — a tenant's
-        // managed sender identity is used whenever it has one, unconditionally.
-        var useManagedIdentity = identity?.ManagedEmailAddress is not null;
+        // Tenant-scoped mail is always sent as the tenant's managed identity; whatever sender the caller
+        // passed is ignored, so no module (or another tenant's data) can choose a different From. Only
+        // platform-scoped mail keeps the caller's platform sender.
+        var isTenantScoped = request.TenantId.HasValue && request.TenantId != PlatformConstants.RootTenantId;
+        var tenantSender = isTenantScoped
+            ? await TenantEmailIdentity.ResolveSenderAsync(dbContext, request.TenantId!.Value, request.ReplyToEmail,
+                TenantEmailIdentity.Categorize(request.EventKey, request.DocumentType), cancellationToken)
+            : null;
         var message = new EmailOutboxMessage
         {
             TenantId = request.TenantId,
@@ -110,9 +113,9 @@ public sealed class EmailOutboxService(
             TemplateKey = request.TemplateKey.Trim(),
             RecipientEmail = request.RecipientEmail.Trim().ToLowerInvariant(),
             RecipientName = Normalize(request.RecipientName),
-            SenderName = useManagedIdentity ? identity!.SenderName : Normalize(request.SenderName),
-            SenderEmail = useManagedIdentity ? identity!.ManagedEmailAddress : Normalize(request.SenderEmail),
-            ReplyToEmail = Normalize(request.ReplyToEmail) ?? identity?.ReplyToEmail,
+            SenderName = isTenantScoped ? tenantSender?.FromName : Normalize(request.SenderName),
+            SenderEmail = isTenantScoped ? tenantSender?.FromAddress : Normalize(request.SenderEmail),
+            ReplyToEmail = isTenantScoped ? tenantSender?.ReplyTo ?? Normalize(request.ReplyToEmail) : Normalize(request.ReplyToEmail),
             Subject = request.Subject.Trim(),
             HtmlBody = Normalize(request.HtmlBody),
             TextBody = Normalize(request.TextBody),
@@ -428,25 +431,56 @@ public sealed class EmailOutboxProcessor(
                     continue;
                 }
 
+                // Tenant mail is re-resolved at send time so a row queued before a rename (or before this rule
+                // existed, with a platform sender) still goes out as the tenant's current managed identity.
+                var fromName = message.SenderName ?? delivery.SenderName;
+                var fromAddress = message.SenderEmail ?? delivery.SenderEmail;
+                var replyTo = message.ReplyToEmail ?? delivery.ReplyToEmail;
+                var isTenantScoped = message.TenantId.HasValue && message.TenantId != PlatformConstants.RootTenantId;
+                if (isTenantScoped)
+                {
+                    var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == message.TenantId!.Value, cancellationToken);
+                    // A stored Reply-To that one of the tenant's own settings would produce was resolved, not
+                    // an explicit override — re-resolve it so edits to those settings apply to queued mail too.
+                    var replyToOverride = IsIdentityDerivedReplyTo(message.ReplyToEmail, message.SenderEmail, tenantIdentity) ? null : message.ReplyToEmail;
+                    var tenantSender = TenantEmailIdentity.ResolveSender(tenant, tenantIdentity, replyToOverride,
+                        TenantEmailIdentity.Categorize(message.EventKey, message.DocumentType));
+                    if (tenantSender is null)
+                    {
+                        await emailOutboxService.MarkFailedAsync(
+                            message.Id,
+                            "Sender identity missing",
+                            "The tenant has no managed communication address to send from.",
+                            DateTime.UtcNow,
+                            cancellationToken);
+                        continue;
+                    }
+
+                    (fromName, fromAddress, replyTo) = (tenantSender.FromName, tenantSender.FromAddress, tenantSender.ReplyTo);
+                }
+
                 var (cleanBody, legacyAttachments) = ExtractAttachments(
                     string.IsNullOrWhiteSpace(message.HtmlBody) ? message.TextBody ?? string.Empty : message.HtmlBody);
                 var attachments = DeserializeAttachments(message.AttachmentsJson).Concat(legacyAttachments).ToList();
                 var ccAddresses = DeserializeCc(message.CcAddressesJson);
+                var isHtml = !string.IsNullOrWhiteSpace(message.HtmlBody);
 
                 await emailSender.SendAsync(
                     new EmailMessage(
                         message.RecipientEmail,
                         message.Subject,
-                        cleanBody,
-                        message.SenderName ?? delivery.SenderName,
-                        message.SenderEmail ?? delivery.SenderEmail,
-                        message.ReplyToEmail ?? delivery.ReplyToEmail,
-                        IsHtml: !string.IsNullOrWhiteSpace(message.HtmlBody),
+                        TenantEmailIdentity.AppendNoReplyNotice(cleanBody, isHtml, fromAddress, replyTo),
+                        fromName,
+                        fromAddress,
+                        replyTo,
+                        IsHtml: isHtml,
                         Attachments: attachments.Count > 0 ? attachments : null,
                         CcAddresses: ccAddresses.Count > 0 ? ccAddresses.ToList() : null),
                     delivery,
                     cancellationToken);
 
+                // Saved by MarkSentAsync (same DbContext).
+                TenantEmailIdentity.RecordSenderOutcome(tenantIdentity, true, null, null, DateTime.UtcNow);
                 await emailOutboxService.MarkSentAsync(message.Id, DateTime.UtcNow, null, cancellationToken);
                 processed += 1;
             }
@@ -455,6 +489,12 @@ public sealed class EmailOutboxProcessor(
                 var errorCategory = ex is EmailDeliveryException deliveryException
                     ? deliveryException.ErrorCategory
                     : EmailErrorCategories.UnknownSmtpError;
+                if (message.TenantId.HasValue && message.TenantId != PlatformConstants.RootTenantId)
+                {
+                    // Saved by MarkFailedAsync (same DbContext).
+                    var identity = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == message.TenantId.Value, cancellationToken);
+                    TenantEmailIdentity.RecordSenderOutcome(identity, false, errorCategory, ex.Message, DateTime.UtcNow);
+                }
 
                 logger.LogWarning(ex, "Email outbox delivery failed for message {OutboxMessageId}.", message.Id);
                 await emailOutboxService.MarkFailedAsync(message.Id, errorCategory, ex.Message, DateTime.UtcNow, cancellationToken);
@@ -463,6 +503,11 @@ public sealed class EmailOutboxProcessor(
 
         return processed;
     }
+
+    private static bool IsIdentityDerivedReplyTo(string? replyTo, string? senderEmail, EmailSetting? identity) =>
+        string.IsNullOrWhiteSpace(replyTo)
+        || new[] { senderEmail, identity?.ManagedEmailAddress, identity?.ReplyToEmail, identity?.FinanceReplyToEmail, identity?.OperationsReplyToEmail }
+            .Any(x => string.Equals(x, replyTo, StringComparison.OrdinalIgnoreCase));
 
     // Parses <!-- attachment:filename:base64 --> comments injected by ScheduledReportService,
     // returns the cleaned body and any reconstructed attachments.

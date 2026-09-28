@@ -55,7 +55,7 @@ public sealed class TrialLifecycleWorker(
                     // Trial has expired
                     license.Status = LicenseStatuses.TrialExpired;
                     if (license.Tenant is not null)
-                        license.Tenant.LicenseStatus = LicenseStatuses.TrialExpired;
+                        TenantLifecycleState.Sync(license.Tenant, license, now);
                     expiredCount++;
                     logger.LogInformation(
                         "Trial expired for tenant {TenantId}. Setting status to TrialExpired.", license.TenantId);
@@ -66,7 +66,7 @@ public sealed class TrialLifecycleWorker(
                     // Trial expires within 7 days — warn
                     license.Status = LicenseStatuses.TrialExpiringSoon;
                     if (license.Tenant is not null)
-                        license.Tenant.LicenseStatus = LicenseStatuses.TrialExpiringSoon;
+                        TenantLifecycleState.Sync(license.Tenant, license, now);
                     expiringSoonCount++;
                     logger.LogInformation(
                         "Trial expiring soon for tenant {TenantId} (ends {TrialEndsAt}). Setting status to TrialExpiringSoon.",

@@ -16,8 +16,6 @@ interface PlatformLicensePlan {
   monthlyPrice: number
   annualPrice: number
   maxUsers: number | null
-  maxAssets: number | null
-  maxWorkOrders: number | null
   modulesIncluded: string[]
   isActive: boolean
 }
@@ -29,13 +27,11 @@ interface PlanFormState {
   monthlyPrice: number
   annualPrice: number
   maxUsers: number | null
-  maxAssets: number | null
-  maxWorkOrders: number | null
   modulesIncluded: string
   isActive: boolean
 }
 
-const emptyForm: PlanFormState = { id: null, name: '', code: '', monthlyPrice: 0, annualPrice: 0, maxUsers: null, maxAssets: null, maxWorkOrders: null, modulesIncluded: '', isActive: true }
+const emptyForm: PlanFormState = { id: null, name: '', code: '', monthlyPrice: 0, annualPrice: 0, maxUsers: null, modulesIncluded: '', isActive: true }
 
 function PlanDrawer({ open, plan, onClose }: { open: boolean; plan: PlatformLicensePlan | null; onClose: () => void }) {
   const queryClient = useQueryClient()
@@ -44,7 +40,7 @@ function PlanDrawer({ open, plan, onClose }: { open: boolean; plan: PlatformLice
   useEffect(() => {
     if (!open) return
     if (plan) {
-      setForm({ id: plan.id, name: plan.name, code: plan.code, monthlyPrice: plan.monthlyPrice, annualPrice: plan.annualPrice, maxUsers: plan.maxUsers, maxAssets: plan.maxAssets, maxWorkOrders: plan.maxWorkOrders, modulesIncluded: plan.modulesIncluded.join(', '), isActive: plan.isActive })
+      setForm({ id: plan.id, name: plan.name, code: plan.code, monthlyPrice: plan.monthlyPrice, annualPrice: plan.annualPrice, maxUsers: plan.maxUsers, modulesIncluded: plan.modulesIncluded.join(', '), isActive: plan.isActive })
     } else {
       setForm(emptyForm)
     }
@@ -58,8 +54,6 @@ function PlanDrawer({ open, plan, onClose }: { open: boolean; plan: PlatformLice
         monthlyPrice: form.monthlyPrice,
         annualPrice: form.annualPrice,
         maxUsers: form.maxUsers,
-        maxAssets: form.maxAssets,
-        maxWorkOrders: form.maxWorkOrders,
         modulesIncluded: form.modulesIncluded.split(',').map((m) => m.trim()).filter(Boolean),
         isActive: form.isActive,
       }
@@ -93,23 +87,15 @@ function PlanDrawer({ open, plan, onClose }: { open: boolean; plan: PlatformLice
             <input type="number" value={form.annualPrice} onChange={(event) => setForm((current) => ({ ...current, annualPrice: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Max Users</label>
             <input type="number" value={form.maxUsers ?? ''} onChange={(event) => setForm((current) => ({ ...current, maxUsers: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Max Assets</label>
-            <input type="number" value={form.maxAssets ?? ''} onChange={(event) => setForm((current) => ({ ...current, maxAssets: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Max WOs / mo</label>
-            <input type="number" value={form.maxWorkOrders ?? ''} onChange={(event) => setForm((current) => ({ ...current, maxWorkOrders: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-          </div>
         </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Modules Included (comma-separated)</label>
-          <input value={form.modulesIncluded} onChange={(event) => setForm((current) => ({ ...current, modulesIncluded: event.target.value }))} placeholder="EmailIngestion, MonitoringIntegration, AdvancedReports, ClientPortal" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+          <input value={form.modulesIncluded} onChange={(event) => setForm((current) => ({ ...current, modulesIncluded: event.target.value }))} placeholder="EmailIngestion, MonitoringIntegration" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={form.isActive} onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))} className="h-4 w-4 rounded border-slate-300" />

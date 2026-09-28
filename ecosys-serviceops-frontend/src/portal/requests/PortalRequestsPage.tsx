@@ -5,10 +5,12 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { formatDate } from '../../shared/utils/dates'
 import { usePortalWorkOrders, type PortalWorkOrderListItem } from '../api'
+import { portalFeatures, usePortalFeature } from '../components/PortalFeatureGate'
 
 export function PortalRequestsPage() {
   const navigate = useNavigate()
   const { data, isLoading, isError } = usePortalWorkOrders()
+  const canSubmit = usePortalFeature(portalFeatures.requestSubmission)
 
   const columns: DataTableColumn<PortalWorkOrderListItem>[] = [
     { key: 'workOrderNumber', header: 'Request #', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/portal/requests/${row.id}`}>{row.workOrderNumber}</Link> },
@@ -25,16 +27,16 @@ export function PortalRequestsPage() {
       <PageHeader
         title="Service Requests"
         subtitle="Track requests submitted for your sites and assets."
-        primaryAction={<Link to="/portal/requests/new" className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"><Plus className="h-4 w-4" />New Request</Link>}
+        primaryAction={canSubmit ? <Link to="/portal/requests/new" className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"><Plus className="h-4 w-4" />New Request</Link> : undefined}
       />
       <DataTable
         columns={columns}
         data={data ?? []}
         loading={isLoading}
         emptyTitle={isError ? 'Requests unavailable' : 'No requests yet'}
-        emptyDescription={isError ? 'Requests could not be loaded.' : 'Submit your first service request to get started.'}
-        emptyActionLabel="New Request"
-        onEmptyAction={() => navigate('/portal/requests/new')}
+        emptyDescription={isError ? 'Requests could not be loaded.' : canSubmit ? 'Submit your first service request to get started.' : 'Service requests raised for your account will appear here.'}
+        emptyActionLabel={canSubmit ? 'New Request' : undefined}
+        onEmptyAction={canSubmit ? () => navigate('/portal/requests/new') : undefined}
       />
     </div>
   )

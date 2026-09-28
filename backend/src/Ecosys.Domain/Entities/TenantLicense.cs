@@ -13,6 +13,13 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
     public string BillingCycle { get; set; } = "Monthly";
     public DateTime? NextBillingDate { get; set; }
     public DateTime? SuspendedAt { get; set; }
+
+    /// <summary>
+    /// Why <see cref="Status"/> is Suspended: <c>Manual</c> (a platform operator decision, lifted only by
+    /// an operator) or <c>NonPayment</c> (the subscription worker, lifted by payment, extension or
+    /// renewal). Null whenever the license is not suspended.
+    /// </summary>
+    public string? SuspensionReason { get; set; }
     public DateTime? CancelledAt { get; set; }
     public string? Notes { get; set; }
     public int GracePeriodDays { get; set; } = 7;
@@ -34,12 +41,8 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
     public DateTime? OverdueWarningSentAt { get; set; }
     public int? MaxUsersOverride { get; set; }
     public int? MaxBranchesOverride { get; set; }
-    public int? MaxAssetsOverride { get; set; }
-    public int? MonthlyWorkOrdersOverride { get; set; }
     public bool? EmailIngestionOverride { get; set; }
     public bool? MonitoringIntegrationOverride { get; set; }
-    public bool? AdvancedReportsOverride { get; set; }
-    public bool? ClientPortalOverride { get; set; }
 
     public Tenant? Tenant { get; set; }
     public LicensePlan? LicensePlan { get; set; }

@@ -13,13 +13,11 @@ interface PlatformLicensePlan {
   monthlyPrice: number
   annualPrice: number
   maxUsers: number | null
-  maxAssets: number | null
-  maxWorkOrders: number | null
   modulesIncluded: string[]
   isActive: boolean
 }
 
-const featureModules = ['EmailIngestion', 'MonitoringIntegration', 'AdvancedReports', 'ClientPortal']
+const featureModules = ['EmailIngestion', 'MonitoringIntegration']
 
 function FeatureCell({ plan, moduleName, canManage }: { plan: PlatformLicensePlan; moduleName: string; canManage: boolean }) {
   const queryClient = useQueryClient()
@@ -34,8 +32,6 @@ function FeatureCell({ plan, moduleName, canManage }: { plan: PlatformLicensePla
         monthlyPrice: plan.monthlyPrice,
         annualPrice: plan.annualPrice,
         maxUsers: plan.maxUsers,
-        maxAssets: plan.maxAssets,
-        maxWorkOrders: plan.maxWorkOrders,
         modulesIncluded: nextModules,
         isActive: plan.isActive,
       })

@@ -6,23 +6,13 @@ import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
-import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { Field } from '../common'
-import {
-  useActivateTenant,
-  useCreateTenant,
-  useDeactivateTenant,
-  useExtendTenantTrial,
-  useLead,
-  useSuspendTenant,
-  useTenants,
-} from '../api'
+import { useCreateTenant, useLead, useTenants } from '../api'
 import { licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
-import { LicenseTermDialog } from './LicenseTermDialog'
 import type { PlatformTenantListItem } from '../types'
 
 const statusOptions = ['All', 'Active', 'Trial', 'Suspended', 'Inactive'] as const
@@ -39,6 +29,8 @@ type CreateTenantForm = {
   adminEmail: string
   country: string
   timeZoneId: string
+  /** Licensed workspace users (seats). Required: commercial plans carry no default limit. */
+  maxUsers: string
 }
 
 const countryTimeZones: Record<string, string> = {
@@ -55,7 +47,7 @@ function suggestSlug(companyName: string) {
 
 const emptyForm: CreateTenantForm = {
   companyName: '', slug: '', planCode: 'suite', adminFullName: '', adminEmail: '',
-  country: 'Kenya', timeZoneId: 'Africa/Nairobi',
+  country: 'Kenya', timeZoneId: 'Africa/Nairobi', maxUsers: '',
 }
 
 export function TenantsPage() {
@@ -76,16 +68,8 @@ export function TenantsPage() {
   const [createForm, setCreateForm] = useState(emptyForm)
   const [slugEdited, setSlugEdited] = useState(false)
   const [prefilledLeadId, setPrefilledLeadId] = useState<string | null>(null)
-  const [showSuspend, setShowSuspend] = useState<PlatformTenantListItem | null>(null)
-  const [showDeactivate, setShowDeactivate] = useState<PlatformTenantListItem | null>(null)
-  const [trialTarget, setTrialTarget] = useState<PlatformTenantListItem | null>(null)
-  const [activateTarget, setActivateTarget] = useState<PlatformTenantListItem | null>(null)
 
   const createTenant = useCreateTenant()
-  const suspendTenant = useSuspendTenant(showSuspend?.tenantId ?? '')
-  const deactivateTenant = useDeactivateTenant(showDeactivate?.tenantId ?? '')
-  const extendTenantTrial = useExtendTenantTrial(trialTarget?.tenantId ?? '')
-  const activateTenant = useActivateTenant(activateTarget?.tenantId ?? '')
 
   const rows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase()
@@ -134,41 +118,39 @@ export function TenantsPage() {
         </div>
       ),
     },
-    { key: 'contact', header: 'Primary contact', cell: (row) => <div>{row.contactName ?? 'Not set'}<div className="text-xs text-slate-500">{row.contactEmail ?? 'No email'}</div></div> },
-    { key: 'plan', header: 'Plan', cell: (row) => row.planName ?? 'No plan' },
+    { key: 'admin', header: 'Primary admin', cell: (row) => <div>{row.primaryAdminEmail ?? 'No active admin'}<div className="text-xs text-slate-500">{row.contactName ?? ''}</div></div> },
+    {
+      key: 'plan',
+      header: 'Plan',
+      cell: (row) => (
+        <div>
+          {row.planName ?? 'No plan'}
+          <div className="text-xs text-slate-500">{(row.modules ?? []).map((m) => (m === 'operations' ? 'Operations' : m === 'finance' ? 'Finance' : m)).join(' + ') || '—'}</div>
+        </div>
+      ),
+    },
     { key: 'status', header: 'Status', cell: (row) => tenantStatusBadge(row.status) },
     { key: 'license', header: 'License', cell: (row) => licenseStatusBadge(row.licenseStatus) },
     { key: 'trial', header: 'Trial', cell: (row) => trialStatusBadge(row.trialStatus) },
-    { key: 'days', header: 'Days remaining', cell: (row) => row.trialDaysRemaining ?? '—' },
-    { key: 'users', header: 'Users', cell: (row) => row.userCount },
-    { key: 'branches', header: 'Sites', cell: (row) => row.branchCount },
+    { key: 'expires', header: 'License expires', cell: (row) => (row.licenseExpiresAt ? formatDate(row.licenseExpiresAt) : '—') },
+    {
+      key: 'seats',
+      header: 'Licensed users',
+      cell: (row) => {
+        const full = row.seatLimit != null && row.userCount >= row.seatLimit
+        return <span className={full ? 'font-medium text-amber-700' : undefined}>{row.userCount} / {row.seatLimit ?? 'unlimited'}</span>
+      },
+    },
     { key: 'createdAt', header: 'Created', cell: (row) => formatDate(row.createdAt) },
     {
       key: 'actions',
-      header: 'Account Management',
+      header: '',
+      // Lifecycle actions (activate, suspend with a reason, renew, seats…) live on the tenant page only,
+      // so there is one place to change access and every action carries its reason into the audit trail.
       cell: (row) => (
-        <div className="flex flex-wrap gap-2">
-          {row.status !== 'Active' ? (
-            <button type="button" className="inline-flex h-9 items-center rounded-lg bg-slate-900 px-3 text-xs font-medium text-white hover:bg-slate-800" onClick={() => setActivateTarget(row)}>
-              Activate
-            </button>
-          ) : null}
-          {row.status === 'Active' ? (
-            <button type="button" className="inline-flex h-9 items-center rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs font-medium text-amber-800 hover:bg-amber-100" onClick={() => setShowSuspend(row)}>
-              Suspend
-            </button>
-          ) : null}
-          {!row.trialExtensionUsed ? (
-            <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => setTrialTarget(row)}>
-              Extend trial
-            </button>
-          ) : null}
-          {row.status !== 'Inactive' ? (
-            <button type="button" className="inline-flex h-9 items-center rounded-lg border border-rose-200 bg-rose-50 px-3 text-xs font-medium text-rose-700 hover:bg-rose-100" onClick={() => setShowDeactivate(row)}>
-              Deactivate
-            </button>
-          ) : null}
-        </div>
+        <Link className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" to={`/platform/tenants/${row.tenantId}`}>
+          Manage
+        </Link>
       ),
     },
   ]
@@ -194,12 +176,18 @@ export function TenantsPage() {
       toast.error('Enter a valid administrator email address.')
       return
     }
+    const maxUsers = Number(createForm.maxUsers)
+    if (!Number.isInteger(maxUsers) || maxUsers <= 0) {
+      toast.error('Enter how many workspace users this tenant is licensed for.')
+      return
+    }
 
     try {
       const payload = {
         companyName: createForm.companyName.trim(),
         slug: createForm.slug.trim(),
         planCode: createForm.planCode,
+        maxUsers,
         adminFullName: createForm.adminFullName.trim(),
         adminEmail: createForm.adminEmail.trim(),
         country: createForm.country.trim(),
@@ -342,6 +330,10 @@ export function TenantsPage() {
               ))}
             </div>
           </fieldset>
+          <Field label="Licensed Users">
+            <input required type="number" min={1} step={1} inputMode="numeric" value={createForm.maxUsers} onChange={(event) => setCreateForm((current) => ({ ...current, maxUsers: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900 md:w-48" />
+          </Field>
+          <p className="-mt-3 text-xs text-slate-500">Active workspace users (including pending invitations) count against this. It can be changed later from the tenant's Users tab.</p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Primary Admin Name">
               <input required autoComplete="name" value={createForm.adminFullName} onChange={(event) => setCreateForm((current) => ({ ...current, adminFullName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
@@ -362,69 +354,6 @@ export function TenantsPage() {
         </div>
       </FormDrawer>
 
-      <ConfirmDialog
-        open={showSuspend !== null}
-        title="Suspend tenant"
-        message={showSuspend ? `Suspend ${showSuspend.name}? The tenant will be blocked until reactivated.` : 'Suspend tenant?'}
-        confirmLabel="Suspend"
-        danger
-        onCancel={() => setShowSuspend(null)}
-        onConfirm={() => {
-          if (!showSuspend) return
-          void suspendTenant.mutateAsync('Suspended by platform owner').then(() => {
-            toast.success('Tenant suspended')
-            setShowSuspend(null)
-          })
-        }}
-      />
-
-      <ConfirmDialog
-        open={showDeactivate !== null}
-        title="Deactivate tenant"
-        message={showDeactivate ? `Deactivate ${showDeactivate.name}? This moves the workspace offline.` : 'Deactivate tenant?'}
-        confirmLabel="Deactivate"
-        danger
-        {...(showDeactivate ? { confirmText: showDeactivate.slug } : {})}
-        onCancel={() => setShowDeactivate(null)}
-        onConfirm={() => {
-          if (!showDeactivate) return
-          void deactivateTenant.mutateAsync('Deactivated by platform owner').then(() => {
-            toast.success('Tenant deactivated')
-            setShowDeactivate(null)
-          })
-        }}
-      />
-
-      <ConfirmDialog
-        open={trialTarget !== null}
-        title="Extend trial"
-        message={trialTarget ? `Extend ${trialTarget.name} by 14 days? This can only be done once.` : 'Extend trial?'}
-        confirmLabel="Extend"
-        onCancel={() => setTrialTarget(null)}
-        onConfirm={() => {
-          if (!trialTarget) return
-          void extendTenantTrial.mutateAsync(undefined).then(() => {
-            toast.success('Trial extended')
-            setTrialTarget(null)
-          })
-        }}
-      />
-
-      <LicenseTermDialog
-        open={activateTarget !== null}
-        title="Activate tenant"
-        tenantName={activateTarget?.name ?? ''}
-        confirmLabel="Activate Tenant"
-        submitting={activateTenant.isPending}
-        onCancel={() => setActivateTarget(null)}
-        onConfirm={(term) => {
-          if (!activateTarget) return
-          void activateTenant.mutateAsync(term)
-            .then(() => toast.success('Tenant activated'))
-            .then(() => setActivateTarget(null))
-            .catch(() => undefined)
-        }}
-      />
     </div>
   )
 }

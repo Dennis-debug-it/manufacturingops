@@ -1,34 +1,64 @@
 import { PageHeader } from '../shared/components/PageHeader'
 import { StatCard } from '../shared/components/StatCard'
 import { Spinner } from '../shared/components/Spinner'
-import { usePortalDashboardSummary, usePortalInvoices, usePortalWorkOrders } from './api'
+import { EmptyState } from '../shared/components/EmptyState'
+import { formatCurrency } from '../shared/utils/format'
+import { usePortalReportSummary, usePortalSettings } from './api'
 
 export function PortalReportsPage() {
-  const { data: summary, isLoading: loadingSummary } = usePortalDashboardSummary()
-  const { data: workOrders, isLoading: loadingWorkOrders } = usePortalWorkOrders()
-  const { data: invoices, isLoading: loadingInvoices } = usePortalInvoices()
+  const { data, isLoading, isError } = usePortalReportSummary()
+  const { data: settings } = usePortalSettings()
 
-  if (loadingSummary || loadingWorkOrders || loadingInvoices) {
+  if (isLoading) {
     return <Spinner label="Loading reports" />
   }
 
-  const closedCount = (workOrders ?? []).filter((wo) => wo.status === 'Closed').length
-  const completedCount = (workOrders ?? []).filter((wo) => wo.status === 'Completed' || wo.status === 'Client Accepted').length
-  const totalInvoiced = (invoices ?? []).reduce((sum, invoice) => sum + invoice.totalAmount, 0)
-  const totalPaid = (invoices ?? []).reduce((sum, invoice) => sum + invoice.amountPaid, 0)
+  if (isError || !data) {
+    return <EmptyState title="Reports unavailable" description="Reports could not be loaded right now." />
+  }
 
   return (
-    <div className="space-y-4">
-      <PageHeader title="Reports" subtitle="A quick summary composed from your requests and invoices — a dedicated portal reporting endpoint doesn't exist yet, so these figures are derived client-side from the same data shown on Requests and Invoices." />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total Requests" value={(workOrders ?? []).length} />
-        <StatCard label="Completed" value={completedCount} tone="success" />
-        <StatCard label="Closed" value={closedCount} />
-        <StatCard label="Overdue" value={summary?.overdueWorkOrders ?? 0} tone={summary && summary.overdueWorkOrders > 0 ? 'danger' : 'default'} />
-        <StatCard label="Total Invoiced" value={totalInvoiced.toLocaleString(undefined, { style: 'currency', currency: 'KES' })} />
-        <StatCard label="Total Paid" value={totalPaid.toLocaleString(undefined, { style: 'currency', currency: 'KES' })} tone="success" />
-        <StatCard label="Outstanding Balance" value={(summary?.outstandingInvoiceBalance ?? 0).toLocaleString(undefined, { style: 'currency', currency: 'KES' })} tone={summary && summary.outstandingInvoiceBalance > 0 ? 'warning' : 'default'} />
-      </div>
+    <div className="space-y-6">
+      <PageHeader title="Reports" subtitle="A summary of your service requests and billing." />
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-slate-900">Service Requests</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <StatCard label="Total Requests" value={data.totalRequests} />
+          <StatCard label="Overdue (open, past due)" value={data.overdueRequests} tone={data.overdueRequests > 0 ? 'danger' : 'default'} />
+        </div>
+        {/* Each request is counted in exactly one of these four, so they add up to the total. */}
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <StatCard label="Open" value={data.openRequests} />
+          <StatCard label="Completed" value={data.completedRequests} tone="success" />
+          <StatCard label="Closed" value={data.closedRequests} />
+          <StatCard label="Cancelled" value={data.cancelledRequests} />
+        </div>
+      </section>
+
+      {settings?.showInvoices ? (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-slate-900">Billing</h2>
+          {data.invoiceTotals.length === 0 ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <StatCard label="Total Invoiced" value={formatCurrency(0, data.currency)} />
+              <StatCard label="Total Paid" value={formatCurrency(0, data.currency)} />
+              <StatCard label="Outstanding Balance" value={formatCurrency(0, data.currency)} />
+            </div>
+          ) : (
+            data.invoiceTotals.map((totals) => (
+              <div key={totals.currency} className="space-y-2">
+                {data.invoiceTotals.length > 1 ? <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{totals.currency}</div> : null}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <StatCard label="Total Invoiced" value={formatCurrency(totals.invoiced, totals.currency)} />
+                  <StatCard label="Total Paid" value={formatCurrency(totals.paid, totals.currency)} tone="success" />
+                  <StatCard label="Outstanding Balance" value={formatCurrency(totals.outstanding, totals.currency)} tone={totals.outstanding > 0 ? 'warning' : 'default'} />
+                </div>
+              </div>
+            ))
+          )}
+        </section>
+      ) : null}
     </div>
   )
 }

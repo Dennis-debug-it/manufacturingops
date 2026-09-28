@@ -56,6 +56,51 @@ public sealed class ImportControllerTests
         Assert.Equal("moses@example.com", technician.Email);
     }
 
+    /// <summary>Audit TM-P1-07: CSV import used to bypass licensed seats entirely.</summary>
+    [Fact]
+    public async Task CommitUsers_RejectsTheBatch_WhenActiveRowsExceedTheRemainingSeats()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        (await dbContext.TenantLicenses.SingleAsync(x => x.TenantId == fixture.Tenant.Id)).MaxUsersOverride = 2;
+        await dbContext.SaveChangesAsync();
+        var controller = CreateController(dbContext, fixture, new RecordingCredentialDeliveryService(), new QueueTemporaryPasswordService("TempPass!234", "TempPass!567"));
+
+        var error = await Assert.ThrowsAsync<LicenseException>(() => controller.CommitUsers(
+            new CsvUploadRequest(CreateCsvFile(
+                """
+                FullName,Email,Phone,Role,JobTitle,BranchName,IsTechnician,Status
+                Alice Njeri,alice@example.com,+254700000001,TenantAdmin,Operations Manager,Head Office,false,Active
+                Moses Otieno,moses@example.com,+254700000002,Technician,Technician,Head Office,true,Active
+                """)),
+            CancellationToken.None));
+
+        Assert.Equal("license_users_limit_reached", error.ErrorCode);
+        Assert.Equal(1, await dbContext.Users.CountAsync(x => x.TenantId == fixture.Tenant.Id));
+    }
+
+    /// <summary>Inactive rows don't consume seats, so they import even when the tenant is full.</summary>
+    [Fact]
+    public async Task CommitUsers_AllowsInactiveRows_WhenNoSeatsRemain()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        (await dbContext.TenantLicenses.SingleAsync(x => x.TenantId == fixture.Tenant.Id)).MaxUsersOverride = 1;
+        await dbContext.SaveChangesAsync();
+        var controller = CreateController(dbContext, fixture, new RecordingCredentialDeliveryService(), new QueueTemporaryPasswordService("TempPass!234"));
+
+        var result = await controller.CommitUsers(
+            new CsvUploadRequest(CreateCsvFile(
+                """
+                FullName,Email,Phone,Role,JobTitle,BranchName,IsTechnician,Status
+                Alice Njeri,alice@example.com,+254700000001,TenantAdmin,Operations Manager,Head Office,false,Inactive
+                """)),
+            CancellationToken.None);
+
+        var response = Assert.IsType<ImportCommitResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(1, response.SuccessfulRows);
+    }
+
     [Fact]
     public async Task CommitUsers_Response_DoesNotExposePasswords()
     {
@@ -143,7 +188,10 @@ public sealed class ImportControllerTests
             HasAllBranchAccess = true
         };
 
-        dbContext.AddRange(tenant, branch, actor);
+        var plan = new LicensePlan { PlanCode = $"suite-{Guid.NewGuid():N}", DisplayName = "Suite", IsActive = true };
+        var license = new TenantLicense { TenantId = tenant.Id, LicensePlan = plan, Status = "Active", StartsAt = DateTime.UtcNow.AddMonths(-1), ExpiresAt = DateTime.UtcNow.AddYears(1) };
+
+        dbContext.AddRange(tenant, branch, actor, plan, license);
         await dbContext.SaveChangesAsync();
         return new FixtureData(tenant, branch, actor);
     }
@@ -164,7 +212,8 @@ public sealed class ImportControllerTests
             new PasswordHasher<User>(),
             deliveryService,
             passwordService,
-            new FakeDocumentNumberingService());
+            new FakeDocumentNumberingService(),
+            new LicenseGuardService(dbContext));
 
     private static IFormFile CreateCsvFile(string csv)
     {

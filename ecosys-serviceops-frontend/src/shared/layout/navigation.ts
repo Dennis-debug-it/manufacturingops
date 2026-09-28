@@ -1,5 +1,5 @@
 import type { AppRole } from '../types/auth'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, BookOpen, Activity } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, BookOpen, Activity, Presentation } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -48,5 +48,6 @@ export const platformNavItems: NavItem[] = [
   { label: 'Reports', to: '/platform/reports', roles: ['super_admin'], permission: 'platform.reports.view', icon: BarChart3 },
   { label: 'Audit Logs', to: '/platform/audit', roles: ['super_admin'], permission: 'platform.audit.view', icon: Settings2 },
   { label: 'System Health', to: '/platform/health', roles: ['super_admin'], permission: 'platform.settings.view', icon: Activity },
+  { label: 'Demo Workspace', to: '/platform/demo', roles: ['super_admin'], permission: 'platform.settings.view', icon: Presentation },
   { label: 'Settings', to: '/platform/settings', roles: ['super_admin'], permission: 'platform.settings.view', icon: Settings2 },
 ]

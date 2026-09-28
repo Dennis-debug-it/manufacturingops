@@ -106,7 +106,7 @@ public sealed class PlatformTenantCommunicationSettingsController(
         var deliverySettings = (await emailSettingsResolver.ResolveAsync(tenantId, cancellationToken)).Settings
             ?? throw new BusinessRuleException("Email settings are not configured.");
         var recipient = string.IsNullOrWhiteSpace(request.TestRecipientEmail)
-            ? deliverySettings.SenderAddress
+            ? tenantEmail.ManagedEmailAddress ?? deliverySettings.SenderAddress
             : NormalizeEmail(request.TestRecipientEmail, "Test recipient email must be a valid email address.");
 
         if (string.IsNullOrWhiteSpace(recipient))
@@ -194,6 +194,16 @@ public sealed class PlatformTenantCommunicationSettingsController(
                 delivery.SenderEmail);
 
             var verification = await emailSender.VerifyAsync(delivery, cancellationToken);
+            // Connecting and logging in proves the transport, not the tenant's sender: a server that verifies
+            // senders only refuses an unprovisioned {slug}@serviceops address at MAIL FROM / RCPT time. The
+            // managed address is only reported usable once the server has accepted it.
+            var sender = TenantEmailIdentity.ResolveSender(tenant, tenantEmail);
+            if (verification.Success && delivery.DeliveryMode == EmailDeliveryMode.Smtp && sender is not null)
+            {
+                verification = await emailSender.VerifySenderAsync(delivery, sender.FromAddress, cancellationToken);
+                TenantEmailIdentity.RecordSenderOutcome(tenantEmail, verification.Success, verification.ErrorCategory, verification.TechnicalMessage, DateTime.UtcNow);
+            }
+
             tenantEmail.LastError = null;
             tenantEmail.LastTestedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -272,15 +282,10 @@ public sealed class PlatformTenantCommunicationSettingsController(
             return setting;
         }
 
-        setting = new EmailSetting
-        {
-            TenantId = tenant.Id,
-            IsEnabled = true,
-            SenderName = tenant.Name,
-            SenderAddress = tenant.ContactEmail ?? tenant.Email,
-            CreatedByUserId = tenantContext.GetRequiredUserId(),
-            UpdatedByUserId = tenantContext.GetRequiredUserId()
-        };
+        // Same identity tenant provisioning creates — never a row whose sender is the tenant's contact email.
+        setting = TenantEmailIdentity.Create(tenant);
+        setting.CreatedByUserId = tenantContext.GetRequiredUserId();
+        setting.UpdatedByUserId = tenantContext.GetRequiredUserId();
 
         dbContext.EmailSettings.Add(setting);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -437,11 +442,14 @@ public sealed class PlatformTenantCommunicationSettingsController(
             setting.Id,
             setting.TenantId,
             string.IsNullOrWhiteSpace(setting.SenderName) ? null : setting.SenderName,
-            string.IsNullOrWhiteSpace(setting.SenderAddress) ? null : setting.SenderAddress,
+            setting.ManagedEmailAddress ?? (string.IsNullOrWhiteSpace(setting.SenderAddress) ? null : setting.SenderAddress),
             setting.ReplyToEmail,
             setting.IsEnabled,
             setting.LastTestedAt,
-            setting.LastError);
+            setting.LastError,
+            setting.ManagedEmailStatus,
+            setting.ManagedEmailStatusCheckedAt,
+            setting.ManagedEmailStatusDetail);
 
     private static TenantNotificationSettingResponse MapNotificationSetting(TenantNotificationSetting setting) =>
         new(

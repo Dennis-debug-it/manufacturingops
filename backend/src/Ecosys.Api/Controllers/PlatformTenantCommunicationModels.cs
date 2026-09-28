@@ -1,3 +1,5 @@
+using Ecosys.Domain.Entities;
+
 namespace Ecosys.Api.Controllers;
 
 /// <summary>
@@ -13,7 +15,10 @@ public sealed record TenantEmailSettingsResponse(
     string? ReplyToEmail,
     bool EnableTenantEmailNotifications,
     DateTime? LastTestedAt,
-    string? LastError);
+    string? LastError,
+    string ManagedEmailStatus = ManagedEmailStatuses.Pending,
+    DateTime? ManagedEmailStatusCheckedAt = null,
+    string? ManagedEmailStatusDetail = null);
 
 public sealed record TenantNotificationSettingResponse(
     string NotificationKey,

@@ -23,25 +23,92 @@ public sealed class PortalController(
 
     // ── Dashboard ────────────────────────────────────────────────────────────
 
+    [HttpGet("settings")]
+    public async Task<ActionResult<PortalSettingsResponse>> GetSettings(CancellationToken cancellationToken)
+    {
+        var settings = await LoadSettingsAsync(cancellationToken);
+        return Ok(new PortalSettingsResponse(
+            settings.AllowRequestSubmission,
+            settings.AllowQuoteResponses,
+            settings.ShowInvoices,
+            settings.ShowContracts,
+            settings.ShowAssetRegister,
+            settings.WelcomeMessage));
+    }
+
     [HttpGet("dashboard/summary")]
     public async Task<ActionResult<PortalDashboardSummaryResponse>> GetDashboardSummary(CancellationToken cancellationToken)
     {
+        var settings = await LoadSettingsAsync(cancellationToken);
         var now = DateTime.UtcNow;
-        var openWorkOrders = await dbContext.WorkOrders
-            .CountAsync(x => x.TenantId == TenantId && x.ClientId == ClientId && x.Status != WorkOrderStatuses.Closed && x.Status != WorkOrderStatuses.Cancelled, cancellationToken);
-        var overdueWorkOrders = await dbContext.WorkOrders
-            .CountAsync(x => x.TenantId == TenantId && x.ClientId == ClientId && x.DueDate.HasValue && x.DueDate < now && x.Status != WorkOrderStatuses.Closed && x.Status != WorkOrderStatuses.Cancelled, cancellationToken);
-        var assetCount = await dbContext.Assets.CountAsync(x => x.TenantId == TenantId && x.ClientId == ClientId, cancellationToken);
+        var openWorkOrders = await OpenWorkOrders().CountAsync(cancellationToken);
+        var overdueWorkOrders = await OpenWorkOrders().CountAsync(x => x.DueDate.HasValue && x.DueDate < now, cancellationToken);
+        var assetCount = settings.ShowAssetRegister
+            ? await dbContext.Assets.CountAsync(x => x.TenantId == TenantId && x.ClientId == ClientId, cancellationToken)
+            : 0;
         var upcomingPm = await dbContext.PreventiveMaintenancePlans
             .Include(x => x.Asset)
             .CountAsync(x => x.TenantId == TenantId && x.Asset != null && x.Asset.ClientId == ClientId && x.Status == "Active" && x.NextPmDate.HasValue && x.NextPmDate < now.AddDays(30), cancellationToken);
-        var outstandingInvoices = await dbContext.TenantInvoices
-            .Where(x => x.TenantId == TenantId && x.ClientId == ClientId && x.Balance > 0 && x.Status != "Void")
-            .SumAsync(x => (decimal?)x.Balance, cancellationToken) ?? 0m;
+        var outstandingBalances = settings.ShowInvoices
+            ? await dbContext.TenantInvoices
+                .Where(x => x.TenantId == TenantId && x.ClientId == ClientId && x.Balance > 0 && x.Status != "Void")
+                .GroupBy(x => x.Currency)
+                .Select(g => new PortalCurrencyAmount(g.Key, g.Sum(x => x.Balance)))
+                .ToListAsync(cancellationToken)
+            : [];
         var pendingQuotations = await dbContext.TenantQuotations
             .CountAsync(x => x.TenantId == TenantId && x.ClientId == ClientId && x.Status == "Sent", cancellationToken);
 
-        return Ok(new PortalDashboardSummaryResponse(openWorkOrders, overdueWorkOrders, assetCount, upcomingPm, outstandingInvoices, pendingQuotations));
+        return Ok(new PortalDashboardSummaryResponse(
+            openWorkOrders,
+            overdueWorkOrders,
+            assetCount,
+            upcomingPm,
+            outstandingBalances.OrderBy(x => x.Currency).ToList(),
+            pendingQuotations,
+            await GetTenantCurrencyAsync(cancellationToken)));
+    }
+
+    // ── Reports ──────────────────────────────────────────────────────────────
+
+    [HttpGet("reports/summary")]
+    public async Task<ActionResult<PortalReportSummaryResponse>> GetReportSummary(CancellationToken cancellationToken)
+    {
+        var settings = await LoadSettingsAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+
+        var statusCounts = await dbContext.WorkOrders
+            .Where(x => x.TenantId == TenantId && x.ClientId == ClientId)
+            .GroupBy(x => x.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        int CountOf(params string[] statuses) => statusCounts.Where(x => statuses.Contains(x.Status)).Sum(x => x.Count);
+
+        // Every request lands in exactly one of open / completed / closed / cancelled, so the four add up to the
+        // total. Overdue is the subset of open requests that are past due.
+        var totalRequests = statusCounts.Sum(x => x.Count);
+        var completed = CountOf(CompletedStatuses);
+        var closed = CountOf(WorkOrderStatuses.Closed);
+        var cancelled = CountOf(CancelledStatuses);
+        var overdue = await OpenWorkOrders().CountAsync(x => x.DueDate.HasValue && x.DueDate < now, cancellationToken);
+
+        var invoiceTotals = settings.ShowInvoices
+            ? await dbContext.TenantInvoices
+                .Where(x => x.TenantId == TenantId && x.ClientId == ClientId && x.Status != "Void")
+                .GroupBy(x => x.Currency)
+                .Select(g => new PortalInvoiceCurrencyTotals(g.Key, g.Sum(x => x.TotalAmount), g.Sum(x => x.AmountPaid), g.Sum(x => x.Balance)))
+                .ToListAsync(cancellationToken)
+            : [];
+
+        return Ok(new PortalReportSummaryResponse(
+            totalRequests,
+            totalRequests - completed - closed - cancelled,
+            completed,
+            closed,
+            cancelled,
+            overdue,
+            await GetTenantCurrencyAsync(cancellationToken),
+            invoiceTotals.OrderBy(x => x.Currency).ToList()));
     }
 
     // ── Work Orders (Requests) ───────────────────────────────────────────────
@@ -98,6 +165,11 @@ public sealed class PortalController(
     [HttpPost("work-orders")]
     public async Task<ActionResult<PortalWorkOrderDetailResponse>> CreateWorkOrder([FromBody] PortalCreateWorkOrderRequest request, CancellationToken cancellationToken)
     {
+        if (!(await LoadSettingsAsync(cancellationToken)).AllowRequestSubmission)
+        {
+            throw new ForbiddenException("Service requests cannot be submitted through this portal. Please contact your service provider.");
+        }
+
         if (string.IsNullOrWhiteSpace(request.Title))
         {
             throw new BusinessRuleException("A short title describing the issue is required.");
@@ -163,6 +235,7 @@ public sealed class PortalController(
     [HttpGet("assets")]
     public async Task<ActionResult<IReadOnlyCollection<PortalAssetListItem>>> ListAssets(CancellationToken cancellationToken)
     {
+        await EnsureEnabledAsync(x => x.ShowAssetRegister, "The asset register is", cancellationToken);
         var assets = await dbContext.Assets
             .Include(x => x.Site)
             .Where(x => x.TenantId == TenantId && x.ClientId == ClientId)
@@ -207,6 +280,7 @@ public sealed class PortalController(
     [HttpGet("invoices")]
     public async Task<ActionResult<IReadOnlyCollection<PortalInvoiceListItem>>> ListInvoices(CancellationToken cancellationToken)
     {
+        await EnsureEnabledAsync(x => x.ShowInvoices, "Invoices are", cancellationToken);
         var invoices = await dbContext.TenantInvoices
             .Where(x => x.TenantId == TenantId && x.ClientId == ClientId)
             .OrderByDescending(x => x.InvoiceDate)
@@ -218,6 +292,7 @@ public sealed class PortalController(
     [HttpGet("invoices/{id:guid}")]
     public async Task<ActionResult<PortalInvoiceDetailResponse>> GetInvoice(Guid id, CancellationToken cancellationToken)
     {
+        await EnsureEnabledAsync(x => x.ShowInvoices, "Invoices are", cancellationToken);
         var invoice = await dbContext.TenantInvoices
             .Include(x => x.Lines)
             .Include(x => x.Payments)
@@ -264,6 +339,7 @@ public sealed class PortalController(
     [HttpPost("quotations/{id:guid}/accept")]
     public async Task<ActionResult<PortalQuotationDetailResponse>> AcceptQuotation(Guid id, CancellationToken cancellationToken)
     {
+        await EnsureQuoteResponsesAllowedAsync(cancellationToken);
         var quote = await LoadQuotationAsync(id, cancellationToken);
         if (quote.Status != "Sent")
         {
@@ -277,8 +353,21 @@ public sealed class PortalController(
     }
 
     [HttpPost("quotations/{id:guid}/reject")]
-    public async Task<ActionResult<PortalQuotationDetailResponse>> RejectQuotation(Guid id, [FromBody] PortalRejectQuotationRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<PortalQuotationDetailResponse>> RejectQuotation(Guid id, [FromBody] PortalRejectQuotationRequest? request, CancellationToken cancellationToken)
     {
+        await EnsureQuoteResponsesAllowedAsync(cancellationToken);
+
+        var reason = request?.Reason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new BusinessRuleException("Please tell us why you are declining this quotation.");
+        }
+
+        if (reason.Length > MaxRejectionReasonLength)
+        {
+            throw new BusinessRuleException($"The reason must be {MaxRejectionReasonLength} characters or fewer.");
+        }
+
         var quote = await LoadQuotationAsync(id, cancellationToken);
         if (quote.Status != "Sent")
         {
@@ -286,9 +375,9 @@ public sealed class PortalController(
         }
 
         quote.Status = "Rejected";
-        quote.RejectionReason = request.Reason?.Trim();
+        quote.RejectionReason = reason;
         await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(TenantId, null, "portal.quotation.rejected", nameof(TenantQuotation), quote.Id.ToString(), $"Quotation '{quote.QuoteNumber}' rejected via client portal.", actorName: portalContext.FullName, cancellationToken: cancellationToken);
+        await auditLogService.LogAsync(TenantId, null, "portal.quotation.rejected", nameof(TenantQuotation), quote.Id.ToString(), $"Quotation '{quote.QuoteNumber}' rejected via client portal. Reason: {reason}", actorName: portalContext.FullName, cancellationToken: cancellationToken);
         return Ok(MapQuotationDetail(quote));
     }
 
@@ -297,6 +386,7 @@ public sealed class PortalController(
     [HttpGet("contracts")]
     public async Task<ActionResult<IReadOnlyCollection<PortalContractListItem>>> ListContracts(CancellationToken cancellationToken)
     {
+        await EnsureEnabledAsync(x => x.ShowContracts, "Contracts are", cancellationToken);
         var contracts = await dbContext.Contracts
             .Where(x => x.TenantId == TenantId && x.ClientId == ClientId)
             .OrderByDescending(x => x.StartDate)
@@ -352,6 +442,39 @@ public sealed class PortalController(
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    private const int MaxRejectionReasonLength = 1000;
+
+    private static readonly string[] CompletedStatuses = [WorkOrderStatuses.Completed, WorkOrderStatuses.ClientAccepted];
+    // A rejected request never went ahead, so the client sees it with the cancelled ones.
+    private static readonly string[] CancelledStatuses = [WorkOrderStatuses.Cancelled, WorkOrderStatuses.Rejected];
+    private static readonly string[] NotOpenStatuses = [.. CompletedStatuses, WorkOrderStatuses.Closed, .. CancelledStatuses];
+
+    /// <summary>Requests still being worked on: not completed, closed, cancelled or rejected.</summary>
+    private IQueryable<WorkOrder> OpenWorkOrders() =>
+        dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.ClientId == ClientId && !NotOpenStatuses.Contains(x.Status));
+
+    private Task<PortalModuleSettings> LoadSettingsAsync(CancellationToken cancellationToken) =>
+        PortalModuleSettings.LoadAsync(dbContext, TenantId, cancellationToken);
+
+    private async Task EnsureEnabledAsync(Func<PortalModuleSettings, bool> isEnabled, string featureIs, CancellationToken cancellationToken)
+    {
+        if (!isEnabled(await LoadSettingsAsync(cancellationToken)))
+        {
+            throw new ForbiddenException($"{featureIs} not available in this portal.");
+        }
+    }
+
+    private async Task EnsureQuoteResponsesAllowedAsync(CancellationToken cancellationToken)
+    {
+        if (!(await LoadSettingsAsync(cancellationToken)).AllowQuoteResponses)
+        {
+            throw new ForbiddenException("Quotations cannot be accepted or declined through this portal. Please contact your service provider.");
+        }
+    }
+
+    private async Task<string> GetTenantCurrencyAsync(CancellationToken cancellationToken) =>
+        await dbContext.Tenants.Where(x => x.Id == TenantId).Select(x => x.Currency).SingleOrDefaultAsync(cancellationToken) ?? "KES";
+
     private async Task<TenantQuotation> LoadQuotationAsync(Guid id, CancellationToken cancellationToken) =>
         await dbContext.TenantQuotations
             .Include(x => x.Lines)
@@ -373,7 +496,13 @@ public sealed class PortalController(
 
 // ── Response / request DTOs ─────────────────────────────────────────────────
 
-public sealed record PortalDashboardSummaryResponse(int OpenWorkOrders, int OverdueWorkOrders, int AssetCount, int UpcomingPmCount, decimal OutstandingInvoiceBalance, int PendingQuotations);
+public sealed record PortalSettingsResponse(bool AllowRequestSubmission, bool AllowQuoteResponses, bool ShowInvoices, bool ShowContracts, bool ShowAssetRegister, string? WelcomeMessage);
+
+public sealed record PortalCurrencyAmount(string Currency, decimal Amount);
+public sealed record PortalDashboardSummaryResponse(int OpenWorkOrders, int OverdueWorkOrders, int AssetCount, int UpcomingPmCount, IReadOnlyCollection<PortalCurrencyAmount> OutstandingBalances, int PendingQuotations, string Currency);
+
+public sealed record PortalInvoiceCurrencyTotals(string Currency, decimal Invoiced, decimal Paid, decimal Outstanding);
+public sealed record PortalReportSummaryResponse(int TotalRequests, int OpenRequests, int CompletedRequests, int ClosedRequests, int CancelledRequests, int OverdueRequests, string Currency, IReadOnlyCollection<PortalInvoiceCurrencyTotals> InvoiceTotals);
 
 public sealed record PortalWorkOrderListItem(Guid Id, string WorkOrderNumber, string Title, string Status, string Priority, string? SiteName, string? AssetName, DateTime? DueDate, DateTime CreatedAt);
 public sealed record PortalWorkOrderDetailResponse(Guid Id, string WorkOrderNumber, string Title, string? Description, string Status, string Priority, string WorkType, string? SiteName, string? AssetName, DateTime? DueDate, DateTime? ScheduledStartAt, DateTime? CompletedAt, string? WorkDoneNotes, DateTime CreatedAt);

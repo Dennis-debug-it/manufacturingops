@@ -164,7 +164,7 @@ export function ResetPasswordPage() {
           ) : success ? (
             <div className="mt-8 flex items-start gap-3 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>Your password has been reset. Redirecting you to sign inâ€¦</span>
+              <span>Your password has been reset. Redirecting you to sign in…</span>
             </div>
           ) : (
             <form className="mt-8 space-y-4" onSubmit={onSubmit}>

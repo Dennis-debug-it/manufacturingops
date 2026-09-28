@@ -2,14 +2,29 @@ import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../../shared/utils/cn'
 import { brand } from '../../shared/config/brand'
-import { LayoutDashboard, ClipboardList, FileText, UserCircle2, LogOut, BookOpen } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, FileText, UserCircle2, LogOut, BookOpen, FileSignature, Boxes, CalendarClock, ScrollText, BarChart3, type LucideIcon } from 'lucide-react'
 import { usePortalAuth } from '../auth/PortalAuthContext'
 import { Crystal } from '../../shared/components/Crystal'
+import { usePortalSettings } from '../api'
+import { portalFeatures, type PortalFeature } from '../components/PortalFeatureGate'
 
-const portalNav = [
+interface PortalNavItem {
+  label: string
+  to: string
+  icon: LucideIcon
+  /** Hidden when the tenant has switched this section off in Settings → Client Portal. */
+  feature?: PortalFeature
+}
+
+const portalNav: PortalNavItem[] = [
   { label: 'Dashboard', to: '/portal/dashboard', icon: LayoutDashboard },
   { label: 'Jobs', to: '/portal/requests', icon: ClipboardList },
-  { label: 'Invoices', to: '/portal/invoices', icon: FileText },
+  { label: 'Quotes', to: '/portal/quotes', icon: FileSignature },
+  { label: 'Invoices', to: '/portal/invoices', icon: FileText, feature: portalFeatures.invoices },
+  { label: 'Assets', to: '/portal/assets', icon: Boxes, feature: portalFeatures.assetRegister },
+  { label: 'Maintenance', to: '/portal/maintenance', icon: CalendarClock },
+  { label: 'Contracts', to: '/portal/contracts', icon: ScrollText, feature: portalFeatures.contracts },
+  { label: 'Reports', to: '/portal/reports', icon: BarChart3 },
   { label: 'Help Center', to: '/portal/knowledge', icon: BookOpen },
   { label: 'Profile', to: '/portal/profile', icon: UserCircle2 },
 ]
@@ -22,6 +37,8 @@ export function PortalShell({ children }: PortalShellProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { client, tenant, user, logout } = usePortalAuth()
+  const { data: settings } = usePortalSettings()
+  const navItems = portalNav.filter((item) => !item.feature || (settings ? item.feature(settings) : false))
 
   const handleLogout = async () => {
     await logout()
@@ -58,7 +75,7 @@ export function PortalShell({ children }: PortalShellProps) {
       <div className="mx-auto flex max-w-7xl gap-4 px-4 py-4 sm:px-6">
         <aside className="hidden w-64 shrink-0 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-3 backdrop-blur-[var(--glass-blur-md)] lg:block">
           <nav className="space-y-1">
-            {portalNav.map((item) => {
+            {navItems.map((item) => {
               const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
               const Icon = item.icon
               return (
@@ -82,8 +99,8 @@ export function PortalShell({ children }: PortalShellProps) {
         <main className="min-w-0 flex-1 pb-24 lg:pb-6">{children}</main>
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--glass-border)] bg-[var(--glass-white-strong)] px-2 py-2 backdrop-blur-[var(--glass-blur-md)] lg:hidden">
-        <div className="grid grid-cols-5 gap-1">
-          {portalNav.map((item) => {
+        <div className="flex gap-1 overflow-x-auto">
+          {navItems.map((item) => {
             const active = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
             const Icon = item.icon
             return (
@@ -91,7 +108,7 @@ export function PortalShell({ children }: PortalShellProps) {
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  'flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium',
+                  'flex min-w-[4.5rem] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-2 text-[11px] font-medium',
                   active ? 'bg-[var(--app-primary)] text-white' : 'text-slate-500',
                 )}
               >

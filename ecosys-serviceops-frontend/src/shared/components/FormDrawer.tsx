@@ -29,7 +29,7 @@ export function FormDrawer({ open, title, children, footer, onClose, closeOnOver
           <div>
             <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
+          <button type="button" aria-label="Close" onClick={onClose} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
             <X className="h-4 w-4" />
           </button>
         </header>

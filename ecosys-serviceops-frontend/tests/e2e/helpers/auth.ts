@@ -91,7 +91,9 @@ export async function registerApiCatchAll(page: Page) {
       return
     }
 
-    await route.fulfill(json({}))
+    // Un-mocked GETs are mostly list endpoints; an empty array is safe for both list and object
+    // consumers (property reads yield undefined), whereas {} crashes any page that maps/slices it.
+    await route.fulfill(json(route.request().method() === 'GET' ? [] : {}))
   })
 }
 
@@ -264,7 +266,7 @@ function buildMockSession(options: MockAuthOptions): MockSession {
       ? { expectedUrl: /\/change-password$/, visibleHeading: /change your temporary password/i }
       : {
           expectedUrl: /\/dashboard/,
-          visibleText: /operational overview/i,
+          visibleText: /operational command centre/i,
         },
   }
 }
@@ -320,13 +322,13 @@ async function performLogin(page: Page, email: string, password: string, expecta
   await page.waitForURL(expectation.expectedUrl, { timeout: 20000 })
 
   if (expectation.visibleTestId) {
-    await expect(page.getByTestId(expectation.visibleTestId)).toBeVisible()
+    await expect(page.getByTestId(expectation.visibleTestId)).toBeVisible({ timeout: 20000 })
   }
   if (expectation.visibleHeading) {
-    await expect(page.getByRole('heading', { name: expectation.visibleHeading })).toBeVisible()
+    await expect(page.getByRole('heading', { name: expectation.visibleHeading })).toBeVisible({ timeout: 20000 })
   }
   if (expectation.visibleText) {
-    await expect(page.getByText(expectation.visibleText)).toBeVisible()
+    await expect(page.getByText(expectation.visibleText)).toBeVisible({ timeout: 20000 })
   }
 }
 

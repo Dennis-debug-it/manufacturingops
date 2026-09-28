@@ -150,11 +150,12 @@ public sealed partial class AuthEmailSafetyTests
         Assert.Equal(string.Empty, (await db.EmailSettings.SingleAsync()).Host);
     }
 
-    private static UpsertPlatformTenantRequest MinimalProvisioningRequest(string plan = "suite") => new(
+    /// <summary>Mirrors exactly what the Create Tenant form sends, including the required licensed-users count.</summary>
+    private static UpsertPlatformTenantRequest MinimalProvisioningRequest(string plan = "suite", int? maxUsers = 10) => new(
         Name: null, CompanyName: "Acme Engineering Ltd", Slug: null, CompanyEmail: null, CompanyPhone: null,
         Industry: null, ContactName: null, ContactEmail: null, ContactPhone: null,
         PrimaryContactName: null, PrimaryContactEmail: null, PrimaryContactPhone: null,
         Country: "Kenya", County: null, City: null, Address: null, TaxPin: null, PlanName: null,
-        MaxUsers: null, MaxBranches: null, TrialEndsAt: null, SubscriptionEndsAt: null, StartsAt: null, ExpiresAt: null,
+        MaxUsers: maxUsers, MaxBranches: null, TrialEndsAt: null, SubscriptionEndsAt: null, StartsAt: null, ExpiresAt: null,
         Status: null, LicenseStatus: null, AdminFullName: "John Kamau", AdminEmail: "admin@acme.test", PlanCode: plan);
 }

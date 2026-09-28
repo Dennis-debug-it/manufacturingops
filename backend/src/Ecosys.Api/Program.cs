@@ -316,6 +316,28 @@ app.Use(async (context, next) =>
             return;
         }
 
+        // A lost concurrency race (e.g. two admins adding the last licensed seat at once — the loser's
+        // serializable transaction is aborted) or a unique-key collision is a conflict the caller can act
+        // on, not a server fault.
+        if (FindPostgresException(exception) is { } postgresException
+            && postgresException.SqlState is "40001" or "40P01" or "23505")
+        {
+            var isDuplicate = postgresException.SqlState == "23505";
+            logger.LogWarning(exception, "Request conflicted with a concurrent change ({SqlState}).", postgresException.SqlState);
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            await Results.Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: isDuplicate
+                    ? "A record with the same value already exists."
+                    : "Another change was saved at the same time. Refresh and try again.",
+                extensions: new Dictionary<string, object?>
+                {
+                    ["traceId"] = context.TraceIdentifier,
+                    ["errorCode"] = isDuplicate ? "DUPLICATE_VALUE" : "CONCURRENT_UPDATE"
+                }).ExecuteAsync(context);
+            return;
+        }
+
         if (exception is DbUpdateException dbUpdateException)
         {
             logger.LogError(dbUpdateException, "Database update failed while processing request.");
@@ -437,6 +459,19 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions
 });
 
 app.Run();
+
+static Npgsql.PostgresException? FindPostgresException(Exception? exception)
+{
+    for (var current = exception; current is not null; current = current.InnerException)
+    {
+        if (current is Npgsql.PostgresException postgresException)
+        {
+            return postgresException;
+        }
+    }
+
+    return null;
+}
 
 static string[] GetValidationErrors(ModelStateDictionary modelState)
 {

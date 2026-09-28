@@ -146,6 +146,8 @@ public sealed class PortalAuthSecurityTests
         }
         public Task<PortalMagicLinkResult> VerifyMagicLinkAsync(string token,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> IssueSignInLinkAsync(Guid portalUserId, string magicLinkBaseUrl, string? ipAddress,
+            string? userAgent, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class TokenReadBarrier : DbCommandInterceptor

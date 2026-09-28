@@ -879,22 +879,16 @@ public sealed class WorkOrderExecutionFlowTests
                 false,
                 null,
                 null,
-                null,
-                null,
-                false,
-                false,
                 false,
                 false,
                 null));
         public Task<LicenseUsageSnapshot> GetUsageAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new LicenseUsageSnapshot(1, 1, 1, 1));
+            Task.FromResult(new LicenseUsageSnapshot(1, 1));
         public Task<IReadOnlyCollection<PlatformLicenseUsageSnapshot>> GetPlatformUsageAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyCollection<PlatformLicenseUsageSnapshot>>([]);
         public Task EnsureTenantCanMutateAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task EnsureCanCreateAssetAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task EnsureCanCreateBranchAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task EnsureCanCreateUserAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task EnsureCanCreateWorkOrderAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task EnsureFeatureEnabledAsync(Guid tenantId, string featureName, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<TenantLicense> GetOrCreateTenantLicenseAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
             Task.FromResult(new TenantLicense

@@ -97,12 +97,6 @@ internal sealed class UserCredentialDeliveryService(
         var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == tenantId, cancellationToken);
         var tenantSettings = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
         var effectiveSettings = (await emailSettingsResolver.ResolveAsync(tenantId, cancellationToken)).Settings;
-        var supportEmail = effectiveSettings?.ReplyToEmail
-            ?? effectiveSettings?.SenderAddress
-            ?? tenant?.ContactEmail
-            ?? tenant?.Email
-            ?? "support@ecosys.local";
-
         if (tenantSettings?.IsEnabled == false || EmailDeliveryResolution.IsExplicitlyDisabled(effectiveSettings))
         {
             await WriteDeliveryLogAsync(
@@ -129,6 +123,27 @@ internal sealed class UserCredentialDeliveryService(
                 cancellationToken);
             return new UserCredentialDeliveryResult(false, "NotConfigured", "Credential email could not be sent because SMTP settings are incomplete.");
         }
+
+        var sender = ResolveMessageSender(tenantId, tenant, tenantSettings, delivery);
+        if (sender is null)
+        {
+            // Tenant mail never borrows the platform address or the SMTP login as its sender.
+            await WriteDeliveryLogAsync(
+                tenantId,
+                user.Email,
+                request.TemplateEventKey,
+                "Failed",
+                "Sender identity missing",
+                "Email could not be sent because the tenant has no managed communication address.",
+                cancellationToken);
+            return new UserCredentialDeliveryResult(false, "NotConfigured", "Email could not be sent because the tenant has no managed communication address.");
+        }
+
+        var supportEmail = sender.ReplyTo
+            ?? sender.Address
+            ?? tenant?.ContactEmail
+            ?? tenant?.Email
+            ?? "support@ecosys.local";
 
         try
         {
@@ -178,13 +193,17 @@ internal sealed class UserCredentialDeliveryService(
                 new EmailMessage(
                     user.Email,
                     finalSubject,
-                    template.HtmlBody,
-                    template.SenderNameOverride ?? tenantSettings?.SenderName ?? delivery.SenderName,
-                    tenantSettings?.ManagedEmailAddress ?? delivery.SenderEmail,
-                    template.ReplyToOverride ?? tenantSettings?.ReplyToEmail ?? delivery.ReplyToEmail,
+                    TenantEmailIdentity.AppendNoReplyNotice(template.HtmlBody, true, sender.Address, template.ReplyToOverride ?? sender.ReplyTo),
+                    sender.IsTenant ? sender.Name : template.SenderNameOverride ?? sender.Name,
+                    sender.Address,
+                    template.ReplyToOverride ?? sender.ReplyTo,
                     IsHtml: true),
                 delivery,
                 cancellationToken);
+            if (TenantEmailIdentity.RecordSenderOutcome(tenantSettings, true, null, null, DateTime.UtcNow))
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
 
             await WriteDeliveryLogAsync(
                 tenantId,
@@ -203,6 +222,8 @@ internal sealed class UserCredentialDeliveryService(
             var errorCategory = ex is EmailDeliveryException emailDeliveryException
                 ? emailDeliveryException.ErrorCategory
                 : EmailErrorCategories.UnknownSmtpError;
+            // Persisted by the delivery-log write below (same DbContext).
+            TenantEmailIdentity.RecordSenderOutcome(tenantSettings, false, errorCategory, ex.Message, DateTime.UtcNow);
 
             logger.LogWarning(
                 ex,
@@ -256,12 +277,6 @@ internal sealed class UserCredentialDeliveryService(
         var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == tenantId, cancellationToken);
         var tenantSettings = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
         var effectiveSettings = (await emailSettingsResolver.ResolveAsync(tenantId, cancellationToken)).Settings;
-        var supportEmail = effectiveSettings?.ReplyToEmail
-            ?? effectiveSettings?.SenderAddress
-            ?? tenant?.ContactEmail
-            ?? tenant?.Email
-            ?? "support@ecosys.local";
-
         if (tenantSettings?.IsEnabled == false || EmailDeliveryResolution.IsExplicitlyDisabled(effectiveSettings))
         {
             await WriteDeliveryLogAsync(
@@ -288,6 +303,27 @@ internal sealed class UserCredentialDeliveryService(
                 cancellationToken);
             return new UserCredentialDeliveryResult(false, "NotConfigured", $"{deliveryLabel} email could not be sent because SMTP settings are incomplete.");
         }
+
+        var sender = ResolveMessageSender(tenantId, tenant, tenantSettings, delivery);
+        if (sender is null)
+        {
+            // Tenant mail never borrows the platform address or the SMTP login as its sender.
+            await WriteDeliveryLogAsync(
+                tenantId,
+                user.Email,
+                templateKey,
+                "Failed",
+                "Sender identity missing",
+                "Email could not be sent because the tenant has no managed communication address.",
+                cancellationToken);
+            return new UserCredentialDeliveryResult(false, "NotConfigured", "Email could not be sent because the tenant has no managed communication address.");
+        }
+
+        var supportEmail = sender.ReplyTo
+            ?? sender.Address
+            ?? tenant?.ContactEmail
+            ?? tenant?.Email
+            ?? "support@ecosys.local";
 
         try
         {
@@ -335,13 +371,17 @@ internal sealed class UserCredentialDeliveryService(
                 new EmailMessage(
                     user.Email,
                     finalSubject,
-                    template.HtmlBody,
-                    template.SenderNameOverride ?? tenantSettings?.SenderName ?? delivery.SenderName,
-                    tenantSettings?.ManagedEmailAddress ?? delivery.SenderEmail,
-                    template.ReplyToOverride ?? tenantSettings?.ReplyToEmail ?? delivery.ReplyToEmail,
+                    TenantEmailIdentity.AppendNoReplyNotice(template.HtmlBody, true, sender.Address, template.ReplyToOverride ?? sender.ReplyTo),
+                    sender.IsTenant ? sender.Name : template.SenderNameOverride ?? sender.Name,
+                    sender.Address,
+                    template.ReplyToOverride ?? sender.ReplyTo,
                     IsHtml: true),
                 delivery,
                 cancellationToken);
+            if (TenantEmailIdentity.RecordSenderOutcome(tenantSettings, true, null, null, DateTime.UtcNow))
+            {
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
 
             await WriteDeliveryLogAsync(
                 tenantId,
@@ -360,6 +400,8 @@ internal sealed class UserCredentialDeliveryService(
             var errorCategory = ex is EmailDeliveryException emailDeliveryException
                 ? emailDeliveryException.ErrorCategory
                 : EmailErrorCategories.UnknownSmtpError;
+            // Persisted by the delivery-log write below (same DbContext).
+            TenantEmailIdentity.RecordSenderOutcome(tenantSettings, false, errorCategory, ex.Message, DateTime.UtcNow);
 
             logger.LogWarning(
                 ex,
@@ -423,6 +465,24 @@ internal sealed class UserCredentialDeliveryService(
             _ => templateKey,
         };
     }
+
+    /// <summary>
+    /// Tenant mail is sent as the tenant's managed identity (see TenantEmailIdentity.ResolveSender); only
+    /// platform-scoped mail (the root tenant) uses the platform row's sender. Null when a tenant has no
+    /// usable identity.
+    /// </summary>
+    private static MessageSender? ResolveMessageSender(Guid tenantId, Tenant? tenant, EmailSetting? tenantSettings, EmailDeliverySettings delivery)
+    {
+        if (tenantId == PlatformConstants.RootTenantId)
+        {
+            return new MessageSender(delivery.SenderName, delivery.SenderEmail, delivery.ReplyToEmail, IsTenant: false);
+        }
+
+        var tenantSender = TenantEmailIdentity.ResolveSender(tenant, tenantSettings);
+        return tenantSender is null ? null : new MessageSender(tenantSender.FromName, tenantSender.FromAddress, tenantSender.ReplyTo, IsTenant: true);
+    }
+
+    private sealed record MessageSender(string? Name, string? Address, string? ReplyTo, bool IsTenant);
 
     /// <summary>
     /// Delegates to the one shared resolver/merge pipeline (see EmailSettingsResolver.cs) instead of

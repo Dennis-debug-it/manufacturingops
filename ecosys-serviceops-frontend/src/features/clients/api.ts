@@ -215,6 +215,8 @@ export interface ClientPortalContact {
   email: string
   phone: string | null
   isActive: boolean
+  /** Invited by non-admin staff while approval is required; cannot sign in until an admin activates it. */
+  isPendingApproval: boolean
   lastLoginAt: string | null
   createdAt: string
 }
