@@ -15,7 +15,6 @@ interface PlatformLicensePlan {
   code: string
   monthlyPrice: number
   annualPrice: number
-  maxUsers: number | null
   modulesIncluded: string[]
   isActive: boolean
 }
@@ -26,12 +25,11 @@ interface PlanFormState {
   code: string
   monthlyPrice: number
   annualPrice: number
-  maxUsers: number | null
   modulesIncluded: string
   isActive: boolean
 }
 
-const emptyForm: PlanFormState = { id: null, name: '', code: '', monthlyPrice: 0, annualPrice: 0, maxUsers: null, modulesIncluded: '', isActive: true }
+const emptyForm: PlanFormState = { id: null, name: '', code: '', monthlyPrice: 0, annualPrice: 0, modulesIncluded: '', isActive: true }
 
 function PlanDrawer({ open, plan, onClose }: { open: boolean; plan: PlatformLicensePlan | null; onClose: () => void }) {
   const queryClient = useQueryClient()
@@ -40,7 +38,7 @@ function PlanDrawer({ open, plan, onClose }: { open: boolean; plan: PlatformLice
   useEffect(() => {
     if (!open) return
     if (plan) {
-      setForm({ id: plan.id, name: plan.name, code: plan.code, monthlyPrice: plan.monthlyPrice, annualPrice: plan.annualPrice, maxUsers: plan.maxUsers, modulesIncluded: plan.modulesIncluded.join(', '), isActive: plan.isActive })
+      setForm({ id: plan.id, name: plan.name, code: plan.code, monthlyPrice: plan.monthlyPrice, annualPrice: plan.annualPrice, modulesIncluded: plan.modulesIncluded.join(', '), isActive: plan.isActive })
     } else {
       setForm(emptyForm)
     }
@@ -53,7 +51,6 @@ function PlanDrawer({ open, plan, onClose }: { open: boolean; plan: PlatformLice
         code: form.code || null,
         monthlyPrice: form.monthlyPrice,
         annualPrice: form.annualPrice,
-        maxUsers: form.maxUsers,
         modulesIncluded: form.modulesIncluded.split(',').map((m) => m.trim()).filter(Boolean),
         isActive: form.isActive,
       }
@@ -87,12 +84,6 @@ function PlanDrawer({ open, plan, onClose }: { open: boolean; plan: PlatformLice
             <input type="number" value={form.annualPrice} onChange={(event) => setForm((current) => ({ ...current, annualPrice: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Max Users</label>
-            <input type="number" value={form.maxUsers ?? ''} onChange={(event) => setForm((current) => ({ ...current, maxUsers: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-          </div>
-        </div>
         <div>
           <label className="mb-1.5 block text-sm font-medium text-slate-700">Modules Included (comma-separated)</label>
           <input value={form.modulesIncluded} onChange={(event) => setForm((current) => ({ ...current, modulesIncluded: event.target.value }))} placeholder="EmailIngestion, MonitoringIntegration" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
@@ -124,7 +115,6 @@ export function PlansSettingsPage() {
     { key: 'code', header: 'Code', cell: (row) => <span className="font-mono text-xs">{row.code}</span> },
     { key: 'monthlyPrice', header: 'Monthly', cell: (row) => row.monthlyPrice.toLocaleString() },
     { key: 'annualPrice', header: 'Annual', cell: (row) => row.annualPrice.toLocaleString() },
-    { key: 'maxUsers', header: 'Max Users', cell: (row) => row.maxUsers ?? 'Unlimited' },
     { key: 'modulesIncluded', header: 'Modules', cell: (row) => row.modulesIncluded.join(', ') || '—' },
     { key: 'isActive', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
     { key: 'actions', header: '', cell: (row) => (canManage ? <button type="button" onClick={() => { setEditingPlan(row); setDrawerOpen(true) }} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Edit</button> : null) },

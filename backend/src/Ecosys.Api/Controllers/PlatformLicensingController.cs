@@ -56,7 +56,6 @@ public sealed class PlatformLicensingController(
             DisplayName = ServiceOpsPlans.DisplayName(normalizedCode),
             MonthlyPrice = request.MonthlyPrice,
             AnnualPrice = request.AnnualPrice,
-            MaxUsers = request.MaxUsers,
             MaxBranches = request.MaxBranches,
             ModulesIncluded = NormalizePlanModules(normalizedCode, request.ModulesIncluded),
             IsActive = request.IsActive,
@@ -90,7 +89,6 @@ public sealed class PlatformLicensingController(
         plan.DisplayName = ServiceOpsPlans.IsCommercial(plan.PlanCode) ? ServiceOpsPlans.DisplayName(plan.PlanCode) : request.Name.Trim();
         plan.MonthlyPrice = request.MonthlyPrice;
         plan.AnnualPrice = request.AnnualPrice;
-        plan.MaxUsers = request.MaxUsers;
         plan.MaxBranches = request.MaxBranches;
         plan.ModulesIncluded = NormalizePlanModules(plan.PlanCode, request.ModulesIncluded);
         plan.IsActive = ServiceOpsPlans.IsCommercial(plan.PlanCode) && request.IsActive;
@@ -161,6 +159,7 @@ public sealed class PlatformLicensingController(
         {
             TenantId = request.TenantId,
             LicensePlanId = request.PlanId,
+            LicensedUsers = request.MaxUsers ?? TenantLicense.DefaultLicensedUsers,
             Status = NormalizeSubscriptionStatus(request.Status),
             BillingCycle = NormalizeBillingCycle(request.BillingCycle),
             StartsAt = request.StartsAt,
@@ -228,6 +227,10 @@ public sealed class PlatformLicensingController(
         subscription.ExpiresAt = request.EndsAt;
         subscription.TrialEndsAt = request.TrialEndsAt;
         subscription.NextBillingDate = request.NextBillingDate;
+        if (request.MaxUsers is int licensedUsers)
+        {
+            subscription.LicensedUsers = licensedUsers;
+        }
         TenantLifecycleState.Sync(tenant, subscription, DateTime.UtcNow);
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -314,7 +317,6 @@ public sealed class PlatformLicensingController(
             plan.PlanCode,
             plan.MonthlyPrice,
             plan.AnnualPrice,
-            plan.MaxUsers,
             plan.MaxBranches,
             SplitModules(plan.ModulesIncluded),
             plan.IsActive);
@@ -331,7 +333,8 @@ public sealed class PlatformLicensingController(
             subscription.StartsAt,
             subscription.ExpiresAt,
             subscription.TrialEndsAt,
-            subscription.NextBillingDate);
+            subscription.NextBillingDate,
+            subscription.LicensedUsers);
 
     private static void ValidatePlanRequest(UpsertPlatformLicensePlanRequest request)
     {
@@ -351,6 +354,11 @@ public sealed class PlatformLicensingController(
         if (request.EndsAt.HasValue && request.EndsAt.Value <= request.StartsAt)
         {
             throw new BusinessRuleException("License expiry must be after the license start date.");
+        }
+
+        if (request.MaxUsers is <= 0)
+        {
+            throw new BusinessRuleException("Licensed users must be greater than zero.");
         }
 
         if (request.NextBillingDate.HasValue && request.NextBillingDate.Value < request.StartsAt)
@@ -417,7 +425,6 @@ public sealed record UpsertPlatformLicensePlanRequest(
     string? Code,
     decimal MonthlyPrice,
     decimal AnnualPrice,
-    int? MaxUsers,
     int? MaxBranches,
     IReadOnlyCollection<string>? ModulesIncluded,
     bool IsActive);
@@ -428,7 +435,6 @@ public sealed record PlatformLicensePlanResponse(
     string Code,
     decimal MonthlyPrice,
     decimal AnnualPrice,
-    int? MaxUsers,
     int? MaxBranches,
     IReadOnlyCollection<string> ModulesIncluded,
     bool IsActive);
@@ -441,7 +447,8 @@ public sealed record UpsertPlatformSubscriptionRequest(
     DateTime StartsAt,
     DateTime? EndsAt,
     DateTime? TrialEndsAt,
-    DateTime? NextBillingDate);
+    DateTime? NextBillingDate,
+    int? MaxUsers = null);
 
 public sealed record PlatformSubscriptionResponse(
     Guid Id,
@@ -454,4 +461,5 @@ public sealed record PlatformSubscriptionResponse(
     DateTime StartsAt,
     DateTime? EndsAt,
     DateTime? TrialEndsAt,
-    DateTime? NextBillingDate);
+    DateTime? NextBillingDate,
+    int MaxUsers);

@@ -39,7 +39,7 @@ public sealed partial class AuthEmailSafetyTests
                 setup.TenantLicenses.Add(new TenantLicense
                 {
                     TenantId = tenantId, LicensePlanId = suite.Id, Status = LicenseStatuses.Active,
-                    StartsAt = DateTime.UtcNow.AddMonths(-1), ExpiresAt = DateTime.UtcNow.AddYears(1), MaxUsersOverride = 2,
+                    StartsAt = DateTime.UtcNow.AddMonths(-1), ExpiresAt = DateTime.UtcNow.AddYears(1), LicensedUsers = 2,
                 });
                 setup.Users.Add(new User { TenantId = tenantId, FullName = "Admin", Email = "admin@race.test", Role = AppRoles.Admin, IsActive = true });
                 await setup.SaveChangesAsync();

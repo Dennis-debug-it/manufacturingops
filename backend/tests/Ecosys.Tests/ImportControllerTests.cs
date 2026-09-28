@@ -62,7 +62,7 @@ public sealed class ImportControllerTests
     {
         await using var dbContext = CreateDbContext();
         var fixture = await SeedFixtureAsync(dbContext);
-        (await dbContext.TenantLicenses.SingleAsync(x => x.TenantId == fixture.Tenant.Id)).MaxUsersOverride = 2;
+        (await dbContext.TenantLicenses.SingleAsync(x => x.TenantId == fixture.Tenant.Id)).LicensedUsers = 2;
         await dbContext.SaveChangesAsync();
         var controller = CreateController(dbContext, fixture, new RecordingCredentialDeliveryService(), new QueueTemporaryPasswordService("TempPass!234", "TempPass!567"));
 
@@ -85,7 +85,7 @@ public sealed class ImportControllerTests
     {
         await using var dbContext = CreateDbContext();
         var fixture = await SeedFixtureAsync(dbContext);
-        (await dbContext.TenantLicenses.SingleAsync(x => x.TenantId == fixture.Tenant.Id)).MaxUsersOverride = 1;
+        (await dbContext.TenantLicenses.SingleAsync(x => x.TenantId == fixture.Tenant.Id)).LicensedUsers = 1;
         await dbContext.SaveChangesAsync();
         var controller = CreateController(dbContext, fixture, new RecordingCredentialDeliveryService(), new QueueTemporaryPasswordService("TempPass!234"));
 

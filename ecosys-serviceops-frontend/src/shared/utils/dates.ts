@@ -35,10 +35,10 @@ export const formatDate = (value: string | Date, pattern = 'dd MMM yyyy') => {
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const [year, month, day] = value.split('-').map(Number)
     const dateOnly = new Date(year!, month! - 1, day!)
-    return isValidDate(dateOnly) ? format(dateOnly, pattern) : '�'
+    return isValidDate(dateOnly) ? format(dateOnly, pattern) : '—'
   }
   const date = parseTimestamp(value)
-  if (!isValidDate(date)) return '�'
+  if (!isValidDate(date)) return '—'
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tenantTimeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date)
   const part = (type: string) => Number(parts.find((item) => item.type === type)?.value)
   return format(new Date(part('year'), part('month') - 1, part('day')), pattern)
@@ -49,7 +49,7 @@ export const formatDateTime = (value: string | Date) => {
   return isValidDate(date) ? new Intl.DateTimeFormat('en-GB', {
     timeZone: tenantTimeZone, day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZoneName: 'short',
-  }).format(date) : '�'
+  }).format(date) : '—'
 }
 export const formatTime = (value: string | Date, pattern = 'HH:mm') => {
   const date = parseTimestamp(value)

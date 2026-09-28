@@ -187,7 +187,6 @@ public sealed class LicenseReadOnlyEnforcementTests
         {
             PlanCode = "Suite",
             DisplayName = "Suite",
-            MaxUsers = 50,
             MaxBranches = 10,
             IsActive = true
         };

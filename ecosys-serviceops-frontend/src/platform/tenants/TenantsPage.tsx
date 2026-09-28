@@ -14,24 +14,13 @@ import { Field } from '../common'
 import { useCreateTenant, useLead, useTenants } from '../api'
 import { licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
 import type { PlatformTenantListItem } from '../types'
+import { buildCreateTenantPayload, DEFAULT_LICENSED_USERS, type CreateTenantForm } from './licensedUsers'
 
 const statusOptions = ['All', 'Active', 'Trial', 'Suspended', 'Inactive'] as const
 const trialOptions = ['All', 'TrialActive', 'TrialExpiringSoon', 'TrialExpired', 'TrialExtended', 'PaidActive'] as const
 
 type StatusFilter = (typeof statusOptions)[number]
 type TrialFilter = (typeof trialOptions)[number]
-
-type CreateTenantForm = {
-  companyName: string
-  slug: string
-  planCode: 'operations' | 'finance' | 'suite'
-  adminFullName: string
-  adminEmail: string
-  country: string
-  timeZoneId: string
-  /** Licensed workspace users (seats). Required: commercial plans carry no default limit. */
-  maxUsers: string
-}
 
 const countryTimeZones: Record<string, string> = {
   kenya: 'Africa/Nairobi', uganda: 'Africa/Kampala', rwanda: 'Africa/Kigali',
@@ -47,7 +36,7 @@ function suggestSlug(companyName: string) {
 
 const emptyForm: CreateTenantForm = {
   companyName: '', slug: '', planCode: 'suite', adminFullName: '', adminEmail: '',
-  country: 'Kenya', timeZoneId: 'Africa/Nairobi', maxUsers: '',
+  country: 'Kenya', timeZoneId: 'Africa/Nairobi', maxUsers: String(DEFAULT_LICENSED_USERS),
 }
 
 export function TenantsPage() {
@@ -138,7 +127,7 @@ export function TenantsPage() {
       header: 'Licensed users',
       cell: (row) => {
         const full = row.seatLimit != null && row.userCount >= row.seatLimit
-        return <span className={full ? 'font-medium text-amber-700' : undefined}>{row.userCount} / {row.seatLimit ?? 'unlimited'}</span>
+        return <span className={full ? 'font-medium text-amber-700' : undefined}>{row.userCount} / {row.seatLimit ?? '—'}</span>
       },
     },
     { key: 'createdAt', header: 'Created', cell: (row) => formatDate(row.createdAt) },
@@ -163,37 +152,14 @@ export function TenantsPage() {
   }
 
   const submitCreate = async () => {
-    if (!createForm.companyName.trim() || !createForm.slug.trim()) {
-      toast.error('Company name and workspace slug are required.')
-      return
-    }
-
-    if (!createForm.adminFullName.trim() || !createForm.adminEmail.trim() || !createForm.country.trim() || !createForm.timeZoneId.trim()) {
-      toast.error('Primary administrator, country and timezone are required.')
-      return
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(createForm.adminEmail.trim())) {
-      toast.error('Enter a valid administrator email address.')
-      return
-    }
-    const maxUsers = Number(createForm.maxUsers)
-    if (!Number.isInteger(maxUsers) || maxUsers <= 0) {
-      toast.error('Enter how many workspace users this tenant is licensed for.')
+    const result = buildCreateTenantPayload(createForm)
+    if (!result.ok) {
+      toast.error(result.error)
       return
     }
 
     try {
-      const payload = {
-        companyName: createForm.companyName.trim(),
-        slug: createForm.slug.trim(),
-        planCode: createForm.planCode,
-        maxUsers,
-        adminFullName: createForm.adminFullName.trim(),
-        adminEmail: createForm.adminEmail.trim(),
-        country: createForm.country.trim(),
-        timeZoneId: createForm.timeZoneId.trim(),
-      }
-      const created = await createTenant.mutateAsync(payload)
+      const created = await createTenant.mutateAsync(result.payload)
       if (created.initialAdminInvitationSent === false) {
         toast.error(`Tenant ${created.name} created. Invitation delivery failed; resend it from Users & Access.`)
       } else {
@@ -331,9 +297,9 @@ export function TenantsPage() {
             </div>
           </fieldset>
           <Field label="Licensed Users">
-            <input required type="number" min={1} step={1} inputMode="numeric" value={createForm.maxUsers} onChange={(event) => setCreateForm((current) => ({ ...current, maxUsers: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900 md:w-48" />
+            <input required data-testid="create-tenant-licensed-users" aria-describedby="create-tenant-licensed-users-help" type="number" min={1} step={1} inputMode="numeric" value={createForm.maxUsers} onChange={(event) => setCreateForm((current) => ({ ...current, maxUsers: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900 md:w-48" />
           </Field>
-          <p className="-mt-3 text-xs text-slate-500">Active workspace users (including pending invitations) count against this. It can be changed later from the tenant's Users tab.</p>
+          <p id="create-tenant-licensed-users-help" className="-mt-3 text-xs text-slate-500">Maximum number of licensed user accounts allowed for this tenant. Active workspace users (including pending invitations) count against it; client-portal contacts do not. It can be changed later from the tenant's Users tab.</p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Primary Admin Name">
               <input required autoComplete="name" value={createForm.adminFullName} onChange={(event) => setCreateForm((current) => ({ ...current, adminFullName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />

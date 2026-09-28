@@ -877,7 +877,7 @@ public sealed class WorkOrderExecutionFlowTests
                 false,
                 false,
                 false,
-                null,
+                10,
                 null,
                 false,
                 false,

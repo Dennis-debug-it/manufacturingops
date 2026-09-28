@@ -261,7 +261,7 @@ internal sealed partial class DemoWorkspaceService(
         license.SuspendedAt = null;
         license.SuspensionReason = null;
         license.CancelledAt = null;
-        license.MaxUsersOverride = 10;
+        license.LicensedUsers = TenantLicense.DefaultLicensedUsers;
         license.MaxBranchesOverride = 3;
         TenantLifecycleState.Sync(tenant, license, now);
     }

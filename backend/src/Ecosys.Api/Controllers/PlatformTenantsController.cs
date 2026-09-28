@@ -280,7 +280,7 @@ public sealed class PlatformTenantsController(
     }
 
     /// <summary>
-    /// Sets the tenant's licensed seat count (TenantLicense.MaxUsersOverride — the value LicenseGuardService
+    /// Sets the tenant's licensed seat count (TenantLicense.LicensedUsers — the value LicenseGuardService
     /// enforces). Lowering it below current usage never deactivates anyone: existing users keep access and
     /// new additions/reactivations are refused until usage falls under the limit.
     /// </summary>
@@ -295,8 +295,8 @@ public sealed class PlatformTenantsController(
 
         var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
         var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
-        var before = EffectiveSeatLimit(license);
-        license.MaxUsersOverride = request.MaxUsers;
+        var before = license.LicensedUsers;
+        license.LicensedUsers = request.MaxUsers;
         TenantLifecycleState.Sync(tenant, license, DateTime.UtcNow);
         tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -305,7 +305,7 @@ public sealed class PlatformTenantsController(
         await WriteAuditAsync(
             tenant,
             "platform.tenant.license.seats.updated",
-            $"Licensed users changed from {(before.HasValue ? before.Value.ToString() : "unlimited")} to {request.MaxUsers} ({used} in use)."
+            $"Licensed users changed from {before} to {request.MaxUsers} ({used} in use)."
                 + (used > request.MaxUsers ? " Usage exceeds the new limit; no users were deactivated, new additions are blocked until usage falls." : string.Empty),
             cancellationToken);
 
@@ -889,7 +889,7 @@ public sealed class PlatformTenantsController(
         {
             // Every tenant is provisioned with an explicit seat count; commercial plans carry no default,
             // so omitting it used to create unlimited workspaces (TM-P1-06).
-            throw new BusinessRuleException("Licensed users is required. Enter how many workspace users this tenant may have.");
+            throw new BusinessRuleException("Licensed user limit is required. Enter how many workspace users this tenant may have.");
         }
         ValidatePositive(request.MaxBranches, "Max branches");
         ValidateNotInPast(normalizedTrialEndsAt, todayUtc, "Trial end date");
@@ -1020,7 +1020,10 @@ public sealed class PlatformTenantsController(
         license.TrialEndsAt = trialEndsAt;
         license.ExpiresAt = normalizedExpiresAt ?? normalizedSubscriptionEndsAt ?? (isNewTenant ? trialEndsAt : license.ExpiresAt);
         // Omitted seat/branch limits keep the current licensed value; clearing a limit is not an edit side effect.
-        license.MaxUsersOverride = isNewTenant ? request.MaxUsers : request.MaxUsers ?? license.MaxUsersOverride;
+        if (request.MaxUsers is int licensedUsers)
+        {
+            license.LicensedUsers = licensedUsers;
+        }
         license.MaxBranchesOverride = isNewTenant ? request.MaxBranches : request.MaxBranches ?? license.MaxBranchesOverride;
         license.CreatedAt = EnsureUtc(license.CreatedAt);
         license.UpdatedAt = EnsureUtc(license.UpdatedAt);
@@ -1342,8 +1345,7 @@ public sealed class PlatformTenantsController(
     }
 
     /// <summary>The seat limit LicenseGuardService enforces: the tenant override, else the plan's.</summary>
-    private static int? EffectiveSeatLimit(TenantLicense? license) =>
-        license is null ? null : license.MaxUsersOverride ?? license.LicensePlan?.MaxUsers;
+    private static int? EffectiveSeatLimit(TenantLicense? license) => license?.LicensedUsers;
 
     private async Task<PlatformTenantSummaryResponse> BuildSummaryResponseAsync(Tenant tenant, CancellationToken cancellationToken)
     {

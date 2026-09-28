@@ -66,7 +66,7 @@ export interface PlatformTenantListItem {
   trialDaysRemaining: number | null
   trialStatus: TrialStatus | string
   createdAt: string
-  /** Effective licensed seats (what the backend enforces). Null = unlimited. */
+  /** Licensed users (what the backend enforces). Always set once the tenant has a license. */
   seatLimit?: number | null
   /** ServiceOps modules the plan entitles: 'operations' | 'finance'. */
   modules?: string[]
@@ -161,7 +161,6 @@ export interface PlatformLicensePlan {
   code: string
   monthlyPrice: number
   annualPrice: number
-  maxUsers: number | null
   maxBranches: number | null
   modulesIncluded: string[]
   isActive: boolean
@@ -179,6 +178,8 @@ export interface PlatformSubscription {
   endsAt: string | null
   trialEndsAt: string | null
   nextBillingDate: string | null
+  /** Licensed users on this license (always set, greater than zero). */
+  maxUsers: number
 }
 
 export interface PlatformFinanceDashboard {

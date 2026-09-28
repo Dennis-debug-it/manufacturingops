@@ -68,7 +68,7 @@ export function AccountSettingsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Plan" value={data.planName} />
         <StatCard label="Status" value={<StatusBadge status={data.status} />} tone={data.isSuspended ? 'danger' : 'default'} />
-        <StatCard label="Max Users" value={data.maxUsers ?? 'Unlimited'} />
+        <StatCard label="Licensed Users" value={data.maxUsers ?? '—'} />
         <StatCard label="Max Branches" value={data.maxBranches ?? 'Unlimited'} />
         <StatCard label="Started" value={formatDate(data.startsAt)} />
         <StatCard label={data.trialEndsAt ? 'Trial Ends' : 'Expires'} value={(data.trialEndsAt ?? data.expiresAt) ? formatDate((data.trialEndsAt ?? data.expiresAt) as string) : 'No expiry'} />

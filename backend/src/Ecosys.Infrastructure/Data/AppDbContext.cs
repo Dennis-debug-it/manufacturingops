@@ -1504,67 +1504,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.AnnualPrice).HasPrecision(18, 2);
             entity.Property(x => x.ModulesIncluded).HasMaxLength(1000);
             entity.HasIndex(x => x.PlanCode).IsUnique();
+            // Only the three ServiceOps offerings exist. The pre-ServiceOps Trial/Starter/Professional/Enterprise
+            // plans were retired by the RetireLegacyPlansAndRequireLicensedUsers migration.
             entity.HasData(
-                new LicensePlan
-                {
-                    Id = Guid.Parse("d220965a-38b4-45d0-9870-a8e45627e21a"),
-                    PlanCode = "Trial",
-                    DisplayName = "Trial",
-                    MonthlyPrice = 0,
-                    AnnualPrice = 0,
-                    MaxUsers = 5,
-                    MaxBranches = 1,
-                    ModulesIncluded = "Core",
-                    EmailIngestion = false,
-                    MonitoringIntegration = false,
-                    IsActive = false,
-                    CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new LicensePlan
-                {
-                    Id = Guid.Parse("7e2bc113-bc77-4206-8c53-4696402f69c0"),
-                    PlanCode = "Starter",
-                    DisplayName = "Starter",
-                    MonthlyPrice = 14900,
-                    AnnualPrice = 149000,
-                    MaxUsers = 15,
-                    MaxBranches = 3,
-                    ModulesIncluded = "Core,EmailIngestion",
-                    EmailIngestion = true,
-                    MonitoringIntegration = false,
-                    IsActive = false,
-                    CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new LicensePlan
-                {
-                    Id = Guid.Parse("4df8af7d-8514-45e7-ad42-f5d7b745fe71"),
-                    PlanCode = "Professional",
-                    DisplayName = "Professional",
-                    MonthlyPrice = 39900,
-                    AnnualPrice = 399000,
-                    MaxUsers = 50,
-                    MaxBranches = 10,
-                    ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration",
-                    EmailIngestion = true,
-                    MonitoringIntegration = true,
-                    IsActive = false,
-                    CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new LicensePlan
-                {
-                    Id = Guid.Parse("33fe16d8-5b55-45aa-89e2-1af0f2e7367d"),
-                    PlanCode = "Enterprise",
-                    DisplayName = "Enterprise",
-                    MonthlyPrice = 99900,
-                    AnnualPrice = 999000,
-                    MaxUsers = null,
-                    MaxBranches = null,
-                    ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration",
-                    EmailIngestion = true,
-                    MonitoringIntegration = true,
-                    IsActive = false,
-                    CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, DateTimeKind.Utc)
-                },
                 new LicensePlan
                 {
                     Id = Guid.Parse("55555555-5555-5555-5555-555555555551"), PlanCode = "operations",
@@ -1588,7 +1530,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
         modelBuilder.Entity<TenantLicense>(entity =>
         {
-            entity.ToTable("tenant_licenses");
+            entity.ToTable("tenant_licenses", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_tenant_licenses_LicensedUsers_Positive", "\"LicensedUsers\" > 0"));
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
             entity.Property(x => x.BillingCycle).HasMaxLength(30).IsRequired();

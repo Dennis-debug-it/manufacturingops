@@ -227,7 +227,7 @@ public sealed partial class AuthEmailSafetyTests
 
         var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(MinimalProvisioningRequest(maxUsers: null), CancellationToken.None));
 
-        Assert.Contains("Licensed users", error.Message);
+        Assert.StartsWith("Licensed user limit is required.", error.Message);
         Assert.False(await db.Tenants.AnyAsync(x => x.Slug == "acme-engineering"));
     }
 
@@ -272,7 +272,7 @@ public sealed partial class AuthEmailSafetyTests
 
         var license = await db.TenantLicenses.SingleAsync(x => x.TenantId == created.TenantId);
         var tenant = await db.Tenants.SingleAsync(x => x.Id == created.TenantId);
-        Assert.Equal(12, license.MaxUsersOverride);
+        Assert.Equal(12, license.LicensedUsers);
         Assert.Equal(LicenseStatuses.Suspended, license.Status);
         Assert.Equal(TenantStatuses.Suspended, tenant.Status);
         Assert.Equal("Acme Engineering Group", tenant.CompanyName);
@@ -285,14 +285,14 @@ public sealed partial class AuthEmailSafetyTests
         var tenantId = Guid.NewGuid();
         await SeedTenantAsync(db, tenantId, "Batch Co", "ops@batch.test");
         await SeedActiveLicenseAsync(db, tenantId, DateTime.UtcNow.AddDays(60));
-        (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).MaxUsersOverride = 5;
+        (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).LicensedUsers = 5;
         db.Users.Add(new User { TenantId = tenantId, FullName = "Admin", Email = "admin@batch.test", Role = AppRoles.Admin, IsActive = true });
         await db.SaveChangesAsync();
         var guard = new LicenseGuardService(db);
 
         await guard.EnsureCanAddUsersAsync(tenantId, 4);
         var error = await Assert.ThrowsAsync<LicenseException>(() => guard.EnsureCanAddUsersAsync(tenantId, 5));
-        Assert.Contains("only 4 of 5 seats remain", error.Message);
+        Assert.Contains("licensed user limit of 5: 5 active users requested but only 4 seats remain", error.Message);
         await guard.EnsureCanAddUsersAsync(tenantId, 0);
     }
 
@@ -336,13 +336,12 @@ public sealed partial class AuthEmailSafetyTests
         var operationsPlanId = Guid.Parse("55555555-5555-5555-5555-555555555551");
         var created = Assert.IsType<PlatformLicensePlanResponse>(Assert.IsType<OkObjectResult>((await controller.UpdatePlan(
             operationsPlanId,
-            new UpsertPlatformLicensePlanRequest("Ops", "operations", 0, 0, 25, null, ["EmailIngestion", "AdvancedReports", "ClientPortal"], true),
+            new UpsertPlatformLicensePlanRequest("Ops", "operations", 0, 0, null, ["EmailIngestion", "AdvancedReports", "ClientPortal"], true),
             CancellationToken.None)).Result).Value);
 
         Assert.DoesNotContain("AdvancedReports", created.ModulesIncluded);
         Assert.DoesNotContain("ClientPortal", created.ModulesIncluded);
         Assert.Contains("EmailIngestion", created.ModulesIncluded);
-        Assert.Equal(25, created.MaxUsers);
     }
 
     // ------------------------------------------------------------------ security

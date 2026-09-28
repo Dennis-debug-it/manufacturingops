@@ -3958,9 +3958,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<int?>("MaxBranches")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("MaxUsers")
-                        .HasColumnType("integer");
-
                     b.Property<string>("ModulesIncluded")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -3988,64 +3985,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("license_plans", (string)null);
 
                     b.HasData(
-                        new
-                        {
-                            Id = new Guid("d220965a-38b4-45d0-9870-a8e45627e21a"),
-                            AnnualPrice = 0m,
-                            CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayName = "Trial",
-                            EmailIngestion = false,
-                            IsActive = false,
-                            MaxBranches = 1,
-                            MaxUsers = 5,
-                            ModulesIncluded = "Core",
-                            MonitoringIntegration = false,
-                            MonthlyPrice = 0m,
-                            PlanCode = "Trial"
-                        },
-                        new
-                        {
-                            Id = new Guid("7e2bc113-bc77-4206-8c53-4696402f69c0"),
-                            AnnualPrice = 149000m,
-                            CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayName = "Starter",
-                            EmailIngestion = true,
-                            IsActive = false,
-                            MaxBranches = 3,
-                            MaxUsers = 15,
-                            ModulesIncluded = "Core,EmailIngestion",
-                            MonitoringIntegration = false,
-                            MonthlyPrice = 14900m,
-                            PlanCode = "Starter"
-                        },
-                        new
-                        {
-                            Id = new Guid("4df8af7d-8514-45e7-ad42-f5d7b745fe71"),
-                            AnnualPrice = 399000m,
-                            CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayName = "Professional",
-                            EmailIngestion = true,
-                            IsActive = false,
-                            MaxBranches = 10,
-                            MaxUsers = 50,
-                            ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration",
-                            MonitoringIntegration = true,
-                            MonthlyPrice = 39900m,
-                            PlanCode = "Professional"
-                        },
-                        new
-                        {
-                            Id = new Guid("33fe16d8-5b55-45aa-89e2-1af0f2e7367d"),
-                            AnnualPrice = 999000m,
-                            CreatedAt = new DateTime(2026, 4, 30, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayName = "Enterprise",
-                            EmailIngestion = true,
-                            IsActive = false,
-                            ModulesIncluded = "Core,EmailIngestion,MonitoringIntegration",
-                            MonitoringIntegration = true,
-                            MonthlyPrice = 99900m,
-                            PlanCode = "Enterprise"
-                        },
                         new
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555551"),
@@ -7730,10 +7669,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid>("LicensePlanId")
                         .HasColumnType("uuid");
 
-                    b.Property<int?>("MaxBranchesOverride")
+                    b.Property<int>("LicensedUsers")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("MaxUsersOverride")
+                    b.Property<int?>("MaxBranchesOverride")
                         .HasColumnType("integer");
 
                     b.Property<bool?>("MonitoringIntegrationOverride")
@@ -7780,7 +7719,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("TenantId")
                         .IsUnique();
 
-                    b.ToTable("tenant_licenses", (string)null);
+                    b.ToTable("tenant_licenses", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_tenant_licenses_LicensedUsers_Positive", "\"LicensedUsers\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantModuleSetting", b =>

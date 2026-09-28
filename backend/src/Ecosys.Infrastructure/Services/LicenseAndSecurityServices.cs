@@ -87,7 +87,7 @@ public sealed record TenantLicenseSnapshot(
     bool IsReadOnly,
     bool IsSuspended,
     bool IsGracePeriod,
-    int? MaxUsers,
+    int MaxUsers,
     int? MaxBranches,
     bool EmailIngestion,
     bool MonitoringIntegration,
@@ -103,7 +103,7 @@ public sealed record PlatformLicenseUsageSnapshot(
     string Status,
     int ActiveUsers,
     int ActiveBranches,
-    int? MaxUsers,
+    int MaxUsers,
     int? MaxBranches,
     bool IsReadOnly,
     bool IsSuspended,
@@ -225,20 +225,15 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
         await LockLicenseRowAsync(tenantId, cancellationToken);
 
         var snapshot = await GetSnapshotAsync(tenantId, cancellationToken);
-        if (!snapshot.MaxUsers.HasValue)
-        {
-            return;
-        }
-
         var used = await CountSeatsUsedAsync(tenantId, cancellationToken);
-        var limit = snapshot.MaxUsers.Value;
+        var limit = snapshot.MaxUsers;
         if (used + count > limit)
         {
             var remaining = Math.Max(0, limit - used);
             throw new LicenseException(
                 count == 1
-                    ? $"Licensed user capacity reached: {used} of {limit} seats are in use. Deactivate a user or contact Ecosys to add seats."
-                    : $"Licensed user capacity exceeded: this would add {count} active users but only {remaining} of {limit} seats remain. Deactivate users or contact Ecosys to add seats.",
+                    ? $"This tenant has reached its licensed user limit of {limit}. {used} seats are in use; deactivate a user or contact Ecosys to add seats."
+                    : $"This would exceed the tenant's licensed user limit of {limit}: {count} active users requested but only {remaining} seat{(remaining == 1 ? "" : "s")} remain. Deactivate users or contact Ecosys to add seats.",
                 "license_users_limit_reached",
                 409);
         }
@@ -310,13 +305,16 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             return existing;
         }
 
-        var trialPlan = await dbContext.LicensePlans.SingleAsync(x => x.PlanCode == LicenseStatuses.Trial, cancellationToken);
+        // A new workspace starts as a trial of the full Suite with the default licensed-user count. "Trial" is
+        // a license status, not a plan; callers that know the real plan/seat count overwrite both.
+        var trialPlan = await dbContext.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite, cancellationToken);
         var now = DateTime.UtcNow;
         var trialEndsAt = now.AddDays(14);
         var tenantLicense = new TenantLicense
         {
             TenantId = tenantId,
             LicensePlanId = trialPlan.Id,
+            LicensedUsers = TenantLicense.DefaultLicensedUsers,
             Status = LicenseStatuses.Trial,
             StartsAt = now,
             TrialEndsAt = trialEndsAt,
@@ -401,7 +399,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             isReadOnly,
             isSuspended,
             isGrace,
-            tenantLicense.MaxUsersOverride ?? plan.MaxUsers,
+            tenantLicense.LicensedUsers,
             tenantLicense.MaxBranchesOverride ?? plan.MaxBranches,
             tenantLicense.EmailIngestionOverride ?? plan.EmailIngestion,
             tenantLicense.MonitoringIntegrationOverride ?? plan.MonitoringIntegration,

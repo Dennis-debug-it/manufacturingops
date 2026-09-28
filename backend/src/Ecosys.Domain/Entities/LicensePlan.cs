@@ -8,7 +8,6 @@ public sealed class LicensePlan : AuditableEntity
     public string DisplayName { get; set; } = string.Empty;
     public decimal MonthlyPrice { get; set; }
     public decimal AnnualPrice { get; set; }
-    public int? MaxUsers { get; set; }
     public int? MaxBranches { get; set; }
     public string? ModulesIncluded { get; set; }
     public bool EmailIngestion { get; set; }

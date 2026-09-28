@@ -39,7 +39,16 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
     /// suppressed by a stale timestamp from a prior overdue period.
     /// </summary>
     public DateTime? OverdueWarningSentAt { get; set; }
-    public int? MaxUsersOverride { get; set; }
+    /// <summary>Licensed users given to a new license when the caller does not choose a number.</summary>
+    public const int DefaultLicensedUsers = 10;
+
+    /// <summary>
+    /// The tenant's licensed-user (seat) limit — the single source of truth LicenseGuardService enforces.
+    /// Always explicit and greater than zero (CK_tenant_licenses_LicensedUsers_Positive); plans carry no
+    /// user limit. Active workspace users, pending invitees included, consume a seat; deactivated users
+    /// and client-portal contacts do not.
+    /// </summary>
+    public int LicensedUsers { get; set; } = DefaultLicensedUsers;
     public int? MaxBranchesOverride { get; set; }
     public bool? EmailIngestionOverride { get; set; }
     public bool? MonitoringIntegrationOverride { get; set; }

@@ -12,7 +12,6 @@ interface PlatformLicensePlan {
   code: string
   monthlyPrice: number
   annualPrice: number
-  maxUsers: number | null
   modulesIncluded: string[]
   isActive: boolean
 }
@@ -31,7 +30,6 @@ function FeatureCell({ plan, moduleName, canManage }: { plan: PlatformLicensePla
         code: plan.code,
         monthlyPrice: plan.monthlyPrice,
         annualPrice: plan.annualPrice,
-        maxUsers: plan.maxUsers,
         modulesIncluded: nextModules,
         isActive: plan.isActive,
       })

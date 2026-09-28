@@ -283,7 +283,8 @@ export interface CreateTenantPayload {
   address?: string
   taxPin?: string
   planName?: string
-  maxUsers?: number | null
+  /** Licensed users (seats). Required: the API rejects a tenant without one. */
+  maxUsers: number
   maxBranches?: number | null
   trialEndsAt?: string | null
   subscriptionEndsAt?: string | null

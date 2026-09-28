@@ -251,7 +251,7 @@ public sealed partial class AuthEmailSafetyTests
             Assert.IsType<CreatedAtActionResult>((await controller.Create(MinimalProvisioningRequest(), CancellationToken.None)).Result).Value);
 
         var snapshot = await guard.GetSnapshotAsync(created.TenantId);
-        Assert.True(snapshot.MaxUsers.HasValue, "Tenant was provisioned with unlimited workspace seats (effective MaxUsers is null).");
+        Assert.Equal(10, snapshot.MaxUsers);
     }
 
     /// <summary>
@@ -266,7 +266,7 @@ public sealed partial class AuthEmailSafetyTests
         var tenantId = Guid.NewGuid();
         await SeedTenantAsync(db, tenantId, "Seat Co", "ops@seat.test");
         await SeedActiveLicenseAsync(db, tenantId, DateTime.UtcNow.AddDays(100));
-        (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).MaxUsersOverride = 3;
+        (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).LicensedUsers = 3;
         db.Users.AddRange(
             new User { TenantId = tenantId, FullName = "Active", Email = "a@seat.test", Role = AppRoles.Admin, IsActive = true },
             new User { TenantId = tenantId, FullName = "Pending", Email = "p@seat.test", Role = AppRoles.Viewer, IsActive = true, MustChangePassword = true },
@@ -293,7 +293,7 @@ public sealed partial class AuthEmailSafetyTests
         var tenantId = Guid.NewGuid();
         await SeedTenantAsync(db, tenantId, "Full Co", "ops@full.test");
         await SeedActiveLicenseAsync(db, tenantId, DateTime.UtcNow.AddDays(100));
-        (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).MaxUsersOverride = 1;
+        (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).LicensedUsers = 1;
         db.Users.Add(new User { TenantId = tenantId, FullName = "Only Admin", Email = "admin@full.test", Role = AppRoles.Admin, IsActive = true });
         await db.SaveChangesAsync();
         var controller = CreateAuditPlatformTenantsController(db, new LicenseGuardService(db));

@@ -70,7 +70,7 @@ internal sealed class TestDataSeeder(
             City        = "Nairobi",
             Status      = "Active",
             LicenseStatus = "Trial",
-            PlanName    = "Trial",
+            PlanName    = "Ecosys ServiceOps Suite",
             MaxUsers    = 5,
             MaxBranches = 1,
             IsActive    = true,
@@ -83,12 +83,13 @@ internal sealed class TestDataSeeder(
 
         // ── 2. Tenant license ────────────────────────────────────────────────
         var trialPlan = await dbContext.LicensePlans
-            .SingleAsync(x => x.PlanCode == "Trial", cancellationToken);
+            .SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite, cancellationToken);
 
         dbContext.TenantLicenses.Add(new TenantLicense
         {
             TenantId      = DemoTenantId,
             LicensePlanId = trialPlan.Id,
+            LicensedUsers = 5,
             Status        = "Trial",
             StartsAt      = now,
             TrialEndsAt   = now.AddDays(30),

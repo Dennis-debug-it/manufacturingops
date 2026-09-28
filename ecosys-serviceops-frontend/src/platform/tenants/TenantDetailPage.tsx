@@ -38,6 +38,7 @@ import {
 import { SectionTitle, licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
 import { NewWorkspaceUserDrawer } from './NewWorkspaceUserDrawer'
 import { LicenseTermDialog } from './LicenseTermDialog'
+import { parseLicensedUsers, summarizeSeats } from './licensedUsers'
 import type { PlatformTenantAuditLog } from '../types'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import type { PlatformTenantNumbering, PlatformTenantUser } from '../api'
@@ -67,7 +68,7 @@ const inputClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm 
 
 /** Seats are shown as "used / limit"; a null limit means the tenant predates required seat limits. */
 function formatSeats(used: number, limit: number | null | undefined) {
-  return limit != null ? `${used} / ${limit}` : `${used} / unlimited`
+  return limit != null ? `${used} / ${limit}` : `${used} / —`
 }
 
 const invitationLabels: Record<string, { label: string; className: string }> = {
@@ -129,7 +130,8 @@ export function TenantDetailPage() {
 
   const seatsUsed = tenant.seatsUsed ?? tenant.userCount
   const seatLimit = tenant.seatLimit ?? tenant.maxUsers
-  const seatsFull = seatLimit != null && seatsUsed >= seatLimit
+  const seats = summarizeSeats(seatsUsed, seatLimit)
+  const seatsFull = seats.isFull
   const modules = tenant.modules ?? []
   const isTrial = tenant.status === 'Trial'
   const isSuspended = tenant.status === 'Suspended'
@@ -219,8 +221,9 @@ export function TenantDetailPage() {
     setShowSeatsDialog(true)
   }
 
-  const parsedSeats = Number(seatsInput)
-  const seatsValid = Number.isInteger(parsedSeats) && parsedSeats > 0
+  const seatsParse = parseLicensedUsers(seatsInput)
+  const seatsValid = seatsParse.ok
+  const parsedSeats = seatsParse.ok ? seatsParse.value : 0
 
   const tenantUserColumns: DataTableColumn<PlatformTenantUser>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <span className="font-medium text-slate-900">{row.fullName}</span> },
@@ -325,14 +328,26 @@ export function TenantDetailPage() {
           Edit licensed users
         </button>
       </div>
-      <div className="mt-3 flex flex-wrap items-baseline gap-2">
-        <span className="text-2xl font-semibold text-slate-900">{formatSeats(seatsUsed, seatLimit)}</span>
-        <span className="text-sm text-slate-500">seats in use</span>
-      </div>
+      <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" data-testid="tenant-seats-licensed">
+          <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Licensed Users</dt>
+          <dd className="mt-1 text-2xl font-semibold text-slate-900">{seats.licensed ?? '—'}</dd>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" data-testid="tenant-seats-current">
+          <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Current Users</dt>
+          <dd className="mt-1 text-2xl font-semibold text-slate-900">{seats.current}</dd>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" data-testid="tenant-seats-remaining">
+          <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Remaining Seats</dt>
+          <dd className={`mt-1 text-2xl font-semibold ${seats.isFull ? 'text-amber-700' : 'text-slate-900'}`}>{seats.remaining ?? '—'}</dd>
+        </div>
+      </dl>
       {seatLimit == null ? (
-        <p className="mt-2 text-sm text-amber-700">No seat limit is set for this tenant. Set licensed users so capacity is enforced.</p>
+        <p className="mt-2 text-sm text-amber-700">This tenant has no license yet. Set licensed users to create one.</p>
+      ) : seats.isOverLimit ? (
+        <p className="mt-2 text-sm text-amber-700">{seats.current} active users exceed the licensed limit of {seats.licensed}. Nobody was deactivated; new users and reactivations are blocked until usage falls below the limit or it is raised.</p>
       ) : seatsFull ? (
-        <p className="mt-2 text-sm text-amber-700">Licensed user capacity is reached. New users and reactivations are blocked until a seat is freed or the limit is raised.</p>
+        <p className="mt-2 text-sm text-amber-700">This tenant has reached its licensed user limit of {seats.licensed}. New users and reactivations are blocked until a seat is freed or the limit is raised.</p>
       ) : null}
     </section>
   )
@@ -382,7 +397,7 @@ export function TenantDetailPage() {
                 type="button"
                 onClick={() => setShowAddWorkspaceUser(true)}
                 disabled={seatsFull}
-                title={seatsFull ? 'Licensed user capacity is reached' : undefined}
+                title={seatsFull ? `This tenant has reached its licensed user limit of ${seats.licensed}` : undefined}
                 className={primaryButton}
               >
                 <UserPlus className="h-4 w-4" />
@@ -786,7 +801,9 @@ export function TenantDetailPage() {
         <div className="mt-4">
           <label htmlFor="tenant-seats-input" className="mb-1.5 block text-sm font-medium text-slate-700">Licensed users</label>
           <input id="tenant-seats-input" type="number" min={1} step={1} value={seatsInput} onChange={(event) => setSeatsInput(event.target.value)} className={inputClass} />
-          {seatsValid && parsedSeats < seatsUsed ? (
+          {!seatsParse.ok ? (
+            <p className="mt-2 text-sm text-rose-700">{seatsParse.error}</p>
+          ) : parsedSeats < seatsUsed ? (
             <p className="mt-2 text-sm text-amber-700">This is below the {seatsUsed} users already active. Nobody is deactivated; new additions stay blocked until usage is under {parsedSeats}.</p>
           ) : null}
         </div>
