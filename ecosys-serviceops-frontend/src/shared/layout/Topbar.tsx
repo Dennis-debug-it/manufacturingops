@@ -4,9 +4,10 @@ import { useAuth } from '../hooks/useAuth'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { cn } from '../utils/cn'
 import { Logo } from '../components/Logo'
+import { isDemoTenant } from '../demoWorkspace'
 
 export function Topbar() {
-  const { tenant, user, logout } = useAuth()
+  const { tenant, user, logout, isImpersonating } = useAuth()
   const online = useOnlineStatus()
   const navigate = useNavigate()
 
@@ -40,8 +41,12 @@ export function Topbar() {
         <button
           type="button"
           onClick={async () => {
+            // Logout itself redirects demo and impersonation sessions; don't send those to the sign-in form.
+            const redirected = isImpersonating || isDemoTenant(tenant?.tenantId)
             await logout()
-            navigate('/login')
+            if (!redirected) {
+              navigate('/login')
+            }
           }}
           className={cn(
             'inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--app-border)] px-3 text-sm font-medium text-slate-700 transition hover:bg-[var(--app-primary-soft)]',

@@ -115,6 +115,22 @@ public sealed class DemoWorkspaceSeedTests
     }
 
     [Fact]
+    public async Task OpeningARole_OnlyAcceptsTheDemosOwnLogins()
+    {
+        await using var db = CreateDbContext();
+        var service = CreateService(db);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.FindLoginUserIdAsync("technician"));
+        await service.ResetAsync(null, null, CancellationToken.None);
+        db.Users.Add(new User { TenantId = Guid.NewGuid(), FullName = "Real admin", Username = "owner", Email = "owner@realco.test", PasswordHash = "x", Role = AppRoles.Admin, IsActive = true });
+        await db.SaveChangesAsync();
+
+        var technicianId = await service.FindLoginUserIdAsync(" TECHNICIAN ");
+        Assert.Equal(DemoId, (await db.Users.IgnoreQueryFilters().SingleAsync(x => x.Id == technicianId)).TenantId);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.FindLoginUserIdAsync("owner"));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.FindLoginUserIdAsync(null));
+    }
+
+    [Fact]
     public async Task Reset_RefusesATenantThatIsNotTheDemo()
     {
         await using var db = CreateDbContext();

@@ -107,6 +107,7 @@ export function getSession(): AuthSession | null {
 }
 
 export function clearSession() {
+  const mine = authToken
   session = null
   authToken = null
   refreshTokenValue = null
@@ -116,9 +117,97 @@ export function clearSession() {
   if (!hasWindow()) {
     return
   }
+  // The stored session is shared by every tab. If another tab has since signed in as someone else,
+  // this tab's session is already gone from storage, and clearing it would sign that other user out.
+  const stored = window.localStorage.getItem(tokenKey)
+  if (mine && stored && stored !== mine && !sameUser(readStoredSession(), mine)) {
+    return
+  }
   window.localStorage.removeItem(storageKey)
   window.localStorage.removeItem(tokenKey)
   window.localStorage.removeItem(refreshTokenKey)
+}
+
+function readStoredSession(): AuthSession | null {
+  const stored = window.localStorage.getItem(storageKey)
+  if (!stored) {
+    return null
+  }
+  try {
+    return JSON.parse(stored) as AuthSession
+  } catch {
+    return null
+  }
+}
+
+function sameUser(stored: AuthSession | null, token: string | null) {
+  return Boolean(stored && session && token && stored.user?.userId === session.user?.userId)
+}
+
+/**
+ * How this tab's session relates to the one stored for all tabs:
+ * - `current`: it is the stored session (or this tab is impersonating, which never uses storage);
+ * - `refreshed`: another tab refreshed the same user's tokens; this tab has now adopted them;
+ * - `switched`: another tab signed in as a different user, so this tab is acting on a stale identity;
+ * - `signedOut`: another tab signed out.
+ * Refresh tokens rotate, so a tab still holding the old pair would otherwise fail to refresh and
+ * sign everyone out.
+ */
+export type OtherTabState = 'current' | 'refreshed' | 'switched' | 'signedOut'
+
+export function syncWithOtherTabs(): OtherTabState {
+  if (!hasWindow() || getImpersonationSession() || !authToken) {
+    return 'current'
+  }
+  const storedToken = window.localStorage.getItem(tokenKey)
+  if (storedToken === authToken) {
+    return 'current'
+  }
+  if (!storedToken) {
+    session = null
+    authToken = null
+    refreshTokenValue = null
+    return 'signedOut'
+  }
+  const stored = readStoredSession()
+  if (sameUser(stored, authToken)) {
+    session = stored
+    authToken = storedToken
+    refreshTokenValue = null
+    return 'refreshed'
+  }
+  session = null
+  authToken = null
+  refreshTokenValue = null
+  return 'switched'
+}
+
+/**
+ * Keeps this tab in step with sign-ins and sign-outs in other tabs, instead of carrying on as
+ * whoever it was when it loaded. Calls back when this tab's user is no longer the signed-in one.
+ */
+export function watchOtherTabs(onSuperseded: (state: 'switched' | 'signedOut' | 'signedIn') => void): () => void {
+  if (!hasWindow()) {
+    return () => {}
+  }
+  const listener = (event: StorageEvent) => {
+    if (event.storageArea !== window.localStorage || (event.key !== null && event.key !== tokenKey && event.key !== storageKey)) {
+      return
+    }
+    if (!authToken && !getImpersonationSession()) {
+      // A signed-out tab (e.g. sitting on the sign-in form) follows a sign-in made in another tab.
+      if (window.localStorage.getItem(tokenKey)) {
+        onSuperseded('signedIn')
+      }
+      return
+    }
+    const state = syncWithOtherTabs()
+    if (state === 'switched' || state === 'signedOut') {
+      onSuperseded(state)
+    }
+  }
+  window.addEventListener('storage', listener)
+  return () => window.removeEventListener('storage', listener)
 }
 
 export function setLogoutHandler(handler: (() => void) | null) {

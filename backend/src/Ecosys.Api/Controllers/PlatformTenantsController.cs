@@ -1719,7 +1719,7 @@ public sealed class PlatformTenantsController(
     private static DateTime? EnsureUtc(DateTime? value) =>
         value.HasValue ? EnsureUtc(value.Value) : null;
 
-    private static PermissionResponse MapPermissions(UserPermissionsModel permissions) =>
+    internal static PermissionResponse MapPermissions(UserPermissionsModel permissions) =>
         new()
         {
             CanViewWorkOrders = permissions.CanViewWorkOrders,

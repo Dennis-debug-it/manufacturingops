@@ -11,7 +11,9 @@ import {
   setImpersonationSession,
   setLogoutHandler,
   setSession,
+  watchOtherTabs,
 } from '../api/sessionStore'
+import { isDemoTenant } from '../demoWorkspace'
 import { setTenantTimeZone } from '../utils/dates'
 import { normalizeRole } from '../utils/normalizeRole'
 import type { AuthSession, LoginRequest, LoginResponse, MeResponse } from '../types/auth'
@@ -83,6 +85,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return () => setLogoutHandler(null)
   }, [])
 
+  // Another tab signing in as someone else (or out) replaces the session every tab shares. Follow it rather than
+  // carry on as the old user, whose requests would now fail as unauthorized.
+  const demoSession = isDemoTenant(session?.tenant?.tenantId)
+  useEffect(() => watchOtherTabs((state) => {
+    setStateSession(null)
+    if (state === 'signedOut' && demoSession) {
+      window.location.assign('/demo/signed-out')
+    } else if (state === 'signedIn') {
+      window.location.assign('/')
+    } else {
+      window.location.reload()
+    }
+  }), [demoSession])
+
   useEffect(() => {
     let mounted = true
     const bootstrap = async () => {
@@ -144,6 +160,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const logout = useCallback(async () => {
     const wasImpersonating = Boolean(session?.impersonation)
+    const wasDemo = isDemoTenant(session?.tenant?.tenantId)
     try {
       await api.post<void>(endpoints.auth.logout, {})
     } catch {
@@ -156,8 +173,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setAuthToken(null)
       }
       setStateSession(null)
-      if (wasImpersonating && typeof window !== 'undefined') {
-        window.location.assign('/login')
+      if (typeof window !== 'undefined') {
+        // A demo role opened from the platform goes back there to pick another; a demo login signed in with the
+        // password (shown only once) is told how to get back in, rather than dropped at a bare sign-in form.
+        if (wasDemo) {
+          window.location.assign(wasImpersonating ? '/platform/demo' : '/demo/signed-out')
+        } else if (wasImpersonating) {
+          window.location.assign('/login')
+        }
       }
     }
   }, [session])

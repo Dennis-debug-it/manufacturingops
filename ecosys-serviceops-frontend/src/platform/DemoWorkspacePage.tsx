@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Copy, ExternalLink, KeyRound, RotateCcw } from 'lucide-react'
+import { Copy, ExternalLink, KeyRound, LogIn, RotateCcw } from 'lucide-react'
 import { api } from '../shared/api/apiClient'
+import { setImpersonationSession } from '../shared/api/sessionStore'
+import type { TenantImpersonationResponse } from '../shared/types/auth'
 import { PageHeader } from '../shared/components/PageHeader'
 import { StatCard } from '../shared/components/StatCard'
 import { Spinner } from '../shared/components/Spinner'
@@ -68,6 +70,26 @@ export function DemoWorkspacePage() {
 
   const portalLink = useMutation({
     mutationFn: () => api.post<{ url: string }>(`${endpoint}/portal-link`),
+  })
+
+  // Opens the demo as that role in this tab, with no password: the platform session stays signed in underneath, and
+  // leaving the demo comes back here to pick another role.
+  const openRole = useMutation({
+    mutationFn: (username: string) => api.post<TenantImpersonationResponse>(`${endpoint}/open`, { username }),
+    onSuccess: (result) => {
+      setImpersonationSession({
+        token: result.token,
+        user: result.user,
+        tenant: result.tenant,
+        branches: [],
+        impersonation: {
+          impersonatedByUserId: result.impersonatedByUserId,
+          impersonatedByName: result.impersonatedByName,
+          startedAt: result.startedAt,
+        },
+      })
+      window.location.assign('/')
+    },
   })
 
   const openPortal = () => {
@@ -151,7 +173,7 @@ export function DemoWorkspacePage() {
                 <h2 className="text-sm font-semibold text-slate-900">Staff sign-in</h2>
                 <p className="mt-1 text-sm text-slate-600">
                   At <a href={loginUrl} target="_blank" rel="noreferrer" className="font-medium text-[var(--app-primary)] underline underline-offset-4">{loginUrl}</a>, sign in with a username below and company name{' '}
-                  <strong>{data.companyName}</strong>.{password ? '' : ' Reset the demo to get a new password.'}
+                  <strong>{data.companyName}</strong>, or press <strong>Open</strong> to go straight in as that role.{password ? '' : ' Reset the demo to get a new password.'}
                 </p>
               </div>
               <p className="text-xs text-slate-500">
@@ -165,7 +187,8 @@ export function DemoWorkspacePage() {
                     <th className="py-2 pr-4 font-semibold">Username</th>
                     <th className="py-2 pr-4 font-semibold">Name</th>
                     <th className="py-2 pr-4 font-semibold">Role</th>
-                    <th className="py-2 font-semibold">What it shows</th>
+                    <th className="py-2 pr-4 font-semibold">What it shows</th>
+                    <th className="py-2 font-semibold"><span className="sr-only">Open</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -178,7 +201,18 @@ export function DemoWorkspacePage() {
                       </td>
                       <td className="py-2.5 pr-4 text-slate-700">{login.fullName}</td>
                       <td className="py-2.5 pr-4 text-slate-700">{login.role}</td>
-                      <td className="py-2.5 text-slate-600">{login.shows}</td>
+                      <td className="py-2.5 pr-4 text-slate-600">{login.shows}</td>
+                      <td className="py-2.5 text-right">
+                        <button
+                          type="button"
+                          onClick={() => openRole.mutate(login.username)}
+                          disabled={openRole.isPending}
+                          className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg bg-[var(--app-primary)] px-3 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60"
+                        >
+                          <LogIn className="h-4 w-4" />
+                          {openRole.isPending && openRole.variables === login.username ? 'Opening…' : 'Open'}
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

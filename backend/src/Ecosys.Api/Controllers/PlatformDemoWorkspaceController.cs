@@ -16,9 +16,37 @@ namespace Ecosys.Api.Controllers;
 [Route("api/platform/demo-workspace")]
 public sealed class PlatformDemoWorkspaceController(
     IDemoWorkspaceService demoWorkspaceService,
+    IMvpAuthService authService,
+    ITenantTimeZoneService tenantTimeZoneService,
     ITenantContext tenantContext,
     IOptions<PublicAppOptions> publicAppOptions) : ControllerBase
 {
+    /// <summary>
+    /// Opens the demo as one of its staff logins without a password: an impersonation session, so it stays in the
+    /// presenter's tab and leaving it returns them to the platform. Only the demo's own logins can be opened.
+    /// </summary>
+    [HttpPost("open")]
+    public async Task<ActionResult<TenantImpersonationResponse>> Open([FromBody] OpenDemoRequest request, CancellationToken cancellationToken)
+    {
+        var userId = await demoWorkspaceService.FindLoginUserIdAsync(request?.Username, cancellationToken);
+        var result = await authService.ImpersonateUserAsync(
+            DemoWorkspace.TenantId, userId, tenantContext.GetRequiredUserId(), tenantContext.Email ?? "Platform admin", "Demo workspace", cancellationToken);
+        return Ok(new TenantImpersonationResponse(
+            result.Token,
+            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, null, false, PlatformTenantsController.MapPermissions(result.Permissions)),
+            new LoginTenantDto(
+                result.TenantId,
+                result.CompanyName,
+                result.Country,
+                result.Industry,
+                result.LogoUrl,
+                result.ShowPoweredByEcosys,
+                await tenantTimeZoneService.GetTimeZoneIdAsync(result.TenantId, cancellationToken)),
+            result.ImpersonatedByUserId,
+            result.ImpersonatedByName,
+            result.StartedAt));
+    }
+
     [HttpGet]
     public async Task<ActionResult<DemoWorkspaceStatus>> Get(CancellationToken cancellationToken) =>
         Ok(await demoWorkspaceService.GetStatusAsync(cancellationToken));
@@ -45,3 +73,4 @@ public sealed class PlatformDemoWorkspaceController(
 }
 
 public sealed record DemoPortalLinkResponse(string Url);
+public sealed record OpenDemoRequest(string? Username);
