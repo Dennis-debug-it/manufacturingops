@@ -135,3 +135,38 @@ describe('attachAuthInterceptors — suppressGlobalErrorToast', () => {
     expect(toast.error).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('attachAuthInterceptors — a 401 after another tab switched user', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('reloads as the new user instead of refreshing or clearing their session', async () => {
+    const reload = vi.fn()
+    vi.stubGlobal('window', { location: { reload, pathname: '/work-orders', assign: vi.fn() } })
+    const { client, invokeResponseError } = createFakeClient()
+    const clearSession = vi.fn()
+    const refresh = vi.fn()
+    attachAuthInterceptors(client, {
+      getToken: () => 'admin-token',
+      clearSession,
+      triggerLogout: vi.fn(),
+      loginPath: '/login',
+      refresh,
+      syncWithOtherTabs: () => 'switched',
+    })
+
+    await expect(
+      invokeResponseError({
+        isAxiosError: true,
+        response: { status: 401, data: {} },
+        config: { url: '/api/work-orders', headers: { Authorization: 'Bearer tech-token' } },
+      }),
+    ).rejects.toBeInstanceOf(ApiError)
+
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(refresh).not.toHaveBeenCalled()
+    expect(clearSession).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+})

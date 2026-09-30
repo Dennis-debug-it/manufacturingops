@@ -40,6 +40,11 @@ export interface AuthInterceptorConfig {
    * refresh isn't possible (no refresh token, impersonation, or the refresh itself failed).
    */
   refresh?: () => Promise<string | null>
+  /**
+   * Compares this tab's session with the one other tabs share (see sessionStore.syncWithOtherTabs).
+   * A 401 caused by another tab signing in as someone else must not refresh or clear that session.
+   */
+  syncWithOtherTabs?: () => 'current' | 'refreshed' | 'switched' | 'signedOut'
 }
 
 /** True for auth flows (sign-in, sign-up, password reset, token refresh) that handle errors themselves. */
@@ -109,12 +114,34 @@ export function attachAuthInterceptors(client: AxiosInstance, config: AuthInterc
         // Try a single silent refresh before ending the session. `_ecosysRetried` prevents an
         // infinite loop when the retried request 401s again (e.g. the session was revoked).
         const retriableRequest = originalRequest as (typeof originalRequest & { _ecosysRetried?: boolean }) | undefined
+        const tabState = config.syncWithOtherTabs?.() ?? 'current'
+        if (tabState === 'switched' || tabState === 'signedOut') {
+          // Another tab signed in as someone else, or signed out: reload as whoever is signed in now.
+          if (typeof window !== 'undefined') {
+            window.location.reload()
+          }
+          return Promise.reject(apiError)
+        }
+        if (tabState === 'refreshed' && retriableRequest && !retriableRequest._ecosysRetried) {
+          retriableRequest._ecosysRetried = true
+          retriableRequest.headers = retriableRequest.headers ?? {}
+          retriableRequest.headers.Authorization = `Bearer ${config.getToken()}`
+          return client(retriableRequest)
+        }
         if (config.refresh && retriableRequest && !retriableRequest._ecosysRetried) {
           const newToken = await refreshOnce(config.refresh)
           if (newToken) {
             retriableRequest._ecosysRetried = true
             retriableRequest.headers = retriableRequest.headers ?? {}
             retriableRequest.headers.Authorization = `Bearer ${newToken}`
+            return client(retriableRequest)
+          }
+          // Two tabs refreshing at once: the refresh token rotates, so the slower tab's attempt fails
+          // while the faster tab's new tokens are already stored. Use those rather than signing out.
+          if (config.syncWithOtherTabs?.() === 'refreshed') {
+            retriableRequest._ecosysRetried = true
+            retriableRequest.headers = retriableRequest.headers ?? {}
+            retriableRequest.headers.Authorization = `Bearer ${config.getToken()}`
             return client(retriableRequest)
           }
         }

@@ -17,6 +17,7 @@ import { LoginPage } from '../features/auth/LoginPage'
 import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage'
 import { ImpersonationEntryPage } from '../features/auth/ImpersonationEntryPage'
+import { DemoSignedOutPage } from '../features/auth/DemoSignedOutPage'
 import { RequestDemoPage } from '../features/public/RequestDemoPage'
 import { DemoConfirmationPage } from '../features/public/DemoConfirmationPage'
 import { CsatSurveyPage } from '../features/public/CsatSurveyPage'
@@ -378,6 +379,7 @@ export function AppRouter() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/impersonate-entry" element={<ImpersonationEntryPage />} />
+        <Route path="/demo/signed-out" element={<DemoSignedOutPage />} />
         <Route path="/request-demo" element={<RequestDemoPage />} />
         <Route path="/demo-confirmation" element={<DemoConfirmationPage />} />
         <Route path="/csat/:token" element={<CsatSurveyPage />} />

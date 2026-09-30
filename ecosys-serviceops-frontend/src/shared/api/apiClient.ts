@@ -9,6 +9,7 @@ import {
   setAuthToken,
   setRefreshToken,
   setSession,
+  syncWithOtherTabs,
   triggerLogout,
 } from './sessionStore'
 import { attachAuthInterceptors } from './attachInterceptors'
@@ -61,6 +62,7 @@ attachAuthInterceptors(apiClient, {
   triggerLogout,
   loginPath: '/login',
   refresh: refreshAccessToken,
+  syncWithOtherTabs,
 })
 
 export const api = {

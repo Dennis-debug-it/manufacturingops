@@ -37,6 +37,9 @@ public interface IMvpAuthService
     /// </summary>
     Task<ImpersonationResult> ImpersonateTenantAdminAsync(Guid tenantId, Guid actingUserId, string actingUserName, string? reason, CancellationToken cancellationToken = default);
 
+    /// <summary>Starts an impersonation session as one specific active user of a tenant (the demo workspace's roles).</summary>
+    Task<ImpersonationResult> ImpersonateUserAsync(Guid tenantId, Guid userId, Guid actingUserId, string actingUserName, string? reason, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// The tenant's role-permission matrix (plus group grants and per-user overrides) for
     /// <paramref name="user"/> — the same resolution <see cref="LoginAsync"/> uses. Callers that
@@ -365,6 +368,30 @@ internal sealed class MvpAuthService(
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("This tenant has no active admin user to impersonate.");
 
+        return await StartImpersonationAsync(tenant, targetUser, actingUserId, actingUserName, reason, cancellationToken);
+    }
+
+    public async Task<ImpersonationResult> ImpersonateUserAsync(Guid tenantId, Guid userId, Guid actingUserId, string actingUserName, string? reason, CancellationToken cancellationToken = default)
+    {
+        var tenant = await dbContext.Tenants
+            .SingleOrDefaultAsync(x => x.Id == tenantId && x.Id != PlatformConstants.RootTenantId, cancellationToken)
+            ?? throw new NotFoundException("Tenant was not found.");
+        if (!tenant.IsActive)
+        {
+            throw new BusinessRuleException("This tenant is not active. Reactivate it before starting an impersonation session.");
+        }
+
+        var targetUser = await dbContext.Users
+            .Include(x => x.Permission)
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == userId && x.IsActive, cancellationToken)
+            ?? throw new NotFoundException("That user was not found or is inactive.");
+
+        return await StartImpersonationAsync(tenant, targetUser, actingUserId, actingUserName, reason, cancellationToken);
+    }
+
+    private async Task<ImpersonationResult> StartImpersonationAsync(Tenant tenant, User targetUser, Guid actingUserId, string actingUserName, string? reason, CancellationToken cancellationToken)
+    {
+        var tenantId = tenant.Id;
         var permissions = await ResolvePermissionsAsync(targetUser, cancellationToken);
         var jwtId = Guid.NewGuid().ToString("N");
         var session = userSessionService.StartSession(targetUser, jwtId);
@@ -385,7 +412,7 @@ internal sealed class MvpAuthService(
             "impersonation.started",
             nameof(User),
             targetUser.Id.ToString(),
-            $"Platform admin '{actingUserName}' started an impersonation session in tenant '{tenant.Name}' as tenant admin '{targetUser.Email}'.{reasonSuffix}",
+            $"Platform admin '{actingUserName}' started an impersonation session in tenant '{tenant.Name}' as '{DisplayIdentifier(targetUser)}' ({targetUser.Role}).{reasonSuffix}",
             severity: "Warning",
             cancellationToken: cancellationToken);
 
@@ -395,7 +422,7 @@ internal sealed class MvpAuthService(
             "platform.tenant.impersonation.started",
             nameof(Tenant),
             tenantId.ToString(),
-            $"Platform admin '{actingUserName}' started impersonating tenant admin '{targetUser.Email}' in tenant '{tenant.Name}'.{reasonSuffix}",
+            $"Platform admin '{actingUserName}' started impersonating '{DisplayIdentifier(targetUser)}' ({targetUser.Role}) in tenant '{tenant.Name}'.{reasonSuffix}",
             severity: "Warning",
             cancellationToken: cancellationToken);
 

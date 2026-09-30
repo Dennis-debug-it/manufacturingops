@@ -59,6 +59,9 @@ public interface IDemoWorkspaceService
     Task<DemoWorkspaceResetResult> ResetAsync(Guid? actorUserId, string? actorName, CancellationToken cancellationToken = default);
 
     Task<string> IssuePortalSignInLinkAsync(string appBaseUrl, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default);
+
+    /// <summary>The user behind one of the demo's staff logins; anything else is refused.</summary>
+    Task<Guid> FindLoginUserIdAsync(string? username, CancellationToken cancellationToken = default);
 }
 
 internal sealed partial class DemoWorkspaceService(
@@ -205,6 +208,17 @@ internal sealed partial class DemoWorkspaceService(
             ?? throw new BusinessRuleException("The demo workspace has no active portal contact. Reset the demo workspace first.");
 
         return await portalAuthService.IssueSignInLinkAsync(contactId, appBaseUrl, ipAddress, userAgent, cancellationToken);
+    }
+
+    public async Task<Guid> FindLoginUserIdAsync(string? username, CancellationToken cancellationToken = default)
+    {
+        var login = Logins.FirstOrDefault(x => string.Equals(x.Username, username?.Trim(), StringComparison.OrdinalIgnoreCase))
+            ?? throw new BusinessRuleException("That is not one of the demo workspace's logins.");
+        return await dbContext.Users.IgnoreQueryFilters()
+            .Where(x => x.TenantId == TenantId && x.Username == login.Username && x.IsActive)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new BusinessRuleException("The demo workspace has not been created yet. Create it first.");
     }
 
     // ── Tenant + license ─────────────────────────────────────────────────────
