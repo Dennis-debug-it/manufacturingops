@@ -52,7 +52,11 @@ public static class TenantEmailIdentity
     public static TenantSender? ResolveSender(Tenant? tenant, EmailSetting? identity, string? replyToOverride = null,
         EmailCategory category = EmailCategory.General)
     {
-        var address = NormalizeAddress(identity?.ManagedEmailAddress) ?? TryAddress(tenant?.Slug);
+        // A tenant on its own mail server must send as an address that server accepts; the managed
+        // @serviceops address would be refused there.
+        var address = UsesOwnSmtp(identity)
+            ? NormalizeAddress(identity!.CustomFromAddress)
+            : NormalizeAddress(identity?.ManagedEmailAddress) ?? TryAddress(tenant?.Slug);
         if (address is null) return null;
         var name = FirstNonBlank(identity?.SenderName, tenant?.CompanyName, tenant?.Name) ?? address;
         var categoryReplyTo = category switch
@@ -67,6 +71,15 @@ public static class TenantEmailIdentity
             ?? address;
         return new TenantSender(name, address, replyTo);
     }
+
+    /// <summary>
+    /// True when the tenant has switched on its own SMTP server and given it enough to send: a host and
+    /// a From address. Half-filled settings keep the tenant on platform mail rather than failing sends.
+    /// </summary>
+    public static bool UsesOwnSmtp(EmailSetting? identity) =>
+        identity is { UseCustomSmtp: true }
+        && !string.IsNullOrWhiteSpace(identity.Host)
+        && NormalizeAddress(identity.CustomFromAddress) is not null;
 
     public static async Task<TenantSender?> ResolveSenderAsync(AppDbContext db, Guid tenantId, string? replyToOverride = null,
         EmailCategory category = EmailCategory.General, CancellationToken cancellationToken = default)
@@ -102,7 +115,8 @@ public static class TenantEmailIdentity
     /// </summary>
     public static bool RecordSenderOutcome(EmailSetting? identity, bool accepted, string? errorCategory, string? detail, DateTime utcNow)
     {
-        if (identity?.ManagedEmailAddress is null) return false;
+        // A send through the tenant's own server says nothing about the managed address.
+        if (identity?.ManagedEmailAddress is null || UsesOwnSmtp(identity)) return false;
         if (accepted)
         {
             if (identity.ManagedEmailStatus == ManagedEmailStatuses.Verified) return false;

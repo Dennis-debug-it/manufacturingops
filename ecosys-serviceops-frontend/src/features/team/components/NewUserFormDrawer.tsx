@@ -13,7 +13,7 @@ const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm 
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
 const errorClass = 'mt-1 text-xs text-rose-600'
 
-const ROLE_OPTIONS: Array<{ value: TenantUserRole; label: string }> = [
+export const ROLE_OPTIONS: Array<{ value: TenantUserRole; label: string }> = [
   { value: 'Viewer', label: 'Viewer' },
   { value: 'Technician', label: 'Technician' },
   { value: 'Dispatcher', label: 'Dispatcher' },

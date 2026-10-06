@@ -18,6 +18,7 @@ public static class NotificationKeyDescriptor
         new("work-order.cancelled", "Work order cancelled",              "Work Orders"),
         new("pm.due",               "Preventive maintenance due",        "Preventive Maintenance"),
         new("pm.overdue",           "Preventive maintenance overdue",    "Preventive Maintenance"),
+        new("service-report.sent",  "Service report sent to client",     "Work Orders"),
         new("invoice.sent",         "Invoice sent to client",            "Finance"),
         new("quotation.sent",       "Quotation sent to client",          "Finance"),
         new("users.invited",        "User invited / account setup",      "Account"),

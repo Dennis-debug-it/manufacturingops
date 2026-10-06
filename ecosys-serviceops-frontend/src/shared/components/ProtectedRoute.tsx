@@ -22,6 +22,12 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
 
+  // A temporary password's token is refused everywhere except change-password, so nothing behind
+  // this guard could load anyway.
+  if (user.mustChangePassword) {
+    return <Navigate to="/change-password" replace />
+  }
+
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to="/403" replace />
   }

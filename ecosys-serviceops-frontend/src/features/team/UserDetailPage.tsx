@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useParams } from 'react-router-dom'
-import { Copy } from 'lucide-react'
+import { Copy, Pencil } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
@@ -12,6 +12,7 @@ import { formatDateTime } from '../../shared/utils/dates'
 import { useResendCredentials, useResetUserPassword, useSetUserStatus, useTeamUser, useUpdateTeamUser } from './api'
 import { PermissionMatrix } from './components/PermissionMatrix'
 import { UserAccessPanel } from './components/UserAccessPanel'
+import { EditUserDrawer } from './components/EditUserDrawer'
 import type { RoleCapabilities } from './rolePermissionsApi'
 
 export function UserDetailPage() {
@@ -25,6 +26,7 @@ export function UserDetailPage() {
 
   const [caps, setCaps] = useState<RoleCapabilities | null>(null)
   const [revealedPassword, setRevealedPassword] = useState<string | null>(null)
+  const [editing, setEditing] = useState(false)
   useEffect(() => {
     if (user) setCaps({ ...user.permissions })
   }, [user])
@@ -121,6 +123,7 @@ export function UserDetailPage() {
         primaryAction={
           canManage ? (
             <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setEditing(true)} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"><Pencil className="h-4 w-4" />Edit Details</button>
               {user.hasEmail && (user.mustChangePassword || user.invitationStatus === 'Invited' || user.invitationStatus === 'Expired') ? <button type="button" onClick={resend} disabled={resendCredentials.isPending} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">{resendCredentials.isPending ? 'Sending…' : 'Resend Invite'}</button> : null}
               <button type="button" onClick={reset} disabled={resetPassword.isPending} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">{resetPassword.isPending ? 'Working…' : user.hasEmail ? 'Reset Password' : 'Generate Password'}</button>
               <button type="button" onClick={toggleStatus} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
@@ -191,6 +194,8 @@ export function UserDetailPage() {
       </SummarySection>
 
       {id ? <UserAccessPanel userId={id} isAdminUser={isAdminUser} /> : null}
+
+      {canManage ? <EditUserDrawer open={editing} onClose={() => setEditing(false)} user={user} /> : null}
 
       {user.assignmentGroups.length > 0 ? (
         <SummarySection title="Assignment Groups" description="Groups this user belongs to.">

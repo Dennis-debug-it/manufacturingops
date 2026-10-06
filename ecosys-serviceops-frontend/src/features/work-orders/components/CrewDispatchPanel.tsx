@@ -1,5 +1,6 @@
 import toast from 'react-hot-toast'
 import { CheckCircle2, LogOut, MapPin, Navigation, XCircle } from 'lucide-react'
+import { formatDurationMinutes } from '../../../shared/utils/format'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { usePermission } from '../../../shared/hooks/usePermission'
 import { formatDateTime } from '../../../shared/utils/dates'
@@ -8,6 +9,9 @@ import {
   useRecordTechnicianArrival,
   useRecordTechnicianDeparture,
   useRecordTechnicianResponse,
+  useWorkOrderVisits,
+  type VisitState,
+  type WorkOrderVisits,
 } from '../api'
 import { hasAcceptedAssignment, isPersistedAssignment } from '../dispatchGuards'
 import type { WorkOrder, WorkOrderTechnicianAssignment } from '../types'
@@ -27,6 +31,7 @@ export function CrewDispatchPanel({ workOrder }: { workOrder: WorkOrder }) {
   const markInTransit = useMarkTechnicianInTransit()
   const recordArrival = useRecordTechnicianArrival()
   const recordDeparture = useRecordTechnicianDeparture()
+  const { data: visits } = useWorkOrderVisits(workOrder.id)
 
   const run = async (label: string, action: () => Promise<unknown>) => {
     try {
@@ -48,6 +53,7 @@ export function CrewDispatchPanel({ workOrder }: { workOrder: WorkOrder }) {
   }
 
   return (
+    <div className="space-y-4">
     <ul className="space-y-3">
       {assignments.map((assignment) => {
         const persisted = isPersistedAssignment(assignment)
@@ -58,6 +64,7 @@ export function CrewDispatchPanel({ workOrder }: { workOrder: WorkOrder }) {
           (recordArrival.isPending ? recordArrival.variables?.technicianId : undefined) ??
           (recordDeparture.isPending ? recordDeparture.variables?.technicianId : undefined)
         const busy = busyTechnicianId === assignment.technicianId
+        const visitState = resolveVisitState(assignment, visits)
         const technicianName = assignment.technicianName ?? 'Technician'
 
         return (
@@ -110,36 +117,36 @@ export function CrewDispatchPanel({ workOrder }: { workOrder: WorkOrder }) {
                   exist — neither demands a prior acceptance, and arrival sets Status to "Arrived",
                   which itself satisfies the Start guard. So the site milestones are offered
                   independently of acceptance rather than hidden behind it.
+
+                  Each trip is a visit: Start travel → Record arrival → Record departure, then the
+                  next day's trip starts over. Arrival without travel is allowed (travel not tracked).
                 */}
-                {!assignment.arrivalAt ? (
-                  <>
-                    {assignment.status !== 'InTransit' ? (
-                      <DispatchButton
-                        icon={Navigation}
-                        label="En route"
-                        tone="secondary"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(`${technicianName} marked en route`, () =>
-                            markInTransit.mutateAsync({ id: workOrder.id, technicianId: assignment.technicianId }),
-                          )
-                        }
-                      />
-                    ) : null}
-                    <DispatchButton
-                      icon={MapPin}
-                      label="Record arrival"
-                      tone="primary"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(`${technicianName} arrived on site`, () =>
-                          recordArrival.mutateAsync({ id: workOrder.id, technicianId: assignment.technicianId }),
-                        )
-                      }
-                    />
-                  </>
+                {visitState === 'Idle' ? (
+                  <DispatchButton
+                    icon={Navigation}
+                    label="Start travel"
+                    tone="secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(`${technicianName} started travelling to site`, () =>
+                        markInTransit.mutateAsync({ id: workOrder.id, technicianId: assignment.technicianId }),
+                      )
+                    }
+                  />
                 ) : null}
-                {assignment.arrivalAt && !assignment.departureAt ? (
+                {visitState !== 'OnSite' ? (
+                  <DispatchButton
+                    icon={MapPin}
+                    label="Record arrival"
+                    tone="primary"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(`${technicianName} arrived on site`, () =>
+                        recordArrival.mutateAsync({ id: workOrder.id, technicianId: assignment.technicianId }),
+                      )
+                    }
+                  />
+                ) : (
                   <DispatchButton
                     icon={LogOut}
                     label="Record departure"
@@ -151,21 +158,76 @@ export function CrewDispatchPanel({ workOrder }: { workOrder: WorkOrder }) {
                       )
                     }
                   />
-                ) : null}
+                )}
               </div>
             ) : null}
           </li>
         )
       })}
     </ul>
+    <VisitLog visits={visits} />
+    </div>
+  )
+}
+
+/**
+ * The visit log is the source of truth; the assignment row is only a fallback for technicians who
+ * were already travelling or on site before visits were recorded.
+ */
+function resolveVisitState(assignment: WorkOrderTechnicianAssignment, visits: WorkOrderVisits | undefined): VisitState {
+  const summary = visits?.technicians.find((item) => item.technicianId === assignment.technicianId)
+  if (summary) return summary.state
+  if (assignment.arrivalAt && !assignment.departureAt) return 'OnSite'
+  if (assignment.status === 'InTransit') return 'Travelling'
+  return 'Idle'
+}
+
+function VisitLog({ visits }: { visits: WorkOrderVisits | undefined }) {
+  if (!visits || visits.visits.length === 0) return null
+  return (
+    <section className="rounded-xl border border-[var(--app-border)]">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--app-border)] px-4 py-3">
+        <h3 className="text-sm font-semibold text-slate-900">Site visits</h3>
+        <p className="text-xs text-slate-500">
+          Travel {formatDurationMinutes(visits.totalTravelMinutes)} · On site {formatDurationMinutes(visits.totalOnSiteMinutes)}
+          {visits.technicians.map((tech) => ` · ${tech.technicianName}: ${tech.daysOnJob} day${tech.daysOnJob === 1 ? '' : 's'}`).join('')}
+        </p>
+      </header>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-xs">
+          <thead className="bg-slate-50 text-slate-500">
+            <tr>
+              <th className="px-4 py-2 font-medium">Technician</th>
+              <th className="px-4 py-2 font-medium">Travel started</th>
+              <th className="px-4 py-2 font-medium">Arrived</th>
+              <th className="px-4 py-2 font-medium">Departed</th>
+              <th className="px-4 py-2 font-medium">Travel</th>
+              <th className="px-4 py-2 font-medium">On site</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 text-slate-700">
+            {visits.visits.map((visit) => (
+              <tr key={visit.id}>
+                <td className="px-4 py-2">{visit.technicianName}</td>
+                <td className="px-4 py-2">{visit.travelStartedAt ? formatDateTime(visit.travelStartedAt) : '—'}</td>
+                <td className="px-4 py-2">{visit.arrivedAt ? formatDateTime(visit.arrivedAt) : 'Travelling'}</td>
+                <td className="px-4 py-2">{visit.departedAt ? formatDateTime(visit.departedAt) : visit.arrivedAt ? 'On site' : '—'}</td>
+                <td className="px-4 py-2">{visit.arrivedAt ? formatDurationMinutes(visit.travelMinutes) : '—'}</td>
+                <td className="px-4 py-2">{visit.departedAt ? formatDurationMinutes(visit.onSiteMinutes) : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
 function AssignmentMilestones({ assignment }: { assignment: WorkOrderTechnicianAssignment }) {
   const milestones: Array<{ label: string; value: string | null }> = [
     { label: 'Accepted', value: assignment.acceptedAt },
-    { label: 'Arrived', value: assignment.arrivalAt },
-    { label: 'Departed', value: assignment.departureAt },
+    { label: 'First arrival', value: assignment.arrivalAt },
+    { label: 'Last departure', value: assignment.departureAt },
   ]
 
   return (

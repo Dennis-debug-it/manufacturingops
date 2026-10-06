@@ -256,15 +256,24 @@ internal sealed class MvpAuthService(
                 normalizedWorkspace = null;
             }
 
-            failureEntityId = $"{normalizedUsername}@{normalizedWorkspace ?? workspace.Trim().ToLowerInvariant()}";
-            user = normalizedWorkspace is null
-                ? null
-                : await dbContext.Users
-                    .Include(x => x.Tenant)
-                    .Include(x => x.Permission)
-                    .SingleOrDefaultAsync(
-                        x => x.Username == normalizedUsername && x.Tenant != null && x.Tenant.Slug == normalizedWorkspace,
-                        cancellationToken);
+            // The slug alone is not enough: a platform-provisioned tenant can have a custom workspace
+            // slug, and a clashing name gets a "-2" suffix, so the typed company name would never
+            // match. Also accept the tenant's company/display name verbatim (case-insensitive). If
+            // that is ambiguous (two tenants share a name and both have this username) it's a miss.
+            var typedWorkspace = workspace.Trim().ToLowerInvariant();
+            failureEntityId = $"{normalizedUsername}@{normalizedWorkspace ?? typedWorkspace}";
+            var candidates = await dbContext.Users
+                .Include(x => x.Tenant)
+                .Include(x => x.Permission)
+                .Where(x => x.Username == normalizedUsername && x.Tenant != null &&
+                    ((normalizedWorkspace != null && x.Tenant.Slug == normalizedWorkspace) ||
+                     x.Tenant.CompanyName.ToLower() == typedWorkspace ||
+                     x.Tenant.Name.ToLower() == typedWorkspace))
+                .Take(3)
+                .ToListAsync(cancellationToken);
+            user = candidates.Count == 1
+                ? candidates[0]
+                : candidates.SingleOrDefault(x => normalizedWorkspace != null && x.Tenant!.Slug == normalizedWorkspace);
         }
 
         if (user is null)

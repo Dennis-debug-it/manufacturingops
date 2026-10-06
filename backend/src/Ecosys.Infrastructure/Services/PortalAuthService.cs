@@ -25,6 +25,22 @@ public interface IPortalAuthService
     /// emailing it. Only for platform-operated workspaces (the demo) whose contacts have no real mailbox.
     /// </summary>
     Task<string> IssueSignInLinkAsync(Guid portalUserId, string magicLinkBaseUrl, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Staff-initiated invitation: emails the contact their permanent portal link (see
+    /// <see cref="GetAccessLinkAsync"/>) plus the sign-in page address.
+    /// </summary>
+    Task SendInvitationAsync(Guid portalUserId, string portalBaseUrl, Guid? invitedByUserId, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The contact's permanent, full-access portal link - it never expires. Issued on first use; with
+    /// <paramref name="reset"/> a new one replaces it and the old link stops working. Deactivating the
+    /// contact also stops it. Anyone holding the link acts as this contact, so it is audited.
+    /// </summary>
+    Task<string> GetAccessLinkAsync(Guid portalUserId, string portalBaseUrl, Guid? actorUserId, bool reset, CancellationToken cancellationToken = default);
+
+    /// <summary>Signs in with a permanent portal link; rejects reset links and inactive contacts.</summary>
+    Task<PortalMagicLinkResult> OpenAccessLinkAsync(string link, CancellationToken cancellationToken = default);
 }
 
 internal sealed class PortalAuthService(
@@ -119,6 +135,115 @@ internal sealed class PortalAuthService(
             cancellationToken: cancellationToken);
 
         return link;
+    }
+
+    public async Task SendInvitationAsync(Guid portalUserId, string portalBaseUrl, Guid? invitedByUserId, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default)
+    {
+        var portalUser = await LoadEligibleAsync(portalUserId, cancellationToken);
+        var link = await EnsureAccessLinkAsync(portalUser, portalBaseUrl, reset: false, cancellationToken);
+        var loginUrl = $"{portalBaseUrl.TrimEnd('/')}/portal/login";
+        var company = System.Net.WebUtility.HtmlEncode(portalUser.Tenant!.CompanyName);
+        var html = $"""
+            <p>Hello {System.Net.WebUtility.HtmlEncode(portalUser.FullName)},</p>
+            <p>{company} has given you access to its client portal, where you can raise service requests and follow your work orders, quotations and invoices.</p>
+            <p><a href="{link}">Open the client portal</a></p>
+            <p>This is your personal link and it doesn't expire - bookmark it, and please don't share it. You can also sign in at <a href="{loginUrl}">{System.Net.WebUtility.HtmlEncode(loginUrl)}</a> with <strong>{System.Net.WebUtility.HtmlEncode(portalUser.Email)}</strong>.</p>
+            """;
+
+        await emailOutboxService.QueueEmailAsync(
+            new QueueEmailRequest(
+                portalUser.TenantId, "portal.invitation", "portal-invitation",
+                portalUser.Email, portalUser.FullName, portalUser.Tenant.CompanyName, null, null,
+                $"You're invited to the {portalUser.Tenant.CompanyName} client portal",
+                html, null, invitedByUserId),
+            cancellationToken);
+
+        await auditLogService.LogAsync(portalUser.TenantId, invitedByUserId, "portal.contact.invitation-sent", nameof(ClientPortalUser), portalUser.Id.ToString(),
+            $"Portal invitation with permanent link emailed to '{portalUser.Email}'.", cancellationToken: cancellationToken);
+    }
+
+    public async Task<string> GetAccessLinkAsync(Guid portalUserId, string portalBaseUrl, Guid? actorUserId, bool reset, CancellationToken cancellationToken = default)
+    {
+        var portalUser = await LoadEligibleAsync(portalUserId, cancellationToken);
+        var link = await EnsureAccessLinkAsync(portalUser, portalBaseUrl, reset, cancellationToken);
+        await auditLogService.LogAsync(portalUser.TenantId, actorUserId,
+            reset ? "portal.contact.access-link-reset" : "portal.contact.access-link-copied", nameof(ClientPortalUser), portalUser.Id.ToString(),
+            reset ? $"Permanent portal link for '{portalUser.Email}' reset; the previous link no longer works."
+                  : $"Permanent portal link for '{portalUser.Email}' copied by staff.",
+            cancellationToken: cancellationToken);
+        return link;
+    }
+
+    public async Task<PortalMagicLinkResult> OpenAccessLinkAsync(string link, CancellationToken cancellationToken = default)
+    {
+        const string invalidMessage = "This portal link is no longer valid. Ask your service provider for a new link, or sign in with your email.";
+        var parts = (link ?? string.Empty).Trim().Split('.', 2);
+        if (parts.Length != 2 || !Guid.TryParseExact(parts[0], "N", out var portalUserId))
+        {
+            throw new ForbiddenException(invalidMessage);
+        }
+
+        var portalUser = await dbContext.ClientPortalUsers
+            .IgnoreQueryFilters()
+            .Include(x => x.Client)
+            .Include(x => x.Tenant)
+            .SingleOrDefaultAsync(x => x.Id == portalUserId, cancellationToken);
+        if (portalUser?.AccessLinkNonce is null || !portalUser.IsActive || portalUser.Client is null || !portalUser.Client.IsActive
+            || portalUser.Client.TenantId != portalUser.TenantId || portalUser.Tenant is null || !portalUser.Tenant.IsActive
+            || !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(AccessLinkSecret(portalUser)), Encoding.ASCII.GetBytes(parts[1])))
+        {
+            throw new ForbiddenException(invalidMessage);
+        }
+
+        portalUser.LastLoginAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(portalUser.TenantId, null, "portal.auth.login", nameof(ClientPortalUser), portalUser.Id.ToString(),
+            $"Portal contact '{portalUser.Email}' signed in with their permanent portal link.", actorName: portalUser.FullName, cancellationToken: cancellationToken);
+
+        return new PortalMagicLinkResult(CreateToken(portalUser), portalUser.Id, portalUser.ClientId, portalUser.TenantId,
+            portalUser.FullName, portalUser.Email, portalUser.Client.ClientName, portalUser.Tenant.CompanyName);
+    }
+
+    private async Task<string> EnsureAccessLinkAsync(ClientPortalUser portalUser, string portalBaseUrl, bool reset, CancellationToken cancellationToken)
+    {
+        if (reset || portalUser.AccessLinkNonce is null)
+        {
+            portalUser.AccessLinkNonce = CreateRawToken();
+            portalUser.AccessLinkCreatedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return $"{portalBaseUrl.TrimEnd('/')}/portal/access#{portalUser.Id:N}.{AccessLinkSecret(portalUser)}";
+    }
+
+    /// <summary>
+    /// HMAC of the contact id and nonce under the JWT signing key: the database holds only the nonce,
+    /// so a leaked backup doesn't yield working links. Rotating the signing key invalidates all links.
+    /// </summary>
+    private string AccessLinkSecret(ClientPortalUser portalUser)
+    {
+        var mac = HMACSHA256.HashData(
+            Encoding.UTF8.GetBytes(jwtOptions.Value.SigningKey),
+            Encoding.UTF8.GetBytes($"portal-access-link:{portalUser.Id:N}:{portalUser.AccessLinkNonce}"));
+        return Convert.ToBase64String(mac).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+    }
+
+    private async Task<ClientPortalUser> LoadEligibleAsync(Guid portalUserId, CancellationToken cancellationToken)
+    {
+        var portalUser = await dbContext.ClientPortalUsers
+            .IgnoreQueryFilters()
+            .Include(x => x.Client)
+            .Include(x => x.Tenant)
+            .SingleOrDefaultAsync(x => x.Id == portalUserId, cancellationToken);
+
+        // Same eligibility as the login page: a link must not open a door sign-in would keep shut.
+        if (portalUser is null || !portalUser.IsActive || portalUser.Client is null || !portalUser.Client.IsActive
+            || portalUser.Client.TenantId != portalUser.TenantId || portalUser.Tenant is null || !portalUser.Tenant.IsActive)
+        {
+            throw new BusinessRuleException("This portal contact is inactive or awaiting approval, so they cannot sign in yet.");
+        }
+
+        return portalUser;
     }
 
     private async Task<string> CreateLinkAsync(ClientPortalUser portalUser, string magicLinkBaseUrl, string? ipAddress, string? userAgent, CancellationToken cancellationToken)

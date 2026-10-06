@@ -98,8 +98,32 @@ public sealed partial class WorkOrderExecutionController
         workOrder.ReportApprovedAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "workorder.report.approved", nameof(WorkOrder), workOrder.Id.ToString(), $"Approved service report {workOrder.ReportNumber} for {workOrder.WorkOrderNumber}", cancellationToken);
+        await TryAutoSendApprovedReportAsync(workOrder, cancellationToken);
 
         return Ok(BuildQueueRow(workOrder));
+    }
+
+    /// <summary>
+    /// Settings → Operational Defaults can ask for approved reports to go straight to the client. A
+    /// report that cannot be sent (no client contact email, template disabled) simply stays Approved
+    /// for a manual send, and the reason is kept in the audit log.
+    /// </summary>
+    private async Task TryAutoSendApprovedReportAsync(WorkOrder workOrder, CancellationToken cancellationToken)
+    {
+        var autoSend = await dbContext.TenantOperationsPolicies
+            .Where(x => x.TenantId == TenantId)
+            .Select(x => x.AutoSendServiceReportOnApproval)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!autoSend) return;
+
+        try
+        {
+            await SendReportAsync(workOrder, cancellationToken);
+        }
+        catch (BusinessRuleException ex)
+        {
+            await auditLogService.LogAsync(TenantId, UserId, "workorder.report.autosend-skipped", nameof(WorkOrder), workOrder.Id.ToString(), $"Service report {workOrder.ReportNumber} was approved but not sent automatically: {ex.Message}", cancellationToken);
+        }
     }
 
     [HttpPost("/api/workorders/{id:guid}/report/send")]
@@ -142,8 +166,16 @@ public sealed partial class WorkOrderExecutionController
         {
             if (DeriveReportStatus(workOrder) == ReportStatuses.Approved)
             {
-                await SendReportAsync(workOrder, cancellationToken);
-                processed++;
+                // One client without a contact email must not block the rest of the batch; it stays
+                // Approved and shows up as not processed.
+                try
+                {
+                    await SendReportAsync(workOrder, cancellationToken);
+                    processed++;
+                }
+                catch (BusinessRuleException)
+                {
+                }
             }
         }
         return Ok(new ReportBatchResult(processed, workOrders.Count));
@@ -216,10 +248,15 @@ public sealed partial class WorkOrderExecutionController
         if (DeriveReportStatus(workOrder) != ReportStatuses.Approved)
             throw new BusinessRuleException("Only approved reports can be sent.");
 
+        // "Sent" used to be a status flip only — nothing ever reached the client. Queue the PDF to the
+        // client's saved contact first, so a missing contact or disabled template leaves it Approved.
+        var pdf = pdfRenderer.RenderWorkOrderReportPdf(await BuildPdfModelAsync(workOrder.Id, cancellationToken));
+        var recipient = await serviceReportDeliveryService.QueueAsync(TenantId, workOrder.Id, pdf, UserId, cancellationToken);
+
         workOrder.ReportStatus = ReportStatuses.Sent;
         workOrder.ReportSentAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(TenantId, UserId, "workorder.report.sent", nameof(WorkOrder), workOrder.Id.ToString(), $"Sent service report {workOrder.ReportNumber} for {workOrder.WorkOrderNumber}", cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "workorder.report.sent", nameof(WorkOrder), workOrder.Id.ToString(), $"Sent service report {workOrder.ReportNumber} for {workOrder.WorkOrderNumber} to {recipient}", cancellationToken);
     }
 
     /// <summary>Effective display status: acknowledgement wins, then stored status, else awaiting generation.</summary>

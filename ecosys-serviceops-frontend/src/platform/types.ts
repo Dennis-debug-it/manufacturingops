@@ -371,14 +371,10 @@ export interface TenantEmailSettings {
   enableTenantEmailNotifications: boolean
   lastTestedAt: string | null
   lastError: string | null
-}
-
-export interface TenantNotificationSetting {
-  notificationKey: string
-  emailEnabled: boolean
-  inAppEnabled: boolean
-  smsEnabled: boolean
-  isActive: boolean
+  /** True once the tenant switched to its own SMTP server (Settings → Email Delivery). */
+  usesOwnSmtp?: boolean
+  ownSmtpHost?: string | null
+  ownFromAddress?: string | null
 }
 
 export interface TenantNotificationRecipient {
@@ -389,7 +385,7 @@ export interface TenantNotificationRecipient {
 
 export interface TenantCommunicationSettings {
   emailSettings: TenantEmailSettings
-  notificationSettings: TenantNotificationSetting[]
+  /** Finance addresses the tenant copies on invoices/receipts/statements — read-only here. */
   recipients: TenantNotificationRecipient[]
 }
 

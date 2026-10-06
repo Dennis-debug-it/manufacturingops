@@ -938,7 +938,7 @@ public sealed class TenantInvoiceController(
     {
         var recipients = await financialRecipientResolver.ResolveAsync(TenantId, invoice.ClientId, "Invoice", cancellationToken);
         if (recipients.To.Count == 0)
-            throw new BusinessRuleException("Invoice cannot be dispatched because no valid billing recipient is configured.");
+            throw new BusinessRuleException("Invoice cannot be sent because this client has no email address. Add one to the client and try again.");
 
         var template = await emailTemplateService.RenderTenantTemplateAsync(
             TenantId,
@@ -1009,7 +1009,7 @@ public sealed class TenantInvoiceController(
             var client = payment.Client ?? payment.Invoice?.Client;
             if (client is null) return;
             var recipients = await financialRecipientResolver.ResolveAsync(TenantId, payment.ClientId, "Receipt", cancellationToken);
-            if (recipients.To.Count == 0) throw new BusinessRuleException("Receipt delivery was skipped because no valid billing recipient is configured.");
+            if (recipients.To.Count == 0) throw new BusinessRuleException("Receipt delivery was skipped because this client has no email address.");
 
             var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
             var pdf = RenderReceiptPdf(payment, client, tenant);

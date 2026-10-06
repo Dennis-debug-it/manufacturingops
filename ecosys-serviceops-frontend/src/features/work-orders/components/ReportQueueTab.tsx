@@ -80,8 +80,12 @@ export function ReportQueueTab() {
   const selectedRows = rows.filter((r) => selected.has(r.workOrderId))
 
   const runGenerate = async (id: string) => { await generate.mutateAsync(id); toast.success('Report generated') }
-  const runApprove = async (id: string) => { await approve.mutateAsync(id); toast.success('Report approved') }
-  const runSend = async (id: string) => { await send.mutateAsync(id); toast.success('Report sent') }
+  const runApprove = async (id: string) => {
+    const row = await approve.mutateAsync(id)
+    // With auto-send on (Settings → Operational Defaults) approval also emails the client.
+    toast.success(row?.reportStatus === 'Sent' ? 'Report approved and emailed to the client' : 'Report approved')
+  }
+  const runSend = async (id: string) => { await send.mutateAsync(id); toast.success('Report emailed to the client') }
   const runDownload = async (row: ReportQueueRow) => {
     try { await downloadReportPdf(row.workOrderId, row.woNo) } catch { toast.error('Could not download the PDF') }
   }
@@ -98,7 +102,10 @@ export function ReportQueueTab() {
     const eligible = selectedRows.filter((r) => r.reportStatus === 'Approved').map((r) => r.workOrderId)
     if (eligible.length === 0) return toast.error('Select approved reports to send')
     const result = await sendBatch.mutateAsync(eligible)
-    toast.success(`Sent ${result.processed} report(s)`)
+    // Reports whose client has no contact email are skipped server-side and stay Approved.
+    const skipped = eligible.length - result.processed
+    if (skipped > 0) toast.error(`Emailed ${result.processed} report(s); ${skipped} skipped — no client contact email`)
+    else toast.success(`Emailed ${result.processed} report(s) to clients`)
     setSelected(new Set())
   }
 

@@ -15,13 +15,14 @@ const errorClass = 'mt-1 text-xs text-rose-600'
 /**
  * The fields a server-side 400 is allowed to blame — each renders an error line below, so a pinned
  * message is visible. `UpsertAssetRequest` names its properties in PascalCase; the helper
- * normalises the casing before matching. Properties this form never exposes (`AssetCode`,
+ * normalises the casing before matching. Properties this form never exposes (
  * `BranchId`, `OwnershipType`, the PM-frequency trio) are toasted rather than silently dropped.
  */
 const FORM_FIELDS = [
   'clientId',
   'siteId',
   'assetName',
+  'assetCode',
   'assetType',
   'location',
   'serialNumber',
@@ -49,6 +50,7 @@ function toFormValues(asset: Asset | undefined, defaultClientId?: string, defaul
     clientId: asset?.clientId ?? defaultClientId ?? '',
     siteId: asset?.siteId ?? defaultSiteId ?? '',
     assetName: asset?.assetName ?? '',
+    assetCode: asset?.assetCode ?? '',
     assetType: asset?.assetType ?? '',
     location: asset?.location ?? '',
     serialNumber: asset?.serialNumber ?? '',
@@ -88,6 +90,8 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId,
       clientId: values.clientId,
       siteId: values.siteId || null,
       assetName: values.assetName.trim(),
+      // Blank = let the server generate one from the Asset numbering rule (on edit: keep the current code).
+      assetCode: values.assetCode?.trim() || null,
       assetType: values.assetType?.trim() || null,
       location: values.location?.trim() || null,
       serialNumber: values.serialNumber?.trim() || null,
@@ -160,10 +164,17 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId,
           />
           {errors.siteId ? <p className={errorClass}>{errors.siteId.message}</p> : null}
         </div>
-        <div>
-          <label className={labelClass} htmlFor="asset-name">Asset Name</label>
-          <input id="asset-name" {...register('assetName')} className={fieldClass} />
-          {errors.assetName ? <p className={errorClass}>{errors.assetName.message}</p> : null}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass} htmlFor="asset-name">Asset Name</label>
+            <input id="asset-name" {...register('assetName')} className={fieldClass} />
+            {errors.assetName ? <p className={errorClass}>{errors.assetName.message}</p> : null}
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="asset-code">Asset Code</label>
+            <input id="asset-code" {...register('assetCode')} placeholder={isEdit ? undefined : 'Auto-generated if blank'} className={fieldClass} />
+            {errors.assetCode ? <p className={errorClass}>{errors.assetCode.message}</p> : null}
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

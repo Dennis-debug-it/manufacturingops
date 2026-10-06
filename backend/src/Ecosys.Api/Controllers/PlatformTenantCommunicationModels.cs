@@ -3,9 +3,9 @@ using Ecosys.Domain.Entities;
 namespace Ecosys.Api.Controllers;
 
 /// <summary>
-/// Identity only — SMTP transport is global platform infrastructure with no per-tenant override (not
-/// even via impersonation), so there is nothing transport-related left to show or edit here. What
-/// differentiates a tenant's outbound mail is this sender identity, layered on the platform's transport.
+/// Read-only support view of a tenant's outbound email. By default a tenant sends through the
+/// platform's transport as its managed sender identity; a tenant admin can switch to their own SMTP
+/// server in Settings → Email Delivery, which <see cref="UsesOwnSmtp"/> reports. Nothing here edits it.
 /// </summary>
 public sealed record TenantEmailSettingsResponse(
     Guid Id,
@@ -18,43 +18,19 @@ public sealed record TenantEmailSettingsResponse(
     string? LastError,
     string ManagedEmailStatus = ManagedEmailStatuses.Pending,
     DateTime? ManagedEmailStatusCheckedAt = null,
-    string? ManagedEmailStatusDetail = null);
+    string? ManagedEmailStatusDetail = null,
+    bool UsesOwnSmtp = false,
+    string? OwnSmtpHost = null,
+    string? OwnFromAddress = null);
 
-public sealed record TenantNotificationSettingResponse(
-    string NotificationKey,
-    bool EmailEnabled,
-    bool InAppEnabled,
-    bool SmsEnabled,
-    bool IsActive);
-
-public sealed record TenantNotificationSettingRequest(
-    string NotificationKey,
-    bool EmailEnabled,
-    bool InAppEnabled,
-    bool SmsEnabled,
-    bool IsActive);
-
+/// <summary>A finance address the tenant copies on invoices/receipts/statements (set by the tenant in Finance Defaults).</summary>
 public sealed record TenantNotificationRecipientResponse(
     string RecipientGroup,
     string Email,
     bool IsActive);
 
-public sealed record TenantNotificationRecipientRequest(
-    string RecipientGroup,
-    string Email,
-    bool IsActive);
-
-public sealed record TenantNotificationSettingsResponse(
-    IReadOnlyCollection<TenantNotificationSettingResponse> NotificationSettings,
-    IReadOnlyCollection<TenantNotificationRecipientResponse> Recipients);
-
-public sealed record TenantNotificationSettingsRequest(
-    IReadOnlyCollection<TenantNotificationSettingRequest> NotificationSettings,
-    IReadOnlyCollection<TenantNotificationRecipientRequest> Recipients);
-
 public sealed record TenantCommunicationSettingsResponse(
     TenantEmailSettingsResponse EmailSettings,
-    IReadOnlyCollection<TenantNotificationSettingResponse> NotificationSettings,
     IReadOnlyCollection<TenantNotificationRecipientResponse> Recipients);
 
 public sealed record TenantCommunicationActionRequest(string? TestRecipientEmail);

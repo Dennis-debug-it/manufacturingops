@@ -82,6 +82,10 @@ export function LoginPage() {
         password: values.password,
         ...(values.workspace?.trim() ? { workspace: values.workspace.trim() } : {}),
       })
+      if (session.user.mustChangePassword) {
+        navigate('/change-password', { replace: true })
+        return
+      }
       navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : tenantDestination, { replace: true })
     } catch (error) {
       setSubmitError(resolveErrorMessage(error))

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
+import { WHATSAPP_ENABLED } from '../../shared/config/features'
 
 interface SettingsGroup {
   title: string
@@ -19,10 +20,17 @@ const groups: SettingsGroup[] = [
       { to: '/settings/company', label: 'Company Profile', description: 'Legal details, addresses, and contact info.', icon: Building2 },
       { to: '/settings/branding', label: 'Branding', description: 'Logo and brand colours.', icon: Palette },
       { to: '/settings/templates', label: 'Document Templates', description: 'Layout, sections, and boilerplate text.', icon: FileText },
+    ],
+  },
+  {
+    // Everything email lives together: sending identity, inbound parsing, content, and delivery.
+    title: 'Email',
+    items: [
       { to: '/settings/email', label: 'Workspace Email', description: 'Managed email address, sender name, and preferences.', icon: Mail },
-      { to: '/settings/email/delivery-logs', label: 'Delivery Logs', description: 'Queued, sent, failed, and retried email deliveries.', icon: ScrollText },
-      { to: '/settings/email-templates', label: 'Email Templates', description: 'Transactional email content.', icon: Mail },
       { to: '/settings/email-delivery', label: 'Email Delivery', description: 'Send through platform mail or your own SMTP server.', icon: Send },
+      { to: '/settings/email-intake', label: 'Email Intake & Parsing', description: 'Auto-create work orders from incoming email.', icon: Inbox },
+      { to: '/settings/email-templates', label: 'Email Templates', description: 'Transactional email content.', icon: Mail },
+      { to: '/settings/email/delivery-logs', label: 'Delivery Logs', description: 'Queued, sent, failed, and retried email deliveries.', icon: ScrollText },
     ],
   },
   {
@@ -42,9 +50,8 @@ const groups: SettingsGroup[] = [
   {
     title: 'Intake & Integrations',
     items: [
-      { to: '/settings/email-intake', label: 'Email Intake', description: 'Auto-create work orders from email.', icon: Inbox },
       { to: '/settings/monitoring', label: 'Monitoring Intake', description: 'Alert webhook routing.', icon: Radio },
-      { to: '/settings/whatsapp', label: 'WhatsApp', description: 'WhatsApp Business integration.', icon: MessageCircle },
+      ...(WHATSAPP_ENABLED ? [{ to: '/settings/whatsapp', label: 'WhatsApp', description: 'WhatsApp Business integration.', icon: MessageCircle }] : []),
       { to: '/settings/integrations', label: 'Integrations', description: 'API access and outbound webhooks.', icon: Plug },
     ],
   },

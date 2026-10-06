@@ -1,4 +1,5 @@
 import { lazy, Suspense, useMemo } from 'react'
+import { WHATSAPP_ENABLED } from '../shared/config/features'
 import {
   Navigate,
   Outlet,
@@ -16,6 +17,7 @@ import { ExecutiveDashboardPage } from '../features/dashboard/ExecutiveDashboard
 import { LoginPage } from '../features/auth/LoginPage'
 import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage'
+import { ChangePasswordPage } from '../features/auth/ChangePasswordPage'
 import { ImpersonationEntryPage } from '../features/auth/ImpersonationEntryPage'
 import { DemoSignedOutPage } from '../features/auth/DemoSignedOutPage'
 import { RequestDemoPage } from '../features/public/RequestDemoPage'
@@ -41,6 +43,7 @@ import { PurchaseOrdersPage, PurchaseOrderDetailPage } from '../features/invento
 import { SuppliersPage, SupplierDetailPage } from '../features/inventory/SuppliersPage'
 import { RestockRequestsPage } from '../features/inventory/RestockRequestsPage'
 import { PartsRequestsPage } from '../features/inventory/PartsRequestsPage'
+import { PartsReturnsPage } from '../features/inventory/PartsReturnsPage'
 import { MaterialIssuesPage } from '../features/inventory/MaterialIssuesPage'
 import { VansPage } from '../features/inventory/VansPage'
 import { VanDetailPage } from '../features/inventory/VanDetailPage'
@@ -90,6 +93,7 @@ import { NotificationsSettingsPage as SettingsNotificationsPageReal } from '../f
 import { NumberingSettingsPage as SettingsNumberingPageReal } from '../features/settings/NumberingSettingsPage'
 import { PmTemplatesSettingsPage as SettingsPmTemplatesPageReal } from '../features/settings/PmTemplatesSettingsPage'
 import { EmailIdentitySettingsPage } from '../features/settings/EmailIdentitySettingsPage'
+import { EmailDeliverySettingsPage } from '../features/settings/EmailDeliverySettingsPage'
 import { EmailDeliveryLogsPage } from '../features/settings/EmailDeliveryLogsPage'
 import { EmailTemplatesSettingsPage as SettingsEmailTemplatesPageReal } from '../features/settings/EmailTemplatesSettingsPage'
 import { AuditLogsSettingsPage as SettingsAuditLogsPageReal } from '../features/settings/AuditLogsSettingsPage'
@@ -281,6 +285,7 @@ export function AppRouter() {
       ['/inventory/suppliers/:id', InventorySupplierDetailPage],
       ['/inventory/restock-requests', InventoryRestockRequestsPage],
       ['/inventory/parts-requests', InventoryPartsRequestsPage],
+      ['/inventory/parts-returns', PartsReturnsPage],
       ['/inventory/issues', MaterialIssuesPage],
       ['/inventory/alerts', InventoryAlertsPage],
       ['/inventory/reports', InventoryReportsPage],
@@ -334,6 +339,7 @@ export function AppRouter() {
       ['/settings/branding', SettingsBrandingPage],
       ['/settings/templates', SettingsTemplatesPage],
       ['/settings/email', EmailIdentitySettingsPage],
+      ['/settings/email-delivery', EmailDeliverySettingsPage],
       ['/settings/email/delivery-logs', EmailDeliveryLogsPage],
       ['/settings/email-templates', SettingsEmailTemplatesPage],
       ['/settings/email-templates/:id', SettingsEmailTemplatesPage],
@@ -378,6 +384,7 @@ export function AppRouter() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/change-password" element={<ChangePasswordPage />} />
         <Route path="/impersonate-entry" element={<ImpersonationEntryPage />} />
         <Route path="/demo/signed-out" element={<DemoSignedOutPage />} />
         <Route path="/request-demo" element={<RequestDemoPage />} />
@@ -397,7 +404,7 @@ export function AppRouter() {
         <Route path="/dashboard" element={<ProtectedRoute><DashboardRoute /></ProtectedRoute>} />
 
         <Route element={<ProtectedRoute allowedRoles={tenantRoles}><TenantShellRoute /></ProtectedRoute>}>
-          {tenantRouteComponents.map(([path, Component]) => (
+          {tenantRouteComponents.filter(([path]) => WHATSAPP_ENABLED || !path.includes('whatsapp')).map(([path, Component]) => (
             <Route key={path} path={path} element={<Component />} />
           ))}
         </Route>

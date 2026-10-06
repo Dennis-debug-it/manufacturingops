@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { ArrowUpRight, Check, Circle, Pencil, RotateCcw, Square, Trash2, Type, X } from 'lucide-react'
+import { ArrowUpRight, Check, Circle, Move, Pencil, RotateCcw, Square, Trash2, Type, X } from 'lucide-react'
 import { cn } from '../../../shared/utils/cn'
 
-type Tool = 'draw' | 'arrow' | 'circle' | 'rectangle' | 'text'
+type Tool = 'move' | 'draw' | 'arrow' | 'circle' | 'rectangle' | 'text'
 
 type Point = { x: number; y: number }
 
@@ -21,6 +21,7 @@ const colors = [
 ]
 
 const tools: Array<{ id: Tool; label: string; icon: typeof Pencil }> = [
+  { id: 'move', label: 'Move', icon: Move },
   { id: 'draw', label: 'Draw', icon: Pencil },
   { id: 'arrow', label: 'Arrow', icon: ArrowUpRight },
   { id: 'circle', label: 'Circle', icon: Circle },
@@ -80,11 +81,38 @@ function drawAction(ctx: CanvasRenderingContext2D, action: Action, canvasWidth: 
       return
     }
     case 'text': {
-      const fontSize = Math.max(canvasWidth / 30, 22)
+      const fontSize = textFontSize(canvasWidth)
       ctx.font = `600 ${fontSize}px sans-serif`
       ctx.textBaseline = 'top'
       ctx.fillText(action.text, action.x, action.y)
     }
+  }
+}
+
+const textFontSize = (canvasWidth: number) => Math.max(canvasWidth / 30, 22)
+
+/** Axis-aligned box around an annotation, in canvas pixels — what a tap/drag in Move mode hits. */
+function boundsOf(ctx: CanvasRenderingContext2D, action: Action, canvasWidth: number) {
+  if (action.type === 'text') {
+    const fontSize = textFontSize(canvasWidth)
+    ctx.font = `600 ${fontSize}px sans-serif`
+    return { left: action.x, top: action.y, right: action.x + ctx.measureText(action.text).width, bottom: action.y + fontSize * 1.2 }
+  }
+  const points = action.type === 'draw' ? action.points : [action.from, action.to]
+  const xs = points.map((point) => point.x)
+  const ys = points.map((point) => point.y)
+  return { left: Math.min(...xs), top: Math.min(...ys), right: Math.max(...xs), bottom: Math.max(...ys) }
+}
+
+function translate(action: Action, dx: number, dy: number): Action {
+  const shift = (point: Point) => ({ x: point.x + dx, y: point.y + dy })
+  switch (action.type) {
+    case 'draw':
+      return { ...action, points: action.points.map(shift) }
+    case 'text':
+      return { ...action, x: action.x + dx, y: action.y + dy }
+    default:
+      return { ...action, from: shift(action.from), to: shift(action.to) }
   }
 }
 
@@ -117,10 +145,14 @@ export function PhotoAnnotationCanvas({ file, onCancel, onDone }: { file: File; 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
   const drawingRef = useRef<Action | null>(null)
+  /** Move tool: which annotation is being dragged, where the drag started, and its original position. */
+  const draggingRef = useRef<{ index: number; start: Point; original: Action; before: Action[] } | null>(null)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [tool, setTool] = useState<Tool>('draw')
   const [color, setColor] = useState(colors[0]?.value ?? '#ef4444')
   const [actions, setActions] = useState<Action[]>([])
+  // Snapshots for Undo, so moving or clearing can be undone as well as adding.
+  const [history, setHistory] = useState<Action[][]>([])
   const [textPoint, setTextPoint] = useState<Point | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -167,9 +199,35 @@ export function PhotoAnnotationCanvas({ file, onCancel, onDone }: { file: File; 
     return { x: (event.clientX - rect.left) * scaleX, y: (event.clientY - rect.top) * scaleY }
   }
 
+  const commit = (next: Action[], before: Action[] = actions) => {
+    setHistory((prev) => [...prev, before])
+    setActions(next)
+  }
+
+  /** Topmost annotation under the point, with a finger-sized margin scaled to the displayed canvas. */
+  const hitTest = (point: Point): number => {
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx) return -1
+    const margin = 16 * (canvas.width / canvas.getBoundingClientRect().width)
+    for (let index = actions.length - 1; index >= 0; index -= 1) {
+      const box = boundsOf(ctx, actions[index]!, canvas.width)
+      if (point.x >= box.left - margin && point.x <= box.right + margin && point.y >= box.top - margin && point.y <= box.bottom + margin) return index
+    }
+    return -1
+  }
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     if (!imageLoaded) return
     const point = getCanvasPoint(event)
+
+    if (tool === 'move') {
+      const index = hitTest(point)
+      if (index < 0) return
+      event.currentTarget.setPointerCapture(event.pointerId)
+      draggingRef.current = { index, start: point, original: actions[index]!, before: actions }
+      return
+    }
 
     if (tool === 'text') {
       setTextPoint(point)
@@ -181,6 +239,14 @@ export function PhotoAnnotationCanvas({ file, onCancel, onDone }: { file: File; 
   }
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    const drag = draggingRef.current
+    if (drag) {
+      const point = getCanvasPoint(event)
+      const moved = translate(drag.original, point.x - drag.start.x, point.y - drag.start.y)
+      setActions((prev) => prev.map((item, index) => (index === drag.index ? moved : item)))
+      return
+    }
+
     const action = drawingRef.current
     if (!action) return
     const point = getCanvasPoint(event)
@@ -200,20 +266,32 @@ export function PhotoAnnotationCanvas({ file, onCancel, onDone }: { file: File; 
   }
 
   const handlePointerUp = () => {
+    const drag = draggingRef.current
+    if (drag) {
+      draggingRef.current = null
+      // Only a real move is worth an Undo step.
+      if (actions[drag.index] !== drag.original) setHistory((prev) => [...prev, drag.before])
+      return
+    }
     if (!drawingRef.current) return
-    setActions((prev) => [...prev, drawingRef.current as Action])
+    commit([...actions, drawingRef.current])
     drawingRef.current = null
   }
 
   const commitText = (text: string) => {
     if (textPoint && text.trim()) {
-      setActions((prev) => [...prev, { type: 'text', color, x: textPoint.x, y: textPoint.y, text: text.trim() }])
+      commit([...actions, { type: 'text', color, x: textPoint.x, y: textPoint.y, text: text.trim() }])
     }
     setTextPoint(null)
   }
 
-  const undo = () => setActions((prev) => prev.slice(0, -1))
-  const clear = () => setActions([])
+  const undo = () => {
+    const previous = history[history.length - 1]
+    if (!previous) return
+    setHistory((prev) => prev.slice(0, -1))
+    setActions(previous)
+  }
+  const clear = () => commit([])
 
   const handleDone = () => {
     const canvas = canvasRef.current
@@ -246,7 +324,7 @@ export function PhotoAnnotationCanvas({ file, onCancel, onDone }: { file: File; 
         {!imageLoaded ? <p className="text-sm text-white/70">Loading photo…</p> : null}
         <canvas
           ref={canvasRef}
-          className="touch-none"
+          className={cn('touch-none', tool === 'move' && 'cursor-move')}
           style={{ maxWidth: '100%', maxHeight: '100%', display: imageLoaded ? 'block' : 'none' }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -287,7 +365,7 @@ export function PhotoAnnotationCanvas({ file, onCancel, onDone }: { file: File; 
           <button
             type="button"
             onClick={undo}
-            disabled={actions.length === 0}
+            disabled={history.length === 0}
             className="flex h-14 w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-lg text-xs font-medium text-white/70 transition hover:bg-white/10 disabled:opacity-40"
           >
             <RotateCcw className="h-4 w-4" />

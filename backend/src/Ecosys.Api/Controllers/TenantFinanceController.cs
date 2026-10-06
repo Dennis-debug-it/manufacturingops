@@ -602,7 +602,7 @@ public sealed class TenantFinanceController(
         var additional = financialRecipientResolver.ValidateAdditionalRecipients(request.AdditionalRecipients);
         var allTo = recipients.To.Concat(additional).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (allTo.Length == 0)
-            throw new BusinessRuleException("Statement cannot be dispatched because no valid billing recipient is configured.");
+            throw new BusinessRuleException("Statement cannot be sent because this client has no email address. Add one to the client and try again.");
 
         var cc = allTo.Skip(1).Concat(recipients.Cc).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         await emailOutbox.QueueEmailAsync(

@@ -72,6 +72,43 @@ public sealed partial class AuthEmailSafetyTests
     }
 
     [Fact]
+    public async Task PlatformEdit_DoesNotOverwriteCompanyDetailsTheTenantManagesItself()
+    {
+        await using var db = CreateDbContext();
+        await db.Database.EnsureCreatedAsync();
+        await SeedPlatformUserAsync(db, "owner@platform.test");
+        var controller = CreateAuditPlatformTenantsController(db, new LicenseGuardService(db));
+        var created = Assert.IsType<PlatformTenantDetailResponse>(
+            Assert.IsType<CreatedAtActionResult>((await controller.Create(MinimalProvisioningRequest(maxUsers: 10), CancellationToken.None)).Result).Value);
+
+        // The tenant updates its own Company Profile...
+        var tenant = await db.Tenants.SingleAsync(x => x.Id == created.TenantId);
+        tenant.CompanyName = "Acme Engineering (K) Ltd";
+        tenant.Email = "info@acme.co.ke";
+        tenant.Phone = "+254700000001";
+        tenant.Country = "Uganda";
+        tenant.TimeZoneId = "Africa/Kampala";
+        tenant.Address = "Plot 5, Kampala Road";
+        await db.SaveChangesAsync();
+
+        // ...then a platform admin edits the tenant with stale company details in the request.
+        await controller.Update(created.TenantId, MinimalProvisioningRequest(maxUsers: 12) with
+        {
+            CompanyEmail = "stale@acme.test", CompanyPhone = "+254799999999", Country = "Kenya", Address = "Old address",
+            PrimaryContactName = "New Contact",
+        }, CancellationToken.None);
+
+        var reloaded = await db.Tenants.AsNoTracking().SingleAsync(x => x.Id == created.TenantId);
+        Assert.Equal("Acme Engineering (K) Ltd", reloaded.CompanyName);
+        Assert.Equal("info@acme.co.ke", reloaded.Email);
+        Assert.Equal("+254700000001", reloaded.Phone);
+        Assert.Equal("Uganda", reloaded.Country);
+        Assert.Equal("Africa/Kampala", reloaded.TimeZoneId);
+        Assert.Equal("Plot 5, Kampala Road", reloaded.Address);
+        Assert.Equal("New Contact", reloaded.ContactName);
+    }
+
+    [Fact]
     public async Task LicensedUsers_LimitOfTen_BlocksTheEleventhUser_UntilTheLimitIsRaised()
     {
         await using var db = CreateDbContext();

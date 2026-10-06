@@ -900,7 +900,7 @@ public sealed class PlatformTenantsController(
         var companyInUse = await dbContext.Tenants.AnyAsync(
             x => x.Id != tenant.Id
                 && x.Id != PlatformConstants.RootTenantId
-                && x.CompanyName.ToLower() == trimmedName.ToLower(),
+                && (x.CompanyName.ToLower() == trimmedName.ToLower() || x.Name.ToLower() == trimmedName.ToLower()),
             cancellationToken);
         if (companyInUse)
         {
@@ -919,16 +919,23 @@ public sealed class PlatformTenantsController(
         }
 
         tenant.Name = trimmedName;
-        tenant.CompanyName = trimmedName;
         tenant.Slug = slug;
         tenant.ContactName = NormalizeOptional(request.PrimaryContactName ?? request.ContactName);
         tenant.ContactEmail = normalizedContactEmail;
         tenant.ContactPhone = NormalizeOptional(request.PrimaryContactPhone ?? request.ContactPhone);
-        tenant.Email = normalizedCompanyEmail ?? NormalizeOptional(tenant.Email) ?? NormalizeEmail(request.AdminEmail) ?? TenantEmailIdentity.Address(slug);
-        tenant.Phone = NormalizeOptional(request.CompanyPhone) ?? tenant.Phone;
-        tenant.Country = NormalizeOptional(request.Country) ?? NormalizeOptional(tenant.Country) ?? "Kenya";
-        tenant.TimeZoneId = TenantTimeService.NormalizeTimeZone(NormalizeOptional(request.TimeZoneId) ?? (isNewTenant ? null : tenant.TimeZoneId), tenant.Country);
-        if (isNewTenant) tenant.Currency = TenantEmailIdentity.DefaultCurrency(tenant.Country);
+        // Company details are seeded here at provisioning, then belong to the tenant (Settings → Company
+        // Profile). Writing them on every platform edit silently overwrote whatever the tenant had saved.
+        if (isNewTenant)
+        {
+            tenant.CompanyName = trimmedName;
+            tenant.Email = normalizedCompanyEmail ?? NormalizeEmail(request.AdminEmail) ?? TenantEmailIdentity.Address(slug);
+            tenant.Phone = NormalizeOptional(request.CompanyPhone);
+            tenant.Country = NormalizeOptional(request.Country) ?? "Kenya";
+            tenant.TimeZoneId = TenantTimeService.NormalizeTimeZone(NormalizeOptional(request.TimeZoneId), tenant.Country);
+            tenant.Currency = TenantEmailIdentity.DefaultCurrency(tenant.Country);
+            tenant.Industry = NormalizeOptional(request.Industry);
+            tenant.Address = NormalizeOptional(request.Address);
+        }
         var emailIdentity = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);
         if (emailIdentity is not null && emailIdentity.ManagedEmailAddress is not null)
         {
@@ -942,10 +949,8 @@ public sealed class PlatformTenantsController(
             emailIdentity.ManagedEmailAddress = renamedAddress;
             emailIdentity.SenderAddress = emailIdentity.ManagedEmailAddress;
         }
-        tenant.Industry = NormalizeOptional(request.Industry) ?? tenant.Industry;
         tenant.County = NormalizeOptional(request.County);
         tenant.City = NormalizeOptional(request.City);
-        tenant.Address = NormalizeOptional(request.Address);
         tenant.TaxPin = NormalizeOptional(request.TaxPin);
         tenant.PlanName = plan?.DisplayName ?? requestedPlanName;
         tenant.CreatedByUserId ??= tenantContext.GetRequiredUserId();

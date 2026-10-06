@@ -33,6 +33,7 @@ public sealed class Phase2GovernanceTests
                 "platform.subscription.grace-warning",
                 "platform.subscription.suspended",
                 "quotation.sent",
+                "service-report.sent",
                 "tenant.onboarding",
                 "user.password-reset.admin",
                 "users.invited",

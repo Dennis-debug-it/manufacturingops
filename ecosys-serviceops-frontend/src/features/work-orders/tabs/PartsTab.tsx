@@ -12,6 +12,7 @@ import { formatDateTime } from '../../../shared/utils/dates'
 import { useMaterialOptions } from '../pickerApi'
 import { useCreatePartsRequest, useDeliverPartsRequest, usePartsRequestsForWorkOrder } from '../partsRequestsApi'
 import type { PartsRequest } from '../partsRequestsApi'
+import { PartsReturnsSection } from '../components/PartsReturnsSection'
 
 interface DraftItem {
   key: string
@@ -160,6 +161,8 @@ export function PartsTab({ workOrderId }: { workOrderId: string }) {
           ))}
         </div>
       )}
+
+      <PartsReturnsSection workOrderId={workOrderId} />
 
       <FormDrawer
         open={open}

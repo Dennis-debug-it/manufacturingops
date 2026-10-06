@@ -32,6 +32,14 @@ public sealed class EmailSetting : AuditableEntity, ITenantEntity
     public DateTime? ManagedEmailStatusCheckedAt { get; set; }
     public string? ManagedEmailStatusDetail { get; set; }
     public bool InboundEnabled { get; set; } = true;
+    /// <summary>
+    /// Tenant rows only: send through the tenant's own mail server (<see cref="Host"/>, <see cref="Port"/>,
+    /// <see cref="Username"/>, <see cref="EncryptedSecret"/>) as <see cref="CustomFromAddress"/> instead of
+    /// the platform transport and managed address. Off by default; platform mail is used while it is off.
+    /// </summary>
+    public bool UseCustomSmtp { get; set; }
+    /// <summary>The From address used with the tenant's own SMTP server — one that server accepts as a sender.</summary>
+    public string? CustomFromAddress { get; set; }
     public string? EmailSignature { get; set; }
     public bool IsConfigured { get; set; }
     public DateTime? LastTestedAt { get; set; }

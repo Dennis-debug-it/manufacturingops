@@ -27,7 +27,8 @@ public sealed partial class WorkOrderExecutionController(
     IWorkOrderLifecycleService workOrderLifecycleService,
     IPdfRenderer pdfRenderer,
     IDocumentNumberingService documentNumberingService,
-    IHttpClientFactory httpClientFactory) : TenantAwareControllerBase(tenantContext)
+    IHttpClientFactory httpClientFactory,
+    IServiceReportDeliveryService serviceReportDeliveryService) : TenantAwareControllerBase(tenantContext)
 {
     private const string ProgressUpdateEventType = "ProgressUpdate";
 

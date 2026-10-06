@@ -14,7 +14,7 @@ const STATUS_FALLBACKS: Record<number, string> = {
   404: "We couldn't find what you were looking for.",
   408: "The request timed out. Please try again.",
   409: "That conflicts with the current state. Please refresh and try again.",
-  413: "That upload is too large.",
+  413: "That file is too large to upload. Photos and attachments can be up to 5 MB, logos and documents up to 10 MB.",
   422: "Some of the information provided isn't valid. Please check it and try again.",
   429: "Too many attempts. Please wait a moment and try again.",
 }
@@ -57,7 +57,8 @@ export class ApiError extends Error {
 }
 
 function messageFromBody(data: unknown): string | null {
-  if (typeof data === 'string' && data.trim()) return data.trim()
+  // A proxy's HTML error page (e.g. nginx "413 Request Entity Too Large") is not a message for users.
+  if (typeof data === 'string' && data.trim()) return /^\s*</.test(data) ? null : data.trim()
   if (data && typeof data === 'object') {
     const record = data as Record<string, unknown>
     for (const key of ['message', 'detail', 'title'] as const) {

@@ -307,9 +307,51 @@ export interface RecordDepartureVariables {
 
 function invalidateDispatchState(queryClient: ReturnType<typeof useQueryClient>, id: string) {
   invalidateWorkOrders(queryClient, id)
+  void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'visits'] })
   void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'assignment-history'] })
   void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'events'] })
   void queryClient.invalidateQueries({ queryKey: ['dispatch'] })
+}
+
+/** One trip to site: travel start → arrival → departure. A multi-day job has one per day/trip. */
+export interface WorkOrderVisit {
+  id: string
+  technicianId: string
+  technicianName: string
+  travelStartedAt: string | null
+  arrivedAt: string | null
+  departedAt: string | null
+  travelMinutes: number
+  onSiteMinutes: number
+  notes: string | null
+}
+
+/** `Idle` → en route → `Travelling` → arrival → `OnSite` → departure → `Idle` (next trip). */
+export type VisitState = 'Idle' | 'Travelling' | 'OnSite'
+
+export interface WorkOrderVisitTechnicianSummary {
+  technicianId: string
+  technicianName: string
+  state: VisitState
+  visitCount: number
+  daysOnJob: number
+  travelMinutes: number
+  onSiteMinutes: number
+}
+
+export interface WorkOrderVisits {
+  visits: WorkOrderVisit[]
+  technicians: WorkOrderVisitTechnicianSummary[]
+  totalTravelMinutes: number
+  totalOnSiteMinutes: number
+}
+
+export function useWorkOrderVisits(id: string) {
+  return useQuery({
+    queryKey: ['work-orders', id, 'visits'],
+    queryFn: () => api.get<WorkOrderVisits>(endpoints.workOrders.visits(id)),
+    enabled: Boolean(id),
+  })
 }
 
 export function useRecordTechnicianResponse() {

@@ -39,6 +39,7 @@ export function PortalApp() {
         <Routes>
           <Route path="login" element={<PortalLoginPage />} />
           <Route path="verify" element={<PortalVerifyPage />} />
+          <Route path="access" element={<PortalVerifyPage permanent />} />
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<PortalShellRoute><PortalDashboardPage /></PortalShellRoute>} />
           <Route path="requests" element={<PortalShellRoute><PortalRequestsPage /></PortalShellRoute>} />

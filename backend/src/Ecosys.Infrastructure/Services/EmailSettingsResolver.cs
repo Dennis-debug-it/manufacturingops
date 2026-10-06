@@ -40,6 +40,14 @@ public static class EmailDeliveryResolution
     {
         var mode = ParseDeliveryMode(settings?.Provider);
 
+        // A tenant's own server gets exactly what the tenant entered. Filling its gaps from the
+        // platform's Smtp:* configuration would hand the platform's credentials to a tenant-chosen host.
+        if (TenantEmailIdentity.UsesOwnSmtp(settings))
+        {
+            return Build(EmailDeliveryMode.Smtp, settings, decryptedSecret, settings!.Host,
+                settings.Port > 0 ? settings.Port : 587, settings.Username, settings.UseSsl);
+        }
+
         // Configuration fills gaps; it never overrides a choice. A row that names a non-SMTP
         // provider is an operator decision and is handed on untouched.
         if (mode != EmailDeliveryMode.Smtp)
@@ -110,10 +118,10 @@ public static class EmailDeliveryResolution
 }
 
 /// <summary>
-/// SMTP transport is global platform infrastructure — there is no per-tenant SMTP server, and no
-/// per-tenant override of it, even via platform-admin impersonation. What differentiates a tenant is
-/// its managed sender identity (the {slug}@serviceops... address — see TenantEmailIdentity), which is
-/// layered on top of the platform's transport for every send.
+/// By default SMTP transport is platform infrastructure: a tenant sends through the platform's server
+/// as its managed sender identity (the {slug}@serviceops... address — see TenantEmailIdentity). A tenant
+/// admin can instead switch on their own SMTP server (EmailSetting.UseCustomSmtp); once it has a host and
+/// From address, that tenant's mail goes through it and nothing of the platform's is used.
 /// </summary>
 public sealed class EmailSettingsResolver(AppDbContext dbContext) : IEmailSettingsResolver
 {
@@ -128,6 +136,11 @@ public sealed class EmailSettingsResolver(AppDbContext dbContext) : IEmailSettin
         }
 
         var tenantSettings = await LoadAsync(scopeTenantId, cancellationToken);
+        if (TenantEmailIdentity.UsesOwnSmtp(tenantSettings))
+        {
+            return new EffectiveEmailSettings(tenantSettings, UsesPlatformMail: false);
+        }
+
         if (tenantSettings is null || platformSettings is null)
         {
             return new EffectiveEmailSettings(tenantSettings ?? platformSettings, UsesPlatformMail: true);

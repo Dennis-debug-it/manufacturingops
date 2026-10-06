@@ -188,6 +188,10 @@ server {
     listen 80;
     server_name serviceops.yourdomain.com;
 
+    # Must be at least the container's limit (15m), or this proxy refuses photo/logo/document
+    # uploads with "413 Request Entity Too Large" (nginx defaults to 1 MB).
+    client_max_body_size 15m;
+
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host              $host;

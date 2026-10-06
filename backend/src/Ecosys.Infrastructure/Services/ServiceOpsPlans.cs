@@ -35,7 +35,7 @@ public static class ServiceOpsPlans
     {
         "AssignmentGroups", "Assets", "AssetCategories", "Contracts", "ContractReference", "Csat",
         "Dashboard", "Dispatch", "EscalationRules", "EtaNotificationSettings", "Intake", "IntakeProtocols",
-        "MaterialIssues", "MaterialRequests", "Materials", "PartsRequests", "PreventiveMaintenance", "PmTemplates",
+        "MaterialIssues", "MaterialRequests", "Materials", "PartsRequests", "PartsReturns", "PreventiveMaintenance", "PmTemplates",
         "PurchaseOrders", "Reports", "ScheduledReports", "Sites", "Systems", "SlaDefinitions", "SlaPolicies",
         "StockTransfers", "TeamManagement", "Technicians", "TechnicianJobs", "TimeAttendance", "Vans", "WhatsApp",
         "Workflows", "WorkOrderAssignments", "WorkOrderExecution", "WorkOrderTemplates", "WorkOrders"
@@ -56,7 +56,7 @@ public static class ServiceOpsPlans
     {
         "AccessControl", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "ClientPortalContacts",
         "Clients", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "PortalAuth", "PortalKnowledge",
-        "PublicWorkOrder", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDeliveryLogs",
+        "PublicWorkOrder", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users"
     };
 

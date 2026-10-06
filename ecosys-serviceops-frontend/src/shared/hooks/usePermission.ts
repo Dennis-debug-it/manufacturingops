@@ -130,6 +130,7 @@ const permissionSetLookup: Partial<Record<string, keyof PermissionSet>> = {
   'parts-requests.create': 'canRequestMaterials',
   'parts-requests.approve': 'canApproveMaterials',
   'parts-requests.dispatch': 'canIssueMaterials',
+  'parts-returns.receive': 'canIssueMaterials',
   'inventory.issues.approve': 'canApproveMaterials',
   'inventory.issues.issue': 'canIssueMaterials',
   'inventory.transfers.manage': 'canManageMaterials',
@@ -158,6 +159,7 @@ const executeActions = new Set([
   'work-orders.materials.log',
   'work-orders.report.generate',
   'parts-requests.deliver',
+  'parts-returns.create',
 ])
 
 export function usePermission(action: string): boolean {

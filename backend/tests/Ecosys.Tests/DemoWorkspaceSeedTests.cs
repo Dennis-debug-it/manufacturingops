@@ -171,6 +171,9 @@ public sealed class DemoWorkspaceSeedTests
         public Task RequestMagicLinkAsync(string email, string magicLinkBaseUrl, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<PortalMagicLinkResult> VerifyMagicLinkAsync(string token, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> IssueSignInLinkAsync(Guid portalUserId, string magicLinkBaseUrl, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task SendInvitationAsync(Guid portalUserId, string portalBaseUrl, Guid? invitedByUserId, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> GetAccessLinkAsync(Guid portalUserId, string portalBaseUrl, Guid? actorUserId, bool reset, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PortalMagicLinkResult> OpenAccessLinkAsync(string link, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class UnusedFileStorage : IFileStorageService

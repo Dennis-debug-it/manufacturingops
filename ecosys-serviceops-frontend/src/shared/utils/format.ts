@@ -28,3 +28,12 @@ export const formatStatus = (value: string) =>
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
+
+/** 0 → "0m", 45 → "45m", 135 → "2h 15m", 120 → "2h". */
+export function formatDurationMinutes(minutes: number): string {
+  const total = Math.max(0, Math.round(minutes))
+  const hours = Math.floor(total / 60)
+  const rest = total % 60
+  if (hours === 0) return `${rest}m`
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`
+}

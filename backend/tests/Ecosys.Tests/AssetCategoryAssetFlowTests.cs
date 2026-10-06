@@ -173,6 +173,37 @@ public sealed class AssetCategoryAssetFlowTests
         Assert.Equal("Generator", asset.AssetCategoryName);
     }
 
+    [Fact]
+    public async Task Asset_WithoutCode_SkipsGeneratedCodesThatAreAlreadyTaken()
+    {
+        // The numbering counter does not know about codes typed by hand or imported, so its next
+        // value can already exist; that used to fail the insert on the unique (tenant, code) index.
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        dbContext.Assets.Add(new Asset { TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, AssetName = "Imported", AssetCode = "ast-000001", Status = "Active" });
+        await dbContext.SaveChangesAsync();
+
+        var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
+        var createResult = await assetsController.Create(
+            new UpsertAssetRequest(
+                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                "Chiller", null, "HVAC", "Owned", null, null, null, null,
+                null, null, null, null, null, false, null, null, null, "Active", null),
+            CancellationToken.None);
+
+        var payload = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
+        Assert.Equal("AST-000002", payload.AssetCode);
+    }
+
+    [Fact]
+    public void UpsertAssetRequest_AssetCodeIsOptional()
+    {
+        // With nullable reference types on, MVC treats a non-nullable string as implicitly [Required],
+        // so the asset form (which leaves the code blank to auto-generate it) got a 400 every time.
+        var parameter = typeof(UpsertAssetRequest).GetConstructors().Single().GetParameters().Single(x => x.Name == "AssetCode");
+        Assert.Equal(System.Reflection.NullabilityState.Nullable, new System.Reflection.NullabilityInfoContext().Create(parameter).WriteState);
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -324,8 +355,10 @@ public sealed class AssetCategoryAssetFlowTests
 
     private sealed class FakeDocumentNumberingService : IDocumentNumberingService
     {
+        private int _next;
+
         public Task<string> GenerateAsync(Guid tenantId, Guid? branchId, string documentType, CancellationToken cancellationToken = default) =>
-            Task.FromResult("AST-AUTO-001");
+            Task.FromResult($"AST-{Interlocked.Increment(ref _next):D6}");
 
         public Task<NumberingSetting> UpsertAsync(Guid tenantId, Guid? branchId, string documentType, string prefix, long nextNumber, int paddingLength, string resetFrequency, bool includeYear, bool includeMonth, bool isActive, CancellationToken cancellationToken = default, string? suffix = null, string yearFormat = "YYYY", string separator = "-", bool isLocked = false) =>
             throw new NotSupportedException();

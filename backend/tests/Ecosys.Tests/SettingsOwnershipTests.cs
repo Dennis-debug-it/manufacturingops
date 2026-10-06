@@ -21,8 +21,8 @@ public sealed class SettingsOwnershipTests
     [Fact]
     public void SettingsController_NoLongerExposesAnyTenantFacingSmtpTransportEndpoint()
     {
-        // Regression guard for the architecture correction: a tenant admin (even one impersonated by a
-        // platform admin) must never be able to write SMTP host/port/credentials again.
+        // Tenant SMTP has exactly one home: TenantEmailDeliveryController (Settings → Email Delivery,
+        // tenant admin only). The old SettingsController endpoints must not come back alongside it.
         var actionNames = typeof(SettingsController)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
             .Select(x => x.Name)
@@ -48,6 +48,9 @@ public sealed class SettingsOwnershipTests
         Assert.DoesNotContain("UpdateEmailSettings", actionNames);
         Assert.DoesNotContain("UpdateCommunicationSettings", actionNames);
         Assert.DoesNotContain("ResetEmailSettingsToDefaults", actionNames);
+        // Notification switches were never read by anything, and finance recipients are tenant-owned
+        // (Settings → Finance Defaults); the platform view of both is read-only.
+        Assert.DoesNotContain("UpdateNotificationSettings", actionNames);
     }
 
     [Fact]

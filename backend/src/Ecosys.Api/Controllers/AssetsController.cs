@@ -163,7 +163,7 @@ public sealed class AssetsController(
             AssetCategoryId = request.AssetCategoryId,
             AssetName = request.AssetName.Trim(),
             AssetCode = string.IsNullOrWhiteSpace(request.AssetCode)
-                ? await documentNumberingService.GenerateAsync(TenantId, branchId, DocumentTypes.Asset, cancellationToken)
+                ? await GenerateUniqueAssetCodeAsync(branchId, cancellationToken)
                 : request.AssetCode.Trim(),
             AssetType = request.AssetType?.Trim(),
             OwnershipType = NormalizeOwnershipType(request.OwnershipType),
@@ -459,6 +459,26 @@ public sealed class AssetsController(
         }
     }
 
+    /// <summary>
+    /// The numbering counter knows nothing about codes typed by hand or brought in by an import, so
+    /// its next value can already be taken — and the (TenantId, AssetCode) unique index then fails the
+    /// insert. Skip past any taken values; each call advances the counter, so this converges.
+    /// </summary>
+    private async Task<string> GenerateUniqueAssetCodeAsync(Guid? branchId, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            var candidate = await documentNumberingService.GenerateAsync(TenantId, branchId, DocumentTypes.Asset, cancellationToken);
+            var normalized = candidate.ToLowerInvariant();
+            if (!await dbContext.Assets.AnyAsync(x => x.TenantId == TenantId && x.AssetCode.ToLower() == normalized, cancellationToken))
+            {
+                return candidate;
+            }
+        }
+
+        throw new BusinessRuleException("Could not generate a free asset code. Enter an asset code manually or adjust the Asset numbering rule.");
+    }
+
     private async Task EnsureUniqueAssetCodeAsync(string assetCode, Guid? currentId, CancellationToken cancellationToken)
     {
         var normalizedCode = assetCode.Trim().ToLowerInvariant();
@@ -622,7 +642,7 @@ public sealed record UpsertAssetRequest(
     Guid? SystemId,
     Guid? AssetCategoryId,
     [StringLength(200)] string AssetName,
-    [StringLength(100)] string AssetCode,
+    [StringLength(100)] string? AssetCode,
     [StringLength(100)] string? AssetType,
     [StringLength(50)] string? OwnershipType,
     [StringLength(200)] string? Location,

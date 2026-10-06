@@ -114,6 +114,48 @@ public sealed class WorkOrderAssignmentsController(
     }
 
     /// <summary>
+    /// Every trip each technician has made to this job (travel start, arrival, departure) with travel
+    /// and on-site totals, so multi-day jobs show the whole history. <c>State</c> per technician drives
+    /// which action the UI offers next: Idle → Travelling → OnSite → Idle.
+    /// </summary>
+    [HttpGet("visits")]
+    public async Task<ActionResult<WorkOrderVisitsResponse>> GetVisits(Guid workOrderId, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureTenantOperationalAccess();
+        await EnsureAccessibleAsync(workOrderId, cancellationToken);
+
+        var visits = await dbContext.WorkOrderVisits
+            .AsNoTracking()
+            .Include(x => x.Technician)
+            .Where(x => x.TenantId == TenantId && x.WorkOrderId == workOrderId)
+            .OrderBy(x => x.TravelStartedAt ?? x.ArrivedAt ?? x.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var rows = visits.Select(x => new WorkOrderVisitResponse(
+            x.Id, x.TechnicianId, x.Technician?.FullName ?? "Technician",
+            x.TravelStartedAt, x.ArrivedAt, x.DepartedAt, x.TravelMinutes, x.OnSiteMinutes, x.Notes)).ToList();
+
+        var technicians = visits
+            .GroupBy(x => x.TechnicianId)
+            .Select(group =>
+            {
+                var open = group.Where(x => x.DepartedAt == null).OrderByDescending(x => x.CreatedAt).FirstOrDefault();
+                var state = open is null ? "Idle" : open.ArrivedAt is null ? "Travelling" : "OnSite";
+                return new WorkOrderVisitTechnicianSummary(
+                    group.Key,
+                    group.First().Technician?.FullName ?? "Technician",
+                    state,
+                    group.Count(),
+                    group.Select(x => (x.ArrivedAt ?? x.TravelStartedAt ?? x.CreatedAt).Date).Distinct().Count(),
+                    group.Sum(x => x.TravelMinutes),
+                    group.Sum(x => x.OnSiteMinutes));
+            })
+            .ToList();
+
+        return Ok(new WorkOrderVisitsResponse(rows, technicians, technicians.Sum(x => x.TravelMinutes), technicians.Sum(x => x.OnSiteMinutes)));
+    }
+
+    /// <summary>
     /// Rolls the per-technician arrival/departure stamps up onto the work-order header.
     /// <para>
     /// EC-013: recording a departure only wrote <c>work_order_technician_assignments.DepartureAt</c>.
@@ -278,3 +320,17 @@ public sealed record WorkOrderAssignmentHistoryItem(
     string? PerformedByUserName,
     DateTime PerformedAt,
     string? Notes);
+
+public sealed record WorkOrderVisitResponse(
+    Guid Id, Guid TechnicianId, string TechnicianName,
+    DateTime? TravelStartedAt, DateTime? ArrivedAt, DateTime? DepartedAt,
+    int TravelMinutes, int OnSiteMinutes, string? Notes);
+
+public sealed record WorkOrderVisitTechnicianSummary(
+    Guid TechnicianId, string TechnicianName, string State, int VisitCount, int DaysOnJob, int TravelMinutes, int OnSiteMinutes);
+
+public sealed record WorkOrderVisitsResponse(
+    IReadOnlyList<WorkOrderVisitResponse> Visits,
+    IReadOnlyList<WorkOrderVisitTechnicianSummary> Technicians,
+    int TotalTravelMinutes,
+    int TotalOnSiteMinutes);

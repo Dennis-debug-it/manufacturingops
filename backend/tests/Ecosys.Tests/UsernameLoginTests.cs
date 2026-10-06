@@ -228,6 +228,99 @@ public sealed partial class AuthEmailSafetyTests
         Assert.Empty(await dbContext.EmailDeliveryLogs.ToListAsync());
     }
 
+    [Fact]
+    public async Task ResetPassword_GenerateAndReveal_WorksForAUserWhoHasNotSignedInYet()
+    {
+        // A freshly created no-email user still has MustChangePassword set; the admin's
+        // "Generate Password" button is the only way to hand them a password, so it must not be
+        // rejected as if it were an emailed reset.
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var user = await SeedTenantUserAsync(dbContext, tenantId, "newhire@tenant.test", mustChangePassword: true);
+        var controller = CreateUsersController(dbContext, tenantId, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true));
+
+        var actionResult = await controller.ResetPassword(user.Id, new ResetPasswordRequest(null, null, GenerateAndReveal: true), CancellationToken.None);
+
+        var response = Assert.IsType<CredentialDeliveryResponse>(Assert.IsType<OkObjectResult>(actionResult.Result).Value);
+        Assert.False(string.IsNullOrWhiteSpace(response.TemporaryPassword));
+    }
+
+    [Fact]
+    public async Task ResetPassword_EmailedReset_StillRejectedForAUserWhoHasNotSignedInYet()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var user = await SeedTenantUserAsync(dbContext, tenantId, "newhire2@tenant.test", mustChangePassword: true);
+        var controller = CreateUsersController(dbContext, tenantId, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true));
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.ResetPassword(user.Id, null, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Login_WithUsername_AcceptsCompanyNameWhenTheSlugWasCustomised()
+    {
+        // A platform-provisioned tenant can be given a workspace slug unrelated to its company name
+        // (or a "-2" suffix on a clash). Users only know the company name, so it must still resolve.
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        await SeedTenantAsync(dbContext, tenantId, "acmecorp", "admin@acmecorp.test");
+        var tenant = await dbContext.Tenants.SingleAsync(x => x.Id == tenantId);
+        tenant.Slug = "acme-hq-2";
+        tenant.CompanyName = "Acme Corporation Kenya";
+        await dbContext.SaveChangesAsync();
+        var user = await SeedUsernameOnlyUserAsync(dbContext, tenantId, "jsmith");
+
+        var authService = CreateAuthService(dbContext);
+        var controller = CreateAuthController(dbContext, tenantId, user.Id, authService);
+
+        var result = await controller.Login(new LoginRequest("jsmith", UsernamePassword, "  acme corporation kenya "), CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        Assert.Equal(user.Id, Assert.IsType<LoginResponse>(ok.Value).User.UserId);
+    }
+
+    [Fact]
+    public async Task Login_WithUsername_AmbiguousCompanyNameAcrossTenantsFailsGenerically()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantAId = Guid.NewGuid();
+        var tenantBId = Guid.NewGuid();
+        await SeedTenantAsync(dbContext, tenantAId, "acme-a", "admin@acme-a.test");
+        await SeedTenantAsync(dbContext, tenantBId, "acme-b", "admin@acme-b.test");
+        foreach (var tenant in await dbContext.Tenants.Where(x => x.Id == tenantAId || x.Id == tenantBId).ToListAsync())
+            tenant.CompanyName = "Acme";
+        await dbContext.SaveChangesAsync();
+        var user = await SeedUsernameOnlyUserAsync(dbContext, tenantAId, "jsmith");
+        await SeedUsernameOnlyUserAsync(dbContext, tenantBId, "jsmith");
+
+        var authService = CreateAuthService(dbContext);
+        var controller = CreateAuthController(dbContext, tenantAId, user.Id, authService);
+
+        await Assert.ThrowsAsync<UnauthorizedException>(
+            () => controller.Login(new LoginRequest("jsmith", UsernamePassword, "Acme"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Update_CorrectingAMistypedEmail_RevokesLinksAlreadySentToTheWrongAddress()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        var user = await SeedTenantUserAsync(dbContext, tenantId, "jonh@tenant.test", mustChangePassword: true);
+        dbContext.PasswordResetTokens.Add(new PasswordResetToken
+        {
+            UserId = user.Id, TokenHash = "hash", Purpose = PasswordLinkPurposes.Invitation, ExpiresAt = DateTime.UtcNow.AddDays(3),
+        });
+        await dbContext.SaveChangesAsync();
+        var controller = CreateUsersController(dbContext, tenantId, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true));
+
+        await controller.Update(user.Id, new UpdateUserRequest(
+            user.FullName, "john@tenant.test", null, null, user.Role, null, null, true, null, null, null, true, null, user.Username),
+            CancellationToken.None);
+
+        Assert.Equal("john@tenant.test", (await dbContext.Users.SingleAsync(x => x.Id == user.Id)).Email);
+        Assert.NotNull((await dbContext.PasswordResetTokens.SingleAsync()).RevokedAt);
+    }
+
     private static async Task<User> SeedUsernameOnlyUserAsync(AppDbContext dbContext, Guid tenantId, string username)
     {
         var user = new User

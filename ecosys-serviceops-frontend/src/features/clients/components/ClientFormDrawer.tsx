@@ -1,9 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { applyApiFieldErrors } from '../../../shared/api/apiError'
+import { api } from '../../../shared/api/apiClient'
+import { endpoints } from '../../../shared/api/endpoints'
 import { useCreateClient, useUpdateClient } from '../api'
 import { clientSchema, type ClientFormValues } from '../schemas'
 import type { Client } from '../types'
@@ -45,6 +47,7 @@ export function ClientFormDrawer({ open, onClose, onCreated, client }: ClientFor
     defaultValues: emptyValues,
   })
   const createClient = useCreateClient()
+  const [invitePortal, setInvitePortal] = useState(false)
   const updateClient = useUpdateClient(client?.id ?? '')
 
   useEffect(() => {
@@ -65,6 +68,7 @@ export function ClientFormDrawer({ open, onClose, onCreated, client }: ClientFor
 
   const close = () => {
     reset(emptyValues)
+    setInvitePortal(false)
     onClose()
   }
 
@@ -80,6 +84,11 @@ export function ClientFormDrawer({ open, onClose, onCreated, client }: ClientFor
       notes: values.notes?.trim() || null,
     }
 
+    if (!isEdit && invitePortal && !payload.email) {
+      setError('email', { message: 'An email is needed to invite this client to the portal' })
+      return
+    }
+
     try {
       if (isEdit && client) {
         const updated = await updateClient.mutateAsync({ ...payload, isActive: client.isActive })
@@ -88,6 +97,19 @@ export function ClientFormDrawer({ open, onClose, onCreated, client }: ClientFor
       } else {
         const created = await createClient.mutateAsync({ ...payload, isActive: true })
         toast.success(`Client "${created.clientName}" created`)
+        if (invitePortal && payload.email) {
+          // The client exists either way; a failed invite can be retried from the Client Portal tab.
+          try {
+            await api.post(endpoints.clientPortalContacts.create(created.id), {
+              fullName: payload.contactPerson ?? payload.clientName,
+              email: payload.email,
+              phone: payload.contactPhone ?? undefined,
+            })
+            toast.success(`Portal invitation sent to ${payload.email}`)
+          } catch {
+            toast.error('Client created, but the portal invitation failed — retry from the Client Portal tab')
+          }
+        }
         close()
         onCreated?.(created.id)
       }
@@ -152,6 +174,15 @@ export function ClientFormDrawer({ open, onClose, onCreated, client }: ClientFor
             {errors.contactPhone ? <p className={errorClass}>{errors.contactPhone.message}</p> : null}
           </div>
         </div>
+        {!isEdit ? (
+          <label className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+            <input type="checkbox" checked={invitePortal} onChange={(event) => setInvitePortal(event.target.checked)} className="mt-0.5" />
+            <span>
+              Give this client access to the client portal
+              <span className="block text-xs text-slate-500">Emails an invitation to the email above (the contact person is used as the name). More contacts can be added on the Client Portal tab.</span>
+            </span>
+          </label>
+        ) : null}
         <div>
           <label className={labelClass} htmlFor="client-notes">Notes</label>
           <textarea id="client-notes" {...register('notes')} rows={3} className={`${fieldClass} h-auto py-2`} />

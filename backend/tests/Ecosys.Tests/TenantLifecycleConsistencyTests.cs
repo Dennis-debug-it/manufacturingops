@@ -275,7 +275,9 @@ public sealed partial class AuthEmailSafetyTests
         Assert.Equal(12, license.LicensedUsers);
         Assert.Equal(LicenseStatuses.Suspended, license.Status);
         Assert.Equal(TenantStatuses.Suspended, tenant.Status);
-        Assert.Equal("Acme Engineering Group", tenant.CompanyName);
+        // The platform renames its own workspace record; the company name is the tenant's (Company Profile).
+        Assert.Equal("Acme Engineering Group", tenant.Name);
+        Assert.Equal("Acme Engineering Ltd", tenant.CompanyName);
     }
 
     [Fact]

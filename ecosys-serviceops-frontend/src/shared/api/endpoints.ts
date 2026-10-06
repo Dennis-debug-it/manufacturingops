@@ -38,6 +38,8 @@ export const endpoints = {
   tenant: {
     profile: '/api/tenant/profile',
     brandingLogo: '/api/tenant/branding/logo',
+    emailDelivery: '/api/tenant/email-delivery',
+    emailDeliveryTest: '/api/tenant/email-delivery/test',
   },
   dashboard: {
     summary: '/api/dashboard/summary',
@@ -105,6 +107,9 @@ export const endpoints = {
     timeLogs: (id: string) => `/api/work-orders/${id}/time-logs`,
     sla: (id: string) => `/api/workorders/${id}/sla`,
     partsRequests: (id: string) => `/api/workorders/${id}/parts-requests`,
+    partsReturns: (id: string) => `/api/workorders/${id}/parts-returns`,
+    returnableParts: (id: string) => `/api/workorders/${id}/parts-returns/returnable`,
+    visits: (id: string) => `/api/workorders/${id}/visits`,
     workflowStatuses: '/api/workorders/workflow-statuses',
     notes: (id: string) => `/api/workorders/${id}/notes`,
     related: (id: string) => `/api/workorders/${id}/related`,
@@ -189,6 +194,11 @@ export const endpoints = {
     approve: (id: string) => `/api/material-requests/${id}/approve`,
     issue: (id: string) => `/api/material-requests/${id}/issue`,
     close: (id: string) => `/api/material-requests/${id}/close`,
+  },
+  partsReturns: {
+    list: '/api/parts-returns',
+    receive: (id: string) => `/api/parts-returns/${id}/receive`,
+    reject: (id: string) => `/api/parts-returns/${id}/reject`,
   },
   partsRequests: {
     list: '/api/parts-requests',
@@ -526,6 +536,7 @@ export const endpoints = {
   portal: {
     requestLink: '/api/portal/auth/request-link',
     verify: '/api/portal/auth/verify',
+    accessLink: '/api/portal/auth/access-link',
     me: '/api/portal/auth/me',
     logout: '/api/portal/auth/logout',
     settings: '/api/portal/settings',
@@ -554,5 +565,7 @@ export const endpoints = {
     create: (clientId: string) => `/api/clients/${clientId}/portal-users`,
     status: (clientId: string, id: string) => `/api/clients/${clientId}/portal-users/${id}/status`,
     resendLink: (clientId: string, id: string) => `/api/clients/${clientId}/portal-users/${id}/resend-link`,
+    accessLink: (clientId: string, id: string) => `/api/clients/${clientId}/portal-users/${id}/access-link`,
+    resetAccessLink: (clientId: string, id: string) => `/api/clients/${clientId}/portal-users/${id}/access-link/reset`,
   },
 } as const

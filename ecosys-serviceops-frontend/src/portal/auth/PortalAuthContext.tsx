@@ -20,6 +20,8 @@ export interface PortalAuthContextValue {
   isReady: boolean
   requestLink: (email: string) => Promise<void>
   verify: (token: string) => Promise<PortalSession>
+  /** Signs in with a contact's permanent portal link (it never expires). */
+  openAccessLink: (token: string) => Promise<PortalSession>
   logout: () => Promise<void>
 }
 
@@ -88,8 +90,11 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
     await portalApi.post(endpoints.portal.requestLink, { email })
   }
 
-  const verify = async (token: string) => {
-    const response = await portalApi.post<PortalVerifyResponse>(endpoints.portal.verify, { token })
+  const verify = (token: string) => startSession(endpoints.portal.verify, token)
+  const openAccessLink = (token: string) => startSession(endpoints.portal.accessLink, token)
+
+  const startSession = async (url: string, token: string) => {
+    const response = await portalApi.post<PortalVerifyResponse>(url, { token })
     const nextSession = toSession(response)
     sessionVersion.current += 1
     // Data cached for a previous contact must never show under the new one.
@@ -123,6 +128,7 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
     isReady,
     requestLink,
     verify,
+    openAccessLink,
     logout,
   }), [isReady, session])
 

@@ -190,9 +190,64 @@ public sealed class AdvancedSettingsController(
         policy.RequireTechnicianSignature = request.RequireTechnicianSignature;
         policy.RequireClientSignature = request.RequireClientSignature;
         policy.AllowRemoteCompletion = request.AllowRemoteCompletion;
+        policy.AutoSendServiceReportOnApproval = request.AutoSendServiceReportOnApproval;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(policy);
+    }
+
+    /// <summary>
+    /// The tenant's own finance addresses, copied (CC) on finance documents sent to clients. Invoices,
+    /// receipts and statements always go To the client — see FinancialRecipientResolver. Used to be
+    /// editable only from the platform side, where the tenant couldn't see or change it.
+    /// </summary>
+    [HttpGet("finance-recipients")]
+    public async Task<ActionResult<IReadOnlyCollection<FinanceRecipientDto>>> GetFinanceRecipients(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var recipients = await dbContext.TenantNotificationRecipients
+            .Where(x => x.TenantId == TenantId && x.IsActive)
+            .OrderBy(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+        return Ok(recipients.Select(x => new FinanceRecipientDto(x.Email, AppliesToFromGroup(x.RecipientGroup))).ToList());
+    }
+
+    [HttpPut("finance-recipients")]
+    public async Task<ActionResult<IReadOnlyCollection<FinanceRecipientDto>>> UpdateFinanceRecipients([FromBody] IReadOnlyCollection<FinanceRecipientDto> request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var cleaned = new List<FinanceRecipientDto>();
+        foreach (var item in request ?? [])
+        {
+            var email = item.Email?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(email)) continue;
+            if (email.Length > 256 || !System.Net.Mail.MailAddress.TryCreate(email, out _))
+                throw new BusinessRuleException($"'{item.Email}' is not a valid email address.");
+            var appliesTo = FinanceRecipientDocumentTypes.FirstOrDefault(x => string.Equals(x, item.AppliesTo, StringComparison.OrdinalIgnoreCase)) ?? "All";
+            if (!cleaned.Any(x => x.Email == email && x.AppliesTo == appliesTo)) cleaned.Add(new FinanceRecipientDto(email, appliesTo));
+        }
+
+        if (cleaned.Count > 20) throw new BusinessRuleException("Add at most 20 finance addresses.");
+
+        var current = await dbContext.TenantNotificationRecipients.Where(x => x.TenantId == TenantId).ToListAsync(cancellationToken);
+        dbContext.TenantNotificationRecipients.RemoveRange(current);
+        dbContext.TenantNotificationRecipients.AddRange(cleaned.Select(x => new TenantNotificationRecipient
+        {
+            TenantId = TenantId,
+            Email = x.Email,
+            RecipientGroup = x.AppliesTo == "All" ? "cc" : $"{x.AppliesTo} CC",
+            IsActive = true,
+        }));
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(cleaned);
+    }
+
+    private static readonly string[] FinanceRecipientDocumentTypes = ["All", "Invoice", "Receipt", "Statement"];
+
+    private static string AppliesToFromGroup(string? group)
+    {
+        var normalized = new string((group ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        return FinanceRecipientDocumentTypes.Skip(1).FirstOrDefault(x => normalized.StartsWith(x.ToLowerInvariant(), StringComparison.Ordinal)) ?? "All";
     }
 
     [HttpGet("finance-defaults")]
@@ -695,7 +750,7 @@ public sealed record AssignmentGroupResponse(Guid Id, Guid? BranchId, string? Br
 public sealed record TenantSecurityPolicyRequest(int MinPasswordLength, bool RequireUppercase, bool RequireLowercase, bool RequireDigit, bool RequireSpecialCharacter, int PasswordRotationDays, int SessionTimeoutMinutes, bool RequireMfa);
 public sealed record NotificationSettingsRequest(bool EmailAlertsEnabled, bool SmsAlertsEnabled, bool WorkOrderAssignmentAlerts, bool LicenseExpiryAlerts, bool DailyDigestEnabled);
 public sealed record MonitoringSettingsRequest(string ProviderName, string? EndpointLabel, string? WebhookSecret, Guid? DefaultBranchId, string DefaultPriority, bool AutoCreateWorkOrders, bool IsEnabled);
-public sealed record TenantOperationsPolicyRequest(bool RequireTechnicianSignature, bool RequireClientSignature, bool AllowRemoteCompletion);
+public sealed record TenantOperationsPolicyRequest(bool RequireTechnicianSignature, bool RequireClientSignature, bool AllowRemoteCompletion, bool AutoSendServiceReportOnApproval = false);
 
 public sealed record TenantFinanceDefaultsRequest(
     bool EnableVat,
@@ -705,3 +760,6 @@ public sealed record TenantFinanceDefaultsRequest(
     int DefaultInvoiceDueDays,
     int DefaultQuotationValidityDays,
     bool DefaultExpenseApprovalRequired);
+
+/// <summary><c>AppliesTo</c>: All, Invoice, Receipt or Statement.</summary>
+public sealed record FinanceRecipientDto(string Email, string AppliesTo);

@@ -1,4 +1,5 @@
 import type { AppRole } from '../types/auth'
+import { WHATSAPP_ENABLED } from '../config/features'
 import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, BookOpen, Activity, Presentation } from 'lucide-react'
 
 export interface NavItem {
@@ -23,7 +24,7 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Finance', to: '/finance', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'finance.view', icon: Wallet },
   { label: 'Approvals', to: '/approvals', roles: ['admin', 'manager', 'finance'], icon: CheckSquare },
   { label: 'Reports', to: '/reports', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'reports.view', icon: BarChart3 },
-  { label: 'WhatsApp', to: '/whatsapp', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'whatsapp.view', icon: MessageCircle },
+  ...(WHATSAPP_ENABLED ? [{ label: 'WhatsApp', to: '/whatsapp', roles: ['admin', 'manager', 'dispatcher', 'viewer'] as AppRole[], permission: 'whatsapp.view', icon: MessageCircle }] : []),
   { label: 'Settings', to: '/settings', roles: ['admin'], permission: 'settings.view', icon: Settings2 },
 ]
 

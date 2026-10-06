@@ -83,6 +83,60 @@ public sealed class EmailSettingsResolverTests
         Assert.True(result.UsesPlatformMail);
     }
 
+    [Fact]
+    public async Task TenantWithOwnSmtpSwitchedOn_SendsThroughItsOwnServer()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", "noreply@platform.test");
+        SeedSettings(dbContext, tenantId, "smtp.tenant.test", "acme@serviceops.test");
+        await dbContext.SaveChangesAsync();
+        var tenantRow = await dbContext.EmailSettings.SingleAsync(x => x.TenantId == tenantId);
+        tenantRow.UseCustomSmtp = true;
+        tenantRow.CustomFromAddress = "service@acme.test";
+        await dbContext.SaveChangesAsync();
+
+        var result = await new EmailSettingsResolver(dbContext).ResolveAsync(tenantId, CancellationToken.None);
+
+        Assert.False(result.UsesPlatformMail);
+        Assert.Equal("smtp.tenant.test", result.Settings!.Host);
+        Assert.Equal("service@acme.test", TenantEmailIdentity.ResolveSender(null, result.Settings)!.FromAddress);
+    }
+
+    [Fact]
+    public async Task TenantWithOwnSmtpSwitchedOnButNoFromAddress_StaysOnPlatformMail()
+    {
+        // Half-filled settings must not strand the tenant's mail; it keeps using the platform until complete.
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        SeedSettings(dbContext, PlatformConstants.RootTenantId, "smtp.platform.test", "noreply@platform.test");
+        SeedSettings(dbContext, tenantId, "smtp.tenant.test", "acme@serviceops.test");
+        await dbContext.SaveChangesAsync();
+        (await dbContext.EmailSettings.SingleAsync(x => x.TenantId == tenantId)).UseCustomSmtp = true;
+        await dbContext.SaveChangesAsync();
+
+        var result = await new EmailSettingsResolver(dbContext).ResolveAsync(tenantId, CancellationToken.None);
+
+        Assert.True(result.UsesPlatformMail);
+        Assert.Equal("smtp.platform.test", result.Settings!.Host);
+    }
+
+    [Fact]
+    public void TenantOwnSmtp_NeverBorrowsThePlatformCredentials()
+    {
+        // Filling a tenant server's blank username/password from Smtp:* would hand the platform's
+        // credentials to a host the tenant chose.
+        var delivery = EmailDeliveryResolution.Resolve(
+            new EmailSetting { TenantId = Guid.NewGuid(), Host = "smtp.tenant.test", Port = 0, Provider = "Smtp", IsEnabled = true, UseCustomSmtp = true, CustomFromAddress = "service@acme.test" },
+            null,
+            new SmtpOptions { Host = "smtp.env.test", Port = 25, Username = "platform-user", Password = "platform-secret" });
+
+        Assert.Equal("smtp.tenant.test", delivery!.SmtpHost);
+        Assert.Equal(587, delivery.SmtpPort);
+        Assert.Null(delivery.SmtpUsername);
+        Assert.Null(delivery.SmtpPasswordSecret);
+    }
+
     private static void SeedSettings(AppDbContext dbContext, Guid tenantId, string host, string senderAddress) =>
         dbContext.EmailSettings.Add(new EmailSetting
         {

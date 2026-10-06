@@ -25,6 +25,17 @@ interface Line {
 
 const emptyLine = (): Line => ({ description: '', quantity: '1', unitRate: '0', unit: 'unit', taxRate: null, itemType: 'Service', rateCardId: '' })
 
+const VALIDITY_OPTIONS = [30, 60, 90, 120] as const
+const DEFAULT_VALIDITY_DAYS = 30
+
+/** End of the day `days` from today — quotes are valid through the whole of their last day. */
+function validUntilFor(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  date.setHours(23, 59, 59, 0)
+  return date
+}
+
 export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate()
   const { data: clients } = useClients()
@@ -34,7 +45,7 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
 
   const [clientId, setClientId] = useState('')
   const [subject, setSubject] = useState('')
-  const [validUntil, setValidUntil] = useState('')
+  const [validityDays, setValidityDays] = useState(DEFAULT_VALIDITY_DAYS)
   const [currency, setCurrency] = useState(getActiveCurrency)
   const [lines, setLines] = useState<Line[]>([emptyLine()])
 
@@ -46,7 +57,7 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
   const close = () => {
     setClientId('')
     setSubject('')
-    setValidUntil('')
+    setValidityDays(DEFAULT_VALIDITY_DAYS)
     setCurrency(getActiveCurrency())
     setLines([emptyLine()])
     onClose()
@@ -86,15 +97,15 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
   }, 0)
 
   const submit = async () => {
-    if (!clientId || !validUntil) {
-      toast.error('Client and valid-until date are required')
+    if (!clientId) {
+      toast.error('Client is required')
       return
     }
     try {
       const created = await createQuotation.mutateAsync({
         clientId,
         quoteDate: new Date().toISOString(),
-        validUntil: new Date(validUntil).toISOString(),
+        validUntil: validUntilFor(validityDays).toISOString(),
         subject: subject.trim() || null,
         currency: currency.trim().toUpperCase() || getActiveCurrency(),
         lines: lines.filter((line) => line.description.trim()).map((line) => ({
@@ -147,8 +158,11 @@ export function NewQuoteFormDrawer({ open, onClose }: { open: boolean; onClose: 
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelClass} htmlFor="quote-valid-until">Valid Until</label>
-            <input id="quote-valid-until" type="date" value={validUntil} onChange={(event) => setValidUntil(event.target.value)} className={fieldClass} />
+            <label className={labelClass} htmlFor="quote-validity">Validity</label>
+            <select id="quote-validity" value={validityDays} onChange={(event) => setValidityDays(Number(event.target.value))} className={fieldClass}>
+              {VALIDITY_OPTIONS.map((days) => (<option key={days} value={days}>{days} days</option>))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">Valid until {validUntilFor(validityDays).toLocaleDateString()}</p>
           </div>
           <div>
             <label className={labelClass} htmlFor="quote-currency">Currency</label>

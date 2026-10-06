@@ -103,6 +103,11 @@ export function ClientDetailPage() {
             ),
           },
           {
+            id: 'portal-access',
+            label: 'Client Portal',
+            content: <ClientPortalContactsTab clientId={id} />,
+          },
+          {
             id: 'sites',
             label: 'Sites',
             content: (
@@ -175,11 +180,6 @@ export function ClientDetailPage() {
             id: 'documents',
             label: 'Documents',
             content: <EmptyState title="No documents" description="Client documents and attachments will appear here." />,
-          },
-          {
-            id: 'portal-access',
-            label: 'Portal Access',
-            content: <ClientPortalContactsTab clientId={id} />,
           },
         ].filter((tab) => hasOperations || !['sites', 'assets', 'work-orders', 'contracts'].includes(tab.id))}
       />

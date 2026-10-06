@@ -254,8 +254,28 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.WorkOrderId == workOrderId && x.TechnicianId == request.TechnicianId, cancellationToken)
             ?? throw new BusinessRuleException("Technician is not currently assigned to this work order.");
 
+        var travelStartedAt = request.DepartedForSiteAt ?? DateTime.UtcNow;
+        var openVisit = await FindOpenVisitAsync(tenantId, workOrderId, request.TechnicianId, cancellationToken);
+        if (openVisit?.ArrivedAt is not null)
+        {
+            throw new BusinessRuleException("Record the departure from site before starting the next trip.");
+        }
+
+        // Each trip is its own visit, so a job that runs over several days gets one visit per day.
+        if (openVisit is null)
+        {
+            dbContext.WorkOrderVisits.Add(new WorkOrderVisit
+            {
+                TenantId = tenantId,
+                WorkOrderId = workOrderId,
+                TechnicianId = request.TechnicianId,
+                TravelStartedAt = travelStartedAt,
+                Notes = NormalizeNotes(request.Notes)
+            });
+        }
+
         assignment.Status = "InTransit";
-        assignment.AcceptedAt ??= request.DepartedForSiteAt ?? DateTime.UtcNow;
+        assignment.AcceptedAt ??= travelStartedAt;
 
         await UpdateTechnicianTrackingAsync(tenantId, request.TechnicianId, workOrderId, request.Latitude, request.Longitude, true, cancellationToken);
         await AddHistoryAsync(tenantId, workOrderId, "TechnicianInTransit", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
@@ -272,8 +292,26 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.WorkOrderId == workOrderId && x.TechnicianId == request.TechnicianId, cancellationToken)
             ?? throw new BusinessRuleException("Arrival cannot be recorded before technician assignment.");
 
+        var arrivedAt = request.ArrivedAt ?? DateTime.UtcNow;
+        var visit = await FindOpenVisitAsync(tenantId, workOrderId, request.TechnicianId, cancellationToken);
+        if (visit?.ArrivedAt is not null)
+        {
+            throw new BusinessRuleException("Arrival is already recorded for this visit. Record the departure first.");
+        }
+
+        if (visit is null)
+        {
+            // Arrived without "en route" being tapped: still a visit, just with no travel time.
+            visit = new WorkOrderVisit { TenantId = tenantId, WorkOrderId = workOrderId, TechnicianId = request.TechnicianId };
+            dbContext.WorkOrderVisits.Add(visit);
+        }
+
+        visit.ArrivedAt = arrivedAt;
+        visit.TravelMinutes = MinutesBetween(visit.TravelStartedAt, arrivedAt);
+
         assignment.Status = "Arrived";
-        assignment.ArrivalAt = request.ArrivedAt ?? DateTime.UtcNow;
+        // The first arrival is the response milestone (SLA, completion guard); later visits don't move it.
+        assignment.ArrivalAt ??= arrivedAt;
         await UpdateTechnicianTrackingAsync(tenantId, request.TechnicianId, workOrderId, request.Latitude, request.Longitude, true, cancellationToken);
         await AddHistoryAsync(tenantId, workOrderId, "TechnicianArrived", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
         await AddEventAsync(tenantId, workOrderId, actorUserId, "Arrival", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} arrived on site.", request.Latitude, request.Longitude, cancellationToken);
@@ -289,7 +327,23 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.WorkOrderId == workOrderId && x.TechnicianId == request.TechnicianId, cancellationToken)
             ?? throw new BusinessRuleException("Departure cannot be recorded before technician assignment.");
 
-        assignment.DepartureAt = request.DepartedAt ?? DateTime.UtcNow;
+        var departedAt = request.DepartedAt ?? DateTime.UtcNow;
+        var visit = await FindOpenVisitAsync(tenantId, workOrderId, request.TechnicianId, cancellationToken);
+        if (visit is null && assignment.ArrivalAt is { } legacyArrival && (assignment.DepartureAt is null || assignment.DepartureAt < legacyArrival))
+        {
+            // On site since before visits were recorded: rebuild the visit from the assignment's arrival.
+            visit = new WorkOrderVisit { TenantId = tenantId, WorkOrderId = workOrderId, TechnicianId = request.TechnicianId, ArrivedAt = legacyArrival };
+            dbContext.WorkOrderVisits.Add(visit);
+        }
+
+        if (visit?.ArrivedAt is null)
+        {
+            throw new BusinessRuleException("Record the arrival on site before the departure.");
+        }
+
+        visit.DepartedAt = departedAt;
+        visit.OnSiteMinutes = MinutesBetween(visit.ArrivedAt, departedAt);
+        assignment.DepartureAt = departedAt;
         await UpdateTechnicianTrackingAsync(tenantId, request.TechnicianId, null, request.Latitude, request.Longitude, false, cancellationToken);
         await AddHistoryAsync(tenantId, workOrderId, "TechnicianDeparted", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
         await AddEventAsync(tenantId, workOrderId, actorUserId, "Departure", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} departed from site.", request.Latitude, request.Longitude, cancellationToken);
@@ -323,6 +377,20 @@ internal sealed class WorkOrderAssignmentWorkflowService(
 
         await etaNotificationService.NotifyAsync(tenantId, workOrder, eventType, technicianName, cancellationToken);
     }
+
+    /// <summary>The technician's visit that has not been closed by a departure yet, if any.</summary>
+    private async Task<WorkOrderVisit?> FindOpenVisitAsync(Guid tenantId, Guid workOrderId, Guid technicianId, CancellationToken cancellationToken) =>
+        dbContext.WorkOrderVisits.Local.FirstOrDefault(x => x.TenantId == tenantId && x.WorkOrderId == workOrderId && x.TechnicianId == technicianId && x.DepartedAt == null)
+        ?? await dbContext.WorkOrderVisits
+            .Where(x => x.TenantId == tenantId && x.WorkOrderId == workOrderId && x.TechnicianId == technicianId && x.DepartedAt == null)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private static int MinutesBetween(DateTime? start, DateTime end) =>
+        start is null || end <= start.Value ? 0 : (int)Math.Round((end - start.Value).TotalMinutes);
+
+    private static string? NormalizeNotes(string? notes) =>
+        string.IsNullOrWhiteSpace(notes) ? null : notes.Trim()[..Math.Min(notes.Trim().Length, 1000)];
 
     private async Task<WorkOrder> LoadWorkOrderAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken) =>
         await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == workOrderId, cancellationToken)

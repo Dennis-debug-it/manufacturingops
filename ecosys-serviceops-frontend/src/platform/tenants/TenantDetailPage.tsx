@@ -43,17 +43,6 @@ import type { PlatformTenantAuditLog } from '../types'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import type { PlatformTenantNumbering, PlatformTenantUser } from '../api'
 
-const communicationGroups = [
-  'Admin',
-  'Operations',
-  'SLAEscalation',
-  'Dispatch',
-  'Maintenance',
-  'Assets',
-  'Materials',
-  'SystemAlerts',
-] as const
-
 const moduleLabels: Record<string, string> = {
   operations: 'Operations',
   finance: 'Finance',
@@ -513,8 +502,10 @@ export function TenantDetailPage() {
       content: communication ? (
         <div className="space-y-5">
           <section className={panelClass}>
-            <SectionTitle title="Email settings" description="Read-only — SMTP is global platform infrastructure. This tenant's own Workspace Email settings page is where display name, reply-to, and notification preferences are changed." />
+            <SectionTitle title="Email settings" description="Read-only. The tenant manages its own email in its workspace: sender name and reply-to under Settings → Workspace Email, and platform mail versus its own SMTP server under Settings → Email Delivery." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <InfoCard label="Sends through" value={communication.emailSettings.usesOwnSmtp ? `Own SMTP server (${communication.emailSettings.ownSmtpHost ?? '—'})` : 'Platform mail'} />
+              {communication.emailSettings.usesOwnSmtp ? <InfoCard label="From address" value={communication.emailSettings.ownFromAddress ?? '—'} /> : null}
               <InfoCard label="Sender name" value={communication.emailSettings.senderName || '—'} />
               <InfoCard label="Sender email" value={communication.emailSettings.senderEmail || '—'} />
               <InfoCard label="Reply-to email" value={communication.emailSettings.replyToEmail || '—'} />
@@ -533,15 +524,19 @@ export function TenantDetailPage() {
           </section>
 
           <section className={panelClass}>
-            <SectionTitle title="Notification groups" description="Default recipient groups and switches." />
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-              {communicationGroups.map((group) => (
-                <div key={group} className="rounded-xl border border-slate-200 px-4 py-3">
-                  <p className="font-medium text-slate-900">{group}</p>
-                  <p className="mt-1 text-sm text-slate-600">Managed by tenant notification settings.</p>
-                </div>
-              ))}
-            </div>
+            <SectionTitle title="Finance email copies" description="Read-only. Addresses the tenant copies (CC) on invoices, receipts and statements; documents always go to the client itself. The tenant edits these under Settings → Finance Defaults." />
+            {communication.recipients.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-500">No finance copies configured.</p>
+            ) : (
+              <ul className="mt-4 space-y-2 text-sm text-slate-700">
+                {communication.recipients.map((recipient) => (
+                  <li key={`${recipient.recipientGroup}-${recipient.email}`} className="flex justify-between rounded-lg bg-slate-50 px-3 py-2">
+                    <span>{recipient.email}</span>
+                    <span className="text-xs text-slate-500">{recipient.recipientGroup}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
         </div>
       ) : (

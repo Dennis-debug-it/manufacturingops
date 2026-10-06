@@ -67,6 +67,7 @@ public static class DependencyInjection
         services.AddScoped<IEmailOutboxService, EmailOutboxService>();
         services.AddScoped<IEmailOutboxProcessor, EmailOutboxProcessor>();
         services.AddScoped<IFinancialRecipientResolver, FinancialRecipientResolver>();
+        services.AddScoped<IServiceReportDeliveryService, ServiceReportDeliveryService>();
         services.AddScoped<IUserCredentialDeliveryService, UserCredentialDeliveryService>();
         services.AddScoped<ITemporaryPasswordService, TemporaryPasswordService>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();

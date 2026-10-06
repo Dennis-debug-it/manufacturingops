@@ -8,7 +8,7 @@ import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
 import { cn } from '../../../shared/utils/cn'
 import { applyApiFieldErrors } from '../../../shared/api/apiError'
-import { useCreateWorkOrder, useRepeatVisitCheckForAsset } from '../api'
+import { useCreateWorkOrder, useRepeatVisitCheckForAsset, useWorkOrderTemplates } from '../api'
 import { useAssetOptions, useClientOptions, useSiteOptions, useTechnicianOptions } from '../pickerApi'
 import { newWorkOrderSchema, priorityOptions, workTypeOptions, type NewWorkOrderFormValues } from '../schemas'
 
@@ -41,6 +41,8 @@ export interface NewWorkOrderFormProps {
 export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: NewWorkOrderFormProps) {
   const navigate = useNavigate()
   const [clientSearch, setClientSearch] = useState('')
+  const [templateId, setTemplateId] = useState('')
+  const { data: templates } = useWorkOrderTemplates({ activeOnly: true })
   const debouncedClientSearch = useDebounce(clientSearch, 250)
 
   const {
@@ -49,6 +51,8 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
     handleSubmit,
     watch,
     reset,
+    getValues,
+    setValue,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<NewWorkOrderFormValues>({
@@ -82,6 +86,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
       description: '',
       assignedTechnicianId: '',
     })
+    setTemplateId('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -99,8 +104,27 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
 
   const clientOptions = useMemo(() => clients ?? [], [clients])
 
+  /**
+   * Picking a template pre-fills type, priority, title and description (without overwriting what the
+   * user already typed); the server then attaches the template's checklist and planned materials.
+   */
+  const applyTemplate = (id: string) => {
+    setTemplateId(id)
+    const template = (templates ?? []).find((item) => item.id === id)
+    if (!template) return
+    if (workTypeOptions.some((option) => option.value === template.jobType)) {
+      setValue('workType', template.jobType as NewWorkOrderFormValues['workType'])
+    }
+    if (priorityOptions.some((option) => option.value === template.defaultPriority)) {
+      setValue('priority', template.defaultPriority as NewWorkOrderFormValues['priority'])
+    }
+    if (!getValues('title')?.trim()) setValue('title', template.name, { shouldValidate: true })
+    if (!getValues('description')?.trim() && template.description) setValue('description', template.description)
+  }
+
   const closeAndReset = () => {
     reset()
+    setTemplateId('')
     setClientSearch('')
     onClose()
   }
@@ -121,6 +145,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
         assignmentType: values.assignedTechnicianId ? 'IndividualTechnician' : 'Unassigned',
         notifyClient: true,
         parentWorkOrderId: parentWorkOrderId ?? null,
+        templateId: templateId || null,
       })
       toast.success(`Work order ${created.workOrderNumber} created`)
       closeAndReset()
@@ -223,6 +248,19 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
             </span>
           </div>
         ) : null}
+
+        <div>
+          <label className={labelClass} htmlFor="wo-template">Template</label>
+          <select id="wo-template" value={templateId} onChange={(event) => applyTemplate(event.target.value)} className={fieldClass}>
+            <option value="">No template</option>
+            {(templates ?? []).map((template) => (
+              <option key={template.id} value={template.id}>
+                {template.name}{template.checklistTemplateName ? ` · ${template.checklistTemplateName}` : ''}
+              </option>
+            ))}
+          </select>
+          {(templates ?? []).length === 0 ? <p className="mt-1 text-xs text-slate-500">Create reusable job templates in Settings → Work Order Templates.</p> : null}
+        </div>
 
         <div>
           <label className={labelClass} htmlFor="wo-title">Title</label>

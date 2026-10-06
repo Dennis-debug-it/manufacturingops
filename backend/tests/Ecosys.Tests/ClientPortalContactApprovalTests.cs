@@ -78,6 +78,19 @@ public sealed class ClientPortalContactApprovalTests
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    [Fact]
+    public async Task AccessLink_UsesTheConfiguredPublicUrl()
+    {
+        var (db, links) = await SetupAsync(requireApproval: false);
+        var contact = await CreateAsync(CreateController(db, links, isAdmin: true));
+
+        var result = await CreateController(db, links, isAdmin: true).GetAccessLink(_clientId, contact.Id, CancellationToken.None);
+
+        var response = Assert.IsType<PortalAccessLinkResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.StartsWith("https://serviceops.test/portal/access#", response.Link);
+        Assert.Equal("https://serviceops.test/portal/login", response.PortalLoginUrl);
+    }
+
     private async Task<(AppDbContext Db, RecordingPortalAuthService Links)> SetupAsync(bool requireApproval)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -92,11 +105,12 @@ public sealed class ClientPortalContactApprovalTests
             ValueJson = JsonSerializer.Serialize(new { requireApprovalForNewContacts = requireApproval }),
         });
         await db.SaveChangesAsync();
-        return (db, new RecordingPortalAuthService());
+        return (db, new RecordingPortalAuthService(db));
     }
 
     private ClientPortalContactsController CreateController(AppDbContext db, RecordingPortalAuthService links, bool isAdmin) =>
-        new(db, new FakeTenantContext(_tenantId, _userId, isAdmin), new AllowAllUserAccessService(), links, new NoOpAuditLogService())
+        new(db, new FakeTenantContext(_tenantId, _userId, isAdmin), new AllowAllUserAccessService(), links, new NoOpAuditLogService(),
+            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.PublicAppOptions { PublicUrl = "https://serviceops.test" }))
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() },
         };
@@ -107,9 +121,23 @@ public sealed class ClientPortalContactApprovalTests
         return Assert.IsType<ClientPortalContactResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
     }
 
-    private sealed class RecordingPortalAuthService : IPortalAuthService
+    private sealed class RecordingPortalAuthService(AppDbContext db) : IPortalAuthService
     {
+        /// <summary>Emails that received an invitation (staff-sent) or a sign-in link.</summary>
         public List<string> Sent { get; } = [];
+        public List<string> CopiedLinks { get; } = [];
+
+        public async Task SendInvitationAsync(Guid portalUserId, string portalBaseUrl, Guid? invitedByUserId, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default) =>
+            Sent.Add((await db.ClientPortalUsers.IgnoreQueryFilters().SingleAsync(x => x.Id == portalUserId, cancellationToken)).Email);
+
+        public Task<string> GetAccessLinkAsync(Guid portalUserId, string portalBaseUrl, Guid? actorUserId, bool reset, CancellationToken cancellationToken = default)
+        {
+            var link = $"{portalBaseUrl}/portal/access#{portalUserId:N}.{(reset ? "reset" : "secret")}";
+            CopiedLinks.Add(link);
+            return Task.FromResult(link);
+        }
+
+        public Task<PortalMagicLinkResult> OpenAccessLinkAsync(string link, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task RequestMagicLinkAsync(string email, string magicLinkBaseUrl, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default)
         {

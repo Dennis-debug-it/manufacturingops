@@ -29,6 +29,7 @@ public static class DocumentTypes
     public const string PurchaseOrder = "PurchaseOrder";
     public const string SupplierBill = "SupplierBill";
     public const string ServiceReport = "ServiceReport";
+    public const string PartsReturn = "PartsReturn";
 
     public static string Normalize(string documentType)
     {
@@ -57,6 +58,7 @@ public static class DocumentTypes
             var x when x == PurchaseOrder.ToLowerInvariant() => PurchaseOrder,
             var x when x == SupplierBill.ToLowerInvariant() => SupplierBill,
             var x when x == ServiceReport.ToLowerInvariant() => ServiceReport,
+            var x when x == PartsReturn.ToLowerInvariant() => PartsReturn,
             _ => throw new Ecosys.Shared.Errors.BusinessRuleException("Unsupported document type.")
         };
     }
@@ -441,6 +443,7 @@ internal sealed class DocumentNumberingService(AppDbContext dbContext) : IDocume
             DocumentTypes.PurchaseOrder => "PO",
             DocumentTypes.SupplierBill => "BILL",
             DocumentTypes.ServiceReport => "SR",
+            DocumentTypes.PartsReturn => "RTN",
             _ => "DOC"
         };
 }

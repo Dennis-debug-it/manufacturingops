@@ -74,6 +74,20 @@ public sealed class PortalAuthController(IPortalAuthService portalAuthService, A
             new PortalTenantDto(result.TenantId, result.CompanyName)));
     }
 
+    /// <summary>Signs in with a contact's permanent portal link (the part after <c>#</c> in /portal/access).</summary>
+    [AllowAnonymous]
+    [HttpPost("access-link")]
+    public async Task<ActionResult<PortalVerifyResponse>> OpenAccessLink([FromBody] PortalVerifyRequest request, CancellationToken cancellationToken)
+    {
+        var result = await portalAuthService.OpenAccessLinkAsync(request.Token, cancellationToken);
+
+        return Ok(new PortalVerifyResponse(
+            result.Token,
+            new PortalUserDto(result.PortalUserId, result.FullName, result.Email),
+            new PortalClientDto(result.ClientId, result.ClientName),
+            new PortalTenantDto(result.TenantId, result.CompanyName)));
+    }
+
     [Authorize(Policy = "PortalAccess")]
     [HttpPost("logout")]
     public IActionResult Logout() => Ok();

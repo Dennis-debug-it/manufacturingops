@@ -6,6 +6,8 @@ using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Ecosys.Shared.Options;
 
 namespace Ecosys.Api.Controllers;
 
@@ -17,7 +19,8 @@ public sealed class ClientPortalContactsController(
     ITenantContext tenantContext,
     IUserAccessService userAccessService,
     IPortalAuthService portalAuthService,
-    IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
+    IAuditLogService auditLogService,
+    IOptions<PublicAppOptions> publicAppOptions) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<ClientPortalContactResponse>>> List(Guid clientId, CancellationToken cancellationToken)
@@ -135,16 +138,44 @@ public sealed class ClientPortalContactsController(
         }
 
         await SendSignInLinkAsync(contact, cancellationToken);
-        await auditLogService.LogAsync(TenantId, UserId, "portal.contact.link-resent", nameof(ClientPortalUser), contact.Id.ToString(), $"Sign-in link resent to portal contact '{contact.Email}'.", cancellationToken);
 
         return Ok(Map(contact));
     }
 
-    private Task SendSignInLinkAsync(ClientPortalUser contact, CancellationToken cancellationToken)
+    /// <summary>
+    /// The contact's permanent portal link, to share by WhatsApp/SMS. It never expires and gives full
+    /// access as this contact, so it is admin-only and audited; it stays the same until reset.
+    /// </summary>
+    [HttpPost("{id:guid}/access-link")]
+    public Task<ActionResult<PortalAccessLinkResponse>> GetAccessLink(Guid clientId, Guid id, CancellationToken cancellationToken) =>
+        AccessLinkAsync(clientId, id, reset: false, cancellationToken);
+
+    /// <summary>Replaces the permanent link; the previous one stops working immediately.</summary>
+    [HttpPost("{id:guid}/access-link/reset")]
+    public Task<ActionResult<PortalAccessLinkResponse>> ResetAccessLink(Guid clientId, Guid id, CancellationToken cancellationToken) =>
+        AccessLinkAsync(clientId, id, reset: true, cancellationToken);
+
+    private async Task<ActionResult<PortalAccessLinkResponse>> AccessLinkAsync(Guid clientId, Guid id, bool reset, CancellationToken cancellationToken)
     {
-        var origin = Request.Headers.Origin.FirstOrDefault() ?? $"{Request.Scheme}://{Request.Host.Value}";
-        return portalAuthService.RequestMagicLinkAsync(contact.Email, origin, HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), cancellationToken);
+        userAccessService.EnsureAdmin();
+        var contact = await dbContext.ClientPortalUsers
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.ClientId == clientId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Portal contact was not found.");
+
+        var link = await portalAuthService.GetAccessLinkAsync(contact.Id, PortalBaseUrl(), UserId, reset, cancellationToken);
+        return Ok(new PortalAccessLinkResponse(link, $"{PortalBaseUrl().TrimEnd('/')}/portal/login"));
     }
+
+    /// <summary>Staff-initiated, so it's an invitation carrying the permanent portal link, not a 30-minute login link.</summary>
+    private Task SendSignInLinkAsync(ClientPortalUser contact, CancellationToken cancellationToken) =>
+        portalAuthService.SendInvitationAsync(contact.Id, PortalBaseUrl(), UserId,
+            HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString(), cancellationToken);
+
+    /// <summary>The configured public URL; the request's Origin only as a fallback for local setups without one.</summary>
+    private string PortalBaseUrl() =>
+        Uri.TryCreate(publicAppOptions.Value.PublicUrl?.Trim(), UriKind.Absolute, out var configured)
+            ? configured.GetLeftPart(UriPartial.Authority)
+            : Request.Headers.Origin.FirstOrDefault() ?? $"{Request.Scheme}://{Request.Host.Value}";
 
     private async Task EnsureClientExistsAsync(Guid clientId, CancellationToken cancellationToken)
     {
@@ -162,3 +193,5 @@ public sealed class ClientPortalContactsController(
 public sealed record ClientPortalContactResponse(Guid Id, string FullName, string Email, string? Phone, bool IsActive, bool IsPendingApproval, DateTime? LastLoginAt, DateTime CreatedAt);
 public sealed record CreateClientPortalContactRequest(string FullName, string Email, string? Phone);
 public sealed record UpdateClientPortalContactStatusRequest(bool IsActive);
+
+public sealed record PortalAccessLinkResponse(string Link, string PortalLoginUrl);

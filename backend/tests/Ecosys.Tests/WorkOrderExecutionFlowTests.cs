@@ -351,6 +351,92 @@ public sealed class WorkOrderExecutionFlowTests
         Assert.Equal("Completed", response.Status);
     }
 
+    [Fact]
+    public async Task PartsReturn_Receive_RestocksUnused_DropsFaultyFromUsage_AndOnlyRecordsRemoved()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var usage = new WorkOrderMaterialUsage
+        {
+            TenantId = fixture.Tenant.Id, WorkOrderId = fixture.WorkOrder.Id, MaterialItemId = fixture.Material.Id,
+            QuantityUsed = 5, Chargeable = true, UsedByUserId = fixture.User.Id,
+        };
+        dbContext.WorkOrderMaterialUsages.Add(usage);
+        await dbContext.SaveChangesAsync();
+        var controller = CreatePartsReturnsController(dbContext, fixture);
+
+        var created = await controller.Create(fixture.WorkOrder.Id, new CreatePartsReturnRequest("End of job", [
+            new CreatePartsReturnLineRequest(usage.Id, null, 2, "Unused", null),
+            new CreatePartsReturnLineRequest(null, fixture.Material.Id, 1, "Removed", "Old contactor"),
+        ]), CancellationToken.None);
+        var pending = Assert.IsType<PartsReturnResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value);
+        Assert.Equal(PartsReturnStatuses.Pending, pending.Status);
+
+        // 2 of 5 are already pending, so only 3 more can be raised.
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(fixture.WorkOrder.Id,
+            new CreatePartsReturnRequest(null, [new CreatePartsReturnLineRequest(usage.Id, null, 4, "Faulty", null)]), CancellationToken.None));
+        await controller.Create(fixture.WorkOrder.Id,
+            new CreatePartsReturnRequest(null, [new CreatePartsReturnLineRequest(usage.Id, null, 1, "Faulty", null)]), CancellationToken.None);
+
+        // Nothing moves until stores receives the return.
+        Assert.Equal(5, (await dbContext.WorkOrderMaterialUsages.SingleAsync(x => x.Id == usage.Id)).QuantityUsed);
+        Assert.Empty(await dbContext.StockMovements.Where(x => x.MovementType == "Return").ToListAsync());
+
+        foreach (var id in await dbContext.PartsReturns.Select(x => x.Id).ToListAsync())
+            await controller.Receive(id, CancellationToken.None);
+
+        Assert.Equal(2, (await dbContext.WorkOrderMaterialUsages.SingleAsync(x => x.Id == usage.Id)).QuantityUsed);
+        var restock = Assert.Single(await dbContext.StockMovements.Where(x => x.MovementType == "Return").ToListAsync());
+        Assert.Equal(2, restock.Quantity);
+        Assert.All(await dbContext.PartsReturns.ToListAsync(), x => Assert.Equal(PartsReturnStatuses.Received, x.Status));
+    }
+
+    [Fact]
+    public async Task PartsReturn_Rejected_LeavesStockAndUsageAlone()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var usage = new WorkOrderMaterialUsage
+        {
+            TenantId = fixture.Tenant.Id, WorkOrderId = fixture.WorkOrder.Id, MaterialItemId = fixture.Material.Id,
+            QuantityUsed = 3, Chargeable = true, UsedByUserId = fixture.User.Id,
+        };
+        dbContext.WorkOrderMaterialUsages.Add(usage);
+        await dbContext.SaveChangesAsync();
+        var controller = CreatePartsReturnsController(dbContext, fixture);
+        var created = Assert.IsType<PartsReturnResponse>(Assert.IsType<CreatedAtActionResult>((await controller.Create(fixture.WorkOrder.Id,
+            new CreatePartsReturnRequest(null, [new CreatePartsReturnLineRequest(usage.Id, null, 3, "Unused", null)]), CancellationToken.None)).Result).Value);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Reject(created.Id, new RejectPartsReturnRequest(" "), CancellationToken.None));
+        await controller.Reject(created.Id, new RejectPartsReturnRequest("Parts never reached stores"), CancellationToken.None);
+
+        Assert.Equal(3, (await dbContext.WorkOrderMaterialUsages.SingleAsync()).QuantityUsed);
+        Assert.Empty(await dbContext.StockMovements.ToListAsync());
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Receive(created.Id, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(true, "Sent")]
+    [InlineData(false, "Approved")]
+    public async Task ApprovingAReport_SendsItOnlyWhenAutoSendIsOn(bool autoSend, string expectedStatus)
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        fixture.WorkOrder.Status = WorkOrderStatuses.Completed;
+        fixture.WorkOrder.CompletedAt = DateTime.UtcNow;
+        fixture.WorkOrder.ReportStatus = "Draft";
+        dbContext.TenantOperationsPolicies.Add(new TenantOperationsPolicy { TenantId = fixture.Tenant.Id, AutoSendServiceReportOnApproval = autoSend });
+        await dbContext.SaveChangesAsync();
+        var delivery = new FakeServiceReportDeliveryService();
+        var controller = CreateExecutionController(dbContext, fixture, reportDelivery: delivery);
+
+        var result = await controller.ApproveQueuedReport(fixture.WorkOrder.Id, CancellationToken.None);
+
+        var row = Assert.IsType<ReportQueueRow>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(expectedStatus, row.ReportStatus);
+        Assert.Equal(autoSend ? 1 : 0, delivery.QueuedWorkOrderIds.Count);
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -583,7 +669,8 @@ public sealed class WorkOrderExecutionFlowTests
         AppDbContext dbContext,
         FixtureData fixture,
         FakeFileStorageService? fileStorage = null,
-        FakePdfRenderer? pdfRenderer = null)
+        FakePdfRenderer? pdfRenderer = null,
+        FakeServiceReportDeliveryService? reportDelivery = null)
     {
         var controller = new WorkOrderExecutionController(
             dbContext,
@@ -597,8 +684,23 @@ public sealed class WorkOrderExecutionFlowTests
             new FakeWorkOrderLifecycleService(dbContext),
             pdfRenderer ?? new FakePdfRenderer(),
             new FakeDocumentNumberingService(),
-            new StubHttpClientFactory());
+            new StubHttpClientFactory(),
+            reportDelivery ?? new FakeServiceReportDeliveryService());
 
+        controller.ControllerContext = CreateControllerContext(fixture.User);
+        return controller;
+    }
+
+    private static PartsReturnsController CreatePartsReturnsController(AppDbContext dbContext, FixtureData fixture)
+    {
+        var controller = new PartsReturnsController(
+            dbContext,
+            new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id),
+            new AuditLogService(dbContext, new HttpContextAccessor()),
+            new FakeUserAccessService(),
+            new FakeBranchAccessService(),
+            new FakeDocumentNumberingService(),
+            new StockLedgerService(dbContext));
         controller.ControllerContext = CreateControllerContext(fixture.User);
         return controller;
     }

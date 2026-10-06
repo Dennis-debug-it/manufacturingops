@@ -30,44 +30,6 @@ public sealed class PlatformTenantCommunicationSettingsController(
     IAuditLogService auditLogService,
     ILogger<PlatformTenantCommunicationSettingsController> logger) : ControllerBase
 {
-    private static readonly string[] AllowedNotificationKeys =
-    [
-        "work-order.new-created",
-        "work-order.assigned",
-        "work-order.updated",
-        "work-order.completed",
-        "work-order.overdue",
-        "sla.warning",
-        "sla.breach",
-        "pm.due",
-        "pm.overdue",
-        "pm.completed",
-        "asset.created",
-        "asset.updated",
-        "asset.deactivated",
-        "asset.maintenance-due",
-        "materials.request-submitted",
-        "materials.request-approved",
-        "materials.request-rejected",
-        "materials.request-issued",
-        "materials.low-stock-alert",
-        "users.invited",
-        "users.activated",
-        "users.deactivated",
-        "users.role-changed",
-        "tenant.profile-updated",
-        "tenant.branding-updated",
-        "tenant.module-access-changed",
-        "tenant.subscription-status-changed",
-        "system.alerts",
-        "system.failed-login-attempts",
-        "system.integration-errors",
-        "system.background-job-failures"
-    ];
-
-    private static readonly HashSet<string> AllowedNotificationKeySet = AllowedNotificationKeys
-        .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
     private static readonly string[] AllowedRecipientGroups =
     [
         "Admin",
@@ -229,44 +191,15 @@ public sealed class PlatformTenantCommunicationSettingsController(
         }
     }
 
-    [HttpGet("notification-settings")]
-    public async Task<ActionResult<TenantNotificationSettingsResponse>> GetNotificationSettings(Guid tenantId, CancellationToken cancellationToken)
-    {
-        _ = await LoadManagedTenantAsync(tenantId, cancellationToken);
-        var notificationSettings = await EnsureAndLoadNotificationSettingsAsync(tenantId, cancellationToken);
-        var recipients = await LoadRecipientsAsync(tenantId, cancellationToken);
-        return Ok(new TenantNotificationSettingsResponse(
-            notificationSettings.Select(MapNotificationSetting).ToList(),
-            recipients.Select(MapRecipient).ToList()));
-    }
-
-    [HttpPut("notification-settings")]
-    public async Task<ActionResult<TenantNotificationSettingsResponse>> UpdateNotificationSettings(Guid tenantId, [FromBody] TenantNotificationSettingsRequest request, CancellationToken cancellationToken)
-    {
-        _ = await LoadManagedTenantAsync(tenantId, cancellationToken);
-        await UpsertNotificationSettingsAsync(tenantId, request.NotificationSettings, cancellationToken);
-        await ReplaceRecipientsAsync(tenantId, request.Recipients, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await WriteAuditAsync(tenantId, "platform.tenant.communication.notifications.updated", "Tenant notification settings were updated.", cancellationToken);
-
-        var notificationSettings = await EnsureAndLoadNotificationSettingsAsync(tenantId, cancellationToken);
-        var recipients = await LoadRecipientsAsync(tenantId, cancellationToken);
-        return Ok(new TenantNotificationSettingsResponse(
-            notificationSettings.Select(MapNotificationSetting).ToList(),
-            recipients.Select(MapRecipient).ToList()));
-    }
-
     [HttpGet("communication-settings")]
     public async Task<ActionResult<TenantCommunicationSettingsResponse>> GetCommunicationSettings(Guid tenantId, CancellationToken cancellationToken)
     {
         var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
         var email = await GetOrCreateTenantEmailSettingAsync(tenant, cancellationToken);
-        var notificationSettings = await EnsureAndLoadNotificationSettingsAsync(tenantId, cancellationToken);
         var recipients = await LoadRecipientsAsync(tenantId, cancellationToken);
 
         return Ok(new TenantCommunicationSettingsResponse(
             MapEmail(email),
-            notificationSettings.Select(MapNotificationSetting).ToList(),
             recipients.Select(MapRecipient).ToList()));
     }
 
@@ -292,44 +225,6 @@ public sealed class PlatformTenantCommunicationSettingsController(
         return setting;
     }
 
-    private async Task<List<TenantNotificationSetting>> EnsureAndLoadNotificationSettingsAsync(Guid tenantId, CancellationToken cancellationToken)
-    {
-        var current = await dbContext.TenantNotificationSettings
-            .Where(x => x.TenantId == tenantId)
-            .ToListAsync(cancellationToken);
-
-        var hasChanges = false;
-        foreach (var key in AllowedNotificationKeys)
-        {
-            if (current.Any(x => string.Equals(x.NotificationKey, key, StringComparison.OrdinalIgnoreCase)))
-            {
-                continue;
-            }
-
-            var row = new TenantNotificationSetting
-            {
-                TenantId = tenantId,
-                NotificationKey = key,
-                EmailEnabled = true,
-                InAppEnabled = key is "system.failed-login-attempts" or "system.integration-errors" or "system.background-job-failures",
-                SmsEnabled = false,
-                IsActive = true
-            };
-            dbContext.TenantNotificationSettings.Add(row);
-            current.Add(row);
-            hasChanges = true;
-        }
-
-        if (hasChanges)
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        return current
-            .OrderBy(x => x.NotificationKey)
-            .ToList();
-    }
-
     private async Task<List<TenantNotificationRecipient>> LoadRecipientsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         return await dbContext.TenantNotificationRecipients
@@ -337,92 +232,6 @@ public sealed class PlatformTenantCommunicationSettingsController(
             .OrderBy(x => x.RecipientGroup)
             .ThenBy(x => x.Email)
             .ToListAsync(cancellationToken);
-    }
-
-    private async Task UpsertNotificationSettingsAsync(Guid tenantId, IReadOnlyCollection<TenantNotificationSettingRequest> requests, CancellationToken cancellationToken)
-    {
-        if (requests.Count == 0)
-        {
-            throw new BusinessRuleException("At least one notification setting is required.");
-        }
-
-        var normalized = requests
-            .Where(x => !string.IsNullOrWhiteSpace(x.NotificationKey))
-            .Select(x => new TenantNotificationSettingRequest(
-                x.NotificationKey.Trim().ToLowerInvariant(),
-                x.EmailEnabled,
-                x.InAppEnabled,
-                x.SmsEnabled,
-                x.IsActive))
-            .DistinctBy(x => x.NotificationKey, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        if (normalized.Count == 0)
-        {
-            throw new BusinessRuleException("At least one notification setting is required.");
-        }
-
-        foreach (var row in normalized)
-        {
-            if (!AllowedNotificationKeySet.Contains(row.NotificationKey))
-            {
-                throw new BusinessRuleException($"Unsupported notification key: {row.NotificationKey}");
-            }
-        }
-
-        var current = await EnsureAndLoadNotificationSettingsAsync(tenantId, cancellationToken);
-        var map = current.ToDictionary(x => x.NotificationKey, x => x, StringComparer.OrdinalIgnoreCase);
-
-        foreach (var input in normalized)
-        {
-            if (!map.TryGetValue(input.NotificationKey, out var target))
-            {
-                target = new TenantNotificationSetting
-                {
-                    TenantId = tenantId,
-                    NotificationKey = input.NotificationKey
-                };
-                dbContext.TenantNotificationSettings.Add(target);
-                map[input.NotificationKey] = target;
-            }
-
-            target.EmailEnabled = input.EmailEnabled;
-            target.InAppEnabled = input.InAppEnabled;
-            target.SmsEnabled = input.SmsEnabled;
-            target.IsActive = input.IsActive;
-        }
-    }
-
-    private async Task ReplaceRecipientsAsync(Guid tenantId, IReadOnlyCollection<TenantNotificationRecipientRequest> requests, CancellationToken cancellationToken)
-    {
-        var normalized = requests
-            .Where(x => !string.IsNullOrWhiteSpace(x.RecipientGroup) && !string.IsNullOrWhiteSpace(x.Email))
-            .Select(x => new TenantNotificationRecipientRequest(
-                NormalizeRecipientGroup(x.RecipientGroup),
-                NormalizeEmail(x.Email, "Recipient email must be a valid email address."),
-                x.IsActive))
-            .DistinctBy(x => $"{x.RecipientGroup}|{x.Email}", StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var current = await dbContext.TenantNotificationRecipients
-            .Where(x => x.TenantId == tenantId)
-            .ToListAsync(cancellationToken);
-
-        if (current.Count > 0)
-        {
-            dbContext.TenantNotificationRecipients.RemoveRange(current);
-        }
-
-        foreach (var row in normalized)
-        {
-            dbContext.TenantNotificationRecipients.Add(new TenantNotificationRecipient
-            {
-                TenantId = tenantId,
-                RecipientGroup = row.RecipientGroup,
-                Email = row.Email,
-                IsActive = row.IsActive
-            });
-        }
     }
 
     private async Task WriteAuditAsync(Guid tenantId, string action, string details, CancellationToken cancellationToken)
@@ -449,15 +258,10 @@ public sealed class PlatformTenantCommunicationSettingsController(
             setting.LastError,
             setting.ManagedEmailStatus,
             setting.ManagedEmailStatusCheckedAt,
-            setting.ManagedEmailStatusDetail);
-
-    private static TenantNotificationSettingResponse MapNotificationSetting(TenantNotificationSetting setting) =>
-        new(
-            setting.NotificationKey,
-            setting.EmailEnabled,
-            setting.InAppEnabled,
-            setting.SmsEnabled,
-            setting.IsActive);
+            setting.ManagedEmailStatusDetail,
+            UsesOwnSmtp: TenantEmailIdentity.UsesOwnSmtp(setting),
+            OwnSmtpHost: TenantEmailIdentity.UsesOwnSmtp(setting) ? setting.Host : null,
+            OwnFromAddress: TenantEmailIdentity.UsesOwnSmtp(setting) ? setting.CustomFromAddress : null);
 
     private static TenantNotificationRecipientResponse MapRecipient(TenantNotificationRecipient recipient) =>
         new(

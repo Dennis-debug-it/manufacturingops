@@ -21,12 +21,16 @@ public interface IFinancialRecipientResolver
 }
 
 /// <summary>
-/// Resolves billing recipients from tenant-scoped configuration. Dedicated recipients
-/// take precedence over the client's generic address, and all results are validated and
-/// de-duplicated before they reach the outbox.
+/// Who a finance document (invoice, receipt, statement) goes to. It always goes To the client
+/// itself; the tenant's own finance addresses (Settings → Finance Defaults) are only ever copied.
+/// These addresses are tenant-wide, so letting them replace the client — as they used to — sent
+/// every client's invoices to the tenant's inbox and none to the clients. A recipient tagged for one
+/// document type ("Receipt CC") is copied on that type only.
 /// </summary>
 public sealed class FinancialRecipientResolver(AppDbContext dbContext) : IFinancialRecipientResolver
 {
+    private static readonly string[] DocumentTypePrefixes = ["invoice", "receipt", "statement", "quotation", "creditnote", "payment"];
+
     public async Task<FinancialDocumentRecipients> ResolveAsync(
         Guid tenantId,
         Guid clientId,
@@ -41,6 +45,10 @@ public sealed class FinancialRecipientResolver(AppDbContext dbContext) : IFinanc
             return new FinancialDocumentRecipients([], []);
         }
 
+        var to = new List<string>();
+        var clientEmail = NormalizeEmail(client.Email);
+        if (clientEmail is not null) to.Add(clientEmail);
+
         var normalizedType = NormalizeGroup(documentType);
         var recipients = await dbContext.TenantNotificationRecipients
             .AsNoTracking()
@@ -49,28 +57,12 @@ public sealed class FinancialRecipientResolver(AppDbContext dbContext) : IFinanc
             .ThenBy(x => x.Email)
             .ToListAsync(cancellationToken);
 
-        var to = new List<string>();
         var cc = new List<string>();
         foreach (var recipient in recipients)
         {
             var email = NormalizeEmail(recipient.Email);
-            if (email is null) continue;
-
-            var group = NormalizeGroup(recipient.RecipientGroup);
-            if (IsCcGroup(group, normalizedType))
-            {
-                AddDistinct(cc, email);
-            }
-            else if (IsToGroup(group, normalizedType))
-            {
-                AddDistinct(to, email);
-            }
-        }
-
-        if (to.Count == 0)
-        {
-            var fallback = NormalizeEmail(client.Email);
-            if (fallback is not null) to.Add(fallback);
+            if (email is null || !AppliesTo(NormalizeGroup(recipient.RecipientGroup), normalizedType)) continue;
+            AddDistinct(cc, email);
         }
 
         cc.RemoveAll(address => to.Contains(address, StringComparer.OrdinalIgnoreCase));
@@ -91,16 +83,12 @@ public sealed class FinancialRecipientResolver(AppDbContext dbContext) : IFinanc
         return valid;
     }
 
-    private static bool IsToGroup(string group, string documentType) =>
-        group is "billing" or "finance" or "billingcontact" or "financecontact"
-        || group == documentType
-        || group == $"{documentType}recipient"
-        || group == $"{documentType}recipients";
-
-    private static bool IsCcGroup(string group, string documentType) =>
-        group is "cc" or "copy" or "copied" or "additional" or "additionalrecipient" or "additionalrecipients"
-        || group == $"{documentType}cc"
-        || group == $"{documentType}copy";
+    /// <summary>Generic groups (cc, billing, finance…) apply to every document; "receiptcc" only to receipts.</summary>
+    private static bool AppliesTo(string group, string documentType)
+    {
+        var targeted = DocumentTypePrefixes.FirstOrDefault(prefix => group.StartsWith(prefix, StringComparison.Ordinal));
+        return targeted is null || targeted == documentType;
+    }
 
     private static string NormalizeGroup(string? value) =>
         new string((value ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();

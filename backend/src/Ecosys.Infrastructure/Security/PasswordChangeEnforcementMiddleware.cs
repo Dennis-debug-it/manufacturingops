@@ -9,7 +9,8 @@ public sealed class PasswordChangeEnforcementMiddleware(
     ILogger<PasswordChangeEnforcementMiddleware> logger)
 {
     private const string PasswordChangeOnlyScope = "password_change_only";
-    private const string AllowedPath = "/api/auth/change-password";
+    // Signing out must also work, or a user who abandons the change leaves their session open.
+    private static readonly string[] AllowedPaths = ["/api/auth/change-password", "/api/auth/logout"];
 
     public async Task InvokeAsync(HttpContext context)
     {
@@ -20,7 +21,7 @@ public sealed class PasswordChangeEnforcementMiddleware(
             {
                 var path = context.Request.Path.Value ?? string.Empty;
                 var isAllowed = context.Request.Method == HttpMethods.Post &&
-                    path.Equals(AllowedPath, StringComparison.OrdinalIgnoreCase);
+                    AllowedPaths.Any(allowed => path.Equals(allowed, StringComparison.OrdinalIgnoreCase));
 
                 if (!isAllowed)
                 {

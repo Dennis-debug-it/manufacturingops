@@ -164,6 +164,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<ContractRenewal> ContractRenewals => Set<ContractRenewal>();
     public DbSet<WorkOrderBillableItem> WorkOrderBillableItems => Set<WorkOrderBillableItem>();
     public DbSet<WorkOrderTimeLog> WorkOrderTimeLogs => Set<WorkOrderTimeLog>();
+    public DbSet<WorkOrderVisit> WorkOrderVisits => Set<WorkOrderVisit>();
+    public DbSet<PartsReturn> PartsReturns => Set<PartsReturn>();
+    public DbSet<PartsReturnLine> PartsReturnLines => Set<PartsReturnLine>();
     public DbSet<TenantInvoice> TenantInvoices => Set<TenantInvoice>();
     public DbSet<TenantInvoiceLine> TenantInvoiceLines => Set<TenantInvoiceLine>();
     public DbSet<TenantPayment> TenantPayments => Set<TenantPayment>();
@@ -440,6 +443,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
         modelBuilder.Entity<ClientPortalUser>(entity =>
         {
+            entity.Property(x => x.AccessLinkNonce).HasMaxLength(64);
             entity.ToTable("client_portal_users");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
@@ -1380,6 +1384,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.ToTable("email_settings");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.ManagedEmailAddress).HasMaxLength(256);
+            entity.Property(x => x.CustomFromAddress).HasMaxLength(256);
             entity.Property(x => x.ManagedEmailStatus).HasMaxLength(32).IsRequired().HasDefaultValue(ManagedEmailStatuses.Pending);
             entity.Property(x => x.ManagedEmailStatusDetail).HasMaxLength(1000);
             entity.Property(x => x.EmailSignature).HasMaxLength(4000);
@@ -3021,6 +3026,50 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.SetNull);
         });
         ApplyTenantFilter<WorkOrderTimeLog>(modelBuilder);
+
+        // ── WorkOrderVisit ───────────────────────────────────────────────────
+        modelBuilder.Entity<WorkOrderVisit>(entity =>
+        {
+            entity.ToTable("work_order_visits");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.WorkOrderId, x.TechnicianId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Technician).WithMany().HasForeignKey(x => x.TechnicianId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<WorkOrderVisit>(modelBuilder);
+
+        // ── PartsReturn ──────────────────────────────────────────────────────
+        modelBuilder.Entity<PartsReturn>(entity =>
+        {
+            entity.ToTable("parts_returns");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ReturnNumber).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.RejectionReason).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.ReturnNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.WorkOrderId });
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.RequestedByUser).WithMany().HasForeignKey(x => x.RequestedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ProcessedByUser).WithMany().HasForeignKey(x => x.ProcessedByUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasMany(x => x.Lines).WithOne(x => x.PartsReturn).HasForeignKey(x => x.PartsReturnId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<PartsReturn>(modelBuilder);
+
+        modelBuilder.Entity<PartsReturnLine>(entity =>
+        {
+            entity.ToTable("parts_return_lines");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.Condition).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+        });
 
         // ── TenantInvoice ────────────────────────────────────────────────────
         modelBuilder.Entity<TenantInvoice>(entity =>

@@ -259,6 +259,25 @@ export function useResendClientPortalLink(clientId: string) {
   })
 }
 
+export interface PortalAccessLink {
+  link: string
+  portalLoginUrl: string
+}
+
+/**
+ * Admin-only: the contact's permanent, full-access portal link (never expires). The same link is
+ * returned each time until it is reset; resetting makes the previous link stop working.
+ */
+export function usePortalAccessLink(clientId: string) {
+  return useMutation({
+    mutationFn: ({ id, reset }: { id: string; reset: boolean }) =>
+      api.post<PortalAccessLink>(reset ? endpoints.clientPortalContacts.resetAccessLink(clientId, id) : endpoints.clientPortalContacts.accessLink(clientId, id), {}),
+  })
+}
+
+/** Where clients sign in; they enter their email and get a one-time link. */
+export const portalLoginUrl = () => `${window.location.origin}/portal/login`
+
 // ── Client Archive/Delete ────────────────────────────────────────────────────
 
 export interface ClientDeletionCheck {

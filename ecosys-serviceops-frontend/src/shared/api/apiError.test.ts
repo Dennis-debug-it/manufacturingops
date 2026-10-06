@@ -65,4 +65,16 @@ describe('normalizeError', () => {
     const result = normalizeError(axiosErrorWithResponse(403, { message: 'Suspended', errorCode: 'license_suspended' }))
     expect(result.errorCode).toBe('license_suspended')
   })
+
+  it('never shows a proxy HTML error page as the message (nginx 413)', () => {
+    const html = ['<html>', '<head><title>413 Request Entity Too Large</title></head>', '<body></body></html>'].join('\n')
+    const result = normalizeError(axiosErrorWithResponse(413, html))
+    expect(result.status).toBe(413)
+    expect(result.message).not.toContain('<')
+    expect(result.message).toMatch(/too large/i)
+  })
+
+  it('still shows a plain-text error body from the API', () => {
+    expect(normalizeError(axiosErrorWithResponse(400, 'Asset code must be unique per tenant.')).message).toBe('Asset code must be unique per tenant.')
+  })
 })

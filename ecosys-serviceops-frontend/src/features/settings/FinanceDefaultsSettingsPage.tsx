@@ -1,7 +1,9 @@
 import { SettingsForm } from './components/SettingsForm'
+import { FinanceRecipientsSection } from './components/FinanceRecipientsSection'
 
 export function FinanceDefaultsSettingsPage() {
   return (
+    <div className="space-y-4">
     <SettingsForm
       title="Finance Defaults"
       subtitle="Default tax rate, payment terms, and approval rules new quotations and invoices are created with."
@@ -27,5 +29,7 @@ export function FinanceDefaultsSettingsPage() {
         { key: 'defaultExpenseApprovalRequired', label: 'Require approval for new expenses by default', type: 'checkbox' },
       ]}
     />
+    <FinanceRecipientsSection />
+    </div>
   )
 }

@@ -12,11 +12,18 @@ export function OperationalDefaultsSettingsPage() {
         requireTechnicianSignature: true,
         requireClientSignature: true,
         allowRemoteCompletion: false,
+        autoSendServiceReportOnApproval: false,
       }}
       fields={[
         { key: 'requireTechnicianSignature', label: 'Require technician signature to complete a work order', type: 'checkbox' },
         { key: 'requireClientSignature', label: 'Require client signature to complete a work order', type: 'checkbox' },
         { key: 'allowRemoteCompletion', label: 'Allow work orders to be completed remotely (no on-site check-in)', type: 'checkbox' },
+        {
+          key: 'autoSendServiceReportOnApproval',
+          label: 'Email the service report to the client automatically when it is approved',
+          type: 'checkbox',
+          helperText: "Sent to the work order's client contact, or the client's email. Reports with no contact email stay in the queue for a manual send.",
+        },
       ]}
     />
   )

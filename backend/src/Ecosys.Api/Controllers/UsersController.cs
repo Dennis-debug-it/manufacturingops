@@ -222,6 +222,17 @@ public sealed class UsersController(
         var normalizedBranchIds = NormalizeBranchIds(request.BranchIds);
         var resolvedDefaultBranchId = await ResolveDefaultBranchIdAsync(normalizedRole, normalizedBranchIds, request.DefaultBranchId, request.HasAllBranchAccess, cancellationToken);
 
+        // A corrected address means any invite/reset link already sent went to the wrong mailbox —
+        // possibly someone else's. Kill those links; the admin resends to the right address.
+        var emailChanged = !string.Equals(user.Email, normalizedEmail, StringComparison.OrdinalIgnoreCase);
+        if (emailChanged)
+        {
+            var outstandingLinks = await dbContext.PasswordResetTokens
+                .Where(x => x.UserId == user.Id && x.UsedAt == null && x.SupersededAt == null && x.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+            foreach (var link in outstandingLinks) link.RevokedAt = DateTime.UtcNow;
+        }
+
         user.FullName = request.FullName.Trim();
         user.Email = normalizedEmail;
         user.HasEmail = hasEmail;
@@ -232,7 +243,14 @@ public sealed class UsersController(
         user.IsActive = request.IsActive;
         user.HasAllBranchAccess = string.Equals(normalizedRole, AppRoles.Admin, StringComparison.OrdinalIgnoreCase) || request.HasAllBranchAccess;
         user.DefaultBranchId = resolvedDefaultBranchId;
-        user.Permission ??= new UserPermission();
+        if (user.Permission is null)
+        {
+            // Added explicitly: a new child with a preset Guid key reached only through the navigation
+            // is tracked as an update of a row that doesn't exist, and SaveChanges fails.
+            user.Permission = new UserPermission { UserId = user.Id };
+            dbContext.UserPermissions.Add(user.Permission);
+        }
+
         ApplyPermissions(user.Permission, permissions);
 
         dbContext.UserBranchAssignments.RemoveRange(user.BranchAssignments);
@@ -383,15 +401,22 @@ public sealed class UsersController(
         var user = await dbContext.Users.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("User was not found.");
 
-        if (!user.IsActive || user.MustChangePassword)
+        if (!user.IsActive)
         {
-            throw new BusinessRuleException("Password reset emails can only be sent for active users.");
+            throw new BusinessRuleException("Passwords can only be reset for active users.");
         }
 
         // The admin's choice: type a password directly, or generate one and have it revealed once —
         // either way nothing is emailed, so this branch works even for users with no email address.
+        // It is also allowed for users who have not finished setup yet (MustChangePassword): a
+        // no-email user created without a password has no other way to receive one.
         var adminSuppliedPassword = request?.ResolvePasswordOrNull();
         var generateAndReveal = request?.GenerateAndReveal ?? false;
+        if (adminSuppliedPassword is null && !generateAndReveal && user.MustChangePassword)
+        {
+            throw new BusinessRuleException("This user has not completed account setup yet. Resend the invitation instead of a password reset.");
+        }
+
         if (adminSuppliedPassword is not null || generateAndReveal)
         {
             var newPassword = adminSuppliedPassword ?? temporaryPasswordService.Generate();

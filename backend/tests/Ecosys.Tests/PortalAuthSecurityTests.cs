@@ -135,6 +135,45 @@ public sealed class PortalAuthSecurityTests
             condition == "unknown-token" ? "other-token" : "test-token"));
     }
 
+    [Fact]
+    public async Task PermanentLink_KeepsWorking_UntilResetOrTheContactIsDeactivated()
+    {
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var tenant = new Tenant { IsActive = true, CompanyName = "Acme Services" };
+        var client = new Client { TenantId = tenant.Id, IsActive = true, ClientName = "Client Co" };
+        var contact = new ClientPortalUser { TenantId = tenant.Id, Tenant = tenant, ClientId = client.Id, Client = client,
+            IsActive = true, FullName = "Jane", Email = "jane@client.test" };
+        db.AddRange(tenant, client, contact);
+        await db.SaveChangesAsync();
+        var outbox = new RecordingOutbox();
+        var service = new PortalAuthService(db, Options.Create(new JwtOptions { SigningKey = new string('k', 64) }), outbox, new NoOpAudit());
+        static string Fragment(string link) => link[(link.IndexOf('#') + 1)..];
+
+        // The invitation email carries the same permanent link staff can copy.
+        await service.SendInvitationAsync(contact.Id, "https://serviceops.test", null, null, null);
+        var link = await service.GetAccessLinkAsync(contact.Id, "https://serviceops.test", Guid.NewGuid(), reset: false);
+        Assert.StartsWith("https://serviceops.test/portal/access#", link);
+        Assert.Contains(link, Assert.Single(outbox.Queued).HtmlBody);
+        Assert.Empty(await db.ClientPortalLoginTokens.ToListAsync());
+
+        // Reusable: no expiry, not consumed by use.
+        Assert.Equal(contact.Id, (await service.OpenAccessLinkAsync(Fragment(link))).PortalUserId);
+        Assert.Equal(contact.Id, (await service.OpenAccessLinkAsync(Fragment(link))).PortalUserId);
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.OpenAccessLinkAsync(Fragment(link)[..^2] + "xx"));
+
+        // Reset kills the old link; the new one works.
+        var newLink = await service.GetAccessLinkAsync(contact.Id, "https://serviceops.test", Guid.NewGuid(), reset: true);
+        Assert.NotEqual(link, newLink);
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.OpenAccessLinkAsync(Fragment(link)));
+        Assert.Equal(contact.Id, (await service.OpenAccessLinkAsync(Fragment(newLink))).PortalUserId);
+
+        // Deactivating the contact stops it too.
+        contact.IsActive = false;
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.OpenAccessLinkAsync(Fragment(newLink)));
+    }
+
     private sealed class RecordingPortalAuthService : IPortalAuthService
     {
         public string? BaseUrl { get; private set; }
@@ -148,6 +187,27 @@ public sealed class PortalAuthSecurityTests
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> IssueSignInLinkAsync(Guid portalUserId, string magicLinkBaseUrl, string? ipAddress,
             string? userAgent, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task SendInvitationAsync(Guid portalUserId, string portalBaseUrl, Guid? invitedByUserId, string? ipAddress,
+            string? userAgent, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> GetAccessLinkAsync(Guid portalUserId, string portalBaseUrl, Guid? actorUserId, bool reset, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<PortalMagicLinkResult> OpenAccessLinkAsync(string link, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingOutbox : IEmailOutboxService
+    {
+        public List<QueueEmailRequest> Queued { get; } = [];
+        public Task<EmailOutboxMessage> QueueEmailAsync(QueueEmailRequest request, CancellationToken cancellationToken = default)
+        {
+            Queued.Add(request);
+            return Task.FromResult(new EmailOutboxMessage());
+        }
+        public Task<IReadOnlyCollection<EmailOutboxMessage>> GetPendingBatchAsync(int batchSize, DateTime utcNow, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> MarkSendingAsync(Guid outboxMessageId, DateTime utcNow, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<int> ReleaseAbandonedClaimsAsync(TimeSpan claimTimeout, DateTime utcNow, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task MarkSentAsync(Guid outboxMessageId, DateTime utcNow, string? providerMessageId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task MarkFailedAsync(Guid outboxMessageId, string? errorCategory, string? errorMessage, DateTime utcNow, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task RetryAsync(Guid outboxMessageId, DateTime nextAttemptAt, string? errorMessage, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task CancelAsync(Guid outboxMessageId, string? errorMessage, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class TokenReadBarrier : DbCommandInterceptor

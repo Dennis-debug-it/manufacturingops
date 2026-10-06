@@ -27,6 +27,7 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { formatNumber } from '../../shared/utils/format'
 import { formatRelative } from '../../shared/utils/dates'
 import { useWhatsAppConversations } from '../whatsapp/api'
+import { WHATSAPP_ENABLED } from '../../shared/config/features'
 import type { DashboardGroupMetric, DashboardSummary, DashboardTechnicianWorkload } from './types'
 
 interface StatCardDef {
@@ -187,7 +188,7 @@ export function DashboardPage() {
         </div>
       </Surface>
 
-      <WhatsAppAlertsWidget />
+      {WHATSAPP_ENABLED ? <WhatsAppAlertsWidget /> : null}
 
       <Surface variant="solid" padding="sm">
         <div className="flex flex-wrap gap-4 text-sm text-slate-600">

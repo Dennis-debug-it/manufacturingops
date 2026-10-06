@@ -33,6 +33,7 @@ export const assetSchema = z.object({
   clientId: z.string().min(1, 'Client is required'),
   siteId: z.string().optional(),
   assetName: z.string().min(1, 'Asset name is required').max(200),
+  assetCode: z.string().max(100).optional(),
   assetType: z.string().max(100).optional(),
   location: z.string().max(200).optional(),
   serialNumber: z.string().max(120).optional(),
