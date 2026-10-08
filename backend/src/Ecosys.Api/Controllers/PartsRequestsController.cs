@@ -23,6 +23,7 @@ public sealed class PartsRequestsController(
     public async Task<ActionResult<IReadOnlyCollection<PartsRequestResponse>>> GetForWorkOrder(Guid workOrderId, CancellationToken cancellationToken)
     {
         userAccessService.EnsureTenantOperationalAccess();
+        await EnsureTechnicianAssignedToWorkOrderAsync(dbContext, workOrderId, cancellationToken);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
 
         var requests = await Query(scope)
@@ -37,6 +38,7 @@ public sealed class PartsRequestsController(
     public async Task<ActionResult<PartsRequestResponse>> Create(Guid workOrderId, [FromBody] CreatePartsRequestRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureTenantOperationalAccess();
+        await EnsureTechnicianAssignedToWorkOrderAsync(dbContext, workOrderId, cancellationToken);
 
         if (request.Items.Count == 0)
         {
@@ -121,6 +123,12 @@ public sealed class PartsRequestsController(
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
 
         var query = Query(scope);
+        if (IsTechnicianOnlyWorkspaceUser())
+        {
+            // Field technicians see their own requests, not the whole branch's stores queue.
+            var userId = UserId;
+            query = query.Where(x => x.TechnicianId == userId);
+        }
         if (!string.IsNullOrWhiteSpace(status))
         {
             query = query.Where(x => x.Status == status);
