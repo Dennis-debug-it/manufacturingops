@@ -146,10 +146,14 @@ export function WorkOrderDetailPage() {
   const start = () => void runAction('Work started', () => startWorkOrder.mutateAsync(undefined))
   const resume = () => void runAction('Work resumed', () => resumeFromHold.mutateAsync())
 
-  // One main action that follows the job: Resume → Start → Complete → Close.
+  // One main action that follows the job: Assign → Start → Complete → Close (or Resume when on hold).
+  // An unassigned job cannot be started: the server needs a technician who has accepted it.
+  const needsAssignment = workOrder.isUnassigned && canAssign && !isFinal && !isOnHold
   const mainAction: { label: string; onClick: () => void } | null = canResumeNow
     ? { label: 'Resume', onClick: resume }
-    : canStartNow
+    : needsAssignment
+      ? { label: 'Assign', onClick: () => setReassignOpen(true) }
+      : canStartNow
       ? { label: 'Start Work', onClick: start }
       : canCompleteNow
         ? { label: 'Complete', onClick: () => setCompleteOpen(true) }
@@ -161,7 +165,7 @@ export function WorkOrderDetailPage() {
     ...(canCompleteNow && mainAction?.label !== 'Complete' ? [{ label: 'Complete', onClick: () => setCompleteOpen(true) }] : []),
     ...(canPauseNow ? [{ label: 'Put On Hold', onClick: () => setHoldOpen(true) }] : []),
     ...(canResumeNow && mainAction?.label !== 'Resume' ? [{ label: 'Resume', onClick: resume }] : []),
-    ...(canAssign && !isFinal ? [{ label: 'Reassign', onClick: () => setReassignOpen(true) }] : []),
+    ...(canAssign && !isFinal && !needsAssignment ? [{ label: 'Reassign', onClick: () => setReassignOpen(true) }] : []),
     ...(canCreate ? [{ label: 'Duplicate', onClick: () => void submitDuplicate() }] : []),
     ...(canCancelNow ? [{ label: 'Cancel Work Order', onClick: () => setConfirmAction('cancel'), danger: true }] : []),
   ]
