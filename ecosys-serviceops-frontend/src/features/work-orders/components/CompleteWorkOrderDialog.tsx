@@ -20,6 +20,8 @@ export interface CompleteWorkOrderDialogProps {
   arrivalRecorded: boolean
   /** Whether the signed-in user holds the tenant `admin` role the server requires for an override. */
   canAdminOverride: boolean
+  /** Work-done notes already recorded during execution, used to prefill the dialog. */
+  initialNotes?: string | null | undefined
   onClose: () => void
   onSubmit: (submission: CompleteWorkOrderSubmission) => void
 }
@@ -30,6 +32,7 @@ export function CompleteWorkOrderDialog({
   submitting,
   arrivalRecorded,
   canAdminOverride,
+  initialNotes,
   onClose,
   onSubmit,
 }: CompleteWorkOrderDialogProps) {
@@ -38,12 +41,14 @@ export function CompleteWorkOrderDialog({
   const [overrideReason, setOverrideReason] = useState('')
 
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      setNotes(initialNotes ?? '')
+    } else {
       setNotes('')
       setOverrideEnabled(false)
       setOverrideReason('')
     }
-  }, [open])
+  }, [open, initialNotes])
 
   if (!open) {
     return null

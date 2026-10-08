@@ -1,45 +1,45 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, MoreVertical } from 'lucide-react'
+import { AlertTriangle, CalendarClock, MoreVertical, PauseCircle } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
 import { DetailLayout } from '../../shared/components/DetailLayout'
 import { StatusBadge } from '../../shared/components/StatusBadge'
+import { SlaBadge } from '../../shared/components/SlaBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
-import { MobileActionBar } from '../../shared/components/MobileActionBar'
-import { SummarySection } from '../../shared/pages/ModulePage'
+import { useAuth } from '../../shared/hooks/useAuth'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
-import { formatDate, formatDateTime } from '../../shared/utils/dates'
+import { cn } from '../../shared/utils/cn'
+import { formatDate, formatDateTime, isPast } from '../../shared/utils/dates'
 import {
   useCancelWorkOrder,
   useCloseWorkOrder,
   useCompleteWorkOrder,
   useDuplicateWorkOrder,
+  useExecutionBundle,
   useHoldWorkOrder,
   usePatchWorkOrderWorkflowStatus,
   useResumeFromHold,
   useStartWorkOrder,
   useWorkOrder,
+  useWorkOrderSla,
 } from './api'
 import { useWorkflowStatuses } from '../settings/workflowsApi'
-import { TimelineTab } from './tabs/TimelineTab'
-import { ActivityTab } from './tabs/ActivityTab'
-import { NotesTab } from './tabs/NotesTab'
+import { CompleteWorkOrderDialog } from './components/CompleteWorkOrderDialog'
 import { DocumentsPanel } from './components/DocumentsPanel'
+import { ReassignDrawer } from './components/ReassignDrawer'
 import { RelatedWorkOrdersPanel } from './components/RelatedWorkOrdersPanel'
+import { SubtasksPanel } from './components/SubtasksPanel'
 import { TechnicianLocationPanel } from './components/TechnicianLocationPanel'
-import { AssignmentTab } from './tabs/AssignmentTab'
-import { ExecutionTab } from './tabs/ExecutionTab'
-import { EvidenceTab } from './tabs/EvidenceTab'
-import { PartsTab } from './tabs/PartsTab'
-import { SignaturesTab } from './tabs/SignaturesTab'
+import { hasRecordedArrival } from './dispatchGuards'
+import { ActivityTab } from './tabs/ActivityTab'
+import { OverviewTab } from './tabs/OverviewTab'
 import { ReportTab } from './tabs/ReportTab'
-import { SlaTab } from './tabs/SlaTab'
-import { SubtasksTab } from './tabs/SubtasksTab'
+import { WorkTab } from './tabs/WorkTab'
 
 const holdTypeOptions = [
   { value: 'OnHold', label: 'On Hold (general)' },
@@ -47,36 +47,35 @@ const holdTypeOptions = [
   { value: 'WaitingOnClient', label: 'Waiting on Client' },
 ] as const
 
-const summaryFields: Array<{ key: string; label: string; render?: (value: string) => string }> = [
-  { key: 'workOrderNumber', label: 'WO Number' },
-  { key: 'workType', label: 'Type' },
-  { key: 'priority', label: 'Priority' },
-  { key: 'status', label: 'Status' },
-  { key: 'clientName', label: 'Client' },
-  { key: 'siteName', label: 'Site' },
-  { key: 'assetName', label: 'Asset' },
-  { key: 'assignmentSummary', label: 'Assigned To' },
-  { key: 'dueDate', label: 'Due Date', render: (value) => formatDate(value) },
-  { key: 'createdAt', label: 'Created', render: (value) => formatDateTime(value) },
-  { key: 'slaStatus', label: 'SLA Status' },
-  { key: 'branchName', label: 'Branch' },
-]
+const HOLD_STATUSES = ['On Hold', 'Waiting on Parts', 'Waiting on Client']
+const FINAL_STATUSES = ['Completed', 'Closed', 'Cancelled']
+const STARTABLE_STATUSES = ['Assigned', 'Scheduled', 'New', 'Open']
+
+const chipClass = 'inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-700'
+const secondaryButtonClass = 'inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50'
+
+type MenuItem = { label: string; onClick: () => void; danger?: boolean }
 
 export function WorkOrderDetailPage() {
   const { hasModule } = useEntitlements()
+  const { user } = useAuth()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: workOrder, isLoading, isError } = useWorkOrder(id)
+  const { data: sla } = useWorkOrderSla(id)
+  const { data: bundle } = useExecutionBundle(id)
   const { data: workflowStatuses } = useWorkflowStatuses()
   const patchWorkflowStatus = usePatchWorkOrderWorkflowStatus()
 
   const canAssign = usePermission('work-orders.assign')
   const canStart = usePermission('work-orders.start')
-  const canExecute = usePermission('work-orders.execute')
+  const canHold = usePermission('work-orders.hold')
+  const canResumePermission = usePermission('work-orders.resume')
   const canComplete = usePermission('work-orders.complete')
   const canClose = usePermission('work-orders.close')
   const canCancel = usePermission('work-orders.cancel')
   const canCreate = usePermission('work-orders.create')
+  const canEdit = usePermission('work-orders.edit')
 
   const startWorkOrder = useStartWorkOrder(id ?? '')
   const holdWorkOrder = useHoldWorkOrder(id ?? '')
@@ -87,13 +86,21 @@ export function WorkOrderDetailPage() {
   const duplicateWorkOrder = useDuplicateWorkOrder(id ?? '')
 
   const [completeOpen, setCompleteOpen] = useState(false)
-  const [workDoneNotes, setWorkDoneNotes] = useState('')
-  const [reportSummary, setReportSummary] = useState('')
+  const [reassignOpen, setReassignOpen] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'close' | 'cancel' | null>(null)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [holdOpen, setHoldOpen] = useState(false)
   const [holdType, setHoldType] = useState<(typeof holdTypeOptions)[number]['value']>('OnHold')
   const [holdReason, setHoldReason] = useState('')
+
+  const runAction = async (label: string, mutateAsync: () => Promise<unknown>) => {
+    try {
+      await mutateAsync()
+      toast.success(label)
+    } catch {
+      // interceptor surfaces the error toast
+    }
+  }
 
   const submitDuplicate = async () => {
     try {
@@ -117,31 +124,6 @@ export function WorkOrderDetailPage() {
     }
   }
 
-  const runAction = async (label: string, mutateAsync: () => Promise<unknown>) => {
-    try {
-      await mutateAsync()
-      toast.success(label)
-    } catch {
-      // interceptor surfaces the error toast
-    }
-  }
-
-  const submitComplete = async () => {
-    if (!workDoneNotes.trim()) {
-      toast.error('Work done notes are required')
-      return
-    }
-    try {
-      await completeWorkOrder.mutateAsync({ workDoneNotes: workDoneNotes.trim(), reportSummary: reportSummary.trim() || null })
-      toast.success('Work order completed')
-      setCompleteOpen(false)
-      setWorkDoneNotes('')
-      setReportSummary('')
-    } catch {
-      // interceptor surfaces the error toast
-    }
-  }
-
   if (isLoading) {
     return <Spinner label="Loading work order" />
   }
@@ -151,13 +133,38 @@ export function WorkOrderDetailPage() {
   }
 
   const status = workOrder.status
-  const holdStatuses = ['On Hold', 'Waiting on Parts', 'Waiting on Client']
-  const canPause = canExecute && !holdStatuses.includes(status) && !['Completed', 'Closed', 'Cancelled'].includes(status)
-  const canResume = canExecute && holdStatuses.includes(status)
-  const canStartNow = canStart && ['Assigned', 'Scheduled', 'New', 'Open'].includes(status)
-  const canCompleteNow = canComplete && !['Completed', 'Closed', 'Cancelled'].includes(status)
+  const isFinal = FINAL_STATUSES.includes(status)
+  const isOnHold = HOLD_STATUSES.includes(status)
+  const canStartNow = canStart && STARTABLE_STATUSES.includes(status)
+  const canPauseNow = canHold && !isOnHold && !isFinal
+  const canResumeNow = canResumePermission && isOnHold
+  const canCompleteNow = canComplete && !isFinal
   const canCloseNow = canClose && status === 'Completed'
-  const canCancelNow = canCancel && !['Completed', 'Closed', 'Cancelled'].includes(status)
+  const canCancelNow = canCancel && !isFinal
+  const arrivalRecorded = Boolean(workOrder.arrivalAt) || hasRecordedArrival(workOrder.technicianAssignments)
+
+  const start = () => void runAction('Work started', () => startWorkOrder.mutateAsync(undefined))
+  const resume = () => void runAction('Work resumed', () => resumeFromHold.mutateAsync())
+
+  // One main action that follows the job: Resume → Start → Complete → Close.
+  const mainAction: { label: string; onClick: () => void } | null = canResumeNow
+    ? { label: 'Resume', onClick: resume }
+    : canStartNow
+      ? { label: 'Start Work', onClick: start }
+      : canCompleteNow
+        ? { label: 'Complete', onClick: () => setCompleteOpen(true) }
+        : canCloseNow
+          ? { label: 'Close', onClick: () => setConfirmAction('close') }
+          : null
+
+  const menuItems: MenuItem[] = [
+    ...(canCompleteNow && mainAction?.label !== 'Complete' ? [{ label: 'Complete', onClick: () => setCompleteOpen(true) }] : []),
+    ...(canPauseNow ? [{ label: 'Put On Hold', onClick: () => setHoldOpen(true) }] : []),
+    ...(canResumeNow && mainAction?.label !== 'Resume' ? [{ label: 'Resume', onClick: resume }] : []),
+    ...(canAssign && !isFinal ? [{ label: 'Reassign', onClick: () => setReassignOpen(true) }] : []),
+    ...(canCreate ? [{ label: 'Duplicate', onClick: () => void submitDuplicate() }] : []),
+    ...(canCancelNow ? [{ label: 'Cancel Work Order', onClick: () => setConfirmAction('cancel'), danger: true }] : []),
+  ]
 
   const currentWorkflowStatus = workOrder.workflowStatusId
     ? (workflowStatuses ?? []).find((s) => s.id === workOrder.workflowStatusId)
@@ -169,7 +176,7 @@ export function WorkOrderDetailPage() {
     : []
 
   const changeWorkflowStatus = async (workflowStatusId: string) => {
-    if (!id || workflowStatusId === currentWorkflowStatus?.id) return
+    if (workflowStatusId === currentWorkflowStatus?.id) return
     try {
       await patchWorkflowStatus.mutateAsync({ id, workflowStatusId })
       toast.success('Status updated')
@@ -178,89 +185,88 @@ export function WorkOrderDetailPage() {
     }
   }
 
+  const slaDeadline = sla?.resolutionDeadline ?? sla?.responseDeadline ?? workOrder.slaResolutionDeadline ?? workOrder.slaResponseDeadline
+  const slaBreached = sla ? sla.responseBreached || sla.resolutionBreached : workOrder.slaResponseBreached || workOrder.slaResolutionBreached
+  const dueOverdue = Boolean(workOrder.dueDate) && !isFinal && isPast(workOrder.dueDate!)
+
+  const chips = (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {currentWorkflowStatus && canEdit ? (
+        <select
+          value={currentWorkflowStatus.id}
+          onChange={(event) => void changeWorkflowStatus(event.target.value)}
+          disabled={patchWorkflowStatus.isPending || currentWorkflowStatus.isFinal}
+          className="h-7 rounded-full border-0 px-2.5 text-xs font-medium text-white outline-none disabled:opacity-70"
+          style={{ backgroundColor: currentWorkflowStatus.color }}
+          aria-label="Work order status"
+        >
+          {workflowStatusOptions.map((option) => (
+            <option key={option.id} value={option.id} className="bg-white text-slate-900">{option.name}</option>
+          ))}
+        </select>
+      ) : (
+        <StatusBadge status={status} />
+      )}
+      <StatusBadge status={`${workOrder.priority} priority`} />
+      {slaDeadline && !isFinal ? <SlaBadge deadline={slaDeadline} breached={slaBreached} paused={sla?.isPaused ?? false} /> : null}
+      {workOrder.dueDate ? (
+        <span className={cn(chipClass, dueOverdue && 'border-rose-200 text-rose-700')}>
+          <CalendarClock className="h-3 w-3" />Due {formatDate(workOrder.dueDate)}
+        </span>
+      ) : null}
+      {hasModule('finance') && workOrder.quoteId && workOrder.quoteNumber ? (
+        <Link to={`/finance/quotes/${workOrder.quoteId}`} className={cn(chipClass, 'text-sky-700 hover:bg-sky-50')}>
+          Quote #{workOrder.quoteNumber}
+        </Link>
+      ) : null}
+    </div>
+  )
+
   const header = (
     <PageHeader
       title={workOrder.workOrderNumber}
       subtitle={workOrder.title}
+      titleAdornment={chips}
       breadcrumbs={[
         { label: 'Work Orders', to: '/work-orders' },
         { label: workOrder.workOrderNumber },
       ]}
-      secondaryActions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Link to="/work-orders" className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Back</Link>
-          {currentWorkflowStatus && canCreate ? (
-            <select
-              value={currentWorkflowStatus.id}
-              onChange={(event) => void changeWorkflowStatus(event.target.value)}
-              disabled={patchWorkflowStatus.isPending || currentWorkflowStatus.isFinal}
-              className="h-9 rounded-full border-0 px-3 text-xs font-medium text-white outline-none disabled:opacity-70"
-              style={{ backgroundColor: currentWorkflowStatus.color }}
-              aria-label="Work order status"
-            >
-              {workflowStatusOptions.map((option) => (
-                <option key={option.id} value={option.id} className="bg-white text-slate-900">
-                  {option.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <StatusBadge status={status} />
-          )}
-          {hasModule('finance') && workOrder.quoteId && workOrder.quoteNumber ? (
-            <Link
-              to={`/finance/quotes/${workOrder.quoteId}`}
-              className="inline-flex items-center rounded-full bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 ring-1 ring-inset ring-sky-200 transition hover:bg-sky-100"
-            >
-              Created from Quote #{workOrder.quoteNumber}
-            </Link>
-          ) : null}
-        </div>
-      }
       primaryAction={
-        <div className="hidden flex-wrap items-center gap-2 md:flex">
-          {canStartNow ? (
-            <button type="button" onClick={() => runAction('Work started', () => startWorkOrder.mutateAsync(undefined))} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Start Work</button>
+        <div className="flex items-center gap-2" data-testid="workflow-actions">
+          {mainAction ? (
+            <button type="button" onClick={mainAction.onClick} className="inline-flex h-10 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
+              {mainAction.label}
+            </button>
           ) : null}
-          {canPause ? (
-            <button type="button" onClick={() => setHoldOpen(true)} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Put On Hold</button>
-          ) : null}
-          {canResume ? (
-            <button type="button" onClick={() => runAction('Work resumed', () => resumeFromHold.mutateAsync())} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Resume</button>
-          ) : null}
-          {canCompleteNow ? (
-            <button type="button" onClick={() => setCompleteOpen(true)} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800">Complete</button>
-          ) : null}
-          {canCloseNow ? (
-            <button type="button" onClick={() => setConfirmAction('close')} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Close</button>
-          ) : null}
-          {canCancelNow ? (
-            <button type="button" onClick={() => setConfirmAction('cancel')} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-white px-4 text-sm font-medium text-rose-600 transition hover:bg-rose-50">Cancel</button>
-          ) : null}
-          {canCreate ? (
+          {menuItems.length > 0 ? (
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setShowActionsMenu((prev) => !prev)}
-                className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                className={cn(secondaryButtonClass, 'w-10 justify-center px-0')}
                 aria-label="More actions"
+                aria-expanded={showActionsMenu}
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
               {showActionsMenu ? (
                 <>
                   <button type="button" aria-label="Close menu" className="fixed inset-0 z-10 cursor-default" onClick={() => setShowActionsMenu(false)} />
-                  <div className="absolute right-0 z-20 mt-2 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowActionsMenu(false)
-                        void submitDuplicate()
-                      }}
-                      className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
-                    >
-                      Duplicate
-                    </button>
+                  <div role="menu" className="absolute right-0 z-20 mt-2 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                    {menuItems.map((item) => (
+                      <button
+                        key={item.label}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setShowActionsMenu(false)
+                          item.onClick()
+                        }}
+                        className={cn('block w-full px-3 py-2 text-left text-sm hover:bg-slate-50', item.danger ? 'text-rose-600' : 'text-slate-700')}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
                   </div>
                 </>
               ) : null}
@@ -271,99 +277,72 @@ export function WorkOrderDetailPage() {
     />
   )
 
+  const alerts = [
+    isOnHold ? {
+      key: 'hold',
+      icon: PauseCircle,
+      text: `${status}${workOrder.holdSince ? ` since ${formatDateTime(workOrder.holdSince)}` : ''}${workOrder.holdReason || workOrder.holdNote ? ` — ${workOrder.holdReason ?? workOrder.holdNote}` : ''}`,
+    } : null,
+    slaBreached && !isFinal ? { key: 'sla', icon: AlertTriangle, text: 'SLA breached. Prioritise or escalate this job.' } : null,
+    workOrder.isRepeatVisit ? {
+      key: 'repeat',
+      icon: AlertTriangle,
+      text: `Repeat visit — this asset has had ${workOrder.repeatVisitCount} jobs in the last 30 days. Consider escalating the underlying fault.`,
+    } : null,
+  ].filter((alert): alert is NonNullable<typeof alert> => alert !== null)
+
   return (
     <>
-      {workOrder.isRepeatVisit ? (
-        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            Repeat visit — this asset has had {workOrder.repeatVisitCount} jobs in the last 30 days. Consider escalating the underlying fault.
-          </span>
+      {alerts.length > 0 ? (
+        <div className="mb-4 space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {alerts.map(({ key, icon: Icon, text }) => (
+            <p key={key} className="flex items-start gap-2">
+              <Icon className="mt-0.5 h-4 w-4 shrink-0" />{text}
+            </p>
+          ))}
         </div>
       ) : null}
       <DetailLayout
         header={header}
+        defaultTabId="overview"
         sidebar={
           <>
             <TechnicianLocationPanel workOrder={workOrder} />
             <DocumentsPanel workOrderId={id} />
+            <SubtasksPanel workOrder={workOrder} />
             <RelatedWorkOrdersPanel workOrderId={id} />
           </>
         }
         tabs={[
-          {
-            id: 'summary',
-            label: 'Summary',
-            content: (
-              <SummarySection title="Summary" description="Core work order fields and timestamps.">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {summaryFields.map(({ key, label, render }) => {
-                    const raw = (workOrder as unknown as Record<string, unknown>)[key]
-                    const value = typeof raw === 'string' && raw ? (render ? render(raw) : raw) : '—'
-                    return (
-                      <div key={key} className="rounded-xl border border-slate-200 px-4 py-3">
-                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
-                        <div className="mt-2 text-sm text-slate-900">{value}</div>
-                      </div>
-                    )
-                  })}
-                </div>
-                {workOrder.description ? (
-                  <div className="mt-4 rounded-xl border border-slate-200 px-4 py-3">
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Description</div>
-                    <p className="mt-2 text-sm leading-6 text-slate-700">{workOrder.description}</p>
-                  </div>
-                ) : null}
-              </SummarySection>
-            ),
-          },
-          { id: 'timeline', label: 'Timeline', content: <TimelineTab workOrderId={id} /> },
+          { id: 'overview', label: 'Overview', content: <OverviewTab workOrder={workOrder} onReassign={() => setReassignOpen(true)} /> },
+          { id: 'work', label: 'Work', content: <WorkTab workOrder={workOrder} /> },
           { id: 'activity', label: 'Activity', content: <ActivityTab workOrderId={id} /> },
-          { id: 'notes', label: 'Notes', content: <NotesTab workOrderId={id} /> },
-          { id: 'assignment', label: 'Assignment', content: <AssignmentTab workOrder={workOrder} /> },
-          { id: 'sla', label: 'SLA', content: <SlaTab workOrderId={id} /> },
-          { id: 'execution', label: 'Work Execution', content: <ExecutionTab workOrderId={id} /> },
-          { id: 'evidence', label: 'Evidence', content: <EvidenceTab workOrderId={id} /> },
-          { id: 'parts', label: 'Parts', content: <PartsTab workOrderId={id} /> },
-          { id: 'subtasks', label: 'Sub-tasks', content: <SubtasksTab workOrder={workOrder} /> },
-          { id: 'signatures', label: 'Signatures', content: <SignaturesTab workOrderId={id} /> },
           { id: 'report', label: 'Report', content: <ReportTab workOrder={workOrder} /> },
         ]}
       />
 
-      {canAssign || canCompleteNow ? (
-        <MobileActionBar
-          actions={[
-            ...(canStartNow ? [{ label: 'Start Work', onClick: () => runAction('Work started', () => startWorkOrder.mutateAsync(undefined)) }] : []),
-            ...(canCompleteNow ? [{ label: 'Complete', primary: true, onClick: () => setCompleteOpen(true) }] : []),
-          ]}
-        />
-      ) : null}
-
-      <FormDrawer
+      <CompleteWorkOrderDialog
         open={completeOpen}
-        title="Complete Work Order"
+        woNumber={workOrder.workOrderNumber}
+        submitting={completeWorkOrder.isPending}
+        arrivalRecorded={arrivalRecorded}
+        canAdminOverride={user?.role === 'admin'}
+        initialNotes={bundle?.notes.workDone ?? workOrder.workDoneNotes}
         onClose={() => setCompleteOpen(false)}
-        footer={
-          <div className="flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setCompleteOpen(false)} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={submitComplete} disabled={completeWorkOrder.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-60">
-              {completeWorkOrder.isPending ? 'Completing…' : 'Complete Work Order'}
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="complete-notes">Work Done Notes</label>
-            <textarea id="complete-notes" value={workDoneNotes} onChange={(event) => setWorkDoneNotes(event.target.value)} rows={5} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="complete-summary">Report Summary (optional)</label>
-            <textarea id="complete-summary" value={reportSummary} onChange={(event) => setReportSummary(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900" />
-          </div>
-        </div>
-      </FormDrawer>
+        onSubmit={({ workDoneNotes, adminOverride, overrideReason }) => {
+          completeWorkOrder.mutate(
+            { workDoneNotes, adminOverride, overrideReason },
+            {
+              onSuccess: () => {
+                toast.success('Work order completed')
+                setCompleteOpen(false)
+              },
+            },
+          )
+        }}
+      />
+
+      <ReassignDrawer workOrderId={id} open={reassignOpen} onClose={() => setReassignOpen(false)} />
 
       <ConfirmDialog
         open={confirmAction !== null}
