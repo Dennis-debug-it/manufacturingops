@@ -3722,6 +3722,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entry.Entity.CommissioningDate = EnsureUtc(entry.Entity.CommissioningDate);
             entry.Entity.DecommissionDate = EnsureUtc(entry.Entity.DecommissionDate);
             entry.Entity.WarrantyExpiryDate = EnsureUtc(entry.Entity.WarrantyExpiryDate);
+            entry.Entity.WarrantyStartDate = EnsureUtc(entry.Entity.WarrantyStartDate);
             entry.Entity.LastPmDate = EnsureUtc(entry.Entity.LastPmDate);
             entry.Entity.NextPmDate = EnsureUtc(entry.Entity.NextPmDate);
         }

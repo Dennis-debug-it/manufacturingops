@@ -172,13 +172,15 @@ public sealed class AssetsController(
             Manufacturer = request.Manufacturer?.Trim(),
             Model = request.Model?.Trim(),
             InstallationDate = request.InstallationDate,
-            WarrantyExpiryDate = request.WarrantyExpiryDate,
+            WarrantyStartDate = ResolveWarrantyStartDate(request),
+            WarrantyPeriodMonths = request.WarrantyPeriodMonths,
+            WarrantyExpiryDate = ResolveWarrantyExpiryDate(request),
             RecommendedPmFrequency = BuildPmFrequencyLabel(request.RecommendedPmFrequency, request.PmFrequencyValue, request.PmFrequencyUnit),
             PmFrequencyValue = request.PmFrequencyValue,
             PmFrequencyUnit = NormalizePmFrequencyUnit(request.PmFrequencyUnit),
             AutoSchedulePm = request.AutoSchedulePm,
             LastPmDate = request.LastPmDate,
-            NextPmDate = request.NextPmDate ?? CalculateNextPmDate(request.LastPmDate, request.PmFrequencyValue, request.PmFrequencyUnit),
+            NextPmDate = request.NextPmDate ?? CalculateNextPmDate(request.LastPmDate ?? request.InstallationDate, request.PmFrequencyValue, request.PmFrequencyUnit),
             Notes = request.Notes?.Trim(),
             Status = string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status.Trim()
         };
@@ -260,13 +262,15 @@ public sealed class AssetsController(
         asset.Manufacturer = request.Manufacturer?.Trim();
         asset.Model = request.Model?.Trim();
         asset.InstallationDate = request.InstallationDate;
-        asset.WarrantyExpiryDate = request.WarrantyExpiryDate;
+        asset.WarrantyStartDate = ResolveWarrantyStartDate(request);
+        asset.WarrantyPeriodMonths = request.WarrantyPeriodMonths;
+        asset.WarrantyExpiryDate = ResolveWarrantyExpiryDate(request);
         asset.RecommendedPmFrequency = BuildPmFrequencyLabel(request.RecommendedPmFrequency, request.PmFrequencyValue, request.PmFrequencyUnit);
         asset.PmFrequencyValue = request.PmFrequencyValue;
         asset.PmFrequencyUnit = NormalizePmFrequencyUnit(request.PmFrequencyUnit);
         asset.AutoSchedulePm = request.AutoSchedulePm;
         asset.LastPmDate = request.LastPmDate;
-        asset.NextPmDate = request.NextPmDate ?? CalculateNextPmDate(request.LastPmDate, request.PmFrequencyValue, request.PmFrequencyUnit);
+        asset.NextPmDate = request.NextPmDate ?? CalculateNextPmDate(request.LastPmDate ?? request.InstallationDate, request.PmFrequencyValue, request.PmFrequencyUnit);
         asset.Notes = request.Notes?.Trim();
         asset.Status = string.IsNullOrWhiteSpace(request.Status) ? asset.Status : request.Status.Trim();
 
@@ -394,6 +398,64 @@ public sealed class AssetsController(
         {
             throw new BusinessRuleException("PM frequency value must be greater than zero.");
         }
+
+        if (request.LastPmDate.HasValue && request.LastPmDate.Value.Date > DateTime.UtcNow.Date.AddDays(1))
+        {
+            throw new BusinessRuleException("Last maintenance date cannot be in the future.");
+        }
+
+        if (request.WarrantyPeriodMonths is <= 0 or > MaxWarrantyPeriodMonths)
+        {
+            throw new BusinessRuleException($"Warranty period must be between 1 and {MaxWarrantyPeriodMonths} months.");
+        }
+
+        var warrantyStart = ResolveWarrantyStartDate(request);
+        var warrantyExpiry = ResolveWarrantyExpiryDate(request);
+        if (warrantyStart.HasValue && warrantyExpiry.HasValue && warrantyExpiry.Value.Date < warrantyStart.Value.Date)
+        {
+            throw new BusinessRuleException("Warranty expiry date cannot be before the warranty start date.");
+        }
+    }
+
+    private const int MaxWarrantyPeriodMonths = 600;
+
+    /// <summary>Warranty cover normally starts at installation unless a separate start date is given.</summary>
+    private static DateTime? ResolveWarrantyStartDate(UpsertAssetRequest request) =>
+        request.WarrantyStartDate
+        ?? (request.WarrantyPeriodMonths.HasValue || request.WarrantyExpiryDate.HasValue ? request.InstallationDate : null);
+
+    /// <summary>
+    /// An explicit expiry date wins; otherwise the expiry is derived from the warranty start plus the
+    /// warranty period, so entering "24 months" is enough to track the cover.
+    /// </summary>
+    private static DateTime? ResolveWarrantyExpiryDate(UpsertAssetRequest request)
+    {
+        if (request.WarrantyExpiryDate.HasValue)
+        {
+            return request.WarrantyExpiryDate;
+        }
+
+        var start = ResolveWarrantyStartDate(request);
+        return start.HasValue && request.WarrantyPeriodMonths is > 0
+            ? start.Value.AddMonths(request.WarrantyPeriodMonths.Value)
+            : null;
+    }
+
+    private static string ResolveWarrantyStatus(DateTime? warrantyExpiryDate)
+    {
+        if (!warrantyExpiryDate.HasValue)
+        {
+            return "No Warranty";
+        }
+
+        var today = DateTime.UtcNow.Date;
+        var expiry = warrantyExpiryDate.Value.Date;
+        if (expiry < today)
+        {
+            return "Warranty Expired";
+        }
+
+        return expiry <= today.AddDays(30) ? "Warranty Expiring Soon" : "Under Warranty";
     }
 
     private static string NormalizeOwnershipType(string? ownershipType) =>
@@ -594,6 +656,10 @@ public sealed class AssetsController(
             asset.Model,
             asset.InstallationDate,
             asset.WarrantyExpiryDate,
+            asset.WarrantyStartDate,
+            asset.WarrantyPeriodMonths,
+            asset.WarrantyExpiryDate.HasValue && asset.WarrantyExpiryDate.Value.Date >= DateTime.UtcNow.Date,
+            ResolveWarrantyStatus(asset.WarrantyExpiryDate),
             asset.RecommendedPmFrequency,
             asset.PmFrequencyValue,
             asset.PmFrequencyUnit,
@@ -659,7 +725,9 @@ public sealed record UpsertAssetRequest(
     DateTime? NextPmDate,
     [StringLength(2000)] string? Notes,
     [StringLength(50)] string? Status,
-    IReadOnlyCollection<UpsertAssetCustomFieldValueRequest>? CustomFieldValues);
+    IReadOnlyCollection<UpsertAssetCustomFieldValueRequest>? CustomFieldValues,
+    DateTime? WarrantyStartDate = null,
+    int? WarrantyPeriodMonths = null);
 
 public sealed record AssetResponse(
     Guid Id,
@@ -684,6 +752,10 @@ public sealed record AssetResponse(
     string? Model,
     DateTime? InstallationDate,
     DateTime? WarrantyExpiryDate,
+    DateTime? WarrantyStartDate,
+    int? WarrantyPeriodMonths,
+    bool IsUnderWarranty,
+    string WarrantyStatus,
     string? RecommendedPmFrequency,
     int? PmFrequencyValue,
     string? PmFrequencyUnit,

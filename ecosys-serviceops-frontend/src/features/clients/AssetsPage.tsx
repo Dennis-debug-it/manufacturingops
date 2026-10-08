@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
+import { formatDate } from '../../shared/utils/dates'
 import { useAssetsPaged } from './api'
 import { TriTabNav } from './components/TriTabNav'
 import { AssetFormDrawer } from './components/AssetFormDrawer'
@@ -31,6 +32,9 @@ export function AssetsPage() {
     { key: 'siteName', header: 'Site', cell: (row) => row.siteName ?? '—' },
     { key: 'assetType', header: 'Type', cell: (row) => row.assetType ?? '—' },
     { key: 'manufacturer', header: 'Manufacturer', cell: (row) => row.manufacturer ?? '—' },
+    { key: 'lastPmDate', header: 'Last PM', cell: (row) => (row.lastPmDate ? formatDate(row.lastPmDate) : '—') },
+    { key: 'nextPmDate', header: 'Next PM', cell: (row) => (row.nextPmDate ? formatDate(row.nextPmDate) : '—') },
+    { key: 'warrantyStatus', header: 'Warranty', cell: (row) => <StatusBadge status={row.warrantyStatus ?? 'No Warranty'} /> },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status ?? 'Active'} /> },
   ]
 

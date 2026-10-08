@@ -441,6 +441,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("WarrantyExpiryDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("WarrantyPeriodMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("WarrantyStartDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int?>("YearOfManufacture")
                         .HasColumnType("integer");
 

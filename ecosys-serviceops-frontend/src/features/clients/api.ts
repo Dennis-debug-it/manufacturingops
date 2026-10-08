@@ -184,8 +184,23 @@ export interface UpsertAssetPayload {
   manufacturer?: string | null
   model?: string | null
   installationDate?: string | null
+  warrantyStartDate?: string | null
+  warrantyPeriodMonths?: number | null
   warrantyExpiryDate?: string | null
+  recommendedPmFrequency?: string | null
+  pmFrequencyValue?: number | null
+  pmFrequencyUnit?: string | null
+  autoSchedulePm?: boolean
+  lastPmDate?: string | null
+  nextPmDate?: string | null
   notes?: string | null
+  // Not edited by the asset form, but sent back on update so saving the form does not clear them.
+  branchId?: string | null
+  systemId?: string | null
+  assetCategoryId?: string | null
+  ownershipType?: string | null
+  status?: string | null
+  customFieldValues?: { fieldDefinitionId: string; value: string }[]
 }
 
 export function useCreateAsset() {

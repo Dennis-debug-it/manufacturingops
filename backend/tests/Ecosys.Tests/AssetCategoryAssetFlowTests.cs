@@ -196,6 +196,54 @@ public sealed class AssetCategoryAssetFlowTests
     }
 
     [Fact]
+    public async Task Asset_WithWarrantyPeriodAndPmFrequency_DerivesExpiryAndNextPmDate()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var installed = DateTime.UtcNow.Date.AddMonths(-3);
+        var lastPm = DateTime.UtcNow.Date.AddDays(-10);
+
+        var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
+        var createResult = await assetsController.Create(
+            new UpsertAssetRequest(
+                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                "Chiller", "CH-01", "HVAC", "Owned", null, null, null, null,
+                installed, null, null, 3, "months", false, lastPm, null, null, "Active", null,
+                WarrantyPeriodMonths: 24),
+            CancellationToken.None);
+
+        var payload = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
+        Assert.Equal(installed, payload.WarrantyStartDate);
+        Assert.Equal(24, payload.WarrantyPeriodMonths);
+        Assert.Equal(installed.AddMonths(24), payload.WarrantyExpiryDate);
+        Assert.True(payload.IsUnderWarranty);
+        Assert.Equal("Under Warranty", payload.WarrantyStatus);
+        Assert.Equal("3 months", payload.RecommendedPmFrequency);
+        Assert.Equal(lastPm.AddMonths(3), payload.NextPmDate);
+    }
+
+    [Fact]
+    public async Task Asset_WithoutWarranty_ReportsNoWarranty()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+
+        var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
+        var createResult = await assetsController.Create(
+            new UpsertAssetRequest(
+                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                "Pump", "PMP-01", null, null, null, null, null, null,
+                DateTime.UtcNow.Date, null, null, null, null, false, null, null, null, "Active", null),
+            CancellationToken.None);
+
+        var payload = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
+        Assert.Null(payload.WarrantyStartDate);
+        Assert.Null(payload.WarrantyExpiryDate);
+        Assert.False(payload.IsUnderWarranty);
+        Assert.Equal("No Warranty", payload.WarrantyStatus);
+    }
+
+    [Fact]
     public void UpsertAssetRequest_AssetCodeIsOptional()
     {
         // With nullable reference types on, MVC treats a non-nullable string as implicitly [Required],

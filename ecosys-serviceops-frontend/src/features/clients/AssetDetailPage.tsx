@@ -14,10 +14,11 @@ import { formatDate } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
 import { useAsset } from './api'
 import { AssetFormDrawer } from './components/AssetFormDrawer'
+import type { Asset } from './types'
 
 function warrantyBadge(expiry: string | null) {
   if (!expiry) {
-    return <StatusBadge status="No Warranty Data" />
+    return <StatusBadge status="No Warranty" />
   }
   const days = differenceInDays(new Date(expiry), new Date())
   if (days < 0) {
@@ -27,6 +28,21 @@ function warrantyBadge(expiry: string | null) {
     return <StatusBadge status="Warranty Expiring Soon" />
   }
   return <StatusBadge status="Under Warranty" />
+}
+
+function maintenanceFrequencyLabel(asset: Asset) {
+  if (asset.pmFrequencyValue && asset.pmFrequencyUnit) {
+    const unit = asset.pmFrequencyValue === 1 ? asset.pmFrequencyUnit.replace(/s$/, '') : asset.pmFrequencyUnit
+    return `Every ${asset.pmFrequencyValue} ${unit}`
+  }
+  return asset.recommendedPmFrequency ?? '—'
+}
+
+function nextPmLabel(nextPmDate: string | null) {
+  if (!nextPmDate) return '—'
+  const days = differenceInDays(new Date(nextPmDate), new Date())
+  const suffix = days < 0 ? ` (overdue ${Math.abs(days)}d)` : days === 0 ? ' (due today)' : ` (in ${days}d)`
+  return `${formatDate(nextPmDate)}${suffix}`
 }
 
 export function AssetDetailPage() {
@@ -80,7 +96,7 @@ export function AssetDetailPage() {
           id: 'specifications',
           label: 'Specifications',
           content: (
-            <SummarySection title="Specifications" description="Asset identity, location, and warranty details.">
+            <SummarySection title="Specifications" description="Asset identity, location, maintenance, and warranty details.">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {[
                   ['Client', asset.clientName ?? '—'],
@@ -92,9 +108,34 @@ export function AssetDetailPage() {
                   ['Manufacturer', asset.manufacturer ?? '—'],
                   ['Model', asset.model ?? '—'],
                   ['Installation Date', asset.installationDate ? formatDate(asset.installationDate) : '—'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-slate-200 px-4 py-3">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
+                    <div className="mt-2 text-sm text-slate-900">{value}</div>
+                  </div>
+                ))}
+              </div>
+              <h3 className="mt-6 text-sm font-semibold text-slate-900">Maintenance</h3>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ['Maintenance Frequency', maintenanceFrequencyLabel(asset)],
+                  ['Last Maintenance', asset.lastPmDate ? formatDate(asset.lastPmDate) : 'Not recorded'],
+                  ['Next Maintenance Due', nextPmLabel(asset.nextPmDate)],
+                  ['Auto-Schedule PM', asset.autoSchedulePm ? 'On' : 'Off'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-slate-200 px-4 py-3">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
+                    <div className="mt-2 text-sm text-slate-900">{value}</div>
+                  </div>
+                ))}
+              </div>
+              <h3 className="mt-6 text-sm font-semibold text-slate-900">Warranty</h3>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ['Under Warranty', asset.warrantyExpiryDate ? (asset.isUnderWarranty ? 'Yes' : 'No — expired') : 'No'],
+                  ['Warranty Period', asset.warrantyPeriodMonths ? `${asset.warrantyPeriodMonths} month${asset.warrantyPeriodMonths === 1 ? '' : 's'}` : '—'],
+                  ['Warranty Start', asset.warrantyStartDate ? formatDate(asset.warrantyStartDate) : '—'],
                   ['Warranty Expiry', asset.warrantyExpiryDate ? formatDate(asset.warrantyExpiryDate) : '—'],
-                  ['Last PM Date', asset.lastPmDate ? formatDate(asset.lastPmDate) : '—'],
-                  ['Next PM Date', asset.nextPmDate ? formatDate(asset.nextPmDate) : '—'],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-xl border border-slate-200 px-4 py-3">
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
