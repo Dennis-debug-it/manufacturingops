@@ -223,6 +223,65 @@ public sealed class AssetCategoryAssetFlowTests
     }
 
     [Fact]
+    public async Task Asset_InstalledLongAgoWithNoPmHistory_NextPmIsNotOverdue()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var installed = DateTime.UtcNow.Date.AddYears(-5).AddDays(10);
+
+        var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
+        var createResult = await assetsController.Create(
+            new UpsertAssetRequest(
+                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                "Old Chiller", "CH-OLD", null, null, null, null, null, null,
+                installed, null, null, 3, "months", true, null, null, null, "Active", null),
+            CancellationToken.None);
+
+        var payload = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
+        Assert.NotNull(payload.NextPmDate);
+        Assert.True(payload.NextPmDate!.Value.Date >= DateTime.UtcNow.Date);
+        Assert.True(payload.NextPmDate.Value.Date < DateTime.UtcNow.Date.AddMonths(3).AddDays(1));
+        // Still on the installation-date cadence: a whole number of quarters after installation.
+        var months = (payload.NextPmDate.Value.Year - installed.Year) * 12 + payload.NextPmDate.Value.Month - installed.Month;
+        Assert.Equal(0, months % 3);
+    }
+
+    [Theory]
+    [InlineData("Monthly", 1, "months")]
+    [InlineData("Quarterly", 1, "quarters")]
+    [InlineData("Semi-Annual", 6, "months")]
+    [InlineData("annually", 1, "years")]
+    [InlineData("Every 2 weeks", 2, "weeks")]
+    [InlineData("3 months", 3, "months")]
+    public async Task Asset_WithTextOnlyFrequency_IsConvertedToValueAndUnit(string label, int expectedValue, string expectedUnit)
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var lastPm = DateTime.UtcNow.Date.AddDays(-5);
+
+        var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
+        var createResult = await assetsController.Create(
+            new UpsertAssetRequest(
+                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                "Pump", $"PMP-{Guid.NewGuid():N}"[..12], null, null, null, null, null, null,
+                null, null, label, null, null, false, lastPm, null, null, "Active", null),
+            CancellationToken.None);
+
+        var payload = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
+        Assert.Equal(expectedValue, payload.PmFrequencyValue);
+        Assert.Equal(expectedUnit, payload.PmFrequencyUnit);
+        Assert.NotNull(payload.NextPmDate);
+    }
+
+    [Fact]
+    public void PmFrequencyLabelParser_RejectsUnrecognisedText()
+    {
+        Assert.False(Ecosys.Api.Common.PmFrequencyLabelParser.TryParse("when it breaks", out _, out _));
+        Assert.False(Ecosys.Api.Common.PmFrequencyLabelParser.TryParse("0 months", out _, out _));
+        Assert.False(Ecosys.Api.Common.PmFrequencyLabelParser.TryParse(null, out _, out _));
+    }
+
+    [Fact]
     public async Task Asset_WithoutWarranty_ReportsNoWarranty()
     {
         await using var dbContext = CreateDbContext();

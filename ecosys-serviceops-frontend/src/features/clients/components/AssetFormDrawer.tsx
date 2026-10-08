@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { addDays, addMonths, addWeeks, addYears, format } from 'date-fns'
+import { addDays, addMonths, addWeeks, addYears, format, startOfDay } from 'date-fns'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
@@ -8,6 +8,7 @@ import { applyApiFieldErrors } from '../../../shared/api/apiError'
 import { useCreateAsset, useUpdateAsset, useClients, useSites, type UpsertAssetPayload } from '../api'
 import { assetSchema, type AssetFormValues } from '../schemas'
 import type { Asset } from '../types'
+import { parsePmFrequencyLabel } from '../pmFrequency'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -75,9 +76,7 @@ function parsePositiveInt(value: string | undefined) {
   return trimmed && /^\d+$/.test(trimmed) && Number(trimmed) > 0 ? Number(trimmed) : null
 }
 
-/** Mirrors the server's next-PM calculation so the form can preview the due date. */
-function nextMaintenanceDate(base: Date | null, value: number | null, unit: string | undefined) {
-  if (!base || !value || !unit) return null
+function addInterval(base: Date, value: number, unit: string) {
   switch (unit) {
     case 'days': return addDays(base, value)
     case 'weeks': return addWeeks(base, value)
@@ -88,7 +87,26 @@ function nextMaintenanceDate(base: Date | null, value: number | null, unit: stri
   }
 }
 
+/**
+ * Mirrors the server's next-PM calculation so the form can preview the due date: one interval
+ * after the last PM, or — with no PM on record — the first date on the installation-date cadence
+ * that is not already in the past.
+ */
+function nextMaintenanceDate(lastPm: Date | null, installed: Date | null, value: number | null, unit: string | undefined) {
+  if (!value || !unit) return null
+  if (lastPm) return addInterval(lastPm, value, unit)
+  if (!installed) return null
+  const today = startOfDay(new Date())
+  for (let periods = 1; periods <= 100_000; periods++) {
+    const next = addInterval(installed, value * periods, unit)
+    if (!next || next >= today) return next
+  }
+  return null
+}
+
 function toFormValues(asset: Asset | undefined, defaultClientId?: string, defaultSiteId?: string): AssetFormValues {
+  // Older assets only carry a text frequency ("Monthly"); prefill value + unit from it.
+  const legacyFrequency = asset?.pmFrequencyValue ? null : parsePmFrequencyLabel(asset?.recommendedPmFrequency)
   return {
     clientId: asset?.clientId ?? defaultClientId ?? '',
     siteId: asset?.siteId ?? defaultSiteId ?? '',
@@ -100,8 +118,8 @@ function toFormValues(asset: Asset | undefined, defaultClientId?: string, defaul
     manufacturer: asset?.manufacturer ?? '',
     model: asset?.model ?? '',
     installationDate: toDateInput(asset?.installationDate),
-    pmFrequencyValue: asset?.pmFrequencyValue ? String(asset.pmFrequencyValue) : '',
-    pmFrequencyUnit: asset?.pmFrequencyUnit ?? '',
+    pmFrequencyValue: asset?.pmFrequencyValue ? String(asset.pmFrequencyValue) : legacyFrequency ? String(legacyFrequency.value) : '',
+    pmFrequencyUnit: asset?.pmFrequencyUnit ?? legacyFrequency?.unit ?? '',
     lastPmDate: toDateInput(asset?.lastPmDate),
     autoSchedulePm: asset?.autoSchedulePm ?? false,
     hasWarranty: Boolean(asset?.warrantyExpiryDate || asset?.warrantyPeriodMonths),
@@ -126,7 +144,8 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId,
   const hasWarranty = watch('hasWarranty')
 
   const previewNextPm = nextMaintenanceDate(
-    parseDateInput(lastPmDate || installationDate),
+    parseDateInput(lastPmDate),
+    parseDateInput(installationDate),
     parsePositiveInt(pmFrequencyValue),
     pmFrequencyUnit,
   )
@@ -328,7 +347,11 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId,
             </div>
           </div>
           {asset?.recommendedPmFrequency && !asset.pmFrequencyValue ? (
-            <p className="text-xs text-slate-500">Current frequency: {asset.recommendedPmFrequency}. Set a value and unit to enable due-date tracking.</p>
+            <p className="text-xs text-slate-500">
+              {parsePmFrequencyLabel(asset.recommendedPmFrequency)
+                ? <>Converted from &ldquo;{asset.recommendedPmFrequency}&rdquo;. Save to start due-date tracking.</>
+                : <>&ldquo;{asset.recommendedPmFrequency}&rdquo; is not a recognised frequency. Set a value and unit to start due-date tracking.</>}
+            </p>
           ) : null}
           <div>
             <label className={labelClass} htmlFor="asset-last-pm">Last Maintenance Date</label>
@@ -337,7 +360,7 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId,
           </div>
           <p className="text-xs text-slate-500">
             {previewNextPm
-              ? <>Next maintenance due <span className="font-medium text-slate-700">{format(previewNextPm, 'dd MMM yyyy')}</span>{lastPmDate ? '' : ' (from installation date)'}.</>
+              ? <>Next maintenance due <span className="font-medium text-slate-700">{format(previewNextPm, 'dd MMM yyyy')}</span>{lastPmDate ? '' : ' (on the installation-date cycle; no maintenance recorded yet)'}.</>
               : 'Set a frequency and a last maintenance or installation date to calculate the next due date.'}
           </p>
           <label className="flex items-center gap-2 text-sm text-slate-700">

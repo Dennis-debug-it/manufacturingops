@@ -152,6 +152,7 @@ public sealed class AssetsController(
         }
 
         var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, cancellationToken);
+        var (frequencyValue, frequencyUnit) = ResolvePmFrequency(request);
 
         var asset = new Asset
         {
@@ -175,12 +176,12 @@ public sealed class AssetsController(
             WarrantyStartDate = ResolveWarrantyStartDate(request),
             WarrantyPeriodMonths = request.WarrantyPeriodMonths,
             WarrantyExpiryDate = ResolveWarrantyExpiryDate(request),
-            RecommendedPmFrequency = BuildPmFrequencyLabel(request.RecommendedPmFrequency, request.PmFrequencyValue, request.PmFrequencyUnit),
-            PmFrequencyValue = request.PmFrequencyValue,
-            PmFrequencyUnit = NormalizePmFrequencyUnit(request.PmFrequencyUnit),
+            RecommendedPmFrequency = BuildPmFrequencyLabel(request.RecommendedPmFrequency, frequencyValue, frequencyUnit),
+            PmFrequencyValue = frequencyValue,
+            PmFrequencyUnit = NormalizePmFrequencyUnit(frequencyUnit),
             AutoSchedulePm = request.AutoSchedulePm,
             LastPmDate = request.LastPmDate,
-            NextPmDate = request.NextPmDate ?? CalculateNextPmDate(request.LastPmDate ?? request.InstallationDate, request.PmFrequencyValue, request.PmFrequencyUnit),
+            NextPmDate = request.NextPmDate ?? CalculateNextPmDate(request.LastPmDate, request.InstallationDate, frequencyValue, frequencyUnit),
             Notes = request.Notes?.Trim(),
             Status = string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status.Trim()
         };
@@ -265,12 +266,13 @@ public sealed class AssetsController(
         asset.WarrantyStartDate = ResolveWarrantyStartDate(request);
         asset.WarrantyPeriodMonths = request.WarrantyPeriodMonths;
         asset.WarrantyExpiryDate = ResolveWarrantyExpiryDate(request);
-        asset.RecommendedPmFrequency = BuildPmFrequencyLabel(request.RecommendedPmFrequency, request.PmFrequencyValue, request.PmFrequencyUnit);
-        asset.PmFrequencyValue = request.PmFrequencyValue;
-        asset.PmFrequencyUnit = NormalizePmFrequencyUnit(request.PmFrequencyUnit);
+        var (frequencyValue, frequencyUnit) = ResolvePmFrequency(request);
+        asset.RecommendedPmFrequency = BuildPmFrequencyLabel(request.RecommendedPmFrequency, frequencyValue, frequencyUnit);
+        asset.PmFrequencyValue = frequencyValue;
+        asset.PmFrequencyUnit = NormalizePmFrequencyUnit(frequencyUnit);
         asset.AutoSchedulePm = request.AutoSchedulePm;
         asset.LastPmDate = request.LastPmDate;
-        asset.NextPmDate = request.NextPmDate ?? CalculateNextPmDate(request.LastPmDate ?? request.InstallationDate, request.PmFrequencyValue, request.PmFrequencyUnit);
+        asset.NextPmDate = request.NextPmDate ?? CalculateNextPmDate(request.LastPmDate, request.InstallationDate, frequencyValue, frequencyUnit);
         asset.Notes = request.Notes?.Trim();
         asset.Status = string.IsNullOrWhiteSpace(request.Status) ? asset.Status : request.Status.Trim();
 
@@ -489,9 +491,14 @@ public sealed class AssetsController(
         return string.IsNullOrWhiteSpace(currentLabel) ? null : currentLabel.Trim();
     }
 
-    private static DateTime? CalculateNextPmDate(DateTime? lastPmDate, int? frequencyValue, string? frequencyUnit)
+    /// <summary>
+    /// The next PM is one interval after the last one. With no PM on record the schedule is anchored
+    /// to the installation date and rolled forward to the first due date from today, so an asset
+    /// installed years ago is not reported as overdue for a service nobody has missed.
+    /// </summary>
+    private static DateTime? CalculateNextPmDate(DateTime? lastPmDate, DateTime? installationDate, int? frequencyValue, string? frequencyUnit)
     {
-        if (!lastPmDate.HasValue || !frequencyValue.HasValue || string.IsNullOrWhiteSpace(frequencyUnit))
+        if (!frequencyValue.HasValue || string.IsNullOrWhiteSpace(frequencyUnit))
         {
             return null;
         }
@@ -501,15 +508,57 @@ public sealed class AssetsController(
             throw new BusinessRuleException("PM frequency value must be greater than zero.");
         }
 
-        return NormalizePmFrequencyUnit(frequencyUnit) switch
+        var unit = NormalizePmFrequencyUnit(frequencyUnit);
+        if (lastPmDate.HasValue)
         {
-            "days" => lastPmDate.Value.AddDays(frequencyValue.Value),
-            "weeks" => lastPmDate.Value.AddDays(frequencyValue.Value * 7),
-            "months" => lastPmDate.Value.AddMonths(frequencyValue.Value),
-            "quarters" => lastPmDate.Value.AddMonths(frequencyValue.Value * 3),
-            "years" => lastPmDate.Value.AddYears(frequencyValue.Value),
-            _ => null
-        };
+            return AddPmInterval(lastPmDate.Value, frequencyValue.Value, unit);
+        }
+
+        if (!installationDate.HasValue)
+        {
+            return null;
+        }
+
+        var today = DateTime.UtcNow.Date;
+        var anchor = installationDate.Value;
+        DateTime? next = null;
+        // Step from the anchor (rather than adding repeatedly) so month-end dates do not drift.
+        for (var periods = 1; periods <= 100_000; periods++)
+        {
+            next = AddPmInterval(anchor, frequencyValue.Value * periods, unit);
+            if (next is null || next.Value.Date >= today)
+            {
+                break;
+            }
+        }
+
+        return next;
+    }
+
+    private static DateTime? AddPmInterval(DateTime from, int value, string? unit) => unit switch
+    {
+        "days" => from.AddDays(value),
+        "weeks" => from.AddDays(value * 7),
+        "months" => from.AddMonths(value),
+        "quarters" => from.AddMonths(value * 3),
+        "years" => from.AddYears(value),
+        _ => null
+    };
+
+    /// <summary>
+    /// Structured value + unit win; otherwise a free-text frequency such as "Monthly" or
+    /// "Every 2 weeks" (older records, other clients) is converted so it drives the schedule.
+    /// </summary>
+    private static (int? Value, string? Unit) ResolvePmFrequency(UpsertAssetRequest request)
+    {
+        if (request.PmFrequencyValue.HasValue || !string.IsNullOrWhiteSpace(request.PmFrequencyUnit))
+        {
+            return (request.PmFrequencyValue, request.PmFrequencyUnit);
+        }
+
+        return PmFrequencyLabelParser.TryParse(request.RecommendedPmFrequency, out var value, out var unit)
+            ? (value, unit)
+            : (null, null);
     }
 
     private async Task EnsureClientExistsAsync(Guid clientId, CancellationToken cancellationToken)
