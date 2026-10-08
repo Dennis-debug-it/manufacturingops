@@ -143,6 +143,8 @@ const permissionSetLookup: Partial<Record<string, keyof PermissionSet>> = {
  * photo/signature capture, pause/resume/cancel, timeline comments) only require
  * `EnsureTenantOperationalAccess` server-side — any tenant role except `viewer`.
  * There is no dedicated `PermissionSet` field for this, so it's role-gated here.
+ * Closing a work order is deliberately absent: the server only lets tenant admins move a work
+ * order from Completed to Closed, and admins already pass every check above.
  */
 const operationalRoles: AppRole[] = ['admin', 'manager', 'dispatcher', 'technician', 'super_admin']
 const executeActions = new Set([
@@ -151,7 +153,6 @@ const executeActions = new Set([
   'work-orders.depart',
   'work-orders.hold',
   'work-orders.resume',
-  'work-orders.close',
   'work-orders.cancel',
   'work-orders.timeline.comment',
   'work-orders.evidence.upload',

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, CalendarClock, MoreVertical, PauseCircle } from 'lucide-react'
+import { AlertTriangle, CalendarClock, CheckCircle2, MoreVertical, PauseCircle } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
@@ -284,6 +284,7 @@ export function WorkOrderDetailPage() {
       text: `${status}${workOrder.holdSince ? ` since ${formatDateTime(workOrder.holdSince)}` : ''}${workOrder.holdReason || workOrder.holdNote ? ` — ${workOrder.holdReason ?? workOrder.holdNote}` : ''}`,
     } : null,
     slaBreached && !isFinal ? { key: 'sla', icon: AlertTriangle, text: 'SLA breached. Prioritise or escalate this job.' } : null,
+    status === 'Completed' && !canClose ? { key: 'closing', icon: CheckCircle2, text: 'Completed. An administrator will review and close this work order.' } : null,
     workOrder.isRepeatVisit ? {
       key: 'repeat',
       icon: AlertTriangle,
