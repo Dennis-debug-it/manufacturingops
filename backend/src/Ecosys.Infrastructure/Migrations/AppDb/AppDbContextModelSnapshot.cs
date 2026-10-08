@@ -9286,6 +9286,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid?>("FollowUpOfWorkOrderId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("HoldEndedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -9485,6 +9488,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("ClosedByUserId");
 
                     b.HasIndex("ContractId");
+
+                    b.HasIndex("FollowUpOfWorkOrderId");
 
                     b.HasIndex("LeadTechnicianId");
 
@@ -13378,6 +13383,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasForeignKey("ContractId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Ecosys.Domain.Entities.WorkOrder", "FollowUpOfWorkOrder")
+                        .WithMany("FollowUpWorkOrders")
+                        .HasForeignKey("FollowUpOfWorkOrderId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Ecosys.Domain.Entities.Technician", "LeadTechnician")
                         .WithMany()
                         .HasForeignKey("LeadTechnicianId")
@@ -13447,6 +13457,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("ClosedByUser");
 
                     b.Navigation("Contract");
+
+                    b.Navigation("FollowUpOfWorkOrder");
 
                     b.Navigation("LeadTechnician");
 
@@ -14422,6 +14434,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("ChildWorkOrders");
 
                     b.Navigation("Events");
+
+                    b.Navigation("FollowUpWorkOrders");
 
                     b.Navigation("MaterialIssues");
 

@@ -137,6 +137,7 @@ public sealed class TechnicianJobsController(
             .ThenInclude(x => x.Technician)
             .Include(x => x.PmTemplate)
             .Include(x => x.ChecklistItems)
+            .Include(x => x.FollowUpOfWorkOrder)
             .Where(x => x.TenantId == TenantId)
             .WhereAccessible(scope, x => x.BranchId);
 
@@ -398,7 +399,9 @@ public sealed class TechnicianJobsController(
             PlannedMaterials: WorkOrdersController.ParsePlannedMaterials(workOrder.PlannedMaterialsJson),
             HoldSince: workOrder.HoldStartedAt,
             IsRepeatVisit: workOrder.IsRepeatVisit,
-            RepeatVisitCount: workOrder.RepeatVisitCount);
+            RepeatVisitCount: workOrder.RepeatVisitCount,
+            FollowUpOfWorkOrderId: workOrder.FollowUpOfWorkOrderId,
+            FollowUpOfWorkOrderNumber: workOrder.FollowUpOfWorkOrder?.WorkOrderNumber);
     }
 
     private static (string? Reason, string? Note) ResolveActiveHoldDetails(WorkOrder workOrder)

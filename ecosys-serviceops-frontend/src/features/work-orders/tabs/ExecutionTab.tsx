@@ -13,12 +13,19 @@ const passFailOptions: Array<{ value: string; label: string; icon: typeof CheckC
   { value: 'Fail', label: 'Fail', icon: XCircle },
   { value: 'N/A', label: 'N/A', icon: MinusCircle },
 ]
+// Checkbox and yes/no questions (e.g. the starter packs' "Follow-up required") answer Yes or No.
+const yesNoOptions: typeof passFailOptions = [
+  { value: 'Yes', label: 'Yes', icon: CheckCircle2 },
+  { value: 'No', label: 'No', icon: XCircle },
+]
 
 function ChecklistRow({ item, workOrderId, canExecute }: { item: WorkOrderChecklistItem; workOrderId: string; canExecute: boolean }) {
   const updateItem = useUpdateChecklistItem(workOrderId)
   const [remarks, setRemarks] = useState(item.remarks ?? '')
 
   const isPassFail = ['passfail', 'pass/fail', 'boolean'].includes(item.inputType.toLowerCase())
+  const isYesNo = ['checkbox', 'yesno', 'yes/no'].includes(item.inputType.toLowerCase())
+  const choiceOptions = isYesNo ? yesNoOptions : passFailOptions
   const isMeasurement = ['number', 'measurement'].includes(item.inputType.toLowerCase())
 
   const setResponse = async (value: string) => {
@@ -49,9 +56,9 @@ function ChecklistRow({ item, workOrderId, canExecute }: { item: WorkOrderCheckl
       </div>
 
       <div className="mt-3">
-        {isPassFail ? (
+        {isPassFail || isYesNo ? (
           <div className="flex gap-2">
-            {passFailOptions.map((option) => {
+            {choiceOptions.map((option) => {
               const Icon = option.icon
               const selected = item.responseValue === option.value
               return (

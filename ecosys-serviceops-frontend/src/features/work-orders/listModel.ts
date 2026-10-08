@@ -32,6 +32,8 @@ export interface WorkOrderRow {
   holdNote: string | null
   isRepeatVisit: boolean
   repeatVisitCount: number
+  /** Number of the finished job this one returns to, when it is a follow-up. */
+  followUpOfWorkOrderNumber: string | null
   /** Server Start guard: at least one persisted technician assignment in an accepted state. */
   hasAcceptedTechnician: boolean
   /** Server Complete guard: at least one persisted technician assignment with an arrival recorded. */
@@ -109,6 +111,7 @@ export function normalizeWorkOrders(payload: unknown): WorkOrderRow[] {
       holdNote: typeof row.holdNote === 'string' ? row.holdNote : null,
       isRepeatVisit: Boolean(row.isRepeatVisit),
       repeatVisitCount: typeof row.repeatVisitCount === 'number' ? row.repeatVisitCount : 0,
+      followUpOfWorkOrderNumber: typeof row.followUpOfWorkOrderId === 'string' ? (typeof row.followUpOfWorkOrderNumber === 'string' ? row.followUpOfWorkOrderNumber : '') : null,
       hasAcceptedTechnician: hasAcceptedTechnician(readAssignmentGuardState(row.technicianAssignments)),
       hasRecordedArrival: hasRecordedArrival(readAssignmentGuardState(row.technicianAssignments)),
     }))

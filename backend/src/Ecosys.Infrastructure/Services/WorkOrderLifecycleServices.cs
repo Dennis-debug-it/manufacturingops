@@ -1054,6 +1054,25 @@ internal sealed class WorkOrderLifecycleService(
             ?? throw new Ecosys.Shared.Errors.NotFoundException("Work order was not found.");
     }
 
+    /// <summary>
+    /// Closing is final, so a job can't be closed while work under it is still open: every close path
+    /// (Close button, Kanban, PATCH status) funnels through <see cref="TransitionAsync"/>.
+    /// Completed sub-tasks don't block; they are finished work awaiting their own close.
+    /// </summary>
+    private async Task EnsureNoOpenSubtasksAsync(WorkOrder workOrder, CancellationToken cancellationToken)
+    {
+        var subtasks = await dbContext.WorkOrders
+            .Where(x => x.TenantId == workOrder.TenantId && x.ParentWorkOrderId == workOrder.Id)
+            .Select(x => new { x.WorkOrderNumber, x.Status })
+            .ToListAsync(cancellationToken);
+        var open = subtasks.Where(x => WorkOrderStatuses.IsOpen(x.Status)).Select(x => x.WorkOrderNumber).ToList();
+        if (open.Count > 0)
+        {
+            throw new BusinessRuleException(
+                $"This work order has {open.Count} open sub-task{(open.Count == 1 ? string.Empty : "s")} ({string.Join(", ", open)}). Complete or cancel {(open.Count == 1 ? "it" : "them")} before closing.");
+        }
+    }
+
     private async Task TransitionAsync(WorkOrder workOrder, Guid actorUserId, string targetStatus, string? reason, string? note, CancellationToken cancellationToken)
     {
         var currentStatus = NormalizeStatus(workOrder.Status);
@@ -1069,6 +1088,11 @@ internal sealed class WorkOrderLifecycleService(
         if (WorkOrderStatusTransitions.IsAdminOnlyTransition(currentStatus, targetStatus) && !canUseAdminOnlyTransitions)
         {
             throw new BusinessRuleException($"Only administrators can transition work orders from '{currentStatus}' to '{targetStatus}'.");
+        }
+
+        if (string.Equals(targetStatus, WorkOrderStatuses.Closed, StringComparison.OrdinalIgnoreCase))
+        {
+            await EnsureNoOpenSubtasksAsync(workOrder, cancellationToken);
         }
 
         if (WorkOrderStatuses.IsHold(currentStatus) && !WorkOrderStatuses.IsHold(targetStatus))

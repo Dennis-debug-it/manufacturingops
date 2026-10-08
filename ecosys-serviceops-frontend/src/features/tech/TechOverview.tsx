@@ -37,7 +37,7 @@ function ChecklistItem({ workOrderId, item, editable }: { workOrderId: string; i
   const isNumber = /number|numeric|reading/i.test(item.inputType)
   const choices = item.options.length > 0
     ? item.options
-    : /pass|fail/i.test(item.inputType) ? ['Pass', 'Fail', 'N/A'] : /yes|no|bool/i.test(item.inputType) ? ['Yes', 'No', 'N/A'] : []
+    : /pass|fail/i.test(item.inputType) ? ['Pass', 'Fail', 'N/A'] : /check/i.test(item.inputType) ? ['Yes', 'No'] : /yes|no|bool/i.test(item.inputType) ? ['Yes', 'No', 'N/A'] : []
 
   const save = async (responseValue: string) => {
     try {

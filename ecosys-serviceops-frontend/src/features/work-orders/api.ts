@@ -95,6 +95,7 @@ export interface CreateWorkOrderPayload {
   clientContactEmail?: string | null
   templateId?: string | null
   parentWorkOrderId?: string | null
+  followUpOfWorkOrderId?: string | null
 }
 
 export interface CompleteWorkOrderPayload {
@@ -570,6 +571,15 @@ export function usePatchWorkOrderStatus() {
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       api.patch<WorkOrder>(endpoints.workOrders.patchStatus(id), { status }),
     onSuccess: (_data, variables) => invalidateWorkOrders(queryClient, variables.id),
+  })
+}
+
+/** Admin action: send a completed or closed job back for more work (status "Reopened"). */
+export function useReopenWorkOrder(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.patch<WorkOrder>(endpoints.workOrders.patchStatus(id), { status: 'Reopened' }),
+    onSuccess: () => invalidateWorkOrders(queryClient, id),
   })
 }
 

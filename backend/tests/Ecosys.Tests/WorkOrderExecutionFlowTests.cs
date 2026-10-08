@@ -392,6 +392,39 @@ public sealed class WorkOrderExecutionFlowTests
     }
 
     [Fact]
+    public async Task FollowUpSourceReport_TechnicianOnFollowUp_SeesOriginalJobReport()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        // The original visit was done by someone else; the fixture technician is on the follow-up.
+        var original = new WorkOrder
+        {
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id, SiteId = fixture.Site.Id, AssetId = fixture.Asset.Id,
+            WorkOrderNumber = "WO-ORIG-9", Title = "Generator transfer fault", Priority = "High", Status = "Closed",
+            WorkDoneNotes = "Reset the ATS; AVR needs replacing.",
+        };
+        var unrelatedFollowUp = new WorkOrder
+        {
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id,
+            WorkOrderNumber = "WO-OTHER-9", Title = "Someone else's follow-up", Priority = "Low", Status = "Open", FollowUpOfWorkOrderId = original.Id,
+        };
+        dbContext.WorkOrders.AddRange(original, unrelatedFollowUp);
+        fixture.WorkOrder.FollowUpOfWorkOrderId = original.Id;
+        await dbContext.SaveChangesAsync();
+        var controller = CreateExecutionController(dbContext, fixture, technicianOnly: true);
+
+        var report = Assert.IsType<WorkOrderServiceReportPreviewResponse>(Assert.IsType<OkObjectResult>(
+            (await controller.GetFollowUpSourceReport(fixture.WorkOrder.Id, CancellationToken.None)).Result).Value);
+        Assert.Equal("WO-ORIG-9", report.WorkOrderNumber);
+        Assert.Equal("Reset the ATS; AVR needs replacing.", report.WorkDone);
+        Assert.IsType<FileContentResult>(await controller.DownloadFollowUpSourceReportPdf(fixture.WorkOrder.Id, CancellationToken.None));
+
+        // The original itself, and follow-ups they aren't on, stay out of reach.
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetServiceReport(original.Id, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetFollowUpSourceReport(unrelatedFollowUp.Id, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task PartsRequestsAndReturns_TechnicianOnly_AreLimitedToAssignedJobs()
     {
         await using var dbContext = CreateDbContext();
@@ -746,11 +779,12 @@ public sealed class WorkOrderExecutionFlowTests
         FixtureData fixture,
         FakeFileStorageService? fileStorage = null,
         FakePdfRenderer? pdfRenderer = null,
-        FakeServiceReportDeliveryService? reportDelivery = null)
+        FakeServiceReportDeliveryService? reportDelivery = null,
+        bool technicianOnly = false)
     {
         var controller = new WorkOrderExecutionController(
             dbContext,
-            new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id),
+            new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id, technicianOnly),
             new FakeUserAccessService(),
             new FakeBranchAccessService(),
             fileStorage ?? new FakeFileStorageService(),

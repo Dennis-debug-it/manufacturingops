@@ -95,6 +95,8 @@ export const endpoints = {
     duplicate: (id: string) => `/api/workorders/${id}/duplicate`,
     fromQuote: '/api/workorders/from-quote',
     children: (id: string) => `/api/workorders/${id}/children`,
+    followUpSourceReport: (id: string) => `/api/workorders/${id}/follow-up-source/service-report`,
+    followUpSourceReportPdf: (id: string) => `/api/workorders/${id}/follow-up-source/service-report/pdf`,
     hold: (id: string) => `/api/workorders/${id}/hold`,
     patchStatus: (id: string) => `/api/workorders/${id}/status`,
     bulkAssign: '/api/workorders/bulk-assign',

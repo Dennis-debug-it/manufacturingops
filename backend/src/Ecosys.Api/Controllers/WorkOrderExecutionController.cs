@@ -608,6 +608,38 @@ public sealed partial class WorkOrderExecutionController(
         return File(pdf, "application/pdf", $"{report.WorkOrderNumber}-service-report.pdf");
     }
 
+    /// <summary>
+    /// The service report of the job this one follows up on, so the technician on a return visit sees
+    /// what was found and done last time (work done, checklist, materials, photos). Access follows the
+    /// follow-up job: a technician assigned to it may read the original even though they weren't on it.
+    /// </summary>
+    [HttpGet("follow-up-source/service-report")]
+    public async Task<ActionResult<WorkOrderServiceReportPreviewResponse>> GetFollowUpSourceReport(Guid workOrderId, CancellationToken cancellationToken)
+    {
+        var originalId = await ResolveFollowUpSourceAsync(workOrderId, cancellationToken);
+        return Ok(await BuildServiceReportPreviewAsync(originalId, cancellationToken, skipTechnicianScope: true));
+    }
+
+    [HttpGet("follow-up-source/service-report/pdf")]
+    public async Task<IActionResult> DownloadFollowUpSourceReportPdf(Guid workOrderId, CancellationToken cancellationToken)
+    {
+        var originalId = await ResolveFollowUpSourceAsync(workOrderId, cancellationToken);
+        var report = await BuildPdfModelAsync(originalId, cancellationToken, skipTechnicianScope: true);
+        var pdf = pdfRenderer.RenderWorkOrderReportPdf(report);
+        return File(pdf, "application/pdf", $"{report.WorkOrderNumber}-service-report.pdf");
+    }
+
+    private async Task<Guid> ResolveFollowUpSourceAsync(Guid workOrderId, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureTenantOperationalAccess();
+        await EnsureAccessibleAsync(workOrderId, cancellationToken);
+        return await dbContext.WorkOrders
+            .Where(x => x.TenantId == TenantId && x.Id == workOrderId)
+            .Select(x => x.FollowUpOfWorkOrderId)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("This work order is not a follow-up.");
+    }
+
     [HttpPost("pause")]
     public Task<ActionResult<WorkOrderResponse>> Pause(Guid workOrderId, [FromBody] PauseWorkOrderRequest? request, CancellationToken cancellationToken)
     {
@@ -668,7 +700,11 @@ public sealed partial class WorkOrderExecutionController(
         }
     }
 
-    private async Task<WorkOrder> LoadWorkOrderAsync(Guid workOrderId, CancellationToken cancellationToken)
+    /// <param name="skipTechnicianScope">
+    /// Only for read-only views the caller has already been authorised for another way (the original
+    /// job behind a follow-up the technician is assigned to). Branch scope still applies.
+    /// </param>
+    private async Task<WorkOrder> LoadWorkOrderAsync(Guid workOrderId, CancellationToken cancellationToken, bool skipTechnicianScope = false)
     {
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
         var query = dbContext.WorkOrders
@@ -688,7 +724,7 @@ public sealed partial class WorkOrderExecutionController(
             .Where(x => x.TenantId == TenantId && x.Id == workOrderId)
             .WhereAccessible(scope, x => x.BranchId);
 
-        if (IsTechnicianOnlyWorkspaceUser())
+        if (!skipTechnicianScope && IsTechnicianOnlyWorkspaceUser())
         {
             var technicianId = await ResolveCurrentTechnicianIdAsync(cancellationToken);
             if (!technicianId.HasValue)
@@ -813,9 +849,9 @@ public sealed partial class WorkOrderExecutionController(
             await BuildServiceReportPreviewAsync(workOrderId, cancellationToken));
     }
 
-    private async Task<WorkOrderServiceReportPreviewResponse> BuildServiceReportPreviewAsync(Guid workOrderId, CancellationToken cancellationToken)
+    private async Task<WorkOrderServiceReportPreviewResponse> BuildServiceReportPreviewAsync(Guid workOrderId, CancellationToken cancellationToken, bool skipTechnicianScope = false)
     {
-        var pdfModel = await BuildPdfModelAsync(workOrderId, cancellationToken);
+        var pdfModel = await BuildPdfModelAsync(workOrderId, cancellationToken, skipTechnicianScope);
         return new WorkOrderServiceReportPreviewResponse(
             pdfModel.CompanyName,
             pdfModel.WorkOrderNumber,
@@ -852,9 +888,9 @@ public sealed partial class WorkOrderExecutionController(
             pdfModel.ShowPoweredByEcosys);
     }
 
-    private async Task<WorkOrderReportPdfModel> BuildPdfModelAsync(Guid workOrderId, CancellationToken cancellationToken)
+    private async Task<WorkOrderReportPdfModel> BuildPdfModelAsync(Guid workOrderId, CancellationToken cancellationToken, bool skipTechnicianScope = false)
     {
-        var workOrder = await LoadWorkOrderAsync(workOrderId, cancellationToken);
+        var workOrder = await LoadWorkOrderAsync(workOrderId, cancellationToken, skipTechnicianScope);
         var tenant = await dbContext.Tenants.SingleAsync(x => x.Id == TenantId, cancellationToken);
 
         var photos = await dbContext.WorkOrderPhotoEvidence

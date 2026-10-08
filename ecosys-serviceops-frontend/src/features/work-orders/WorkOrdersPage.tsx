@@ -87,6 +87,11 @@ export function WorkOrdersPage() {
               {row.childWorkOrderCount} sub-task{row.childWorkOrderCount > 1 ? 's' : ''}
             </span>
           ) : null}
+          {row.followUpOfWorkOrderNumber !== null ? (
+            <span className="inline-flex items-center rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-700 ring-1 ring-inset ring-sky-200" title={row.followUpOfWorkOrderNumber ? `Follow-up of ${row.followUpOfWorkOrderNumber}` : 'Follow-up'}>
+              Follow-up
+            </span>
+          ) : null}
           {row.isRepeatVisit ? (
             <span
               className="inline-flex items-center rounded-full bg-amber-50 p-1 text-amber-600 ring-1 ring-inset ring-amber-200"

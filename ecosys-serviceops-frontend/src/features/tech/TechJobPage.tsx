@@ -21,6 +21,7 @@ import { TechJobGuides } from './TechGuides'
 import { TechMaterials } from './TechMaterials'
 import { TechOverview } from './TechOverview'
 import { TechParts } from './TechParts'
+import { TechPreviousVisit } from './TechPreviousVisit'
 import { TechPhotos } from './TechPhotos'
 
 type Section = 'overview' | 'photos' | 'parts' | 'complete'
@@ -188,6 +189,7 @@ export function TechJobPage() {
 
       {section === 'overview' ? (
         <>
+          <TechPreviousVisit job={job} />
           <TechOverview job={job} editable={editable} />
           <TechJobGuides workOrderId={id} />
         </>

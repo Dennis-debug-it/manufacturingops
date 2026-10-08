@@ -60,6 +60,12 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public string? PlannedMaterialsJson { get; set; }
     public Guid? QuoteId { get; set; }
     public Guid? ParentWorkOrderId { get; set; }
+    /// <summary>
+    /// The finished job this one follows up on (a return visit). Unlike <see cref="ParentWorkOrderId"/>
+    /// (sub-tasks), a follow-up never completes or reopens the original; it is a link for history and
+    /// repeat-visit reporting, and lets the technician see the original job's report.
+    /// </summary>
+    public Guid? FollowUpOfWorkOrderId { get; set; }
     public string? PreviousStatus { get; set; }
     public DateTime? SlaResponseDeadline { get; set; }
     public DateTime? SlaResolutionDeadline { get; set; }
@@ -110,6 +116,8 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public TenantQuotation? Quote { get; set; }
     public WorkOrder? ParentWorkOrder { get; set; }
     public ICollection<WorkOrder> ChildWorkOrders { get; set; } = new List<WorkOrder>();
+    public WorkOrder? FollowUpOfWorkOrder { get; set; }
+    public ICollection<WorkOrder> FollowUpWorkOrders { get; set; } = new List<WorkOrder>();
     public ICollection<MaterialRequest> MaterialRequests { get; set; } = new List<MaterialRequest>();
     public ICollection<WorkOrderEvent> Events { get; set; } = new List<WorkOrderEvent>();
     public ICollection<WorkOrderNote> Notes { get; set; } = new List<WorkOrderNote>();

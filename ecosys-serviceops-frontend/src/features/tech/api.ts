@@ -3,7 +3,7 @@ import { api, apiClient } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { Van, VanStockLine } from '../inventory/vansApi'
 import type { KnowledgeArticleListItem } from '../knowledge/types'
-import type { WorkOrder } from '../work-orders/types'
+import type { WorkOrder, WorkOrderServiceReportPreview } from '../work-orders/types'
 
 // Keys live under 'work-orders' so every work-order mutation's invalidation refreshes them too.
 export function useTechJobs() {
@@ -109,4 +109,24 @@ export function useMyVan(technicianId: string | undefined) {
     retry: false,
     staleTime: 30_000,
   })
+}
+
+/** The service report of the job a follow-up returns to, so the technician knows what happened last time. */
+export function useFollowUpSourceReport(workOrderId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['work-orders', workOrderId, 'follow-up-source-report'],
+    queryFn: () => api.get<WorkOrderServiceReportPreview>(endpoints.workOrders.followUpSourceReport(workOrderId)),
+    enabled: enabled && Boolean(workOrderId),
+    staleTime: 5 * 60_000,
+  })
+}
+
+export async function downloadFollowUpSourceReport(workOrderId: string, originalNumber: string) {
+  const response = await apiClient.get(endpoints.workOrders.followUpSourceReportPdf(workOrderId), { responseType: 'blob', suppressGlobalErrorToast: true })
+  const url = URL.createObjectURL(response.data as Blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${originalNumber}-service-report.pdf`
+  link.click()
+  URL.revokeObjectURL(url)
 }

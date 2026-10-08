@@ -12,6 +12,7 @@ import { useCreateWorkOrder, useRepeatVisitCheckForAsset, useWorkOrderTemplates 
 import { useAssetOptions, useClientOptions, useSiteOptions } from '../pickerApi'
 import { AssignmentFields, emptyAssignment, toCreateAssignmentPayload, type AssignmentValue } from './AssignmentFields'
 import { newWorkOrderSchema, priorityOptions, workTypeOptions, type NewWorkOrderFormValues } from '../schemas'
+import type { WorkOrder } from '../types'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -36,9 +37,41 @@ export interface NewWorkOrderFormProps {
   open: boolean
   onClose: () => void
   parentWorkOrderId?: string | null
+  /** Create a return visit for this finished job: same client, site and asset, with last visit's notes. */
+  followUpOf?: WorkOrder | null
 }
 
-export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: NewWorkOrderFormProps) {
+const emptyValues: NewWorkOrderFormValues = {
+  clientId: '',
+  siteId: '',
+  assetId: '',
+  title: '',
+  workType: 'CorrectiveMaintenance',
+  priority: 'Medium',
+  dueDate: '',
+  description: '',
+}
+
+/** Starting values for a follow-up; the office can still edit everything but the client. */
+export function followUpDefaults(original: WorkOrder): NewWorkOrderFormValues {
+  const lastVisit = [
+    `Follow-up of ${original.workOrderNumber}: ${original.title}.`,
+    original.workDoneNotes?.trim() ? `Work done last visit: ${original.workDoneNotes.trim()}` : null,
+    original.description?.trim() ? `Original request: ${original.description.trim()}` : null,
+  ].filter(Boolean).join('\n\n')
+  const title = `Follow-up: ${original.title}`
+  return {
+    ...emptyValues,
+    clientId: original.clientId,
+    siteId: original.siteId ?? '',
+    assetId: original.assetId ?? '',
+    title: title.length > 200 ? `${title.slice(0, 199)}…` : title,
+    priority: priorityOptions.some((option) => option.value === original.priority) ? original.priority as NewWorkOrderFormValues['priority'] : 'Medium',
+    description: lastVisit.length > 2000 ? `${lastVisit.slice(0, 1999)}…` : lastVisit,
+  }
+}
+
+export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null, followUpOf = null }: NewWorkOrderFormProps) {
   const navigate = useNavigate()
   const [clientSearch, setClientSearch] = useState('')
   const [templateId, setTemplateId] = useState('')
@@ -58,16 +91,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
     formState: { errors, isSubmitting },
   } = useForm<NewWorkOrderFormValues>({
     resolver: zodResolver(newWorkOrderSchema),
-    defaultValues: {
-      clientId: '',
-      siteId: '',
-      assetId: '',
-      title: '',
-      workType: 'CorrectiveMaintenance',
-      priority: 'Medium',
-      dueDate: '',
-      description: '',
-    },
+    defaultValues: emptyValues,
   })
 
   useEffect(() => {
@@ -75,16 +99,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
       return
     }
 
-    reset({
-      clientId: '',
-      siteId: '',
-      assetId: '',
-      title: '',
-      workType: 'CorrectiveMaintenance',
-      priority: 'Medium',
-      dueDate: '',
-      description: '',
-    })
+    reset(followUpOf ? followUpDefaults(followUpOf) : emptyValues)
     setTemplateId('')
     setAssignment(emptyAssignment)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,9 +159,10 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
         ...toCreateAssignmentPayload(assignment),
         notifyClient: true,
         parentWorkOrderId: parentWorkOrderId ?? null,
+        followUpOfWorkOrderId: followUpOf?.id ?? null,
         templateId: templateId || null,
       })
-      toast.success(`Work order ${created.workOrderNumber} created`)
+      toast.success(followUpOf ? `Follow-up ${created.workOrderNumber} created` : `Work order ${created.workOrderNumber} created`)
       closeAndReset()
       navigate(`/work-orders/${created.id}`)
     } catch (error) {
@@ -159,7 +175,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
   return (
     <FormDrawer
       open={open}
-      title={parentWorkOrderId ? 'New Sub-task' : 'New Work Order'}
+      title={followUpOf ? `Follow-up of ${followUpOf.workOrderNumber}` : parentWorkOrderId ? 'New Sub-task' : 'New Work Order'}
       onClose={closeAndReset}
       footer={
         <div className="flex items-center justify-end gap-2">
@@ -176,12 +192,19 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
             disabled={isSubmitting}
             className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {isSubmitting ? 'Creating…' : 'Create Work Order'}
+            {isSubmitting ? 'Creating…' : followUpOf ? 'Create Follow-up' : 'Create Work Order'}
           </button>
         </div>
       }
     >
       <form id="new-work-order-form" onSubmit={onSubmit} className="space-y-4">
+        {followUpOf ? (
+          <div>
+            <span className={labelClass}>Client</span>
+            {/* A follow-up stays with the original job's client (the server enforces it). */}
+            <p className="flex h-11 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700">{followUpOf.clientName ?? 'Same client as the original job'}</p>
+          </div>
+        ) : (
         <div>
           <label className={labelClass} htmlFor="wo-client">Client</label>
           <input
@@ -205,6 +228,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
           />
           {errors.clientId ? <p className={errorClass}>{errors.clientId.message}</p> : null}
         </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>

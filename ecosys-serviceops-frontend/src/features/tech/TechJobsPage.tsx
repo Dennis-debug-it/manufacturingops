@@ -78,6 +78,7 @@ export function TechJobsPage() {
                     <span className="font-mono">{job.workOrderNumber}</span>
                     <span className={cn('rounded-full px-1.5 py-0.5 font-medium', job.priority === 'Critical' || job.priority === 'High' ? 'bg-rose-50 text-rose-700' : 'bg-slate-100 text-slate-600')}>{job.priority}</span>
                     {mine?.isLead ? <span className="inline-flex items-center gap-0.5 text-amber-700"><Star className="h-3 w-3" />Lead</span> : null}
+                    {job.followUpOfWorkOrderId ? <span className="text-sky-700">Follow-up{job.followUpOfWorkOrderNumber ? ` of ${job.followUpOfWorkOrderNumber}` : ''}</span> : null}
                   </div>
                   <p className="truncate text-sm font-semibold text-slate-900">{job.title}</p>
                   <p className="flex items-center gap-1 truncate text-xs text-slate-500">
