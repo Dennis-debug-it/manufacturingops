@@ -28,6 +28,8 @@ export interface TechnicianOption {
 export interface AssignmentGroupOption {
   id: string
   name: string
+  isActive?: boolean
+  members?: { technicianId: string; memberName: string | null; isLead: boolean; isActive: boolean }[]
 }
 
 export interface MaterialOption {
