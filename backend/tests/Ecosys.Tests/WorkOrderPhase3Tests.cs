@@ -109,6 +109,48 @@ public sealed class WorkOrderPhase3Tests
     }
 
     [Fact]
+    public async Task Create_WithTechnician_AssignsOnCreation()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedControllerFixtureAsync(dbContext);
+        var technician = new Technician { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, FullName = "John Kamau", Email = "john@acme.test", IsActive = true };
+        dbContext.Technicians.Add(technician);
+        await dbContext.SaveChangesAsync();
+        var controller = CreateWorkOrdersController(dbContext, fixture, CreateAssignmentWorkflowService(dbContext));
+
+        // Exactly what the New Work Order form sends when a technician is picked.
+        var result = await controller.Create(
+            new CreateWorkOrderRequest(
+                fixture.Client.Id,
+                null,
+                null,
+                null,
+                fixture.Asset.Id,
+                null,
+                WorkOrderAssignmentTypes.IndividualTechnician,
+                technician.Id,
+                null,
+                null,
+                null,
+                "Generator triage",
+                null,
+                WorkOrderPriorities.Medium,
+                null,
+                WorkOrderTypes.CorrectiveMaintenance,
+                false,
+                null),
+            CancellationToken.None);
+
+        var created = Assert.IsType<WorkOrderResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
+        dbContext.ChangeTracker.Clear();
+        var persisted = await dbContext.WorkOrders.Include(x => x.TechnicianAssignments).SingleAsync(x => x.Id == created.Id);
+        Assert.Equal(technician.Id, persisted.AssignedTechnicianId);
+        Assert.Single(persisted.TechnicianAssignments);
+        Assert.Equal(WorkOrderStatuses.Assigned, persisted.Status);
+        Assert.Equal(WorkOrderAssignmentTypes.IndividualTechnician, persisted.AssignmentType);
+    }
+
+    [Fact]
     public async Task Create_RejectsInvalidPriority()
     {
         await using var dbContext = CreateDbContext();
@@ -402,7 +444,7 @@ public sealed class WorkOrderPhase3Tests
             new NoOpEtaNotificationService(),
             NullLogger<WorkOrderAssignmentWorkflowService>.Instance);
 
-    private static WorkOrdersController CreateWorkOrdersController(AppDbContext dbContext, ControllerFixture fixture)
+    private static WorkOrdersController CreateWorkOrdersController(AppDbContext dbContext, ControllerFixture fixture, IWorkOrderAssignmentWorkflowService? assignmentWorkflowService = null)
     {
         var controller = new WorkOrdersController(
             dbContext,
@@ -413,7 +455,7 @@ public sealed class WorkOrderPhase3Tests
             new NoOpBranchAccessService(),
             new NoOpLicenseGuardService(),
             new NoOpWorkOrderLifecycleService(),
-            new NoOpAssignmentWorkflowService(),
+            assignmentWorkflowService ?? new NoOpAssignmentWorkflowService(),
             new NoOpPmChecklistService(),
             new NoOpSlaService(),
             new NoOpWorkflowService());
