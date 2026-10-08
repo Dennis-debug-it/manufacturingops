@@ -467,6 +467,27 @@ export function useUploadPhoto(id: string) {
   })
 }
 
+export function useAddMaterialUsage(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { materialItemId: string; quantityUsed: number; assetId?: string | null; chargeable?: boolean; notes?: string | null }) =>
+      api.post<WorkOrderExecutionBundle>(endpoints.workOrders.materialsUsed(id), {
+        materialItemId: payload.materialItemId,
+        assetId: payload.assetId ?? null,
+        quantityUsed: payload.quantityUsed,
+        unitCost: null,
+        chargeable: payload.chargeable ?? true,
+        notes: payload.notes ?? null,
+        usedAt: null,
+      }),
+    onSuccess: () => {
+      invalidateExecution(queryClient, id)
+      // Logging usage issues stock from the branch.
+      void queryClient.invalidateQueries({ queryKey: ['picker', 'materials'] })
+    },
+  })
+}
+
 export function useUpdatePhoto(id: string) {
   const queryClient = useQueryClient()
   return useMutation({

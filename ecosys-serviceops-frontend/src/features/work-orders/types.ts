@@ -137,8 +137,8 @@ export interface WorkOrder {
   assetModel: string | null
   assetLocation: string | null
   assetWarrantyExpiryDate: string | null
-  assetLastPmDate: string | null
-  assetNextPmDate: string | null
+  assetLastServiceDate: string | null
+  assetNextServiceDate: string | null
   assetWarrantyStatus: string | null
   availableTransitions: string[]
   workflowStatusId: string | null

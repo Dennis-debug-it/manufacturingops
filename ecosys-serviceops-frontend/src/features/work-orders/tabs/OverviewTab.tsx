@@ -134,8 +134,8 @@ export function OverviewTab({ workOrder, onReassign }: { workOrder: WorkOrder; o
             ['Serial', workOrder.assetSerialNumber],
             ['Make / model', assetModel || null],
             ['Warranty', warranty],
-            ['Last PM', workOrder.assetLastPmDate ? formatDate(workOrder.assetLastPmDate) : null],
-            ['Next PM', workOrder.assetNextPmDate ? formatDate(workOrder.assetNextPmDate) : null],
+            ['Last PM', workOrder.assetLastServiceDate ? formatDate(workOrder.assetLastServiceDate) : null],
+            ['Next PM', workOrder.assetNextServiceDate ? formatDate(workOrder.assetNextServiceDate) : null],
           ]}
         />
       ) : null}
@@ -162,10 +162,10 @@ export function OverviewTab({ workOrder, onReassign }: { workOrder: WorkOrder; o
         />
       ) : null}
 
-      {workOrder.plannedMaterials.length > 0 ? (
+      {(workOrder.plannedMaterials ?? []).length > 0 ? (
         <Section title="Planned materials">
           <ul className="divide-y divide-slate-100 text-sm">
-            {workOrder.plannedMaterials.map((material) => (
+            {(workOrder.plannedMaterials ?? []).map((material) => (
               <li key={material.materialId} className="flex justify-between gap-3 py-1.5">
                 <span className="text-slate-900">{material.materialName}</span>
                 <span className="text-slate-500">× {material.quantity}</span>

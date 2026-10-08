@@ -162,7 +162,7 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
           <Row label="Serial">{job.assetSerialNumber}</Row>
           <Row label="Model">{[job.assetManufacturer, job.assetModel].filter(Boolean).join(' ') || null}</Row>
           <Row label="Location">{job.assetLocation}</Row>
-          <Row label="Last PM">{job.assetLastPmDate ? formatDate(job.assetLastPmDate) : null}</Row>
+          <Row label="Last PM">{job.assetLastServiceDate ? formatDate(job.assetLastServiceDate) : null}</Row>
         </Card>
       ) : null}
 

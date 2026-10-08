@@ -1657,7 +1657,7 @@ public sealed class WorkOrdersController(
         return JsonSerializer.Serialize(snapshot);
     }
 
-    private static IReadOnlyCollection<PlannedMaterialResponse> ParsePlannedMaterials(string? json)
+    internal static IReadOnlyCollection<PlannedMaterialResponse> ParsePlannedMaterials(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
@@ -2137,7 +2137,7 @@ public sealed class WorkOrdersController(
         || tenantContext.HasRole(AppRoles.PlatformSuperAdmin)
         || tenantContext.HasRole(AppRoles.SuperAdmin);
 
-    private static string? BuildSiteLocation(Site? site)
+    internal static string? BuildSiteLocation(Site? site)
     {
         if (site is null)
         {
@@ -2152,7 +2152,7 @@ public sealed class WorkOrdersController(
         return parts.Count == 0 ? null : string.Join(", ", parts);
     }
 
-    private static string? ResolveAssetWarrantyStatus(Asset? asset)
+    internal static string? ResolveAssetWarrantyStatus(Asset? asset)
     {
         if (asset?.WarrantyExpiryDate is null)
         {

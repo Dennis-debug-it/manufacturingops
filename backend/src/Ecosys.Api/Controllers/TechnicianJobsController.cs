@@ -123,6 +123,7 @@ public sealed class TechnicianJobsController(
             .Include(x => x.Client)
             .Include(x => x.Site)
             .Include(x => x.Asset)
+            .ThenInclude(x => x!.AssetCategory)
             .Include(x => x.Contract)
             .Include(x => x.System)
             .Include(x => x.AssignedTechnician)
@@ -371,7 +372,33 @@ public sealed class TechnicianJobsController(
             ContractEndDate: workOrder.Contract?.EndDate,
             ContractRenewalRisk: workOrder.Contract?.RenewalRisk.ToString(),
             PricingNotes: workOrder.PricingNotes,
-            AppliedSlaSource: workOrder.AppliedSlaSource);
+            AppliedSlaSource: workOrder.AppliedSlaSource,
+            // Field details a technician needs on site (pricing fields stay with the office view).
+            ClientContactPerson: workOrder.Client?.ContactPerson,
+            ClientContactPhone: workOrder.Client?.ContactPhone,
+            SiteCode: workOrder.Site?.SiteCode,
+            SiteContactPerson: workOrder.Site?.ContactPerson,
+            SiteContactPhone: workOrder.Site?.ContactPhone,
+            SiteOperatingHours: workOrder.Site?.OperatingHours,
+            SiteAccessNotes: workOrder.Site?.AccessNotes,
+            SiteLocation: WorkOrdersController.BuildSiteLocation(workOrder.Site),
+            SiteLatitude: workOrder.Site?.Latitude,
+            SiteLongitude: workOrder.Site?.Longitude,
+            AssetCode: workOrder.Asset?.AssetCode,
+            AssetType: workOrder.Asset?.AssetType,
+            AssetCategoryName: workOrder.Asset?.AssetCategory?.Name,
+            AssetSerialNumber: workOrder.Asset?.SerialNumber,
+            AssetManufacturer: workOrder.Asset?.Manufacturer,
+            AssetModel: workOrder.Asset?.Model,
+            AssetLocation: workOrder.Asset?.Location,
+            AssetWarrantyExpiryDate: workOrder.Asset?.WarrantyExpiryDate,
+            AssetLastServiceDate: workOrder.Asset?.LastPmDate,
+            AssetNextServiceDate: workOrder.Asset?.NextPmDate,
+            AssetWarrantyStatus: WorkOrdersController.ResolveAssetWarrantyStatus(workOrder.Asset),
+            PlannedMaterials: WorkOrdersController.ParsePlannedMaterials(workOrder.PlannedMaterialsJson),
+            HoldSince: workOrder.HoldStartedAt,
+            IsRepeatVisit: workOrder.IsRepeatVisit,
+            RepeatVisitCount: workOrder.RepeatVisitCount);
     }
 
     private static (string? Reason, string? Note) ResolveActiveHoldDetails(WorkOrder workOrder)

@@ -43,9 +43,12 @@ public sealed class PostgresAdvisoryLockLease(
     string connectionString,
     ILogger<PostgresAdvisoryLockLease> logger) : IBackgroundWorkLease, IAsyncDisposable
 {
+    // Never disposed: disposing it while a caller holds it made that caller's Release() throw
+    // during shutdown. It owns no wait handle, so leaving it to the GC is safe.
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly HashSet<string> _held = new(StringComparer.Ordinal);
     private NpgsqlConnection? _connection;
+    private volatile bool _disposed;
 
     public async Task<bool> TryAcquireAsync(string workName, CancellationToken cancellationToken = default)
     {
@@ -62,6 +65,11 @@ public sealed class PostgresAdvisoryLockLease(
 
         try
         {
+            if (_disposed)
+            {
+                return false;
+            }
+
             var connection = await GetOpenConnectionAsync(cancellationToken);
             if (connection is null)
             {
@@ -106,7 +114,7 @@ public sealed class PostgresAdvisoryLockLease(
 
         try
         {
-            if (!_held.Contains(workName) || _connection is null)
+            if (_disposed || !_held.Contains(workName) || _connection is null)
             {
                 return false;
             }
@@ -145,7 +153,7 @@ public sealed class PostgresAdvisoryLockLease(
 
         try
         {
-            if (!_held.Remove(workName) || _connection is null)
+            if (_disposed || !_held.Remove(workName) || _connection is null)
             {
                 return;
             }
@@ -167,8 +175,27 @@ public sealed class PostgresAdvisoryLockLease(
 
     public async ValueTask DisposeAsync()
     {
-        await DiscardConnectionAsync();
-        _gate.Dispose();
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
+        // Let an in-flight acquire/check/release finish rather than pulling the connection out from
+        // under it; if one is stuck, close the connection anyway (that also releases every lock).
+        var entered = await _gate.WaitAsync(TimeSpan.FromSeconds(5));
+        try
+        {
+            await DiscardConnectionAsync();
+        }
+        finally
+        {
+            if (entered)
+            {
+                _gate.Release();
+            }
+        }
     }
 
     private async Task<NpgsqlConnection?> GetOpenConnectionAsync(CancellationToken cancellationToken)

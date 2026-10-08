@@ -17,6 +17,7 @@ import {
 import { useMyTechnician, useTechJob } from './api'
 import { jobPhase, myAssignmentOf, PHASE_LABEL, PHASE_TONE } from './jobState'
 import { TechFinish } from './TechFinish'
+import { TechMaterials } from './TechMaterials'
 import { TechOverview } from './TechOverview'
 import { TechPhotos } from './TechPhotos'
 
@@ -184,7 +185,12 @@ export function TechJobPage() {
 
       {section === 'overview' ? <TechOverview job={job} editable={editable} /> : null}
       {section === 'photos' ? <TechPhotos workOrderId={id} editable={editable} /> : null}
-      {section === 'complete' ? <TechFinish workOrderId={id} editable={editable} workDone={workDone} onWorkDoneChange={setWorkDoneDraft} /> : null}
+      {section === 'complete' ? (
+        <>
+          <TechMaterials job={job} editable={editable} />
+          <TechFinish workOrderId={id} editable={editable} workDone={workDone} onWorkDoneChange={setWorkDoneDraft} />
+        </>
+      ) : null}
 
       {primary || moreActions.length > 0 ? (
         <div data-testid="tech-bottom-bar" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur">
