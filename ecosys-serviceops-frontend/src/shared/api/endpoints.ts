@@ -150,6 +150,11 @@ export const endpoints = {
   assetCategories: {
     list: '/api/asset-templates',
   },
+  technicianJobs: {
+    list: '/api/technician/jobs',
+    me: '/api/technician/jobs/me',
+    detail: (id: string) => `/api/technician/jobs/${id}`,
+  },
   technicians: {
     list: '/api/technicians',
     detail: (id: string) => `/api/technicians/${id}`,

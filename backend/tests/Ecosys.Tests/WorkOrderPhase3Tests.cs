@@ -151,6 +151,32 @@ public sealed class WorkOrderPhase3Tests
     }
 
     [Fact]
+    public async Task Reassign_TechniciansWithoutTeam_AssignsThem()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedWorkflowFixtureAsync(dbContext);
+        var controller = new WorkOrderAssignmentsController(
+            dbContext,
+            new FakeTenantContext(fixture.Tenant.Id, fixture.Actor.Id, fixture.Actor.Email),
+            new NoOpUserAccessService(),
+            new NoOpBranchAccessService(),
+            CreateAssignmentWorkflowService(dbContext));
+
+        var result = await controller.Reassign(
+            fixture.WorkOrder.Id,
+            new ReassignActionRequest(null, [fixture.TechnicianOne.Id, fixture.TechnicianTwo.Id], fixture.TechnicianTwo.Id, null),
+            CancellationToken.None);
+
+        Assert.IsType<OkObjectResult>(result.Result);
+        dbContext.ChangeTracker.Clear();
+        var persisted = await dbContext.WorkOrders.Include(x => x.TechnicianAssignments).SingleAsync(x => x.Id == fixture.WorkOrder.Id);
+        Assert.Null(persisted.AssignmentGroupId);
+        Assert.Equal(2, persisted.TechnicianAssignments.Count);
+        Assert.Equal(fixture.TechnicianTwo.Id, persisted.LeadTechnicianId);
+        Assert.Equal(WorkOrderAssignmentTypes.MultipleTechnicians, persisted.AssignmentType);
+    }
+
+    [Fact]
     public async Task Create_RejectsInvalidPriority()
     {
         await using var dbContext = CreateDbContext();

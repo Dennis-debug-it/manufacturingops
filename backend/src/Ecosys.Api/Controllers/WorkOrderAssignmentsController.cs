@@ -67,11 +67,8 @@ public sealed class WorkOrderAssignmentsController(
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanAssignWorkOrders);
         await EnsureAccessibleAsync(workOrderId, cancellationToken);
 
-        if (request.TechnicianIds is not null && request.TechnicianIds.Count > 0 && !request.AssignmentGroupId.HasValue)
-        {
-            throw new BusinessRuleException("Select an assignment group first before choosing technicians.");
-        }
-
+        // Like work order creation, technicians can be assigned with or without a team; when a team
+        // is chosen the assignment service still requires the technicians to belong to it.
         await assignmentWorkflowService.ApplyAssignmentsAsync(TenantId, workOrderId, UserId, new WorkOrderAssignmentUpdateRequest(request.AssignmentGroupId, request.TechnicianIds, request.LeadTechnicianId, request.Notes), true, cancellationToken);
         return Ok(await LoadResponseAsync(workOrderId, cancellationToken));
     }

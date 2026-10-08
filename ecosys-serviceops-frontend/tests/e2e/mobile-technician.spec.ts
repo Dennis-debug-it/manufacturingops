@@ -1,7 +1,8 @@
 ﻿import { expect, test, type Locator, type Page } from '@playwright/test'
 import { CORS_HEADERS, json, loginWithMockSession, registerApiCatchAll } from './helpers/auth'
+import { E2E_API_URL } from './helpers/test-data'
 
-test.use({ viewport: { width: 412, height: 915 } })
+test.use({ viewport: { width: 412, height: 915 }, permissions: ['geolocation'], geolocation: { latitude: -1.2921, longitude: 36.8219 } })
 
 test.describe('mobile technician mode', () => {
   test('technician can progress the simplified workflow from the /tech route group', async ({ page }) => {
@@ -18,12 +19,18 @@ test.describe('mobile technician mode', () => {
     await expect(page.getByTestId('tech-bottom-bar')).toBeVisible()
     await expect(page.getByTestId('assignment-group-control')).toHaveCount(0)
 
+    // The server requires the technician to accept and record arrival before work can start.
+    await page.getByRole('button', { name: 'Accept Job' }).click()
+    await expect(page.getByText(/job accepted/i)).toBeVisible()
+    await page.getByRole('button', { name: "I've Arrived" }).click()
+    await expect(page.getByText(/arrival recorded/i)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Start Work' })).toBeVisible()
     await page.getByRole('button', { name: 'Start Work' }).click()
     await expect(page.getByText(/job updated/i)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Complete' })).toBeVisible()
     await page.getByLabel('Open more actions').first().click()
     await expect(page.getByRole('button', { name: 'Put On Hold' })).toBeVisible()
+    await page.keyboard.press('Escape')
 
     const jobUrl = page.url()
     const progressDraft = 'Replaced the relay, tightened the lug, and tested the generator under load.'
@@ -50,6 +57,7 @@ test.describe('mobile technician mode', () => {
     await page.getByRole('button', { name: /save signature/i }).click()
     await expect(page.getByText(/client sign-off saved/i)).toBeVisible()
 
+    await page.getByLabel(/work done/i).fill('Replaced the starter relay and load-tested the generator.')
     await page.getByRole('button', { name: 'Complete' }).click()
     await expect(page.getByText(/job updated/i)).toBeVisible()
     await expect(page.getByTestId('tech-bottom-bar')).toHaveCount(0)
@@ -182,7 +190,7 @@ function createScenarioState() {
 }
 
 async function mockTechnicianMode(page: Page, state: ReturnType<typeof createScenarioState>) {
-  const baseApi = 'http://localhost:5072'
+  const baseApi = E2E_API_URL
 
   await registerApiCatchAll(page)
   await loginWithMockSession(page, {
@@ -191,6 +199,35 @@ async function mockTechnicianMode(page: Page, state: ReturnType<typeof createSce
     fullName: 'Moses Otieno',
     tenantName: 'Acme Facilities',
     tenantId: 'tenant-1',
+  })
+
+  await page.route(`${baseApi}/api/technician/jobs/me`, async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: CORS_HEADERS })
+      return
+    }
+    await route.fulfill(json({ technicianId: 'tech-1', fullName: 'Moses Otieno' }))
+  })
+
+  await page.route(`${baseApi}/api/workorders/${state.workOrder.id}/technician-response`, async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: CORS_HEADERS })
+      return
+    }
+    state.workOrder.technicianAssignments[0]!.status = 'Accepted'
+    state.workOrder.technicianAssignments[0]!.acceptedAt = '2026-05-16T08:20:00.000Z'
+    await route.fulfill(json(state.workOrder))
+  })
+
+  await page.route(`${baseApi}/api/workorders/${state.workOrder.id}/arrival`, async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      await route.fulfill({ status: 204, headers: CORS_HEADERS })
+      return
+    }
+    state.workOrder.technicianAssignments[0]!.status = 'Arrived'
+    state.workOrder.technicianAssignments[0]!.arrivalAt = '2026-05-16T08:35:00.000Z'
+    state.workOrder.arrivalAt = '2026-05-16T08:35:00.000Z' as unknown as null
+    await route.fulfill(json(state.workOrder))
   })
 
   await page.route(`${baseApi}/api/technician/jobs`, async (route) => {

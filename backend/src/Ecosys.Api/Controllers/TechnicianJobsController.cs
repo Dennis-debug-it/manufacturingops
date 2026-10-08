@@ -48,6 +48,20 @@ public sealed class TechnicianJobsController(
         return Ok(workOrders.Select(Map).ToList());
     }
 
+    /// <summary>
+    /// The signed-in user's technician profile. Assignments are keyed by technician, not user, so the
+    /// technician app needs this to find "my" assignment (to accept a job or record arrival).
+    /// </summary>
+    [HttpGet("me")]
+    public async Task<ActionResult<TechnicianSelfResponse>> Me(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureTenantOperationalAccess();
+        var technician = await ResolveTechnicianAsync(cancellationToken)
+            ?? throw new NotFoundException("No technician profile is linked to this account.");
+
+        return Ok(new TechnicianSelfResponse(technician.Id, technician.FullName));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<WorkOrderResponse>> Get(Guid id, CancellationToken cancellationToken)
     {
@@ -363,3 +377,5 @@ public sealed class TechnicianJobsController(
     private static (string? Reason, string? Note) ResolveActiveHoldDetails(WorkOrder workOrder)
         => WorkOrderHoldReasons.ResolveCurrentDetails(workOrder);
 }
+
+public sealed record TechnicianSelfResponse(Guid TechnicianId, string FullName);
