@@ -23,14 +23,18 @@ import {
   useExecutionBundle,
   useHoldWorkOrder,
   usePatchWorkOrderWorkflowStatus,
+  useReopenWorkOrder,
   useResumeFromHold,
   useStartWorkOrder,
   useWorkOrder,
+  useWorkOrderChildren,
   useWorkOrderSla,
 } from './api'
 import { useWorkflowStatuses } from '../settings/workflowsApi'
 import { CompleteWorkOrderDialog } from './components/CompleteWorkOrderDialog'
 import { DocumentsPanel } from './components/DocumentsPanel'
+import { FollowUpsPanel } from './components/FollowUpsPanel'
+import { NewWorkOrderForm } from './components/NewWorkOrderForm'
 import { ReassignDrawer } from './components/ReassignDrawer'
 import { RelatedWorkOrdersPanel } from './components/RelatedWorkOrdersPanel'
 import { SubtasksPanel } from './components/SubtasksPanel'
@@ -49,7 +53,11 @@ const holdTypeOptions = [
 
 const HOLD_STATUSES = ['On Hold', 'Waiting on Parts', 'Waiting on Client']
 const FINAL_STATUSES = ['Completed', 'Closed', 'Cancelled']
-const STARTABLE_STATUSES = ['Assigned', 'Scheduled', 'New', 'Open']
+/** Finished work that can get a return visit (the API enforces the same list). */
+const FOLLOW_UP_STATUSES = ['Completed', 'Client Accepted', 'Closed']
+/** Sub-task statuses that no longer block closing the parent. */
+const SUBTASK_DONE_STATUSES = ['Completed', 'Client Accepted', 'Closed', 'Cancelled', 'Rejected']
+const STARTABLE_STATUSES = ['Assigned', 'Scheduled', 'New', 'Open', 'Reopened']
 
 const chipClass = 'inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-700'
 const secondaryButtonClass = 'inline-flex h-10 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50'
@@ -84,10 +92,13 @@ export function WorkOrderDetailPage() {
   const cancelWorkOrder = useCancelWorkOrder(id ?? '')
   const completeWorkOrder = useCompleteWorkOrder(id ?? '')
   const duplicateWorkOrder = useDuplicateWorkOrder(id ?? '')
+  const reopenWorkOrder = useReopenWorkOrder(id ?? '')
+  const { data: subtasks } = useWorkOrderChildren(id)
+  const [followUpOpen, setFollowUpOpen] = useState(false)
 
   const [completeOpen, setCompleteOpen] = useState(false)
   const [reassignOpen, setReassignOpen] = useState(false)
-  const [confirmAction, setConfirmAction] = useState<'close' | 'cancel' | null>(null)
+  const [confirmAction, setConfirmAction] = useState<'close' | 'cancel' | 'reopen' | null>(null)
   const [showActionsMenu, setShowActionsMenu] = useState(false)
   const [holdOpen, setHoldOpen] = useState(false)
   const [holdType, setHoldType] = useState<(typeof holdTypeOptions)[number]['value']>('OnHold')
@@ -142,6 +153,20 @@ export function WorkOrderDetailPage() {
   const canCloseNow = canClose && status === 'Completed'
   const canCancelNow = canCancel && !isFinal
   const arrivalRecorded = Boolean(workOrder.arrivalAt) || hasRecordedArrival(workOrder.technicianAssignments)
+  const canFollowUp = canCreate && FOLLOW_UP_STATUSES.includes(status)
+  // The server only offers Reopened to callers allowed to make that move (closed jobs: admins only).
+  const canReopen = user?.role === 'admin' && (workOrder.availableTransitions ?? []).includes('Reopened')
+  const openSubtasks = (subtasks ?? []).filter((child) => !SUBTASK_DONE_STATUSES.includes(child.status))
+  const followUps = workOrder.followUps ?? []
+
+  // Closing is final, so it waits for open sub-tasks (the server refuses it too).
+  const requestClose = () => {
+    if (openSubtasks.length > 0) {
+      toast.error(`Complete or cancel the open sub-task${openSubtasks.length === 1 ? '' : 's'} first: ${openSubtasks.map((child) => child.workOrderNumber).join(', ')}`)
+      return
+    }
+    setConfirmAction('close')
+  }
 
   const start = () => void runAction('Work started', () => startWorkOrder.mutateAsync(undefined))
   const resume = () => void runAction('Work resumed', () => resumeFromHold.mutateAsync())
@@ -158,7 +183,7 @@ export function WorkOrderDetailPage() {
       : canCompleteNow
         ? { label: 'Complete', onClick: () => setCompleteOpen(true) }
         : canCloseNow
-          ? { label: 'Close', onClick: () => setConfirmAction('close') }
+          ? { label: 'Close', onClick: requestClose }
           : null
 
   const menuItems: MenuItem[] = [
@@ -166,6 +191,8 @@ export function WorkOrderDetailPage() {
     ...(canPauseNow ? [{ label: 'Put On Hold', onClick: () => setHoldOpen(true) }] : []),
     ...(canResumeNow && mainAction?.label !== 'Resume' ? [{ label: 'Resume', onClick: resume }] : []),
     ...(canAssign && !isFinal && !needsAssignment ? [{ label: 'Reassign', onClick: () => setReassignOpen(true) }] : []),
+    ...(canFollowUp ? [{ label: 'Create Follow-up', onClick: () => setFollowUpOpen(true) }] : []),
+    ...(canReopen ? [{ label: 'Reopen', onClick: () => setConfirmAction('reopen') }] : []),
     ...(canCreate ? [{ label: 'Duplicate', onClick: () => void submitDuplicate() }] : []),
     ...(canCancelNow ? [{ label: 'Cancel Work Order', onClick: () => setConfirmAction('cancel'), danger: true }] : []),
   ]
@@ -298,6 +325,19 @@ export function WorkOrderDetailPage() {
 
   return (
     <>
+      {workOrder.followUpRequested && followUps.length === 0 ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900" data-testid="follow-up-requested">
+          <p className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            The technician marked a follow-up visit as required on the checklist.
+          </p>
+          {canFollowUp ? (
+            <button type="button" onClick={() => setFollowUpOpen(true)} className="inline-flex h-9 items-center rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white hover:bg-sky-800">
+              Create follow-up
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {alerts.length > 0 ? (
         <div className="mb-4 space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           {alerts.map(({ key, icon: Icon, text }) => (
@@ -315,6 +355,7 @@ export function WorkOrderDetailPage() {
             <TechnicianLocationPanel workOrder={workOrder} />
             <DocumentsPanel workOrderId={id} />
             <SubtasksPanel workOrder={workOrder} />
+            <FollowUpsPanel workOrder={workOrder} onCreate={canFollowUp ? () => setFollowUpOpen(true) : null} />
             <RelatedWorkOrdersPanel workOrderId={id} />
           </>
         }
@@ -349,16 +390,26 @@ export function WorkOrderDetailPage() {
 
       <ReassignDrawer workOrderId={id} open={reassignOpen} onClose={() => setReassignOpen(false)} />
 
+      <NewWorkOrderForm open={followUpOpen} onClose={() => setFollowUpOpen(false)} followUpOf={workOrder} />
+
       <ConfirmDialog
         open={confirmAction !== null}
-        title={confirmAction === 'close' ? 'Close Work Order' : 'Cancel Work Order'}
-        message={confirmAction === 'close' ? 'This closes the work order after completion. This action cannot be undone.' : 'This cancels the work order. This action cannot be undone.'}
-        confirmLabel={confirmAction === 'close' ? 'Close Work Order' : 'Cancel Work Order'}
+        title={confirmAction === 'close' ? 'Close Work Order' : confirmAction === 'reopen' ? 'Reopen Work Order' : 'Cancel Work Order'}
+        message={
+          confirmAction === 'close'
+            ? 'This closes the work order after completion. This action cannot be undone.'
+            : confirmAction === 'reopen'
+              ? 'This sends the job back for more work on the same work order (status Reopened), then assign or start it again. To book a separate return visit instead, use Create Follow-up.'
+              : 'This cancels the work order. This action cannot be undone.'
+        }
+        confirmLabel={confirmAction === 'close' ? 'Close Work Order' : confirmAction === 'reopen' ? 'Reopen' : 'Cancel Work Order'}
         danger={confirmAction === 'cancel'}
         onCancel={() => setConfirmAction(null)}
         onConfirm={() => {
           if (confirmAction === 'close') {
             void runAction('Work order closed', () => closeWorkOrder.mutateAsync(undefined))
+          } else if (confirmAction === 'reopen') {
+            void runAction('Work order reopened', () => reopenWorkOrder.mutateAsync())
           } else if (confirmAction === 'cancel') {
             void runAction('Work order cancelled', () => cancelWorkOrder.mutateAsync(undefined))
           }

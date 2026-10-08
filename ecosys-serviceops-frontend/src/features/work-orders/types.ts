@@ -166,6 +166,20 @@ export interface WorkOrder {
   plannedMaterials: PlannedMaterial[]
   isRepeatVisit: boolean
   repeatVisitCount: number
+  /** The finished job this one is a return visit for. */
+  followUpOfWorkOrderId?: string | null
+  followUpOfWorkOrderNumber?: string | null
+  /** Return visits raised from this job. */
+  followUps?: WorkOrderLink[]
+  /** The technician answered "Follow-up required" with yes on the checklist. */
+  followUpRequested?: boolean
+}
+
+export interface WorkOrderLink {
+  id: string
+  workOrderNumber: string
+  status: string
+  createdAt: string
 }
 
 export interface PlannedMaterial {

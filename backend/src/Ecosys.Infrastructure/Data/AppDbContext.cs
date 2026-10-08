@@ -723,6 +723,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => x.TrackingToken).IsUnique().HasFilter("\"TrackingToken\" IS NOT NULL");
             entity.HasIndex(x => x.QuoteId);
             entity.HasIndex(x => x.ParentWorkOrderId);
+            entity.HasIndex(x => x.FollowUpOfWorkOrderId);
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.WorkOrders)
                 .HasForeignKey(x => x.TenantId)
@@ -790,6 +791,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.ParentWorkOrder)
                 .WithMany(x => x.ChildWorkOrders)
                 .HasForeignKey(x => x.ParentWorkOrderId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.FollowUpOfWorkOrder)
+                .WithMany(x => x.FollowUpWorkOrders)
+                .HasForeignKey(x => x.FollowUpOfWorkOrderId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(x => x.Assignments)
                 .WithOne(x => x.WorkOrder)

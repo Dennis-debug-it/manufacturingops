@@ -1,22 +1,24 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, FileDown } from 'lucide-react'
 import { SignaturePad } from '../../shared/components/SignaturePad'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { cn } from '../../shared/utils/cn'
 import { formatDateTime } from '../../shared/utils/dates'
 import { useCaptureSignature, useExecutionBundle } from '../work-orders/api'
+import { downloadServiceReport } from './api'
 
 const inputClass = 'w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 
 export interface TechFinishProps {
   workOrderId: string
+  workOrderNumber: string
   editable: boolean
   workDone: string
   onWorkDoneChange: (value: string) => void
 }
 
-export function TechFinish({ workOrderId, editable, workDone, onWorkDoneChange }: TechFinishProps) {
+export function TechFinish({ workOrderId, workOrderNumber, editable, workDone, onWorkDoneChange }: TechFinishProps) {
   const { user } = useAuth()
   const { data: bundle } = useExecutionBundle(workOrderId)
   const capture = useCaptureSignature(workOrderId)
@@ -29,6 +31,18 @@ export function TechFinish({ workOrderId, editable, workDone, onWorkDoneChange }
   const [clientRole, setClientRole] = useState('')
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [padKey, setPadKey] = useState(0)
+  const [downloading, setDownloading] = useState(false)
+
+  const download = async () => {
+    setDownloading(true)
+    try {
+      await downloadServiceReport(workOrderId, workOrderNumber)
+    } catch {
+      toast.error('Could not download the service report')
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   const name = signer === 'Client' ? clientName.trim() : user?.fullName ?? 'Technician'
   const saveSignature = async () => {
@@ -126,6 +140,14 @@ export function TechFinish({ workOrderId, editable, workDone, onWorkDoneChange }
             ))}
           </ul>
         ) : null}
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-slate-900">Service report</h2>
+        <p className="mt-1 text-xs text-slate-500">Work done, checklist, materials, photos and signatures as the client will see them.</p>
+        <button type="button" onClick={() => void download()} disabled={downloading} className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-800 disabled:opacity-60">
+          <FileDown className="h-4 w-4" />{downloading ? 'Preparing PDF…' : 'Download service report (PDF)'}
+        </button>
       </section>
     </div>
   )

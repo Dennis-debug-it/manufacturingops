@@ -33,6 +33,12 @@ public sealed class PartsReturnsController(
     {
         userAccessService.EnsureTenantOperationalAccess();
         var query = Query(await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken));
+        if (IsTechnicianOnlyWorkspaceUser())
+        {
+            // Field technicians see their own returns, not the whole branch's stores queue.
+            var userId = UserId;
+            query = query.Where(x => x.RequestedByUserId == userId);
+        }
         if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
         {
             var normalized = status.Trim();
@@ -47,6 +53,7 @@ public sealed class PartsReturnsController(
     public async Task<ActionResult<IReadOnlyCollection<PartsReturnResponse>>> GetForWorkOrder(Guid workOrderId, CancellationToken cancellationToken)
     {
         userAccessService.EnsureTenantOperationalAccess();
+        await EnsureTechnicianAssignedToWorkOrderAsync(dbContext, workOrderId, cancellationToken);
         var returns = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken))
             .Where(x => x.WorkOrderId == workOrderId)
             .OrderByDescending(x => x.RequestedAt)
@@ -265,6 +272,7 @@ public sealed class PartsReturnsController(
 
     private async Task<WorkOrder> LoadWorkOrderAsync(Guid workOrderId, CancellationToken cancellationToken)
     {
+        await EnsureTechnicianAssignedToWorkOrderAsync(dbContext, workOrderId, cancellationToken);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
         return await dbContext.WorkOrders
                 .Where(x => x.TenantId == TenantId && x.Id == workOrderId)

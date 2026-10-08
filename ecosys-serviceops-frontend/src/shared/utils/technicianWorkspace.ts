@@ -36,3 +36,15 @@ export function isTechnicianWorkspaceUser(user: AuthUser | null | undefined): bo
   }
   return Boolean(user.permissions.canCompleteWorkOrders)
 }
+
+/** Where an office URL lands for a technician-only user (old links, bookmarks, notification emails). */
+export function techPathFor(pathname: string): string {
+  const jobId = pathname.match(/^\/work-orders\/([^/]+)/)?.[1]
+  if (jobId) return `/tech/jobs/${jobId}`
+  if (pathname === '/my-time' || pathname.startsWith('/team/time-attendance')) return '/tech/time'
+  const articleId = pathname.match(/^\/knowledge\/([^/]+)/)?.[1]
+  if (articleId) return `/tech/guides/${articleId}`
+  if (pathname.startsWith('/knowledge')) return '/tech/guides'
+  if (pathname === '/me' || pathname.startsWith('/settings/account') || pathname.startsWith('/inventory/vans')) return '/tech/account'
+  return '/tech'
+}

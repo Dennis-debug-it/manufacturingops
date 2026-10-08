@@ -62,7 +62,132 @@ test.describe('mobile technician mode', () => {
     await expect(page.getByText(/job updated/i)).toBeVisible()
     await expect(page.getByTestId('tech-bottom-bar')).toHaveCount(0)
   })
+
+  test('technician reaches time & leave, parts, guides, service report and account from /tech', async ({ page }) => {
+    const state = createScenarioState()
+    // A job already in progress, so parts can be requested.
+    Object.assign(state.workOrder.technicianAssignments[0]!, { status: 'Arrived', acceptedAt: '2026-05-16T08:20:00.000Z', arrivalAt: '2026-05-16T08:35:00.000Z' })
+    Object.assign(state.workOrder, { status: 'In Progress', arrivalAt: '2026-05-16T08:35:00.000Z', workStartedAt: '2026-05-16T08:40:00.000Z' })
+    await mockTechnicianMode(page, state)
+    const self = await mockTechnicianSelfService(page, state.workOrder.id)
+
+    // Office links land on the technician equivalent instead of a 403 page.
+    await page.goto('/team/time-attendance/leave')
+    await expect(page).toHaveURL(/\/tech\/time$/)
+    await expect(page.getByRole('heading', { name: 'My Time & Leave' })).toBeVisible()
+    await page.getByRole('button', { name: /clock in/i }).click()
+    await expect(page.getByText('Clocked in', { exact: true }).first()).toBeVisible()
+    await page.getByLabel('Reason (optional)').fill('Family event')
+    await page.getByRole('button', { name: 'Submit request' }).click()
+    await expect(page.getByText('Leave request submitted')).toBeVisible()
+    expect(self.leaveRequests).toHaveLength(1)
+    expect(self.leaveRequests[0]).toMatchObject({ leaveType: 'ANNUAL', reason: 'Family event' })
+
+    // Guides: search and open.
+    await page.getByRole('link', { name: 'Guides' }).click()
+    await expect(page).toHaveURL(/\/tech\/guides$/)
+    await page.getByRole('link', { name: /Generator will not start/ }).click()
+    await expect(page.getByRole('heading', { name: 'Generator will not start' })).toBeVisible()
+    await expect(page.getByText('Check the starter relay first.')).toBeVisible()
+
+    // Parts on the job: request a part, then return an unused one.
+    await page.goto(`/tech/jobs/${state.workOrder.id}`)
+    await expect(page.getByText('Guides for this job')).toBeVisible()
+    await page.getByRole('link', { name: 'Parts', exact: true }).click()
+    await page.getByRole('button', { name: 'Request parts' }).click()
+    await page.getByLabel('Stock item', { exact: true }).selectOption({ index: 1 })
+    await page.getByLabel('Quantity requested').fill('2')
+    await page.getByRole('button', { name: 'Add to request' }).click()
+    await page.getByRole('button', { name: 'Send request' }).click()
+    await expect(page.getByText('Parts request sent to stores')).toBeVisible()
+    expect(self.partsRequests[0]).toMatchObject({ items: [{ inventoryItemId: state.materials[0]!.id, quantityRequested: 2 }] })
+
+    await page.getByRole('button', { name: 'Return parts' }).click()
+    await page.getByLabel('Quantity of Starter relay to return').fill('1')
+    await page.getByRole('button', { name: 'Send return' }).click()
+    await expect(page.getByText('Return sent to stores')).toBeVisible()
+    expect(self.partsReturns[0]).toMatchObject({ lines: [{ workOrderMaterialUsageId: 'usage-1', quantity: 1, condition: 'Unused' }] })
+
+    // Service report PDF from the Finish tab.
+    await page.getByRole('link', { name: 'Finish', exact: true }).click()
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', { name: /download service report/i }).click()
+    expect((await download).suggestedFilename()).toBe('WO-TECH-100-service-report.pdf')
+
+    // Account: van stock, password change and notification preferences.
+    await page.getByRole('link', { name: 'Me', exact: true }).click()
+    await expect(page.getByText(/My van: Van 7/)).toBeVisible()
+    await expect(page.getByText('Starter relay')).toBeVisible()
+    await page.getByLabel('Current password', { exact: true }).fill('Old-pass-1')
+    await page.getByLabel('New password', { exact: true }).fill('New-pass-22')
+    await page.getByLabel('Confirm new password').fill('New-pass-22')
+    await page.getByRole('button', { name: 'Change password' }).click()
+    await expect(page.getByText('Your password has been changed successfully.')).toBeVisible()
+    await page.getByRole('switch', { name: 'Work order assigned: email' }).click()
+    await expect.poll(() => self.preferenceUpdates.length).toBe(1)
+    expect(self.preferenceUpdates[0]).toEqual([{ notificationKey: 'workorder.assigned', emailEnabled: false, inAppEnabled: true }])
+  })
 })
+
+async function mockTechnicianSelfService(page: Page, workOrderId: string) {
+  const baseApi = E2E_API_URL
+  const self = {
+    leaveRequests: [] as Array<Record<string, unknown>>,
+    partsRequests: [] as Array<Record<string, unknown>>,
+    partsReturns: [] as Array<Record<string, unknown>>,
+    preferenceUpdates: [] as unknown[],
+    clockedIn: false,
+  }
+  const handle = async (pattern: string, handler: (method: string, body: unknown) => unknown, contentType?: string) => {
+    await page.route(pattern, async (route) => {
+      const method = route.request().method()
+      if (method === 'OPTIONS') {
+        await route.fulfill({ status: 204, headers: CORS_HEADERS })
+        return
+      }
+      const result = handler(method, method === 'GET' ? null : route.request().postDataJSON())
+      if (contentType) {
+        await route.fulfill({ status: 200, headers: { ...CORS_HEADERS, 'Content-Type': contentType }, body: result as string })
+        return
+      }
+      await route.fulfill(result === undefined ? { status: 204, headers: CORS_HEADERS } : json(result))
+    })
+  }
+
+  const article = { id: 'kb-1', title: 'Generator will not start', slug: 'gen-no-start', summary: 'Starter faults', categoryId: null, categoryName: 'Generators', status: 'Published', visibility: 'Internal', publishedAt: '2026-05-01T00:00:00Z', updatedAt: '2026-05-01T00:00:00Z', viewCount: 0, helpfulCount: 0, notHelpfulCount: 0, tags: [] }
+  await handle(`${baseApi}/api/attendance/me/status`, () => ({ technicianId: 'tech-1', technicianName: 'Moses Otieno', status: self.clockedIn ? 'ClockedIn' : 'NotClockedIn', clockInAt: self.clockedIn ? '2026-05-16T07:00:00Z' : null, lastLocation: null }))
+  await handle(`${baseApi}/api/attendance/me/clock-in`, () => { self.clockedIn = true; return { ok: true } })
+  await handle(`${baseApi}/api/attendance/leave-types`, () => [{ code: 'ANNUAL', name: 'Annual leave', isPaid: true, annualAllowanceDays: 21 }])
+  await handle(`${baseApi}/api/attendance/leave/mine`, (method, body) => {
+    if (method === 'POST') self.leaveRequests.push(body as Record<string, unknown>)
+    return method === 'POST' ? { id: 'leave-1' } : []
+  })
+  await handle(`${baseApi}/api/attendance/timesheets/mine**`, () => ({ periodLabel: 'This week', totalHours: 0, overtimeHours: 0, leaveHours: 0, dailyBreakdown: [] }))
+  await handle(`${baseApi}/api/knowledge/search**`, () => [article])
+  await handle(`${baseApi}/api/knowledge/suggestions/work-order/${workOrderId}`, () => [article])
+  await handle(`${baseApi}/api/knowledge/articles/kb-1`, () => ({ ...article, body: 'Check the starter relay first.', createdByUserId: 'u', createdByName: null, updatedByUserId: null, updatedByName: null, createdAt: '2026-05-01T00:00:00Z', relatedArticles: [] }))
+  await handle(`${baseApi}/api/workorders/${workOrderId}/parts-requests`, (method, body) => {
+    if (method === 'POST') self.partsRequests.push(body as Record<string, unknown>)
+    return method === 'POST' ? { id: 'pr-1' } : []
+  })
+  await handle(`${baseApi}/api/workorders/${workOrderId}/parts-returns/returnable`, () => [{ workOrderMaterialUsageId: 'usage-1', materialItemId: 'mat-1', itemCode: 'SR-1', itemName: 'Starter relay', unitOfMeasure: 'pcs', quantityUsed: 2, pendingReturnQuantity: 0, returnableQuantity: 2, usedAt: '2026-05-16T09:00:00Z' }])
+  await handle(`${baseApi}/api/workorders/${workOrderId}/parts-returns`, (method, body) => {
+    if (method === 'POST') self.partsReturns.push(body as Record<string, unknown>)
+    return method === 'POST' ? { id: 'ret-1' } : []
+  })
+  await handle(`${baseApi}/api/workorders/${workOrderId}/service-report/pdf`, () => '%PDF-1.4 test', 'application/pdf')
+  await handle(`${baseApi}/api/vans`, () => [{ id: 'van-1', name: 'Van 7', registrationNumber: 'KDA 123A', technicianId: 'tech-1', technicianName: 'Moses Otieno', homeBranchId: null, homeBranchName: null, isActive: true, distinctItemCount: 1, createdAt: '2026-05-01T00:00:00Z' }])
+  await handle(`${baseApi}/api/vans/van-1/stock`, () => [{ materialId: 'mat-1', materialName: 'Starter relay', materialCode: 'SR-1', unitOfMeasure: 'pcs', quantityOnHand: 4, reorderLevel: 1, unitCost: 18 }])
+  await handle(`${baseApi}/api/auth/change-password`, () => ({ message: 'Your password has been changed successfully.' }))
+  await handle(`${baseApi}/api/me/notification-preferences`, (method, body) => {
+    if (method === 'PUT') {
+      self.preferenceUpdates.push(body)
+      return undefined
+    }
+    return [{ notificationKey: 'workorder.assigned', label: 'Work order assigned', category: 'Work orders', emailEnabled: true, inAppEnabled: true }]
+  })
+  return self
+}
 
 function createScenarioState() {
   const workOrder = {

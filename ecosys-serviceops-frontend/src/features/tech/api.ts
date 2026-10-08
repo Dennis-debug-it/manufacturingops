@@ -1,7 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
-import { api } from '../../shared/api/apiClient'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api, apiClient } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
-import type { WorkOrder } from '../work-orders/types'
+import type { Van, VanStockLine } from '../inventory/vansApi'
+import type { KnowledgeArticleListItem } from '../knowledge/types'
+import type { WorkOrder, WorkOrderServiceReportPreview } from '../work-orders/types'
 
 // Keys live under 'work-orders' so every work-order mutation's invalidation refreshes them too.
 export function useTechJobs() {
@@ -23,8 +25,108 @@ export function useTechJob(id: string | undefined) {
 export function useMyTechnician() {
   return useQuery({
     queryKey: ['technician', 'me'],
-    queryFn: () => api.get<{ technicianId: string; fullName: string }>(endpoints.technicianJobs.me),
+    // 404 just means "no technician profile" (e.g. office staff on /me); callers handle its absence.
+    queryFn: () => api.get<{ technicianId: string; fullName: string }>(endpoints.technicianJobs.me, undefined, { suppressGlobalErrorToast: true }),
     staleTime: 5 * 60_000,
     retry: false,
   })
+}
+
+// Published guides a technician can read; /search only returns published articles they may see.
+export function useGuideSearch(q: string) {
+  return useQuery({
+    queryKey: ['knowledge-articles', 'tech-search', q],
+    queryFn: () => api.get<KnowledgeArticleListItem[]>(endpoints.knowledge.search, { q: q || undefined }),
+    staleTime: 30_000,
+  })
+}
+
+export function useGuideSuggestions(workOrderId: string) {
+  return useQuery({
+    queryKey: ['knowledge-articles', 'tech-suggestions', workOrderId],
+    // Optional extra on the job screen: stay quiet if this user's role can't read the knowledge base.
+    queryFn: () => api.get<KnowledgeArticleListItem[]>(endpoints.knowledge.suggestionsForWorkOrder(workOrderId), undefined, { suppressGlobalErrorToast: true }),
+    enabled: Boolean(workOrderId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+}
+
+export interface NotificationPreference {
+  notificationKey: string
+  label: string
+  category: string
+  emailEnabled: boolean
+  inAppEnabled: boolean
+}
+
+export function useMyNotificationPreferences() {
+  return useQuery({
+    queryKey: ['me', 'notification-preferences'],
+    queryFn: () => api.get<NotificationPreference[]>(endpoints.me.notificationPreferences),
+  })
+}
+
+export function useSaveMyNotificationPreferences() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (items: Array<Pick<NotificationPreference, 'notificationKey' | 'emailEnabled' | 'inAppEnabled'>>) =>
+      api.put(endpoints.me.notificationPreferences, items),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['me', 'notification-preferences'] }),
+  })
+}
+
+export function useChangeMyPassword() {
+  return useMutation({
+    mutationFn: (payload: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
+      api.post<{ message: string }>(endpoints.auth.changePassword, payload),
+  })
+}
+
+/** Downloads the job's service report PDF (the API builds it on demand). */
+export async function downloadServiceReport(workOrderId: string, workOrderNumber: string) {
+  const response = await apiClient.get(endpoints.workOrders.serviceReportPdf(workOrderId), { responseType: 'blob', suppressGlobalErrorToast: true })
+  const url = URL.createObjectURL(response.data as Blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${workOrderNumber}-service-report.pdf`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+/** The van assigned to this technician, if any. Quiet on 403 for roles without stock access. */
+export function useMyVan(technicianId: string | undefined) {
+  return useQuery({
+    queryKey: ['inventory', 'vans', 'mine', technicianId],
+    queryFn: async () => {
+      const vans = await api.get<Van[]>(endpoints.vans.list, undefined, { suppressGlobalErrorToast: true })
+      const van = vans.find((item) => item.technicianId === technicianId)
+      if (!van) return null
+      const stock = await api.get<VanStockLine[]>(endpoints.vans.stock(van.id), undefined, { suppressGlobalErrorToast: true })
+      return { van, stock }
+    },
+    enabled: Boolean(technicianId),
+    retry: false,
+    staleTime: 30_000,
+  })
+}
+
+/** The service report of the job a follow-up returns to, so the technician knows what happened last time. */
+export function useFollowUpSourceReport(workOrderId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ['work-orders', workOrderId, 'follow-up-source-report'],
+    queryFn: () => api.get<WorkOrderServiceReportPreview>(endpoints.workOrders.followUpSourceReport(workOrderId)),
+    enabled: enabled && Boolean(workOrderId),
+    staleTime: 5 * 60_000,
+  })
+}
+
+export async function downloadFollowUpSourceReport(workOrderId: string, originalNumber: string) {
+  const response = await apiClient.get(endpoints.workOrders.followUpSourceReportPdf(workOrderId), { responseType: 'blob', suppressGlobalErrorToast: true })
+  const url = URL.createObjectURL(response.data as Blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${originalNumber}-service-report.pdf`
+  link.click()
+  URL.revokeObjectURL(url)
 }

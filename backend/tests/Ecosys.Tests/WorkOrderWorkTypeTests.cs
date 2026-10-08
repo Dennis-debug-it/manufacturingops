@@ -54,6 +54,76 @@ public sealed class WorkOrderWorkTypeTests
         Assert.False(persisted.IsPreventiveMaintenance);
     }
 
+    [Theory]
+    [InlineData(WorkOrderStatuses.Completed)]
+    [InlineData(WorkOrderStatuses.Closed)]
+    public async Task Create_FollowUpOfFinishedJob_LinksBothWays(string originalStatus)
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedManualCreateFixtureAsync(dbContext);
+        var original = await SeedOriginalAsync(dbContext, fixture, originalStatus);
+        var controller = CreateWorkOrdersController(dbContext, fixture);
+
+        var result = await controller.Create(FollowUpRequest(fixture, fixture.Client.Id, original.Id), CancellationToken.None);
+
+        var followUp = Assert.IsType<WorkOrderResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
+        Assert.Equal(original.Id, followUp.FollowUpOfWorkOrderId);
+        Assert.Equal("WO-ORIG-1", followUp.FollowUpOfWorkOrderNumber);
+        Assert.Null(followUp.ParentWorkOrderId);
+
+        var originalView = Assert.IsType<WorkOrderResponse>(Assert.IsType<OkObjectResult>((await controller.Get(original.Id, CancellationToken.None)).Result).Value);
+        Assert.Equal(followUp.Id, Assert.Single(originalView.FollowUps!).Id);
+        // A follow-up never changes the original job.
+        Assert.Equal(originalStatus, originalView.Status);
+    }
+
+    [Fact]
+    public async Task Create_FollowUp_RefusesOpenOriginalOrOtherClient()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedManualCreateFixtureAsync(dbContext);
+        var open = await SeedOriginalAsync(dbContext, fixture, WorkOrderStatuses.InProgress);
+        var done = await SeedOriginalAsync(dbContext, fixture, WorkOrderStatuses.Completed, "WO-ORIG-2");
+        var otherClient = new Client { TenantId = fixture.Tenant.Id, ClientName = "Other", Email = "other@acme.test", IsActive = true };
+        dbContext.Clients.Add(otherClient);
+        await dbContext.SaveChangesAsync();
+        var controller = CreateWorkOrdersController(dbContext, fixture);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(FollowUpRequest(fixture, fixture.Client.Id, open.Id), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(FollowUpRequest(fixture, otherClient.Id, done.Id), CancellationToken.None));
+        Assert.Equal(2, await dbContext.WorkOrders.CountAsync());
+    }
+
+    [Fact]
+    public void FollowUpChecklist_DetectsTickedFollowUpQuestion()
+    {
+        static WorkOrderChecklistItem Item(string question, string? answer) => new() { QuestionText = question, ResponseValue = answer };
+
+        Assert.True(FollowUpChecklist.IsRequested([Item("Follow-up required", "Yes")]));
+        Assert.True(FollowUpChecklist.IsRequested([Item("Runtime hours", "120"), Item("Follow up needed?", "true")]));
+        Assert.False(FollowUpChecklist.IsRequested([Item("Follow-up required", "No")]));
+        Assert.False(FollowUpChecklist.IsRequested([Item("Follow-up required", null)]));
+        Assert.False(FollowUpChecklist.IsRequested([Item("Area left clean", "Yes")]));
+    }
+
+    private static async Task<WorkOrder> SeedOriginalAsync(AppDbContext dbContext, ManualFixture fixture, string status, string number = "WO-ORIG-1")
+    {
+        var original = new WorkOrder
+        {
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id, AssetId = fixture.Asset.Id,
+            WorkOrderNumber = number, Title = "Generator fault", Priority = "High", Status = status,
+            WorkType = WorkOrderTypes.CorrectiveMaintenance, CompletedAt = DateTime.UtcNow.AddDays(-1),
+        };
+        dbContext.WorkOrders.Add(original);
+        await dbContext.SaveChangesAsync();
+        return original;
+    }
+
+    private static CreateWorkOrderRequest FollowUpRequest(ManualFixture fixture, Guid clientId, Guid originalId) =>
+        new(clientId, fixture.Branch.Id, null, null, null, null, "Unassigned", null, null, null, null,
+            "Follow-up: Generator fault", "Return to replace the AVR.", "High", null,
+            WorkOrderTypes.CorrectiveMaintenance, false, null, FollowUpOfWorkOrderId: originalId);
+
     [Fact]
     public async Task Create_ManualWorkOrder_RejectsMissingWorkType()
     {

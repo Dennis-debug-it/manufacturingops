@@ -122,11 +122,12 @@ export function ReportsPage() {
                 <Download className="h-4 w-4" />Export CSV
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
               <StatCard label="Total" value={performance?.total ?? 0} />
               <StatCard label="Completed" value={performance?.completed ?? 0} tone="success" />
               <StatCard label="On-Time Rate" value={formatPercent(performance?.onTimeRate ?? 0)} />
               <StatCard label="Overdue" value={performance?.overdue ?? 0} tone="danger" />
+              <StatCard label="Follow-up Visits" value={`${performance?.followUps ?? 0} (${formatPercent(performance?.followUpRate ?? 0)})`} tone={(performance?.followUpRate ?? 0) >= 15 ? 'warning' : 'default'} />
             </div>
             <DataTable
               columns={[

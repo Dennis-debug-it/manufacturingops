@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Bell, CalendarDays, ClipboardList, MoreHorizontal, UserCircle2, Watch, X } from 'lucide-react'
+import { BookOpen, CalendarDays, ClipboardList, MoreHorizontal, UserCircle2, Watch, X } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useAuth } from '../hooks/useAuth'
 import { tenantNavItems, type NavItem } from './navigation'
@@ -8,10 +8,10 @@ import { useEntitlements } from '../hooks/useEntitlements'
 
 const technicianNav = [
   { label: 'Jobs', to: '/work-orders', icon: ClipboardList },
-  { label: 'My Time', to: '/me/time', icon: Watch },
+  { label: 'My Time', to: '/my-time', icon: Watch },
   { label: 'Today', to: '/maintenance/calendar', icon: CalendarDays },
-  { label: 'Alerts', to: '/reports', icon: Bell },
-  { label: 'Profile', to: '/settings/account', icon: UserCircle2 },
+  { label: 'Guides', to: '/knowledge', icon: BookOpen },
+  { label: 'Profile', to: '/me', icon: UserCircle2 },
 ]
 
 function isActive(pathname: string, to: string) {

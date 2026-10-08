@@ -53,11 +53,15 @@ public sealed class ReportsController(
                 x.DueDate,
                 x.IsPreventiveMaintenance,
                 x.ArrivalAt,
-                x.DepartureAt
+                x.DepartureAt,
+                IsFollowUp = x.FollowUpOfWorkOrderId != null
             })
             .ToListAsync(ct);
 
         var total = wos.Count;
+        // Return visits raised from a finished job ("Create follow-up"): a high share points at
+        // first-time-fix problems.
+        var followUps = wos.Count(x => x.IsFollowUp);
         var completed = wos.Count(x => x.Status == "Completed");
         var completedOnTime = wos.Count(x => x.Status == "Completed" && x.DueDate.HasValue && x.CompletedAt <= x.DueDate);
         var overdue = wos.Count(x => x.Status != "Completed" && x.Status != "Cancelled" && x.DueDate.HasValue && x.DueDate < DateTime.UtcNow);
@@ -86,6 +90,8 @@ public sealed class ReportsController(
             Overdue = overdue,
             OnTimeRate = completed > 0 ? Math.Round((double)completedOnTime / completed * 100, 1) : 0,
             AvgCompletionHours = Math.Round(avgCompletionHours, 1),
+            FollowUps = followUps,
+            FollowUpRate = total > 0 ? Math.Round((double)followUps / total * 100, 1) : 0,
             ByStatus = byStatus,
             ByPriority = byPriority,
             ByDay = byDay
@@ -107,6 +113,7 @@ public sealed class ReportsController(
         var query = dbContext.WorkOrders
             .Include(x => x.Client)
             .Include(x => x.AssignedTechnician)
+            .Include(x => x.FollowUpOfWorkOrder)
             .Where(x => x.TenantId == TenantId && x.CreatedAt >= start && x.CreatedAt <= end);
 
         if (clientId.HasValue) query = query.Where(x => x.ClientId == clientId.Value);
@@ -118,11 +125,11 @@ public sealed class ReportsController(
         var wos = await query.OrderBy(x => x.CreatedAt).ToListAsync(ct);
 
         var csv = new StringBuilder();
-        csv.AppendLine("WO Number,Title,Client,Priority,Status,Created At,Due Date,Completed At,On Time,PM");
+        csv.AppendLine("WO Number,Title,Client,Priority,Status,Created At,Due Date,Completed At,On Time,PM,Follow-up Of");
         foreach (var wo in wos)
         {
             var onTime = wo.CompletedAt.HasValue && wo.DueDate.HasValue ? (wo.CompletedAt <= wo.DueDate ? "Yes" : "No") : "";
-            csv.AppendLine($"\"{Csv.Escape(wo.WorkOrderNumber)}\",\"{Csv.Escape(wo.Title)}\",\"{Csv.Escape(wo.Client?.ClientName)}\",{wo.Priority},{wo.Status},{wo.CreatedAt:yyyy-MM-dd},{wo.DueDate?.ToString("yyyy-MM-dd")},{wo.CompletedAt?.ToString("yyyy-MM-dd")},{onTime},{(wo.IsPreventiveMaintenance ? "Yes" : "No")}");
+            csv.AppendLine($"\"{Csv.Escape(wo.WorkOrderNumber)}\",\"{Csv.Escape(wo.Title)}\",\"{Csv.Escape(wo.Client?.ClientName)}\",{wo.Priority},{wo.Status},{wo.CreatedAt:yyyy-MM-dd},{wo.DueDate?.ToString("yyyy-MM-dd")},{wo.CompletedAt?.ToString("yyyy-MM-dd")},{onTime},{(wo.IsPreventiveMaintenance ? "Yes" : "No")},\"{Csv.Escape(wo.FollowUpOfWorkOrder?.WorkOrderNumber)}\"");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"wo-performance-{start:yyyyMMdd}-{end:yyyyMMdd}.csv");
@@ -232,7 +239,8 @@ public sealed class ReportsController(
                 AssetId = g.Key,
                 CorrectiveCount = g.Count(x => !x.IsPreventiveMaintenance),
                 PmCount = g.Count(x => x.IsPreventiveMaintenance),
-                PmCompleted = g.Count(x => x.IsPreventiveMaintenance && x.Status == "Completed")
+                PmCompleted = g.Count(x => x.IsPreventiveMaintenance && x.Status == "Completed"),
+                FollowUpCount = g.Count(x => x.FollowUpOfWorkOrderId != null)
             })
             .ToDictionaryAsync(x => x.AssetId, ct);
 
@@ -258,6 +266,7 @@ public sealed class ReportsController(
                     ? (a.WarrantyExpiryDate >= DateTime.UtcNow ? "In Warranty" : "Expired")
                     : "Unknown",
                 CorrectiveWos = wos?.CorrectiveCount ?? 0,
+                FollowUpWos = wos?.FollowUpCount ?? 0,
                 PmCompliance = pmCompliance,
                 IsRecurringFault = isRecurringFault
             };
@@ -284,11 +293,11 @@ public sealed class ReportsController(
         var data = result?.Value as dynamic;
 
         var csv = new StringBuilder();
-        csv.AppendLine("Asset Code,Asset Name,Category,Client,Status,Last PM,Next PM,Warranty Status,Corrective WOs,PM Compliance %,Recurring Fault");
+        csv.AppendLine("Asset Code,Asset Name,Category,Client,Status,Last PM,Next PM,Warranty Status,Corrective WOs,Follow-up WOs,PM Compliance %,Recurring Fault");
         if (data?.Assets is IEnumerable<dynamic> items)
         {
             foreach (var a in items)
-                csv.AppendLine($"\"{Csv.Escape((object?)a.AssetCode)}\",\"{Csv.Escape((object?)a.AssetName)}\",\"{Csv.Escape((object?)a.CategoryName)}\",\"{Csv.Escape((object?)a.ClientName)}\",{a.Status},{a.LastPmDate:yyyy-MM-dd},{a.NextPmDate:yyyy-MM-dd},{a.WarrantyStatus},{a.CorrectiveWos},{a.PmCompliance},{(a.IsRecurringFault ? "Yes" : "No")}");
+                csv.AppendLine($"\"{Csv.Escape((object?)a.AssetCode)}\",\"{Csv.Escape((object?)a.AssetName)}\",\"{Csv.Escape((object?)a.CategoryName)}\",\"{Csv.Escape((object?)a.ClientName)}\",{a.Status},{a.LastPmDate:yyyy-MM-dd},{a.NextPmDate:yyyy-MM-dd},{a.WarrantyStatus},{a.CorrectiveWos},{a.FollowUpWos},{a.PmCompliance},{(a.IsRecurringFault ? "Yes" : "No")}");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "asset-reliability.csv");

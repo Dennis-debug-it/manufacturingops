@@ -95,6 +95,8 @@ export const endpoints = {
     duplicate: (id: string) => `/api/workorders/${id}/duplicate`,
     fromQuote: '/api/workorders/from-quote',
     children: (id: string) => `/api/workorders/${id}/children`,
+    followUpSourceReport: (id: string) => `/api/workorders/${id}/follow-up-source/service-report`,
+    followUpSourceReportPdf: (id: string) => `/api/workorders/${id}/follow-up-source/service-report/pdf`,
     hold: (id: string) => `/api/workorders/${id}/hold`,
     patchStatus: (id: string) => `/api/workorders/${id}/status`,
     bulkAssign: '/api/workorders/bulk-assign',
@@ -299,6 +301,11 @@ export const endpoints = {
     archive: (id: string) => `/api/knowledge/articles/${id}/archive`,
     categories: '/api/knowledge/categories',
     category: (id: string) => `/api/knowledge/categories/${id}`,
+    search: '/api/knowledge/search',
+    suggestionsForWorkOrder: (workOrderId: string) => `/api/knowledge/suggestions/work-order/${workOrderId}`,
+  },
+  me: {
+    notificationPreferences: '/api/me/notification-preferences',
   },
   notificationTemplates: {
     eta: '/api/settings/notifications/eta',

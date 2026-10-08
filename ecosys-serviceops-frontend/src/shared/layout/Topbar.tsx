@@ -1,5 +1,5 @@
-import { LogOut, WifiOff } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { LogOut, UserCircle2, WifiOff } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { cn } from '../utils/cn'
@@ -34,10 +34,13 @@ export function Topbar() {
             Offline — changes can’t be saved
           </span>
         ) : null}
-        <div className="hidden text-right sm:block">
-          <div className="text-sm font-medium text-slate-900">{user?.fullName}</div>
-          <div className="text-xs text-slate-500">{user?.jobTitle ?? user?.role}</div>
-        </div>
+        <Link to="/me" title="My account" className="flex items-center gap-2 rounded-lg px-2 py-1 text-right transition hover:bg-[var(--app-primary-soft)]">
+          <UserCircle2 className="h-5 w-5 text-slate-500 sm:hidden" aria-label="My account" />
+          <span className="hidden sm:block">
+            <span className="block text-sm font-medium text-slate-900">{user?.fullName}</span>
+            <span className="block text-xs text-slate-500">{user?.jobTitle ?? user?.role}</span>
+          </span>
+        </Link>
         <button
           type="button"
           onClick={async () => {

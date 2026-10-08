@@ -11,6 +11,48 @@ namespace Ecosys.Tests;
 public sealed class PreventiveMaintenanceFlowTests
 {
     [Fact]
+    public async Task Close_WithOpenSubtask_IsRefused_UntilTheSubtaskIsDone()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var parent = await dbContext.WorkOrders.SingleAsync(x => x.Id == fixture.WorkOrderId);
+        parent.Status = WorkOrderStatuses.Completed;
+        var subtask = new WorkOrder
+        {
+            TenantId = fixture.TenantId, ClientId = parent.ClientId, ParentWorkOrderId = parent.Id,
+            WorkOrderNumber = "WO-SUB-1", Title = "Replace filter", Priority = "Low", Status = WorkOrderStatuses.Assigned,
+        };
+        dbContext.WorkOrders.Add(subtask);
+        await dbContext.SaveChangesAsync();
+        var service = CreateLifecycleService(dbContext);
+
+        var error = await Assert.ThrowsAsync<Ecosys.Shared.Errors.BusinessRuleException>(() => service.ChangeStatusAsync(
+            fixture.TenantId, parent.Id, fixture.ActorUserId, new WorkOrderStatusChangeRequest(WorkOrderStatuses.Closed)));
+        Assert.Contains("WO-SUB-1", error.Message);
+        Assert.Equal(WorkOrderStatuses.Completed, (await dbContext.WorkOrders.AsNoTracking().SingleAsync(x => x.Id == parent.Id)).Status);
+
+        // A finished sub-task no longer blocks closing.
+        subtask.Status = WorkOrderStatuses.Completed;
+        await dbContext.SaveChangesAsync();
+        var closed = await service.ChangeStatusAsync(fixture.TenantId, parent.Id, fixture.ActorUserId, new WorkOrderStatusChangeRequest(WorkOrderStatuses.Closed));
+        Assert.Equal(WorkOrderStatuses.Closed, closed.Status);
+    }
+
+    private static WorkOrderLifecycleService CreateLifecycleService(AppDbContext dbContext) =>
+        new(
+            dbContext,
+            new TestTenantContext(),
+            new AuditLogService(dbContext, new Microsoft.AspNetCore.Http.HttpContextAccessor()),
+            new NoOpEmailOutboxService(),
+            new StubEmailTemplateService(),
+            new StubEmailSubjectRuleService(),
+            new NoOpSlaService(),
+            new NoOpServiceOpsNotifier(),
+            new NoOpEtaNotificationService(),
+            Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.PublicAppOptions()),
+            NullLogger<WorkOrderLifecycleService>.Instance);
+
+    [Fact]
     public async Task CompleteAsync_ForPmWorkOrder_UpdatesAssetPlanAndMeterReading()
     {
         await using var dbContext = CreateDbContext();

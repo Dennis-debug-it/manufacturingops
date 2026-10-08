@@ -10,6 +10,9 @@ export interface WorkOrderPerformanceReport {
   overdue: number
   onTimeRate: number
   avgCompletionHours: number
+  /** Return visits raised with "Create follow-up". */
+  followUps?: number
+  followUpRate?: number
   byStatus: Array<{ status: string; count: number }>
   byPriority: Array<{ priority: string; count: number }>
   byDay: Array<{ date: string; count: number }>
@@ -61,6 +64,7 @@ export interface AssetReliabilityRow {
   warrantyExpiryDate: string | null
   warrantyStatus: string
   correctiveWos: number
+  followUpWos?: number
   pmCompliance: number
   isRecurringFault: boolean
 }

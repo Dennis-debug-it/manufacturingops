@@ -1,7 +1,9 @@
+using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Errors;
 using Ecosys.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Api.Controllers;
 
@@ -65,6 +67,44 @@ public abstract class TenantAwareControllerBase(ITenantContext tenantContext) : 
         }
 
         return tenantContext.HasPermission(PermissionNames.CanCompleteWorkOrders);
+    }
+
+    /// <summary>
+    /// Technician-only workspace users may act only on jobs assigned to them (as assigned, lead or crew
+    /// technician); branch scope alone would let them reach every job in their branch. Everyone else
+    /// passes through unchanged. Matches the technician lookup used by the work order controllers:
+    /// the active technician linked to this user, falling back to one with the same email.
+    /// </summary>
+    protected async Task EnsureTechnicianAssignedToWorkOrderAsync(AppDbContext dbContext, Guid workOrderId, CancellationToken cancellationToken)
+    {
+        if (!IsTechnicianOnlyWorkspaceUser())
+        {
+            return;
+        }
+
+        var technicians = dbContext.Technicians.Where(x => x.TenantId == TenantId && x.IsActive);
+        var userId = UserId;
+        var technicianId = await technicians.Where(x => x.UserId == userId).Select(x => (Guid?)x.Id).SingleOrDefaultAsync(cancellationToken);
+        if (!technicianId.HasValue)
+        {
+            var email = await dbContext.Users.Where(x => x.TenantId == TenantId && x.Id == userId).Select(x => x.Email).SingleOrDefaultAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(email))
+            {
+                technicianId = await technicians.Where(x => x.Email == email).Select(x => (Guid?)x.Id).SingleOrDefaultAsync(cancellationToken);
+            }
+        }
+
+        var assigned = technicianId.HasValue && await dbContext.WorkOrders.AnyAsync(
+            x => x.TenantId == TenantId && x.Id == workOrderId
+                && (x.AssignedTechnicianId == technicianId.Value
+                    || x.LeadTechnicianId == technicianId.Value
+                    || x.TechnicianAssignments.Any(assignment => assignment.TechnicianId == technicianId.Value)),
+            cancellationToken);
+
+        if (!assigned)
+        {
+            throw new ForbiddenException("Technicians can only access jobs assigned to them.");
+        }
     }
 
     protected string UserDisplayName =>

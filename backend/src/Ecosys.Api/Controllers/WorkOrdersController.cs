@@ -64,7 +64,8 @@ public sealed class WorkOrdersController(
         [FromQuery] DateTime? toDate,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] bool? followUp = null)
     {
         EnsureGeneralWorkspaceAccess(PermissionNames.CanViewWorkOrders);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
@@ -99,6 +100,13 @@ public sealed class WorkOrdersController(
             query = unassigned.Value
                 ? query.Where(x => x.AssignmentGroupId == null && !x.TechnicianAssignments.Any())
                 : query.Where(x => x.AssignmentGroupId != null || x.TechnicianAssignments.Any());
+        }
+
+        if (followUp.HasValue)
+        {
+            query = followUp.Value
+                ? query.Where(x => x.FollowUpOfWorkOrderId != null)
+                : query.Where(x => x.FollowUpOfWorkOrderId == null);
         }
 
         if (fromDate.HasValue)
@@ -329,6 +337,7 @@ public sealed class WorkOrdersController(
         var template = await ResolveWorkOrderTemplateAsync(rawRequest.TemplateId, cancellationToken);
         var request = ApplyTemplateDefaults(rawRequest, template);
         var parentWorkOrder = await EnsureParentWorkOrderExistsAsync(request.ParentWorkOrderId, cancellationToken);
+        var followUpOf = await EnsureFollowUpSourceAsync(request.FollowUpOfWorkOrderId, request.ClientId, cancellationToken);
 
         ValidateCreate(request);
         var normalizedWorkType = WorkOrderTypes.Normalize(request.WorkType);
@@ -388,6 +397,7 @@ public sealed class WorkOrdersController(
             TrackingToken = TrackingTokenGenerator.Generate(),
             WorkOrderTemplateId = template?.Id,
             ParentWorkOrderId = parentWorkOrder?.Id,
+            FollowUpOfWorkOrderId = followUpOf?.Id,
             EstimatedDuration = template?.EstimatedDurationMins.HasValue == true ? Math.Round(template.EstimatedDurationMins.Value / 60m, 2) : null,
             PlannedMaterialsJson = template is not null ? await BuildPlannedMaterialsSnapshotAsync(template, cancellationToken) : null
         };
@@ -437,7 +447,9 @@ public sealed class WorkOrdersController(
             "Work order created",
             nameof(WorkOrder),
             workOrder.Id.ToString(),
-            $"Created work order '{workOrder.WorkOrderNumber}'.",
+            followUpOf is null
+                ? $"Created work order '{workOrder.WorkOrderNumber}'."
+                : $"Created work order '{workOrder.WorkOrderNumber}' as a follow-up of '{followUpOf.WorkOrderNumber}'.",
             cancellationToken);
 
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, workOrder.BranchId, cancellationToken);
@@ -1613,6 +1625,37 @@ public sealed class WorkOrdersController(
         };
     }
 
+    /// <summary>
+    /// A follow-up is a return visit to a finished job, so the original must be completed (or
+    /// accepted/closed) and belong to the same client; anything still open should be worked on directly.
+    /// </summary>
+    private async Task<WorkOrder?> EnsureFollowUpSourceAsync(Guid? followUpOfWorkOrderId, Guid clientId, CancellationToken cancellationToken)
+    {
+        if (!followUpOfWorkOrderId.HasValue)
+        {
+            return null;
+        }
+
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        var original = await dbContext.WorkOrders
+            .Where(x => x.TenantId == TenantId && x.Id == followUpOfWorkOrderId.Value)
+            .WhereAccessible(scope, x => x.BranchId)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new BusinessRuleException("The work order being followed up was not found.");
+
+        if (!FollowUpChecklist.CanBeFollowedUp(original.Status))
+        {
+            throw new BusinessRuleException("Only completed or closed work orders can be followed up. Continue the open job instead.");
+        }
+
+        if (original.ClientId != clientId)
+        {
+            throw new BusinessRuleException("A follow-up must be for the same client as the original work order.");
+        }
+
+        return original;
+    }
+
     private async Task<WorkOrder?> EnsureParentWorkOrderExistsAsync(Guid? parentWorkOrderId, CancellationToken cancellationToken)
     {
         if (!parentWorkOrderId.HasValue)
@@ -1746,6 +1789,8 @@ public sealed class WorkOrdersController(
             .Include(x => x.ChecklistItems)
             .Include(x => x.Quote)
             .Include(x => x.ChildWorkOrders)
+            .Include(x => x.FollowUpOfWorkOrder)
+            .Include(x => x.FollowUpWorkOrders)
             .Where(x => x.TenantId == TenantId)
             .WhereAccessible(scope, x => x.BranchId);
 
@@ -2073,7 +2118,14 @@ public sealed class WorkOrdersController(
             ParsePlannedMaterials(workOrder.PlannedMaterialsJson),
             workOrder.WorkflowStatusId,
             workOrder.IsRepeatVisit,
-            workOrder.RepeatVisitCount);
+            workOrder.RepeatVisitCount,
+            workOrder.FollowUpOfWorkOrderId,
+            workOrder.FollowUpOfWorkOrder?.WorkOrderNumber,
+            (workOrder.FollowUpWorkOrders ?? [])
+                .OrderBy(x => x.CreatedAt)
+                .Select(x => new WorkOrderLinkResponse(x.Id, x.WorkOrderNumber, WorkOrderStatuses.Normalize(x.Status), x.CreatedAt))
+                .ToList(),
+            FollowUpChecklist.IsRequested(workOrder.ChecklistItems));
     }
 
     private static string ResolveSlaStatus(WorkOrder workOrder)
@@ -2351,7 +2403,8 @@ public sealed record CreateWorkOrderRequest(
     bool NotifyClient = true,
     [StringLength(256)] string? ClientContactEmail = null,
     Guid? TemplateId = null,
-    Guid? ParentWorkOrderId = null);
+    Guid? ParentWorkOrderId = null,
+    Guid? FollowUpOfWorkOrderId = null);
 
 public sealed record UpdateWorkOrderRequest(
     Guid ClientId,
@@ -2502,7 +2555,14 @@ public sealed record WorkOrderResponse(
     IReadOnlyCollection<PlannedMaterialResponse>? PlannedMaterials = null,
     Guid? WorkflowStatusId = null,
     bool IsRepeatVisit = false,
-    int RepeatVisitCount = 0);
+    int RepeatVisitCount = 0,
+    Guid? FollowUpOfWorkOrderId = null,
+    string? FollowUpOfWorkOrderNumber = null,
+    IReadOnlyCollection<WorkOrderLinkResponse>? FollowUps = null,
+    bool FollowUpRequested = false);
+
+/// <summary>A linked job, as shown on the job it is linked to.</summary>
+public sealed record WorkOrderLinkResponse(Guid Id, string WorkOrderNumber, string Status, DateTime CreatedAt);
 
 public sealed record PlannedMaterialResponse(Guid MaterialId, string MaterialName, decimal Quantity);
 public sealed record HoldWorkOrderRequest(string? Reason, string? HoldType);

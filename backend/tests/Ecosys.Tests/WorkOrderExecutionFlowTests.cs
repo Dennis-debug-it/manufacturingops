@@ -392,6 +392,115 @@ public sealed class WorkOrderExecutionFlowTests
     }
 
     [Fact]
+    public async Task FollowUpSourceReport_TechnicianOnFollowUp_SeesOriginalJobReport()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        // The original visit was done by someone else; the fixture technician is on the follow-up.
+        var original = new WorkOrder
+        {
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id, SiteId = fixture.Site.Id, AssetId = fixture.Asset.Id,
+            WorkOrderNumber = "WO-ORIG-9", Title = "Generator transfer fault", Priority = "High", Status = "Closed",
+            WorkDoneNotes = "Reset the ATS; AVR needs replacing.",
+        };
+        var unrelatedFollowUp = new WorkOrder
+        {
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id,
+            WorkOrderNumber = "WO-OTHER-9", Title = "Someone else's follow-up", Priority = "Low", Status = "Open", FollowUpOfWorkOrderId = original.Id,
+        };
+        dbContext.WorkOrders.AddRange(original, unrelatedFollowUp);
+        fixture.WorkOrder.FollowUpOfWorkOrderId = original.Id;
+        await dbContext.SaveChangesAsync();
+        var controller = CreateExecutionController(dbContext, fixture, technicianOnly: true);
+
+        var report = Assert.IsType<WorkOrderServiceReportPreviewResponse>(Assert.IsType<OkObjectResult>(
+            (await controller.GetFollowUpSourceReport(fixture.WorkOrder.Id, CancellationToken.None)).Result).Value);
+        Assert.Equal("WO-ORIG-9", report.WorkOrderNumber);
+        Assert.Equal("Reset the ATS; AVR needs replacing.", report.WorkDone);
+        Assert.IsType<FileContentResult>(await controller.DownloadFollowUpSourceReportPdf(fixture.WorkOrder.Id, CancellationToken.None));
+
+        // The original itself, and follow-ups they aren't on, stay out of reach.
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetServiceReport(original.Id, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetFollowUpSourceReport(unrelatedFollowUp.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PartsRequestsAndReturns_TechnicianOnly_AreLimitedToAssignedJobs()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        // Same branch, someone else's job: branch scope alone would let the technician reach it.
+        var otherJob = new WorkOrder
+        {
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id,
+            WorkOrderNumber = "WO-OTHER-1", Title = "Not mine", Priority = "Low", Status = "Open",
+        };
+        dbContext.WorkOrders.Add(otherJob);
+        foreach (var job in new[] { fixture.WorkOrder.Id, otherJob.Id })
+        {
+            dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
+            {
+                TenantId = fixture.Tenant.Id, WorkOrderId = job, MaterialItemId = fixture.Material.Id,
+                QuantityUsed = 2, Chargeable = true, UsedByUserId = fixture.User.Id,
+            });
+        }
+        await dbContext.SaveChangesAsync();
+        var otherUsage = await dbContext.WorkOrderMaterialUsages.SingleAsync(x => x.WorkOrderId == otherJob.Id);
+        var myUsage = await dbContext.WorkOrderMaterialUsages.SingleAsync(x => x.WorkOrderId == fixture.WorkOrder.Id);
+
+        var requests = CreatePartsRequestsController(dbContext, fixture, technicianOnly: true);
+        var returns = CreatePartsReturnsController(dbContext, fixture, technicianOnly: true);
+        var partsRequest = new CreatePartsRequestRequest(null, [new CreatePartsRequestItemRequest(fixture.Material.Id, null, 1)]);
+        var partsReturn = new CreatePartsReturnRequest(null, [new CreatePartsReturnLineRequest(otherUsage.Id, null, 1, "Unused", null)]);
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => requests.Create(otherJob.Id, partsRequest, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => requests.GetForWorkOrder(otherJob.Id, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => returns.Create(otherJob.Id, partsReturn, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => returns.GetReturnable(otherJob.Id, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => returns.GetForWorkOrder(otherJob.Id, CancellationToken.None));
+        Assert.Empty(await dbContext.PartsRequests.ToListAsync());
+        Assert.Empty(await dbContext.PartsReturns.ToListAsync());
+
+        // Their own job still works.
+        Assert.IsType<CreatedAtActionResult>((await requests.Create(fixture.WorkOrder.Id, partsRequest, CancellationToken.None)).Result);
+        Assert.IsType<CreatedAtActionResult>((await returns.Create(fixture.WorkOrder.Id,
+            new CreatePartsReturnRequest(null, [new CreatePartsReturnLineRequest(myUsage.Id, null, 1, "Unused", null)]), CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await requests.GetForWorkOrder(fixture.WorkOrder.Id, CancellationToken.None)).Result);
+    }
+
+    [Fact]
+    public async Task PartsRequestAndReturnLists_TechnicianOnly_ShowOnlyTheirOwn()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var colleagueUser = new User
+        {
+            TenantId = fixture.Tenant.Id, FullName = "Colleague", Email = $"colleague-{Guid.NewGuid():N}@acme.test",
+            PasswordHash = "hash", Role = AppRoles.User, IsActive = true,
+        };
+        dbContext.Users.Add(colleagueUser);
+        var colleague = colleagueUser.Id;
+        dbContext.PartsRequests.AddRange(
+            new PartsRequest { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderId = fixture.WorkOrder.Id, TechnicianId = fixture.User.Id, Status = "Pending" },
+            new PartsRequest { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderId = fixture.WorkOrder.Id, TechnicianId = colleague, Status = "Pending" });
+        dbContext.PartsReturns.AddRange(
+            new PartsReturn { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderId = fixture.WorkOrder.Id, ReturnNumber = "RET-1", RequestedByUserId = fixture.User.Id, RequestedAt = DateTime.UtcNow },
+            new PartsReturn { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderId = fixture.WorkOrder.Id, ReturnNumber = "RET-2", RequestedByUserId = colleague, RequestedAt = DateTime.UtcNow });
+        await dbContext.SaveChangesAsync();
+
+        static T Value<T>(ActionResult<T> result) => Assert.IsType<T>(Assert.IsType<OkObjectResult>(result.Result).Value, exactMatch: false);
+
+        var techRequests = Value(await CreatePartsRequestsController(dbContext, fixture, technicianOnly: true).GetAll(null, null, null, null, null, null, CancellationToken.None));
+        Assert.Equal(fixture.User.Id, Assert.Single(techRequests).TechnicianId);
+        var techReturns = Value(await CreatePartsReturnsController(dbContext, fixture, technicianOnly: true).List(null, CancellationToken.None));
+        Assert.Equal("RET-1", Assert.Single(techReturns).ReturnNumber);
+
+        // Stores staff still see the whole queue.
+        Assert.Equal(2, Value(await CreatePartsRequestsController(dbContext, fixture, technicianOnly: false).GetAll(null, null, null, null, null, null, CancellationToken.None)).Count);
+        Assert.Equal(2, Value(await CreatePartsReturnsController(dbContext, fixture).List(null, CancellationToken.None)).Count);
+    }
+
+    [Fact]
     public async Task PartsReturn_Rejected_LeavesStockAndUsageAlone()
     {
         await using var dbContext = CreateDbContext();
@@ -670,11 +779,12 @@ public sealed class WorkOrderExecutionFlowTests
         FixtureData fixture,
         FakeFileStorageService? fileStorage = null,
         FakePdfRenderer? pdfRenderer = null,
-        FakeServiceReportDeliveryService? reportDelivery = null)
+        FakeServiceReportDeliveryService? reportDelivery = null,
+        bool technicianOnly = false)
     {
         var controller = new WorkOrderExecutionController(
             dbContext,
-            new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id),
+            new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id, technicianOnly),
             new FakeUserAccessService(),
             new FakeBranchAccessService(),
             fileStorage ?? new FakeFileStorageService(),
@@ -691,16 +801,28 @@ public sealed class WorkOrderExecutionFlowTests
         return controller;
     }
 
-    private static PartsReturnsController CreatePartsReturnsController(AppDbContext dbContext, FixtureData fixture)
+    private static PartsReturnsController CreatePartsReturnsController(AppDbContext dbContext, FixtureData fixture, bool technicianOnly = false)
     {
         var controller = new PartsReturnsController(
             dbContext,
-            new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id),
+            new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id, technicianOnly),
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new FakeUserAccessService(),
             new FakeBranchAccessService(),
             new FakeDocumentNumberingService(),
             new StockLedgerService(dbContext));
+        controller.ControllerContext = CreateControllerContext(fixture.User);
+        return controller;
+    }
+
+    private static PartsRequestsController CreatePartsRequestsController(AppDbContext dbContext, FixtureData fixture, bool technicianOnly)
+    {
+        var controller = new PartsRequestsController(
+            dbContext,
+            new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id, technicianOnly),
+            new AuditLogService(dbContext, new HttpContextAccessor()),
+            new FakeUserAccessService(),
+            new FakeBranchAccessService());
         controller.ControllerContext = CreateControllerContext(fixture.User);
         return controller;
     }
@@ -767,19 +889,21 @@ public sealed class WorkOrderExecutionFlowTests
         MaterialItem Material,
         WorkOrder WorkOrder);
 
-    private sealed class FakeTenantContext(Guid tenantId, Guid userId) : ITenantContext
+    /// <param name="technicianOnly">A field technician: no admin, only view/complete work orders (the technician-only workspace).</param>
+    private sealed class FakeTenantContext(Guid tenantId, Guid userId, bool technicianOnly = false) : ITenantContext
     {
         public Guid? TenantId => tenantId;
         public Guid? UserId => userId;
         public Guid? SessionId => Guid.NewGuid();
         public string? Email => "test@acme.test";
-        public string? Role => AppRoles.Admin;
-        public string? JobTitle => "Admin";
+        public string? Role => technicianOnly ? AppRoles.Technician : AppRoles.Admin;
+        public string? JobTitle => technicianOnly ? "Technician" : "Admin";
         public bool IsAuthenticated => true;
         public bool IsSuperAdmin => false;
-        public bool IsAdmin => true;
-        public bool HasRole(string role) => string.Equals(role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase);
-        public bool HasPermission(string permissionName) => true;
+        public bool IsAdmin => !technicianOnly;
+        public bool HasRole(string role) => string.Equals(role, Role, StringComparison.OrdinalIgnoreCase);
+        public bool HasPermission(string permissionName) =>
+            !technicianOnly || permissionName is PermissionNames.CanViewWorkOrders or PermissionNames.CanCompleteWorkOrders;
         public Guid GetRequiredTenantId() => tenantId;
         public Guid GetRequiredUserId() => userId;
         public Guid GetRequiredSessionId() => SessionId!.Value;

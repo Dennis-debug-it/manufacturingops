@@ -1,13 +1,22 @@
-import { Link, Outlet, useNavigate } from 'react-router-dom'
-import { LogOut } from 'lucide-react'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { BookOpen, CalendarClock, ClipboardList, LogOut, UserRound } from 'lucide-react'
 import { Logo } from '../../shared/components/Logo'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { isDemoTenant } from '../../shared/demoWorkspace'
+import { cn } from '../../shared/utils/cn'
 
-/** Phone-first shell for field technicians: just their jobs, no office navigation. */
+const SECTIONS = [
+  { to: '/tech', label: 'Jobs', icon: ClipboardList, match: (path: string) => path === '/tech' || path.startsWith('/tech/jobs') },
+  { to: '/tech/time', label: 'Time & Leave', icon: CalendarClock, match: (path: string) => path.startsWith('/tech/time') },
+  { to: '/tech/guides', label: 'Guides', icon: BookOpen, match: (path: string) => path.startsWith('/tech/guides') },
+  { to: '/tech/account', label: 'Me', icon: UserRound, match: (path: string) => path.startsWith('/tech/account') },
+] as const
+
+/** Phone-first shell for field technicians: their jobs, time & leave, guides and account; no office navigation. */
 export function TechLayout() {
   const { tenant, user, logout, isImpersonating } = useAuth()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
 
   const signOut = async () => {
     const redirected = isImpersonating || isDemoTenant(tenant?.tenantId)
@@ -30,6 +39,21 @@ export function TechLayout() {
             </button>
           </div>
         </div>
+        <nav aria-label="Technician sections" className="mx-auto grid max-w-xl grid-cols-4 gap-1 px-2 pb-2">
+          {SECTIONS.map(({ to, label, icon: Icon, match }) => {
+            const active = match(pathname)
+            return (
+              <Link
+                key={to}
+                to={to}
+                aria-current={active ? 'page' : undefined}
+                className={cn('flex h-10 flex-col items-center justify-center gap-0.5 rounded-lg text-[11px] font-medium', active ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-50')}
+              >
+                <Icon className="h-4 w-4" />{label}
+              </Link>
+            )
+          })}
+        </nav>
       </header>
       <main className="mx-auto max-w-xl px-4 pb-32 pt-4">
         <Outlet />
