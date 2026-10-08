@@ -9,7 +9,8 @@ import { useDebounce } from '../../../shared/hooks/useDebounce'
 import { cn } from '../../../shared/utils/cn'
 import { applyApiFieldErrors } from '../../../shared/api/apiError'
 import { useCreateWorkOrder, useRepeatVisitCheckForAsset, useWorkOrderTemplates } from '../api'
-import { useAssetOptions, useClientOptions, useSiteOptions, useTechnicianOptions } from '../pickerApi'
+import { useAssetOptions, useClientOptions, useSiteOptions } from '../pickerApi'
+import { AssignmentFields, emptyAssignment, toCreateAssignmentPayload, type AssignmentValue } from './AssignmentFields'
 import { newWorkOrderSchema, priorityOptions, workTypeOptions, type NewWorkOrderFormValues } from '../schemas'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
@@ -29,7 +30,6 @@ const WORK_ORDER_FORM_FIELDS = [
   'priority',
   'dueDate',
   'description',
-  'assignedTechnicianId',
 ] as const satisfies readonly (keyof NewWorkOrderFormValues)[]
 
 export interface NewWorkOrderFormProps {
@@ -42,6 +42,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
   const navigate = useNavigate()
   const [clientSearch, setClientSearch] = useState('')
   const [templateId, setTemplateId] = useState('')
+  const [assignment, setAssignment] = useState<AssignmentValue>(emptyAssignment)
   const { data: templates } = useWorkOrderTemplates({ activeOnly: true })
   const debouncedClientSearch = useDebounce(clientSearch, 250)
 
@@ -66,7 +67,6 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
       priority: 'Medium',
       dueDate: '',
       description: '',
-      assignedTechnicianId: '',
     },
   })
 
@@ -84,9 +84,9 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
       priority: 'Medium',
       dueDate: '',
       description: '',
-      assignedTechnicianId: '',
     })
     setTemplateId('')
+    setAssignment(emptyAssignment)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -97,7 +97,6 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
   const { data: clients, isLoading: clientsLoading } = useClientOptions(debouncedClientSearch)
   const { data: sites, isLoading: sitesLoading } = useSiteOptions(clientId || undefined)
   const { data: assets, isLoading: assetsLoading } = useAssetOptions(clientId || undefined, siteId || undefined)
-  const { data: technicians, isLoading: techniciansLoading } = useTechnicianOptions()
   const { data: repeatVisitCheck } = useRepeatVisitCheckForAsset(assetId || undefined)
 
   const createWorkOrder = useCreateWorkOrder()
@@ -125,6 +124,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
   const closeAndReset = () => {
     reset()
     setTemplateId('')
+    setAssignment(emptyAssignment)
     setClientSearch('')
     onClose()
   }
@@ -141,8 +141,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
         workType: values.workType,
         isPreventiveMaintenance: values.workType === 'PreventiveMaintenance',
         dueDate: values.dueDate ? new Date(values.dueDate).toISOString() : null,
-        assignedTechnicianId: values.assignedTechnicianId || null,
-        assignmentType: values.assignedTechnicianId ? 'IndividualTechnician' : 'Unassigned',
+        ...toCreateAssignmentPayload(assignment),
         notifyClient: true,
         parentWorkOrderId: parentWorkOrderId ?? null,
         templateId: templateId || null,
@@ -292,15 +291,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null }: Ne
           <input id="wo-due-date" type="date" {...register('dueDate')} className={fieldClass} />
         </div>
 
-        <div>
-          <label className={labelClass} htmlFor="wo-assignee">Assigned To</label>
-          <select id="wo-assignee" {...register('assignedTechnicianId')} className={fieldClass}>
-            <option value="">{techniciansLoading ? 'Loading technicians…' : 'Unassigned'}</option>
-            {(technicians ?? []).map((technician) => (
-              <option key={technician.id} value={technician.id}>{technician.fullName}</option>
-            ))}
-          </select>
-        </div>
+        <AssignmentFields idPrefix="wo-assign" value={assignment} onChange={setAssignment} />
 
         <div>
           <label className={labelClass} htmlFor="wo-description">Description</label>

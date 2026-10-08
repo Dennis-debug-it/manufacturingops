@@ -46,6 +46,7 @@ internal sealed class TestDataSeeder(
         // Idempotency guard — skip if demo tenant already exists
         if (await dbContext.Tenants.AnyAsync(x => x.Id == DemoTenantId, cancellationToken))
         {
+            await UpgradeDemoTechnicianRoleAsync(cancellationToken);
             logger.LogInformation("Demo seed data already present — skipping.");
             return;
         }
@@ -181,7 +182,7 @@ internal sealed class TestDataSeeder(
         };
         dbContext.Users.Add(manager);
 
-        // 5b. Technician (User role + Technician profile)
+        // 5b. Technician (Technician role + Technician profile)
         var tech = new User
         {
             Id                 = TechUserId,
@@ -190,7 +191,7 @@ internal sealed class TestDataSeeder(
             FullName           = "Demo Technician",
             Email              = "tech@demo.co.ke",
             Phone              = "0700000001",
-            Role               = AppRoles.User,
+            Role               = AppRoles.Technician,
             JobTitle           = "Field Technician",
             IsActive           = true,
             HasAllBranchAccess = false,
@@ -206,6 +207,15 @@ internal sealed class TestDataSeeder(
             CreatedAt             = now,
         };
         dbContext.Users.Add(tech);
+        // Without a branch row a branch-scoped user sees no work orders at all, even their own.
+        dbContext.UserBranchAssignments.Add(new UserBranchAssignment
+        {
+            TenantId  = DemoTenantId,
+            UserId    = TechUserId,
+            BranchId  = DemoBranchId,
+            IsDefault = true,
+            CreatedAt = now,
+        });
 
         // 5c. Technician profile linked to tech user
         dbContext.Technicians.Add(new Technician
@@ -679,5 +689,47 @@ internal sealed class TestDataSeeder(
             "Platform Admin:  {PlatformAdminEmail} (not seeded here — password is PlatformAdmin:Password in configuration)",
             string.IsNullOrWhiteSpace(platformAdminEmail) ? "<PlatformAdmin:Email not configured>" : platformAdminEmail);
         logger.LogInformation("======================================================");
+    }
+
+    /// <summary>
+    /// Older demo databases seeded the demo technician with the generic User role, whose permission
+    /// template drops "complete work orders", and without a branch row, which hides every work order
+    /// from a branch-scoped user — so the account could not use the technician app.
+    /// </summary>
+    private async Task UpgradeDemoTechnicianRoleAsync(CancellationToken cancellationToken)
+    {
+        var tech = await dbContext.Users.SingleOrDefaultAsync(x => x.Id == TechUserId, cancellationToken);
+        if (tech is null)
+        {
+            return;
+        }
+
+        var changed = false;
+        if (tech.Role == AppRoles.User)
+        {
+            tech.Role = AppRoles.Technician;
+            changed = true;
+        }
+
+        if (!tech.HasAllBranchAccess
+            && !await dbContext.UserBranchAssignments.AnyAsync(x => x.UserId == TechUserId, cancellationToken)
+            && await dbContext.Branches.AnyAsync(x => x.Id == DemoBranchId, cancellationToken))
+        {
+            dbContext.UserBranchAssignments.Add(new UserBranchAssignment
+            {
+                TenantId  = DemoTenantId,
+                UserId    = TechUserId,
+                BranchId  = DemoBranchId,
+                IsDefault = true,
+                CreatedAt = DateTime.UtcNow,
+            });
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Upgraded the demo technician account (Technician role and branch access).");
+        }
     }
 }

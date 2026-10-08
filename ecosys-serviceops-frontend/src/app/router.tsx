@@ -5,10 +5,15 @@ import {
   Outlet,
   Route,
   Routes,
+  useLocation,
 } from 'react-router-dom'
 import { ProtectedRoute } from '../shared/components/ProtectedRoute'
 import { Spinner } from '../shared/components/Spinner'
 import { useAuth } from '../shared/hooks/useAuth'
+import { isTechnicianWorkspaceUser } from '../shared/utils/technicianWorkspace'
+import { TechLayout } from '../features/tech/TechLayout'
+import { TechJobsPage } from '../features/tech/TechJobsPage'
+import { TechJobPage } from '../features/tech/TechJobPage'
 import { AppShell } from '../shared/layout/AppShell'
 import { createModulePage, type ModulePageConfig } from '../shared/pages/ModulePage'
 import type { AppRole } from '../shared/types/auth'
@@ -214,6 +219,13 @@ const SettingsOverviewPage = SettingsOverviewPageReal
 const OnboardingPage = OnboardingPageReal
 
 function TenantShellRoute() {
+  const { user } = useAuth()
+  const location = useLocation()
+  // Field technicians are refused the office work-order screens by the API; send them to their jobs.
+  if (isTechnicianWorkspaceUser(user) && location.pathname.startsWith('/work-orders')) {
+    const jobId = location.pathname.match(/^\/work-orders\/([^/]+)/)?.[1]
+    return <Navigate to={jobId ? `/tech/jobs/${jobId}` : '/tech'} replace />
+  }
   return (
     <AppShell>
       <Outlet />
@@ -225,6 +237,9 @@ function DashboardRoute() {
   const { user } = useAuth()
   if (user?.role === 'super_admin' || user?.role === 'platform_sales') {
     return <Navigate to="/platform/overview" replace />
+  }
+  if (isTechnicianWorkspaceUser(user)) {
+    return <Navigate to="/tech" replace />
   }
 
   return (
@@ -244,6 +259,9 @@ function HomeRedirect() {
   }
   if (user.role === 'super_admin' || user.role === 'platform_sales') {
     return <Navigate to="/platform/overview" replace />
+  }
+  if (isTechnicianWorkspaceUser(user)) {
+    return <Navigate to="/tech" replace />
   }
   return <Navigate to="/dashboard" replace />
 }
@@ -402,6 +420,12 @@ export function AppRouter() {
         <Route path="/platform/dashboard" element={<Navigate to="/platform/overview" replace />} />
 
         <Route path="/dashboard" element={<ProtectedRoute><DashboardRoute /></ProtectedRoute>} />
+
+        <Route path="/tech" element={<ProtectedRoute allowedRoles={tenantRoles}><TechLayout /></ProtectedRoute>}>
+          <Route index element={<TechJobsPage />} />
+          <Route path="jobs/:id" element={<TechJobPage />} />
+          <Route path="jobs/:id/:section" element={<TechJobPage />} />
+        </Route>
 
         <Route element={<ProtectedRoute allowedRoles={tenantRoles}><TenantShellRoute /></ProtectedRoute>}>
           {tenantRouteComponents.filter(([path]) => WHATSAPP_ENABLED || !path.includes('whatsapp')).map(([path, Component]) => (

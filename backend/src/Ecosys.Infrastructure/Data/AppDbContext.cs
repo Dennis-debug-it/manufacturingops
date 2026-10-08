@@ -552,6 +552,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Model).HasMaxLength(150);
             entity.Property(x => x.CapacityRating).HasMaxLength(100);
             entity.Property(x => x.PhysicalDescription).HasMaxLength(2000);
+            entity.Property(x => x.DecommissionReason).HasMaxLength(500);
             entity.Property(x => x.RecommendedPmFrequency).HasMaxLength(100);
             entity.Property(x => x.PmFrequencyUnit).HasMaxLength(30);
             entity.Property(x => x.MeterLabel).HasMaxLength(100);
@@ -3722,6 +3723,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entry.Entity.CommissioningDate = EnsureUtc(entry.Entity.CommissioningDate);
             entry.Entity.DecommissionDate = EnsureUtc(entry.Entity.DecommissionDate);
             entry.Entity.WarrantyExpiryDate = EnsureUtc(entry.Entity.WarrantyExpiryDate);
+            entry.Entity.WarrantyStartDate = EnsureUtc(entry.Entity.WarrantyStartDate);
             entry.Entity.LastPmDate = EnsureUtc(entry.Entity.LastPmDate);
             entry.Entity.NextPmDate = EnsureUtc(entry.Entity.NextPmDate);
         }

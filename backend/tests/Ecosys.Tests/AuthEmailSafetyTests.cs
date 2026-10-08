@@ -135,6 +135,50 @@ public sealed partial class AuthEmailSafetyTests
         Assert.Equal("account-setup-link", log.TemplateKey);
     }
 
+    [Theory]
+    [InlineData(AppRoles.Technician, true)]
+    [InlineData(AppRoles.User, false)]
+    public async Task TenantCreateUser_TechnicianRole_GetsTechnicianProfileWithoutPhoneOrGroups(string role, bool expectProfile)
+    {
+        // Without a technician profile the user never appears in the work order "Assigned To" list.
+        await using var dbContext = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        await SeedTenantAsync(dbContext, tenantId, "Acme", "admin@acme.test");
+
+        var controller = CreateUsersController(dbContext, tenantId, new FakeUserCredentialDeliveryService(dbContext, credentialSendSucceeds: true));
+
+        var actionResult = await controller.Create(
+            new CreateUserRequest(
+                "Grace Muthoni",
+                "grace@acme.test",
+                null,
+                null,
+                role,
+                null,
+                null,
+                true,
+                "TemporaryPassword",
+                null,
+                [],
+                null,
+                true,
+                []),
+            CancellationToken.None);
+
+        var response = Assert.IsType<UserResponse>(Assert.IsType<CreatedAtActionResult>(actionResult.Result).Value);
+        var technician = await dbContext.Technicians.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.UserId == response.Id);
+        if (expectProfile)
+        {
+            Assert.NotNull(technician);
+            Assert.Equal("Grace Muthoni", technician.FullName);
+            Assert.True(technician.IsActive);
+        }
+        else
+        {
+            Assert.Null(technician);
+        }
+    }
+
     [Fact]
     public async Task TenantCreateUser_SendsAccountSetupLink_InsteadOfPasswordResetTemplate()
     {

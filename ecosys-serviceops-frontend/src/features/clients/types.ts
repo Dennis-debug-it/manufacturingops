@@ -134,6 +134,11 @@ export interface Asset {
   model: string | null
   installationDate: string | null
   warrantyExpiryDate: string | null
+  warrantyStartDate: string | null
+  warrantyPeriodMonths: number | null
+  isUnderWarranty: boolean
+  /** 'Under Warranty' | 'Warranty Expiring Soon' | 'Warranty Expired' | 'No Warranty' */
+  warrantyStatus: string
   recommendedPmFrequency: string | null
   pmFrequencyValue: number | null
   pmFrequencyUnit: string | null
@@ -142,4 +147,10 @@ export interface Asset {
   nextPmDate: string | null
   notes: string | null
   status: string | null
+  decommissionDate?: string | null
+  decommissionReason?: string | null
+  hasContractCover?: boolean
+  /** 'Under Warranty' | 'Under Contract' | 'Out of Support' | 'Retired' */
+  supportStatus?: string
+  customFieldValues?: { fieldDefinitionId: string; value: string }[]
 }

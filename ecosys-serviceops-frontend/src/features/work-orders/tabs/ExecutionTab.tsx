@@ -5,7 +5,7 @@ import { EmptyState } from '../../../shared/components/EmptyState'
 import { Spinner } from '../../../shared/components/Spinner'
 import { usePermission } from '../../../shared/hooks/usePermission'
 import { cn } from '../../../shared/utils/cn'
-import { useChecklist, useSaveExecutionNotes, useUpdateChecklistItem } from '../api'
+import { useChecklist, useExecutionBundle, useSaveExecutionNotes, useUpdateChecklistItem } from '../api'
 import type { WorkOrderChecklistItem } from '../types'
 
 const passFailOptions: Array<{ value: string; label: string; icon: typeof CheckCircle2 }> = [
@@ -118,7 +118,11 @@ export function ExecutionTab({ workOrderId }: { workOrderId: string }) {
   const canExecute = usePermission('work-orders.execute')
   const { data: checklist, isLoading, isError } = useChecklist(workOrderId)
   const saveNotes = useSaveExecutionNotes(workOrderId)
-  const [workDone, setWorkDone] = useState('')
+  const { data: bundle } = useExecutionBundle(workOrderId)
+  const savedWorkDone = bundle?.notes.workDone ?? ''
+  const [workDone, setWorkDone] = useState<string | null>(null)
+  // Show what was saved until the user starts editing.
+  const workDoneValue = workDone ?? savedWorkDone
 
   const sections = useMemo(() => {
     const items = checklist ?? []
@@ -133,9 +137,10 @@ export function ExecutionTab({ workOrderId }: { workOrderId: string }) {
   }, [checklist])
 
   const submitWorkDone = async () => {
-    if (!workDone.trim()) return
+    if (!workDoneValue.trim()) return
     try {
-      await saveNotes.mutateAsync({ workDone: workDone.trim() })
+      await saveNotes.mutateAsync({ workDone: workDoneValue.trim() })
+      setWorkDone(null)
       toast.success('Work performed notes saved')
     } catch {
       // interceptor surfaces the error toast
@@ -159,7 +164,7 @@ export function ExecutionTab({ workOrderId }: { workOrderId: string }) {
           <textarea
             id="work-done"
             disabled={!canExecute}
-            value={workDone}
+            value={workDoneValue}
             onChange={(event) => setWorkDone(event.target.value)}
             rows={5}
             placeholder="Describe the work performed…"
@@ -169,7 +174,7 @@ export function ExecutionTab({ workOrderId }: { workOrderId: string }) {
             <button
               type="button"
               onClick={submitWorkDone}
-              disabled={saveNotes.isPending || !workDone.trim()}
+              disabled={saveNotes.isPending || !workDoneValue.trim() || workDoneValue === savedWorkDone}
               className="mt-3 inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saveNotes.isPending ? 'Saving…' : 'Save'}

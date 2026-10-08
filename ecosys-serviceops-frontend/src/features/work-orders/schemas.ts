@@ -23,7 +23,6 @@ export const newWorkOrderSchema = z.object({
   priority: z.enum(['Low', 'Medium', 'High', 'Critical']),
   dueDate: z.string().optional(),
   description: z.string().max(2000, 'Description is too long').optional(),
-  assignedTechnicianId: z.string().optional(),
 })
 
 export type NewWorkOrderFormValues = z.infer<typeof newWorkOrderSchema>

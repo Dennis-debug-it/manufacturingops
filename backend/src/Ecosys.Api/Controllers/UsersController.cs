@@ -731,7 +731,11 @@ public sealed class UsersController(
                 : assignmentGroupIds.Where(x => x != Guid.Empty).Distinct().ToList()
             : [];
 
-        if (technician is null && normalizedGroupIds.Count == 0 && string.IsNullOrWhiteSpace(phoneNumber))
+        // A Technician-role user always needs a technician profile: it is what makes them selectable
+        // when creating or assigning a work order. Other roles only get one when they join a group
+        // or give a phone number for field work.
+        var isTechnicianRole = string.Equals(user.Role, AppRoles.Technician, StringComparison.OrdinalIgnoreCase);
+        if (technician is null && !isTechnicianRole && normalizedGroupIds.Count == 0 && string.IsNullOrWhiteSpace(phoneNumber))
         {
             return;
         }

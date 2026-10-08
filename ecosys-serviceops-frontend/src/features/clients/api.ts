@@ -145,6 +145,10 @@ export interface AssetListFilters {
   clientId?: string
   siteId?: string
   search?: string
+  /** Defaults to active on the server. */
+  status?: 'active' | 'inactive' | 'all'
+  /** 'out' = in service but with no warranty or contract cover. */
+  support?: 'out'
 }
 
 export function useAssets(filters?: AssetListFilters) {
@@ -159,7 +163,7 @@ export function useAssets(filters?: AssetListFilters) {
 export function useAssetsPaged(filters: AssetListFilters, page: number, pageSize: number) {
   return useQuery({
     queryKey: ['assets', 'paged', filters, page, pageSize],
-    queryFn: () => api.get<PagedResult<Asset>>(endpoints.assets.list, { clientId: filters.clientId, siteId: filters.siteId, search: filters.search, page, pageSize }),
+    queryFn: () => api.get<PagedResult<Asset>>(endpoints.assets.list, { clientId: filters.clientId, siteId: filters.siteId, search: filters.search, status: filters.status, support: filters.support, page, pageSize }),
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   })
@@ -184,8 +188,23 @@ export interface UpsertAssetPayload {
   manufacturer?: string | null
   model?: string | null
   installationDate?: string | null
+  warrantyStartDate?: string | null
+  warrantyPeriodMonths?: number | null
   warrantyExpiryDate?: string | null
+  recommendedPmFrequency?: string | null
+  pmFrequencyValue?: number | null
+  pmFrequencyUnit?: string | null
+  autoSchedulePm?: boolean
+  lastPmDate?: string | null
+  nextPmDate?: string | null
   notes?: string | null
+  // Not edited by the asset form, but sent back on update so saving the form does not clear them.
+  branchId?: string | null
+  systemId?: string | null
+  assetCategoryId?: string | null
+  ownershipType?: string | null
+  status?: string | null
+  customFieldValues?: { fieldDefinitionId: string; value: string }[]
 }
 
 export function useCreateAsset() {
@@ -204,6 +223,42 @@ export function useUpdateAsset(id: string) {
       void queryClient.invalidateQueries({ queryKey: ['assets'] })
       void queryClient.invalidateQueries({ queryKey: ['assets', id] })
     },
+  })
+}
+
+export interface RetireAssetPayload {
+  decommissionDate?: string | null
+  reason: string
+}
+
+function invalidateAssets(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: ['assets'] })
+  // Retiring stops an asset's auto PM plan.
+  void queryClient.invalidateQueries({ queryKey: ['pm-plans'] })
+}
+
+export function useRetireAsset(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: RetireAssetPayload) => api.post<Asset>(endpoints.assets.retire(id), payload),
+    onSuccess: () => invalidateAssets(queryClient),
+  })
+}
+
+export function useBulkRetireAssets() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: RetireAssetPayload & { assetIds: string[] }) =>
+      api.post<{ retired: number; skipped: number }>(endpoints.assets.bulkRetire, payload),
+    onSuccess: () => invalidateAssets(queryClient),
+  })
+}
+
+export function useReactivateAsset(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post<Asset>(endpoints.assets.reactivate(id), {}),
+    onSuccess: () => invalidateAssets(queryClient),
   })
 }
 
