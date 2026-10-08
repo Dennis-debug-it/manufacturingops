@@ -22,6 +22,8 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Knowledge', to: '/knowledge', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer'], permission: 'knowledge.view', icon: BookOpen },
   { label: 'Contracts', to: '/contracts', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'contracts.view', icon: FileText },
   { label: 'Finance', to: '/finance', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'finance.view', icon: Wallet },
+  // Self-service clock in/out, leave and timesheet for office staff who also go out on jobs.
+  { label: 'My Time & Leave', to: '/my-time', roles: ['manager', 'dispatcher', 'technician'], icon: CalendarClock },
   { label: 'Approvals', to: '/approvals', roles: ['admin', 'manager', 'finance'], icon: CheckSquare },
   { label: 'Reports', to: '/reports', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'reports.view', icon: BarChart3 },
   ...(WHATSAPP_ENABLED ? [{ label: 'WhatsApp', to: '/whatsapp', roles: ['admin', 'manager', 'dispatcher', 'viewer'] as AppRole[], permission: 'whatsapp.view', icon: MessageCircle }] : []),

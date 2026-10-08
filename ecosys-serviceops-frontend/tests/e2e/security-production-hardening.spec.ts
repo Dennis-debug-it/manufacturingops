@@ -68,7 +68,7 @@ test.describe('security and production hardening', () => {
     })
 
     await page.goto('/knowledge')
-    await page.waitForURL('**/tech')
+    await page.waitForURL('**/tech/guides')
     await expect(page.getByText('Admin escalation guide')).toHaveCount(0)
   })
 

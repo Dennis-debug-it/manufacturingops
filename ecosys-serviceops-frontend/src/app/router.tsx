@@ -10,10 +10,13 @@ import {
 import { ProtectedRoute } from '../shared/components/ProtectedRoute'
 import { Spinner } from '../shared/components/Spinner'
 import { useAuth } from '../shared/hooks/useAuth'
-import { isTechnicianWorkspaceUser } from '../shared/utils/technicianWorkspace'
+import { isTechnicianWorkspaceUser, techPathFor } from '../shared/utils/technicianWorkspace'
 import { TechLayout } from '../features/tech/TechLayout'
 import { TechJobsPage } from '../features/tech/TechJobsPage'
 import { TechJobPage } from '../features/tech/TechJobPage'
+import { TechGuidePage, TechGuidesPage } from '../features/tech/TechGuides'
+import { TechAccountPage } from '../features/tech/TechAccountPage'
+import { MyTimePage } from '../features/team/MyTimePage'
 import { AppShell } from '../shared/layout/AppShell'
 import { createModulePage, type ModulePageConfig } from '../shared/pages/ModulePage'
 import type { AppRole } from '../shared/types/auth'
@@ -221,10 +224,9 @@ const OnboardingPage = OnboardingPageReal
 function TenantShellRoute() {
   const { user } = useAuth()
   const location = useLocation()
-  // Field technicians are refused the office work-order screens by the API; send them to their jobs.
-  if (isTechnicianWorkspaceUser(user) && location.pathname.startsWith('/work-orders')) {
-    const jobId = location.pathname.match(/^\/work-orders\/([^/]+)/)?.[1]
-    return <Navigate to={jobId ? `/tech/jobs/${jobId}` : '/tech'} replace />
+  // Field technicians are refused the office screens by the API; send them to the /tech equivalent.
+  if (isTechnicianWorkspaceUser(user)) {
+    return <Navigate to={techPathFor(location.pathname)} replace />
   }
   return (
     <AppShell>
@@ -387,6 +389,8 @@ export function AppRouter() {
       ['/settings/escalation-rules', EscalationRulesSettingsPage],
       ['/settings/wo-templates', WOTemplatesSettingsPage],
       ['/approvals', MyApprovalsPage],
+      ['/my-time', MyTimePage],
+      ['/me', TechAccountPage],
       ['/onboarding', OnboardingPage],
       ['/dispatch/map', LiveMapPage],
       ['/dispatch/route/:technicianId', DailyRouteView],
@@ -425,6 +429,10 @@ export function AppRouter() {
           <Route index element={<TechJobsPage />} />
           <Route path="jobs/:id" element={<TechJobPage />} />
           <Route path="jobs/:id/:section" element={<TechJobPage />} />
+          <Route path="time" element={<MyTimePage />} />
+          <Route path="guides" element={<TechGuidesPage />} />
+          <Route path="guides/:id" element={<TechGuidePage />} />
+          <Route path="account" element={<TechAccountPage />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={tenantRoles}><TenantShellRoute /></ProtectedRoute>}>

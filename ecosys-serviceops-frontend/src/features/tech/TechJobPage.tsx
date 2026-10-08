@@ -17,11 +17,13 @@ import {
 import { useMyTechnician, useTechJob } from './api'
 import { jobPhase, myAssignmentOf, PHASE_LABEL, PHASE_TONE } from './jobState'
 import { TechFinish } from './TechFinish'
+import { TechJobGuides } from './TechGuides'
 import { TechMaterials } from './TechMaterials'
 import { TechOverview } from './TechOverview'
+import { TechParts } from './TechParts'
 import { TechPhotos } from './TechPhotos'
 
-type Section = 'overview' | 'photos' | 'complete'
+type Section = 'overview' | 'photos' | 'parts' | 'complete'
 const HOLD_TYPES = [
   { value: 'WaitingOnParts', label: 'Waiting on parts' },
   { value: 'WaitingOnClient', label: 'Waiting on client' },
@@ -48,7 +50,7 @@ function currentPosition(): Promise<{ latitude: number | null; longitude: number
 
 export function TechJobPage() {
   const { id = '', section: rawSection } = useParams<{ id: string; section?: string }>()
-  const section: Section = rawSection === 'photos' || rawSection === 'complete' ? rawSection : 'overview'
+  const section: Section = rawSection === 'photos' || rawSection === 'parts' || rawSection === 'complete' ? rawSection : 'overview'
   const navigate = useNavigate()
   const { data: job, isLoading, isError } = useTechJob(id)
   const { data: me } = useMyTechnician()
@@ -161,6 +163,7 @@ export function TechJobPage() {
   const tabs: { id: Section; label: string; to: string }[] = [
     { id: 'overview', label: 'Overview', to: `/tech/jobs/${id}` },
     { id: 'photos', label: `Photos${bundle?.photos.length ? ` (${bundle.photos.length})` : ''}`, to: `/tech/jobs/${id}/photos` },
+    { id: 'parts', label: 'Parts', to: `/tech/jobs/${id}/parts` },
     { id: 'complete', label: 'Finish', to: `/tech/jobs/${id}/complete` },
   ]
 
@@ -175,7 +178,7 @@ export function TechJobPage() {
         {phase === 'done' && job.status === 'Completed' ? <p className="text-sm text-slate-600">Completed. An administrator will review and close it.</p> : null}
       </div>
 
-      <nav className="grid grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-white p-1">
+      <nav className="grid grid-cols-4 gap-1 rounded-lg border border-slate-200 bg-white p-1">
         {tabs.map((tab) => (
           <Link key={tab.id} to={tab.to} replace className={cn('flex h-9 items-center justify-center rounded-md text-sm font-medium', section === tab.id ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600')}>
             {tab.label}
@@ -183,12 +186,18 @@ export function TechJobPage() {
         ))}
       </nav>
 
-      {section === 'overview' ? <TechOverview job={job} editable={editable} /> : null}
+      {section === 'overview' ? (
+        <>
+          <TechOverview job={job} editable={editable} />
+          <TechJobGuides workOrderId={id} />
+        </>
+      ) : null}
       {section === 'photos' ? <TechPhotos workOrderId={id} editable={editable} /> : null}
+      {section === 'parts' ? <TechParts workOrderId={id} editable={editable} /> : null}
       {section === 'complete' ? (
         <>
           <TechMaterials job={job} editable={editable} />
-          <TechFinish workOrderId={id} editable={editable} workDone={workDone} onWorkDoneChange={setWorkDoneDraft} />
+          <TechFinish workOrderId={id} workOrderNumber={job.workOrderNumber} editable={editable} workDone={workDone} onWorkDoneChange={setWorkDoneDraft} />
         </>
       ) : null}
 
