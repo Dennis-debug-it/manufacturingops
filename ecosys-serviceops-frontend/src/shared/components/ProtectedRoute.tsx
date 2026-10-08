@@ -33,9 +33,15 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
   }
 
   if (user.role !== 'super_admin' && user.role !== 'platform_sales') {
-    if (entitlements.isLoading) return <div className="p-6">Loading workspace…</div>
+    // Offline with nothing stored yet, the plan check can't finish; don't hold the screen on it
+    // (screens that need a module still say so below, and the API enforces the plan anyway).
+    const planCheckStuck = entitlements.fetchStatus === 'paused' || entitlements.isError
+    if (entitlements.isLoading && !planCheckStuck) return <div className="p-6">Loading workspace…</div>
     if (location.pathname === '/dashboard' && !entitlements.hasModule('operations') && entitlements.hasModule('finance'))
       return <Navigate to="/finance" replace />
+    if (!entitlements.canAccessPath(location.pathname) && planCheckStuck && !entitlements.data) {
+      return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-800">You're offline. This page needs a connection; it will load when you're back online.</div>
+    }
     if (!entitlements.canAccessPath(location.pathname)) return <div className="rounded-xl border border-slate-200 bg-white p-6">This feature is unavailable on your ServiceOps plan. Contact your account manager to upgrade.</div>
   }
 

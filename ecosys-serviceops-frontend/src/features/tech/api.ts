@@ -1,9 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { api, apiClient } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { Van, VanStockLine } from '../inventory/vansApi'
 import type { KnowledgeArticleListItem } from '../knowledge/types'
-import type { WorkOrder, WorkOrderServiceReportPreview } from '../work-orders/types'
+import type { WorkOrder, WorkOrderExecutionBundle, WorkOrderServiceReportPreview } from '../work-orders/types'
 
 // Keys live under 'work-orders' so every work-order mutation's invalidation refreshes them too.
 export function useTechJobs() {
@@ -129,4 +129,18 @@ export async function downloadFollowUpSourceReport(workOrderId: string, original
   link.download = `${originalNumber}-service-report.pdf`
   link.click()
   URL.revokeObjectURL(url)
+}
+
+/**
+ * Loads everything a job screen needs into the cache (and so onto the phone, see offline/persist.ts)
+ * before the technician gets there, so a job they haven't opened yet still works without signal.
+ * Keys and data match useTechJob, useExecutionBundle and useFollowUpSourceReport.
+ */
+export function prefetchJobForOffline(queryClient: QueryClient, job: WorkOrder) {
+  const staleTime = 60_000
+  void queryClient.prefetchQuery({ queryKey: ['work-orders', job.id, 'tech'], queryFn: () => api.get<WorkOrder>(endpoints.technicianJobs.detail(job.id)), staleTime })
+  void queryClient.prefetchQuery({ queryKey: ['work-orders', job.id, 'execution'], queryFn: () => api.get<WorkOrderExecutionBundle>(endpoints.workOrders.executionBundle(job.id)), staleTime })
+  if (job.followUpOfWorkOrderId) {
+    void queryClient.prefetchQuery({ queryKey: ['work-orders', job.id, 'follow-up-source-report'], queryFn: () => api.get<WorkOrderServiceReportPreview>(endpoints.workOrders.followUpSourceReport(job.id)), staleTime: 5 * 60_000 })
+  }
 }

@@ -238,8 +238,8 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             "Declined" => "Declined",
             _ => throw new BusinessRuleException("Technician response must be Accepted or Declined.")
         };
-        assignment.AcceptedAt = assignment.Status == "Accepted" ? DateTime.UtcNow : assignment.AcceptedAt;
-        assignment.DeclinedAt = assignment.Status == "Declined" ? DateTime.UtcNow : assignment.DeclinedAt;
+        assignment.AcceptedAt = assignment.Status == "Accepted" ? OccurredAt.UtcNow : assignment.AcceptedAt;
+        assignment.DeclinedAt = assignment.Status == "Declined" ? OccurredAt.UtcNow : assignment.DeclinedAt;
 
         await AddHistoryAsync(tenantId, workOrderId, assignment.Status == "Accepted" ? "TechnicianAccepted" : "TechnicianDeclined", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
         await AddEventAsync(tenantId, workOrderId, actorUserId, assignment.Status == "Accepted" ? "TechnicianAccepted" : "TechnicianDeclined", assignment.Status == "Accepted" ? "Accepted" : "AssignedToTechnician", $"{assignment.Technician?.FullName ?? "Technician"} {assignment.Status.ToLowerInvariant()} the job.", cancellationToken: cancellationToken);
@@ -254,7 +254,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.WorkOrderId == workOrderId && x.TechnicianId == request.TechnicianId, cancellationToken)
             ?? throw new BusinessRuleException("Technician is not currently assigned to this work order.");
 
-        var travelStartedAt = request.DepartedForSiteAt ?? DateTime.UtcNow;
+        var travelStartedAt = request.DepartedForSiteAt ?? OccurredAt.UtcNow;
         var openVisit = await FindOpenVisitAsync(tenantId, workOrderId, request.TechnicianId, cancellationToken);
         if (openVisit?.ArrivedAt is not null)
         {
@@ -292,7 +292,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.WorkOrderId == workOrderId && x.TechnicianId == request.TechnicianId, cancellationToken)
             ?? throw new BusinessRuleException("Arrival cannot be recorded before technician assignment.");
 
-        var arrivedAt = request.ArrivedAt ?? DateTime.UtcNow;
+        var arrivedAt = request.ArrivedAt ?? OccurredAt.UtcNow;
         var visit = await FindOpenVisitAsync(tenantId, workOrderId, request.TechnicianId, cancellationToken);
         if (visit?.ArrivedAt is not null)
         {
@@ -327,7 +327,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.WorkOrderId == workOrderId && x.TechnicianId == request.TechnicianId, cancellationToken)
             ?? throw new BusinessRuleException("Departure cannot be recorded before technician assignment.");
 
-        var departedAt = request.DepartedAt ?? DateTime.UtcNow;
+        var departedAt = request.DepartedAt ?? OccurredAt.UtcNow;
         var visit = await FindOpenVisitAsync(tenantId, workOrderId, request.TechnicianId, cancellationToken);
         if (visit is null && assignment.ArrivalAt is { } legacyArrival && (assignment.DepartureAt is null || assignment.DepartureAt < legacyArrival))
         {
@@ -479,7 +479,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             FromTechnicianId = fromTechnicianId,
             ToTechnicianId = toTechnicianId,
             PerformedByUserId = actorUserId,
-            PerformedAt = DateTime.UtcNow,
+            PerformedAt = OccurredAt.UtcNow,
             Notes = notes?.Trim()
         });
 
@@ -498,7 +498,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             Message = message,
             Latitude = latitude,
             Longitude = longitude,
-            OccurredAt = DateTime.UtcNow
+            OccurredAt = OccurredAt.UtcNow
         });
 
         await auditLogService.LogAsync(tenantId, actorUserId, $"Work order {eventType}", nameof(WorkOrder), workOrderId.ToString(), message, cancellationToken);
@@ -514,7 +514,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
 
         technician.IsTrackingActive = isTrackingActive;
         technician.ActiveWorkOrderId = activeWorkOrderId;
-        technician.LastLocationAt = DateTime.UtcNow;
+        technician.LastLocationAt = OccurredAt.UtcNow;
         technician.LastKnownLatitude = latitude;
         technician.LastKnownLongitude = longitude;
     }

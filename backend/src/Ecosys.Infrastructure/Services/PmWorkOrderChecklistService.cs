@@ -144,7 +144,7 @@ internal sealed class PmWorkOrderChecklistService(
         checklistItem.Remarks = checklistItem.TechnicianRemarksAllowed ? Normalize(remarks) : null;
         checklistItem.IsCompleted = isCompleted;
         checklistItem.CompletedByUserId = isCompleted ? actorUserId : null;
-        checklistItem.CompletedAt = isCompleted ? DateTime.UtcNow : null;
+        checklistItem.CompletedAt = isCompleted ? OccurredAt.UtcNow : null;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(

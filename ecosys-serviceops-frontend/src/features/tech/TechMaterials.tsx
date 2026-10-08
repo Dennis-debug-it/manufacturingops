@@ -3,16 +3,17 @@ import toast from 'react-hot-toast'
 import { Plus } from 'lucide-react'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { cn } from '../../shared/utils/cn'
-import { useAddMaterialUsage, useExecutionBundle } from '../work-orders/api'
 import { useMaterialOptions } from '../work-orders/pickerApi'
+import { savedMessage, useTechActions } from './offline/actions'
+import { useTechBundle } from './offline/hooks'
 import type { WorkOrder } from '../work-orders/types'
 
 const inputClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 
 /** Parts and consumables used on the job; logging one issues it from the branch's stock. */
 export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boolean }) {
-  const { data: bundle } = useExecutionBundle(job.id)
-  const addUsage = useAddMaterialUsage(job.id)
+  const { data: bundle } = useTechBundle(job.id)
+  const actions = useTechActions()
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 250)
   const { data: options, isLoading } = useMaterialOptions(debouncedSearch)
@@ -23,10 +24,10 @@ export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boo
   const qty = Number(quantity)
   const validQty = Number.isFinite(qty) && qty > 0
 
-  const log = async (materialItemId: string, quantityUsed: number, label: string) => {
+  const log = async (materialItemId: string, quantityUsed: number, label: string, unitOfMeasure: string | null = null) => {
     try {
-      await addUsage.mutateAsync({ materialItemId, quantityUsed, assetId: job.assetId })
-      toast.success(`Logged ${quantityUsed} × ${label}`)
+      const result = await actions.logMaterial(job, { materialItemId, quantityUsed, assetId: job.assetId, materialName: label, unitOfMeasure })
+      toast.success(savedMessage(`Logged ${quantityUsed} × ${label}`, result))
       setMaterialId('')
       setQuantity('1')
       setSearch('')
@@ -63,7 +64,7 @@ export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boo
             <button
               key={planned.materialId}
               type="button"
-              disabled={addUsage.isPending}
+              disabled={actions.busy}
               onClick={() => void log(planned.materialId, planned.quantity, planned.materialName)}
               className="flex h-10 w-full items-center justify-between rounded-lg border border-dashed border-slate-300 px-3 text-sm text-slate-700 disabled:opacity-60"
             >
@@ -88,11 +89,11 @@ export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boo
             <span className="flex items-center text-sm text-slate-500">{selected?.unitOfMeasure ?? ''}</span>
             <button
               type="button"
-              disabled={!selected || !validQty || addUsage.isPending}
-              onClick={() => selected && void log(selected.id, qty, selected.itemName)}
+              disabled={!selected || !validQty || actions.busy}
+              onClick={() => selected && void log(selected.id, qty, selected.itemName, selected.unitOfMeasure)}
               className="ml-auto inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-50"
             >
-              {addUsage.isPending ? 'Logging…' : 'Log material'}
+              {actions.busy ? 'Logging…' : 'Log material'}
             </button>
           </div>
           {selected && validQty && qty > selected.quantityOnHand ? (

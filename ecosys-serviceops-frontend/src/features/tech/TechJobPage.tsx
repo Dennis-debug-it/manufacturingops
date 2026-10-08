@@ -4,17 +4,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ChevronLeft, MoreHorizontal, X } from 'lucide-react'
 import { Spinner } from '../../shared/components/Spinner'
 import { cn } from '../../shared/utils/cn'
-import {
-  useCompleteWorkOrder,
-  useExecutionBundle,
-  useHoldWorkOrder,
-  useRecordTechnicianArrival,
-  useRecordTechnicianDeparture,
-  useRecordTechnicianResponse,
-  useResumeFromHold,
-  useStartWorkOrder,
-} from '../work-orders/api'
-import { useMyTechnician, useTechJob } from './api'
+import { useMyTechnician } from './api'
+import { savedMessage, useTechActions } from './offline/actions'
+import { useJobHasQueuedActions, useTechBundle, useTechJobView } from './offline/hooks'
 import { jobPhase, myAssignmentOf, PHASE_LABEL, PHASE_TONE } from './jobState'
 import { TechFinish } from './TechFinish'
 import { TechJobGuides } from './TechGuides'
@@ -53,17 +45,11 @@ export function TechJobPage() {
   const { id = '', section: rawSection } = useParams<{ id: string; section?: string }>()
   const section: Section = rawSection === 'photos' || rawSection === 'parts' || rawSection === 'complete' ? rawSection : 'overview'
   const navigate = useNavigate()
-  const { data: job, isLoading, isError } = useTechJob(id)
+  const { data: job, isLoading, isError } = useTechJobView(id)
   const { data: me } = useMyTechnician()
-  const { data: bundle } = useExecutionBundle(id)
-
-  const respond = useRecordTechnicianResponse()
-  const arrive = useRecordTechnicianArrival()
-  const depart = useRecordTechnicianDeparture()
-  const start = useStartWorkOrder(id)
-  const hold = useHoldWorkOrder(id)
-  const resume = useResumeFromHold(id)
-  const complete = useCompleteWorkOrder(id)
+  const { data: bundle } = useTechBundle(id)
+  const actions = useTechActions()
+  const hasQueued = useJobHasQueuedActions(job)
 
   const [menuOpen, setMenuOpen] = useState(false)
   const [holdOpen, setHoldOpen] = useState(false)
@@ -87,8 +73,12 @@ export function TechJobPage() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [sheetOpen])
 
-  if (isLoading) return <Spinner label="Loading job" />
-  if (isError || !job) {
+  if (isLoading && !job) {
+    return navigator.onLine
+      ? <Spinner label="Loading job" />
+      : <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">You're offline and this job hasn't been saved on this phone yet. Open it once with a signal to keep it for offline use.</p>
+  }
+  if ((isError && !job) || !job) {
     return (
       <div className="space-y-3">
         <Link to="/tech" className="inline-flex items-center gap-1 text-sm text-slate-600"><ChevronLeft className="h-4 w-4" />My Jobs</Link>
@@ -99,14 +89,13 @@ export function TechJobPage() {
 
   const mine = myAssignmentOf(job, me?.technicianId)
   const phase = jobPhase(job, mine)
-  const busy = acting || respond.isPending || arrive.isPending || depart.isPending || start.isPending || hold.isPending || resume.isPending || complete.isPending
+  const busy = acting || actions.busy
   const editable = !['accept', 'declined', 'done'].includes(phase)
 
-  const run = async (success: string, action: () => Promise<unknown>) => {
+  const run = async (success: string, action: () => Promise<{ queued: boolean }>) => {
     setActing(true)
     try {
-      await action()
-      toast.success(success)
+      toast.success(savedMessage(success, await action()))
       return true
     } catch {
       // interceptor surfaces the error toast
@@ -126,7 +115,7 @@ export function TechJobPage() {
       document.getElementById('tech-work-done')?.focus()
       return
     }
-    if (await run('Job updated', () => complete.mutateAsync({ workDoneNotes: workDone.trim() }))) {
+    if (await run('Job updated', () => actions.complete(job, workDone.trim()))) {
       setWorkDoneDraft(null)
     }
   }
@@ -134,28 +123,28 @@ export function TechJobPage() {
   const primary: { label: string; onClick: () => void } | null = (() => {
     switch (phase) {
       case 'accept':
-        return mine ? { label: 'Accept Job', onClick: () => void run('Job accepted', () => respond.mutateAsync({ id, technicianId: mine.technicianId, response: 'Accepted' })) } : null
+        return mine ? { label: 'Accept Job', onClick: () => void run('Job accepted', () => actions.respond(job, mine.technicianId, 'Accepted')) } : null
       case 'arrive':
-        return mine ? { label: "I've Arrived", onClick: () => void run('Arrival recorded', async () => arrive.mutateAsync({ id, technicianId: mine.technicianId, ...(await currentPosition()) })) } : null
+        return mine ? { label: "I've Arrived", onClick: () => void run('Arrival recorded', async () => actions.arrive(job, mine.technicianId, await currentPosition())) } : null
       case 'start':
-        return { label: 'Start Work', onClick: () => void run('Job updated', () => start.mutateAsync()) }
+        return { label: 'Start Work', onClick: () => void run('Job updated', () => actions.start(job)) }
       case 'work':
         return { label: 'Complete', onClick: () => void finish() }
       case 'on-hold':
-        return { label: 'Resume', onClick: () => void run('Job updated', () => resume.mutateAsync()) }
+        return { label: 'Resume', onClick: () => void run('Job updated', () => actions.resume(job)) }
       default:
         return null
     }
   })()
 
   const moreActions = [
-    ...(phase === 'accept' && mine ? [{ label: 'Decline Job', danger: true, onClick: () => void run('Job declined', () => respond.mutateAsync({ id, technicianId: mine.technicianId, response: 'Declined' })) }] : []),
+    ...(phase === 'accept' && mine ? [{ label: 'Decline Job', danger: true, onClick: () => void run('Job declined', () => actions.respond(job, mine.technicianId, 'Declined')) }] : []),
     ...(['arrive', 'start', 'work'].includes(phase) ? [{ label: 'Put On Hold', onClick: () => setHoldOpen(true) }] : []),
-    ...(mine?.arrivalAt && !mine.departureAt && phase !== 'done' ? [{ label: 'Record Departure', onClick: () => void run('Departure recorded', async () => depart.mutateAsync({ id, technicianId: mine.technicianId, ...(await currentPosition()) })) }] : []),
+    ...(mine?.arrivalAt && !mine.departureAt && phase !== 'done' ? [{ label: 'Record Departure', onClick: () => void run('Departure recorded', async () => actions.depart(job, mine.technicianId, await currentPosition())) }] : []),
   ]
 
   const submitHold = async () => {
-    if (await run('Job updated', () => hold.mutateAsync({ holdType, reason: holdReason.trim() || null }))) {
+    if (await run('Job updated', () => actions.hold(job, holdType, holdReason.trim() || null))) {
       setHoldOpen(false)
       setHoldReason('')
     }
@@ -177,6 +166,7 @@ export function TechJobPage() {
         <span className={cn('inline-block rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset', PHASE_TONE[phase])}>{PHASE_LABEL[phase]}</span>
         {phase === 'on-hold' && (job.holdReason || job.holdNote) ? <p className="text-sm text-orange-700">{job.status}: {job.holdReason ?? job.holdNote}</p> : null}
         {phase === 'done' && job.status === 'Completed' ? <p className="text-sm text-slate-600">Completed. An administrator will review and close it.</p> : null}
+        {hasQueued ? <p className="text-xs font-medium text-sky-700" data-testid="job-waiting-to-sync">Changes on this job are saved on this phone and waiting to sync.</p> : null}
       </div>
 
       <nav className="grid grid-cols-4 gap-1 rounded-lg border border-slate-200 bg-white p-1">
@@ -194,7 +184,7 @@ export function TechJobPage() {
           <TechJobGuides workOrderId={id} />
         </>
       ) : null}
-      {section === 'photos' ? <TechPhotos workOrderId={id} editable={editable} /> : null}
+      {section === 'photos' ? <TechPhotos job={job} editable={editable} /> : null}
       {section === 'parts' ? <TechParts workOrderId={id} editable={editable} /> : null}
       {section === 'complete' ? (
         <>
@@ -237,8 +227,8 @@ export function TechJobPage() {
                   ))}
                 </div>
                 <textarea value={holdReason} onChange={(event) => setHoldReason(event.target.value)} rows={3} placeholder="What are you waiting for?" aria-label="Hold details" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
-                <button type="button" onClick={() => void submitHold()} disabled={hold.isPending} className="inline-flex h-12 w-full items-center justify-center rounded-lg bg-slate-900 text-sm font-semibold text-white disabled:opacity-60">
-                  {hold.isPending ? 'Saving…' : 'Confirm hold'}
+                <button type="button" onClick={() => void submitHold()} disabled={busy} className="inline-flex h-12 w-full items-center justify-center rounded-lg bg-slate-900 text-sm font-semibold text-white disabled:opacity-60">
+                  {busy ? 'Saving…' : 'Confirm hold'}
                 </button>
               </>
             ) : (

@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
-import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, MapPin, Phone, Star } from 'lucide-react'
 import { cn } from '../../shared/utils/cn'
 import { formatDate, formatDateTime, formatRelative } from '../../shared/utils/dates'
-import { useExecutionBundle, useSaveExecutionNotes, useUpdateChecklistItem } from '../work-orders/api'
 import type { WorkOrder, WorkOrderChecklistItem } from '../work-orders/types'
+import { savedMessage, useTechActions } from './offline/actions'
+import { useTechBundle } from './offline/hooks'
 
 const cardClass = 'rounded-xl border border-slate-200 bg-white p-4'
 const inputClass = 'w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
@@ -29,9 +29,8 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-function ChecklistItem({ workOrderId, item, editable }: { workOrderId: string; item: WorkOrderChecklistItem; editable: boolean }) {
-  const queryClient = useQueryClient()
-  const update = useUpdateChecklistItem(workOrderId)
+function ChecklistItem({ job, item, editable }: { job: WorkOrder; item: WorkOrderChecklistItem; editable: boolean }) {
+  const actions = useTechActions()
   const [value, setValue] = useState(item.responseValue ?? '')
   const [remarks, setRemarks] = useState(item.remarks ?? '')
   const isNumber = /number|numeric|reading/i.test(item.inputType)
@@ -41,9 +40,7 @@ function ChecklistItem({ workOrderId, item, editable }: { workOrderId: string; i
 
   const save = async (responseValue: string) => {
     try {
-      await update.mutateAsync({ itemId: item.id, responseValue, remarks: remarks.trim() || null, isCompleted: Boolean(responseValue) })
-      // The technician job carries the checklist, so refresh it too.
-      void queryClient.invalidateQueries({ queryKey: ['work-orders', workOrderId, 'tech'] })
+      await actions.answerChecklist(job, item.id, item.questionText, { responseValue, remarks: remarks.trim() || null, isCompleted: Boolean(responseValue) })
     } catch {
       // interceptor surfaces the error toast
     }
@@ -64,7 +61,7 @@ function ChecklistItem({ workOrderId, item, editable }: { workOrderId: string; i
             <button
               key={choice}
               type="button"
-              disabled={!editable || update.isPending}
+              disabled={!editable || actions.busy}
               onClick={() => { setValue(choice); void save(choice) }}
               className={cn('h-9 rounded-lg border px-3 text-sm font-medium', value === choice ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-300 bg-white text-slate-700', 'disabled:opacity-60')}
             >
@@ -83,7 +80,7 @@ function ChecklistItem({ workOrderId, item, editable }: { workOrderId: string; i
             onChange={(event) => setValue(event.target.value)}
             className={cn(inputClass, 'h-10')}
           />
-          <button type="button" disabled={!editable || update.isPending || value === (item.responseValue ?? '')} onClick={() => void save(value.trim())} className="h-10 shrink-0 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 disabled:opacity-50">Save</button>
+          <button type="button" disabled={!editable || actions.busy || value === (item.responseValue ?? '')} onClick={() => void save(value.trim())} className="h-10 shrink-0 rounded-lg border border-slate-300 px-3 text-sm font-medium text-slate-700 disabled:opacity-50">Save</button>
         </div>
       )}
       {editable && (item.technicianRemarksAllowed || (item.requiresNoteOnFail && value === 'Fail')) ? (
@@ -101,8 +98,8 @@ function ChecklistItem({ workOrderId, item, editable }: { workOrderId: string; i
 }
 
 export function TechOverview({ job, editable }: { job: WorkOrder; editable: boolean }) {
-  const { data: bundle } = useExecutionBundle(job.id)
-  const saveNotes = useSaveExecutionNotes(job.id)
+  const { data: bundle } = useTechBundle(job.id)
+  const actions = useTechActions()
   const [update, setUpdate] = useState('')
 
   const phone = job.siteContactPhone ?? job.clientContactPhone
@@ -114,8 +111,7 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
   const postUpdate = async () => {
     if (!update.trim()) return
     try {
-      await saveNotes.mutateAsync({ progressComment: update.trim() })
-      toast.success('Update saved')
+      toast.success(savedMessage('Update saved', await actions.saveNotes(job, { progressComment: update.trim() })))
       setUpdate('')
     } catch {
       // interceptor surfaces the error toast
@@ -188,7 +184,7 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
           <ul className="divide-y divide-slate-100">
             {[...job.checklistItems]
               .sort((a, b) => a.sectionOrder - b.sectionOrder || a.sortOrder - b.sortOrder)
-              .map((item) => <ChecklistItem key={item.id} workOrderId={job.id} item={item} editable={editable} />)}
+              .map((item) => <ChecklistItem key={item.id} job={job} item={item} editable={editable} />)}
           </ul>
         </Card>
       ) : null}
@@ -201,8 +197,8 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
           placeholder="Day 1: Inspected generator, found faulty AVR, awaiting replacement."
           className={cn(inputClass, 'py-2')}
         />
-        <button type="button" onClick={() => void postUpdate()} disabled={!update.trim() || saveNotes.isPending} className="mt-2 inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-50">
-          {saveNotes.isPending ? 'Saving…' : 'Save update'}
+        <button type="button" onClick={() => void postUpdate()} disabled={!update.trim() || actions.busy} className="mt-2 inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-50">
+          {actions.busy ? 'Saving…' : 'Save update'}
         </button>
         {(bundle?.progressUpdates ?? []).length > 0 ? (
           <ul className="mt-3 space-y-2 border-t border-slate-100 pt-3">

@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { endpoints } from '../api/endpoints'
 import { api } from '../api/apiClient'
+import { normalizeError } from '../api/apiError'
+import { clearOfflineCache } from '../../features/tech/offline/persist'
 import {
   clearImpersonationSession,
   clearSession,
@@ -67,13 +70,24 @@ export interface AuthProviderProps {
   children: ReactNode
 }
 
+/**
+ * Signing out forgets the cached data, including the copy kept on the phone for offline use.
+ * Queued technician actions are kept: they belong to that user and sync when they sign back in.
+ */
+function forgetOfflineData(queryClient: QueryClient) {
+  queryClient.clear()
+  void clearOfflineCache()
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const [session, setStateSession] = useState<AuthSession | null>(null)
   const [isReady, setIsReady] = useState(false)
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     setLogoutHandler(() => {
       setStateSession(null)
+      forgetOfflineData(queryClient)
       if (getImpersonationSession()) {
         clearImpersonationSession()
       } else {
@@ -83,7 +97,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     })
 
     return () => setLogoutHandler(null)
-  }, [])
+  }, [queryClient])
 
   // Another tab signing in as someone else (or out) replaces the session every tab shares. Follow it rather than
   // carry on as the old user, whose requests would now fail as unauthorized.
@@ -124,8 +138,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         } else {
           setSession(nextSession)
         }
-      } catch {
+      } catch (error) {
         if (!mounted) {
+          return
+        }
+        // No signal (a technician opening the app in the field): carry on with the stored session
+        // rather than signing them out; it is checked again on the next request that gets through.
+        if (normalizeError(error).isNetworkError) {
+          setStateSession(stored)
           return
         }
         if (impersonating) {
@@ -173,6 +193,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setAuthToken(null)
       }
       setStateSession(null)
+      forgetOfflineData(queryClient)
       if (typeof window !== 'undefined') {
         // A demo role opened from the platform goes back there to pick another; a demo login signed in with the
         // password (shown only once) is told how to get back in, rather than dropped at a bare sign-in form.
@@ -183,7 +204,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
       }
     }
-  }, [session])
+  }, [queryClient, session])
 
   const refreshSession = useCallback(async () => {
     const me = await api.get<MeResponse>(endpoints.auth.me)

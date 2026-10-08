@@ -94,6 +94,31 @@ public sealed class PreventiveMaintenanceFlowTests
         Assert.Contains("Runtime Hours", report.AnswersJson, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task CompleteAsync_SyncedFromOffline_IsDatedWhenItHappened()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var service = CreateLifecycleService(dbContext);
+        var completedOnSite = DateTime.UtcNow.AddHours(-3);
+
+        Assert.True(OccurredAt.TrySet(completedOnSite));
+        try
+        {
+            var result = await service.CompleteAsync(
+                fixture.TenantId, fixture.WorkOrderId, fixture.ActorUserId,
+                new WorkOrderCompletionRequest("Completed the monthly PM service.", "PM completed successfully."), CancellationToken.None);
+
+            Assert.Equal(completedOnSite, result.CompletedAt);
+            var statusEvent = await dbContext.WorkOrderEvents.Where(x => x.WorkOrderId == fixture.WorkOrderId && x.NewStatus == WorkOrderStatuses.Completed).SingleAsync();
+            Assert.Equal(completedOnSite, statusEvent.OccurredAt);
+        }
+        finally
+        {
+            OccurredAt.Clear();
+        }
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

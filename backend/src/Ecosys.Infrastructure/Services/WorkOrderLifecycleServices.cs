@@ -137,7 +137,7 @@ internal sealed class WorkOrderLifecycleService(
             EventType = "Comment",
             Status = NormalizeStatus(workOrder.Status),
             Message = request.Message.Trim(),
-            OccurredAt = DateTime.UtcNow
+            OccurredAt = OccurredAt.UtcNow
         };
 
         dbContext.WorkOrderEvents.Add(workOrderEvent);
@@ -152,7 +152,7 @@ internal sealed class WorkOrderLifecycleService(
 
         if (!workOrder.WorkStartedAt.HasValue)
         {
-            workOrder.WorkStartedAt = DateTime.UtcNow;
+            workOrder.WorkStartedAt = OccurredAt.UtcNow;
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -164,7 +164,7 @@ internal sealed class WorkOrderLifecycleService(
     public async Task<WorkOrder> ArriveAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderLocationRequest request, CancellationToken cancellationToken = default)
     {
         var workOrder = await LoadWorkOrderAsync(tenantId, workOrderId, cancellationToken);
-        workOrder.ArrivalAt = DateTime.UtcNow;
+        workOrder.ArrivalAt = OccurredAt.UtcNow;
 
         if (workOrder.AssignedTechnicianId.HasValue)
         {
@@ -187,7 +187,7 @@ internal sealed class WorkOrderLifecycleService(
     public async Task<WorkOrder> DepartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderLocationRequest request, CancellationToken cancellationToken = default)
     {
         var workOrder = await LoadWorkOrderAsync(tenantId, workOrderId, cancellationToken);
-        workOrder.DepartureAt = DateTime.UtcNow;
+        workOrder.DepartureAt = OccurredAt.UtcNow;
 
         if (workOrder.AssignedTechnicianId.HasValue)
         {
@@ -579,7 +579,7 @@ internal sealed class WorkOrderLifecycleService(
         await TransitionAsync(workOrder, actorUserId, WorkOrderStatuses.Completed, "Field work completed", null, cancellationToken);
 
         workOrder.WorkDoneNotes = request.WorkDoneNotes.Trim();
-        workOrder.CompletedAt = DateTime.UtcNow;
+        workOrder.CompletedAt = OccurredAt.UtcNow;
 
         if (workOrder.PmTemplateId.HasValue
             || await dbContext.WorkOrderChecklistItems.AnyAsync(x => x.TenantId == tenantId && x.WorkOrderId == workOrder.Id, cancellationToken))
@@ -1076,7 +1076,7 @@ internal sealed class WorkOrderLifecycleService(
     private async Task TransitionAsync(WorkOrder workOrder, Guid actorUserId, string targetStatus, string? reason, string? note, CancellationToken cancellationToken)
     {
         var currentStatus = NormalizeStatus(workOrder.Status);
-        var utcNow = DateTime.UtcNow;
+        var utcNow = OccurredAt.UtcNow;
         var canUseAdminOnlyTransitions = CanUseAdminOnlyLifecycleTransitions();
 
         if (!WorkOrderStatusTransitions.CanTransition(currentStatus, targetStatus, canUseAdminOnlyTransitions))
@@ -1279,7 +1279,7 @@ internal sealed class WorkOrderLifecycleService(
             Message       = message,
             Latitude      = latitude,
             Longitude     = longitude,
-            OccurredAt    = DateTime.UtcNow
+            OccurredAt    = OccurredAt.UtcNow
         });
 
         await dbContext.SaveChangesAsync(cancellationToken);

@@ -1,9 +1,14 @@
+import { useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { BookOpen, CalendarClock, ClipboardList, LogOut, UserRound } from 'lucide-react'
 import { Logo } from '../../shared/components/Logo'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { isDemoTenant } from '../../shared/demoWorkspace'
 import { cn } from '../../shared/utils/cn'
+import { usePendingActions } from './offline/hooks'
+import { OfflineStatus } from './offline/OfflineStatus'
+import { startOfflinePersistence } from './offline/persist'
 
 const SECTIONS = [
   { to: '/tech', label: 'Jobs', icon: ClipboardList, match: (path: string) => path === '/tech' || path.startsWith('/tech/jobs') },
@@ -17,8 +22,17 @@ export function TechLayout() {
   const { tenant, user, logout, isImpersonating } = useAuth()
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const queryClient = useQueryClient()
+  const pending = usePendingActions()
+  const userId = user?.userId
+
+  // Keep this technician's jobs on the phone so the app works without a signal.
+  useEffect(() => (userId ? startOfflinePersistence(queryClient, userId) : undefined), [queryClient, userId])
 
   const signOut = async () => {
+    if (pending.length > 0 && !window.confirm(`${pending.length} change${pending.length === 1 ? ' is' : 's are'} still waiting to sync. They stay on this phone and sync when you sign back in. Sign out anyway?`)) {
+      return
+    }
     const redirected = isImpersonating || isDemoTenant(tenant?.tenantId)
     await logout()
     if (!redirected) navigate('/login')
@@ -33,6 +47,7 @@ export function TechLayout() {
             <span className="truncate text-sm font-semibold text-slate-900">{tenant?.companyName ?? 'My Jobs'}</span>
           </Link>
           <div className="flex items-center gap-2">
+            <OfflineStatus />
             <span className="hidden truncate text-xs text-slate-500 sm:block">{user?.fullName}</span>
             <button type="button" onClick={() => void signOut()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
               <LogOut className="h-3.5 w-3.5" />Sign out

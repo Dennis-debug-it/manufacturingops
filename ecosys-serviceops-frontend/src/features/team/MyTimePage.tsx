@@ -7,16 +7,9 @@ import { EmptyState } from '../../shared/components/EmptyState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { formatDate, formatTime } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
-import {
-  useApplyForLeave,
-  useClockInMine,
-  useClockOutMine,
-  useLeaveTypes,
-  useMyAttendanceStatus,
-  useMyLeave,
-  useMyTimesheet,
-  useSetMyStatus,
-} from './timeAttendance/api'
+import { useApplyForLeave, useLeaveTypes, useMyLeave, useMyTimesheet } from './timeAttendance/api'
+import { savedMessage, useTechActions } from '../tech/offline/actions'
+import { useMyAttendanceView } from '../tech/offline/hooks'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -35,14 +28,18 @@ function todayIso() {
 }
 
 function ClockCard() {
-  const { data: status, isLoading, isError } = useMyAttendanceStatus()
-  const clockIn = useClockInMine()
-  const clockOut = useClockOutMine()
-  const setStatus = useSetMyStatus()
-  const busy = clockIn.isPending || clockOut.isPending || setStatus.isPending
+  // Clock in/out works offline like the technician's job actions: shown at once, synced later.
+  const { data: status, isLoading, isError } = useMyAttendanceView()
+  const actions = useTechActions()
+  const busy = actions.busy
+  const act = (done: string, action: () => Promise<{ queued: boolean }>) => {
+    action().then((result) => toast.success(savedMessage(done, result))).catch(() => {
+      // interceptor surfaces the error toast
+    })
+  }
 
-  if (isLoading) return <Spinner label="Loading your clock status" />
-  if (isError || !status) {
+  if (isLoading && !status) return <Spinner label="Loading your clock status" />
+  if ((isError && !status) || !status) {
     return (
       <EmptyState
         title="Time & attendance unavailable"
@@ -70,25 +67,25 @@ function ClockCard() {
 
       <div className="mt-4 flex flex-wrap gap-2">
         {!isClockedIn ? (
-          <button type="button" className={primaryBtn} disabled={busy} onClick={() => clockIn.mutate({}, { onSuccess: () => toast.success('Clocked in') })}>
+          <button type="button" className={primaryBtn} disabled={busy} onClick={() => act('Clocked in', actions.clockIn)}>
             <LogIn className="h-4 w-4" /> Clock In
           </button>
         ) : (
           <>
-            <button type="button" className={primaryBtn} disabled={busy} onClick={() => clockOut.mutate(undefined, { onSuccess: () => toast.success('Clocked out') })}>
+            <button type="button" className={primaryBtn} disabled={busy} onClick={() => act('Clocked out', actions.clockOut)}>
               <LogOut className="h-4 w-4" /> Clock Out
             </button>
             {status.status !== 'OnBreak' ? (
-              <button type="button" className={secondaryBtn} disabled={busy} onClick={() => setStatus.mutate({ status: 'OnBreak' }, { onSuccess: () => toast.success('On break') })}>
+              <button type="button" className={secondaryBtn} disabled={busy} onClick={() => act('On break', () => actions.setClockStatus('OnBreak'))}>
                 <Coffee className="h-4 w-4" /> Take Break
               </button>
             ) : (
-              <button type="button" className={secondaryBtn} disabled={busy} onClick={() => setStatus.mutate({ status: 'ClockedIn' }, { onSuccess: () => toast.success('Back to work') })}>
+              <button type="button" className={secondaryBtn} disabled={busy} onClick={() => act('Back to work', () => actions.setClockStatus('ClockedIn'))}>
                 <LogIn className="h-4 w-4" /> End Break
               </button>
             )}
             {status.status !== 'Travelling' ? (
-              <button type="button" className={secondaryBtn} disabled={busy} onClick={() => setStatus.mutate({ status: 'Travelling' }, { onSuccess: () => toast.success('Travelling') })}>
+              <button type="button" className={secondaryBtn} disabled={busy} onClick={() => act('Travelling', () => actions.setClockStatus('Travelling'))}>
                 <Navigation className="h-4 w-4" /> Travelling
               </button>
             ) : null}
