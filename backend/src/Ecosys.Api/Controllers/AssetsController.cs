@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
+using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
@@ -41,11 +42,14 @@ public sealed class AssetsController(
         [FromQuery] string? status,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? support = null)
     {
         userAccessService.EnsureTenantOperationalAccess();
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
-        var normalizedStatus = NormalizeStatusFilter(status);
+        var outOfSupportOnly = NormalizeSupportFilter(support);
+        // Only assets still in service can be "out of support"; retired ones are already handled.
+        var normalizedStatus = outOfSupportOnly ? "active" : NormalizeStatusFilter(status);
         var normalizedSearch = NormalizeSearch(search);
 
         var query = dbContext.Assets
@@ -104,14 +108,33 @@ public sealed class AssetsController(
 
         var ordered = query.OrderBy(x => x.AssetName);
 
+        if (outOfSupportOnly)
+        {
+            var today = DateTime.UtcNow.Date;
+            var candidates = await ordered
+                .Where(x => !x.WarrantyExpiryDate.HasValue || x.WarrantyExpiryDate.Value < today)
+                .ToListAsync(cancellationToken);
+            var contracts = await LoadSupportingContractsAsync(candidates.Select(x => x.ClientId), cancellationToken);
+            var unsupported = candidates
+                .Where(x => !IsCoveredByContract(x, contracts))
+                .Select(x => Map(x, hasContractCover: false))
+                .ToList();
+
+            return QueryablePagingExtensions.IsPagingRequested(page, pageSize)
+                ? Ok(unsupported.ToPagedResult(page, pageSize))
+                : Ok(unsupported);
+        }
+
         if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
         {
             var paged = await ordered.ToPagedResultAsync(page, pageSize, cancellationToken);
-            return Ok(paged.Map(Map));
+            var pageContracts = await LoadSupportingContractsAsync(paged.Items.Select(x => x.ClientId), cancellationToken);
+            return Ok(paged.Map(x => Map(x, IsCoveredByContract(x, pageContracts))));
         }
 
         var assets = await ordered.ToListAsync(cancellationToken);
-        return Ok(assets.Select(Map).ToList());
+        var allContracts = await LoadSupportingContractsAsync(assets.Select(x => x.ClientId), cancellationToken);
+        return Ok(assets.Select(x => Map(x, IsCoveredByContract(x, allContracts))).ToList());
     }
 
     [HttpGet("{id:guid}")]
@@ -128,12 +151,244 @@ public sealed class AssetsController(
             .Include(x => x.AssetCategory)
             .Include(x => x.CustomFieldValues)
                 .ThenInclude(x => x.FieldDefinition)
-            .Where(x => x.TenantId == TenantId && x.Status != "Inactive" && x.Id == id)
+            .Where(x => x.TenantId == TenantId && x.Id == id)
             .WhereAccessible(scope, x => x.BranchId)
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Asset was not found.");
 
-        return Ok(Map(asset));
+        return Ok(await MapWithCoverageAsync(asset, cancellationToken));
+    }
+
+    /// <summary>
+    /// Retires (decommissions) an asset that is no longer supported: it leaves the active register,
+    /// its automatic PM plan is stopped, and the date and reason are kept for history. The record
+    /// and its work order history are preserved and it can be reactivated.
+    /// </summary>
+    [HttpPost("{id:guid}/retire")]
+    public async Task<ActionResult<AssetResponse>> Retire(Guid id, [FromBody] RetireAssetRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
+        var reason = ValidateRetireRequest(request);
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+
+        var asset = await LoadAssetForResponse()
+            .Where(x => x.TenantId == TenantId && x.Id == id)
+            .WhereAccessible(scope, x => x.BranchId)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Asset was not found.");
+
+        if (string.Equals(asset.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BusinessRuleException("Asset is already retired.");
+        }
+
+        await RetireAsync(asset, request.DecommissionDate, reason, cancellationToken);
+        return Ok(await MapWithCoverageAsync(asset, cancellationToken));
+    }
+
+    /// <summary>Retires several assets at once, e.g. everything the "out of support" view lists.</summary>
+    [HttpPost("retire")]
+    public async Task<ActionResult<BulkRetireAssetsResponse>> RetireMany([FromBody] BulkRetireAssetsRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
+        var reason = ValidateRetireRequest(new RetireAssetRequest(request.DecommissionDate, request.Reason));
+        var ids = (request.AssetIds ?? []).Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            throw new BusinessRuleException("Select at least one asset to retire.");
+        }
+
+        if (ids.Count > MaxBulkRetire)
+        {
+            throw new BusinessRuleException($"Retire at most {MaxBulkRetire} assets at a time.");
+        }
+
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        var assets = await dbContext.Assets
+            .Where(x => x.TenantId == TenantId && ids.Contains(x.Id) && x.Status != "Inactive")
+            .WhereAccessible(scope, x => x.BranchId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var asset in assets)
+        {
+            await RetireAsync(asset, request.DecommissionDate, reason, cancellationToken);
+        }
+
+        return Ok(new BulkRetireAssetsResponse(assets.Count, ids.Count - assets.Count));
+    }
+
+    [HttpPost("{id:guid}/reactivate")]
+    public async Task<ActionResult<AssetResponse>> Reactivate(Guid id, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
+        await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+
+        var asset = await LoadAssetForResponse()
+            .Where(x => x.TenantId == TenantId && x.Id == id)
+            .WhereAccessible(scope, x => x.BranchId)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Asset was not found.");
+
+        if (!string.Equals(asset.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BusinessRuleException("Asset is not retired.");
+        }
+
+        asset.Status = "Active";
+        asset.DecommissionDate = null;
+        asset.DecommissionReason = null;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditLogService.LogAsync(
+            TenantId,
+            UserId,
+            "Asset reactivated",
+            nameof(Asset),
+            asset.Id.ToString(),
+            $"Reactivated asset '{asset.AssetName}'.",
+            cancellationToken);
+
+        return Ok(await MapWithCoverageAsync(asset, cancellationToken));
+    }
+
+    private const int MaxBulkRetire = 500;
+
+    private static string ValidateRetireRequest(RetireAssetRequest request)
+    {
+        var reason = request.Reason?.Trim();
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new BusinessRuleException("Give a reason for retiring the asset.");
+        }
+
+        if (request.DecommissionDate.HasValue && request.DecommissionDate.Value.Date > DateTime.UtcNow.Date.AddDays(1))
+        {
+            throw new BusinessRuleException("Decommission date cannot be in the future.");
+        }
+
+        return reason;
+    }
+
+    private async Task RetireAsync(Asset asset, DateTime? decommissionDate, string reason, CancellationToken cancellationToken)
+    {
+        asset.Status = "Inactive";
+        asset.DecommissionDate = decommissionDate ?? DateTime.UtcNow.Date;
+        asset.DecommissionReason = reason;
+        asset.AutoSchedulePm = false;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await preventiveMaintenancePlanService.SyncForAssetAsync(asset, cancellationToken);
+
+        await auditLogService.LogAsync(
+            TenantId,
+            UserId,
+            "Asset retired",
+            nameof(Asset),
+            asset.Id.ToString(),
+            $"Retired asset '{asset.AssetName}': {reason}",
+            cancellationToken);
+    }
+
+    private IQueryable<Asset> LoadAssetForResponse() =>
+        dbContext.Assets
+            .Include(x => x.Client)
+            .Include(x => x.Branch)
+            .Include(x => x.Site)
+            .Include(x => x.System)
+            .Include(x => x.AssetCategory)
+            .Include(x => x.CustomFieldValues)
+                .ThenInclude(x => x.FieldDefinition);
+
+    /// <summary>
+    /// Contracts that currently provide cover: in term (or within their grace period) and in a
+    /// lifecycle state that allows service. Mirrors the contract coverage service's eligibility
+    /// rules, without the work-order-type matching that only applies to a specific job.
+    /// </summary>
+    private async Task<List<Contract>> LoadSupportingContractsAsync(IEnumerable<Guid> clientIds, CancellationToken cancellationToken)
+    {
+        var ids = clientIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var today = DateTime.UtcNow.Date;
+        var contracts = await dbContext.Contracts
+            .AsNoTracking()
+            .Include(x => x.Sites)
+            .Include(x => x.Assets)
+            .Include(x => x.AssetCategories)
+                .ThenInclude(x => x.AssetCategory)
+            .Where(x => x.TenantId == TenantId
+                && ids.Contains(x.ClientId)
+                && !x.IsArchived
+                && x.StartDate <= today.AddDays(1)
+                && (x.Status == ContractStatus.Active
+                    || x.Status == ContractStatus.ExpiringSoon
+                    || x.Status == ContractStatus.RenewalInProgress
+                    || x.Status == ContractStatus.Expired))
+            .ToListAsync(cancellationToken);
+
+        return contracts
+            .Where(x =>
+            {
+                var withinTerm = x.StartDate.Date <= today && x.EndDate.Date >= today;
+                var withinGrace = x.EndDate.Date < today && x.GracePeriodDays > 0 && x.EndDate.Date.AddDays(x.GracePeriodDays) >= today;
+                return x.Status == ContractStatus.Expired ? withinGrace : withinTerm || withinGrace;
+            })
+            .ToList();
+    }
+
+    private static bool IsCoveredByContract(Asset asset, IReadOnlyCollection<Contract> contracts)
+    {
+        var category = asset.AssetCategory?.Name ?? asset.AssetType;
+        return contracts.Any(contract =>
+        {
+            if (contract.ClientId != asset.ClientId)
+            {
+                return false;
+            }
+
+            if (contract.Assets.Count > 0)
+            {
+                return contract.Assets.Any(x => x.AssetId == asset.Id);
+            }
+
+            if (contract.AssetCategories.Count > 0)
+            {
+                return !string.IsNullOrWhiteSpace(category) && contract.AssetCategories.Any(x =>
+                    string.Equals(x.AssetCategory?.Name, category, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(x.AssetCategoryName, category, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (contract.Sites.Count > 0)
+            {
+                return asset.SiteId.HasValue && contract.Sites.Any(x => x.SiteId == asset.SiteId.Value);
+            }
+
+            return true;
+        });
+    }
+
+    private async Task<AssetResponse> MapWithCoverageAsync(Asset asset, CancellationToken cancellationToken)
+    {
+        var contracts = await LoadSupportingContractsAsync([asset.ClientId], cancellationToken);
+        return Map(asset, IsCoveredByContract(asset, contracts));
+    }
+
+    private static bool NormalizeSupportFilter(string? support)
+    {
+        if (string.IsNullOrWhiteSpace(support))
+        {
+            return false;
+        }
+
+        return support.Trim().ToLowerInvariant() switch
+        {
+            "out" or "out-of-support" or "unsupported" => true,
+            "all" => false,
+            _ => throw new BusinessRuleException("Support filter must be out or all.")
+        };
     }
 
     [HttpPost]
@@ -220,7 +475,7 @@ public sealed class AssetsController(
         }
         await dbContext.Entry(asset).Collection(x => x.CustomFieldValues).Query().Include(x => x.FieldDefinition).LoadAsync(cancellationToken);
 
-        return CreatedAtAction(nameof(Get), new { id = asset.Id }, Map(asset));
+        return CreatedAtAction(nameof(Get), new { id = asset.Id }, await MapWithCoverageAsync(asset, cancellationToken));
     }
 
     [HttpPut("{id:guid}")]
@@ -308,7 +563,7 @@ public sealed class AssetsController(
         }
         await dbContext.Entry(asset).Collection(x => x.CustomFieldValues).Query().Include(x => x.FieldDefinition).LoadAsync(cancellationToken);
 
-        return Ok(Map(asset));
+        return Ok(await MapWithCoverageAsync(asset, cancellationToken));
     }
 
     private async Task EnsureSiteIsValidAsync(Guid clientId, Guid? siteId, CancellationToken cancellationToken)
@@ -363,6 +618,7 @@ public sealed class AssetsController(
             ?? throw new NotFoundException("Asset was not found.");
 
         asset.Status = "Inactive";
+        asset.DecommissionDate ??= DateTime.UtcNow.Date;
         asset.AutoSchedulePm = false;
         await dbContext.SaveChangesAsync(cancellationToken);
         await preventiveMaintenancePlanService.SyncForAssetAsync(asset, cancellationToken);
@@ -681,7 +937,22 @@ public sealed class AssetsController(
         }
     }
 
-    private static AssetResponse Map(Asset asset) =>
+    private static string ResolveSupportStatus(Asset asset, bool hasContractCover)
+    {
+        if (string.Equals(asset.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Retired";
+        }
+
+        if (asset.WarrantyExpiryDate.HasValue && asset.WarrantyExpiryDate.Value.Date >= DateTime.UtcNow.Date)
+        {
+            return "Under Warranty";
+        }
+
+        return hasContractCover ? "Under Contract" : "Out of Support";
+    }
+
+    private static AssetResponse Map(Asset asset, bool hasContractCover) =>
         new(
             asset.Id,
             asset.BranchId,
@@ -718,6 +989,10 @@ public sealed class AssetsController(
             asset.Notes,
             asset.Status,
             asset.CreatedAt,
+            asset.DecommissionDate,
+            asset.DecommissionReason,
+            hasContractCover,
+            ResolveSupportStatus(asset, hasContractCover),
             asset.CustomFieldValues
                 .OrderBy(x => x.FieldDefinition?.DisplayOrder ?? int.MaxValue)
                 .ThenBy(x => x.FieldDefinition?.FieldLabel)
@@ -814,7 +1089,23 @@ public sealed record AssetResponse(
     string? Notes,
     string Status,
     DateTime CreatedAt,
+    DateTime? DecommissionDate,
+    string? DecommissionReason,
+    bool HasContractCover,
+    // "Under Warranty", "Under Contract", "Out of Support", or "Retired".
+    string SupportStatus,
     IReadOnlyCollection<AssetCustomFieldValueResponse> CustomFieldValues);
+
+public sealed record RetireAssetRequest(
+    DateTime? DecommissionDate,
+    [StringLength(500)] string? Reason);
+
+public sealed record BulkRetireAssetsRequest(
+    IReadOnlyCollection<Guid>? AssetIds,
+    DateTime? DecommissionDate,
+    [StringLength(500)] string? Reason);
+
+public sealed record BulkRetireAssetsResponse(int Retired, int Skipped);
 
 public sealed record UpsertAssetCustomFieldValueRequest(
     Guid FieldDefinitionId,

@@ -20,6 +20,7 @@ public sealed class Asset : AuditableEntity, ITenantEntity
     public DateTime? InstallationDate { get; set; }
     public DateTime? CommissioningDate { get; set; }
     public DateTime? DecommissionDate { get; set; }
+    public string? DecommissionReason { get; set; }
     public DateTime? WarrantyExpiryDate { get; set; }
     public DateTime? WarrantyStartDate { get; set; }
     public int? WarrantyPeriodMonths { get; set; }

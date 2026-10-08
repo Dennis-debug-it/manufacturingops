@@ -345,6 +345,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("DecommissionDate")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DecommissionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<Guid?>("DefaultAssignmentGroupId")
                         .HasColumnType("uuid");
 

@@ -1,5 +1,6 @@
 using Ecosys.Api.Controllers;
 using Ecosys.Domain.Entities;
+using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
@@ -279,6 +280,109 @@ public sealed class AssetCategoryAssetFlowTests
         Assert.False(Ecosys.Api.Common.PmFrequencyLabelParser.TryParse("when it breaks", out _, out _));
         Assert.False(Ecosys.Api.Common.PmFrequencyLabelParser.TryParse("0 months", out _, out _));
         Assert.False(Ecosys.Api.Common.PmFrequencyLabelParser.TryParse(null, out _, out _));
+    }
+
+    [Fact]
+    public async Task Asset_Retire_ThenReactivate_KeepsRecordAndStopsAutoPm()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
+        var created = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>((await assetsController.Create(
+            new UpsertAssetRequest(
+                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                "Old UPS", "UPS-OLD", null, null, null, null, null, null,
+                null, null, null, 6, "months", true, DateTime.UtcNow.Date.AddMonths(-1), null, null, "Active", null),
+            CancellationToken.None)).Result).Value);
+
+        var retireResult = await assetsController.Retire(created.Id, new RetireAssetRequest(null, "  End of life, replaced by UPS-NEW "), CancellationToken.None);
+        var retired = Assert.IsType<AssetResponse>(Assert.IsType<OkObjectResult>(retireResult.Result).Value);
+        Assert.Equal("Inactive", retired.Status);
+        Assert.Equal("Retired", retired.SupportStatus);
+        Assert.Equal("End of life, replaced by UPS-NEW", retired.DecommissionReason);
+        Assert.Equal<DateTime?>(DateTime.UtcNow.Date, retired.DecommissionDate);
+        Assert.False(retired.AutoSchedulePm);
+
+        // Retired assets drop out of the default (active) list but can still be opened.
+        var active = Assert.IsAssignableFrom<IReadOnlyCollection<AssetResponse>>(Assert.IsType<OkObjectResult>(
+            await assetsController.GetAll(null, null, null, null, null, null, null, null, null, CancellationToken.None)).Value);
+        Assert.DoesNotContain(active, x => x.Id == created.Id);
+        Assert.IsType<OkObjectResult>((await assetsController.Get(created.Id, CancellationToken.None)).Result);
+
+        await Assert.ThrowsAsync<Ecosys.Shared.Errors.BusinessRuleException>(() =>
+            assetsController.Retire(created.Id, new RetireAssetRequest(null, "again"), CancellationToken.None));
+
+        var reactivated = Assert.IsType<AssetResponse>(Assert.IsType<OkObjectResult>(
+            (await assetsController.Reactivate(created.Id, CancellationToken.None)).Result).Value);
+        Assert.Equal("Active", reactivated.Status);
+        Assert.Null(reactivated.DecommissionDate);
+        Assert.Null(reactivated.DecommissionReason);
+    }
+
+    [Fact]
+    public async Task Asset_Retire_RequiresReason()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var asset = new Asset { TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, AssetName = "Pump", AssetCode = "P-1", Status = "Active" };
+        dbContext.Assets.Add(asset);
+        await dbContext.SaveChangesAsync();
+
+        var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
+        await Assert.ThrowsAsync<Ecosys.Shared.Errors.BusinessRuleException>(() =>
+            assetsController.Retire(asset.Id, new RetireAssetRequest(null, " "), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Assets_OutOfSupportFilter_ExcludesWarrantyAndContractCover_AndBulkRetireWorks()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var today = DateTime.UtcNow.Date;
+        Asset NewAsset(string code, DateTime? warrantyExpiry) => new()
+        {
+            TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, SiteId = fixture.Site.Id,
+            AssetName = code, AssetCode = code, Status = "Active", WarrantyExpiryDate = warrantyExpiry
+        };
+        var underWarranty = NewAsset("A-WARRANTY", today.AddMonths(6));
+        var underContract = NewAsset("A-CONTRACT", today.AddMonths(-6));
+        var unsupported = NewAsset("A-NONE", null);
+        var expiredWarranty = NewAsset("A-EXPIRED", today.AddDays(-1));
+        dbContext.Assets.AddRange(underWarranty, underContract, unsupported, expiredWarranty);
+
+        var contract = new Contract
+        {
+            TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, ContractNumber = "CT-1", Name = "Support",
+            Status = ContractStatus.Active, StartDate = today.AddMonths(-1), EndDate = today.AddMonths(11)
+        };
+        contract.Assets.Add(new ContractAsset { TenantId = fixture.Tenant.Id, ContractId = contract.Id, AssetId = underContract.Id });
+        // An expired contract (past grace) gives no cover.
+        var oldContract = new Contract
+        {
+            TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, ContractNumber = "CT-0", Name = "Old",
+            Status = ContractStatus.Expired, StartDate = today.AddYears(-2), EndDate = today.AddYears(-1)
+        };
+        oldContract.Assets.Add(new ContractAsset { TenantId = fixture.Tenant.Id, ContractId = oldContract.Id, AssetId = unsupported.Id });
+        dbContext.Contracts.AddRange(contract, oldContract);
+        await dbContext.SaveChangesAsync();
+
+        var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
+        var outOfSupport = Assert.IsAssignableFrom<IReadOnlyCollection<AssetResponse>>(Assert.IsType<OkObjectResult>(
+            await assetsController.GetAll(null, null, null, null, null, null, null, null, null, CancellationToken.None, "out")).Value);
+        Assert.Equal(new[] { "A-EXPIRED", "A-NONE" }, outOfSupport.Select(x => x.AssetCode).OrderBy(x => x).ToArray());
+        Assert.All(outOfSupport, x => Assert.Equal("Out of Support", x.SupportStatus));
+
+        var all = Assert.IsAssignableFrom<IReadOnlyCollection<AssetResponse>>(Assert.IsType<OkObjectResult>(
+            await assetsController.GetAll(null, null, null, null, null, null, null, null, null, CancellationToken.None)).Value);
+        Assert.Equal("Under Contract", all.Single(x => x.AssetCode == "A-CONTRACT").SupportStatus);
+        Assert.Equal("Under Warranty", all.Single(x => x.AssetCode == "A-WARRANTY").SupportStatus);
+
+        var bulk = Assert.IsType<BulkRetireAssetsResponse>(Assert.IsType<OkObjectResult>((await assetsController.RetireMany(
+            new BulkRetireAssetsRequest(outOfSupport.Select(x => x.Id).Append(Guid.NewGuid()).ToList(), null, "No longer under support"),
+            CancellationToken.None)).Result).Value);
+        Assert.Equal(2, bulk.Retired);
+        Assert.Equal(1, bulk.Skipped);
+        Assert.Equal(2, await dbContext.Assets.CountAsync(x => x.Status == "Inactive" && x.DecommissionReason == "No longer under support"));
     }
 
     [Fact]

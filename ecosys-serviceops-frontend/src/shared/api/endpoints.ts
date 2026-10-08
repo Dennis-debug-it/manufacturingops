@@ -143,6 +143,9 @@ export const endpoints = {
     detail: (id: string) => `/api/assets/${id}`,
     create: '/api/assets',
     update: (id: string) => `/api/assets/${id}`,
+    retire: (id: string) => `/api/assets/${id}/retire`,
+    reactivate: (id: string) => `/api/assets/${id}/reactivate`,
+    bulkRetire: '/api/assets/retire',
   },
   assetCategories: {
     list: '/api/asset-templates',

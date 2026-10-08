@@ -147,5 +147,10 @@ export interface Asset {
   nextPmDate: string | null
   notes: string | null
   status: string | null
+  decommissionDate?: string | null
+  decommissionReason?: string | null
+  hasContractCover?: boolean
+  /** 'Under Warranty' | 'Under Contract' | 'Out of Support' | 'Retired' */
+  supportStatus?: string
   customFieldValues?: { fieldDefinitionId: string; value: string }[]
 }

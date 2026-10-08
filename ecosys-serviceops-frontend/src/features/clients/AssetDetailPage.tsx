@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { differenceInDays } from 'date-fns'
 import { Link, useParams } from 'react-router-dom'
-import { Pencil } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { Archive, Pencil, RotateCcw } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
@@ -12,8 +13,9 @@ import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
-import { useAsset } from './api'
+import { useAsset, useReactivateAsset, useRetireAsset, type RetireAssetPayload } from './api'
 import { AssetFormDrawer } from './components/AssetFormDrawer'
+import { RetireAssetDialog } from './components/RetireAssetDialog'
 import type { Asset } from './types'
 
 function warrantyBadge(expiry: string | null) {
@@ -45,17 +47,43 @@ function nextPmLabel(nextPmDate: string | null) {
   return `${formatDate(nextPmDate)}${suffix}`
 }
 
+const CLOSED_WORK_ORDER_STATUS = /complete|accepted|closed|cancel|reject/i
+
 export function AssetDetailPage() {
   const { id } = useParams<{ id: string }>()
   const canEdit = usePermission('clients.edit')
+  const canManageAssets = usePermission('assets.manage')
   const { data: asset, isLoading, isError } = useAsset(id)
   const { data: workOrders } = useWorkOrders()
   const [showEditForm, setShowEditForm] = useState(false)
+  const [showRetire, setShowRetire] = useState(false)
+  const retireAsset = useRetireAsset(id ?? '')
+  const reactivateAsset = useReactivateAsset(id ?? '')
 
   const assetWorkOrders = useMemo(
     () => (workOrders ?? []).filter((wo) => wo.assetId === id),
     [workOrders, id],
   )
+  const openWorkOrderCount = assetWorkOrders.filter((wo) => !CLOSED_WORK_ORDER_STATUS.test(wo.status ?? '')).length
+
+  const retire = async (payload: RetireAssetPayload) => {
+    try {
+      await retireAsset.mutateAsync(payload)
+      toast.success('Asset retired')
+      setShowRetire(false)
+    } catch {
+      // The API client already shows the error toast; keep the dialog open to retry.
+    }
+  }
+
+  const reactivate = async () => {
+    try {
+      await reactivateAsset.mutateAsync()
+      toast.success('Asset reactivated')
+    } catch {
+      // Error toast shown by the API client.
+    }
+  }
 
   if (isLoading) {
     return <Spinner label="Loading asset" />
@@ -64,6 +92,8 @@ export function AssetDetailPage() {
   if (isError || !asset || !id) {
     return <EmptyState title="Asset unavailable" description="The asset record could not be loaded." />
   }
+
+  const isRetired = asset.status === 'Inactive'
 
   const header = (
     <PageHeader
@@ -75,11 +105,23 @@ export function AssetDetailPage() {
       ]}
       secondaryActions={
         <div className="flex items-center gap-2">
-          <StatusBadge status={asset.status ?? 'Active'} />
-          {warrantyBadge(asset.warrantyExpiryDate)}
-          {canEdit ? (
+          <StatusBadge status={isRetired ? 'Retired' : asset.status ?? 'Active'} />
+          {isRetired ? null : asset.supportStatus === 'Under Contract' || asset.supportStatus === 'Out of Support'
+            ? <StatusBadge status={asset.supportStatus} />
+            : warrantyBadge(asset.warrantyExpiryDate)}
+          {canEdit && !isRetired ? (
             <button type="button" onClick={() => setShowEditForm(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
               <Pencil className="h-3.5 w-3.5" />Edit
+            </button>
+          ) : null}
+          {canManageAssets && !isRetired ? (
+            <button type="button" onClick={() => setShowRetire(true)} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 text-sm font-medium text-rose-700 transition hover:bg-rose-50">
+              <Archive className="h-3.5 w-3.5" />Retire
+            </button>
+          ) : null}
+          {canManageAssets && isRetired ? (
+            <button type="button" disabled={reactivateAsset.isPending} onClick={() => void reactivate()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60">
+              <RotateCcw className="h-3.5 w-3.5" />{reactivateAsset.isPending ? 'Reactivating…' : 'Reactivate'}
             </button>
           ) : null}
         </div>
@@ -97,6 +139,14 @@ export function AssetDetailPage() {
           label: 'Specifications',
           content: (
             <SummarySection title="Specifications" description="Asset identity, location, maintenance, and warranty details.">
+              {isRetired ? (
+                <div className="mb-4 rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  <span className="font-semibold text-slate-900">Retired</span>
+                  {asset.decommissionDate ? <> on {formatDate(asset.decommissionDate)}</> : null}
+                  {asset.decommissionReason ? <> — {asset.decommissionReason}</> : null}.
+                  {' '}It is hidden from the active register and has no automatic PM scheduling.
+                </div>
+              ) : null}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {[
                   ['Client', asset.clientName ?? '—'],
@@ -130,9 +180,10 @@ export function AssetDetailPage() {
                 ))}
               </div>
               <h3 className="mt-6 text-sm font-semibold text-slate-900">Warranty</h3>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 {[
                   ['Under Warranty', asset.warrantyExpiryDate ? (asset.isUnderWarranty ? 'Yes' : 'No — expired') : 'No'],
+                  ['Contract Cover', asset.hasContractCover ? 'Yes' : 'No'],
                   ['Warranty Period', asset.warrantyPeriodMonths ? `${asset.warrantyPeriodMonths} month${asset.warrantyPeriodMonths === 1 ? '' : 's'}` : '—'],
                   ['Warranty Start', asset.warrantyStartDate ? formatDate(asset.warrantyStartDate) : '—'],
                   ['Warranty Expiry', asset.warrantyExpiryDate ? formatDate(asset.warrantyExpiryDate) : '—'],
@@ -193,6 +244,16 @@ export function AssetDetailPage() {
       ]}
     />
     <AssetFormDrawer open={showEditForm} onClose={() => setShowEditForm(false)} asset={asset} />
+    <RetireAssetDialog
+      open={showRetire}
+      count={1}
+      assetName={asset.assetName}
+      openWorkOrders={openWorkOrderCount}
+      defaultReason={asset.supportStatus === 'Out of Support' ? 'No longer under support' : ''}
+      submitting={retireAsset.isPending}
+      onCancel={() => setShowRetire(false)}
+      onConfirm={(payload) => void retire(payload)}
+    />
     </>
   )
 }

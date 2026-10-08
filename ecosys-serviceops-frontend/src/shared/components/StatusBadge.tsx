@@ -7,6 +7,9 @@ export interface StatusBadgeProps {
 
 function resolveVariant(status: string): BadgeTone {
   const normalized = status.toLowerCase()
+  if (normalized === 'out of support') return 'danger'
+  if (normalized === 'under contract') return 'success'
+  if (normalized === 'retired') return 'neutral'
   if (normalized.includes('warranty')) {
     if (normalized.includes('expired')) return 'danger'
     if (normalized.includes('expiring')) return 'warning'
