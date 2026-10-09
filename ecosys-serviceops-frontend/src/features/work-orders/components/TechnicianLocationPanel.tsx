@@ -62,7 +62,10 @@ export function TechnicianLocationPanel({ workOrder }: { workOrder: WorkOrder })
           scrollWheelZoom={false}
           {...(bounds.length > 1 ? { bounds } : {})}
         >
-          <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                // The site sends no referrer (nginx Referrer-Policy); OpenStreetMap refuses tile
+                // requests without one, so the tiles alone say which site they are for.
+                referrerPolicy="strict-origin-when-cross-origin" />
           <Marker position={techPosition} icon={technicianPinIcon(technician?.status ?? 'on-job')}>
             <Popup>{technician?.fullName ?? 'Technician'}</Popup>
           </Marker>

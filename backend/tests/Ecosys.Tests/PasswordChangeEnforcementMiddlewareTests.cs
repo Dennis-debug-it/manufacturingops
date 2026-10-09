@@ -15,6 +15,7 @@ public sealed class PasswordChangeEnforcementMiddlewareTests
     [Theory]
     [InlineData("POST", "/api/auth/change-password", true)]
     [InlineData("POST", "/api/auth/logout", true)]
+    [InlineData("POST", "/api/auth/login", true)]
     [InlineData("GET", "/api/auth/me", false)]
     [InlineData("GET", "/api/workorders", false)]
     public async Task RestrictedToken_OnlyReachesChangePasswordAndLogout(string method, string path, bool allowed)

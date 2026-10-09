@@ -42,10 +42,12 @@ interface PreferentialRate {
 }
 
 function usePreferentialRatesForClient(clientId: string | undefined) {
+  // The API only shows rates to people with the finance rates permission.
+  const canViewRates = usePermission('finance.rates.view')
   return useQuery({
     queryKey: ['finance', 'preferential-rates', clientId],
     queryFn: () => api.get<PreferentialRate[]>(endpoints.finance.preferentialRates),
-    enabled: Boolean(clientId),
+    enabled: Boolean(clientId) && canViewRates,
     select: (data) => data.filter((rate) => rate.clientId === clientId),
   })
 }

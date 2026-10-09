@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
+import { usePermission } from '../../shared/hooks/usePermission'
 import type { PagedResult } from '../../shared/types/pagination'
 import type {
   RelatedWorkOrders,
@@ -715,6 +716,7 @@ export function useResumeFromHold(id: string) {
 
 // Work order templates
 export function useWorkOrderTemplates(params?: { jobType?: string; search?: string; activeOnly?: boolean }) {
+  const canCreate = usePermission('work-orders.create')
   return useQuery({
     queryKey: ['work-order-templates', params ?? {}],
     queryFn: () =>
@@ -724,6 +726,8 @@ export function useWorkOrderTemplates(params?: { jobType?: string; search?: stri
         activeOnly: params?.activeOnly,
       }),
     staleTime: 30_000,
+    // The API only lists templates to people who can create work orders.
+    enabled: canCreate,
   })
 }
 

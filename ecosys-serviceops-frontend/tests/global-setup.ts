@@ -9,7 +9,7 @@ export default async function globalSetup() {
   const timeout = setTimeout(() => controller.abort(), 5000)
 
   try {
-    const response = await fetch(`${E2E_API_BASE_URL.replace(/\/+$/, '')}/health`, {
+    const response = await fetch(`${E2E_API_BASE_URL.replace(/\/+$/, '')}/health/live`, {
       signal: controller.signal,
     })
     if (!response.ok) {

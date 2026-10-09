@@ -124,17 +124,11 @@ public sealed class TenantEmailDeliveryController(
         return Ok(result);
     }
 
-    private async Task<EmailSetting> GetOrCreateAsync(CancellationToken cancellationToken)
-    {
-        var setting = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
-        if (setting is not null) return setting;
-
-        var tenant = await dbContext.Tenants.SingleAsync(x => x.Id == TenantId, cancellationToken);
-        setting = TenantEmailIdentity.Create(tenant);
-        dbContext.EmailSettings.Add(setting);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return setting;
-    }
+    private Task<EmailSetting> GetOrCreateAsync(CancellationToken cancellationToken) =>
+        dbContext.GetOrCreateAsync(
+            dbContext.EmailSettings.Where(x => x.TenantId == TenantId),
+            async () => TenantEmailIdentity.Create(await dbContext.Tenants.SingleAsync(x => x.Id == TenantId, cancellationToken)),
+            cancellationToken);
 
     private static TenantEmailDeliveryResponse Map(EmailSetting setting) => new(
         setting.UseCustomSmtp,

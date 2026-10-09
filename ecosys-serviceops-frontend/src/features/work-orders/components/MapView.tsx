@@ -128,6 +128,9 @@ export function MapView({ rows }: MapViewProps) {
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                // The site sends no referrer (nginx Referrer-Policy); OpenStreetMap refuses tile
+                // requests without one, so the tiles alone say which site they are for.
+                referrerPolicy="strict-origin-when-cross-origin"
           />
           <ClusterLayer rows={located} onOpen={openWorkOrder} />
         </MapContainer>

@@ -6,6 +6,7 @@ import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
+import { useAuth } from '../../shared/hooks/useAuth'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useTechnicians } from '../team/api'
 import { useBranches } from './api'
@@ -19,7 +20,8 @@ export function VansPage() {
   const canManage = usePermission('inventory.materials.manage')
   const { data, isLoading, isError } = useVans()
   const { data: technicians } = useTechnicians()
-  const { data: branches } = useBranches()
+  // Only admins can list branches (the API refuses others); everyone else sees just "None".
+  const { data: branches } = useBranches({ enabled: useAuth().user?.role === 'admin' })
   const createVan = useCreateVan()
 
   const [showNew, setShowNew] = useState(false)

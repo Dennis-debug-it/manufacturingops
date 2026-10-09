@@ -186,7 +186,10 @@ public sealed class AuthController(
         return Ok();
     }
 
+    // An authenticated read the app makes on every page load, not a credential guess: keep it out
+    // of the sign-in limit, or a busy office behind one address gets signed out on refresh.
     [Authorize]
+    [DisableRateLimiting]
     [HttpGet("me")]
     public async Task<ActionResult<AuthenticatedContextResponse>> GetCurrentUser(CancellationToken cancellationToken)
     {

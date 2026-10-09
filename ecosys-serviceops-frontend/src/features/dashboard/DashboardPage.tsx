@@ -24,6 +24,7 @@ import { Surface } from '../../shared/components/Surface'
 import { Crystal } from '../../shared/components/Crystal'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { usePermission } from '../../shared/hooks/usePermission'
 import { formatNumber } from '../../shared/utils/format'
 import { formatRelative } from '../../shared/utils/dates'
 import { useWhatsAppConversations } from '../whatsapp/api'
@@ -57,6 +58,9 @@ const toneClasses: Record<NonNullable<StatCardDef['tone']>, string> = {
 
 export function DashboardPage() {
   const { branches } = useAuth()
+  // The executive view reads the reports and revenue APIs; offer it only to people they serve.
+  const canViewReports = usePermission('reports.view')
+  const canViewFinance = usePermission('finance.view')
   const [branchId, setBranchId] = useState('')
 
   const { data, isLoading, isError } = useQuery({
@@ -112,13 +116,15 @@ export function DashboardPage() {
               </select>
             ) : null}
             {/* The only entry point to the executive view — its route had no inbound link at all. */}
-            <Link
-              to="/dashboard/executive"
-              className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              <LineChart className="h-4 w-4" />
-              Executive View
-            </Link>
+            {canViewReports && canViewFinance ? (
+              <Link
+                to="/dashboard/executive"
+                className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                <LineChart className="h-4 w-4" />
+                Executive View
+              </Link>
+            ) : null}
           </div>
         }
       />

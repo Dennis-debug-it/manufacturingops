@@ -13,7 +13,12 @@
     <title>ECOSYS</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Replaced by the app as soon as it starts. If the app's code can't load at all, this is what
+         shows instead of a blank page (and tells us that is what happened). -->
+    <div id="root"><div style="padding:24px;font-family:system-ui,sans-serif;color:#475569;font-size:14px;line-height:1.5">
+      <p style="margin:0 0 8px;font-weight:600;color:#0f172a">Loading Ecosys…</p>
+      <p style="margin:0">If this stays here, close the app completely and open it again, or <a href="/login?reset-app=1" style="color:#0f766e">reset the app</a>.</p>
+    </div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

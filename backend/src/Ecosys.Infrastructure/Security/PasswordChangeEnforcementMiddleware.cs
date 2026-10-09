@@ -9,8 +9,9 @@ public sealed class PasswordChangeEnforcementMiddleware(
     ILogger<PasswordChangeEnforcementMiddleware> logger)
 {
     private const string PasswordChangeOnlyScope = "password_change_only";
-    // Signing out must also work, or a user who abandons the change leaves their session open.
-    private static readonly string[] AllowedPaths = ["/api/auth/change-password", "/api/auth/logout"];
+    // Signing out must also work, or a user who abandons the change leaves their session open; and
+    // signing in again (with the new password) must not be refused just because the old token came along.
+    private static readonly string[] AllowedPaths = ["/api/auth/change-password", "/api/auth/logout", "/api/auth/login"];
 
     public async Task InvokeAsync(HttpContext context)
     {

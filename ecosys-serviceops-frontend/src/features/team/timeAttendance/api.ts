@@ -226,7 +226,7 @@ export function useLeaveTypes() {
 export function useMyLeave() {
   return useQuery({
     queryKey: ['attendance', 'me', 'leave'],
-    queryFn: () => api.get<LeaveRequestItem[]>('/api/attendance/leave/mine'),
+    queryFn: () => api.get<LeaveRequestItem[]>('/api/attendance/leave/mine', undefined, { suppressGlobalErrorToast: true }),
     staleTime: 30_000,
   })
 }
@@ -254,10 +254,12 @@ export interface MyAttendanceStatus {
   lastLocation: string | null
 }
 
+// The "my" reads fail for accounts with no technician profile; the page explains that in place,
+// so they don't also raise an error pop-up.
 export function useMyAttendanceStatus() {
   return useQuery({
     queryKey: ['attendance', 'me', 'status'],
-    queryFn: () => api.get<MyAttendanceStatus>('/api/attendance/me/status'),
+    queryFn: () => api.get<MyAttendanceStatus>('/api/attendance/me/status', undefined, { suppressGlobalErrorToast: true }),
     staleTime: 15_000,
   })
 }
@@ -290,7 +292,7 @@ export function useSetMyStatus() {
 export function useMyTimesheet(view: TimesheetView = 'week', from?: string, to?: string) {
   return useQuery({
     queryKey: ['attendance', 'me', 'timesheet', view, from ?? '', to ?? ''],
-    queryFn: () => api.get<TimesheetDetail>('/api/attendance/timesheets/mine', { view, from, to }),
+    queryFn: () => api.get<TimesheetDetail>('/api/attendance/timesheets/mine', { view, from, to }, { suppressGlobalErrorToast: true }),
     staleTime: 30_000,
   })
 }

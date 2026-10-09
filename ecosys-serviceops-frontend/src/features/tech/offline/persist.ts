@@ -1,7 +1,7 @@
 import { openDB } from 'idb'
 import type { Query, QueryClient, QueryKey } from '@tanstack/react-query'
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
-import { persistQueryClient } from '@tanstack/react-query-persist-client'
+import { persistQueryClient, persistQueryClientSave, type PersistedClient, type Persister } from '@tanstack/react-query-persist-client'
 
 /**
  * Keeps what a technician needs in the field on the phone (their jobs, each job's details,
@@ -18,7 +18,7 @@ export const OFFLINE_MAX_AGE = 3 * 24 * 60 * 60 * 1000
 
 const dbPromise = () => openDB(DB_NAME, 1, { upgrade: (database) => { database.createObjectStore(STORE) } })
 
-const persister = createAsyncStoragePersister({
+const storagePersister = createAsyncStoragePersister({
   key: KEY,
   throttleTime: 1000,
   storage: {
@@ -27,6 +27,34 @@ const persister = createAsyncStoragePersister({
     removeItem: async (key) => { await (await dbPromise()).delete(STORE, key) },
   },
 })
+
+/**
+ * A refresh that fails when the signal drops leaves a query in error with its last data still
+ * shown. Store that data as the last good copy (without the error, which isn't storable) so the
+ * jobs are still there if the app is closed and reopened offline.
+ */
+export function keepLastGoodData(client: PersistedClient): PersistedClient {
+  return {
+    ...client,
+    clientState: {
+      ...client.clientState,
+      queries: client.clientState.queries.map((query) => query.state.status === 'error'
+        ? { ...query, state: { ...query.state, status: 'success', error: null, fetchStatus: 'idle' } }
+        : query),
+    },
+  }
+}
+
+const persister: Persister = {
+  persistClient: (client) => storagePersister.persistClient(keepLastGoodData(client)),
+  restoreClient: () => storagePersister.restoreClient(),
+  removeClient: () => storagePersister.removeClient(),
+}
+
+/** Queries stored on the phone: the technician's, once they have data (even if a later refresh failed). */
+function shouldStoreQuery(query: Query) {
+  return query.state.data !== undefined && isOfflineQueryKey(query.queryKey)
+}
 
 /** The technician app's queries worth having offline. */
 export function isOfflineQueryKey(key: QueryKey): boolean {
@@ -45,17 +73,23 @@ export function isOfflineQueryKey(key: QueryKey): boolean {
 
 /** Starts storing (and restores) the technician's offline data; returns the stop function. */
 export function startOfflinePersistence(queryClient: QueryClient, userId: string): () => void {
-  const [unsubscribe] = persistQueryClient({
+  const options = {
     queryClient,
     persister,
     maxAge: OFFLINE_MAX_AGE,
     // Another user's stored data is discarded rather than restored.
     buster: userId,
-    dehydrateOptions: {
-      shouldDehydrateQuery: (query: Query) => query.state.status === 'success' && isOfflineQueryKey(query.queryKey),
-    },
-  })
-  return unsubscribe
+    dehydrateOptions: { shouldDehydrateQuery: shouldStoreQuery },
+  }
+  let stopped = false
+  const [unsubscribe, restored] = persistQueryClient(options)
+  // Saving otherwise starts with the next change after the restore; jobs that loaded while it
+  // was restoring would not be stored until something else changed.
+  void restored.then(() => (stopped ? undefined : persistQueryClientSave(options))).catch(() => {})
+  return () => {
+    stopped = true
+    unsubscribe()
+  }
 }
 
 /** Removes the stored copy (sign-out). */

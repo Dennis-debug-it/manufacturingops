@@ -28,7 +28,9 @@ public sealed class PreventiveMaintenanceController(
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<PreventiveMaintenancePlanResponse>>> GetAll([FromQuery] Guid? branchId, CancellationToken cancellationToken)
     {
-        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+        // Reading the schedule is for everyone who sees work orders (the Maintenance calendar);
+        // changing it stays with settings managers.
+        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanManageSettings, PermissionNames.CanViewWorkOrders);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         var plans = await Query()
             .WhereAccessible(scope, x => x.BranchId)
@@ -41,7 +43,7 @@ public sealed class PreventiveMaintenanceController(
     [HttpGet("due")]
     public async Task<ActionResult<IReadOnlyCollection<PreventiveMaintenancePlanResponse>>> GetDue([FromQuery] Guid? branchId, CancellationToken cancellationToken)
     {
-        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanManageSettings, PermissionNames.CanViewWorkOrders);
         // "Due today" is a calendar-date decision — use the tenant's local day, not UTC, so a PM
         // due today isn't shown a day late near the UTC/local midnight boundary (F6-02).
         // NextPmDate is a timestamptz, and Npgsql only accepts UTC parameters, so the bound is the

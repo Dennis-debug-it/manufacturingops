@@ -32,16 +32,40 @@ public sealed class TemplateAndPmAccessTests
     }
 
     [Fact]
-    public async Task PreventiveMaintenance_BlocksUserWithoutManageSettings()
+    public async Task PreventiveMaintenance_WorkOrderViewersCanReadButNotChangePlans()
     {
         await using var dbContext = CreateDbContext();
         var tenant = CreateTenant();
-        var user = CreateUser(tenant.Id, "Planner Blocked", "Supervisor", AppRoles.User);
+        var user = CreateUser(tenant.Id, "Planner Reader", "Supervisor", AppRoles.User);
         dbContext.AddRange(tenant, user);
         await dbContext.SaveChangesAsync();
 
-        var tenantContext = new FakeTenantContext(tenant.Id, user.Id, user.Email, AppRoles.User, "Supervisor", isAdmin: false, permissions: [PermissionNames.CanViewWorkOrders]);
-        var controller = new PreventiveMaintenanceController(
+        var controller = CreatePmController(dbContext, new FakeTenantContext(tenant.Id, user.Id, user.Email, AppRoles.User, "Supervisor", isAdmin: false, permissions: [PermissionNames.CanViewWorkOrders]));
+
+        Assert.IsType<OkObjectResult>((await controller.GetAll(null, CancellationToken.None)).Result);
+        Assert.IsType<OkObjectResult>((await controller.GetDue(null, CancellationToken.None)).Result);
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.Create(new UpsertPreventiveMaintenancePlanRequest(Guid.NewGuid(), Guid.NewGuid(), 1, null, true, null, null, "Active"), CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.Update(Guid.NewGuid(), new UpsertPreventiveMaintenancePlanRequest(Guid.NewGuid(), Guid.NewGuid(), 1, null, true, null, null, "Active"), CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GenerateWorkOrder(Guid.NewGuid(), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PreventiveMaintenance_BlocksReadingWithoutWorkOrderOrSettingsAccess()
+    {
+        await using var dbContext = CreateDbContext();
+        var tenant = CreateTenant();
+        var user = CreateUser(tenant.Id, "No Access", "Clerk", AppRoles.User);
+        dbContext.AddRange(tenant, user);
+        await dbContext.SaveChangesAsync();
+
+        var controller = CreatePmController(dbContext, new FakeTenantContext(tenant.Id, user.Id, user.Email, AppRoles.User, "Clerk", isAdmin: false, permissions: []));
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetAll(null, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetDue(null, CancellationToken.None));
+    }
+
+    private static PreventiveMaintenanceController CreatePmController(AppDbContext dbContext, FakeTenantContext tenantContext) =>
+        new(
             dbContext,
             tenantContext,
             new PermissionAwareUserAccessService(tenantContext),
@@ -51,12 +75,6 @@ public sealed class TemplateAndPmAccessTests
             new NoOpPmChecklistService(),
             TestTimeZones.Create(dbContext),
             new NoOpLogger<PreventiveMaintenanceController>());
-
-        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetAll(null, CancellationToken.None));
-        await Assert.ThrowsAsync<ForbiddenException>(() => controller.Create(new UpsertPreventiveMaintenancePlanRequest(Guid.NewGuid(), Guid.NewGuid(), 1, null, true, null, null, "Active"), CancellationToken.None));
-        await Assert.ThrowsAsync<ForbiddenException>(() => controller.Update(Guid.NewGuid(), new UpsertPreventiveMaintenancePlanRequest(Guid.NewGuid(), Guid.NewGuid(), 1, null, true, null, null, "Active"), CancellationToken.None));
-        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GenerateWorkOrder(Guid.NewGuid(), CancellationToken.None));
-    }
 
     [Fact]
     public async Task PreventiveMaintenance_Create_NormalizesBrowserDatesToUtc()

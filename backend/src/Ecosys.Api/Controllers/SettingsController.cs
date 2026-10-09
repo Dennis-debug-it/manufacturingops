@@ -439,29 +439,20 @@ public sealed class SettingsController(
         await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
         ?? throw new NotFoundException("Tenant settings were not found.");
 
-    private async Task<EmailIntakeSetting> GetOrCreateEmailIntakeSettingAsync(CancellationToken cancellationToken)
-    {
-        var settings = await dbContext.EmailIntakeSettings.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
-        if (settings is not null)
-        {
-            return settings;
-        }
-
-        settings = new EmailIntakeSetting
-        {
-            TenantId = TenantId,
-            MailboxProvider = "IMAP",
-            Host = string.Empty,
-            Port = 993,
-            UseSsl = true,
-            DefaultPriority = "Medium",
-            CreateWorkOrderFromUnknownSender = false
-        };
-
-        dbContext.EmailIntakeSettings.Add(settings);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return settings;
-    }
+    private Task<EmailIntakeSetting> GetOrCreateEmailIntakeSettingAsync(CancellationToken cancellationToken) =>
+        dbContext.GetOrCreateAsync(
+            dbContext.EmailIntakeSettings.Where(x => x.TenantId == TenantId),
+            () => new EmailIntakeSetting
+            {
+                TenantId = TenantId,
+                MailboxProvider = "IMAP",
+                Host = string.Empty,
+                Port = 993,
+                UseSsl = true,
+                DefaultPriority = "Medium",
+                CreateWorkOrderFromUnknownSender = false
+            },
+            cancellationToken);
 
     private static void ValidateEmailIntakeRequest(EmailIntakeSettingsRequest request)
     {
