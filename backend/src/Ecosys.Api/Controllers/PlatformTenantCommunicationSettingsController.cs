@@ -207,23 +207,18 @@ public sealed class PlatformTenantCommunicationSettingsController(
         await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == tenantId && x.Id != PlatformConstants.RootTenantId, cancellationToken)
         ?? throw new NotFoundException("Tenant was not found.");
 
-    private async Task<EmailSetting> GetOrCreateTenantEmailSettingAsync(Tenant tenant, CancellationToken cancellationToken)
-    {
-        var setting = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == tenant.Id, cancellationToken);
-        if (setting is not null)
-        {
-            return setting;
-        }
-
-        // Same identity tenant provisioning creates — never a row whose sender is the tenant's contact email.
-        setting = TenantEmailIdentity.Create(tenant);
-        setting.CreatedByUserId = tenantContext.GetRequiredUserId();
-        setting.UpdatedByUserId = tenantContext.GetRequiredUserId();
-
-        dbContext.EmailSettings.Add(setting);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return setting;
-    }
+    private Task<EmailSetting> GetOrCreateTenantEmailSettingAsync(Tenant tenant, CancellationToken cancellationToken) =>
+        dbContext.GetOrCreateAsync(
+            dbContext.EmailSettings.Where(x => x.TenantId == tenant.Id),
+            () =>
+            {
+                // Same identity tenant provisioning creates — never a row whose sender is the tenant's contact email.
+                var setting = TenantEmailIdentity.Create(tenant);
+                setting.CreatedByUserId = tenantContext.GetRequiredUserId();
+                setting.UpdatedByUserId = tenantContext.GetRequiredUserId();
+                return setting;
+            },
+            cancellationToken);
 
     private async Task<List<TenantNotificationRecipient>> LoadRecipientsAsync(Guid tenantId, CancellationToken cancellationToken)
     {

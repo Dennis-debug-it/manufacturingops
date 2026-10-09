@@ -415,18 +415,12 @@ var forwardedHeadersOptions = new ForwardedHeadersOptions
 };
 
 // Defaults trust loopback only; a reverse proxy on another host must be listed in
-// ECOSYS_KNOWN_PROXIES (comma-separated IPs) or client IPs collapse to the proxy IP
-// and every user shares one auth rate-limit bucket.
-var knownProxiesEnv = Environment.GetEnvironmentVariable("ECOSYS_KNOWN_PROXIES");
-if (!string.IsNullOrWhiteSpace(knownProxiesEnv))
+// ECOSYS_KNOWN_PROXIES (comma-separated IPs or CIDR ranges) or client IPs collapse to the
+// proxy IP and every user shares one auth rate-limit bucket.
+var invalidKnownProxies = KnownProxiesConfiguration.Apply(forwardedHeadersOptions, Environment.GetEnvironmentVariable("ECOSYS_KNOWN_PROXIES"));
+foreach (var entry in invalidKnownProxies)
 {
-    foreach (var entry in knownProxiesEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-    {
-        if (System.Net.IPAddress.TryParse(entry, out var proxyAddress))
-        {
-            forwardedHeadersOptions.KnownProxies.Add(proxyAddress);
-        }
-    }
+    app.Logger.LogWarning("ECOSYS_KNOWN_PROXIES entry {Entry} is not an IP address or CIDR range and was skipped.", entry);
 }
 
 app.UseForwardedHeaders(forwardedHeadersOptions);

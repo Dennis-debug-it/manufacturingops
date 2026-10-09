@@ -812,31 +812,26 @@ public sealed class PlatformSettingsController(
             ?? new PlatformEmailSubjectRulesRecord("[Ecosys]", null, false, "Production", false, true);
     }
 
-    private async Task<EmailSetting> GetOrCreatePlatformEmailSettingAsync(CancellationToken cancellationToken)
-    {
-        var setting = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-        if (setting is not null)
-        {
-            return setting;
-        }
-
-        var tenant = await LoadPlatformTenantAsync(cancellationToken);
-        setting = new EmailSetting
-        {
-            TenantId = PlatformConstants.RootTenantId,
-            IsEnabled = true,
-            Provider = EmailDeliveryMode.Smtp.ToString(),
-            Host = "localhost",
-            Port = 587,
-            UseSsl = true,
-            SenderName = tenant.Name,
-            SenderAddress = tenant.ContactEmail ?? tenant.Email,
-            IsConfigured = false
-        };
-        dbContext.EmailSettings.Add(setting);
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return setting;
-    }
+    private Task<EmailSetting> GetOrCreatePlatformEmailSettingAsync(CancellationToken cancellationToken) =>
+        dbContext.GetOrCreateAsync(
+            dbContext.EmailSettings.Where(x => x.TenantId == PlatformConstants.RootTenantId),
+            async () =>
+            {
+                var tenant = await LoadPlatformTenantAsync(cancellationToken);
+                return new EmailSetting
+                {
+                    TenantId = PlatformConstants.RootTenantId,
+                    IsEnabled = true,
+                    Provider = EmailDeliveryMode.Smtp.ToString(),
+                    Host = "localhost",
+                    Port = 587,
+                    UseSsl = true,
+                    SenderName = tenant.Name,
+                    SenderAddress = tenant.ContactEmail ?? tenant.Email,
+                    IsConfigured = false
+                };
+            },
+            cancellationToken);
 
     private PlatformEmailSettingsResponse MapEmail(
         EmailSetting setting,

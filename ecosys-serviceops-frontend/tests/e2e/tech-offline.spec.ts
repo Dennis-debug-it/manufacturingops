@@ -44,7 +44,7 @@ test.describe('technician app offline', () => {
 
     await page.getByPlaceholder('Day 1: Inspected generator, found faulty AVR, awaiting replacement.').fill('Replaced the AVR.')
     await page.getByRole('button', { name: /save update/i }).click()
-    await expect(page.getByText('Replaced the AVR.')).toBeVisible()
+    await expect(page.getByRole('listitem').getByText('Replaced the AVR.')).toBeVisible()
 
     await page.getByRole('link', { name: 'Finish', exact: true }).click()
     await page.getByLabel(/work done/i).fill('Replaced the AVR and load-tested the generator.')
@@ -144,8 +144,8 @@ test.describe('technician app offline', () => {
     await mockTechnicianWorkOrder(page, state)
     await page.goto('/tech')
     await expect(page.getByText('WO-2026-0042')).toBeVisible()
-    // Give the stored copy a moment to be written (throttled to once a second).
-    await page.waitForTimeout(1500)
+    // Give the stored copy time to be written (throttled to once a second).
+    await page.waitForTimeout(2500)
 
     // Offline start-up: the "who am I" check fails, the job feed fails; the stored copies are used.
     await page.route(`${API}/api/**`, (route) => route.abort('internetdisconnected'))

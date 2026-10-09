@@ -27,7 +27,7 @@ Optional:
 
 If tenant credentials are not provided, tests auto-create a tenant account with random signup data.
 
-Before running `npx playwright test`, make sure the backend is reachable at `http://localhost:5072` or the configured `E2E_API_BASE_URL`. The suite now performs a `/health` precheck and fails early with a clear setup message if the API is unavailable.
+Before running `npx playwright test`, make sure the backend is reachable at `http://localhost:5072` or the configured `E2E_API_BASE_URL`. The suite now performs a `/health/live` precheck and fails early with a clear setup message if the API is unavailable.
 
 ## 3. Run tests before deployment
 

@@ -6,6 +6,7 @@ import {
   Route,
   Routes,
   useLocation,
+  useParams,
 } from 'react-router-dom'
 import { ProtectedRoute } from '../shared/components/ProtectedRoute'
 import { Spinner } from '../shared/components/Spinner'
@@ -221,6 +222,12 @@ const SettingsAuditLogsPage = SettingsAuditLogsPageReal
 const SettingsOverviewPage = SettingsOverviewPageReal
 const OnboardingPage = OnboardingPageReal
 
+/** Old link target: assets are added from the site page, so send it there rather than to a "not found" asset. */
+function SiteAssetsNewRedirect() {
+  const { id } = useParams()
+  return <Navigate to={id ? `/sites/${id}` : '/sites'} replace />
+}
+
 function TenantShellRoute() {
   const { user } = useAuth()
   const location = useLocation()
@@ -285,7 +292,7 @@ export function AppRouter() {
       ['/clients/:id/sites/new', ClientWizardPage],
       ['/sites', SitesPage],
       ['/sites/:id', SiteDetailPage],
-      ['/sites/:id/assets/new', AssetDetailPage],
+      ['/sites/:id/assets/new', SiteAssetsNewRedirect],
       ['/assets', AssetsPage],
       ['/assets/:id', AssetDetailPage],
       ['/inventory', InventoryStockPage],

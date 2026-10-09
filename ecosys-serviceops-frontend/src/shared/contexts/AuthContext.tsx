@@ -142,9 +142,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (!mounted) {
           return
         }
-        // No signal (a technician opening the app in the field): carry on with the stored session
-        // rather than signing them out; it is checked again on the next request that gets through.
-        if (normalizeError(error).isNetworkError) {
+        // Only a server that rejects the session ends it. No signal (a technician opening the app in
+        // the field), a busy server (429) or a server error: carry on with the stored session rather
+        // than signing them out; it is checked again on the next request that gets through.
+        const status = normalizeError(error).status
+        if (status !== 401 && status !== 403) {
           setStateSession(stored)
           return
         }

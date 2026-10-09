@@ -194,10 +194,11 @@ export const useCompleteStockTransfer = (id: string) => useStockTransferAction(e
 export const useCancelStockTransfer = (id: string) => useStockTransferAction(endpoints.stockTransfers.cancel(id))
 
 // Branches (used as "Locations")
-export function useBranches() {
+export function useBranches(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['branches'],
     queryFn: () => api.get<Branch[]>(endpoints.branches.list),
     staleTime: 60_000,
+    enabled: options.enabled ?? true,
   })
 }

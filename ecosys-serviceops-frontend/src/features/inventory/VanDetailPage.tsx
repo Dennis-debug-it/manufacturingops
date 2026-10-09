@@ -9,6 +9,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { StatusBadge } from '../../shared/components/StatusBadge'
+import { useAuth } from '../../shared/hooks/useAuth'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useMaterials, useBranches } from './api'
 import { useVan, useVanStock, useLoadVan, useReturnVanStock, useConsumeVanStock, useDeactivateVan, type VanStockLine } from './vansApi'
@@ -28,7 +29,8 @@ export function VanDetailPage() {
   const { data: van, isLoading, isError } = useVan(id)
   const { data: stock, isLoading: stockLoading } = useVanStock(id)
   const { data: materials } = useMaterials({ status: 'active' })
-  const { data: branches } = useBranches()
+  // Only admins can list branches (the API refuses others); everyone else sees just "None".
+  const { data: branches } = useBranches({ enabled: useAuth().user?.role === 'admin' })
 
   const loadVan = useLoadVan(id ?? '')
   const returnVan = useReturnVanStock(id ?? '')
