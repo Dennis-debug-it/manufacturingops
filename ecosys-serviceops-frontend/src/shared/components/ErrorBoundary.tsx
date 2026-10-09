@@ -1,5 +1,6 @@
 import type { ErrorInfo, ReactNode } from 'react'
 import React from 'react'
+import { recordBootError, resetApp } from '../../app/bootGuard'
 
 export interface ErrorBoundaryProps {
   children: ReactNode
@@ -7,17 +8,19 @@ export interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   hasError: boolean
+  message: string | null
 }
 
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = { hasError: false }
+  public state: ErrorBoundaryState = { hasError: false, message: null }
 
-  public static getDerivedStateFromError(): ErrorBoundaryState {
-    return { hasError: true }
+  public static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
+    return { hasError: true, message: error instanceof Error ? error.message : String(error) }
   }
 
   public componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('Unhandled React error', error, info)
+    recordBootError(error)
   }
 
   public render() {
@@ -30,12 +33,21 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             <p className="mt-2 text-sm text-slate-600">
               The page could not render correctly. Try reloading the page or return to the dashboard.
             </p>
+            {/* Shown so a screenshot of this page says what actually failed. */}
+            {this.state.message ? <p className="mt-2 break-words text-xs text-rose-700">{this.state.message}</p> : null}
             <button
               type="button"
               className="mt-6 inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
-              onClick={() => this.setState({ hasError: false })}
+              onClick={() => this.setState({ hasError: false, message: null })}
             >
               Retry
+            </button>
+            <button
+              type="button"
+              className="ml-2 mt-6 inline-flex h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700"
+              onClick={() => void resetApp()}
+            >
+              Reset app
             </button>
           </div>
         </div>

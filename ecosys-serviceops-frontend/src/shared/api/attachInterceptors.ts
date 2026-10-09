@@ -48,6 +48,10 @@ export interface AuthInterceptorConfig {
 }
 
 /** True for auth flows (sign-in, sign-up, password reset, token refresh) that handle errors themselves. */
+function isSignInRequest(url: string | undefined): boolean {
+  return Boolean(url && /\/auth\/login(\?|$)/.test(url))
+}
+
 function isAuthRequest(url: string | undefined): boolean {
   return Boolean(url && url.includes('/auth/'))
 }
@@ -84,7 +88,10 @@ function trackLicenseWarning(response: AxiosResponse | undefined) {
 export function attachAuthInterceptors(client: AxiosInstance, config: AuthInterceptorConfig) {
   client.interceptors.request.use((request: InternalAxiosRequestConfig) => {
     const token = config.getToken()
-    if (token) {
+    // Signing in starts a new session: never send the old token with it. A temporary-password
+    // token left over from the forced password change is refused for everything but that change,
+    // so carrying it here sent the user straight back to the sign-in page.
+    if (token && !isSignInRequest(request.url)) {
       request.headers.Authorization = `Bearer ${token}`
     }
     return request
