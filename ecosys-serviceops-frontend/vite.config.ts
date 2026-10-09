@@ -7,12 +7,10 @@ export default defineConfig({
   plugins: [
     react(),
     // Precache-only PWA. `generateSW` (the default strategy) emits a Workbox service worker that
-    // precaches the built shell and serves it as the navigation fallback — a real load-time win,
-    // and it keeps working. It does NOT give the app offline *writes*: every mutation goes
-    // straight to the API. There used to be a hand-written `src/pwa/sw.ts` pointed at by
-    // `srcDir`/`filename`; those options only apply to the `injectManifest` strategy, so that file
-    // was never in the bundle — and had it been, its blanket `fetch` pass-through would have
-    // disabled precaching entirely. Both it and the never-imported IndexedDB sync layer are gone.
+    // precaches the built shell and serves it as the navigation fallback, so the app opens without
+    // a signal. Offline *data and writes* are not the service worker's job: the technician app
+    // keeps its jobs in IndexedDB and queues its actions in an outbox it replays when back online
+    // (src/features/tech/offline). Office screens still need a connection.
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',

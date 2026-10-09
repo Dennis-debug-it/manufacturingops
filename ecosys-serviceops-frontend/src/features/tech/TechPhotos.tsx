@@ -1,17 +1,31 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Camera, ImagePlus } from 'lucide-react'
 import { AuthenticatedImage } from '../../shared/components/AuthenticatedImage'
 import { cn } from '../../shared/utils/cn'
 import { formatRelative } from '../../shared/utils/dates'
-import { useExecutionBundle, useUploadPhoto } from '../work-orders/api'
+import type { WorkOrder } from '../work-orders/types'
+import { savedMessage, useTechActions } from './offline/actions'
+import { useTechBundle } from './offline/hooks'
+import { isPendingPhoto, type PendingPhoto } from './offline/overlay'
 
 const CATEGORIES = ['Before', 'During', 'After'] as const
 const MAX_BYTES = 5 * 1024 * 1024
 
-export function TechPhotos({ workOrderId, editable }: { workOrderId: string; editable: boolean }) {
-  const { data: bundle } = useExecutionBundle(workOrderId)
-  const upload = useUploadPhoto(workOrderId)
+/** A photo still on the phone: shown from the stored file until it uploads. */
+function LocalPhoto({ photo, className }: { photo: PendingPhoto; className: string }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(photo.localBlob)
+    setUrl(objectUrl)
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [photo.localBlob])
+  return url ? <img src={url} alt={photo.caption} className={className} /> : <div className={className} />
+}
+
+export function TechPhotos({ job, editable }: { job: Pick<WorkOrder, 'id' | 'workOrderNumber'>; editable: boolean }) {
+  const { data: bundle } = useTechBundle(job.id)
+  const actions = useTechActions()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('During')
@@ -30,8 +44,7 @@ export function TechPhotos({ workOrderId, editable }: { workOrderId: string; edi
   const submit = async () => {
     if (!file) return
     try {
-      await upload.mutateAsync({ file, category, caption: caption.trim() || file.name })
-      toast.success('Evidence uploaded')
+      toast.success(savedMessage('Evidence uploaded', await actions.uploadPhoto(job, file, { category, caption: caption.trim() || file.name })))
       setFile(null)
       setCaption('')
       if (inputRef.current) inputRef.current.value = ''
@@ -65,8 +78,8 @@ export function TechPhotos({ workOrderId, editable }: { workOrderId: string; edi
             <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" onChange={(event) => choose(event.target.files?.[0])} />
           </label>
           <input value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Caption (optional)" aria-label="Photo caption" className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-          <button type="button" onClick={() => void submit()} disabled={!file || upload.isPending} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 text-sm font-medium text-white disabled:opacity-50">
-            {upload.isPending ? 'Uploading…' : 'Upload evidence'}
+          <button type="button" onClick={() => void submit()} disabled={!file || actions.busy} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 text-sm font-medium text-white disabled:opacity-50">
+            {actions.busy ? 'Uploading…' : 'Upload evidence'}
           </button>
         </section>
       ) : null}
@@ -77,10 +90,12 @@ export function TechPhotos({ workOrderId, editable }: { workOrderId: string; edi
         <ul className="grid grid-cols-2 gap-2">
           {photos.map((photo) => (
             <li key={photo.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <AuthenticatedImage src={photo.publicUrl ?? `/api/attachments/${photo.attachmentId}/download`} alt={photo.caption} className="h-32 w-full object-cover" />
+              {isPendingPhoto(photo)
+                ? <LocalPhoto photo={photo} className="h-32 w-full object-cover" />
+                : <AuthenticatedImage src={photo.publicUrl ?? `/api/attachments/${photo.attachmentId}/download`} alt={photo.caption} className="h-32 w-full object-cover" />}
               <div className="p-2">
                 <p className="truncate text-xs font-medium text-slate-800">{photo.caption || photo.fileName}</p>
-                <p className="text-[11px] text-slate-500">{photo.category} · {formatRelative(photo.uploadedAt)}</p>
+                <p className="text-[11px] text-slate-500">{photo.category} · {isPendingPhoto(photo) ? 'waiting to upload' : formatRelative(photo.uploadedAt)}</p>
               </div>
             </li>
           ))}

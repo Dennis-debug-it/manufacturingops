@@ -1,20 +1,32 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { ChevronRight, MapPin, Star } from 'lucide-react'
 import { Spinner } from '../../shared/components/Spinner'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useOnlineStatus } from '../../shared/hooks/useOnlineStatus'
 import { cn } from '../../shared/utils/cn'
 import { formatDate } from '../../shared/utils/dates'
-import { useMyTechnician, useTechJobs } from './api'
-import { jobPhase, myAssignmentOf, PHASE_LABEL, PHASE_TONE } from './jobState'
+import { prefetchJobForOffline, useMyTechnician } from './api'
+import { FINAL_STATUSES, jobPhase, myAssignmentOf, PHASE_LABEL, PHASE_TONE } from './jobState'
+import { useTechJobsView } from './offline/hooks'
 
 const PRIORITY_RANK: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 }
 
 export function TechJobsPage() {
   const { user } = useAuth()
-  const { data: jobs, isLoading, isError } = useTechJobs()
+  const { data: jobs, isLoading, isError, dataUpdatedAt } = useTechJobsView()
   const { data: me } = useMyTechnician()
   const [view, setView] = useState<'active' | 'done'>('active')
+  const queryClient = useQueryClient()
+  const online = useOnlineStatus()
+
+  // Each time the list refreshes online, load the open jobs' details so they work offline too.
+  useEffect(() => {
+    if (!navigator.onLine || !jobs) return
+    jobs.filter((job) => !FINAL_STATUSES.includes(job.status)).forEach((job) => prefetchJobForOffline(queryClient, job))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per server refresh, not per overlay change
+  }, [dataUpdatedAt, queryClient])
 
   const rows = useMemo(() => {
     const withPhase = (jobs ?? []).map((job) => {
@@ -56,9 +68,11 @@ export function TechJobsPage() {
         ))}
       </div>
 
-      {isLoading ? (
+      {!jobs && !online ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">You're offline and your jobs haven't been saved on this phone yet. Open the app once with a signal to keep them for offline use.</p>
+      ) : isLoading ? (
         <Spinner label="Loading your jobs" />
-      ) : isError ? (
+      ) : isError && !jobs ? (
         <p className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">Your jobs could not be loaded. Check your connection and pull to refresh.</p>
       ) : visible.length === 0 ? (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">

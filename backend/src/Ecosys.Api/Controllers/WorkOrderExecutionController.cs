@@ -83,7 +83,7 @@ public sealed partial class WorkOrderExecutionController(
                 EventType = ProgressUpdateEventType,
                 Status = WorkOrderStatuses.Normalize(workOrder.Status),
                 Message = request.ProgressComment.Trim(),
-                OccurredAt = DateTime.UtcNow
+                OccurredAt = OccurredAt.UtcNow
             });
         }
 
@@ -182,7 +182,7 @@ public sealed partial class WorkOrderExecutionController(
                 Chargeable = request.Chargeable,
                 Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
                 UsedByUserId = UserId,
-                UsedAt = request.UsedAt ?? DateTime.UtcNow
+                UsedAt = request.UsedAt ?? OccurredAt.UtcNow
             });
 
             dbContext.WorkOrderEvents.Add(new WorkOrderEvent
@@ -193,7 +193,7 @@ public sealed partial class WorkOrderExecutionController(
                 EventType = "PartUsed",
                 Status = WorkOrderStatuses.Normalize(workOrder.Status),
                 Message = $"Used {request.QuantityUsed} x {material.ItemName}.",
-                OccurredAt = DateTime.UtcNow
+                OccurredAt = OccurredAt.UtcNow
             });
 
             await dbContext.SaveChangesAsync(ct);
@@ -274,7 +274,7 @@ public sealed partial class WorkOrderExecutionController(
             Category = normalizedCategory,
             IncludeInReport = includeInReport ?? true,
             UploadedByUserId = UserId,
-            UploadedAt = DateTime.UtcNow
+            UploadedAt = OccurredAt.UtcNow
         });
 
         dbContext.WorkOrderEvents.Add(new WorkOrderEvent
@@ -285,7 +285,7 @@ public sealed partial class WorkOrderExecutionController(
             EventType = "PhotoUploaded",
             Status = WorkOrderStatuses.Normalize(workOrder.Status),
             Message = $"Uploaded a {normalizedCategory} photo.",
-            OccurredAt = DateTime.UtcNow
+            OccurredAt = OccurredAt.UtcNow
         });
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -375,7 +375,7 @@ public sealed partial class WorkOrderExecutionController(
         {
             item.IsCompleted = true;
             item.CompletedByUserId = UserId;
-            item.CompletedAt = DateTime.UtcNow;
+            item.CompletedAt = OccurredAt.UtcNow;
         }
 
         dbContext.WorkOrderPhotoEvidence.Add(new WorkOrderPhotoEvidence
@@ -387,7 +387,7 @@ public sealed partial class WorkOrderExecutionController(
             Category = "Checklist",
             IncludeInReport = true,
             UploadedByUserId = UserId,
-            UploadedAt = DateTime.UtcNow
+            UploadedAt = OccurredAt.UtcNow
         });
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -459,7 +459,7 @@ public sealed partial class WorkOrderExecutionController(
                 SignatureDataUrl = request.SignatureDataUrl.Trim(),
                 Comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim(),
                 CapturedByUserId = UserId,
-                CapturedAt = DateTime.UtcNow
+                CapturedAt = OccurredAt.UtcNow
             });
         }
         else
@@ -469,7 +469,7 @@ public sealed partial class WorkOrderExecutionController(
             existing.SignatureDataUrl = request.SignatureDataUrl.Trim();
             existing.Comment = string.IsNullOrWhiteSpace(request.Comment) ? null : request.Comment.Trim();
             existing.CapturedByUserId = UserId;
-            existing.CapturedAt = DateTime.UtcNow;
+            existing.CapturedAt = OccurredAt.UtcNow;
         }
 
         var matchingChecklistItems = await dbContext.WorkOrderChecklistItems
@@ -493,7 +493,7 @@ public sealed partial class WorkOrderExecutionController(
 
             checklistItem.IsCompleted = true;
             checklistItem.CompletedByUserId = UserId;
-            checklistItem.CompletedAt = DateTime.UtcNow;
+            checklistItem.CompletedAt = OccurredAt.UtcNow;
             checklistItem.ResponseValue = request.SignerName.Trim();
         }
 
@@ -505,7 +505,7 @@ public sealed partial class WorkOrderExecutionController(
             EventType = "SignatureCollected",
             Status = WorkOrderStatuses.Normalize(workOrder.Status),
             Message = $"Captured {request.SignatureType.ToLowerInvariant()} signature from {request.SignerName.Trim()}.",
-            OccurredAt = DateTime.UtcNow
+            OccurredAt = OccurredAt.UtcNow
         });
 
         await dbContext.SaveChangesAsync(cancellationToken);

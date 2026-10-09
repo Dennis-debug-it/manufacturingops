@@ -187,7 +187,8 @@ builder.Services.AddAuthorization(options =>
         .RequireRole(AppRoles.PortalClient).AddRequirements(new PortalSessionRequirement()));
 });
 builder.Services.AddScoped<IAuthorizationHandler, PortalSessionAuthorizationHandler>();
-builder.Services.AddControllers()
+builder.Services.AddScoped<Ecosys.Api.Offline.IdempotencyFilter>();
+builder.Services.AddControllers(options => options.Filters.AddService<Ecosys.Api.Offline.IdempotencyFilter>())
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -443,6 +444,7 @@ app.UseMiddleware<UserSessionHeartbeatMiddleware>();
 app.UseMiddleware<PasswordChangeEnforcementMiddleware>();
 app.UseMiddleware<TenantLicenseEnforcementMiddleware>();
 app.UseMiddleware<RequestMetricsMiddleware>();
+app.UseMiddleware<Ecosys.Api.Offline.OccurredAtMiddleware>();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<ServiceOpsHub>("/hubs/serviceops");

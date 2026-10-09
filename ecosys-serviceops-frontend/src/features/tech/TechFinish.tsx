@@ -5,7 +5,8 @@ import { SignaturePad } from '../../shared/components/SignaturePad'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { cn } from '../../shared/utils/cn'
 import { formatDateTime } from '../../shared/utils/dates'
-import { useCaptureSignature, useExecutionBundle } from '../work-orders/api'
+import { savedMessage, useTechActions } from './offline/actions'
+import { useTechBundle } from './offline/hooks'
 import { downloadServiceReport } from './api'
 
 const inputClass = 'w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
@@ -20,8 +21,8 @@ export interface TechFinishProps {
 
 export function TechFinish({ workOrderId, workOrderNumber, editable, workDone, onWorkDoneChange }: TechFinishProps) {
   const { user } = useAuth()
-  const { data: bundle } = useExecutionBundle(workOrderId)
-  const capture = useCaptureSignature(workOrderId)
+  const { data: bundle } = useTechBundle(workOrderId)
+  const actions = useTechActions()
   const signatures = bundle?.signatures ?? []
   const clientSigned = signatures.some((signature) => signature.signatureType === 'Client')
   const techSigned = signatures.some((signature) => signature.signatureType === 'Technician')
@@ -48,13 +49,13 @@ export function TechFinish({ workOrderId, workOrderNumber, editable, workDone, o
   const saveSignature = async () => {
     if (!dataUrl || !name) return
     try {
-      await capture.mutateAsync({
+      const result = await actions.captureSignature({ id: workOrderId, workOrderNumber }, {
         signatureType: signer,
         signerName: name,
         signerRole: signer === 'Client' ? clientRole.trim() || null : 'Technician',
         signatureDataUrl: dataUrl,
       })
-      toast.success(signer === 'Client' ? 'Client sign-off saved' : 'Your signature saved')
+      toast.success(savedMessage(signer === 'Client' ? 'Client sign-off saved' : 'Your signature saved', result))
       setDataUrl(null)
       setPadKey((key) => key + 1)
       if (signer === 'Client' && !techSigned) setSigner('Technician')
@@ -121,8 +122,8 @@ export function TechFinish({ workOrderId, workOrderNumber, editable, workDone, o
               <SignaturePad key={padKey} onChange={setDataUrl} />
             </div>
             <p className={cn('text-xs', dataUrl ? 'text-emerald-700' : 'text-slate-500')}>{dataUrl ? 'Signature captured' : 'Sign in the box above'}</p>
-            <button type="button" onClick={() => void saveSignature()} disabled={!dataUrl || !name || capture.isPending} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 text-sm font-medium text-white disabled:opacity-50">
-              {capture.isPending ? 'Saving…' : 'Save signature'}
+            <button type="button" onClick={() => void saveSignature()} disabled={!dataUrl || !name || actions.busy} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 text-sm font-medium text-white disabled:opacity-50">
+              {actions.busy ? 'Saving…' : 'Save signature'}
             </button>
           </>
         ) : null}

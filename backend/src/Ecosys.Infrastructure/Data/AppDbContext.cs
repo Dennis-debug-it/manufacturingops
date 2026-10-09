@@ -76,6 +76,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<TenantNotificationSetting> TenantNotificationSettings => Set<TenantNotificationSetting>();
     public DbSet<TenantNotificationRecipient> TenantNotificationRecipients => Set<TenantNotificationRecipient>();
     public DbSet<UserNotificationPreference> UserNotificationPreferences => Set<UserNotificationPreference>();
+    public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<EmailIntakeSetting> EmailIntakeSettings => Set<EmailIntakeSetting>();
     public DbSet<NumberingSetting> NumberingSettings => Set<NumberingSetting>();
     public DbSet<LicensePlan> LicensePlans => Set<LicensePlan>();
@@ -1448,6 +1449,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<IdempotencyRecord>(entity =>
+        {
+            entity.ToTable("idempotency_records");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Key).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Method).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.Path).HasMaxLength(500).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.UserId, x.Key }).IsUnique();
+            entity.HasIndex(x => x.CreatedAt);
         });
 
         modelBuilder.Entity<EmailIntakeSetting>(entity =>

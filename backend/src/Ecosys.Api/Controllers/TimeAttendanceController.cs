@@ -359,7 +359,7 @@ public sealed class TimeAttendanceController(
         if (await FindOpenEntryAsync(technician.Id, cancellationToken) is not null)
             throw new BusinessRuleException("You are already clocked in.");
 
-        var now = DateTime.UtcNow;
+        var now = OccurredAt.UtcNow;
         var entry = new AttendanceEntry
         {
             TenantId = TenantId,
@@ -383,7 +383,7 @@ public sealed class TimeAttendanceController(
         var entry = await FindOpenEntryAsync(technician.Id, cancellationToken)
             ?? throw new BusinessRuleException("You are not clocked in.");
 
-        var now = DateTime.UtcNow;
+        var now = OccurredAt.UtcNow < entry.ClockInAt ? entry.ClockInAt : OccurredAt.UtcNow;
         if (entry.Status == "OnBreak" && entry.BreakStartedAt is not null)
         {
             entry.BreakMinutes += (int)Math.Round((now - entry.BreakStartedAt.Value).TotalMinutes);
@@ -410,7 +410,7 @@ public sealed class TimeAttendanceController(
         var entry = await FindOpenEntryAsync(technician.Id, cancellationToken)
             ?? throw new BusinessRuleException("You are not clocked in.");
 
-        var now = DateTime.UtcNow;
+        var now = OccurredAt.UtcNow < entry.ClockInAt ? entry.ClockInAt : OccurredAt.UtcNow;
         if (entry.Status == "OnBreak" && request.Status != "OnBreak" && entry.BreakStartedAt is not null)
         {
             entry.BreakMinutes += (int)Math.Round((now - entry.BreakStartedAt.Value).TotalMinutes);

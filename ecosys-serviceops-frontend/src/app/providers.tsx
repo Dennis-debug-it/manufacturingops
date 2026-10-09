@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '../shared/contexts/AuthContext'
 import { TenantProvider } from '../shared/contexts/TenantContext'
 import { normalizeError } from '../shared/api/apiError'
+import { OutboxSyncAgent } from '../features/tech/offline/hooks'
 
 export interface ProvidersProps {
   children: ReactNode
@@ -27,6 +28,8 @@ export function Providers({ children }: ProvidersProps) {
               return failureCount < 3
             },
             staleTime: 30_000,
+            // Long enough that jobs cached for offline use survive between visits (see tech/offline/persist.ts).
+            gcTime: 24 * 60 * 60 * 1000,
             refetchOnWindowFocus: false,
           },
           mutations: {
@@ -40,6 +43,7 @@ export function Providers({ children }: ProvidersProps) {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TenantProvider>
+          <OutboxSyncAgent />
           {children}
           <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
         </TenantProvider>
