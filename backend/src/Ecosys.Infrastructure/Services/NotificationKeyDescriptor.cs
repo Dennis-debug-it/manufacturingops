@@ -26,6 +26,7 @@ public static class NotificationKeyDescriptor
         new("user.password-reset.admin",     "Admin password reset",     "Account"),
         new("tenant.onboarding",    "Workspace provisioned",             "System"),
         new("platform.lead.received", "Workspace request received",      "System"),
+        new("auth.signup.verify-email", "Self sign-up email confirmation", "Account"),
     ];
 
     public static IReadOnlyList<NotificationDescriptor> List() => All;

@@ -19,6 +19,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<PendingSignup> PendingSignups => Set<PendingSignup>();
     public DbSet<CsatSurvey> CsatSurveys => Set<CsatSurvey>();
     public DbSet<ApprovalMatrix> ApprovalMatrices => Set<ApprovalMatrix>();
     public DbSet<ApprovalLevel> ApprovalLevels => Set<ApprovalLevel>();
@@ -348,6 +349,24 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.Sessions)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PendingSignup>(entity =>
+        {
+            entity.ToTable("pending_signups");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.CompanyName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Phone).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Country).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Industry).HasMaxLength(100);
+            entity.Property(x => x.PasswordHash).IsRequired();
+            entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.CompletedAt).IsConcurrencyToken();
+            entity.Property(x => x.RequestedIp).HasMaxLength(100);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => x.Email);
         });
 
         modelBuilder.Entity<PasswordResetToken>(entity =>

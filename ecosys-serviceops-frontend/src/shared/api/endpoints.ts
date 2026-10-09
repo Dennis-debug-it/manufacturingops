@@ -34,6 +34,8 @@ export const endpoints = {
     validateInvitation: '/api/auth/validate-invitation',
     resendInvitation: '/api/auth/resend-invitation',
     changePassword: '/api/auth/change-password',
+    signupStart: '/api/auth/signup/start',
+    signupVerify: '/api/auth/signup/verify',
   },
   tenant: {
     profile: '/api/tenant/profile',

@@ -31,6 +31,8 @@ export interface AuthContextValue {
   isImpersonating: boolean
   impersonation: AuthSession['impersonation'] | null
   login: (credentials: LoginRequest) => Promise<AuthSession>
+  /** Opens a "Start free trial" confirmation link: creates the workspace and signs its owner in. */
+  completeSignup: (token: string) => Promise<AuthSession>
   logout: () => Promise<void>
   refreshSession: () => Promise<void>
 }
@@ -170,8 +172,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [])
 
-  const login = useCallback(async (credentials: LoginRequest) => {
-    const response = await api.post<LoginResponse>(endpoints.auth.login, credentials)
+  const startSession = useCallback((response: LoginResponse) => {
     const nextSession = toSession(response)
     setAuthToken(nextSession.token)
     setSession(nextSession)
@@ -179,6 +180,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setIsReady(true)
     return nextSession
   }, [])
+
+  const login = useCallback(async (credentials: LoginRequest) =>
+    startSession(await api.post<LoginResponse>(endpoints.auth.login, credentials)), [startSession])
+
+  const completeSignup = useCallback(async (token: string) =>
+    startSession(await api.post<LoginResponse>(endpoints.auth.signupVerify, { token }, { suppressGlobalErrorToast: true })), [startSession])
 
   const logout = useCallback(async () => {
     const wasImpersonating = Boolean(session?.impersonation)
@@ -229,9 +236,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isImpersonating: Boolean(session?.impersonation),
     impersonation: session?.impersonation ?? null,
     login,
+    completeSignup,
     logout,
     refreshSession,
-  }), [isReady, login, logout, refreshSession, session])
+  }), [completeSignup, isReady, login, logout, refreshSession, session])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

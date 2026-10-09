@@ -158,6 +158,29 @@ internal sealed class EmailTemplateService(AppDbContext dbContext) : IEmailTempl
                 ["fullName", "platformName", "loginUrl", "email", "temporaryPassword", "supportEmail"],
                 ["fullName", "email", "loginUrl"],
                 true),
+            ["signup-verify-email"] = new(
+                "signup-verify-email",
+                "Self sign-up: confirm email",
+                "Confirm your email to start your {{platformName}} trial",
+                """
+                <p>Hello {{fullName}},</p>
+                <p>Thanks for signing up {{companyName}} for {{platformName}}.</p>
+                <p><a href="{{verifyLink}}">Confirm your email and open your workspace</a></p>
+                <p>Your 14-day free trial starts when you open the link. It expires at {{expiresAt}}. If you did not sign up, you can ignore this message.</p>
+                <p>Need help? Contact {{supportEmail}}.</p>
+                """,
+                """
+                Hello {{fullName}},
+
+                Thanks for signing up {{companyName}} for {{platformName}}.
+                Confirm your email and open your workspace: {{verifyLink}}
+                Your 14-day free trial starts when you open the link. It expires at {{expiresAt}}.
+                If you did not sign up, you can ignore this message.
+                Need help? Contact {{supportEmail}}.
+                """,
+                ["fullName", "companyName", "platformName", "verifyLink", "supportEmail", "expiresAt"],
+                ["fullName", "verifyLink"],
+                true),
             ["password-reset-link"] = new(
                 "password-reset-link",
                 "Self-service password reset",

@@ -32,6 +32,7 @@ public sealed class EmailSubjectRuleService(AppDbContext dbContext) : IEmailSubj
             ["tenant.onboarding"] = "[Onboarding]",
             ["platform.lead.received"] = "[Lead]",
             ["auth.password-reset.requested"] = "[Security]",
+            ["auth.signup.verify-email"] = "[Account]",
             ["user.password-reset.admin"] = "[Security]",
             ["work-order.assigned"] = "[Work Order]",
             ["work-order.overdue"] = "[Work Order]",

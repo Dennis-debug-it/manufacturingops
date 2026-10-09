@@ -24,6 +24,7 @@ public sealed class Phase2GovernanceTests
         Assert.Equal(
             [
                 "auth.password-reset.requested",
+                "auth.signup.verify-email",
                 "csat.survey",
                 "invoice.sent",
                 "platform.invoice.issued",

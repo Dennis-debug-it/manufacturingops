@@ -49,7 +49,7 @@ export interface AuthInterceptorConfig {
 
 /** True for auth flows (sign-in, sign-up, password reset, token refresh) that handle errors themselves. */
 function isSignInRequest(url: string | undefined): boolean {
-  return Boolean(url && /\/auth\/login(\?|$)/.test(url))
+  return Boolean(url && /\/auth\/(login|signup\/(start|verify))(\?|$)/.test(url))
 }
 
 function isAuthRequest(url: string | undefined): boolean {

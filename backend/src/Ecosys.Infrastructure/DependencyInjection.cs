@@ -71,6 +71,8 @@ public static class DependencyInjection
         services.AddScoped<IUserCredentialDeliveryService, UserCredentialDeliveryService>();
         services.AddScoped<ITemporaryPasswordService, TemporaryPasswordService>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
+        services.AddScoped<IPlatformLeadNotifier, PlatformLeadNotifier>();
+        services.AddScoped<ISelfSignupService, SelfSignupService>();
         services.AddScoped<ITenantSecurityPolicyService, TenantSecurityPolicyService>();
         services.AddScoped<ITenantTimeZoneService, TenantTimeZoneService>();
         services.AddScoped<IWorkOrderLifecycleService, WorkOrderLifecycleService>();

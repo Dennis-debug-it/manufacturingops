@@ -18,11 +18,8 @@ namespace Ecosys.Api.Controllers;
 public sealed class PlatformLeadsController(
     AppDbContext dbContext,
     IAuditLogService auditLogService,
-    IEmailTemplateService emailTemplateService,
-    IEmailSubjectRuleService emailSubjectRuleService,
-    IEmailOutboxService emailOutboxService,
-    ITenantContext tenantContext,
-    ILogger<PlatformLeadsController> logger) : ControllerBase
+    IPlatformLeadNotifier platformLeadNotifier,
+    ITenantContext tenantContext) : ControllerBase
 {
     private static readonly string[] AllowedContactMethods =
     [
@@ -74,7 +71,7 @@ public sealed class PlatformLeadsController(
             actorName: lead.ContactPersonName,
             cancellationToken: cancellationToken);
 
-        await TryNotifyPlatformOwnerAsync(lead, cancellationToken);
+        await platformLeadNotifier.TryNotifyAsync(lead, tenantContext.UserId, cancellationToken);
 
         return Ok(new PublicLeadSubmissionResponse(
             true,
@@ -186,71 +183,6 @@ public sealed class PlatformLeadsController(
             .AsTracking()
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
         ?? throw new NotFoundException("Lead was not found.");
-
-    private async Task TryNotifyPlatformOwnerAsync(PlatformLead lead, CancellationToken cancellationToken)
-    {
-        var platformEmail = await dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == PlatformConstants.RootTenantId, cancellationToken);
-        var ownerEmail = NormalizeOptional(platformEmail?.ReplyToEmail) ?? NormalizeOptional(platformEmail?.SenderAddress);
-        if (string.IsNullOrWhiteSpace(ownerEmail))
-        {
-            return;
-        }
-
-        try
-        {
-            if (platformEmail is null || string.IsNullOrWhiteSpace(platformEmail.Host))
-            {
-                return;
-            }
-
-            var template = await emailTemplateService.RenderPlatformTemplateAsync(
-                "workspace-request-received",
-                EmailTemplateVariables.WithRecipientAndActorAliases(
-                    lead.ContactPersonName,
-                    lead.ContactPersonName,
-                    new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                    {
-                        ["companyName"] = lead.CompanyName,
-                        ["leadCompanyName"] = lead.CompanyName,
-                        ["email"] = lead.Email,
-                        ["contactEmail"] = lead.Email,
-                        ["phone"] = lead.Phone,
-                        ["contactPhone"] = lead.Phone,
-                        ["country"] = lead.Country ?? "Not provided",
-                        ["industry"] = lead.Industry ?? "Not provided",
-                        ["message"] = lead.Message ?? "Not provided",
-                        ["contactName"] = lead.ContactPersonName,
-                        ["submittedAt"] = lead.CreatedAt.ToString("u"),
-                        ["platformName"] = "Ecosys",
-                    }),
-                cancellationToken);
-            var finalSubject = await emailSubjectRuleService.BuildFinalSubjectAsync(
-                PlatformConstants.RootTenantId,
-                "platform.lead.received",
-                template.Subject,
-                cancellationToken: cancellationToken);
-
-            await emailOutboxService.QueueEmailAsync(
-                new QueueEmailRequest(
-                    PlatformConstants.RootTenantId,
-                    "platform.lead.received",
-                    "workspace-request-received",
-                    ownerEmail,
-                    null,
-                    template.SenderNameOverride ?? platformEmail.SenderName,
-                    platformEmail.SenderAddress,
-                    template.ReplyToOverride ?? lead.Email,
-                    finalSubject,
-                    template.HtmlBody,
-                    template.TextBody,
-                    tenantContext.UserId),
-                cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(exception, "Failed to send platform lead notification email for lead {LeadId}.", lead.Id);
-        }
-    }
 
     private static PlatformLeadDetailResponse MapDetail(PlatformLead lead) =>
         new(
