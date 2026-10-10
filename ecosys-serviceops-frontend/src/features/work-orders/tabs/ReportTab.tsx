@@ -1,16 +1,18 @@
 import { useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
-import { ChevronDown, Download, RefreshCw } from 'lucide-react'
+import { ChevronDown, Download, Pencil, RefreshCw } from 'lucide-react'
 import { apiClient } from '../../../shared/api/apiClient'
 import { endpoints } from '../../../shared/api/endpoints'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Spinner } from '../../../shared/components/Spinner'
+import { AuthenticatedImage } from '../../../shared/components/AuthenticatedImage'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { usePermission } from '../../../shared/hooks/usePermission'
 import { cn } from '../../../shared/utils/cn'
 import { formatCurrency } from '../../../shared/utils/format'
-import { useAcknowledgeWorkOrder, useGenerateServiceReport, useServiceReport } from '../api'
-import type { WorkOrder } from '../types'
+import { useAcknowledgeWorkOrder, useExecutionBundle, useGenerateServiceReport, useReportContent, useServiceReport, useUpdatePhoto } from '../api'
+import { ReportEditNote, ReportEditor } from '../components/ReportEditor'
+import type { WorkOrder, WorkOrderPhoto } from '../types'
 
 function Section({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -22,6 +24,40 @@ function Section({ title, defaultOpen = false, children }: { title: string; defa
       </button>
       {open ? <div className="border-t border-slate-100 px-5 py-4">{children}</div> : null}
     </div>
+  )
+}
+
+/** Every photo on the job, with a switch for whether it appears in the report. */
+function ReportPhotos({ workOrderId, photos, canEdit }: { workOrderId: string; photos: WorkOrderPhoto[]; canEdit: boolean }) {
+  const updatePhoto = useUpdatePhoto(workOrderId)
+  // The switch flips at once; it goes back if the save fails.
+  const [pending, setPending] = useState<Record<string, boolean>>({})
+  if (photos.length === 0) return <p className="text-sm text-slate-500">No photos on this job.</p>
+  const included = (photo: WorkOrderPhoto) => pending[photo.id] ?? photo.includeInReport
+  const toggle = async (photo: WorkOrderPhoto) => {
+    const next = !included(photo)
+    setPending((prev) => ({ ...prev, [photo.id]: next }))
+    try {
+      await updatePhoto.mutateAsync({ photoId: photo.id, caption: photo.caption, category: photo.category, includeInReport: next })
+    } catch {
+      setPending((prev) => ({ ...prev, [photo.id]: !next }))
+    }
+  }
+  return (
+    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      {photos.map((photo) => (
+        <li key={photo.id} className={cn('overflow-hidden rounded-lg border border-slate-200 bg-white', !included(photo) && 'opacity-60')}>
+          <AuthenticatedImage src={photo.publicUrl ?? `/api/attachments/${photo.attachmentId}/download`} alt={photo.caption} className="h-28 w-full object-cover" />
+          <div className="space-y-1 p-2">
+            <p className="truncate text-xs text-slate-700" title={photo.caption}>{photo.caption}</p>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600">
+              <input type="checkbox" checked={included(photo)} disabled={!canEdit} onChange={() => void toggle(photo)} />
+              In report
+            </label>
+          </div>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -37,6 +73,11 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
   const { data: report, isLoading, isError } = useServiceReport(workOrder.id)
   const generate = useGenerateServiceReport(workOrder.id)
   const acknowledge = useAcknowledgeWorkOrder(workOrder.id)
+  const canEdit = usePermission('work-orders.complete')
+  const { data: content } = useReportContent(workOrder.id)
+  const { data: bundle } = useExecutionBundle(workOrder.id)
+  const [editing, setEditing] = useState(false)
+  const editable = canEdit && Boolean(content) && !content?.lockedReason
 
   const [downloading, setDownloading] = useState(false)
   const [ackOpen, setAckOpen] = useState(false)
@@ -103,6 +144,12 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
           <span className="text-sm text-slate-600">{report.workOrderNumber} — {report.title}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {editable && !editing ? (
+            <button type="button" onClick={() => setEditing(true)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+              <Pencil className="h-4 w-4" />
+              Edit report
+            </button>
+          ) : null}
           {canGenerate ? (
             <button type="button" onClick={regenerate} disabled={generate.isPending} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60">
               <RefreshCw className="h-4 w-4" />
@@ -120,6 +167,9 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
           ) : null}
         </div>
       </div>
+
+      {content ? <ReportEditNote content={content} /> : null}
+      {editing && content ? <ReportEditor workOrderId={workOrder.id} content={content} onClose={() => setEditing(false)} /> : null}
 
       {ackOpen ? (
         <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
@@ -228,19 +278,8 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
         )}
       </Section>
 
-      <Section title="Photos">
-        {report.photoGroups.length === 0 ? (
-          <p className="text-sm text-slate-500">No photos included in this report.</p>
-        ) : (
-          <div className="space-y-3">
-            {report.photoGroups.map((group) => (
-              <div key={group.category}>
-                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{group.category}</div>
-                <p className="text-sm text-slate-600">{group.photos.length} photo(s)</p>
-              </div>
-            ))}
-          </div>
-        )}
+      <Section title={`Photos (${(bundle?.photos ?? []).filter((photo) => photo.includeInReport).length} in report)`}>
+        <ReportPhotos workOrderId={workOrder.id} photos={bundle?.photos ?? []} canEdit={editable} />
       </Section>
 
       <Section title="Signatures">

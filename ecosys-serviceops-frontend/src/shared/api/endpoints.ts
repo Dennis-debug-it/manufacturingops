@@ -90,6 +90,7 @@ export const endpoints = {
     serviceReport: (id: string) => `/api/workorders/${id}/service-report`,
     generateServiceReport: (id: string) => `/api/workorders/${id}/service-report/generate`,
     serviceReportPdf: (id: string) => `/api/workorders/${id}/service-report/pdf`,
+    reportContent: (id: string) => `/api/workorders/${id}/report/content`,
     pause: (id: string) => `/api/workorders/${id}/pause`,
     resume: (id: string) => `/api/workorders/${id}/resume`,
     close: (id: string) => `/api/workorders/${id}/close`,

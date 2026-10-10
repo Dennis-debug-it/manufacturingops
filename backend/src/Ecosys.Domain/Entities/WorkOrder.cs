@@ -51,6 +51,13 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public DateTime? ReportGeneratedAt { get; set; }
     public DateTime? ReportApprovedAt { get; set; }
     public DateTime? ReportSentAt { get; set; }
+    // Office edits to the report's wording. Null = use the job's own text (description / technician notes),
+    // which is never changed by editing the report.
+    public string? ReportProblemText { get; set; }
+    public string? ReportFindingsText { get; set; }
+    public string? ReportWorkDoneText { get; set; }
+    public DateTime? ReportEditedAt { get; set; }
+    public Guid? ReportEditedByUserId { get; set; }
     public bool IsPreventiveMaintenance { get; set; }
     public Guid? PreventiveMaintenancePlanId { get; set; }
     public Guid? PmTemplateId { get; set; }

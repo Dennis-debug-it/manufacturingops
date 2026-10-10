@@ -1007,9 +1007,10 @@ public sealed partial class WorkOrderExecutionController(
             technicianTeam,
             workOrder.PmTemplateNameSnapshot ?? workOrder.PmTemplate?.Name,
             workOrder.PmTemplateVersionSnapshot,
-            workOrder.Description,
-            workOrder.JobCardNotes,
-            workOrder.WorkDoneNotes,
+            // Office edits to the report's wording win over the job's own text.
+            workOrder.ReportProblemText ?? workOrder.Description,
+            workOrder.ReportFindingsText ?? workOrder.JobCardNotes,
+            workOrder.ReportWorkDoneText ?? workOrder.WorkDoneNotes,
             $"{FormatReportDate(DateTime.UtcNow, templateConfig)} UTC",
             new List<WorkOrderReportPdfTimestamp>
             {

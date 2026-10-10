@@ -9576,6 +9576,16 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("ReportApprovedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("ReportEditedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReportEditedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReportFindingsText")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
                     b.Property<DateTime?>("ReportGeneratedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -9583,12 +9593,20 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<string>("ReportProblemText")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
                     b.Property<DateTime?>("ReportSentAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ReportStatus")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
+
+                    b.Property<string>("ReportWorkDoneText")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<DateTime?>("ScheduledEndAt")
                         .HasColumnType("timestamp with time zone");
