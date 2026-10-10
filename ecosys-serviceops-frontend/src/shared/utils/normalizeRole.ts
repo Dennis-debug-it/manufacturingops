@@ -27,6 +27,9 @@ export function normalizeRole(rawRole: string): AppRole {
       return 'dispatcher'
     case 'technician':
       return 'technician'
+    // Stores and logistics (stored as "MaterialsController").
+    case 'materialscontroller':
+      return 'materials_controller'
     // Tenant finance clerk. Ecosys finance staff are a different role entirely and are handled
     // with the other platform roles below — mapping them here showed platform staff a tenant shell.
     case 'finance':

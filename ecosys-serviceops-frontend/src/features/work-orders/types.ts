@@ -377,6 +377,22 @@ export interface WorkOrderReportTimestamp {
   value: string | null
 }
 
+/** Original = the job's own text; edited = the office's wording for the report (null = not edited). */
+export interface ReportTextField {
+  original: string | null
+  edited: string | null
+}
+
+export interface ReportContent {
+  reportStatus: string
+  lockedReason: string | null
+  reportedProblem: ReportTextField
+  findings: ReportTextField
+  workDone: ReportTextField
+  editedAt: string | null
+  editedByName: string | null
+}
+
 export interface WorkOrderServiceReportPreview {
   companyName: string
   workOrderNumber: string

@@ -58,7 +58,8 @@ public sealed record EmailIntakeSettingsRequest(
     string DefaultPriority,
     bool CreateWorkOrderFromUnknownSender,
     string? SubjectParsingRules,
-    string? AllowedSenderDomains);
+    string? AllowedSenderDomains,
+    bool? AutoReplyEnabled = null);
 
 public sealed record EmailIntakeSettingsResponse(
     Guid Id,
@@ -80,11 +81,29 @@ public sealed record EmailIntakeSettingsResponse(
     string? AllowedSenderDomains,
     DateTime? LastCheckedAt,
     bool IsConnectionHealthy,
-    string? LastError);
+    string? LastError,
+    bool AutoReplyEnabled = true,
+    /// <summary>True once the mailbox has been read at least once (intake handles emails arriving after that).</summary>
+    bool IsReading = false);
 
-public sealed record EmailIntakeTestRequest(string? Host, int Port);
+/// <summary>Blank fields fall back to the saved settings, so a saved mailbox can be re-tested.</summary>
+public sealed record EmailIntakeTestRequest(string? Host, int Port, bool? UseSsl = null, string? Username = null, string? Password = null);
 
 public sealed record EmailIntakeTestResponse(bool Success, DateTime? LastCheckedAt, string? LastError);
+
+public sealed record EmailIntakeMessageResponse(
+    Guid Id,
+    DateTime ReceivedAt,
+    string FromAddress,
+    string? FromName,
+    string Subject,
+    string Outcome,
+    string? Detail,
+    Guid? WorkOrderId,
+    string? WorkOrderNumber,
+    bool AutoReplySent);
+
+public sealed record EmailIntakeCheckResponse(int Handled, DateTime? LastCheckedAt, bool IsConnectionHealthy, string? LastError);
 
 public sealed record UpsertIntakeProtocolRequest(
     string Name,

@@ -141,6 +141,37 @@ function TextInputOverlay({ onCommit, onCancel }: { onCommit: (text: string) => 
   )
 }
 
+/** Uploads are capped at 5 MB; stay comfortably under it. */
+const MAX_UPLOAD_BYTES = 4.5 * 1024 * 1024
+
+const toBlob = (canvas: HTMLCanvasElement, quality: number) =>
+  new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+
+/**
+ * The annotated photo as a JPEG small enough to upload. A full-resolution PNG of a phone photo
+ * is often 10–20 MB, which the server rejects — so the annotation never reached the report.
+ */
+async function exportForUpload(source: HTMLCanvasElement): Promise<Blob | null> {
+  let last: Blob | null = null
+  for (const longEdge of [2560, 1920, 1280]) {
+    const scale = Math.min(1, longEdge / Math.max(source.width, source.height))
+    const target = document.createElement('canvas')
+    target.width = Math.max(1, Math.round(source.width * scale))
+    target.height = Math.max(1, Math.round(source.height * scale))
+    const ctx = target.getContext('2d')
+    if (!ctx) return null
+    // JPEG has no transparency: start from white.
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, target.width, target.height)
+    ctx.drawImage(source, 0, 0, target.width, target.height)
+    for (const quality of [0.88, 0.75]) {
+      last = await toBlob(target, quality)
+      if (last && last.size <= MAX_UPLOAD_BYTES) return last
+    }
+  }
+  return last
+}
+
 export function PhotoAnnotationCanvas({ file, onCancel, onDone }: { file: File; onCancel: () => void; onDone: (blob: Blob) => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
@@ -293,14 +324,16 @@ export function PhotoAnnotationCanvas({ file, onCancel, onDone }: { file: File; 
   }
   const clear = () => commit([])
 
-  const handleDone = () => {
+  const handleDone = async () => {
     const canvas = canvasRef.current
     if (!canvas) return
     setSaving(true)
-    canvas.toBlob((blob) => {
-      setSaving(false)
+    try {
+      const blob = await exportForUpload(canvas)
       if (blob) onDone(blob)
-    }, 'image/png')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -312,7 +345,7 @@ export function PhotoAnnotationCanvas({ file, onCancel, onDone }: { file: File; 
         <p className="text-sm font-medium text-white">Annotate Photo</p>
         <button
           type="button"
-          onClick={handleDone}
+          onClick={() => void handleDone()}
           disabled={!imageLoaded || saving}
           className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-emerald-500 px-4 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
         >

@@ -13,6 +13,7 @@ const workspaceRoles = [
   { value: 'Manager', label: 'Manager' },
   { value: 'Dispatcher', label: 'Dispatcher' },
   { value: 'Technician', label: 'Technician' },
+  { value: 'MaterialsController', label: 'Materials Controller' },
   { value: 'finance', label: 'Finance' },
   { value: 'Viewer', label: 'Viewer' },
 ]

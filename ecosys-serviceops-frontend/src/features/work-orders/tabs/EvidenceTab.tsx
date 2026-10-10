@@ -16,10 +16,11 @@ function PhotoCard({ photo, workOrderId, canEdit, onPreview }: { photo: WorkOrde
   const updatePhoto = useUpdatePhoto(workOrderId)
   const [caption, setCaption] = useState(photo.caption)
   const [category, setCategory] = useState(photo.category)
+  const [inReport, setInReport] = useState(photo.includeInReport)
 
   const saveEdits = async () => {
     try {
-      await updatePhoto.mutateAsync({ photoId: photo.id, caption, category, includeInReport: photo.includeInReport })
+      await updatePhoto.mutateAsync({ photoId: photo.id, caption, category, includeInReport: inReport })
       toast.success('Photo updated')
     } catch {
       // interceptor surfaces the error toast
@@ -54,6 +55,20 @@ function PhotoCard({ photo, workOrderId, canEdit, onPreview }: { photo: WorkOrde
             <option key={option} value={option}>{option}</option>
           ))}
         </select>
+        <label className="flex items-center gap-1.5 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={inReport}
+            disabled={!canEdit}
+            onChange={(event) => {
+              const next = event.target.checked
+              setInReport(next)
+              // The interceptor shows the error; the switch goes back.
+              updatePhoto.mutateAsync({ photoId: photo.id, caption, category, includeInReport: next }).catch(() => setInReport(!next))
+            }}
+          />
+          Include in service report
+        </label>
         <p className="text-[11px] text-slate-500">{photo.uploadedByName ?? 'Unknown'} · {formatDateTime(photo.uploadedAt)}</p>
       </div>
     </div>
@@ -77,7 +92,7 @@ export function EvidenceTab({ workOrderId }: { workOrderId: string }) {
 
   const onAnnotationDone = async (blob: Blob) => {
     setAnnotating(null)
-    const annotatedFile = new File([blob], 'annotated-photo.png', { type: 'image/png' })
+    const annotatedFile = new File([blob], 'annotated-photo.jpg', { type: blob.type || 'image/jpeg' })
     try {
       await uploadPhoto.mutateAsync({ file: annotatedFile, category: 'Other' })
       toast.success('Photo uploaded')

@@ -126,6 +126,99 @@ public sealed partial class WorkOrderExecutionController
         }
     }
 
+    // ── Editing the report's wording ─────────────────────────────────────────
+
+    /// <summary>The report's editable text: the job's own wording next to any office edit.</summary>
+    [HttpGet("/api/workorders/{id:guid}/report/content")]
+    public async Task<ActionResult<ReportContentResponse>> GetReportContent(Guid id, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureTenantOperationalAccess();
+        await EnsureAccessibleAsync(id, cancellationToken);
+        var workOrder = await LoadReportWorkOrderAsync(id, cancellationToken);
+        return Ok(await BuildReportContentAsync(workOrder, cancellationToken));
+    }
+
+    /// <summary>
+    /// Saves edits to the report's wording. The job's own description and the technician's notes are
+    /// left as they were; a blank field (or one matching the original) goes back to the job's text.
+    /// An approved report needs approving again after an edit; a sent or acknowledged one is locked.
+    /// </summary>
+    [HttpPut("/api/workorders/{id:guid}/report/content")]
+    public async Task<ActionResult<ReportContentResponse>> UpdateReportContent(Guid id, [FromBody] UpdateReportContentRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanCompleteWorkOrders);
+        var workOrder = await LoadReportWorkOrderAsync(id, cancellationToken);
+        var status = DeriveReportStatus(workOrder);
+        if (ReportLockedReason(status) is { } locked)
+            throw new BusinessRuleException(locked);
+
+        static string? Edit(string? value, string? original)
+        {
+            var trimmed = value?.Trim();
+            if (string.IsNullOrEmpty(trimmed) || trimmed == original?.Trim()) return null;
+            if (trimmed.Length > 4000) throw new BusinessRuleException("Each report section can be at most 4000 characters.");
+            return trimmed;
+        }
+
+        var problem = Edit(request.ReportedProblem, workOrder.Description);
+        var findings = Edit(request.Findings, workOrder.JobCardNotes);
+        var workDone = Edit(request.WorkDone, workOrder.WorkDoneNotes);
+        if (problem == workOrder.ReportProblemText && findings == workOrder.ReportFindingsText && workDone == workOrder.ReportWorkDoneText)
+            return Ok(await BuildReportContentAsync(workOrder, cancellationToken));
+
+        workOrder.ReportProblemText = problem;
+        workOrder.ReportFindingsText = findings;
+        workOrder.ReportWorkDoneText = workDone;
+        workOrder.ReportEditedAt = DateTime.UtcNow;
+        workOrder.ReportEditedByUserId = UserId;
+
+        var reopened = status == ReportStatuses.Approved;
+        if (reopened)
+        {
+            workOrder.ReportStatus = ReportStatuses.Draft;
+            workOrder.ReportApprovedAt = null;
+        }
+
+        dbContext.WorkOrderEvents.Add(new WorkOrderEvent
+        {
+            TenantId = TenantId,
+            WorkOrderId = workOrder.Id,
+            ActorUserId = UserId,
+            EventType = "ReportEdited",
+            Status = WorkOrderStatuses.Normalize(workOrder.Status),
+            Message = reopened ? "Edited the service report; it needs approving again." : "Edited the service report.",
+            OccurredAt = DateTime.UtcNow
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "workorder.report.edited", nameof(WorkOrder), workOrder.Id.ToString(),
+            $"Edited service report wording for {workOrder.WorkOrderNumber}{(reopened ? " (approval cleared)" : string.Empty)}", cancellationToken);
+
+        return Ok(await BuildReportContentAsync(workOrder, cancellationToken));
+    }
+
+    private static string? ReportLockedReason(string status) => status switch
+    {
+        ReportStatuses.Sent => "This report has already been sent to the client and can no longer be edited.",
+        ReportStatuses.Acknowledged => "This report has been acknowledged by the client and can no longer be edited.",
+        _ => null
+    };
+
+    private async Task<ReportContentResponse> BuildReportContentAsync(WorkOrder workOrder, CancellationToken cancellationToken)
+    {
+        var status = DeriveReportStatus(workOrder);
+        var editedBy = workOrder.ReportEditedByUserId is { } editorId
+            ? await dbContext.Users.IgnoreQueryFilters().Where(x => x.Id == editorId).Select(x => x.FullName).FirstOrDefaultAsync(cancellationToken)
+            : null;
+        return new ReportContentResponse(
+            status,
+            ReportLockedReason(status),
+            new ReportTextField(workOrder.Description, workOrder.ReportProblemText),
+            new ReportTextField(workOrder.JobCardNotes, workOrder.ReportFindingsText),
+            new ReportTextField(workOrder.WorkDoneNotes, workOrder.ReportWorkDoneText),
+            workOrder.ReportEditedAt,
+            editedBy);
+    }
+
     [HttpPost("/api/workorders/{id:guid}/report/send")]
     public async Task<ActionResult<ReportQueueRow>> SendQueuedReport(Guid id, CancellationToken cancellationToken)
     {
@@ -343,3 +436,17 @@ public sealed record ReportQueueResponse(
 public sealed record ReportBatchRequest(IReadOnlyList<Guid> Ids);
 
 public sealed record ReportBatchResult(int Processed, int Matched);
+
+public sealed record UpdateReportContentRequest(string? ReportedProblem, string? Findings, string? WorkDone);
+
+/// <summary>Original = the job's own text; Edited = the office's wording for the report (null = not edited).</summary>
+public sealed record ReportTextField(string? Original, string? Edited);
+
+public sealed record ReportContentResponse(
+    string ReportStatus,
+    string? LockedReason,
+    ReportTextField ReportedProblem,
+    ReportTextField Findings,
+    ReportTextField WorkDone,
+    DateTime? EditedAt,
+    string? EditedByName);

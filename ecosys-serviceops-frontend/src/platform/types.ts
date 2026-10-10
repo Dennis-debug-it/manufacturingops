@@ -371,7 +371,7 @@ export interface TenantEmailSettings {
   enableTenantEmailNotifications: boolean
   lastTestedAt: string | null
   lastError: string | null
-  /** True once the tenant switched to its own SMTP server (Settings → Email Delivery). */
+  /** True once the tenant switched to its own SMTP server (Settings → Email). */
   usesOwnSmtp?: boolean
   ownSmtpHost?: string | null
   ownFromAddress?: string | null

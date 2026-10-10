@@ -63,11 +63,13 @@ public sealed class PlatformLeadFlowTests
         var controller = new PlatformLeadsController(
             dbContext,
             new AuditLogService(dbContext, new HttpContextAccessor()),
-            new FakeEmailTemplateService(),
-            new FakeEmailSubjectRuleService(),
-            new EmailOutboxService(dbContext, new EmailDeliveryLogService(dbContext)),
-            new FakeTenantContext(),
-            NullLogger<PlatformLeadsController>.Instance);
+            new PlatformLeadNotifier(
+                dbContext,
+                new FakeEmailTemplateService(),
+                new FakeEmailSubjectRuleService(),
+                new EmailOutboxService(dbContext, new EmailDeliveryLogService(dbContext)),
+                NullLogger<PlatformLeadNotifier>.Instance),
+            new FakeTenantContext());
 
         controller.ControllerContext = new ControllerContext
         {

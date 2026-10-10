@@ -53,12 +53,38 @@ public sealed class AuthController(
             MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId))));
     }
 
+    /// <summary>"Start free trial": checks the form and emails a link to confirm the address.</summary>
+    [HttpPost("signup/start")]
+    public async Task<ActionResult<MessageResponse>> StartSignup(
+        [FromBody] SelfSignupStartRequest request,
+        [FromServices] ISelfSignupService selfSignupService,
+        CancellationToken cancellationToken)
+    {
+        var message = await selfSignupService.StartAsync(request, HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken);
+        return Ok(new MessageResponse(message));
+    }
+
+    /// <summary>Opens the confirmation link: creates the trial workspace and signs its administrator in.</summary>
+    [HttpPost("signup/verify")]
+    public async Task<ActionResult<LoginResponse>> VerifySignup(
+        [FromBody] VerifySignupRequest request,
+        [FromServices] ISelfSignupService selfSignupService,
+        CancellationToken cancellationToken)
+    {
+        var result = await selfSignupService.CompleteAsync(request.Token, cancellationToken);
+        return Ok(ToLoginResponse(result, await ResolveTimeZoneIdAsync(result.TenantId, cancellationToken)));
+    }
+
     [HttpPost("login")]
     public async Task<ActionResult<LoginResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
         var result = await authService.LoginAsync(request.EmailOrUsername, request.Password, request.Workspace, cancellationToken);
 
-        return Ok(new LoginResponse(
+        return Ok(ToLoginResponse(result, await ResolveTimeZoneIdAsync(result.TenantId, cancellationToken)));
+    }
+
+    private static LoginResponse ToLoginResponse(LoginResult result, string timeZoneId) =>
+        new(
             result.Token,
             new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId)), result.Username, result.HasEmail),
             new LoginTenantDto(
@@ -68,8 +94,7 @@ public sealed class AuthController(
                 result.Industry,
                 result.LogoUrl,
                 result.ShowPoweredByEcosys,
-                await ResolveTimeZoneIdAsync(result.TenantId, cancellationToken))));
-    }
+                timeZoneId));
 
     [HttpPost("forgot-password")]
     public async Task<ActionResult<MessageResponse>> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken)
@@ -319,6 +344,8 @@ public sealed class AuthController(
         tenantId == PlatformConstants.RootTenantId
         && AppRoles.PlatformRoles.Contains(role, StringComparer.OrdinalIgnoreCase);
 }
+
+public sealed record VerifySignupRequest(string Token);
 
 public sealed record SignupRequest(
     string FullName,

@@ -8,6 +8,7 @@ const roleOrientation: Record<string, string> = {
   manager: 'As a Manager, you can oversee work orders, assign technicians, and monitor operational performance.',
   dispatcher: 'As a Dispatcher, you\'ll coordinate work order assignments and keep the field team moving.',
   technician: 'As a Technician, use the Work Orders tab to see your jobs, complete checklists, capture evidence, and get signatures.',
+  materials_controller: 'As the Materials Controller, you look after the stores: keep stock levels right, issue parts and materials to jobs and vans, receive purchase orders and move stock between locations — all under Inventory.',
   finance: 'As Finance, you\'ll manage invoices, quotes, and receivables from the Finance module.',
   viewer: 'As a Viewer, you have read-only access across the workspace.',
 }

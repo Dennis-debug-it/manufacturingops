@@ -10,6 +10,7 @@ public sealed class LicensePlan : AuditableEntity
     public decimal AnnualPrice { get; set; }
     public int? MaxBranches { get; set; }
     public string? ModulesIncluded { get; set; }
+    /// <summary>No longer read: email intake is included with the Operations module. Kept so existing data loads.</summary>
     public bool EmailIngestion { get; set; }
     public bool MonitoringIntegration { get; set; }
     public bool IsActive { get; set; } = true;

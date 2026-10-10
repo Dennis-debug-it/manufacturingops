@@ -12,6 +12,9 @@ public static class NotificationKeyDescriptor
         new("work-order.assigned",  "Work order assigned to me",        "Work Orders"),
         new("work-order.started",   "Work order started (admin alert)",  "Work Orders"),
         new("work-order.on-hold",   "Work order placed on hold",         "Work Orders"),
+        new("email-intake.email-intake-received", "Email request received (auto-reply)", "Email Intake"),
+        new("email-intake.email-intake-reply-added", "Email added to existing job (auto-reply)", "Email Intake"),
+        new("email-intake.email-intake-unrecognised", "Unrecognised email sender (auto-reply)", "Email Intake"),
         new("work-order.overdue",   "Work order overdue",                "Work Orders"),
         new("work-order.completed", "Work order completed",              "Work Orders"),
         new("work-order.closed",    "Work order closed (client notif.)", "Work Orders"),
@@ -26,6 +29,7 @@ public static class NotificationKeyDescriptor
         new("user.password-reset.admin",     "Admin password reset",     "Account"),
         new("tenant.onboarding",    "Workspace provisioned",             "System"),
         new("platform.lead.received", "Workspace request received",      "System"),
+        new("auth.signup.verify-email", "Self sign-up email confirmation", "Account"),
     ];
 
     public static IReadOnlyList<NotificationDescriptor> List() => All;

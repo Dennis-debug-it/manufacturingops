@@ -270,7 +270,8 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             ServiceOpsPlans.EnsureModules(snapshot.Modules, [ServiceOpsPlans.Operations]);
         var enabled = featureName switch
         {
-            LicenseFeatures.EmailIngestion => snapshot.EmailIngestion,
+            // Included with Operations (checked just above).
+            LicenseFeatures.EmailIngestion => true,
             LicenseFeatures.MonitoringIntegration => snapshot.MonitoringIntegration,
             _ => false
         };
@@ -401,7 +402,8 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             isGrace,
             tenantLicense.LicensedUsers,
             tenantLicense.MaxBranchesOverride ?? plan.MaxBranches,
-            tenantLicense.EmailIngestionOverride ?? plan.EmailIngestion,
+            // Email intake comes with the Operations module; there is no separate switch for it.
+            ServiceOpsPlans.Modules(plan).Contains(ServiceOpsPlans.Operations),
             tenantLicense.MonitoringIntegrationOverride ?? plan.MonitoringIntegration,
             warning) { Modules = ServiceOpsPlans.Modules(plan) };
     }

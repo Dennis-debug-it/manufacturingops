@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
   Radio, MessageCircle, CreditCard, ShieldCheck, Users, Bell, Plug, LineChart,
-  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Send, Rocket, Percent,
+  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Rocket, Percent,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
@@ -26,8 +26,7 @@ const groups: SettingsGroup[] = [
     // Everything email lives together: sending identity, inbound parsing, content, and delivery.
     title: 'Email',
     items: [
-      { to: '/settings/email', label: 'Workspace Email', description: 'Managed email address, sender name, and preferences.', icon: Mail },
-      { to: '/settings/email-delivery', label: 'Email Delivery', description: 'Send through platform mail or your own SMTP server.', icon: Send },
+      { to: '/settings/email', label: 'Email', description: 'Who your emails come from and where replies go.', icon: Mail },
       { to: '/settings/email-intake', label: 'Email Intake & Parsing', description: 'Auto-create work orders from incoming email.', icon: Inbox },
       { to: '/settings/email-templates', label: 'Email Templates', description: 'Transactional email content.', icon: Mail },
       { to: '/settings/email/delivery-logs', label: 'Delivery Logs', description: 'Queued, sent, failed, and retried email deliveries.', icon: ScrollText },

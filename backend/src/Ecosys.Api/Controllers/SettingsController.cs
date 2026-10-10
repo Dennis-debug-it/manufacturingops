@@ -116,44 +116,69 @@ public sealed class SettingsController(
         return Ok(MapEmailIntake(settings));
     }
 
+    /// <summary>Signs in to the mailbox and opens the inbox, so "it works" means intake can really read it.</summary>
     [HttpPost("email-intake/test-connection")]
-    public async Task<ActionResult<EmailIntakeTestResponse>> TestEmailIntakeConnection([FromBody] EmailIntakeTestRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<EmailIntakeTestResponse>> TestEmailIntakeConnection(
+        [FromBody] EmailIntakeTestRequest request,
+        [FromServices] IEmailIntakeMailbox mailbox,
+        CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
         var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
         var host = string.IsNullOrWhiteSpace(request.Host) ? settings.Host : request.Host.Trim();
         var port = request.Port > 0 ? request.Port : settings.Port;
+        var username = string.IsNullOrWhiteSpace(request.Username) ? settings.Username : request.Username.Trim();
+        var password = string.IsNullOrEmpty(request.Password) ? secretEncryptionService.Decrypt(settings.EncryptedPassword) : request.Password;
 
-        if (string.IsNullOrWhiteSpace(host) || port <= 0)
+        if (string.IsNullOrWhiteSpace(host) || port <= 0 || string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
         {
-            throw new BusinessRuleException("Host and port are required to test the connection.");
+            throw new BusinessRuleException("Mail server, port, username and password are required to test the mailbox.");
         }
 
         try
         {
-            using var client = new TcpClient();
-            var connectTask = client.ConnectAsync(host, port, cancellationToken).AsTask();
-            var timeoutTask = Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-            var completedTask = await Task.WhenAny(connectTask, timeoutTask);
-            if (completedTask != connectTask || !client.Connected)
-            {
-                throw new TimeoutException("Connection timed out.");
-            }
-
+            await mailbox.VerifyAsync(new EmailIntakeMailboxSettings(host, port, request.UseSsl ?? settings.UseSsl, username, password), cancellationToken);
             settings.LastCheckedAt = DateTime.UtcNow;
             settings.IsConnectionHealthy = true;
             settings.LastError = null;
             await dbContext.SaveChangesAsync(cancellationToken);
             return Ok(new EmailIntakeTestResponse(true, settings.LastCheckedAt, null));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             settings.LastCheckedAt = DateTime.UtcNow;
             settings.IsConnectionHealthy = false;
-            settings.LastError = ex.Message;
+            settings.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
             await dbContext.SaveChangesAsync(cancellationToken);
             return Ok(new EmailIntakeTestResponse(false, settings.LastCheckedAt, settings.LastError));
         }
+    }
+
+    /// <summary>Reads the mailbox now instead of waiting for the next minute.</summary>
+    [HttpPost("email-intake/check-now")]
+    public async Task<ActionResult<EmailIntakeCheckResponse>> CheckEmailIntakeNow([FromServices] IEmailIntakeService intake, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var handled = await intake.PollTenantAsync(TenantId, cancellationToken);
+        dbContext.ChangeTracker.Clear();
+        var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
+        return Ok(new EmailIntakeCheckResponse(handled, settings.LastCheckedAt, settings.IsConnectionHealthy, settings.LastError));
+    }
+
+    /// <summary>The latest emails intake read and what happened to each.</summary>
+    [HttpGet("email-intake/messages")]
+    public async Task<ActionResult<IReadOnlyCollection<EmailIntakeMessageResponse>>> GetEmailIntakeMessages(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var items = await dbContext.EmailIntakeMessages.AsNoTracking()
+            .Where(x => x.TenantId == TenantId)
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(50)
+            .Select(x => new EmailIntakeMessageResponse(
+                x.Id, x.ReceivedAt, x.FromAddress, x.FromName, x.Subject, x.Outcome, x.Detail,
+                x.WorkOrderId, x.WorkOrder != null ? x.WorkOrder.WorkOrderNumber : null, x.AutoReplySent))
+            .ToListAsync(cancellationToken);
+        return Ok(items);
     }
 
     [HttpGet("monitoring-webhooks")]
@@ -469,6 +494,14 @@ public sealed class SettingsController(
 
     private async Task ApplyEmailIntakeSettingsAsync(EmailIntakeSetting settings, EmailIntakeSettingsRequest request, CancellationToken cancellationToken)
     {
+        // A different mailbox starts reading afresh from its newest email.
+        if (!string.Equals(settings.Host, NormalizeOptional(request.Host) ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(settings.Username, NormalizeOptional(request.Username), StringComparison.OrdinalIgnoreCase))
+        {
+            settings.ImapUidValidity = null;
+            settings.ImapLastUid = null;
+        }
+
         settings.IsEnabled = request.IsEnabled;
         settings.IntakeEmailAddress = NormalizeOptional(request.IntakeEmailAddress);
         settings.MailboxProvider = request.MailboxProvider.Trim();
@@ -483,6 +516,7 @@ public sealed class SettingsController(
         settings.CreateWorkOrderFromUnknownSender = request.CreateWorkOrderFromUnknownSender;
         settings.SubjectParsingRules = NormalizeOptional(request.SubjectParsingRules);
         settings.AllowedSenderDomains = NormalizeOptional(request.AllowedSenderDomains);
+        settings.AutoReplyEnabled = request.AutoReplyEnabled ?? settings.AutoReplyEnabled;
 
         var encryptedPassword = secretEncryptionService.Encrypt(request.Password);
         if (!string.IsNullOrWhiteSpace(encryptedPassword))
@@ -739,7 +773,9 @@ public sealed class SettingsController(
             settings.AllowedSenderDomains,
             settings.LastCheckedAt,
             settings.IsConnectionHealthy,
-            settings.LastError);
+            settings.LastError,
+            settings.AutoReplyEnabled,
+            settings.ImapLastUid.HasValue);
 
     private static MonitoringWebhookIntegrationResponse MapMonitoringWebhook(MonitoringWebhookIntegration item, string? generatedSecret = null) =>
         new(

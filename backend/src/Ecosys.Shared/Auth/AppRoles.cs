@@ -22,6 +22,11 @@ public static class AppRoles
     public const string Manager = "Manager";
     public const string Dispatcher = "Dispatcher";
     public const string Technician = "Technician";
+    /// <summary>
+    /// Stores and logistics: keeps the stock, issues materials and parts to jobs and vans, receives
+    /// purchase orders, and moves stock between stores. Shown as "Materials Controller".
+    /// </summary>
+    public const string MaterialsController = "MaterialsController";
     /// <summary>Tenant finance user. Lower-case for historical reasons; see <see cref="Finance"/>.</summary>
     public const string FinanceUser = "finance";
     public const string Viewer = "Viewer";
@@ -56,6 +61,7 @@ public static class AppRoles
         Manager,
         Dispatcher,
         Technician,
+        MaterialsController,
         FinanceUser,
         Viewer,
         User
@@ -71,6 +77,7 @@ public static class AppRoles
         Manager,
         Dispatcher,
         Technician,
+        MaterialsController,
         FinanceUser,
         Viewer
     ];

@@ -30,6 +30,8 @@ import { ChangePasswordPage } from '../features/auth/ChangePasswordPage'
 import { ImpersonationEntryPage } from '../features/auth/ImpersonationEntryPage'
 import { DemoSignedOutPage } from '../features/auth/DemoSignedOutPage'
 import { RequestDemoPage } from '../features/public/RequestDemoPage'
+import { SignupPage } from '../features/public/SignupPage'
+import { SignupVerifyPage } from '../features/public/SignupVerifyPage'
 import { DemoConfirmationPage } from '../features/public/DemoConfirmationPage'
 import { CsatSurveyPage } from '../features/public/CsatSurveyPage'
 import { TrackJobPage } from '../features/portal/TrackJobPage'
@@ -102,7 +104,6 @@ import { NotificationsSettingsPage as SettingsNotificationsPageReal } from '../f
 import { NumberingSettingsPage as SettingsNumberingPageReal } from '../features/settings/NumberingSettingsPage'
 import { PmTemplatesSettingsPage as SettingsPmTemplatesPageReal } from '../features/settings/PmTemplatesSettingsPage'
 import { EmailIdentitySettingsPage } from '../features/settings/EmailIdentitySettingsPage'
-import { EmailDeliverySettingsPage } from '../features/settings/EmailDeliverySettingsPage'
 import { EmailDeliveryLogsPage } from '../features/settings/EmailDeliveryLogsPage'
 import { EmailTemplatesSettingsPage as SettingsEmailTemplatesPageReal } from '../features/settings/EmailTemplatesSettingsPage'
 import { AuditLogsSettingsPage as SettingsAuditLogsPageReal } from '../features/settings/AuditLogsSettingsPage'
@@ -136,7 +137,7 @@ import { SchedulingBoardPage } from '../features/dispatch/SchedulingBoardPage'
 import { PlatformApp } from '../platform/PlatformApp'
 import { PortalApp } from '../portal/PortalApp'
 
-const tenantRoles: AppRole[] = ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer']
+const tenantRoles: AppRole[] = ['admin', 'manager', 'dispatcher', 'technician', 'materials_controller', 'finance', 'viewer']
 const platformRoles: AppRole[] = ['super_admin', 'platform_sales']
 
 const lazyModulePage = (config: ModulePageConfig) =>
@@ -366,7 +367,8 @@ export function AppRouter() {
       ['/settings/branding', SettingsBrandingPage],
       ['/settings/templates', SettingsTemplatesPage],
       ['/settings/email', EmailIdentitySettingsPage],
-      ['/settings/email-delivery', EmailDeliverySettingsPage],
+      // Merged into the Email page; old links and bookmarks land there.
+      ['/settings/email-delivery', () => <Navigate to="/settings/email" replace />],
       ['/settings/email/delivery-logs', EmailDeliveryLogsPage],
       ['/settings/email-templates', SettingsEmailTemplatesPage],
       ['/settings/email-templates/:id', SettingsEmailTemplatesPage],
@@ -417,6 +419,8 @@ export function AppRouter() {
         <Route path="/impersonate-entry" element={<ImpersonationEntryPage />} />
         <Route path="/demo/signed-out" element={<DemoSignedOutPage />} />
         <Route path="/request-demo" element={<RequestDemoPage />} />
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="/signup/verify" element={<SignupVerifyPage />} />
         <Route path="/demo-confirmation" element={<DemoConfirmationPage />} />
         <Route path="/csat/:token" element={<CsatSurveyPage />} />
         <Route path="/track/:token" element={<TrackJobPage />} />

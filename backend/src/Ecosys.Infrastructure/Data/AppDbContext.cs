@@ -19,6 +19,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<PendingSignup> PendingSignups => Set<PendingSignup>();
     public DbSet<CsatSurvey> CsatSurveys => Set<CsatSurvey>();
     public DbSet<ApprovalMatrix> ApprovalMatrices => Set<ApprovalMatrix>();
     public DbSet<ApprovalLevel> ApprovalLevels => Set<ApprovalLevel>();
@@ -78,6 +79,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<UserNotificationPreference> UserNotificationPreferences => Set<UserNotificationPreference>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<EmailIntakeSetting> EmailIntakeSettings => Set<EmailIntakeSetting>();
+    public DbSet<EmailIntakeMessage> EmailIntakeMessages => Set<EmailIntakeMessage>();
     public DbSet<NumberingSetting> NumberingSettings => Set<NumberingSetting>();
     public DbSet<LicensePlan> LicensePlans => Set<LicensePlan>();
     public DbSet<TenantLicense> TenantLicenses => Set<TenantLicense>();
@@ -348,6 +350,24 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.Sessions)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PendingSignup>(entity =>
+        {
+            entity.ToTable("pending_signups");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.CompanyName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Phone).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Country).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Industry).HasMaxLength(100);
+            entity.Property(x => x.PasswordHash).IsRequired();
+            entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.CompletedAt).IsConcurrencyToken();
+            entity.Property(x => x.RequestedIp).HasMaxLength(100);
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => x.Email);
         });
 
         modelBuilder.Entity<PasswordResetToken>(entity =>
@@ -693,6 +713,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.AcknowledgementComments).HasMaxLength(4000);
             entity.Property(x => x.ReportStatus).HasMaxLength(30);
             entity.Property(x => x.ReportNumber).HasMaxLength(50);
+            entity.Property(x => x.ReportProblemText).HasMaxLength(4000);
+            entity.Property(x => x.ReportFindingsText).HasMaxLength(4000);
+            entity.Property(x => x.ReportWorkDoneText).HasMaxLength(4000);
             entity.Property(x => x.PmTemplateNameSnapshot).HasMaxLength(150);
             entity.Property(x => x.AppliedSlaSource).HasMaxLength(80);
             entity.Property(x => x.AppliedRateSource).HasMaxLength(80);
@@ -1460,6 +1483,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Path).HasMaxLength(500).IsRequired();
             entity.HasIndex(x => new { x.TenantId, x.UserId, x.Key }).IsUnique();
             entity.HasIndex(x => x.CreatedAt);
+        });
+
+        modelBuilder.Entity<EmailIntakeMessage>(entity =>
+        {
+            entity.ToTable("email_intake_messages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.MessageId).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.FromAddress).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.FromName).HasMaxLength(200);
+            entity.Property(x => x.Subject).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Outcome).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Detail).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.MessageId }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.CreatedAt });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<EmailIntakeSetting>(entity =>

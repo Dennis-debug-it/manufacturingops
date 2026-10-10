@@ -401,8 +401,8 @@ export function DocumentPreview({ config, docType: controlledDocType, onDocTypeC
         <div className="text-slate-400">Generated: 09 Jul 2026</div>
       </div>
       {(enabledSections.length > 0 ? enabledSections : [{ id: 'service-details', label: 'Service Details', enabled: true, order: 0 }]).map((section) => (
-        <div key={section.id} className="rounded border p-2 text-[10px]" style={{ borderColor: `${primary}55` }}>
-          <div className="font-semibold text-slate-800">{section.label}</div>
+        <div key={section.id} className="text-[10px]">
+          <div className="border-b pb-0.5 font-semibold text-slate-800" style={{ borderColor: secondary }}>{section.label}</div>
           <div className="mt-0.5 text-slate-600">{sampleReportSections[section.id] ?? 'Sample content for this section.'}</div>
         </div>
       ))}

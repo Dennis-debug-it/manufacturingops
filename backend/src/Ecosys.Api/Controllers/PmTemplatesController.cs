@@ -18,7 +18,8 @@ public sealed class PmTemplatesController(
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<TemplateResponse>>> GetAll(CancellationToken cancellationToken)
     {
-        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+        // Reading templates is needed to plan maintenance (Maintenance → Schedules); editing stays with settings.
+        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanManageSettings, PermissionNames.CanCreateWorkOrders, PermissionNames.CanAssignWorkOrders);
         var templates = await pmTemplateService.ListAsync(TenantId, cancellationToken);
         return Ok(templates.Select(Map).ToList());
     }
@@ -26,7 +27,8 @@ public sealed class PmTemplatesController(
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<TemplateResponse>> Get(Guid id, CancellationToken cancellationToken)
     {
-        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+        // Reading templates is needed to plan maintenance (Maintenance → Schedules); editing stays with settings.
+        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanManageSettings, PermissionNames.CanCreateWorkOrders, PermissionNames.CanAssignWorkOrders);
         var template = await pmTemplateService.GetAsync(TenantId, id, cancellationToken);
         return Ok(Map(template));
     }

@@ -47,6 +47,8 @@ services:
       ECOSYS_SMTP_USE_SSL: ${ECOSYS_SMTP_USE_SSL:-}
       ECOSYS_SMTP_USERNAME: ${ECOSYS_SMTP_USERNAME:-}
       ECOSYS_SMTP_PASSWORD: ${ECOSYS_SMTP_PASSWORD:-}
+      # Public "Start free trial" sign-up (needs SMTP and ECOSYS_PUBLIC_URL). false = demo requests only.
+      AuthSecurity__EmailVerifiedSignupEnabled: ${ECOSYS_SELF_SIGNUP_ENABLED:-true}
       # Fallback workspace time zone, used when neither the tenant nor the platform sets one.
       Time__DefaultTimeZone: ${ECOSYS_DEFAULT_TIME_ZONE:-Africa/Nairobi}
       # Origin the API puts in password-reset / account-setup / ETA links it emails out.

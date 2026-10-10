@@ -546,6 +546,80 @@ public sealed class WorkOrderExecutionFlowTests
         Assert.Equal(autoSend ? 1 : 0, delivery.QueuedWorkOrderIds.Count);
     }
 
+    [Fact]
+    public async Task EditingTheReport_ChangesTheReportOnly_AndBlankGoesBackToTheTechniciansWords()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        fixture.WorkOrder.Description = "Gen won't start";
+        fixture.WorkOrder.JobCardNotes = "batt flat, contactr burnt";
+        fixture.WorkOrder.WorkDoneNotes = "replaced";
+        fixture.WorkOrder.ReportStatus = "Draft";
+        await dbContext.SaveChangesAsync();
+        var pdfRenderer = new FakePdfRenderer();
+        var controller = CreateExecutionController(dbContext, fixture, pdfRenderer: pdfRenderer);
+
+        var saved = Assert.IsType<ReportContentResponse>(Assert.IsType<OkObjectResult>((await controller.UpdateReportContent(fixture.WorkOrder.Id,
+            new UpdateReportContentRequest("Gen won't start", "Battery was flat and the main contactor had burnt out.", "Replaced the battery and contactor; tested under load."),
+            CancellationToken.None)).Result).Value);
+
+        // Unchanged problem text is not stored as an edit.
+        Assert.Null(saved.ReportedProblem.Edited);
+        Assert.Equal("Battery was flat and the main contactor had burnt out.", saved.Findings.Edited);
+        Assert.Equal("batt flat, contactr burnt", saved.Findings.Original);
+        Assert.NotNull(saved.EditedAt);
+        Assert.Equal("Draft", saved.ReportStatus);
+
+        // The technician's notes are untouched; the report uses the edits.
+        var workOrder = await dbContext.WorkOrders.SingleAsync(x => x.Id == fixture.WorkOrder.Id);
+        Assert.Equal("batt flat, contactr burnt", workOrder.JobCardNotes);
+        await controller.DownloadServiceReportPdf(fixture.WorkOrder.Id, CancellationToken.None);
+        Assert.Equal("Battery was flat and the main contactor had burnt out.", pdfRenderer.LastReport!.Findings);
+        Assert.Equal("Replaced the battery and contactor; tested under load.", pdfRenderer.LastReport.WorkDone);
+        Assert.Equal("Gen won't start", pdfRenderer.LastReport.ReportedProblem);
+        Assert.Contains(dbContext.WorkOrderEvents, x => x.WorkOrderId == fixture.WorkOrder.Id && x.EventType == "ReportEdited");
+
+        // Clearing a field goes back to the technician's wording.
+        await controller.UpdateReportContent(fixture.WorkOrder.Id, new UpdateReportContentRequest(null, "  ", "Replaced the battery and contactor; tested under load."), CancellationToken.None);
+        await controller.DownloadServiceReportPdf(fixture.WorkOrder.Id, CancellationToken.None);
+        Assert.Equal("batt flat, contactr burnt", pdfRenderer.LastReport!.Findings);
+    }
+
+    [Fact]
+    public async Task EditingAnApprovedReport_SendsItBackForApproval()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        fixture.WorkOrder.ReportStatus = "Approved";
+        fixture.WorkOrder.ReportApprovedAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync();
+        var controller = CreateExecutionController(dbContext, fixture);
+
+        var saved = Assert.IsType<ReportContentResponse>(Assert.IsType<OkObjectResult>((await controller.UpdateReportContent(fixture.WorkOrder.Id,
+            new UpdateReportContentRequest(null, "Corrected findings.", null), CancellationToken.None)).Result).Value);
+
+        Assert.Equal("Draft", saved.ReportStatus);
+        Assert.Null((await dbContext.WorkOrders.SingleAsync(x => x.Id == fixture.WorkOrder.Id)).ReportApprovedAt);
+    }
+
+    [Theory]
+    [InlineData("Sent")]
+    [InlineData("Acknowledged")]
+    public async Task ASentOrAcknowledgedReport_CannotBeEdited(string status)
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        fixture.WorkOrder.ReportStatus = status;
+        await dbContext.SaveChangesAsync();
+        var controller = CreateExecutionController(dbContext, fixture);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.UpdateReportContent(fixture.WorkOrder.Id,
+            new UpdateReportContentRequest(null, "Too late.", null), CancellationToken.None));
+        var content = Assert.IsType<ReportContentResponse>(Assert.IsType<OkObjectResult>((await controller.GetReportContent(fixture.WorkOrder.Id, CancellationToken.None)).Result).Value);
+        Assert.NotNull(content.LockedReason);
+        Assert.Null(content.Findings.Edited);
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

@@ -158,6 +158,29 @@ internal sealed class EmailTemplateService(AppDbContext dbContext) : IEmailTempl
                 ["fullName", "platformName", "loginUrl", "email", "temporaryPassword", "supportEmail"],
                 ["fullName", "email", "loginUrl"],
                 true),
+            ["signup-verify-email"] = new(
+                "signup-verify-email",
+                "Self sign-up: confirm email",
+                "Confirm your email to start your {{platformName}} trial",
+                """
+                <p>Hello {{fullName}},</p>
+                <p>Thanks for signing up {{companyName}} for {{platformName}}.</p>
+                <p><a href="{{verifyLink}}">Confirm your email and open your workspace</a></p>
+                <p>Your 14-day free trial starts when you open the link. It expires at {{expiresAt}}. If you did not sign up, you can ignore this message.</p>
+                <p>Need help? Contact {{supportEmail}}.</p>
+                """,
+                """
+                Hello {{fullName}},
+
+                Thanks for signing up {{companyName}} for {{platformName}}.
+                Confirm your email and open your workspace: {{verifyLink}}
+                Your 14-day free trial starts when you open the link. It expires at {{expiresAt}}.
+                If you did not sign up, you can ignore this message.
+                Need help? Contact {{supportEmail}}.
+                """,
+                ["fullName", "companyName", "platformName", "verifyLink", "supportEmail", "expiresAt"],
+                ["fullName", "verifyLink"],
+                true),
             ["password-reset-link"] = new(
                 "password-reset-link",
                 "Self-service password reset",
@@ -295,6 +318,33 @@ internal sealed class EmailTemplateService(AppDbContext dbContext) : IEmailTempl
             ["work-order.started"] = new("work-order.started", "Work order started notification", "Work order {{WorkOrderNumber}} is now in progress", "<p>Work order <strong>{{WorkOrderNumber}}</strong> has been started.</p><p><strong>Technician:</strong> {{TechnicianName}}<br /><strong>Started At:</strong> {{StartedAt}}</p>", "Work order {{WorkOrderNumber}} has been started.\nTechnician: {{TechnicianName}}\nStarted At: {{StartedAt}}", ["WorkOrderNumber", "TechnicianName", "StartedAt"], ["WorkOrderNumber"], true),
             ["work-order.closed"] = new("work-order.closed", "Work order closed notification", "Work order {{WorkOrderNumber}} closed", "<p>Dear {{ClientName}},</p><p>Work order <strong>{{WorkOrderNumber}}</strong> has been closed.</p><p><strong>Summary:</strong> {{CompletionSummary}}</p>", "Dear {{ClientName}},\n\nWork order {{WorkOrderNumber}} has been closed.\nSummary: {{CompletionSummary}}", ["WorkOrderNumber", "ClientName", "CompletionSummary"], ["WorkOrderNumber"], true),
             ["work-order.cancelled"] = new("work-order.cancelled", "Work order cancelled notification", "Work order {{WorkOrderNumber}} has been cancelled", "<p>Work order <strong>{{WorkOrderNumber}}</strong> has been cancelled.</p><p><strong>Reason:</strong> {{Reason}}</p>", "Work order {{WorkOrderNumber}} has been cancelled.\nReason: {{Reason}}", ["WorkOrderNumber", "Reason"], ["WorkOrderNumber"], true),
+            ["email-intake-received"] = new(
+                "email-intake-received",
+                "Email request received (auto-reply)",
+                "Re: {{originalSubject}} [{{workOrderNumber}}]",
+                "<p>Hello {{fullName}},</p><p>Thank you for contacting {{companyName}}. We've received your request and logged it as <strong>{{workOrderNumber}}</strong>.</p><p>Our team will be in touch shortly. To add anything, just reply to this email and keep <strong>{{workOrderNumber}}</strong> in the subject.</p><p>Regards,<br />{{companyName}}</p>",
+                "Hello {{fullName}},\n\nThank you for contacting {{companyName}}. We've received your request and logged it as {{workOrderNumber}}.\n\nOur team will be in touch shortly. To add anything, just reply to this email and keep {{workOrderNumber}} in the subject.\n\nRegards,\n{{companyName}}",
+                ["fullName", "companyName", "workOrderNumber", "workOrderTitle", "originalSubject"],
+                ["workOrderNumber"],
+                true),
+            ["email-intake-reply-added"] = new(
+                "email-intake-reply-added",
+                "Email added to an existing job (auto-reply)",
+                "Re: {{originalSubject}}",
+                "<p>Hello {{fullName}},</p><p>Thank you — your message has been added to <strong>{{workOrderNumber}}</strong> ({{workOrderTitle}}). Our team has been notified.</p><p>Regards,<br />{{companyName}}</p>",
+                "Hello {{fullName}},\n\nThank you — your message has been added to {{workOrderNumber}} ({{workOrderTitle}}). Our team has been notified.\n\nRegards,\n{{companyName}}",
+                ["fullName", "companyName", "workOrderNumber", "workOrderTitle", "workOrderStatus", "originalSubject"],
+                ["workOrderNumber"],
+                true),
+            ["email-intake-unrecognised"] = new(
+                "email-intake-unrecognised",
+                "Email from an unrecognised sender (auto-reply)",
+                "Re: {{originalSubject}}",
+                "<p>Hello {{fullName}},</p><p>Thank you for your email to {{companyName}}. We couldn't match your email address to a customer account, so your message hasn't been logged as a service request yet.</p><p>Please reply from the email address registered with us, or call us so we can help.</p><p>Regards,<br />{{companyName}}</p>",
+                "Hello {{fullName}},\n\nThank you for your email to {{companyName}}. We couldn't match your email address to a customer account, so your message hasn't been logged as a service request yet.\n\nPlease reply from the email address registered with us, or call us so we can help.\n\nRegards,\n{{companyName}}",
+                ["fullName", "companyName", "originalSubject"],
+                [],
+                true),
             ["work-order.client.started"] = new(
                 "work-order.client.started",
                 "Client notification — work started",

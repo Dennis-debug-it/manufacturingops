@@ -8,6 +8,7 @@ import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import { Logo } from '../../shared/components/Logo'
 import { resolveErrorMessage } from '../../shared/api/apiError'
+import { useAuth } from '../../shared/hooks/useAuth'
 
 const resetPasswordSchema = z
   .object({
@@ -36,6 +37,7 @@ export function ResetPasswordPage() {
   const token = searchParams.get('token') ?? ''
   const isInvite = searchParams.get('mode') === 'invite'
   const navigate = useNavigate()
+  const { isAuthenticated, user: signedInUser, logout } = useAuth()
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [invitationStatus, setInvitationStatus] = useState<InvitationStatus | null>(null)
@@ -120,6 +122,9 @@ export function ResetPasswordPage() {
         confirmPassword: values.confirmPassword,
       })
       setSuccess(true)
+      // Opened in a browser where someone else is signed in (often the admin who sent the invite):
+      // sign them out, or the sign-in page would carry on as them.
+      if (isAuthenticated) await logout()
       setTimeout(() => navigate(isInvite ? '/login?welcome=1' : '/login', { replace: true }), 2000)
     } catch (error) {
       setSubmitError(resolveErrorMessage(error))
@@ -133,6 +138,11 @@ export function ResetPasswordPage() {
         <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 text-white shadow-2xl backdrop-blur">
           <Logo tone="dark" className="h-12 w-auto" />
           <h1 className="mt-6 text-lg font-semibold tracking-tight">{isInvite ? 'Set your password' : 'Choose a new password'}</h1>
+          {isAuthenticated && signedInUser && !success ? (
+            <p role="note" className="mt-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-300">
+              {signedInUser.fullName} is signed in on this browser. Setting this password signs them out first.
+            </p>
+          ) : null}
 
           {isInvite && !success && invitationStatus !== 'VALID' ? (
             <div className="mt-8 space-y-4">

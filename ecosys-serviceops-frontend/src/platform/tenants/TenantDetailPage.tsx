@@ -502,7 +502,7 @@ export function TenantDetailPage() {
       content: communication ? (
         <div className="space-y-5">
           <section className={panelClass}>
-            <SectionTitle title="Email settings" description="Read-only. The tenant manages its own email in its workspace: sender name and reply-to under Settings → Workspace Email, and platform mail versus its own SMTP server under Settings → Email Delivery." />
+            <SectionTitle title="Email settings" description="Read-only. The tenant manages its own email in its workspace under Settings → Email (sender name, reply-to, and optionally its own mail server)." />
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <InfoCard label="Sends through" value={communication.emailSettings.usesOwnSmtp ? `Own SMTP server (${communication.emailSettings.ownSmtpHost ?? '—'})` : 'Platform mail'} />
               {communication.emailSettings.usesOwnSmtp ? <InfoCard label="From address" value={communication.emailSettings.ownFromAddress ?? '—'} /> : null}

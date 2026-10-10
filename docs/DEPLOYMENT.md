@@ -77,6 +77,7 @@ log after changing this.
 | `ECOSYS_BACKUP_DIR` | `./backups` | Host directory for database dumps — §5 |
 | `ECOSYS_BACKUP_RETENTION_DAYS` | `14` | Prune dumps older than this; `0` keeps everything |
 | `ECOSYS_SMTP_HOST` / `_PORT` / `_USE_SSL` / `_USERNAME` / `_PASSWORD` | *(unset)* | Outbound email. With no host configured the app runs but sends nothing — including password-reset mail |
+| `ECOSYS_SELF_SIGNUP_ENABLED` | `true` | The public **Start free trial** page (`/signup`). A company enters its details, confirms its email from the link, and lands in a 14-day Suite trial workspace; each sign-up appears under Platform → Leads as "Converted to Workspace". Needs SMTP; without it the page tells people to request a demo. `false` turns it off |
 
 `ASPNETCORE_ENVIRONMENT` is pinned to `Production` by the compose file and the Dockerfile.
 That is what disables Swagger and test seeding and enables HSTS; do not override it.

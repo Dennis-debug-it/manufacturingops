@@ -11,21 +11,21 @@ export interface NavItem {
 }
 
 export const tenantNavItems: NavItem[] = [
-  { label: 'Dashboard', to: '/dashboard', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer'], permission: 'dashboard.view', icon: LayoutDashboard },
-  { label: 'Work Orders', to: '/work-orders', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: ClipboardList },
+  { label: 'Dashboard', to: '/dashboard', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'dashboard.view', icon: LayoutDashboard },
+  { label: 'Work Orders', to: '/work-orders', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], permission: 'work-orders.view', icon: ClipboardList },
   { label: 'Scheduling Board', to: '/dispatch/board', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: CalendarClock },
   { label: 'Live Map', to: '/dispatch/map', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: MapPin },
   { label: 'Maintenance', to: '/maintenance/calendar', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Wrench },
   { label: 'Clients', to: '/clients', roles: ['admin', 'manager', 'dispatcher', 'finance', 'viewer'], permission: 'clients.view', icon: Building2 },
-  { label: 'Inventory', to: '/inventory', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'materials.view', icon: Package },
+  { label: 'Inventory', to: '/inventory', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], permission: 'materials.view', icon: Package },
   { label: 'Users & Access', to: '/team', roles: ['admin'], permission: 'team.view', icon: Users },
-  { label: 'Knowledge', to: '/knowledge', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer'], permission: 'knowledge.view', icon: BookOpen },
+  { label: 'Knowledge', to: '/knowledge', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer', 'materials_controller'], permission: 'knowledge.view', icon: BookOpen },
   { label: 'Contracts', to: '/contracts', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'contracts.view', icon: FileText },
   { label: 'Finance', to: '/finance', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'finance.view', icon: Wallet },
   // Self-service clock in/out, leave and timesheet for office staff who also go out on jobs.
-  { label: 'My Time & Leave', to: '/my-time', roles: ['manager', 'dispatcher', 'technician'], icon: CalendarClock },
-  { label: 'Approvals', to: '/approvals', roles: ['admin', 'manager', 'finance'], icon: CheckSquare },
-  { label: 'Reports', to: '/reports', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'reports.view', icon: BarChart3 },
+  { label: 'My Time & Leave', to: '/my-time', roles: ['manager', 'dispatcher', 'technician', 'materials_controller'], icon: CalendarClock },
+  { label: 'Approvals', to: '/approvals', roles: ['admin', 'manager', 'finance', 'materials_controller'], icon: CheckSquare },
+  { label: 'Reports', to: '/reports', roles: ['admin', 'manager', 'finance', 'viewer', 'materials_controller'], permission: 'reports.view', icon: BarChart3 },
   ...(WHATSAPP_ENABLED ? [{ label: 'WhatsApp', to: '/whatsapp', roles: ['admin', 'manager', 'dispatcher', 'viewer'] as AppRole[], permission: 'whatsapp.view', icon: MessageCircle }] : []),
   { label: 'Settings', to: '/settings', roles: ['admin'], permission: 'settings.view', icon: Settings2 },
 ]

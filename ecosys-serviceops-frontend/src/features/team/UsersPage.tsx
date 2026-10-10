@@ -9,7 +9,7 @@ import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
 import { useResendCredentials, useTeamUsers } from './api'
-import { NewUserFormDrawer } from './components/NewUserFormDrawer'
+import { NewUserFormDrawer, roleLabel } from './components/NewUserFormDrawer'
 import type { TeamUser } from './types'
 import { TeamTabNav } from './components/TeamTabNav'
 
@@ -42,6 +42,7 @@ export function UsersPage() {
   const columns: DataTableColumn<TeamUser>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/team/users/${row.id}`}>{row.fullName}</Link> },
     { key: 'email', header: 'Email', cell: (row) => row.email },
+    { key: 'role', header: 'Role', cell: (row) => roleLabel(row.role) },
     { key: 'department', header: 'Department', cell: (row) => row.department ?? '—' },
     { key: 'jobTitle', header: 'Job Title', cell: (row) => row.jobTitle ?? '—' },
     { key: 'defaultBranchName', header: 'Branch', cell: (row) => row.defaultBranchName ?? (row.hasAllBranchAccess ? 'All Branches' : '—') },

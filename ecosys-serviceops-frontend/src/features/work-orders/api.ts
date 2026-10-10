@@ -4,6 +4,7 @@ import { endpoints } from '../../shared/api/endpoints'
 import { usePermission } from '../../shared/hooks/usePermission'
 import type { PagedResult } from '../../shared/types/pagination'
 import type {
+  ReportContent,
   RelatedWorkOrders,
   RepeatVisitCheck,
   WorkOrder,
@@ -499,7 +500,11 @@ export function useUpdatePhoto(id: string) {
         category: payload.category,
         includeInReport: payload.includeInReport,
       }),
-    onSuccess: () => invalidateExecution(queryClient, id),
+    onSuccess: () => {
+      invalidateExecution(queryClient, id)
+      // Captions and "include in report" show in the service report.
+      void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'service-report'] })
+    },
   })
 }
 
@@ -547,6 +552,26 @@ export function useGenerateServiceReport(id: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'service-report'] })
       invalidateExecution(queryClient, id)
+    },
+  })
+}
+
+export function useReportContent(id: string) {
+  return useQuery({
+    queryKey: ['work-orders', id, 'report-content'],
+    queryFn: () => api.get<ReportContent>(endpoints.workOrders.reportContent(id)),
+  })
+}
+
+export function useUpdateReportContent(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { reportedProblem: string | null; findings: string | null; workDone: string | null }) =>
+      api.put<ReportContent>(endpoints.workOrders.reportContent(id), payload),
+    onSuccess: (content) => {
+      queryClient.setQueryData(['work-orders', id, 'report-content'], content)
+      void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'service-report'] })
+      void queryClient.invalidateQueries({ queryKey: ['work-orders', 'report-queue'] })
     },
   })
 }

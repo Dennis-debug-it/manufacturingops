@@ -19,6 +19,12 @@ public interface IMvpAuthService
     Task<SignupResult> SignupAsync(string fullName, string email, string password, string companyName, string? industry, string country, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Creates the workspace for a self-service sign-up whose email has been confirmed: a 14-day
+    /// Suite trial with the signer as its administrator, signed in straight away.
+    /// </summary>
+    Task<LoginResult> CreateVerifiedSignupWorkspaceAsync(PendingSignup signup, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// <paramref name="identifier"/> is either an email (globally unique, resolved directly) or a
     /// username (unique only within a tenant, per EC-041 — two tenants may each have a "jsmith").
     /// A username-shaped identifier therefore also needs <paramref name="workspace"/> — the user's
@@ -146,6 +152,55 @@ internal sealed class MvpAuthService(
 
         tenantSecurityPolicyService.ValidatePassword(password, new TenantSecurityPolicy());
 
+        var (token, tenant, user, permissions) = await CreateTrialWorkspaceAsync(
+            fullName.Trim(), normalizedEmail, user => passwordHasher.HashPassword(user, password),
+            companyName, industry, country, cancellationToken);
+        return new SignupResult(token, tenant.Id, user.Id, tenant.CompanyName, user.Role, user.JobTitle, permissions);
+    }
+
+    public async Task<LoginResult> CreateVerifiedSignupWorkspaceAsync(PendingSignup signup, CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = signup.Email.Trim().ToLowerInvariant();
+        if (await dbContext.Users.AnyAsync(x => x.Email.ToLower() == normalizedEmail, cancellationToken))
+        {
+            throw new BusinessRuleException("An account already exists for this email. Sign in, or reset your password.");
+        }
+
+        var (token, tenant, user, permissions) = await CreateTrialWorkspaceAsync(
+            signup.FullName, normalizedEmail, _ => signup.PasswordHash,
+            signup.CompanyName, signup.Industry, signup.Country, cancellationToken);
+
+        return new LoginResult(
+            token,
+            tenant.Id,
+            user.Id,
+            user.FullName,
+            user.Email,
+            user.Role,
+            user.JobTitle,
+            user.Department,
+            user.MustChangePassword,
+            permissions,
+            tenant.CompanyName,
+            tenant.Country,
+            tenant.Industry,
+            tenant.LogoUrl,
+            tenant.ShowPoweredByEcosys,
+            tenant.TimeZoneId,
+            user.Username,
+            user.HasEmail);
+    }
+
+    /// <summary>A new workspace on a 14-day Suite trial, with <paramref name="email"/> as its administrator.</summary>
+    private async Task<(string Token, Tenant Tenant, User User, UserPermissionsModel Permissions)> CreateTrialWorkspaceAsync(
+        string fullName,
+        string normalizedEmail,
+        Func<User, string> hashPassword,
+        string companyName,
+        string? industry,
+        string country,
+        CancellationToken cancellationToken)
+    {
         await using var transaction = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(cancellationToken) : null;
         var trimmedCompanyName = companyName.Trim();
@@ -172,7 +227,7 @@ internal sealed class MvpAuthService(
         var user = new User
         {
             Tenant = tenant,
-            FullName = fullName.Trim(),
+            FullName = fullName,
             Email = normalizedEmail,
             Role = AppRoles.Admin,
             JobTitle = "Tenant Administrator",
@@ -181,7 +236,7 @@ internal sealed class MvpAuthService(
         };
 
         var permissions = permissionTemplateService.GetFullTenantPermissions();
-        user.PasswordHash = passwordHasher.HashPassword(user, password);
+        user.PasswordHash = hashPassword(user);
         user.Permission = ToEntity(permissions);
 
         dbContext.Tenants.Add(tenant);
@@ -197,6 +252,12 @@ internal sealed class MvpAuthService(
         await dbContext.SaveChangesAsync(cancellationToken);
         await ProvisionTenantDefaultsAsync(tenant.Id, cancellationToken);
 
+        // The workspace row mirrors its license (status Trial, trial end date, seats), as it does for
+        // workspaces the platform creates.
+        var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
+        TenantLifecycleState.Sync(tenant, license, DateTime.UtcNow);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
         await auditLogService.LogAsync(
             tenant.Id,
             user.Id,
@@ -208,7 +269,7 @@ internal sealed class MvpAuthService(
 
         var token = await CreateTokenAsync(user, tenant, permissions, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-        return new SignupResult(token, tenant.Id, user.Id, tenant.CompanyName, user.Role, user.JobTitle, permissions);
+        return (token, tenant, user, permissions);
     }
 
     public async Task<LoginResult> LoginAsync(string identifier, string password, string? workspace = null, CancellationToken cancellationToken = default)

@@ -17,10 +17,19 @@ export const ROLE_OPTIONS: Array<{ value: TenantUserRole; label: string }> = [
   { value: 'Viewer', label: 'Viewer' },
   { value: 'Technician', label: 'Technician' },
   { value: 'Dispatcher', label: 'Dispatcher' },
+  { value: 'MaterialsController', label: 'Materials Controller' },
   { value: 'Manager', label: 'Manager' },
   { value: 'finance', label: 'Finance' },
   { value: 'Admin', label: 'Admin (full access)' },
 ]
+
+/** Plain role name for display, e.g. "finance" → "Finance", "Admin" → "Admin". */
+export const roleLabel = (role: string | null | undefined) => {
+  if (!role) return '—'
+  if (role.toLowerCase() === 'user') return 'Viewer'
+  const option = ROLE_OPTIONS.find((candidate) => candidate.value.toLowerCase() === role.toLowerCase())
+  return option ? option.label.replace(/\s*\(.*\)$/, '') : role
+}
 
 interface FormValues {
   fullName: string
@@ -124,6 +133,12 @@ export function NewUserFormDrawer({ open, onClose }: { open: boolean; onClose: (
         return
       }
 
+      if (!noEmail && created.credentialDelivery && !created.credentialDelivery.success) {
+        // The user exists, but the invitation email didn't go out: say so instead of "Invited".
+        toast.error(`${created.fullName} was added, but the invitation email could not be sent. Check Settings → Email, then use Resend Invite on their profile.`)
+        close()
+        return
+      }
       toast.success(noEmail ? `Created ${created.fullName}` : `Invited ${created.fullName}`)
       close()
     } catch (error) {

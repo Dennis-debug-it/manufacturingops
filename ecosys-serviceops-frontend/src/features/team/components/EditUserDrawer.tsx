@@ -42,7 +42,7 @@ const toFormValues = (user: TeamUser): FormValues => ({
  * Fix a user's details after creation. PUT /api/users/{id} replaces the whole user, so everything this
  * form doesn't show (permissions, branch access, groups, status) is sent back exactly as loaded.
  */
-export function EditUserDrawer({ open, onClose, user }: { open: boolean; onClose: () => void; user: TeamUser }) {
+export function EditUserDrawer({ open, onClose, user, focusRole = false }: { open: boolean; onClose: () => void; user: TeamUser; focusRole?: boolean }) {
   const { user: currentUser } = useAuth()
   const isSelf = currentUser?.userId === user.id
   const updateUser = useUpdateTeamUser(user.id)
@@ -51,6 +51,13 @@ export function EditUserDrawer({ open, onClose, user }: { open: boolean; onClose
   useEffect(() => {
     if (open) reset(toFormValues(user))
   }, [open, user, reset])
+
+  // "Change Role" opens the same form with the role picker ready.
+  useEffect(() => {
+    if (!open || !focusRole) return
+    const timer = window.setTimeout(() => document.getElementById('edit-user-role')?.focus(), 50)
+    return () => window.clearTimeout(timer)
+  }, [open, focusRole])
 
   const email = watch('email')
   const role = watch('role')

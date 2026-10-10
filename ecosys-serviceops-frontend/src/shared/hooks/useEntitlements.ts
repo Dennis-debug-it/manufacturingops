@@ -9,7 +9,8 @@ export function useEntitlements() {
   const query = useQuery({
     queryKey: ['tenant-license', tenant?.tenantId],
     queryFn: () => api.get<{ planCode: string; planName: string; modules: ServiceOpsModule[]; maxUsers?: number | null }>('/api/tenant/license'),
-    enabled: isAuthenticated && !isPlatform,
+    // A temporary password's token is refused everywhere but change-password; wait until it's replaced.
+    enabled: isAuthenticated && !isPlatform && !user?.mustChangePassword,
     staleTime: 30_000,
   })
   const modules = query.data?.modules ?? []

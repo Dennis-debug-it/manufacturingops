@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
@@ -33,6 +33,9 @@ export function RequestDemoPage() {
           title="Request a Demo"
           subtitle="See ECOSYS in action for your service operation."
         />
+        <p className="mt-3 text-sm text-slate-600">
+          Want to try it yourself first? <Link to="/signup" className="font-medium text-slate-900 underline">Start a 14-day free trial</Link> and be in your workspace in minutes.
+        </p>
         <form
           className="mt-8 space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
           onSubmit={handleSubmit(async (values) => {

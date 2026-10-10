@@ -38,7 +38,7 @@ const humanize = (eventType: string) => {
 
 function kindOf(event: WorkOrderEvent): Kind {
   const type = event.eventType.toLowerCase()
-  if (type === 'comment' || type === 'progressupdate') return 'notes'
+  if (type === 'comment' || type === 'progressupdate' || type === 'emailreceived') return 'notes'
   if (type.includes('assign') || type.includes('accept') || type.includes('declin') || type.includes('technician') || type.includes('group')) return 'assignment'
   if (event.oldStatus || event.newStatus || ['statuschanged', 'created', 'scheduled', 'rescheduled', 'escalation', 'overduenotified', 'arrival', 'departure', 'intransit'].includes(type)) return 'status'
   return 'other'
@@ -52,7 +52,8 @@ function fromEvent(event: WorkOrderEvent): FeedItem {
     at: event.occurredAt,
     actor: event.actorUserName ?? 'System',
     title: event.eventType === 'Comment' ? 'Update' : humanize(event.eventType),
-    body: [event.message, statusChange, event.reason].filter(Boolean).join(' · ') || null,
+    // An emailed reply's text is in its note (the message is just "Email from … : subject").
+    body: [event.message, statusChange, event.reason, event.eventType === 'EmailReceived' ? event.note : null].filter(Boolean).join(' · ') || null,
     escalation: event.eventType === 'Escalation',
   }
 }

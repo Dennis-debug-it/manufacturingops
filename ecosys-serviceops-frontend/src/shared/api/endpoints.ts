@@ -34,6 +34,8 @@ export const endpoints = {
     validateInvitation: '/api/auth/validate-invitation',
     resendInvitation: '/api/auth/resend-invitation',
     changePassword: '/api/auth/change-password',
+    signupStart: '/api/auth/signup/start',
+    signupVerify: '/api/auth/signup/verify',
   },
   tenant: {
     profile: '/api/tenant/profile',
@@ -88,6 +90,7 @@ export const endpoints = {
     serviceReport: (id: string) => `/api/workorders/${id}/service-report`,
     generateServiceReport: (id: string) => `/api/workorders/${id}/service-report/generate`,
     serviceReportPdf: (id: string) => `/api/workorders/${id}/service-report/pdf`,
+    reportContent: (id: string) => `/api/workorders/${id}/report/content`,
     pause: (id: string) => `/api/workorders/${id}/pause`,
     resume: (id: string) => `/api/workorders/${id}/resume`,
     close: (id: string) => `/api/workorders/${id}/close`,

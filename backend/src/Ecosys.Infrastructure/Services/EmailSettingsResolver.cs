@@ -169,6 +169,10 @@ public sealed class EmailSettingsResolver(AppDbContext dbContext) : IEmailSettin
         return new EffectiveEmailSettings(merged, UsesPlatformMail: true);
     }
 
+    // Email settings are workspace-scoped, so a workspace user's request can't see the platform row
+    // through the normal filter. Without it, mail sent during such a request (a new user's invite,
+    // an admin password reset) fell back to the workspace's empty row — no host, port 25, no TLS —
+    // and failed. The row is always picked by an explicit tenant id here.
     private Task<EmailSetting?> LoadAsync(Guid tenantId, CancellationToken cancellationToken) =>
-        dbContext.EmailSettings.SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+        dbContext.EmailSettings.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
 }
