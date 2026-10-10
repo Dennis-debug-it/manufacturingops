@@ -40,16 +40,94 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
         var style        = PdfStyle.From(cfg);
         var primaryColor = style.Primary(report.PrimaryColor);
         var borderColor  = style.Secondary(report.SecondaryColor);
+        var compact      = string.Equals(cfg.PageDensity, "Compact", StringComparison.OrdinalIgnoreCase);
 
-        var enabledSections = cfg.Sections
+        // Sections render in the order the design puts them, under the labels it shows.
+        var sections = (cfg.Sections is { Count: > 0 } ? cfg.Sections : ReportTemplateConfig.DefaultSections())
+            .Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Id))
             .OrderBy(s => s.Order)
-            .Where(s => s.Enabled)
-            .Select(s => s.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        bool On(string id) => enabledSections.Count == 0 || enabledSections.Contains(id);
+            .DistinctBy(s => s.Id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        // Photo evidence is gated by the IncludePhotos toggle.
-        bool ShowPhotos() => cfg.IncludePhotos && On("photos");
+        var photoGroups = cfg.IncludePhotos ? report.PhotoGroups.Where(x => x.Photos.Count > 0).ToList() : [];
+        var photosInAppendix = string.Equals(cfg.PhotoLayout, "Appendix", StringComparison.OrdinalIgnoreCase);
+        var showPhotos = photoGroups.Count > 0 && sections.Any(s => s.Id.Equals("photos", StringComparison.OrdinalIgnoreCase));
+
+        var hasLogo = cfg.ShowLogo && report.LogoBytes is { Length: > 0 };
+        var logoWidth = Math.Clamp(cfg.LogoWidth, 24, 160);
+        var companyNameSize = Math.Clamp(cfg.CompanyNameFontSize, 10, 32);
+        var contactLine = string.Join("  ·  ", new[] { report.CompanyPhone, report.CompanyEmail, report.CompanyAddress }
+            .Where(x => !string.IsNullOrWhiteSpace(x)));
+        var footerText = cfg.FooterText ?? cfg.DefaultFooterNote;
+
+        void Identity(ColumnDescriptor col, bool centred, float nameSize)
+        {
+            if (cfg.ShowCompanyName)
+            {
+                var name = col.Item().Text(report.CompanyName).FontSize(nameSize).SemiBold().FontColor(primaryColor);
+                if (centred) name.AlignCenter();
+            }
+            if (cfg.ShowCompanyContact && !string.IsNullOrWhiteSpace(contactLine))
+            {
+                var contact = col.Item().Text(contactLine).FontSize(8).FontColor(Colors.Grey.Darken1);
+                if (centred) contact.AlignCenter();
+            }
+        }
+
+        void DocumentTitle(ColumnDescriptor col)
+        {
+            col.Item().AlignRight().Text("SERVICE REPORT").FontSize(16).SemiBold().FontColor(primaryColor);
+            col.Item().AlignRight().Text(report.WorkOrderNumber).FontSize(9).FontColor(Colors.Grey.Darken1);
+        }
+
+        void RenderNamedSection(ColumnDescriptor column, ReportSection section)
+        {
+            var title = string.IsNullOrWhiteSpace(section.Label) ? section.Id : section.Label;
+            switch (section.Id.ToLowerInvariant())
+            {
+                case "service-details":
+                    column.Item().Element(x => RenderSection(x, borderColor, title, new[]
+                    {
+                        ("Client", report.ClientName),
+                        ("Site / Location", report.SiteLabel),
+                        ("Asset", report.AssetName),
+                        ("Asset details", report.AssetDetails),
+                        ("Technician / Team", report.TechnicianTeam),
+                        ("Template", report.TemplateVersion.HasValue
+                            ? $"{report.TemplateName} v{report.TemplateVersion}"
+                            : report.TemplateName)
+                    }));
+                    break;
+                case "problem":
+                    column.Item().Element(x => RenderParagraphSection(x, borderColor, title, report.ReportedProblem));
+                    break;
+                case "findings":
+                    column.Item().Element(x => RenderParagraphSection(x, borderColor, title, report.Findings));
+                    break;
+                case "work-done":
+                    column.Item().Element(x => RenderParagraphSection(x, borderColor, title, report.WorkDone));
+                    break;
+                case "timestamps":
+                    column.Item().Element(x => RenderSection(x, borderColor, title,
+                        report.Timestamps.Select(t => (t.Label, t.Value)).ToArray()));
+                    break;
+                case "checklist":
+                    if (report.ChecklistSections.Count > 0)
+                        column.Item().Element(x => RenderChecklistSection(x, borderColor, title, report.ChecklistSections));
+                    break;
+                case "materials":
+                    column.Item().Element(x => RenderMaterialsSection(x, borderColor, title, report.Materials));
+                    break;
+                case "photos":
+                    if (showPhotos && !photosInAppendix)
+                        RenderPhotoEvidence(column, borderColor, title, photoGroups, cfg.MaxPhotosPerPage);
+                    break;
+                case "signatures":
+                    if (report.Signatures.Count > 0)
+                        column.Item().Element(x => RenderSignatureSection(x, borderColor, title, report.Signatures));
+                    break;
+            }
+        }
 
         return Document.Create(container =>
             container.Page(page =>
@@ -60,40 +138,37 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
 
                 page.Header().Column(header =>
                 {
-                    // ── Company identity row ─────────────────────────────────
-                    header.Item().Row(row =>
+                    // ── Company identity, laid out as the design places the logo ──
+                    header.Item().Element(c => style.HeaderBackground is { } bg ? c.Background(bg).Padding(8) : c).Column(block =>
                     {
-                        var hasLogo = report.LogoBytes is { Length: > 0 };
-
-                        if (hasLogo && cfg.LogoAlignment == LogoAlignment.Left)
-                            row.ConstantItem(80).PaddingRight(12).Image(report.LogoBytes!).FitArea();
-
-                        row.RelativeItem().Column(col =>
+                        if (cfg.LogoAlignment == LogoAlignment.Center)
                         {
-                            if (cfg.ShowCompanyName)
-                                col.Item().Text(report.CompanyName).FontSize(18).SemiBold().FontColor(primaryColor);
-
-                            if (cfg.ShowCompanyContact)
+                            block.Item().Row(row =>
                             {
-                                var contactParts = new[] { report.CompanyPhone, report.CompanyEmail, report.CompanyAddress }
-                                    .Where(x => !string.IsNullOrWhiteSpace(x));
-                                var contactLine = string.Join("  ·  ", contactParts);
-                                if (!string.IsNullOrWhiteSpace(contactLine))
-                                    col.Item().Text(contactLine).FontSize(8).FontColor(Colors.Grey.Darken1);
-                            }
-                        });
-
-                        if (hasLogo && cfg.LogoAlignment == LogoAlignment.Right)
-                            row.ConstantItem(80).PaddingLeft(12).Image(report.LogoBytes!).FitArea();
-
-                        if (hasLogo && cfg.LogoAlignment == LogoAlignment.Center)
+                                row.RelativeItem();
+                                if (hasLogo)
+                                    row.ConstantItem(logoWidth).Image(report.LogoBytes!).FitArea();
+                                row.RelativeItem().Column(DocumentTitle);
+                            });
+                            block.Item().PaddingTop(4).Column(col => Identity(col, centred: true, companyNameSize * 0.8f));
+                        }
+                        else
                         {
-                            // Already placed text; add centered logo after it (secondary position)
+                            block.Item().Row(row =>
+                            {
+                                if (hasLogo && cfg.LogoAlignment == LogoAlignment.Left)
+                                    row.ConstantItem(logoWidth).PaddingRight(12).Image(report.LogoBytes!).FitArea();
+                                row.RelativeItem().Column(col => Identity(col, centred: false, companyNameSize));
+                                row.AutoItem().Column(DocumentTitle);
+                                if (hasLogo && cfg.LogoAlignment == LogoAlignment.Right)
+                                    row.ConstantItem(logoWidth).PaddingLeft(12).Image(report.LogoBytes!).FitArea();
+                            });
                         }
                     });
 
                     // ── Work order identity row ──────────────────────────────
-                    header.Item().PaddingTop(6).BorderBottom(1).BorderColor(borderColor).PaddingBottom(6)
+                    header.Item().PaddingTop(6).BorderTop(2).BorderColor(primaryColor).PaddingTop(6)
+                        .BorderBottom(1).BorderColor(borderColor).PaddingBottom(6)
                         .Row(row =>
                         {
                             row.RelativeItem().Text($"{report.WorkOrderNumber}  |  {report.Title}").FontSize(13).SemiBold();
@@ -105,56 +180,18 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
                         });
                 });
 
-                page.Content().Column(column =>
+                page.Content().PaddingTop(compact ? 6 : 10).Column(column =>
                 {
-                    column.Spacing(12);
+                    column.Spacing(compact ? 8 : 12);
 
-                    if (On("service-details"))
-                        column.Item().Element(x => RenderSection(x, borderColor, "Service details", new[]
-                        {
-                            ("Client", report.ClientName),
-                            ("Site / Location", report.SiteLabel),
-                            ("Asset", report.AssetName),
-                            ("Asset details", report.AssetDetails),
-                            ("Technician / Team", report.TechnicianTeam),
-                            ("Template", report.TemplateVersion.HasValue
-                                ? $"{report.TemplateName} v{report.TemplateVersion}"
-                                : report.TemplateName)
-                        }));
+                    if (!string.IsNullOrWhiteSpace(cfg.IntroText))
+                        column.Item().Text(cfg.IntroText).FontSize(9).FontColor(Colors.Grey.Darken2);
 
-                    if (On("problem"))
-                        column.Item().Element(x => RenderParagraphSection(x, borderColor, "Problem reported", report.ReportedProblem));
+                    foreach (var section in sections)
+                        RenderNamedSection(column, section);
 
-                    if (On("findings"))
-                        column.Item().Element(x => RenderParagraphSection(x, borderColor, "Findings", report.Findings));
-
-                    if (On("work-done"))
-                        column.Item().Element(x => RenderParagraphSection(x, borderColor, "Work done", report.WorkDone));
-
-                    if (On("timestamps"))
-                        column.Item().Element(x => RenderSection(x, borderColor, "Timestamps",
-                            report.Timestamps.Select(t => (t.Label, t.Value)).ToArray()));
-
-                    if (On("checklist") && report.ChecklistSections.Count > 0)
-                        column.Item().Element(x => RenderChecklistSection(x, borderColor, report.ChecklistSections));
-
-                    if (On("materials"))
-                        column.Item().Element(x => RenderMaterialsSection(x, borderColor, report.Materials));
-
-                    if (ShowPhotos())
-                    {
-                        var maxPhotos = Math.Max(1, cfg.MaxPhotosPerPage);
-                        foreach (var group in report.PhotoGroups.Where(x => x.Photos.Count > 0))
-                        {
-                            var capped = group.Photos.Count > maxPhotos
-                                ? group with { Photos = group.Photos.Take(maxPhotos).ToList() }
-                                : group;
-                            column.Item().Element(x => RenderPhotoGroup(x, borderColor, capped));
-                        }
-                    }
-
-                    if (On("signatures") && report.Signatures.Count > 0)
-                        column.Item().Element(x => RenderSignatureSection(x, borderColor, report.Signatures));
+                    if (cfg.ShowSignatureBlock || cfg.ShowStampArea)
+                        column.Item().Element(x => RenderSignOffBlock(x, cfg));
 
                     if (!string.IsNullOrWhiteSpace(cfg.ServiceReportDisclaimer))
                     {
@@ -165,35 +202,130 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
                             col.Item().Text(cfg.ServiceReportDisclaimer).FontSize(8).Italic().FontColor(Colors.Grey.Darken1);
                         });
                     }
+
+                    // Appendix layout: the photos follow everything else, starting on a fresh page.
+                    if (showPhotos && photosInAppendix)
+                    {
+                        column.Item().PageBreak();
+                        var label = sections.First(s => s.Id.Equals("photos", StringComparison.OrdinalIgnoreCase)).Label;
+                        RenderPhotoEvidence(column, borderColor, $"Appendix — {(string.IsNullOrWhiteSpace(label) ? "Photo Evidence" : label)}", photoGroups, cfg.MaxPhotosPerPage);
+                    }
                 });
 
-                page.Footer().BorderTop(1).BorderColor(borderColor).PaddingTop(6).Row(row =>
+                page.Footer().BorderTop(1).BorderColor(borderColor).PaddingTop(6).Column(footer =>
                 {
-                    row.RelativeItem().Column(col =>
+                    footer.Item().Row(row =>
                     {
-                        col.Item().Text(report.CompanyName).FontSize(8).SemiBold().FontColor(Colors.Grey.Darken2);
-                        var footerContact = new[] { report.CompanyPhone, report.CompanyEmail }
-                            .Where(x => !string.IsNullOrWhiteSpace(x));
-                        var footerLine = string.Join("  ·  ", footerContact);
-                        if (!string.IsNullOrWhiteSpace(footerLine))
-                            col.Item().Text(footerLine).FontSize(7).FontColor(Colors.Grey.Darken1);
-                        // Custom footer message from template config
-                        if (!string.IsNullOrWhiteSpace(cfg.FooterText))
-                            col.Item().Text(cfg.FooterText).FontSize(7).Italic().FontColor(Colors.Grey.Darken1);
-                        if (report.ShowPoweredByEcosys)
-                            col.Item().Text("Powered by Ecosys").FontSize(7).FontColor(Colors.Grey.Lighten1);
+                        row.RelativeItem().Column(col =>
+                        {
+                            col.Item().Text(report.CompanyName).FontSize(8).SemiBold().FontColor(Colors.Grey.Darken2);
+                            var footerContact = string.Join("  ·  ", new[] { report.CompanyPhone, report.CompanyEmail }
+                                .Where(x => !string.IsNullOrWhiteSpace(x)));
+                            if (!string.IsNullOrWhiteSpace(footerContact))
+                                col.Item().Text(footerContact).FontSize(7).FontColor(Colors.Grey.Darken1);
+                        });
+
+                        if (style.ShowPageNumbers)
+                        {
+                            style.AlignPageNumber(row.RelativeItem()).AlignBottom().Text(text =>
+                            {
+                                text.Span("Page ").FontSize(8).FontColor(Colors.Grey.Darken1);
+                                text.CurrentPageNumber().FontSize(8).FontColor(Colors.Grey.Darken1);
+                                text.Span(" of ").FontSize(8).FontColor(Colors.Grey.Darken1);
+                                text.TotalPages().FontSize(8).FontColor(Colors.Grey.Darken1);
+                            });
+                        }
                     });
 
-                    row.AutoItem().AlignBottom().Text(text =>
-                    {
-                        text.Span("Page ").FontSize(8).FontColor(Colors.Grey.Darken1);
-                        text.CurrentPageNumber().FontSize(8).FontColor(Colors.Grey.Darken1);
-                        text.Span(" of ").FontSize(8).FontColor(Colors.Grey.Darken1);
-                        text.TotalPages().FontSize(8).FontColor(Colors.Grey.Darken1);
-                    });
+                    if (!string.IsNullOrWhiteSpace(footerText))
+                        footer.Item().PaddingTop(2).Text(footerText).FontSize(7).Italic().FontColor(Colors.Grey.Darken1);
+                    // Hidden when switched off either in the design or in the workspace branding.
+                    if (report.ShowPoweredByEcosys && style.ShowPoweredBy)
+                        footer.Item().PaddingTop(2).Text("Powered by Ecosys").FontSize(7).FontColor(Colors.Grey.Lighten1);
                 });
             }))
             .GeneratePdf();
+    }
+
+    /// <summary>
+    /// Every photo marked for the report, grouped by category in a grid sized so roughly
+    /// <paramref name="photosPerPage"/> fit on a page. Nothing is dropped: extra photos flow onto more pages.
+    /// </summary>
+    private static void RenderPhotoEvidence(ColumnDescriptor column, string borderColor, string title,
+        IReadOnlyCollection<WorkOrderReportPdfPhotoGroup> groups, int photosPerPage)
+    {
+        var perPage = Math.Clamp(photosPerPage, 1, 12);
+        var columns = perPage switch { <= 2 => 1, <= 6 => 2, _ => 3 };
+        var rows = (int)Math.Ceiling(perPage / (double)columns);
+        var imageHeight = Math.Clamp(540f / rows - 30f, 90f, 420f);
+
+        column.Item().Text(title).FontSize(12).SemiBold();
+        foreach (var group in groups)
+        {
+            column.Item().Border(1).BorderColor(borderColor).Padding(10).Column(groupColumn =>
+            {
+                groupColumn.Spacing(6);
+                groupColumn.Item().Text(group.Category).FontSize(11).SemiBold();
+                foreach (var chunk in group.Photos.Chunk(columns))
+                {
+                    groupColumn.Item().ShowEntire().Row(row =>
+                    {
+                        row.Spacing(8);
+                        foreach (var photo in chunk)
+                        {
+                            row.RelativeItem().Column(cell =>
+                            {
+                                cell.Spacing(3);
+                                if (photo.ImageBytes is { Length: > 0 })
+                                    cell.Item().MaxHeight(imageHeight).AlignCenter().Image(photo.ImageBytes).FitArea();
+                                else
+                                    cell.Item().Height(Math.Min(imageHeight, 120f)).Border(1).BorderColor(Colors.Grey.Lighten2)
+                                        .AlignCenter().AlignMiddle().Text("Image unavailable").FontSize(8).FontColor(Colors.Grey.Darken1);
+                                if (!string.IsNullOrWhiteSpace(photo.Caption))
+                                    cell.Item().Text(photo.Caption).FontSize(8);
+                            });
+                        }
+                        // Keep cells the same width when the last row is short.
+                        for (var i = chunk.Length; i < columns; i++)
+                            row.RelativeItem();
+                    });
+                }
+            });
+        }
+    }
+
+    /// <summary>Blank sign-off lines for the design's signature fields, plus the stamp area, aligned as designed.</summary>
+    private static void RenderSignOffBlock(IContainer container, ReportTemplateConfig cfg)
+    {
+        var fields = cfg.ShowSignatureBlock
+            ? (cfg.SignatureFields ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Take(4).DefaultIfEmpty("Authorised Signature").ToList()
+            : [];
+        var position = cfg.SignaturePosition?.Trim().ToLowerInvariant();
+
+        container.PaddingTop(8).Row(row =>
+        {
+            row.Spacing(16);
+            if (position is "center" or "right")
+                row.RelativeItem();
+            foreach (var label in fields)
+            {
+                void Line(IContainer c) => c.Column(col =>
+                {
+                    col.Item().Height(28).BorderBottom(1).BorderColor(Colors.Grey.Darken1);
+                    col.Item().PaddingTop(2).Text(label).FontSize(8).FontColor(Colors.Grey.Darken2);
+                    col.Item().Text("Name / Date").FontSize(7).FontColor(Colors.Grey.Medium);
+                });
+                if (position == "spacebetween" || string.IsNullOrEmpty(position))
+                    row.RelativeItem().Element(Line);
+                else
+                    row.ConstantItem(130).Element(Line);
+            }
+            if (position is "center" or "left")
+                row.RelativeItem();
+            if (cfg.ShowStampArea)
+                row.ConstantItem(70).Height(70).Border(1).BorderColor(Colors.Grey.Lighten1)
+                    .AlignCenter().AlignMiddle().Text("Company\nStamp").FontSize(7).FontColor(Colors.Grey.Medium).AlignCenter();
+        });
     }
 
     private static void RenderSection(IContainer container, string borderColor, string title, IReadOnlyCollection<(string Label, string? Value)> lines)
@@ -223,12 +355,12 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
         });
     }
 
-    private static void RenderMaterialsSection(IContainer container, string borderColor, IReadOnlyCollection<WorkOrderReportPdfMaterial> materials)
+    private static void RenderMaterialsSection(IContainer container, string borderColor, string title, IReadOnlyCollection<WorkOrderReportPdfMaterial> materials)
     {
         container.Border(1).BorderColor(borderColor).Padding(10).Column(column =>
         {
             column.Spacing(6);
-            column.Item().Text("Materials / spares used").FontSize(12).SemiBold();
+            column.Item().Text(title).FontSize(12).SemiBold();
             if (materials.Count == 0)
             {
                 column.Item().Text("No materials recorded.");
@@ -257,12 +389,12 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
         });
     }
 
-    private static void RenderChecklistSection(IContainer container, string borderColor, IReadOnlyCollection<WorkOrderReportPdfChecklistSection> sections)
+    private static void RenderChecklistSection(IContainer container, string borderColor, string title, IReadOnlyCollection<WorkOrderReportPdfChecklistSection> sections)
     {
         container.Border(1).BorderColor(borderColor).Padding(10).Column(column =>
         {
             column.Spacing(8);
-            column.Item().Text("Checklist responses").FontSize(12).SemiBold();
+            column.Item().Text(title).FontSize(12).SemiBold();
 
             foreach (var section in sections)
             {
@@ -301,38 +433,12 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
         });
     }
 
-    private static void RenderPhotoGroup(IContainer container, string borderColor, WorkOrderReportPdfPhotoGroup group)
+    private static void RenderSignatureSection(IContainer container, string borderColor, string title, IReadOnlyCollection<WorkOrderReportPdfSignature> signatures)
     {
         container.Border(1).BorderColor(borderColor).Padding(10).Column(column =>
         {
             column.Spacing(8);
-            column.Item().Text(group.Category).FontSize(12).SemiBold();
-            foreach (var photo in group.Photos)
-            {
-                column.Item().Column(photoColumn =>
-                {
-                    photoColumn.Spacing(4);
-                    if (photo.ImageBytes is { Length: > 0 })
-                    {
-                        photoColumn.Item().Height(160).Image(photo.ImageBytes).FitArea();
-                    }
-                    else if (!string.IsNullOrWhiteSpace(photo.PublicUrl))
-                    {
-                        photoColumn.Item().Text($"Image stored at: {photo.PublicUrl}").FontColor(Colors.Blue.Darken2);
-                    }
-
-                    photoColumn.Item().Text(photo.Caption).FontSize(9);
-                });
-            }
-        });
-    }
-
-    private static void RenderSignatureSection(IContainer container, string borderColor, IReadOnlyCollection<WorkOrderReportPdfSignature> signatures)
-    {
-        container.Border(1).BorderColor(borderColor).Padding(10).Column(column =>
-        {
-            column.Spacing(8);
-            column.Item().Text("Signatures").FontSize(12).SemiBold();
+            column.Item().Text(title).FontSize(12).SemiBold();
 
             foreach (var signature in signatures)
             {

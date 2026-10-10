@@ -77,7 +77,7 @@ export function EvidenceTab({ workOrderId }: { workOrderId: string }) {
 
   const onAnnotationDone = async (blob: Blob) => {
     setAnnotating(null)
-    const annotatedFile = new File([blob], 'annotated-photo.png', { type: 'image/png' })
+    const annotatedFile = new File([blob], 'annotated-photo.jpg', { type: blob.type || 'image/jpeg' })
     try {
       await uploadPhoto.mutateAsync({ file: annotatedFile, category: 'Other' })
       toast.success('Photo uploaded')

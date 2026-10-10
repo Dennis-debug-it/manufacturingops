@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Ecosys.Domain.Entities;
@@ -893,6 +894,12 @@ public sealed partial class WorkOrderExecutionController(
         var workOrder = await LoadWorkOrderAsync(workOrderId, cancellationToken, skipTechnicianScope);
         var tenant = await dbContext.Tenants.SingleAsync(x => x.Id == TenantId, cancellationToken);
 
+        // Resolve the service-report design config: the per-document-type override if present,
+        // otherwise the shared base config (null = use defaults in the renderer).
+        var templateConfig = PdfTemplateHelper.ResolveForDocument(
+            tenant.ReportTemplateConfigJson, tenant.DocumentDesignsJson, "service-report");
+        string Stamp(DateTime value) => FormatReportDate(value.ToLocalTime(), templateConfig);
+
         var photos = await dbContext.WorkOrderPhotoEvidence
             .Include(x => x.Attachment)
             .Where(x => x.TenantId == TenantId && x.WorkOrderId == workOrderId && x.IncludeInReport)
@@ -936,7 +943,7 @@ public sealed partial class WorkOrderExecutionController(
                 signature.SignerName,
                 signature.SignerRole,
                 signature.Comment,
-                signature.CapturedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                Stamp(signature.CapturedAt),
                 TryDecodeDataUrl(signature.SignatureDataUrl, out var imageBytes) ? imageBytes : null))
             .ToList();
 
@@ -981,11 +988,6 @@ public sealed partial class WorkOrderExecutionController(
         // Fetch logo bytes so the renderer can embed the image without making outbound HTTP calls
         var logoBytes = await TryFetchLogoBytesAsync(tenant.LogoUrl, cancellationToken);
 
-        // Resolve the service-report design config: the per-document-type override if present,
-        // otherwise the shared base config (null = use defaults in the renderer).
-        var templateConfig = PdfTemplateHelper.ResolveForDocument(
-            tenant.ReportTemplateConfigJson, tenant.DocumentDesignsJson, "service-report");
-
         return new WorkOrderReportPdfModel(
             string.IsNullOrWhiteSpace(tenant.CompanyName) ? tenant.Name : tenant.CompanyName,
             tenant.LogoUrl,
@@ -1008,14 +1010,14 @@ public sealed partial class WorkOrderExecutionController(
             workOrder.Description,
             workOrder.JobCardNotes,
             workOrder.WorkDoneNotes,
-            DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm 'UTC'"),
+            $"{FormatReportDate(DateTime.UtcNow, templateConfig)} UTC",
             new List<WorkOrderReportPdfTimestamp>
             {
-                new("Created", workOrder.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")),
-                new("Arrived", workOrder.ArrivalAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")),
-                new("Started", workOrder.WorkStartedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")),
-                new("Completed", workOrder.CompletedAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm")),
-                new("Departed", workOrder.DepartureAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))
+                new("Created", Stamp(workOrder.CreatedAt)),
+                new("Arrived", workOrder.ArrivalAt is { } arrivalAt ? Stamp(arrivalAt) : null),
+                new("Started", workOrder.WorkStartedAt is { } workStartedAt ? Stamp(workStartedAt) : null),
+                new("Completed", workOrder.CompletedAt is { } completedAt ? Stamp(completedAt) : null),
+                new("Departed", workOrder.DepartureAt is { } departureAt ? Stamp(departureAt) : null)
             },
             checklistSections,
             materialUsages.Select(x => new WorkOrderReportPdfMaterial(
@@ -1028,6 +1030,20 @@ public sealed partial class WorkOrderExecutionController(
             groupedPhotos,
             signatureModels,
             templateConfig);
+    }
+
+    /// <summary>A date and time in the design's date format (invalid formats fall back to the default).</summary>
+    private static string FormatReportDate(DateTime value, ReportTemplateConfig? config)
+    {
+        var format = string.IsNullOrWhiteSpace(config?.DateFormat) ? "dd MMM yyyy" : config.DateFormat;
+        try
+        {
+            return value.ToString($"{format} HH:mm", CultureInfo.InvariantCulture);
+        }
+        catch (FormatException)
+        {
+            return value.ToString("dd MMM yyyy HH:mm", CultureInfo.InvariantCulture);
+        }
     }
 
     private byte[]? TryLoadImageBytes(string? storagePath, CancellationToken cancellationToken)
