@@ -259,13 +259,13 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
         var rows = (int)Math.Ceiling(perPage / (double)columns);
         var imageHeight = Math.Clamp(540f / rows - 30f, 90f, 420f);
 
-        column.Item().Text(title).FontSize(12).SemiBold();
+        column.Item().Element(x => SectionHeading(x, borderColor, title));
         foreach (var group in groups)
         {
-            column.Item().Border(1).BorderColor(borderColor).Padding(10).Column(groupColumn =>
+            column.Item().Column(groupColumn =>
             {
                 groupColumn.Spacing(6);
-                groupColumn.Item().Text(group.Category).FontSize(11).SemiBold();
+                groupColumn.Item().Text(group.Category).FontSize(10).SemiBold().FontColor(Colors.Grey.Darken2);
                 foreach (var chunk in group.Photos.Chunk(columns))
                 {
                     groupColumn.Item().ShowEntire().Row(row =>
@@ -328,12 +328,16 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
         });
     }
 
+    /// <summary>A section title with a thin rule under it; sections are open, not boxed.</summary>
+    private static void SectionHeading(IContainer container, string ruleColor, string title) =>
+        container.BorderBottom(1).BorderColor(ruleColor).PaddingBottom(3).Text(title).FontSize(12).SemiBold();
+
     private static void RenderSection(IContainer container, string borderColor, string title, IReadOnlyCollection<(string Label, string? Value)> lines)
     {
-        container.Border(1).BorderColor(borderColor).Padding(10).Column(column =>
+        container.Column(column =>
         {
             column.Spacing(6);
-            column.Item().Text(title).FontSize(12).SemiBold();
+            column.Item().Element(x => SectionHeading(x, borderColor, title));
             foreach (var (label, value) in lines.Where(x => !string.IsNullOrWhiteSpace(x.Value)))
             {
                 column.Item().Text(text =>
@@ -347,20 +351,20 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
 
     private static void RenderParagraphSection(IContainer container, string borderColor, string title, string? body)
     {
-        container.Border(1).BorderColor(borderColor).Padding(10).Column(column =>
+        container.Column(column =>
         {
             column.Spacing(6);
-            column.Item().Text(title).FontSize(12).SemiBold();
+            column.Item().Element(x => SectionHeading(x, borderColor, title));
             column.Item().Text(string.IsNullOrWhiteSpace(body) ? "Not recorded." : body);
         });
     }
 
     private static void RenderMaterialsSection(IContainer container, string borderColor, string title, IReadOnlyCollection<WorkOrderReportPdfMaterial> materials)
     {
-        container.Border(1).BorderColor(borderColor).Padding(10).Column(column =>
+        container.Column(column =>
         {
             column.Spacing(6);
-            column.Item().Text(title).FontSize(12).SemiBold();
+            column.Item().Element(x => SectionHeading(x, borderColor, title));
             if (materials.Count == 0)
             {
                 column.Item().Text("No materials recorded.");
@@ -391,10 +395,10 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
 
     private static void RenderChecklistSection(IContainer container, string borderColor, string title, IReadOnlyCollection<WorkOrderReportPdfChecklistSection> sections)
     {
-        container.Border(1).BorderColor(borderColor).Padding(10).Column(column =>
+        container.Column(column =>
         {
             column.Spacing(8);
-            column.Item().Text(title).FontSize(12).SemiBold();
+            column.Item().Element(x => SectionHeading(x, borderColor, title));
 
             foreach (var section in sections)
             {
@@ -435,10 +439,10 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
 
     private static void RenderSignatureSection(IContainer container, string borderColor, string title, IReadOnlyCollection<WorkOrderReportPdfSignature> signatures)
     {
-        container.Border(1).BorderColor(borderColor).Padding(10).Column(column =>
+        container.Column(column =>
         {
             column.Spacing(8);
-            column.Item().Text(title).FontSize(12).SemiBold();
+            column.Item().Element(x => SectionHeading(x, borderColor, title));
 
             foreach (var signature in signatures)
             {
