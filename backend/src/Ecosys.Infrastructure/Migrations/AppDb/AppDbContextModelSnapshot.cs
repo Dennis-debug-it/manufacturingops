@@ -2616,6 +2616,73 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("email_delivery_logs", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.EmailIntakeMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AutoReplySent")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("FromAddress")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("FromName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("MessageId")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("WorkOrderId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkOrderId");
+
+                    b.HasIndex("TenantId", "CreatedAt");
+
+                    b.HasIndex("TenantId", "MessageId")
+                        .IsUnique();
+
+                    b.ToTable("email_intake_messages", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.EmailIntakeSetting", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2625,6 +2692,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<string>("AllowedSenderDomains")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<bool>("AutoReplyEnabled")
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("CreateWorkOrderFromUnknownSender")
                         .HasColumnType("boolean");
@@ -2654,6 +2724,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<long?>("ImapLastUid")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ImapUidValidity")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("IntakeEmailAddress")
                         .HasMaxLength(256)
@@ -11423,6 +11499,24 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("OutboxMessage");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.EmailIntakeMessage", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.WorkOrder", "WorkOrder")
+                        .WithMany()
+                        .HasForeignKey("WorkOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Tenant");
+
+                    b.Navigation("WorkOrder");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.EmailIntakeSetting", b =>

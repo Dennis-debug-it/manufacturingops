@@ -46,7 +46,7 @@ public static class GetOrCreateExtensions
         where T : class =>
         dbContext.GetOrCreateAsync(query, () => Task.FromResult(create()), cancellationToken);
 
-    private static bool IsUniqueViolation(Exception exception)
+    internal static bool IsUniqueViolation(Exception exception)
     {
         for (Exception? current = exception; current is not null; current = current.InnerException)
         {

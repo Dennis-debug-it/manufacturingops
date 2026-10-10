@@ -73,6 +73,8 @@ public static class DependencyInjection
         services.AddScoped<IPasswordResetService, PasswordResetService>();
         services.AddScoped<IPlatformLeadNotifier, PlatformLeadNotifier>();
         services.AddScoped<ISelfSignupService, SelfSignupService>();
+        services.AddScoped<IEmailIntakeMailbox, ImapEmailIntakeMailbox>();
+        services.AddScoped<IEmailIntakeService, EmailIntakeService>();
         services.AddScoped<ITenantSecurityPolicyService, TenantSecurityPolicyService>();
         services.AddScoped<ITenantTimeZoneService, TenantTimeZoneService>();
         services.AddScoped<IWorkOrderLifecycleService, WorkOrderLifecycleService>();
@@ -100,6 +102,7 @@ public static class DependencyInjection
             connectionString,
             serviceProvider.GetRequiredService<ILogger<PostgresAdvisoryLockLease>>()));
         services.AddSingleInstanceHostedService<EmailOutboxWorker>();
+        services.AddSingleInstanceHostedService<EmailIntakeWorker>();
         services.AddSingleInstanceHostedService<TrialLifecycleWorker>();
         services.AddSingleInstanceHostedService<PmSchedulerWorker>();
         services.AddSingleInstanceHostedService<MrrSnapshotWorker>();
