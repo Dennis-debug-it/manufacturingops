@@ -124,6 +124,12 @@ export function NewUserFormDrawer({ open, onClose }: { open: boolean; onClose: (
         return
       }
 
+      if (!noEmail && created.credentialDelivery && !created.credentialDelivery.success) {
+        // The user exists, but the invitation email didn't go out: say so instead of "Invited".
+        toast.error(`${created.fullName} was added, but the invitation email could not be sent. Check Settings → Email Delivery, then use Resend Invite on their profile.`)
+        close()
+        return
+      }
       toast.success(noEmail ? `Created ${created.fullName}` : `Invited ${created.fullName}`)
       close()
     } catch (error) {
