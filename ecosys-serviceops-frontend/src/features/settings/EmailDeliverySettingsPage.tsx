@@ -110,7 +110,13 @@ export function EmailDeliverySettingsPage() {
             <input type="checkbox" checked={values.useCustomSmtp} onChange={(event) => set('useCustomSmtp', event.target.checked)} />
             Use my own SMTP server
           </label>
-          <fieldset disabled={!values.useCustomSmtp} className="grid gap-4 sm:grid-cols-2">
+          {/* The server details only matter when the workspace sends through its own server. */}
+          {!values.useCustomSmtp ? (
+            <p className="text-sm text-slate-500" data-testid="platform-mail-note">
+              Mail goes out through the platform's mail server as {saved.managedEmailAddress ?? 'your workspace address'}. Tick the box above to send from your own domain instead.
+            </p>
+          ) : (
+          <fieldset className="grid gap-4 sm:grid-cols-2" data-testid="own-smtp-fields">
             <label className="space-y-2 text-sm text-slate-700"><span>SMTP Host</span><input required={values.useCustomSmtp} placeholder="smtp.yourcompany.com" value={values.host} onChange={(event) => set('host', event.target.value)} className={inputClass} /></label>
             <div className="grid grid-cols-2 gap-3">
               <label className="space-y-2 text-sm text-slate-700"><span>Port</span><input type="number" min={1} max={65535} value={values.port} onChange={(event) => set('port', event.target.value)} className={inputClass} /></label>
@@ -120,6 +126,7 @@ export function EmailDeliverySettingsPage() {
             <label className="space-y-2 text-sm text-slate-700"><span>Password</span><input type="password" autoComplete="new-password" placeholder={saved.hasPassword ? 'Saved — leave blank to keep' : ''} value={values.password} onChange={(event) => set('password', event.target.value)} className={inputClass} /></label>
             <label className="space-y-2 text-sm text-slate-700 sm:col-span-2"><span>From Address</span><input type="email" required={values.useCustomSmtp} placeholder="service@yourcompany.com" value={values.fromAddress} onChange={(event) => set('fromAddress', event.target.value)} className={inputClass} /><span className="block text-xs text-slate-500">Must be an address your mail server allows this account to send as. Reply-to addresses from Workspace Email still apply.</span></label>
           </fieldset>
+          )}
           <button disabled={save.isPending} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">{save.isPending ? 'Saving…' : 'Save Changes'}</button>
         </form>
 
