@@ -39,6 +39,9 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
     if (entitlements.isLoading && !planCheckStuck) return <div className="p-6">Loading workspace…</div>
     if (location.pathname === '/dashboard' && !entitlements.hasModule('operations') && entitlements.hasModule('finance'))
       return <Navigate to="/finance" replace />
+    // The stores' home is the stock page, not the field-service dashboard.
+    if (location.pathname === '/dashboard' && user.role === 'materials_controller' && entitlements.canAccessPath('/inventory'))
+      return <Navigate to="/inventory" replace />
     if (!entitlements.canAccessPath(location.pathname) && planCheckStuck && !entitlements.data) {
       return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-800">You're offline. This page needs a connection; it will load when you're back online.</div>
     }

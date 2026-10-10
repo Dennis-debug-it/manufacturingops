@@ -1,5 +1,5 @@
 /** Tenant roles a user can be assigned. 'User' is a legacy alias treated as Viewer. */
-export type TenantUserRole = 'Admin' | 'Manager' | 'Dispatcher' | 'Technician' | 'finance' | 'Viewer' | 'User'
+export type TenantUserRole = 'Admin' | 'Manager' | 'Dispatcher' | 'Technician' | 'MaterialsController' | 'finance' | 'Viewer' | 'User'
 
 export interface PermissionSetFields {
   canViewWorkOrders: boolean

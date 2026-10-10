@@ -1,3 +1,4 @@
+import type { AppRole } from '../types/auth'
 import { LogOut, UserCircle2, WifiOff } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
@@ -5,6 +6,12 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { cn } from '../utils/cn'
 import { Logo } from '../components/Logo'
 import { isDemoTenant } from '../demoWorkspace'
+
+/** Shown under the user's name when they have no job title. */
+const roleNames: Partial<Record<AppRole, string>> = {
+  admin: 'Admin', manager: 'Manager', dispatcher: 'Dispatcher', technician: 'Technician',
+  materials_controller: 'Materials Controller', finance: 'Finance', viewer: 'Viewer',
+}
 
 export function Topbar() {
   const { tenant, user, logout, isImpersonating } = useAuth()
@@ -38,7 +45,7 @@ export function Topbar() {
           <UserCircle2 className="h-5 w-5 text-slate-500 sm:hidden" aria-label="My account" />
           <span className="hidden sm:block">
             <span className="block text-sm font-medium text-slate-900">{user?.fullName}</span>
-            <span className="block text-xs text-slate-500">{user?.jobTitle ?? user?.role}</span>
+            <span className="block text-xs text-slate-500">{user?.jobTitle ?? (user ? roleNames[user.role] ?? user.role : null)}</span>
           </span>
         </Link>
         <button

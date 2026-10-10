@@ -90,6 +90,28 @@ public sealed class RoleLoginTests
     }
 
     [Fact]
+    public async Task MaterialsController_RunsTheStores_ButNotDispatchOrFinance()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedAsync(dbContext, AppRoles.MaterialsController);
+
+        var permissions = (await LoginAsync(dbContext, fixture)).User.Permissions;
+
+        // Stock, purchase orders, transfers and vans (manage); handing out parts (issue); approving requests.
+        Assert.True(permissions.CanViewMaterials);
+        Assert.True(permissions.CanManageMaterials);
+        Assert.True(permissions.CanIssueMaterials);
+        Assert.True(permissions.CanApproveMaterials);
+        Assert.True(permissions.CanViewWorkOrders);
+        // Overriding stock levels is left for an admin to grant.
+        Assert.False(permissions.CanOverrideMaterialStock);
+        Assert.False(permissions.CanAssignWorkOrders);
+        Assert.False(permissions.CanCreateWorkOrders);
+        Assert.False(permissions.CanViewFinance);
+        Assert.False(permissions.CanManageSettings);
+    }
+
+    [Fact]
     public async Task Login_Succeeds_ForLegacyUserRole()
     {
         // "User" predates the role matrix and normalises to Viewer. It has no matrix row of its own,

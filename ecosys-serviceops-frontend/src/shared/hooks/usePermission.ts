@@ -65,6 +65,16 @@ const rolePermissions: Record<AppRole, string[]> = {
     'inventory.consume',
     'maintenance.view',
   ],
+  // Stores and logistics. Stock, issuing, purchase orders and transfers are gated by the real
+  // materials permissions (permissionSetLookup); these are the menu-level views.
+  materials_controller: [
+    'dashboard.view',
+    'work-orders.view',
+    'inventory.view',
+    'inventory.edit',
+    'inventory.consume',
+    'maintenance.view',
+  ],
   finance: [
     'dashboard.view',
     'clients.view',

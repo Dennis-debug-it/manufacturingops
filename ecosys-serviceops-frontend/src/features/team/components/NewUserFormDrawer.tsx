@@ -17,6 +17,7 @@ export const ROLE_OPTIONS: Array<{ value: TenantUserRole; label: string }> = [
   { value: 'Viewer', label: 'Viewer' },
   { value: 'Technician', label: 'Technician' },
   { value: 'Dispatcher', label: 'Dispatcher' },
+  { value: 'MaterialsController', label: 'Materials Controller' },
   { value: 'Manager', label: 'Manager' },
   { value: 'finance', label: 'Finance' },
   { value: 'Admin', label: 'Admin (full access)' },

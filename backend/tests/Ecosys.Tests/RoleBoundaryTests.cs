@@ -45,6 +45,7 @@ public sealed class RoleBoundaryTests
     [InlineData("Manager")]
     [InlineData("Dispatcher")]
     [InlineData("Technician")]
+    [InlineData("MaterialsController")]
     [InlineData("finance")]
     [InlineData("Viewer")]
     [InlineData("User")]

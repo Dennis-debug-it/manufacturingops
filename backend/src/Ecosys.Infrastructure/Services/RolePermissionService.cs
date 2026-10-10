@@ -76,6 +76,19 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
             CanViewMaterials = true,
             CanRequestMaterials = true
         },
+        // Same set as the long-standing "Store Manager" job-title template. Overriding stock levels
+        // stays off by default; an admin can tick it in the role matrix.
+        AppRoles.MaterialsController => new UserPermissionsModel
+        {
+            CanViewWorkOrders = true,
+            CanViewKnowledge = true,
+            CanViewMaterials = true,
+            CanRequestMaterials = true,
+            CanManageMaterials = true,
+            CanApproveMaterials = true,
+            CanIssueMaterials = true,
+            CanViewReports = true
+        },
         AppRoles.FinanceUser => new UserPermissionsModel
         {
             CanViewWorkOrders = true,

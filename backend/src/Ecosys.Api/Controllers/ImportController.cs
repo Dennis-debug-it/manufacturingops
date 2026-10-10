@@ -1356,10 +1356,11 @@ public sealed class ImportController(
         return normalized switch
         {
             "technician" => AppRoles.Technician,
+            "materialscontroller" or "materials controller" or "material controller" or "storekeeper" or "store keeper" => AppRoles.MaterialsController,
             null or "" or "user" or "supervisor" or "normaluser" or "normal user" or "requester" => AppRoles.User,
             "tenantadmin" or "tenant admin" or "admin" => AppRoles.Admin,
             "platformowner" or "platform owner" or "superadmin" or "super admin" => throw new ForbiddenException("Only platform owners can create PlatformOwner accounts."),
-            _ => throw new BusinessRuleException("Role must be TenantAdmin, Supervisor, Technician, NormalUser, or User.")
+            _ => throw new BusinessRuleException("Role must be TenantAdmin, Supervisor, Technician, Materials Controller, NormalUser, or User.")
         };
     }
 

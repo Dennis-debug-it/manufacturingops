@@ -1,4 +1,4 @@
-export type TenantRole = 'admin' | 'manager' | 'dispatcher' | 'technician' | 'finance' | 'viewer'
+export type TenantRole = 'admin' | 'manager' | 'dispatcher' | 'technician' | 'materials_controller' | 'finance' | 'viewer'
 export type PlatformRole = 'super_admin' | 'platform_sales'
 export type AppRole = TenantRole | PlatformRole
 

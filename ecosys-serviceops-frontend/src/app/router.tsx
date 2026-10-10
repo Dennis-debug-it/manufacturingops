@@ -137,7 +137,7 @@ import { SchedulingBoardPage } from '../features/dispatch/SchedulingBoardPage'
 import { PlatformApp } from '../platform/PlatformApp'
 import { PortalApp } from '../portal/PortalApp'
 
-const tenantRoles: AppRole[] = ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer']
+const tenantRoles: AppRole[] = ['admin', 'manager', 'dispatcher', 'technician', 'materials_controller', 'finance', 'viewer']
 const platformRoles: AppRole[] = ['super_admin', 'platform_sales']
 
 const lazyModulePage = (config: ModulePageConfig) =>

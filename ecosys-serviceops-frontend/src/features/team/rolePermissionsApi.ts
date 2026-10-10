@@ -155,5 +155,6 @@ export const capabilityGroups: Array<{ group: string; items: Array<{ key: Capabi
 export function roleLabel(role: string): string {
   const normalized = role.toLowerCase()
   if (normalized === 'finance') return 'Finance'
+  if (normalized === 'materialscontroller') return 'Materials Controller'
   return role.charAt(0).toUpperCase() + role.slice(1)
 }
