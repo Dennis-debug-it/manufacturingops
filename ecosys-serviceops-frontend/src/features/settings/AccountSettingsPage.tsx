@@ -84,7 +84,7 @@ export function AccountSettingsPage() {
       <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900">Plan Features</h2>
         <div className="mt-3">
-          <FeatureRow label="Email Ingestion" enabled={data.emailIngestion} />
+          <FeatureRow label="Email Intake (with Operations)" enabled={data.emailIngestion} />
           <FeatureRow label="Monitoring Integration" enabled={data.monitoringIntegration} />
         </div>
       </div>

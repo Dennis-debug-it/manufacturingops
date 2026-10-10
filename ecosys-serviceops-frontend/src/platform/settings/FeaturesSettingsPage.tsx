@@ -16,7 +16,8 @@ interface PlatformLicensePlan {
   isActive: boolean
 }
 
-const featureModules = ['EmailIngestion', 'MonitoringIntegration']
+// Email intake isn't listed: it comes with the Operations module.
+const featureModules = ['MonitoringIntegration']
 
 function FeatureCell({ plan, moduleName, canManage }: { plan: PlatformLicensePlan; moduleName: string; canManage: boolean }) {
   const queryClient = useQueryClient()

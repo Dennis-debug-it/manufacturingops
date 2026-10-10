@@ -50,6 +50,7 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
     /// </summary>
     public int LicensedUsers { get; set; } = DefaultLicensedUsers;
     public int? MaxBranchesOverride { get; set; }
+    /// <summary>No longer read: email intake is included with the Operations module. Kept so existing data loads.</summary>
     public bool? EmailIngestionOverride { get; set; }
     public bool? MonitoringIntegrationOverride { get; set; }
 
