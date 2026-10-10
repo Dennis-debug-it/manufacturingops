@@ -186,7 +186,8 @@ public sealed class PurchaseOrdersController(
     [HttpGet("/api/suppliers")]
     public async Task<ActionResult<IReadOnlyCollection<SupplierListItemResponse>>> ListSuppliers(CancellationToken cancellationToken)
     {
-        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials);
+        // Finance reads suppliers too: a payable is recorded against one.
+        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials, PermissionNames.FinanceView);
 
         var suppliers = await dbContext.Suppliers
             .Where(x => x.TenantId == TenantId)
@@ -210,7 +211,8 @@ public sealed class PurchaseOrdersController(
     [HttpGet("/api/suppliers/{id:guid}")]
     public async Task<ActionResult<SupplierDetailResponse>> GetSupplier(Guid id, CancellationToken cancellationToken)
     {
-        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials);
+        // Finance reads suppliers too: a payable is recorded against one.
+        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials, PermissionNames.FinanceView);
 
         var supplier = await dbContext.Suppliers
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)

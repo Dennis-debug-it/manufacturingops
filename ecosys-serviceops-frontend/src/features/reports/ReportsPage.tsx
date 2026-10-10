@@ -9,6 +9,7 @@ import { StatCard } from '../../shared/components/StatCard'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { Spinner } from '../../shared/components/Spinner'
 import { cn } from '../../shared/utils/cn'
+import { usePermission } from '../../shared/hooks/usePermission'
 import { formatCurrency, formatPercent } from '../../shared/utils/format'
 import { apiClient } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
@@ -37,7 +38,9 @@ export function ReportsPage() {
   const technicianQuery = useTechnicianProductivity({ from, to })
   const { data: assetReliability } = useAssetReliability({ from, to })
   const pmQuery = usePmComplianceReport({ from, to })
-  const financeQuery = useFinanceDashboard()
+  // The finance figures are only for people who can see finance.
+  const canViewFinance = usePermission('finance.view')
+  const financeQuery = useFinanceDashboard({ enabled: canViewFinance })
   const csatQuery = useCsatReport({ from, to })
 
   const { data: performance } = performanceQuery
@@ -96,7 +99,7 @@ export function ReportsPage() {
       <PageHeader title="Reports" subtitle="Operational analytics for the last 30 days." />
 
       <div className="flex flex-wrap gap-2">
-        {tabs.map((option) => (
+        {tabs.filter((option) => option.id !== 'finance' || canViewFinance).map((option) => (
           <button
             key={option.id}
             type="button"

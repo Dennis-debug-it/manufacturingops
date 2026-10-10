@@ -15,8 +15,8 @@ import type {
   RateCard,
 } from './types'
 
-export function useFinanceDashboard() {
-  return useQuery({ queryKey: ['finance', 'dashboard'], queryFn: () => api.get<FinanceDashboard>(endpoints.finance.dashboard), staleTime: 30_000 })
+export function useFinanceDashboard(options?: { enabled?: boolean }) {
+  return useQuery({ queryKey: ['finance', 'dashboard'], queryFn: () => api.get<FinanceDashboard>(endpoints.finance.dashboard), staleTime: 30_000, enabled: options?.enabled ?? true })
 }
 
 // Invoices

@@ -21,7 +21,8 @@ public sealed class BranchesController(
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<BranchResponse>>> GetAll(CancellationToken cancellationToken)
     {
-        userAccessService.EnsureAdmin();
+        // Stock is held per branch, so stores staff need the branch list; changing branches stays admin-only.
+        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials);
 
         var branches = await dbContext.Branches
             .Where(x => x.TenantId == TenantId)

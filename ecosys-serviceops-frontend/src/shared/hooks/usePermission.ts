@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useAuth } from './useAuth'
-import type { AppRole, PermissionSet } from '../types/auth'
+import type { AppRole, AuthUser, PermissionSet } from '../types/auth'
 
 /**
  * RBAC convention (see FRONTEND_BUILD_PLAN.md P1-3 / P8-4):
@@ -173,28 +173,30 @@ const executeActions = new Set([
   'parts-returns.create',
 ])
 
+/** The same check as usePermission, for code that isn't a component (e.g. route access rules). */
+export function hasPermission(user: AuthUser | null | undefined, action: string): boolean {
+  if (!user) {
+    return false
+  }
+
+  if (user.role === 'admin' || user.role === 'super_admin') {
+    return true
+  }
+
+  const permissionSetKey = permissionSetLookup[action]
+  if (permissionSetKey) {
+    return Boolean(user.permissions[permissionSetKey])
+  }
+
+  if (executeActions.has(action)) {
+    return operationalRoles.includes(user.role)
+  }
+
+  const permissions = rolePermissions[user.role]
+  return permissions.includes('*') || permissions.includes(action)
+}
+
 export function usePermission(action: string): boolean {
   const { user } = useAuth()
-
-  return useMemo(() => {
-    if (!user) {
-      return false
-    }
-
-    if (user.role === 'admin' || user.role === 'super_admin') {
-      return true
-    }
-
-    const permissionSetKey = permissionSetLookup[action]
-    if (permissionSetKey) {
-      return Boolean(user.permissions[permissionSetKey])
-    }
-
-    if (executeActions.has(action)) {
-      return operationalRoles.includes(user.role)
-    }
-
-    const permissions = rolePermissions[user.role]
-    return permissions.includes('*') || permissions.includes(action)
-  }, [action, user])
+  return useMemo(() => hasPermission(user, action), [action, user])
 }
