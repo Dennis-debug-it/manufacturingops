@@ -37,17 +37,19 @@ interface StatCardDef {
   to: string
   icon: typeof Activity
   tone?: 'default' | 'danger' | 'warning'
+  /** Shown only to people who can open the screen the card links to. */
+  permission: string
 }
 
 const statCards: StatCardDef[] = [
-  { key: 'openWorkOrders', label: 'Open Work Orders', to: '/work-orders', icon: Activity },
-  { key: 'overdueWorkOrders', label: 'Overdue Work Orders', to: '/work-orders?status=overdue', icon: AlertTriangle, tone: 'danger' },
-  { key: 'unassignedWorkOrders', label: 'Unassigned Work Orders', to: '/work-orders?unassigned=true', icon: UserX, tone: 'warning' },
-  { key: 'techniciansOnSite', label: 'Technicians On Site', to: '/team/technicians', icon: UserCheck },
-  { key: 'assets', label: 'Active Assets', to: '/assets', icon: Boxes },
-  { key: 'clients', label: 'Active Clients', to: '/clients', icon: Building2 },
-  { key: 'materialsLowStock', label: 'Low Stock Materials', to: '/inventory/alerts', icon: PackageX, tone: 'warning' },
-  { key: 'contractsExpiringIn30Days', label: 'Contracts Expiring (30d)', to: '/contracts', icon: FileWarning, tone: 'warning' },
+  { key: 'openWorkOrders', label: 'Open Work Orders', to: '/work-orders', icon: Activity, permission: 'work-orders.view' },
+  { key: 'overdueWorkOrders', label: 'Overdue Work Orders', to: '/work-orders?status=overdue', icon: AlertTriangle, tone: 'danger', permission: 'work-orders.view' },
+  { key: 'unassignedWorkOrders', label: 'Unassigned Work Orders', to: '/work-orders?unassigned=true', icon: UserX, tone: 'warning', permission: 'dispatch.view' },
+  { key: 'techniciansOnSite', label: 'Technicians On Site', to: '/team/technicians', icon: UserCheck, permission: 'dispatch.view' },
+  { key: 'assets', label: 'Active Assets', to: '/assets', icon: Boxes, permission: 'clients.view' },
+  { key: 'clients', label: 'Active Clients', to: '/clients', icon: Building2, permission: 'clients.view' },
+  { key: 'materialsLowStock', label: 'Low Stock Materials', to: '/inventory/alerts', icon: PackageX, tone: 'warning', permission: 'inventory.view' },
+  { key: 'contractsExpiringIn30Days', label: 'Contracts Expiring (30d)', to: '/contracts', icon: FileWarning, tone: 'warning', permission: 'contracts.view' },
 ]
 
 const toneClasses: Record<NonNullable<StatCardDef['tone']>, string> = {
@@ -61,6 +63,16 @@ export function DashboardPage() {
   // The executive view reads the reports and revenue APIs; offer it only to people they serve.
   const canViewReports = usePermission('reports.view')
   const canViewFinance = usePermission('finance.view')
+  // Each block shows only to the people whose work it is: dispatch load for those who dispatch,
+  // contract renewals for those who handle contracts, and so on.
+  const can: Record<string, boolean> = {
+    'work-orders.view': usePermission('work-orders.view'),
+    'dispatch.view': usePermission('dispatch.view'),
+    'clients.view': usePermission('clients.view'),
+    'inventory.view': usePermission('inventory.view'),
+    'contracts.view': usePermission('contracts.view'),
+  }
+  const visibleCards = statCards.filter((card) => can[card.permission])
   const [branchId, setBranchId] = useState('')
 
   const { data, isLoading, isError } = useQuery({
@@ -133,7 +145,7 @@ export function DashboardPage() {
         <div aria-hidden className="pointer-events-none absolute -inset-x-4 -inset-y-6 -z-10 overflow-hidden">
           <Crystal variant="dashboard" className="absolute inset-0 opacity-70" />
         </div>
-        {statCards.map((card) => {
+        {visibleCards.map((card) => {
           const Icon = card.icon
           const value = data[card.key]
           return (
@@ -150,7 +162,7 @@ export function DashboardPage() {
         })}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {can['dispatch.view'] ? <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Surface as="section" variant="glass" padding="lg" className="space-y-4">
           <SectionHeader title="Work Orders by Group" description="Open work order load per assignment group." />
           <DataTable
@@ -170,9 +182,9 @@ export function DashboardPage() {
             emptyDescription="Technician workload will appear here once work orders are assigned."
           />
         </Surface>
-      </div>
+      </div> : null}
 
-      <Surface as="section" variant="glass" padding="lg" className="space-y-4">
+      {can['contracts.view'] ? <Surface as="section" variant="glass" padding="lg" className="space-y-4">
         <SectionHeader title="Contract Health" description="Renewal risk and expiry pipeline across all active contracts." />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-[var(--app-border)] px-4 py-3">
@@ -192,7 +204,7 @@ export function DashboardPage() {
             <div className="mt-2 text-xl font-semibold text-rose-600">{formatNumber(data.expiredContracts)}</div>
           </div>
         </div>
-      </Surface>
+      </Surface> : null}
 
       {WHATSAPP_ENABLED ? <WhatsAppAlertsWidget /> : null}
 

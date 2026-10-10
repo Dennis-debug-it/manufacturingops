@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { usePermission } from '../../shared/hooks/usePermission'
@@ -13,7 +13,8 @@ import { NewInvoiceFormDrawer } from '../finance/components/NewInvoiceFormDrawer
 import { NewUserFormDrawer } from '../team/components/NewUserFormDrawer'
 
 export function OnboardingPage() {
-  const { tenant } = useAuth()
+  const { tenant, user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const { hasModule, planName, isLoading } = useEntitlements()
   const canAddCustomer = usePermission('clients.edit')
   const canCreateWorkOrder = usePermission('work-orders.create')
@@ -23,9 +24,13 @@ export function OnboardingPage() {
   const profile = useQuery({
     queryKey: ['tenant-profile', tenant?.tenantId],
     queryFn: () => api.get<{ serviceOpsEmail?: string | null }>(endpoints.tenant.profile),
-    enabled: Boolean(tenant?.tenantId),
+    // The workspace profile is an admin-only service.
+    enabled: Boolean(tenant?.tenantId) && isAdmin,
   })
   const buttonClass = 'inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50'
+
+  // Workspace setup is the admin's job; anyone else who lands here goes to their own home screen.
+  if (user && !isAdmin) return <Navigate to="/dashboard" replace />
 
   return (
     <div className="space-y-4">

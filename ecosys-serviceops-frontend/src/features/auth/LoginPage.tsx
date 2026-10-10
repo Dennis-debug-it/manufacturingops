@@ -24,10 +24,13 @@ const loginSchema = z
 type LoginFormValues = z.infer<typeof loginSchema>
 
 export function LoginPage() {
-  const { login, isAuthenticated, isReady } = useAuth()
+  const { login, isAuthenticated, isReady, user } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const tenantDestination = searchParams.get('welcome') === '1' ? '/onboarding' : '/dashboard'
+  // The first-sign-in setup page is for the workspace admin. Anyone else invited to the workspace
+  // starts on their normal home screen; the setup page calls admin-only services.
+  const welcome = searchParams.get('welcome') === '1'
+  const destinationFor = (role: string | undefined) => (welcome && role === 'admin' ? '/onboarding' : '/dashboard')
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const passwordVisibilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -71,8 +74,9 @@ export function LoginPage() {
     if (!isReady || !isAuthenticated) {
       return
     }
-    navigate(tenantDestination, { replace: true })
-  }, [isAuthenticated, isReady, navigate, tenantDestination])
+    navigate(destinationFor(user?.role), { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isReady, navigate, welcome, user?.role])
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(null)
@@ -86,7 +90,7 @@ export function LoginPage() {
         navigate('/change-password', { replace: true })
         return
       }
-      navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : tenantDestination, { replace: true })
+      navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : destinationFor(session.user.role), { replace: true })
     } catch (error) {
       setSubmitError(resolveErrorMessage(error))
     }

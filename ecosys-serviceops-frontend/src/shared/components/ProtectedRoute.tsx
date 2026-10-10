@@ -42,6 +42,9 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
     // The stores' home is the stock page, not the field-service dashboard.
     if (location.pathname === '/dashboard' && user.role === 'materials_controller' && entitlements.canAccessPath('/inventory'))
       return <Navigate to="/inventory" replace />
+    // Likewise Finance starts on Finance, not on the field-service dashboard.
+    if (location.pathname === '/dashboard' && user.role === 'finance' && entitlements.canAccessPath('/finance'))
+      return <Navigate to="/finance" replace />
     if (!entitlements.canAccessPath(location.pathname) && planCheckStuck && !entitlements.data) {
       return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-800">You're offline. This page needs a connection; it will load when you're back online.</div>
     }

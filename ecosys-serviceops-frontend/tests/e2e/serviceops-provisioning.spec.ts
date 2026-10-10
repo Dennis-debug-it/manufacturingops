@@ -177,3 +177,22 @@ test('a set-up user shows their role and it can be changed', async ({ page }) =>
   expect(saved).toMatchObject({ role: 'Dispatcher', permissions: null, isActive: true })
   await expect(page.getByText('Dispatcher · Lift technician')).toBeVisible()
 })
+
+test('after accepting an invite, only the admin is taken to workspace setup', async ({ page }) => {
+  await session(page, 'Dispatcher')
+  const adminOnlyCalls: string[] = []
+  page.on('request', (request) => { if (new URL(request.url()).pathname === '/api/tenant/profile') adminOnlyCalls.push(request.url()) })
+  await page.goto('/login?welcome=1')
+  await expect(page).toHaveURL(/\/dashboard$/)
+  // Opening the setup page directly sends a non-admin home too, without calling admin-only services.
+  await page.goto('/onboarding')
+  await expect(page).toHaveURL(/\/dashboard$/)
+  expect(adminOnlyCalls).toEqual([])
+})
+
+test('the workspace admin still lands on workspace setup after accepting an invite', async ({ page }) => {
+  await session(page, 'admin')
+  await page.goto('/login?welcome=1')
+  await expect(page).toHaveURL(/\/onboarding$/)
+  await expect(page.getByRole('heading', { name: 'Welcome to Ecosys ServiceOps' })).toBeVisible()
+})
