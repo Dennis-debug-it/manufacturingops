@@ -12,7 +12,9 @@ import { formatDateTime } from '../../shared/utils/dates'
 import { useResendCredentials, useResetUserPassword, useSetUserStatus, useTeamUser, useUpdateTeamUser } from './api'
 import { PermissionMatrix } from './components/PermissionMatrix'
 import { UserAccessPanel } from './components/UserAccessPanel'
+import { useAuth } from '../../shared/hooks/useAuth'
 import { EditUserDrawer } from './components/EditUserDrawer'
+import { roleLabel } from './components/NewUserFormDrawer'
 import type { RoleCapabilities } from './rolePermissionsApi'
 
 export function UserDetailPage() {
@@ -26,7 +28,9 @@ export function UserDetailPage() {
 
   const [caps, setCaps] = useState<RoleCapabilities | null>(null)
   const [revealedPassword, setRevealedPassword] = useState<string | null>(null)
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState<false | 'details' | 'role'>(false)
+  const { user: currentUser } = useAuth()
+  const isSelf = Boolean(user) && currentUser?.userId === user!.id
   useEffect(() => {
     if (user) setCaps({ ...user.permissions })
   }, [user])
@@ -117,13 +121,14 @@ export function UserDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={user.fullName}
-        subtitle={user.jobTitle ?? user.department ?? 'User'}
+        subtitle={[roleLabel(user.role), user.jobTitle ?? user.department].filter(Boolean).join(' · ')}
         breadcrumbs={[{ label: 'Users & Access', to: '/team/users' }, { label: user.fullName }]}
         secondaryActions={<StatusBadge status={user.isActive ? (user.invitationStatus ?? (user.mustChangePassword ? 'Invited' : 'Active')) : 'Inactive'} />}
         primaryAction={
           canManage ? (
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => setEditing(true)} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"><Pencil className="h-4 w-4" />Edit Details</button>
+              <button type="button" onClick={() => setEditing('details')} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"><Pencil className="h-4 w-4" />Edit Details</button>
+              {!isSelf ? <button type="button" onClick={() => setEditing('role')} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Change Role</button> : null}
               {user.hasEmail && (user.mustChangePassword || user.invitationStatus === 'Invited' || user.invitationStatus === 'Expired') ? <button type="button" onClick={resend} disabled={resendCredentials.isPending} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">{resendCredentials.isPending ? 'Sending…' : 'Resend Invite'}</button> : null}
               <button type="button" onClick={reset} disabled={resetPassword.isPending} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">{resetPassword.isPending ? 'Working…' : user.hasEmail ? 'Reset Password' : 'Generate Password'}</button>
               <button type="button" onClick={toggleStatus} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
@@ -152,6 +157,7 @@ export function UserDetailPage() {
       <SummarySection title="Profile" description="Contact and organization details.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[
+            ['Role', roleLabel(user.role)],
             ['Email', user.hasEmail ? user.email : 'No email address'],
             ['Username', user.username ?? '—'],
             ['Phone', user.phoneNumber ?? '—'],
@@ -195,7 +201,7 @@ export function UserDetailPage() {
 
       {id ? <UserAccessPanel userId={id} isAdminUser={isAdminUser} /> : null}
 
-      {canManage ? <EditUserDrawer open={editing} onClose={() => setEditing(false)} user={user} /> : null}
+      {canManage ? <EditUserDrawer open={Boolean(editing)} focusRole={editing === 'role'} onClose={() => setEditing(false)} user={user} /> : null}
 
       {user.assignmentGroups.length > 0 ? (
         <SummarySection title="Assignment Groups" description="Groups this user belongs to.">

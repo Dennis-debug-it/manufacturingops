@@ -71,6 +71,8 @@ export interface Technician {
   activeWorkOrderId: string | null
   isActive: boolean
   createdAt: string
+  /** The sign-in account behind this technician, if any. */
+  userId?: string | null
 }
 
 export interface CertificationDefinition {

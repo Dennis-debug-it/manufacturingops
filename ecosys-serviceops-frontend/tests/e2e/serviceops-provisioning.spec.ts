@@ -142,3 +142,38 @@ test('managed workspace email saves only tenant-facing preferences', async ({ pa
   await page.getByRole('button', { name: 'Save Changes' }).click()
   expect((await request).postDataJSON()).toEqual({ displayName: 'Acme Service Team', replyToAddress: 'replies@acme.test', financeReplyToAddress: 'accounts@acme.test', operationsReplyToAddress: 'service@acme.test', emailSignature: null, inboundEnabled: true, outboundEnabled: true })
 })
+
+test('a set-up user shows their role and it can be changed', async ({ page }) => {
+  await session(page)
+  let user = {
+    id: 'user-9', fullName: 'Ken Mwangi', email: 'ken@acme.test', hasEmail: true, username: 'ken', phoneNumber: null,
+    role: 'Technician', jobTitle: 'Lift technician', department: null, isActive: true, mustChangePassword: false, invitationStatus: 'Active',
+    hasAllBranchAccess: false, defaultBranchId: null, defaultBranchName: null, branchIds: [], assignmentGroups: [],
+    permissions: { canViewWorkOrders: true, canCompleteWorkOrders: true }, lastCredentialSentAt: null, createdAt: '2026-10-01T08:00:00Z',
+  }
+  let saved: Record<string, unknown> | null = null
+  await page.route('**/api/users', (route) => route.fulfill(respond([user])))
+  // The access panel on the user page lists scopes and groups.
+  await page.route('**/api/access/**', (route) => route.fulfill(respond([])))
+  await page.route('**/api/users/user-9', async (route) => {
+    if (route.request().method() === 'PUT') {
+      saved = route.request().postDataJSON() as Record<string, unknown>
+      user = { ...user, role: saved.role as string }
+    }
+    await route.fulfill(respond(user))
+  })
+
+  await page.goto('/team/users')
+  await expect(page.getByRole('row').filter({ hasText: 'Ken Mwangi' })).toContainText('Technician')
+
+  await page.getByRole('link', { name: 'Ken Mwangi' }).click()
+  await page.getByRole('button', { name: 'Change Role' }).click()
+  await expect(page.getByLabel('Role')).toBeFocused()
+  await page.getByLabel('Role').selectOption('Dispatcher')
+  await page.getByRole('button', { name: 'Save Changes' }).click()
+
+  await expect(page.getByText('User details updated')).toBeVisible()
+  // A new role starts from that role's default capabilities.
+  expect(saved).toMatchObject({ role: 'Dispatcher', permissions: null, isActive: true })
+  await expect(page.getByText('Dispatcher · Lift technician')).toBeVisible()
+})

@@ -150,7 +150,8 @@ public sealed class TechniciansController(
             technician.IsTrackingActive,
             technician.ActiveWorkOrderId,
             technician.IsActive,
-            technician.CreatedAt);
+            technician.CreatedAt,
+            technician.UserId);
 }
 
 public sealed record UpsertTechnicianRequest(
@@ -176,4 +177,6 @@ public sealed record TechnicianResponse(
     bool IsTrackingActive,
     Guid? ActiveWorkOrderId,
     bool IsActive,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    /// <summary>The sign-in account behind this technician, if any (where their role is changed).</summary>
+    Guid? UserId = null);

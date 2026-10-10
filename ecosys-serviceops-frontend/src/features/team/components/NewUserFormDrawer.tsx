@@ -22,6 +22,14 @@ export const ROLE_OPTIONS: Array<{ value: TenantUserRole; label: string }> = [
   { value: 'Admin', label: 'Admin (full access)' },
 ]
 
+/** Plain role name for display, e.g. "finance" → "Finance", "Admin" → "Admin". */
+export const roleLabel = (role: string | null | undefined) => {
+  if (!role) return '—'
+  if (role.toLowerCase() === 'user') return 'Viewer'
+  const option = ROLE_OPTIONS.find((candidate) => candidate.value.toLowerCase() === role.toLowerCase())
+  return option ? option.label.replace(/\s*\(.*\)$/, '') : role
+}
+
 interface FormValues {
   fullName: string
   email: string

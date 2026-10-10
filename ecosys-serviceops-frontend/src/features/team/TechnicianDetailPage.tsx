@@ -39,6 +39,14 @@ export function TechnicianDetailPage() {
               <RouteIcon className="h-4 w-4" />
               Daily Route
             </Link>
+            {technician.userId ? (
+              <Link
+                to={`/team/users/${technician.userId}`}
+                className="inline-flex items-center gap-2 rounded-control border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                Role & Sign-in
+              </Link>
+            ) : null}
             <StatusBadge status={technician.isActive ? 'Active' : 'Inactive'} />
           </>
         }
