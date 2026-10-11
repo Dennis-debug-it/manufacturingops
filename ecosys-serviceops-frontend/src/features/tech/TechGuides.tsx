@@ -40,6 +40,10 @@ export function TechGuidesPage() {
   return (
     <div className="space-y-3">
       <h1 className="text-lg font-semibold text-slate-900">Guides</h1>
+      <Link to="/tech/help" className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900" data-testid="tech-app-help">
+        How to use the technician app
+        <span aria-hidden className="text-slate-400">›</span>
+      </Link>
       <input
         type="search"
         value={search}

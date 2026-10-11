@@ -45,6 +45,7 @@ export function techPathFor(pathname: string): string {
   const articleId = pathname.match(/^\/knowledge\/([^/]+)/)?.[1]
   if (articleId) return `/tech/guides/${articleId}`
   if (pathname.startsWith('/knowledge')) return '/tech/guides'
+  if (pathname.startsWith('/help')) return '/tech/help'
   if (pathname === '/me' || pathname.startsWith('/settings/account') || pathname.startsWith('/inventory/vans')) return '/tech/account'
   return '/tech'
 }
