@@ -14,7 +14,7 @@ import {
   type WorkOrderVisits,
 } from '../api'
 import { hasAcceptedAssignment, isPersistedAssignment } from '../dispatchGuards'
-import type { WorkOrder, WorkOrderTechnicianAssignment } from '../types'
+import { hasLeftSite, isOnSite, type WorkOrder, type WorkOrderTechnicianAssignment } from '../types'
 
 /**
  * The dispatch lifecycle for each technician on the job: accept/decline, en route, arrival and
@@ -74,7 +74,8 @@ export function CrewDispatchPanel({ workOrder }: { workOrder: WorkOrder }) {
                 {technicianName}
                 {assignment.isLead ? <span className="ml-1 text-xs font-normal text-slate-500">(Lead)</span> : null}
               </span>
-              <StatusBadge status={assignment.status} />
+              {/* The assignment keeps "Arrived" after the technician leaves; say what is actually true. */}
+              <StatusBadge status={resolveVisitState(assignment, visits) === 'OnSite' ? 'On Site' : hasLeftSite(assignment) && assignment.status === 'Arrived' ? 'Left Site' : assignment.status} />
             </div>
 
             <AssignmentMilestones assignment={assignment} />
@@ -177,7 +178,7 @@ export function CrewDispatchPanel({ workOrder }: { workOrder: WorkOrder }) {
 function resolveVisitState(assignment: WorkOrderTechnicianAssignment, visits: WorkOrderVisits | undefined): VisitState {
   const summary = visits?.technicians.find((item) => item.technicianId === assignment.technicianId)
   if (summary) return summary.state
-  if (assignment.arrivalAt && !assignment.departureAt) return 'OnSite'
+  if (isOnSite(assignment)) return 'OnSite'
   if (assignment.status === 'InTransit') return 'Travelling'
   return 'Idle'
 }
@@ -227,6 +228,8 @@ function AssignmentMilestones({ assignment }: { assignment: WorkOrderTechnicianA
   const milestones: Array<{ label: string; value: string | null }> = [
     { label: 'Accepted', value: assignment.acceptedAt },
     { label: 'First arrival', value: assignment.arrivalAt },
+    // Only worth showing once there has been more than one visit.
+    ...(assignment.lastArrivalAt && assignment.lastArrivalAt !== assignment.arrivalAt ? [{ label: 'Latest arrival', value: assignment.lastArrivalAt }] : []),
     { label: 'Last departure', value: assignment.departureAt },
   ]
 

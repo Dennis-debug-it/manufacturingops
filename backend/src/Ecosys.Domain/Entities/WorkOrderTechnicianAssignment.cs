@@ -14,7 +14,13 @@ public sealed class WorkOrderTechnicianAssignment : AuditableEntity, ITenantEnti
     public string? Notes { get; set; }
     public DateTime? AcceptedAt { get; set; }
     public DateTime? DeclinedAt { get; set; }
+    /// <summary>First arrival on site: the response milestone (SLA, start guard). Later visits don't move it.</summary>
     public DateTime? ArrivalAt { get; set; }
+    /// <summary>
+    /// Most recent arrival. On a job that runs over several days the technician arrives and leaves each
+    /// day; they are on site when this is later than <see cref="DepartureAt"/> (the most recent departure).
+    /// </summary>
+    public DateTime? LastArrivalAt { get; set; }
     public DateTime? DepartureAt { get; set; }
 
     public Tenant? Tenant { get; set; }

@@ -2619,7 +2619,9 @@ public sealed record WorkOrderTechnicianAssignmentResponse(
     DateTime? AcceptedAt,
     DateTime? ArrivalAt,
     DateTime? DepartureAt,
-    string? Notes);
+    string? Notes,
+    /// <summary>Most recent arrival; on site when it is later than DepartureAt.</summary>
+    DateTime? LastArrivalAt = null);
 
 public sealed record WorkOrderEventResponse(
     Guid Id,
@@ -2721,7 +2723,8 @@ internal static class WorkOrderAssignmentView
                 x.AcceptedAt,
                 x.ArrivalAt,
                 x.DepartureAt,
-                x.Notes))
+                x.Notes,
+                x.LastArrivalAt ?? x.ArrivalAt))
             .ToList();
 
         if (technicianAssignments.Count == 0 && workOrder.AssignedTechnicianId.HasValue)

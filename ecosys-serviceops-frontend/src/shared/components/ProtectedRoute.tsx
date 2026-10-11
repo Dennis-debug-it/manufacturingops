@@ -1,3 +1,4 @@
+import { isTechnicianWorkspaceUser } from '../utils/technicianWorkspace'
 import { canOpenPath } from '../utils/routeAccess'
 import type { ReactNode } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
@@ -50,7 +51,8 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
       return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-800">You're offline. This page needs a connection; it will load when you're back online.</div>
     }
     if (!entitlements.canAccessPath(location.pathname)) return <div className="rounded-xl border border-slate-200 bg-white p-6">This feature is unavailable on your ServiceOps plan. Contact your account manager to upgrade.</div>
-    if (!canOpenPath(user, location.pathname)) {
+    // Technician-app users are sent from any office address to the matching /tech screen instead.
+    if (!isTechnicianWorkspaceUser(user) && !canOpenPath(user, location.pathname)) {
       return (
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <h1 className="text-base font-semibold text-slate-900">You don't have access to this page</h1>

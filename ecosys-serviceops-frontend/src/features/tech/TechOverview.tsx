@@ -1,3 +1,4 @@
+import { hasLeftSite, isOnSite } from '../work-orders/types'
 import { useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
 import { CheckCircle2, MapPin, Phone, Star } from 'lucide-react'
@@ -171,7 +172,7 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
                   {assignment.technicianName ?? 'Technician'}
                   {assignment.isLead ? <span className="inline-flex items-center gap-0.5 text-xs text-amber-700"><Star className="h-3 w-3" />Lead</span> : null}
                 </span>
-                <span className="text-xs text-slate-500">{assignment.arrivalAt ? 'On site' : assignment.status}</span>
+                <span className="text-xs text-slate-500">{isOnSite(assignment) ? 'On site' : hasLeftSite(assignment) ? 'Left site' : assignment.status}</span>
               </li>
             ))}
           </ul>

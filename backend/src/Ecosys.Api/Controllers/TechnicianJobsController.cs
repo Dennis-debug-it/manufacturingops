@@ -274,7 +274,8 @@ public sealed class TechnicianJobsController(
                 x.AcceptedAt,
                 x.ArrivalAt,
                 x.DepartureAt,
-                x.Notes))
+                x.Notes,
+                x.LastArrivalAt ?? x.ArrivalAt))
             .ToList();
 
         return new WorkOrderResponse(
