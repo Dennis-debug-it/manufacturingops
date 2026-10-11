@@ -312,6 +312,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         assignment.Status = "Arrived";
         // The first arrival is the response milestone (SLA, completion guard); later visits don't move it.
         assignment.ArrivalAt ??= arrivedAt;
+        assignment.LastArrivalAt = arrivedAt;
         await UpdateTechnicianTrackingAsync(tenantId, request.TechnicianId, workOrderId, request.Latitude, request.Longitude, true, cancellationToken);
         await AddHistoryAsync(tenantId, workOrderId, "TechnicianArrived", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
         await AddEventAsync(tenantId, workOrderId, actorUserId, "Arrival", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} arrived on site.", request.Latitude, request.Longitude, cancellationToken);

@@ -149,6 +149,7 @@ export interface AssetListFilters {
   status?: 'active' | 'inactive' | 'all'
   /** 'out' = in service but with no warranty or contract cover. */
   support?: 'out'
+  categoryId?: string
 }
 
 export function useAssets(filters?: AssetListFilters) {
@@ -163,7 +164,7 @@ export function useAssets(filters?: AssetListFilters) {
 export function useAssetsPaged(filters: AssetListFilters, page: number, pageSize: number) {
   return useQuery({
     queryKey: ['assets', 'paged', filters, page, pageSize],
-    queryFn: () => api.get<PagedResult<Asset>>(endpoints.assets.list, { clientId: filters.clientId, siteId: filters.siteId, search: filters.search, status: filters.status, support: filters.support, page, pageSize }),
+    queryFn: () => api.get<PagedResult<Asset>>(endpoints.assets.list, { clientId: filters.clientId, siteId: filters.siteId, search: filters.search, status: filters.status, support: filters.support, categoryId: filters.categoryId, page, pageSize }),
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   })

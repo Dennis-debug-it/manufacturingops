@@ -1160,7 +1160,8 @@ public sealed partial class WorkOrderExecutionController(
                 x.AcceptedAt,
                 x.ArrivalAt,
                 x.DepartureAt,
-                x.Notes))
+                x.Notes,
+                x.LastArrivalAt ?? x.ArrivalAt))
             .ToList();
         var availableTransitions = WorkOrderStatusTransitions
             .GetAllowedTargets(workOrder.Status, CanUseAdminOnlyLifecycleTransitions())

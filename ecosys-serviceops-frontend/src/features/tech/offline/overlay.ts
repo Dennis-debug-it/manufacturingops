@@ -40,7 +40,7 @@ export function applyToJob(job: WorkOrder, entries: OutboxEntry[]): WorkOrder {
         updateAssignment(() => body.response === 'Accepted' ? { status: 'Accepted', acceptedAt: at } : { status: 'Declined' })
         break
       case 'arrive':
-        updateAssignment((assignment) => ({ status: 'Arrived', arrivalAt: assignment.arrivalAt ?? at }))
+        updateAssignment((assignment) => ({ status: 'Arrived', arrivalAt: assignment.arrivalAt ?? at, lastArrivalAt: at }))
         next = { ...next, arrivalAt: next.arrivalAt ?? at }
         break
       case 'depart':

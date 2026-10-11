@@ -8,6 +8,8 @@ import { useMyTechnician } from './api'
 import { savedMessage, useTechActions } from './offline/actions'
 import { useJobHasQueuedActions, useTechBundle, useTechJobView } from './offline/hooks'
 import { jobPhase, myAssignmentOf, PHASE_LABEL, PHASE_TONE } from './jobState'
+import { hasLeftSite, isOnSite } from '../work-orders/types'
+import { formatDateTime } from '../../shared/utils/dates'
 import { TechFinish } from './TechFinish'
 import { TechJobGuides } from './TechGuides'
 import { TechMaterials } from './TechMaterials'
@@ -140,7 +142,8 @@ export function TechJobPage() {
   const moreActions = [
     ...(phase === 'accept' && mine ? [{ label: 'Decline Job', danger: true, onClick: () => void run('Job declined', () => actions.respond(job, mine.technicianId, 'Declined')) }] : []),
     ...(['arrive', 'start', 'work'].includes(phase) ? [{ label: 'Put On Hold', onClick: () => setHoldOpen(true) }] : []),
-    ...(mine?.arrivalAt && !mine.departureAt && phase !== 'done' ? [{ label: 'Record Departure', onClick: () => void run('Departure recorded', async () => actions.depart(job, mine.technicianId, await currentPosition())) }] : []),
+    // On a multi-day job yesterday's departure must not hide today's: go by the latest arrival.
+    ...(mine && isOnSite(mine) && phase !== 'done' ? [{ label: 'Record Departure', onClick: () => void run('Departure recorded', async () => actions.depart(job, mine.technicianId, await currentPosition())) }] : []),
   ]
 
   const submitHold = async () => {
@@ -166,6 +169,19 @@ export function TechJobPage() {
         <span className={cn('inline-block rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset', PHASE_TONE[phase])}>{PHASE_LABEL[phase]}</span>
         {phase === 'on-hold' && (job.holdReason || job.holdNote) ? <p className="text-sm text-orange-700">{job.status}: {job.holdReason ?? job.holdNote}</p> : null}
         {phase === 'done' && job.status === 'Completed' ? <p className="text-sm text-slate-600">Completed. An administrator will review and close it.</p> : null}
+        {mine && hasLeftSite(mine) && !['done', 'declined', 'accept'].includes(phase) ? (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2" data-testid="back-on-site">
+            <p className="text-sm text-indigo-800">You left site {mine.departureAt ? formatDateTime(mine.departureAt) : ''}. Back for another day?</p>
+            <button
+              type="button"
+              disabled={acting}
+              onClick={() => void run('Arrival recorded', async () => actions.arrive(job, mine.technicianId, await currentPosition()))}
+              className="inline-flex h-9 items-center rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white disabled:opacity-60"
+            >
+              I'm back on site
+            </button>
+          </div>
+        ) : null}
         {hasQueued ? <p className="text-xs font-medium text-sky-700" data-testid="job-waiting-to-sync">Changes on this job are saved on this phone and waiting to sync.</p> : null}
       </div>
 

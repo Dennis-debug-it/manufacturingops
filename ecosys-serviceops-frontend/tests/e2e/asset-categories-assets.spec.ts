@@ -195,6 +195,13 @@ async function mockAssetModule(page: Page) {
   ]
 
   await registerApiCatchAll(page)
+  // The first-login welcome tour would cover the page.
+  await page.addInitScript(() => {
+    const getItem = Storage.prototype.getItem
+    Storage.prototype.getItem = function (key: string) {
+      return key.startsWith('ecosys.first-login-shown.') ? '1' : getItem.call(this, key)
+    }
+  })
   await loginWithMockSession(page, { role: 'tenantAdmin', email: 'admin@acme.test', fullName: 'Alice Admin', tenantId: 'tenant-1', tenantName: 'Acme Facilities' })
 
   await page.route(`${API}/api/asset-categories`, async (route) => {
@@ -293,7 +300,10 @@ async function mockAssetModule(page: Page) {
         return true
       })
 
-      await route.fulfill(json(filtered))
+      // The register asks for a page at a time; pickers ask for the plain list.
+      const page = Number(url.searchParams.get('page') ?? 0)
+      const pageSize = Number(url.searchParams.get('pageSize') ?? 25)
+      await route.fulfill(json(page ? { items: filtered.slice((page - 1) * pageSize, page * pageSize), totalCount: filtered.length, totalPages: Math.max(1, Math.ceil(filtered.length / pageSize)), page, pageSize } : filtered))
       return
     }
 
@@ -362,8 +372,9 @@ test.describe('asset categories and assets', () => {
     await page.getByLabel('Parent category (optional)').fill('Mechanical')
     await page.getByRole('button', { name: /save category/i }).click()
 
-    await expect(page.getByText('Pump')).toBeVisible()
-    await page.getByRole('button', { name: /pump/i }).click()
+    const categoryList = page.getByRole('navigation', { name: 'Categories' })
+    await expect(categoryList.getByRole('button', { name: /pump/i })).toBeVisible()
+    await categoryList.getByRole('button', { name: /pump/i }).click()
     await page.getByRole('button', { name: /add field/i }).click()
     await page.getByLabel('Display label').fill('Flow Rate')
     await page.getByLabel('Field type').selectOption('Number')
@@ -375,20 +386,23 @@ test.describe('asset categories and assets', () => {
 
   test('create asset with custom fields and filter by category', async ({ page }) => {
     await page.goto('/assets')
-    await expect(page.getByRole('heading', { name: /asset register/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Assets', level: 1 })).toBeVisible()
 
-    await page.getByRole('button', { name: /add asset/i }).click()
+    await page.getByRole('button', { name: 'New Asset' }).first().click()
     await page.getByRole('combobox', { name: 'Client', exact: true }).selectOption('client-1')
     await page.getByRole('combobox', { name: 'Site', exact: true }).selectOption('site-1')
     await page.getByTestId('asset-category-select').selectOption('cat-generator')
-    await page.getByRole('textbox', { name: 'Asset name', exact: true }).fill('Generator 02')
-    await page.getByRole('textbox', { name: 'Asset code', exact: true }).fill('GEN-002')
-    await page.getByRole('textbox', { name: 'Asset type', exact: true }).fill('Generator')
-    await page.getByRole('textbox', { name: 'Location', exact: true }).fill('Engine room')
+    await page.getByRole('textbox', { name: 'Asset Name', exact: true }).fill('Generator 02')
+    await page.getByRole('textbox', { name: 'Asset Code', exact: true }).fill('GEN-002')
+    // The free-text type is filled from the category.
+    await expect(page.getByRole('textbox', { name: 'Asset Type', exact: true })).toHaveValue('Generator')
     await expect(page.getByTestId('asset-custom-fields-panel')).toBeVisible()
+    // A required datasheet field must be filled before saving.
+    await page.getByRole('button', { name: 'Create Asset' }).click()
+    await expect(page.getByText('Capacity KVA is required.')).toBeVisible()
     await page.getByRole('spinbutton', { name: /capacity kva \* unit: kva/i }).fill('500')
     await page.getByRole('combobox', { name: 'Fuel Type', exact: true }).selectOption('Diesel')
-    await page.getByRole('button', { name: /save asset/i }).click()
+    await page.getByRole('button', { name: 'Create Asset' }).click()
 
     await expect(page.getByRole('table').getByText('Generator 02')).toBeVisible()
     await page.getByTestId('asset-category-filter').selectOption('cat-generator')

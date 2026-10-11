@@ -10,6 +10,7 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
 import { useAssetsPaged, useBulkRetireAssets, type AssetListFilters, type RetireAssetPayload } from './api'
+import { useAssetCategories } from './assetCategoriesApi'
 import { TriTabNav } from './components/TriTabNav'
 import { AssetFormDrawer } from './components/AssetFormDrawer'
 import { RetireAssetDialog } from './components/RetireAssetDialog'
@@ -27,6 +28,7 @@ const VIEWS: { id: AssetView; label: string; filters: Pick<AssetListFilters, 'st
 export function AssetsPage() {
   const canCreate = usePermission('assets.manage')
   const [search, setSearch] = useState('')
+  const [categoryId, setCategoryId] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [showForm, setShowForm] = useState(false)
   const [page, setPage] = useState(1)
@@ -48,9 +50,10 @@ export function AssetsPage() {
     setPage(1)
     setSelectedIds([])
     setSelectionKey((key) => key + 1)
-  }, [debouncedSearch, view])
+  }, [debouncedSearch, view, categoryId])
   const viewFilters = VIEWS.find((item) => item.id === view)!.filters
-  const { data, isLoading, isError } = useAssetsPaged({ search: debouncedSearch, ...viewFilters }, page, pageSize)
+  const { data, isLoading, isError } = useAssetsPaged({ search: debouncedSearch, ...viewFilters, ...(categoryId ? { categoryId } : {}) }, page, pageSize)
+  const { data: categories } = useAssetCategories()
 
   const rows = useMemo(() => data?.items ?? [], [data])
   const canRetire = canCreate && view !== 'retired'
@@ -71,7 +74,7 @@ export function AssetsPage() {
     { key: 'assetCode', header: 'Code', cell: (row) => <span className="font-mono text-xs text-slate-600">{row.assetCode}</span> },
     { key: 'clientName', header: 'Client', cell: (row) => row.clientName ?? '—' },
     { key: 'siteName', header: 'Site', cell: (row) => row.siteName ?? '—' },
-    { key: 'assetType', header: 'Type', cell: (row) => row.assetType ?? '—' },
+    { key: 'assetType', header: 'Type', cell: (row) => row.assetCategoryName ?? row.assetType ?? '—' },
     { key: 'manufacturer', header: 'Manufacturer', cell: (row) => row.manufacturer ?? '—' },
     { key: 'lastPmDate', header: 'Last PM', cell: (row) => (row.lastPmDate ? formatDate(row.lastPmDate) : '—') },
     { key: 'nextPmDate', header: 'Next PM', cell: (row) => (row.nextPmDate ? formatDate(row.nextPmDate) : '—') },
@@ -131,6 +134,20 @@ export function AssetsPage() {
           <Search className="h-4 w-4 text-slate-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets by name, code, serial, or manufacturer" className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400" />
         </label>
+        {(categories ?? []).length > 0 ? (
+          <select
+            aria-label="Category"
+            data-testid="asset-category-filter"
+            value={categoryId}
+            onChange={(event) => setCategoryId(event.target.value)}
+            className="mt-2 h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-[var(--app-primary)] sm:w-64"
+          >
+            <option value="">All categories</option>
+            {(categories ?? []).filter((category) => category.isActive).map((category) => (
+              <option key={category.id} value={category.id}>{category.name}</option>
+            ))}
+          </select>
+        ) : null}
       </div>
 
       <DataTable

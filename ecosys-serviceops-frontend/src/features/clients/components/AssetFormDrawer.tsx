@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { addDays, addMonths, addWeeks, addYears, format, startOfDay } from 'date-fns'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -9,6 +9,11 @@ import { useCreateAsset, useUpdateAsset, useClients, useSites, type UpsertAssetP
 import { assetSchema, type AssetFormValues } from '../schemas'
 import type { Asset } from '../types'
 import { parsePmFrequencyLabel } from '../pmFrequency'
+import { activeFields, useAssetCategories } from '../assetCategoriesApi'
+import { AssetDatasheetFields } from './AssetDatasheetFields'
+
+const valuesFrom = (asset: Asset | undefined) =>
+  Object.fromEntries((asset?.customFieldValues ?? []).map(({ fieldDefinitionId, value }) => [fieldDefinitionId, value]))
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -153,10 +158,21 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId,
   const { data: sites } = useSites(clientId || undefined)
   const createAsset = useCreateAsset()
   const updateAsset = useUpdateAsset(asset?.id ?? '')
+  // The category decides which datasheet fields the asset has (from Settings → Asset Categories or a starter pack).
+  const { data: categories } = useAssetCategories()
+  const [categoryId, setCategoryId] = useState(asset?.assetCategoryId ?? '')
+  const [datasheet, setDatasheet] = useState<Record<string, string>>(() => valuesFrom(asset))
+  const [missingFields, setMissingFields] = useState<string[]>([])
+  const activeCategories = (categories ?? []).filter((category) => category.isActive || category.id === categoryId)
+  const category = activeCategories.find((item) => item.id === categoryId)
+  const datasheetFields = activeFields(category)
 
   useEffect(() => {
     if (open) {
       reset(toFormValues(asset, defaultClientId, defaultSiteId))
+      setCategoryId(asset?.assetCategoryId ?? '')
+      setDatasheet(valuesFrom(asset))
+      setMissingFields([])
     }
   }, [open, asset, defaultClientId, defaultSiteId, reset])
 
@@ -177,6 +193,9 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId,
   }
 
   const onSubmit = handleSubmit(async (values) => {
+    const missing = datasheetFields.filter((field) => field.isRequired && !(datasheet[field.id] ?? '').trim()).map((field) => field.id)
+    setMissingFields(missing)
+    if (missing.length > 0) return
     const frequencyValue = parsePositiveInt(values.pmFrequencyValue)
     const frequencyUnit = frequencyValue ? values.pmFrequencyUnit || null : null
     const lastPm = toIsoDate(values.lastPmDate)
@@ -212,10 +231,13 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId,
       notes: values.notes?.trim() || null,
       branchId: asset?.branchId ?? null,
       systemId: asset?.systemId ?? null,
-      assetCategoryId: asset?.assetCategoryId ?? null,
+      assetCategoryId: categoryId || null,
       ownershipType: asset?.ownershipType ?? null,
       status: asset?.status ?? null,
-      customFieldValues: (asset?.customFieldValues ?? []).map(({ fieldDefinitionId, value }) => ({ fieldDefinitionId, value })),
+      // Only this category's fields, and only ones with a value.
+      customFieldValues: datasheetFields
+        .map((field) => ({ fieldDefinitionId: field.id, value: (datasheet[field.id] ?? '').trim() }))
+        .filter((entry) => entry.value),
     }
     try {
       if (isEdit) {
@@ -280,6 +302,40 @@ export function AssetFormDrawer({ open, onClose, defaultClientId, defaultSiteId,
           />
           {errors.siteId ? <p className={errorClass}>{errors.siteId.message}</p> : null}
         </div>
+        <div>
+          <label className={labelClass} htmlFor="asset-category">Category</label>
+          <select
+            id="asset-category"
+            data-testid="asset-category-select"
+            value={categoryId}
+            onChange={(event) => {
+              const next = activeCategories.find((item) => item.id === event.target.value)
+              setCategoryId(event.target.value)
+              setMissingFields([])
+              // Fill the free-text type from the category when it hasn't been typed yet.
+              if (next && !getValues('assetType')?.trim()) setValue('assetType', next.name)
+            }}
+            className={fieldClass}
+          >
+            <option value="">No category</option>
+            {activeCategories.map((item) => (
+              <option key={item.id} value={item.id}>{item.parentCategoryName ? `${item.parentCategoryName} › ${item.name}` : item.name}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">Choosing a category adds its datasheet fields below.</p>
+        </div>
+        {category ? (
+          <AssetDatasheetFields
+            categoryName={category.name}
+            fields={datasheetFields}
+            values={datasheet}
+            missing={missingFields}
+            onChange={(fieldId, value) => {
+              setDatasheet((prev) => ({ ...prev, [fieldId]: value }))
+              if (value.trim()) setMissingFields((prev) => prev.filter((id) => id !== fieldId))
+            }}
+          />
+        ) : null}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelClass} htmlFor="asset-name">Asset Name</label>

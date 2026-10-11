@@ -43,6 +43,27 @@ public sealed class WorkOrderVisitTests
     }
 
     [Fact]
+    public async Task OnDayTwo_TheLatestArrivalIsKept_SoTheTechnicianShowsOnSiteDespiteYesterdaysDeparture()
+    {
+        await using var db = CreateDbContext();
+        var (tenantId, workOrderId, technicianId) = await SeedAsync(db);
+        var workflow = CreateWorkflow(db);
+
+        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1, null));
+        await workflow.RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1.AddHours(8), null));
+        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day2, null));
+
+        var assignment = await db.WorkOrderTechnicianAssignments.SingleAsync();
+        Assert.Equal(Day1, assignment.ArrivalAt);
+        Assert.Equal(Day2, assignment.LastArrivalAt);
+        // On site: the latest arrival is after the last departure, which is still yesterday's.
+        Assert.True(assignment.LastArrivalAt > assignment.DepartureAt);
+
+        await workflow.RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day2.AddHours(6), null));
+        Assert.True(assignment.DepartureAt > assignment.LastArrivalAt);
+    }
+
+    [Fact]
     public async Task StartingTheNextTrip_WhileStillOnSite_IsRejected()
     {
         await using var db = CreateDbContext();

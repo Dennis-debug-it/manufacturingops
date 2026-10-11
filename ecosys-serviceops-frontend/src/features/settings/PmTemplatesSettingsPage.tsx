@@ -7,6 +7,7 @@ import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { usePmTemplates, useDuplicatePmTemplate, useSetPmTemplateActive, useDeletePmTemplate } from '../maintenance/api'
 import { PmTemplateEditorDrawer } from './components/PmTemplateEditorDrawer'
+import { StarterPacks } from './components/StarterPacks'
 import type { PmTemplate } from '../maintenance/types'
 
 function RowActions({ template, onEdit }: { template: PmTemplate; onEdit: () => void }) {
@@ -86,6 +87,10 @@ export function PmTemplatesSettingsPage() {
         emptyTitle={isError ? 'PM templates unavailable' : 'No PM templates yet'}
         emptyDescription={isError ? 'PM templates could not be loaded.' : 'Create your first template to standardise preventive maintenance checklists.'}
       />
+
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+        <StarterPacks />
+      </div>
 
       <PmTemplateEditorDrawer
         open={editorState.open}

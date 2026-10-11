@@ -11,6 +11,7 @@ import { ClientFormDrawer } from '../clients/components/ClientFormDrawer'
 import { NewWorkOrderForm } from '../work-orders/components/NewWorkOrderForm'
 import { NewInvoiceFormDrawer } from '../finance/components/NewInvoiceFormDrawer'
 import { NewUserFormDrawer } from '../team/components/NewUserFormDrawer'
+import { StarterPacks } from '../settings/components/StarterPacks'
 
 export function OnboardingPage() {
   const { tenant, user } = useAuth()
@@ -51,6 +52,11 @@ export function OnboardingPage() {
         </div>
         <p className="mt-5 text-sm text-slate-500">You can complete company details and preferences in Settings whenever you need them.</p>
       </section>
+      {hasModule('operations') ? (
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <StarterPacks compact />
+        </section>
+      ) : null}
       {action === 'customer' && canAddCustomer ? <ClientFormDrawer open onClose={() => setAction(null)} /> : null}
       {action === 'work-order' && hasModule('operations') && canCreateWorkOrder ? <NewWorkOrderForm open onClose={() => setAction(null)} /> : null}
       {action === 'invoice' && hasModule('finance') && canCreateInvoice ? <NewInvoiceFormDrawer open onClose={() => setAction(null)} /> : null}

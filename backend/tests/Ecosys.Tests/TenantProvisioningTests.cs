@@ -62,6 +62,22 @@ public sealed partial class AuthEmailSafetyTests
     }
 
     [Fact]
+    public async Task Provisioning_GivesThePlatformCreatedWorkspaceTheBasicPmChecklists()
+    {
+        // A self-signup workspace always had these; one created from the platform started with none.
+        await using var db = CreateDbContext();
+        await db.Database.EnsureCreatedAsync();
+        await SeedPlatformUserAsync(db, "owner@platform.test");
+        var controller = CreatePlatformTenantsController(db, new FakeUserCredentialDeliveryService(db, true, true));
+
+        var result = await controller.Create(MinimalProvisioningRequest(), CancellationToken.None);
+
+        var response = Assert.IsType<PlatformTenantDetailResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
+        var names = await db.PmTemplates.IgnoreQueryFilters().Where(x => x.TenantId == response.TenantId).Select(x => x.Name).OrderBy(x => x).ToListAsync();
+        Assert.Equal(["Generator PM Checklist", "HVAC PM Checklist", "Solar PM Checklist", "UPS PM Checklist"], names);
+    }
+
+    [Fact]
     public async Task Provisioning_RejectsDuplicateSlugBeforePersistingSecondTenant()
     {
         await using var db = CreateDbContext();

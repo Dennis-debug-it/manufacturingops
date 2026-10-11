@@ -10405,6 +10405,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("IsLead")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTime?>("LastArrivalAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");

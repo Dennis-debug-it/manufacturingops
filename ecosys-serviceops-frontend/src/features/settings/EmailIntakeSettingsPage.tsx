@@ -10,6 +10,7 @@ import { Spinner } from '../../shared/components/Spinner'
 import { formatDateTime } from '../../shared/utils/dates'
 import { useClients } from '../clients/api'
 import { useAssignmentGroups } from '../team/api'
+import { IntakeRulesSection } from './components/IntakeRulesSection'
 
 interface EmailIntakeSettings {
   isEnabled: boolean
@@ -275,6 +276,8 @@ export function EmailIntakeSettingsPage() {
 
           <button disabled={save.isPending} className="inline-flex h-11 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60">{save.isPending ? 'Saving…' : 'Save Changes'}</button>
         </form>
+
+        <IntakeRulesSection className={sectionClass} />
 
         <section className={sectionClass}>
           <h2 className="text-sm font-semibold text-slate-900">Recent emails</h2>

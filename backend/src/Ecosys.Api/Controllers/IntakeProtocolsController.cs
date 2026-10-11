@@ -18,8 +18,7 @@ public sealed class IntakeProtocolsController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     IUserAccessService userAccessService,
-    IAuditLogService auditLogService,
-    ISecretEncryptionService secretEncryptionService) : TenantAwareControllerBase(tenantContext)
+    IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -30,22 +29,72 @@ public sealed class IntakeProtocolsController(
     public async Task<ActionResult<IReadOnlyCollection<IntakeProtocolResponse>>> List(CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
-        await EnsureLegacyEmailProtocolAsync(cancellationToken);
 
+        // Oldest first: that is the order rules are tried in. The old auto-made catch-all rule is hidden.
         var items = await dbContext.IntakeProtocols
-            .Where(x => x.TenantId == TenantId)
-            .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
-            .ThenBy(x => x.Name)
+            .Where(x => x.TenantId == TenantId && !x.CriteriaJson.Contains(IntakeRules.LegacyMarker))
+            .OrderBy(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
 
         return Ok(items.Select(MapProtocol).ToList());
+    }
+
+    /// <summary>Ready-made rules a workspace can add with one click.</summary>
+    [HttpGet("templates")]
+    public ActionResult<IReadOnlyCollection<IntakeRuleTemplateResponse>> Templates()
+    {
+        userAccessService.EnsureAdmin();
+        return Ok(IntakeRuleTemplates.All.Select(x => new IntakeRuleTemplateResponse(x.Key, x.Name, x.Description, x.CriteriaJson, x.ActionsJson)).ToList());
+    }
+
+    [HttpPost("templates/{key}")]
+    public async Task<ActionResult<IntakeProtocolResponse>> AddFromTemplate(string key, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var template = IntakeRuleTemplates.All.FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase))
+            ?? throw new NotFoundException("That ready-made rule was not found.");
+
+        var protocol = new IntakeProtocol
+        {
+            TenantId = TenantId,
+            Name = template.Name,
+            Description = template.Description,
+            SourceType = "Email",
+            IsActive = true,
+            CriteriaJson = template.CriteriaJson,
+            ActionsJson = template.ActionsJson,
+            SourceConfigJson = "{}",
+        };
+        dbContext.IntakeProtocols.Add(protocol);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await AuditSettingsChangeAsync("Intake protocol created", protocol.Id, cancellationToken);
+        return CreatedAtAction(nameof(Get), new { id = protocol.Id }, MapProtocol(protocol));
+    }
+
+    /// <summary>Which rule a sample email would match, without saving anything.</summary>
+    [HttpPost("preview")]
+    public async Task<ActionResult<IntakeRulePreviewResponse>> Preview([FromBody] IntakeRulePreviewRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var rules = await dbContext.IntakeProtocols
+            .Where(x => x.TenantId == TenantId && x.IsActive && x.SourceType == "Email")
+            .ToListAsync(cancellationToken);
+        var outcome = IntakeRules.FirstMatch(rules, new IntakeRuleInput(request.Subject ?? string.Empty, request.Body ?? string.Empty, request.FromAddress?.Trim() ?? string.Empty, request.FromName));
+        if (outcome is null) return Ok(new IntakeRulePreviewResponse(null, null, "No rule matches; the workspace defaults apply.", null, null, null));
+        var title = IntakeRules.ApplyTitle(outcome.TitleTemplate, request.Subject ?? string.Empty, request.FromAddress ?? string.Empty, request.FromName);
+        return Ok(new IntakeRulePreviewResponse(
+            outcome.Rule.Id,
+            outcome.Rule.Name,
+            outcome.Ignore ? "Ignored — no work order is created." : "Creates a work order.",
+            outcome.Ignore ? null : title,
+            outcome.Priority,
+            outcome.WorkOrderType));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<IntakeProtocolResponse>> Get(Guid id, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdmin();
-        await EnsureLegacyEmailProtocolAsync(cancellationToken);
 
         var item = await dbContext.IntakeProtocols
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
@@ -69,8 +118,6 @@ public sealed class IntakeProtocolsController(
         dbContext.IntakeProtocols.Add(protocol);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await SyncLegacyCompatibilityAsync(protocol, request, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         await AuditSettingsChangeAsync("Intake protocol created", protocol.Id, cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = protocol.Id }, MapProtocol(protocol));
@@ -89,8 +136,6 @@ public sealed class IntakeProtocolsController(
         await ApplyProtocolAsync(protocol, request, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        await SyncLegacyCompatibilityAsync(protocol, request, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
 
         await AuditSettingsChangeAsync("Intake protocol updated", protocol.Id, cancellationToken);
         return Ok(MapProtocol(protocol));
@@ -210,148 +255,6 @@ public sealed class IntakeProtocolsController(
         }
     }
 
-    private async Task SyncLegacyCompatibilityAsync(IntakeProtocol protocol, UpsertIntakeProtocolRequest request, CancellationToken cancellationToken)
-    {
-        if (!string.Equals(protocol.SourceType, "Email", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        var sourceConfig = Deserialize<EmailProtocolSourceConfig>(request.SourceConfigJson) ?? new EmailProtocolSourceConfig();
-        var actions = Deserialize<IntakeActionsEnvelope>(request.ActionsJson) ?? new IntakeActionsEnvelope();
-        var createWorkOrder = actions.CreateWorkOrder;
-        var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
-
-        settings.IsEnabled = request.IsActive;
-        settings.IntakeEmailAddress = NormalizeOptional(sourceConfig.IntakeEmailAddress ?? sourceConfig.MonitoredMailbox);
-        settings.MailboxProvider = string.IsNullOrWhiteSpace(sourceConfig.MailboxProvider) ? "IMAP" : sourceConfig.MailboxProvider.Trim();
-        settings.Host = NormalizeOptional(sourceConfig.Host) ?? string.Empty;
-        settings.Port = sourceConfig.Port.GetValueOrDefault(993);
-        settings.UseSsl = sourceConfig.UseSsl ?? true;
-        settings.Username = NormalizeOptional(sourceConfig.Username);
-        settings.DefaultClientId = await ValidateClientIdAsync(createWorkOrder?.ClientId, cancellationToken);
-        settings.DefaultBranchId = await ValidateBranchIdAsync(createWorkOrder?.BranchId, cancellationToken);
-        settings.DefaultAssignmentGroupId = await ValidateAssignmentGroupIdAsync(createWorkOrder?.AssignmentGroupId, cancellationToken);
-        settings.DefaultPriority = string.IsNullOrWhiteSpace(createWorkOrder?.Priority) ? "Medium" : createWorkOrder!.Priority!.Trim();
-        settings.CreateWorkOrderFromUnknownSender = !(sourceConfig.KnownSenderOnly ?? false);
-        settings.SubjectParsingRules = NormalizeOptional(sourceConfig.SubjectParsingMode);
-        settings.AllowedSenderDomains = NormalizeOptional(sourceConfig.AllowedSenderDomains);
-
-        var encryptedPassword = secretEncryptionService.Encrypt(sourceConfig.Password);
-        if (!string.IsNullOrWhiteSpace(encryptedPassword))
-        {
-            settings.EncryptedPassword = encryptedPassword;
-        }
-    }
-
-    private async Task EnsureLegacyEmailProtocolAsync(CancellationToken cancellationToken)
-    {
-        var exists = await dbContext.IntakeProtocols.AnyAsync(
-            x => x.TenantId == TenantId && x.SourceType == "Email",
-            cancellationToken);
-
-        if (exists)
-        {
-            return;
-        }
-
-        var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
-        var protocol = new IntakeProtocol
-        {
-            TenantId = TenantId,
-            Name = string.IsNullOrWhiteSpace(settings.IntakeEmailAddress) ? "Default Email Intake" : $"Email Intake - {settings.IntakeEmailAddress}",
-            SourceType = "Email",
-            IsActive = settings.IsEnabled,
-            Description = "Automated Work Order Generation",
-            CriteriaJson = JsonSerializer.Serialize(
-                new[]
-                {
-                    new
-                    {
-                        id = "legacy-email-subject",
-                        logic = "AND",
-                        criteria = new[]
-                        {
-                            new
-                            {
-                                id = "legacy-email-criterion",
-                                field = "Subject",
-                                @operator = "Is Not Empty",
-                                value = ""
-                            }
-                        }
-                    }
-                }),
-            ActionsJson = JsonSerializer.Serialize(new
-            {
-                createWorkOrder = new
-                {
-                    enabled = true,
-                    workOrderTitleTemplate = "{{subject}}",
-                    workOrderDescriptionTemplate = "{{body}}",
-                    workOrderType = "Corrective",
-                    priority = settings.DefaultPriority,
-                    clientId = settings.DefaultClientId,
-                    branchId = settings.DefaultBranchId,
-                    assetId = (Guid?)null,
-                    assignmentGroupId = settings.DefaultAssignmentGroupId,
-                    assignedUserId = (Guid?)null,
-                    dueDateRule = "None",
-                    tags = "",
-                    autoCreateImmediately = true
-                },
-                sendNotification = new
-                {
-                    enabled = false
-                },
-                attachMetadata = new
-                {
-                    enabled = true,
-                    storeSenderEmail = true,
-                    storeSourceChannel = true,
-                    storeMatchedRuleName = true
-                }
-            }),
-            SourceConfigJson = JsonSerializer.Serialize(new
-            {
-                intakeEmailAddress = settings.IntakeEmailAddress,
-                monitoredMailbox = settings.IntakeEmailAddress,
-                mailboxProvider = settings.MailboxProvider,
-                host = settings.Host,
-                port = settings.Port,
-                useSsl = settings.UseSsl,
-                username = settings.Username,
-                allowedSenderDomains = settings.AllowedSenderDomains,
-                knownSenderOnly = !settings.CreateWorkOrderFromUnknownSender,
-                subjectParsingMode = settings.SubjectParsingRules,
-                matchEmailBody = true,
-                attachmentParsing = true,
-                pollingMode = "Mailbox Listener"
-            }),
-            LastTriggeredAt = settings.LastCheckedAt,
-            LastTriggerStatus = settings.IsConnectionHealthy ? "Healthy" : null,
-            LastError = settings.LastError
-        };
-
-        dbContext.IntakeProtocols.Add(protocol);
-        await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    private Task<EmailIntakeSetting> GetOrCreateEmailIntakeSettingAsync(CancellationToken cancellationToken) =>
-        dbContext.GetOrCreateAsync(
-            dbContext.EmailIntakeSettings.Where(x => x.TenantId == TenantId),
-            () => new EmailIntakeSetting
-            {
-                TenantId = TenantId,
-                MailboxProvider = "IMAP",
-                Host = string.Empty,
-                Port = 993,
-                UseSsl = true,
-                DefaultPriority = "Medium",
-                CreateWorkOrderFromUnknownSender = false
-            },
-            cancellationToken);
-
     private async Task<Guid?> ValidateClientIdAsync(Guid? clientId, CancellationToken cancellationToken)
     {
         if (!clientId.HasValue)
@@ -448,6 +351,11 @@ public sealed class IntakeProtocolsController(
         ValidateJsonPayload(request.CriteriaJson, "CriteriaJson");
         ValidateJsonPayload(request.ActionsJson, "ActionsJson");
         ValidateJsonPayload(request.SourceConfigJson, "SourceConfigJson");
+        if (string.Equals(request.SourceType, "Email", StringComparison.OrdinalIgnoreCase)
+            && IntakeRules.Validate(request.CriteriaJson, request.ActionsJson) is { } problem)
+        {
+            throw new BusinessRuleException(problem);
+        }
     }
 
     private static void ValidateJsonPayload(string? value, string fieldName)

@@ -898,7 +898,8 @@ public sealed class AssetsController(
             }
         }
 
-        foreach (var requiredDefinition in fieldDefinitions.Values.Where(x => x.IsRequired))
+        // A field that has been switched off is no longer asked for, so it cannot be required.
+        foreach (var requiredDefinition in fieldDefinitions.Values.Where(x => x.IsRequired && x.IsActive))
         {
             var provided = requestedValues.Any(x => x.FieldDefinitionId == requiredDefinition.Id && !string.IsNullOrWhiteSpace(x.Value));
             if (!provided)

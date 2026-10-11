@@ -49,9 +49,28 @@ export interface WorkOrderTechnicianAssignment {
   status: string
   assignedAt: string
   acceptedAt: string | null
+  /** First arrival on site (the response milestone). */
   arrivalAt: string | null
+  /** Most recent departure. */
   departureAt: string | null
   notes: string | null
+  /** Most recent arrival. On a multi-day job the technician arrives and leaves each day. */
+  lastArrivalAt?: string | null
+}
+
+/**
+ * Whether the technician is on site now: their latest arrival is after their latest departure. On a
+ * job that runs over several days, yesterday's departure must not hide today's "Record departure".
+ */
+export function isOnSite(assignment: Pick<WorkOrderTechnicianAssignment, 'arrivalAt' | 'departureAt' | 'lastArrivalAt'> | undefined): boolean {
+  const arrived = assignment?.lastArrivalAt ?? assignment?.arrivalAt
+  if (!arrived) return false
+  return !assignment?.departureAt || new Date(assignment.departureAt).getTime() < new Date(arrived).getTime()
+}
+
+/** Has been on site before and has since left (e.g. at the end of day one of a multi-day job). */
+export function hasLeftSite(assignment: Pick<WorkOrderTechnicianAssignment, 'arrivalAt' | 'departureAt' | 'lastArrivalAt'> | undefined): boolean {
+  return Boolean(assignment?.arrivalAt && assignment.departureAt) && !isOnSite(assignment)
 }
 
 export interface WorkOrder {

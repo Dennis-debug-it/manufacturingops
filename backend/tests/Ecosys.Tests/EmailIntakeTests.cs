@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Options;
@@ -169,6 +170,75 @@ public sealed class EmailIntakeFlowTests : IAsyncLifetime
         Assert.False(await db.EmailOutboxMessages.IgnoreQueryFilters().AnyAsync(x => x.EventKey.StartsWith("email-intake.")));
     }
 
+    [Fact]
+    public async Task IntakeRules_DropMailThatIsNotARequest_AndShapeTheWorkOrdersTheyCreate()
+    {
+        await using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await SignUpAsync(client));
+        await client.PostAsJsonAsync("/api/clients", new { clientName = "Acme Mall", email = "ops@acme.test", phone = "0700000000" });
+        var bigCorp = (await (await client.PostAsJsonAsync("/api/clients", new { clientName = "BigCorp", email = "accounts@bigcorp.test", phone = "0700000001" }))
+            .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        await client.PutAsJsonAsync("/api/settings/email-intake", new
+        {
+            isEnabled = true, intakeEmailAddress = "service@intake.test", mailboxProvider = "IMAP", host = "imap.intake.test", port = 993, useSsl = true,
+            username = "service@intake.test", password = "secret", defaultClientId = (Guid?)null, defaultBranchId = (Guid?)null, defaultAssignmentGroupId = (Guid?)null,
+            defaultPriority = "Medium", createWorkOrderFromUnknownSender = false, subjectParsingRules = (string?)null, allowedSenderDomains = (string?)null, autoReplyEnabled = false,
+        });
+
+        // Ready-made rules, tried in the order they were added.
+        foreach (var key in new[] { "ignore-automated", "urgent", "generator-fault" })
+        {
+            Assert.Equal(HttpStatusCode.Created, (await client.PostAsync($"/api/settings/intake-protocols/templates/{key}", null)).StatusCode);
+        }
+
+        // A custom rule: anything from bigcorp.test is that client's, even from people who aren't contacts.
+        var custom = await client.PostAsJsonAsync("/api/settings/intake-protocols", new
+        {
+            name = "BigCorp facilities team", sourceType = "Email", isActive = true, description = (string?)null,
+            criteriaJson = JsonSerializer.Serialize(new[] { new { logic = "AND", criteria = new[] { new { field = "Sender Domain", @operator = "Equals", value = "bigcorp.test" } } } }),
+            actionsJson = JsonSerializer.Serialize(new { createWorkOrder = new { clientId = bigCorp, priority = "High", workOrderTitleTemplate = "BigCorp: {{subject}}" } }),
+            sourceConfigJson = "{}",
+        });
+        Assert.Equal(HttpStatusCode.Created, custom.StatusCode);
+
+        // A rule with no conditions is refused.
+        var empty = await client.PostAsJsonAsync("/api/settings/intake-protocols", new
+        {
+            name = "Broken", sourceType = "Email", isActive = true, description = (string?)null,
+            criteriaJson = "[]", actionsJson = JsonSerializer.Serialize(new { ignore = new { enabled = true } }), sourceConfigJson = "{}",
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+
+        // Saving rules leaves the mailbox settings alone.
+        var settings = await client.GetFromJsonAsync<JsonElement>("/api/settings/email-intake");
+        Assert.Equal("imap.intake.test", settings.GetProperty("host").GetString());
+        Assert.True(settings.GetProperty("isEnabled").GetBoolean());
+
+        var preview = await (await client.PostAsJsonAsync("/api/settings/intake-protocols/preview",
+            new { subject = "Generator tripped", body = "", fromAddress = "ops@acme.test", fromName = "Acme" })).Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Generator faults", preview.GetProperty("ruleName").GetString());
+        Assert.Equal("[Generator] Generator tripped", preview.GetProperty("title").GetString());
+
+        await CheckNowAsync(client);
+        mailbox.Deliver("newsletter@vendor.test", "October deals", "Buy now");
+        mailbox.Deliver("ops@acme.test", "Chiller down - emergency", "No cooling in the food court.");
+        mailbox.Deliver("ops@acme.test", "Generator making a noise", "Rattling at startup.");
+        mailbox.Deliver("facilities@bigcorp.test", "Lift stuck", "Lift 2 stuck on floor 3.");
+        Assert.Equal(4, await CheckNowAsync(client));
+
+        await using var db = CreateContext();
+        var ignored = await db.EmailIntakeMessages.IgnoreQueryFilters().SingleAsync(x => x.FromAddress == "newsletter@vendor.test");
+        Assert.Equal(EmailIntakeOutcomes.Ignored, ignored.Outcome);
+        Assert.Contains("Ignore newsletters and no-reply mail", ignored.Detail);
+
+        var workOrders = await db.WorkOrders.IgnoreQueryFilters().ToDictionaryAsync(x => x.Title);
+        Assert.Equal("Critical", workOrders["Chiller down - emergency"].Priority);
+        Assert.Equal("High", workOrders["[Generator] Generator making a noise"].Priority);
+        Assert.Equal(bigCorp, workOrders["BigCorp: Lift stuck"].ClientId);
+        Assert.Equal(3, workOrders.Count);
+    }
+
     private static async Task<string> SignUpAsync(HttpClient client)
     {
         var response = await client.PostAsJsonAsync("/api/auth/signup", new
@@ -259,5 +329,67 @@ public sealed class EmailIntakeFlowTests : IAsyncLifetime
                 return Task.FromResult(new EmailIntakeFetchResult(1, fresh.Count > 0 ? fresh[^1].Uid : lastUid.Value, fresh));
             }
         }
+    }
+}
+
+
+public sealed class IntakeRuleMatchingTests
+{
+    private static string Rule(string logic, params (string Field, string Operator, string Value)[] criteria) =>
+        JsonSerializer.Serialize(new[] { new { logic, criteria = criteria.Select(c => new { field = c.Field, @operator = c.Operator, value = c.Value }).ToArray() } });
+
+    private static readonly IntakeRuleInput Email = new("Chiller down - URGENT", "No cooling since 8am.", "ops@acme.test", "Acme Ops");
+
+    [Theory]
+    [InlineData("Subject", "Contains", "urgent", true)]
+    [InlineData("Subject", "Contains Any Of", "emergency, urgent", true)]
+    [InlineData("Body", "Contains", "urgent", false)]
+    [InlineData("Subject or Body", "Contains", "cooling", true)]
+    [InlineData("Sender Domain", "Equals", "ACME.test", true)]
+    [InlineData("Sender Email", "Starts With", "ops@", true)]
+    [InlineData("Sender Name", "Ends With", "ops", true)]
+    [InlineData("Subject", "Does Not Contain", "urgent", false)]
+    [InlineData("Body", "Is Not Empty", "", true)]
+    public void SingleConditions(string field, string op, string value, bool expected) =>
+        Assert.Equal(expected, IntakeRules.Matches(Rule("AND", (field, op, value)), Email));
+
+    [Fact]
+    public void AllVersusAny()
+    {
+        Assert.False(IntakeRules.Matches(Rule("AND", ("Subject", "Contains", "urgent"), ("Body", "Contains", "generator")), Email));
+        Assert.True(IntakeRules.Matches(Rule("OR", ("Subject", "Contains", "urgent"), ("Body", "Contains", "generator")), Email));
+    }
+
+    [Fact]
+    public void TheFirstActiveRuleWins_AndTheOldCatchAllIsSkipped()
+    {
+        var create = JsonSerializer.Serialize(new { createWorkOrder = new { priority = "Critical" } });
+        var rules = new[]
+        {
+            new IntakeProtocol { Name = "old", IsActive = true, CreatedAt = DateTime.UtcNow.AddDays(-3), CriteriaJson = $"[{{\"id\":\"{IntakeRules.LegacyMarker}\",\"logic\":\"AND\",\"criteria\":[{{\"field\":\"Subject\",\"operator\":\"Is Not Empty\",\"value\":\"\"}}]}}]", ActionsJson = create },
+            new IntakeProtocol { Name = "off", IsActive = false, CreatedAt = DateTime.UtcNow.AddDays(-2), CriteriaJson = Rule("AND", ("Subject", "Contains", "chiller")), ActionsJson = create },
+            new IntakeProtocol { Name = "chiller", IsActive = true, CreatedAt = DateTime.UtcNow.AddDays(-1), CriteriaJson = Rule("AND", ("Subject", "Contains", "chiller")), ActionsJson = create },
+            new IntakeProtocol { Name = "urgent", IsActive = true, CreatedAt = DateTime.UtcNow, CriteriaJson = Rule("AND", ("Subject", "Contains", "urgent")), ActionsJson = create },
+        };
+        var outcome = IntakeRules.FirstMatch(rules, Email);
+        Assert.Equal("chiller", outcome?.Rule.Name);
+        Assert.Equal("Critical", outcome?.Priority);
+    }
+
+    [Fact]
+    public void TemplatesAreValidRules()
+    {
+        foreach (var template in IntakeRuleTemplates.All)
+        {
+            Assert.Null(IntakeRules.Validate(template.CriteriaJson, template.ActionsJson));
+        }
+    }
+
+    [Fact]
+    public void TitleTemplates()
+    {
+        Assert.Equal("[Generator] Won't start", IntakeRules.ApplyTitle("[Generator] {{subject}}", "Won't start", "a@b.test", null));
+        Assert.Equal("From Ann: Leak", IntakeRules.ApplyTitle("From {{senderName}}: {{subject}}", "Leak", "a@b.test", "Ann"));
+        Assert.Equal("Leak", IntakeRules.ApplyTitle(null, "Leak", "a@b.test", null));
     }
 }
