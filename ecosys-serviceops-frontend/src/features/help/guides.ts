@@ -1,14 +1,26 @@
 import type { LucideIcon } from 'lucide-react'
 import {
+  BarChart3,
+  BookOpen,
   Boxes,
+  Building2,
+  CalendarClock,
+  CheckSquare,
   ClipboardList,
+  Clock,
+  FileSignature,
   FileText,
+  Globe,
   Inbox,
+  Package,
   Rocket,
   Settings2,
   Smartphone,
   Users,
+  Wallet,
+  Wrench,
 } from 'lucide-react'
+import type { AppRole } from '../../shared/types/auth'
 
 export interface GuideSection {
   title: string
@@ -29,6 +41,8 @@ export interface Guide {
   adminOnly?: boolean
   /** Shown in the technician app's help, not in the office guide list. */
   technicianOnly?: boolean
+  /** Only for these roles (the admin always sees every guide). */
+  roles?: AppRole[]
   sections: GuideSection[]
 }
 
@@ -140,7 +154,7 @@ const serviceReports: Guide = {
     {
       title: 'Approve and send',
       steps: [
-        'Reports waiting for review are listed in the work orders report queue.',
+        'Reports waiting for review are listed under Work Orders → Report Queue. Filter the list, then Generate, Approve, Send, open the PDF or Download ZIP for several at once.',
         'Approve the report, then send it: it is emailed to the client’s contact as a PDF.',
         'Settings → Operational Defaults can send approved reports automatically.',
       ],
@@ -303,8 +317,375 @@ const emailIntake: Guide = {
       steps: [
         'On the Email Intake page, add a ready-made rule (urgent = Critical, generator faults, AC not cooling, water leaks, ignore newsletters…) or click New rule.',
         'Set conditions on the subject, body or sender, and choose what happens: set the priority, work type, team or title, accept a sender for a client, or ignore the email.',
-        'Rules are tried top to bottom and the first match wins. Use Try a sample email to check which rule applies.',
+        'Rules are tried top to bottom and the first match wins. Paste an email under the rules and click Test this email to see which rule applies.',
       ],
+    },
+  ],
+}
+
+const workOrders: Guide = {
+  id: 'work-orders',
+  title: 'Work orders',
+  summary: 'Log a job, assign it, follow it through to completion and close it.',
+  icon: ClipboardList,
+  path: '/work-orders',
+  pathLabel: 'Work Orders',
+  sections: [
+    {
+      title: 'Find work orders',
+      text: 'All Work Orders lists every job. Switch between the Table, Kanban, Calendar and Map views, and use Filters to narrow by status, priority, client, technician or date. Report Queue lists finished jobs whose service report needs attention.',
+    },
+    {
+      title: 'Create a work order',
+      steps: [
+        'Click New Work Order.',
+        'Optionally pick a Template to fill in the details, then choose the Client, Site and (if it is about one machine) the Asset.',
+        'Enter the Title, Type, Priority, Due Date and a Description of the problem.',
+        'Click Create Work Order. The SLA clock starts from the priority and the client’s SLA policy.',
+      ],
+      tip: 'Emails to your intake address can create work orders automatically; see the Email intake guide.',
+    },
+    {
+      title: 'Move a job along',
+      steps: [
+        'Open the work order. The tabs are Overview, Work, Activity and Report.',
+        'The main button changes with the status: Assign, then Start Work, then Complete (add the Work done notes and click Mark complete), then Close.',
+        'Technicians record their arrival, departure, checklist, parts and photos from the technician app; you see it live on the Work tab.',
+      ],
+    },
+    {
+      title: 'Jobs that take more than one visit',
+      text: 'Each trip to site is recorded as a visit. The crew panel shows whether a technician is On Site or has Left Site, with their first arrival (used for the SLA), latest arrival and latest departure.',
+    },
+    {
+      title: 'Other actions',
+      text: 'Under More actions: Put On Hold (On Hold (general), Waiting on Parts or Waiting on Client), Resume, Reassign, Create Follow-up, Reopen, Duplicate and Cancel Work Order.',
+    },
+  ],
+}
+
+const scheduling: Guide = {
+  id: 'dispatch',
+  title: 'Scheduling and live map',
+  summary: 'Plan who goes where, see technicians on the map and plan their route.',
+  icon: CalendarClock,
+  path: '/dispatch/board',
+  pathLabel: 'Scheduling Board',
+  sections: [
+    {
+      title: 'Scheduling Board',
+      steps: [
+        'Jobs not yet assigned are in the Unassigned list.',
+        'Drag a job onto a technician’s row at the time you want. Drag it to Drop here to unassign to take it off.',
+        'Use Today and the day/week switch to move around, and All priorities to filter.',
+        'Click Open dispatch actions on a job to assign a crew, reschedule or add notes in the Dispatch drawer.',
+      ],
+    },
+    {
+      title: 'Live Map',
+      text: 'Live Map shows where your technicians are and refreshes every 30 seconds (or click Refresh). Click View daily route to see a technician’s jobs for the day in order; Optimise Route reorders them to cut travel.',
+    },
+  ],
+}
+
+const maintenance: Guide = {
+  id: 'maintenance',
+  title: 'Planned maintenance',
+  summary: 'Set up recurring service for assets and keep track of what’s due and done.',
+  icon: Wrench,
+  path: '/maintenance/calendar',
+  pathLabel: 'Maintenance',
+  sections: [
+    {
+      title: 'Where to look',
+      text: 'Maintenance has the Calendar (what’s due when), PM Schedules (each recurring plan), PM Compliance (done on time vs late or missed) and Engine Status.',
+    },
+    {
+      title: 'Create a PM schedule',
+      steps: [
+        'Go to PM Schedules and click New Schedule.',
+        'Asset & Coverage: choose the client, site and asset(s).',
+        'Template & Schedule: pick the PM template (the checklist) and the frequency: Monthly, Quarterly, Semi-Annual or Annual, and the start date.',
+        'Assignment & WO Settings: choose whether work orders are created automatically (Auto-Schedule) and how far ahead.',
+        'Click Create Schedule.',
+      ],
+      tip: 'Need a work order today? Open the schedule and click Generate Work Order Now. Technicians are assigned on the work order that is created.',
+    },
+    {
+      title: 'Checklists',
+      text: 'The checklist technicians fill in comes from the PM template. Admins manage templates under Settings → PM Templates, where starter packs add ready-made ones.',
+    },
+  ],
+}
+
+const inventory: Guide = {
+  id: 'inventory',
+  title: 'Inventory',
+  summary: 'Parts, stock levels, issuing to jobs, van stock, purchasing and suppliers.',
+  icon: Package,
+  path: '/inventory',
+  pathLabel: 'Inventory',
+  sections: [
+    {
+      title: 'Parts and stock',
+      steps: [
+        'Under Parts, click New Part (or Bulk Import from a spreadsheet). Set the reorder level so you are warned before you run out.',
+        'Adjust Stock corrects a count; Replenish Stock adds stock you received.',
+        'Stock shows what you hold and where; Movements shows every change; Alerts lists parts below their reorder level, each with Replenish.',
+      ],
+    },
+    {
+      title: 'Issue parts to a job',
+      steps: [
+        'Under Issues, click New Issue, choose the work order and parts, and click Create Issue.',
+        'Approve it, then Issue Stock. Unused parts can be sent back with Return.',
+      ],
+    },
+    {
+      title: 'Technician requests and returns',
+      text: 'Parts Requests come from technicians in the field: Approve, then Dispatch (Pending → Approved → Dispatched → Delivered). Parts Returns are parts technicians bring back: Receive or Reject them. Restock Requests ask for stock to be topped up.',
+    },
+    {
+      title: 'Buying stock',
+      steps: [
+        'Add your suppliers under Suppliers with New Supplier.',
+        'Under Purchase Orders, click New Purchase Order and Create Purchase Order. Purchase orders above your approval limit go to My Approvals first.',
+        'Mark Sent once it is with the supplier; when goods arrive, Receive Remaining puts them into stock.',
+      ],
+    },
+    {
+      title: 'Vans',
+      text: 'Under Vans, click New Van for each vehicle, then Load stock onto it. Parts used on jobs are recorded with Consume and unused stock goes back with Return.',
+    },
+    {
+      title: 'Reports',
+      text: 'Inventory Reports has Stock Valuation, Usage, Purchase Orders and Movement.',
+    },
+  ],
+}
+
+const finance: Guide = {
+  id: 'finance',
+  title: 'Finance',
+  summary: 'Quotes, invoices, payments, credit notes, expenses, bills and finance reports.',
+  icon: Wallet,
+  path: '/finance',
+  pathLabel: 'Finance',
+  sections: [
+    {
+      title: 'Where to find things',
+      text: 'Finance is grouped into Documents (Documents, Quotes, Invoices, Credit Notes, Receipts), Pricing (Rate Cards, Preferential Rates, Exchange Rates), Control (Approvals, Credit Control, Aging) and Reports (Reports, Expenses, Payables).',
+    },
+    {
+      title: 'Quote to invoice',
+      steps: [
+        'Under Quotes, click New Quote, add the lines and click Create Quote.',
+        'Click Send to email it. When the client agrees (or accepts it in the client portal) click Accept.',
+        'Click Convert to Invoice, or Build Proforma if you need payment first.',
+      ],
+    },
+    {
+      title: 'Invoices and payments',
+      steps: [
+        'Under Invoices, click New Invoice, add the lines and click Create Invoice.',
+        'When the client pays, open the invoice and click Record Payment (Cash, MPesa, BankTransfer, Cheque or Card).',
+        'For one payment that covers several invoices, go to Receipts → Receive Payment and choose Apply to invoices, or keep it On account.',
+      ],
+    },
+    {
+      title: 'Credit notes',
+      text: 'Under Credit Notes, click New Credit Note, then Create Draft, then Issue when it is right.',
+    },
+    {
+      title: 'Expenses and bills',
+      text: 'Staff claim expenses under Expenses with New Expense Claim and Submit Claim; claims go for approval. Supplier bills are entered under Payables with New Bill and Create Bill.',
+    },
+    {
+      title: 'Chasing payment',
+      text: 'Credit Control and Aging show who owes what and for how long. Open a client’s Statement and click Email Statement to send it.',
+    },
+    {
+      title: 'Finance reports',
+      text: 'Reports has Revenue Summary, Collections, By Client, Outstanding Receivables, Payables Aging and Contract P&L.',
+    },
+  ],
+}
+
+const contracts: Guide = {
+  id: 'contracts',
+  title: 'Contracts',
+  summary: 'Service contracts: what’s covered, SLA terms, billing, approval and renewal.',
+  icon: FileSignature,
+  path: '/contracts',
+  pathLabel: 'Contracts',
+  sections: [
+    {
+      title: 'Create a contract',
+      steps: [
+        'Click New Contract and choose the client.',
+        'Set what is covered: by asset category or specific assets, and the billing model.',
+        'Click Create Contract. It starts as a Draft.',
+      ],
+    },
+    {
+      title: 'Approve and activate',
+      steps: [
+        'Click Submit for Approval; an approver clicks Approve.',
+        'Click Activate to start it. Near the end date, Start Renewal creates the next term.',
+        'You can also Suspend, Resume, Terminate or Cancel a contract.',
+      ],
+    },
+    {
+      title: 'Contract details',
+      text: 'The tabs are Overview, Covered Sites/Assets, SLA Terms, Preferential Rates, PM Terms, Billing and P&L (what the contract earns against what the work costs).',
+    },
+  ],
+}
+
+const timeAttendance: Guide = {
+  id: 'time-attendance',
+  title: 'Time and leave',
+  summary: 'Clock in and out, apply for leave, and (for admins) approve timesheets and leave.',
+  icon: Clock,
+  roles: ['manager', 'dispatcher', 'materials_controller'],
+  sections: [
+    {
+      title: 'Your own time (My Time & Leave)',
+      steps: [
+        'Open My Time & Leave from the menu. Click Clock In when you start and Clock Out when you finish.',
+        'Use Take Break and End Break for breaks, and Travelling while you drive between sites.',
+        'To take time off, click Apply for leave, choose the type and dates, and click Submit request.',
+      ],
+      tip: 'Technicians do the same from the technician app.',
+    },
+    {
+      title: 'Managing the team (admin)',
+      steps: [
+        'Go to Users & Access → Time & Attendance.',
+        'Live shows who is clocked in, on a break or travelling right now.',
+        'Timesheets lists everyone’s hours to check and approve.',
+        'Leave lists leave requests to Approve or Reject; New Leave Request and Submit Request add one for someone.',
+        'Reports shows hours and leave over a period; Export downloads it.',
+      ],
+    },
+  ],
+}
+
+const knowledge: Guide = {
+  id: 'knowledge',
+  title: 'Knowledge base',
+  summary: 'Write how-to articles and procedures for your team and clients.',
+  icon: BookOpen,
+  path: '/knowledge',
+  pathLabel: 'Knowledge',
+  sections: [
+    {
+      title: 'Write an article',
+      steps: [
+        'Click New Category to group articles (for example Generators or Safety), then New Article.',
+        'Write the body in Markdown: headings, lists, links and images.',
+        'Choose the Visibility: Internal (all staff), Technicians only, Admins only, or Public (visible in the client portal).',
+        'Click Save to keep a draft, then Publish when it’s ready.',
+      ],
+      tip: 'Technicians find published articles under Guides in the technician app, even on site.',
+    },
+  ],
+}
+
+const reports: Guide = {
+  id: 'reports',
+  title: 'Reports and dashboards',
+  summary: 'How the business is doing: work orders, SLAs, maintenance, money, technicians and client satisfaction.',
+  icon: BarChart3,
+  path: '/reports',
+  pathLabel: 'Reports',
+  sections: [
+    {
+      title: 'Reports',
+      text: 'Reports has tabs for Work Order, SLA, PM Compliance, Finance, Technician Performance and CSAT (client satisfaction). Pick a date range and filters; Export CSV downloads the figures.',
+    },
+    {
+      title: 'Executive view',
+      text: 'The Executive View link on the Dashboard shows the headline numbers for operations and finance on one page.',
+    },
+  ],
+}
+
+const approvals: Guide = {
+  id: 'approvals',
+  title: 'Approvals',
+  summary: 'Approve purchase orders and expense claims routed to you.',
+  icon: CheckSquare,
+  path: '/approvals',
+  pathLabel: 'My Approvals',
+  roles: ['manager', 'finance', 'materials_controller'],
+  sections: [
+    {
+      title: 'Approve or reject',
+      steps: [
+        'My Approvals lists the purchase orders and expense claims waiting for you. Who approves what depends on the amount, set in Settings → Approval Matrix.',
+        'Open an item, check it, and click Approve (then Confirm Approval) or Reject with a reason.',
+      ],
+    },
+  ],
+}
+
+const clients: Guide = {
+  id: 'clients',
+  title: 'Clients and sites',
+  summary: 'Add clients, their sites and contacts, and see everything you do for them.',
+  icon: Building2,
+  path: '/clients',
+  pathLabel: 'Clients',
+  sections: [
+    {
+      title: 'Add a client',
+      steps: [
+        'Click New Client, fill in the name, contact and billing details, and click Create Client.',
+        'Tick Give this client access to the client portal to invite their contact straight away.',
+        'Have many clients already? Use Import to load them from a spreadsheet.',
+      ],
+    },
+    {
+      title: 'Sites',
+      text: 'A site is a location you work at. On the client’s Sites tab click New Site, enter the address (and map location so jobs show on the Live Map) and click Create Site.',
+    },
+    {
+      title: 'Everything about a client',
+      text: 'The client page has tabs for Overview, Sites, Assets, Contracts, Work Orders, Documents and Client Portal.',
+    },
+  ],
+}
+
+const clientPortal: Guide = {
+  id: 'client-portal',
+  title: 'Client portal',
+  summary: 'Let clients log requests, approve quotes and see their jobs, invoices and reports online.',
+  icon: Globe,
+  path: '/clients',
+  pathLabel: 'Clients',
+  roles: ['manager'],
+  sections: [
+    {
+      title: 'Give a client access',
+      steps: [
+        'Open the client and go to the Client Portal tab.',
+        'Click Invite Contact, enter their name and email and click Send Portal Invitation.',
+        'Use Copy portal link to share the link yourself, Resend Invite if it got lost, and Approve contacts who asked for access.',
+      ],
+      tip: 'Clients sign in with Send sign-in link: they get a link by email, so there is no password to forget.',
+    },
+    {
+      title: 'What clients can do',
+      steps: [
+        'Submit a Request (or New Request, then Submit Request): it becomes a work order for you.',
+        'Accept Quote or Decline Quote on quotes you send.',
+        'See their invoices, assets, maintenance plan, contracts, service reports and update their profile.',
+      ],
+    },
+    {
+      title: 'What they see',
+      text: 'Admins choose what the portal shows and how it looks under Settings → Portal. Knowledge base articles marked Public appear there too.',
     },
   ],
 }
@@ -333,9 +714,21 @@ const settings: Guide = {
 
 export const guides: Guide[] = [
   gettingStarted,
-  technicianApp,
+  workOrders,
   serviceReports,
+  scheduling,
+  maintenance,
+  clients,
   assets,
+  inventory,
+  contracts,
+  finance,
+  approvals,
+  timeAttendance,
+  knowledge,
+  reports,
+  clientPortal,
+  technicianApp,
   maintenanceTemplates,
   emailIntake,
   usersAccess,

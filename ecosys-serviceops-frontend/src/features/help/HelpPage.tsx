@@ -12,8 +12,10 @@ import { guides, type Guide } from './guides'
 export function visibleGuides(user: AuthUser | null | undefined): Guide[] {
   if (!user) return []
   return guides.filter((guide) => {
-    if (guide.adminOnly) return user.role === 'admin'
     if (guide.technicianOnly) return false
+    if (user.role === 'admin') return true
+    if (guide.adminOnly) return false
+    if (guide.roles && !guide.roles.includes(user.role)) return false
     return guide.path ? canOpenPath(user, guide.path) : true
   })
 }
