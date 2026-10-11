@@ -167,6 +167,13 @@ export const endpoints = {
     list: '/api/technicians',
     detail: (id: string) => `/api/technicians/${id}`,
   },
+  intakeRules: {
+    list: '/api/settings/intake-protocols',
+    detail: (id: string) => `/api/settings/intake-protocols/${id}`,
+    templates: '/api/settings/intake-protocols/templates',
+    addTemplate: (key: string) => `/api/settings/intake-protocols/templates/${key}`,
+    preview: '/api/settings/intake-protocols/preview',
+  },
   assignmentGroups: {
     list: '/api/assignment-groups',
     detail: (id: string) => `/api/assignment-groups/${id}`,

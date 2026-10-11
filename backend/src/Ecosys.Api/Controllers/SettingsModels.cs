@@ -130,6 +130,12 @@ public sealed record IntakeProtocolResponse(
     string? LastTriggerStatus,
     string? LastError);
 
+public sealed record IntakeRuleTemplateResponse(string Key, string Name, string Description, string CriteriaJson, string ActionsJson);
+
+public sealed record IntakeRulePreviewRequest(string? Subject, string? Body, string? FromAddress, string? FromName);
+
+public sealed record IntakeRulePreviewResponse(Guid? RuleId, string? RuleName, string Result, string? Title, string? Priority, string? WorkOrderType);
+
 public sealed record IntakeProtocolTestResponse(bool Success, DateTime? LastTriggeredAt, string? LastTriggerStatus, string? LastError);
 
 public sealed record UpsertMonitoringWebhookIntegrationRequest(

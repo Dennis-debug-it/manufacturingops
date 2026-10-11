@@ -228,6 +228,24 @@ internal sealed partial class EmailIntakeService(
         var subject = string.IsNullOrWhiteSpace(message.Subject) ? "(no subject)" : message.Subject.Trim();
         var body = BodyText(message);
         var senderLabel = string.IsNullOrWhiteSpace(from.Name) ? address : $"{from.Name} <{address}>";
+
+        // Intake rules (Settings → Email Intake): the first matching rule can drop the email or shape the work order.
+        var rules = await dbContext.IntakeProtocols.IgnoreQueryFilters()
+            .Where(x => x.TenantId == tenantId && x.IsActive && x.SourceType == "Email")
+            .ToListAsync(cancellationToken);
+        var rule = IntakeRules.FirstMatch(rules, new IntakeRuleInput(subject, body, address, from.Name));
+        if (rule is not null)
+        {
+            rule.Rule.LastTriggeredAt = DateTime.UtcNow;
+            rule.Rule.LastTriggerStatus = rule.Ignore ? $"Ignored an email from {address}" : $"Matched an email from {address}";
+            rule.Rule.LastError = null;
+        }
+
+        if (rule?.Ignore == true)
+        {
+            return await RecordAsync(settings, message, EmailIntakeOutcomes.Ignored, $"Ignored by the rule \"{rule.Rule.Name}\".", null, null, false, cancellationToken);
+        }
+
         var match = await MatchClientAsync(tenantId, address, cancellationToken);
 
         // A reply about an existing job, from that job's client, is added to the job.
@@ -254,7 +272,12 @@ internal sealed partial class EmailIntakeService(
             var domain = address.Split('@').LastOrDefault() ?? string.Empty;
             var allowedDomains = SplitList(settings.AllowedSenderDomains);
             var domainAllowed = allowedDomains.Count == 0 || allowedDomains.Contains(domain, StringComparer.OrdinalIgnoreCase);
-            if (settings.CreateWorkOrderFromUnknownSender && settings.DefaultClientId.HasValue && domainAllowed)
+            if (rule?.ClientId is { } ruleClientId)
+            {
+                // A rule that names a client accepts matching emails from senders who aren't contacts.
+                clientId = ruleClientId;
+            }
+            else if (settings.CreateWorkOrderFromUnknownSender && settings.DefaultClientId.HasValue && domainAllowed)
             {
                 clientId = settings.DefaultClientId;
             }
@@ -281,15 +304,15 @@ internal sealed partial class EmailIntakeService(
             ClientId = clientId.Value,
             SiteId = match.ClientId == clientId ? match.SiteId : null,
             BranchId = settings.DefaultBranchId,
-            AssignmentGroupId = settings.DefaultAssignmentGroupId,
+            AssignmentGroupId = rule?.AssignmentGroupId ?? settings.DefaultAssignmentGroupId,
             WorkOrderNumber = await documentNumberingService.GenerateAsync(tenantId, settings.DefaultBranchId, DocumentTypes.WorkOrder, cancellationToken),
-            Title = Truncate(CleanSubject(subject), 200),
+            Title = Truncate(IntakeRules.ApplyTitle(rule?.TitleTemplate, CleanSubject(subject), address, from.Name), 200),
             Description = Truncate(string.IsNullOrWhiteSpace(body)
                 ? $"Received by email from {senderLabel}."
                 : $"{body}\n\n(Received by email from {senderLabel}.)", 4000),
-            Priority = PriorityFor(settings, subject, body),
+            Priority = rule?.Priority ?? PriorityFor(settings, subject, body),
             Status = WorkOrderStatuses.New,
-            WorkType = WorkOrderTypes.CorrectiveMaintenance,
+            WorkType = rule?.WorkOrderType ?? WorkOrderTypes.CorrectiveMaintenance,
         };
         dbContext.WorkOrders.Add(workOrder);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -305,7 +328,8 @@ internal sealed partial class EmailIntakeService(
             cancellationToken: cancellationToken);
 
         var sent = canAutoReply && await AutoReplyAsync(tenantId, EmailIntakeTemplates.Received, address, from.Name, subject, workOrder, cancellationToken);
-        return await RecordAsync(settings, message, EmailIntakeOutcomes.WorkOrderCreated, $"Created {workOrder.WorkOrderNumber}.", workOrder.Id, clientId, sent, cancellationToken);
+        var created = rule is null ? $"Created {workOrder.WorkOrderNumber}." : $"Created {workOrder.WorkOrderNumber} (rule: {rule.Rule.Name}).";
+        return await RecordAsync(settings, message, EmailIntakeOutcomes.WorkOrderCreated, created, workOrder.Id, clientId, sent, cancellationToken);
     }
 
     private async Task<bool> TryLockTenantAsync(Guid tenantId, CancellationToken cancellationToken)
