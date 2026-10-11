@@ -143,6 +143,12 @@ export const endpoints = {
     search: '/api/sites/search',
     systems: (clientId: string, siteId: string) => `/api/clients/${clientId}/sites/${siteId}/systems`,
   },
+  assetCategories: {
+    list: '/api/asset-categories',
+    detail: (id: string) => `/api/asset-categories/${id}`,
+    fields: (id: string) => `/api/asset-categories/${id}/fields`,
+    field: (id: string, fieldId: string) => `/api/asset-categories/${id}/fields/${fieldId}`,
+  },
   assets: {
     list: '/api/assets',
     detail: (id: string) => `/api/assets/${id}`,
@@ -151,9 +157,6 @@ export const endpoints = {
     retire: (id: string) => `/api/assets/${id}/retire`,
     reactivate: (id: string) => `/api/assets/${id}/reactivate`,
     bulkRetire: '/api/assets/retire',
-  },
-  assetCategories: {
-    list: '/api/asset-templates',
   },
   technicianJobs: {
     list: '/api/technician/jobs',

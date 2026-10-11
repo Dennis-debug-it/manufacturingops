@@ -152,5 +152,6 @@ export interface Asset {
   hasContractCover?: boolean
   /** 'Under Warranty' | 'Under Contract' | 'Out of Support' | 'Retired' */
   supportStatus?: string
-  customFieldValues?: { fieldDefinitionId: string; value: string }[]
+  /** Datasheet values for the asset's category (labels come with the value). */
+  customFieldValues?: { fieldDefinitionId: string; value: string; fieldLabel?: string; fieldType?: string; unit?: string | null }[]
 }

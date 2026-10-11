@@ -103,6 +103,7 @@ import { SecuritySettingsPage as SettingsSecurityPageReal } from '../features/se
 import { NotificationsSettingsPage as SettingsNotificationsPageReal } from '../features/settings/NotificationsSettingsPage'
 import { NumberingSettingsPage as SettingsNumberingPageReal } from '../features/settings/NumberingSettingsPage'
 import { PmTemplatesSettingsPage as SettingsPmTemplatesPageReal } from '../features/settings/PmTemplatesSettingsPage'
+import { AssetCategoriesSettingsPage } from '../features/settings/AssetCategoriesSettingsPage'
 import { EmailIdentitySettingsPage } from '../features/settings/EmailIdentitySettingsPage'
 import { EmailDeliveryLogsPage } from '../features/settings/EmailDeliveryLogsPage'
 import { EmailTemplatesSettingsPage as SettingsEmailTemplatesPageReal } from '../features/settings/EmailTemplatesSettingsPage'
@@ -374,6 +375,7 @@ export function AppRouter() {
       ['/settings/email-templates/:id', SettingsEmailTemplatesPage],
       ['/settings/numbering', SettingsNumberingPage],
       ['/settings/pm-templates', SettingsPmTemplatesPage],
+      ['/settings/asset-categories', AssetCategoriesSettingsPage],
       ['/settings/pm-templates/:id', SettingsPmTemplatesPage],
       ['/settings/inventory', SettingsInventoryPage],
       ['/settings/time-attendance', SettingsTimeAttendancePage],

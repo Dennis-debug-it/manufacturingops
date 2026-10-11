@@ -194,6 +194,22 @@ export function AssetDetailPage() {
                   </div>
                 ))}
               </div>
+              {(asset.customFieldValues ?? []).length > 0 ? (
+                <div className="mt-4" data-testid="asset-datasheet">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{asset.assetCategoryName ?? 'Category'} datasheet</div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {(asset.customFieldValues ?? []).map((entry) => (
+                      <div key={entry.fieldDefinitionId} className="rounded-xl border border-slate-200 px-4 py-3">
+                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{entry.fieldLabel ?? 'Field'}</div>
+                        <div className="mt-2 text-sm text-slate-900">
+                          {entry.fieldType?.toLowerCase() === 'date' && entry.value ? formatDate(entry.value) : entry.value}
+                          {entry.unit ? ` ${entry.unit}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               {asset.notes ? (
                 <div className="mt-4 rounded-xl border border-slate-200 px-4 py-3">
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Notes</div>

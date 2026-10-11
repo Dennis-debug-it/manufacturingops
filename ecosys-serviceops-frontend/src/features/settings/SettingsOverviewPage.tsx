@@ -37,7 +37,8 @@ const groups: SettingsGroup[] = [
     items: [
       { to: '/settings/numbering', label: 'Numbering Rules', description: 'Document prefixes and sequences.', icon: Hash },
       { to: '/settings/operational-defaults', label: 'Operational Defaults', description: 'Signature and completion rules new work orders follow.', icon: ClipboardList },
-      { to: '/settings/pm-templates', label: 'PM Templates', description: 'Preventive maintenance checklists.', icon: ClipboardList },
+      { to: '/settings/pm-templates', label: 'PM Templates', description: 'Preventive maintenance checklists and trade starter packs.', icon: ClipboardList },
+      { to: '/settings/asset-categories', label: 'Asset Categories', description: 'Kinds of equipment and the datasheet details recorded for each.', icon: Boxes },
       { to: '/settings/wo-templates', label: 'Work Order Templates', description: 'Reusable job types with default tasks and materials.', icon: ClipboardList },
       { to: '/settings/inventory', label: 'Inventory Settings', description: 'Stock alerts and deduction rules.', icon: Boxes },
       { to: '/settings/time-attendance', label: 'Time & Attendance Settings', description: 'Work hours and leave policy.', icon: Clock },
