@@ -1084,6 +1084,8 @@ public sealed class PlatformTenantsController(
         {
             dbContext.TenantSecurityPolicies.Add(new TenantSecurityPolicy { TenantId = tenant.Id });
         }
+        // Same starting checklists as a self-signup workspace.
+        await DefaultPmTemplates.AddIfMissingAsync(dbContext, tenant.Id, cancellationToken);
     }
 
     private async Task ValidateInitialAdminAvailabilityAsync(string adminEmail, CancellationToken cancellationToken)
