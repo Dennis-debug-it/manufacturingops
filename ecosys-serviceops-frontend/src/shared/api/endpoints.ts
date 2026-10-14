@@ -319,6 +319,8 @@ export const endpoints = {
   },
   me: {
     notificationPreferences: '/api/me/notification-preferences',
+    pushPublicKey: '/api/me/push/public-key',
+    pushSubscriptions: '/api/me/push/subscriptions',
   },
   notificationTemplates: {
     eta: '/api/settings/notifications/eta',

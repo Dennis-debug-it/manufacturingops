@@ -10,7 +10,8 @@ export default defineConfig({
     // precaches the built shell and serves it as the navigation fallback, so the app opens without
     // a signal. Offline *data and writes* are not the service worker's job: the technician app
     // keeps its jobs in IndexedDB and queues its actions in an outbox it replays when back online
-    // (src/features/tech/offline). Office screens still need a connection.
+    // (src/features/tech/offline). Office screens still need a connection. Push notifications are
+    // handled by public/push-sw.js, which the generated worker imports.
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
@@ -38,6 +39,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // Shows "new job assigned" push notifications and opens the job when one is tapped.
+        importScripts: ['push-sw.js'],
       },
     }),
   ],

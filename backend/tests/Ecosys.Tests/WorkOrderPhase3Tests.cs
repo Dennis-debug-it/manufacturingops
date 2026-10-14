@@ -52,6 +52,45 @@ public sealed class WorkOrderPhase3Tests
     }
 
     [Fact]
+    public async Task ApplyAssignments_PushesNewJobOnlyToNewlyAssignedTechnicians()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedWorkflowFixtureAsync(dbContext);
+        var userOne = Guid.NewGuid();
+        var userTwo = Guid.NewGuid();
+        fixture.TechnicianOne.UserId = userOne;
+        fixture.TechnicianTwo.UserId = userTwo;
+        await dbContext.SaveChangesAsync();
+        var pushQueue = new RecordingPushQueue();
+        var service = CreateAssignmentWorkflowService(dbContext, pushQueue);
+
+        await service.ApplyAssignmentsAsync(
+            fixture.Tenant.Id, fixture.WorkOrder.Id, fixture.Actor.Id,
+            new WorkOrderAssignmentUpdateRequest(fixture.AssignmentGroup.Id, [fixture.TechnicianOne.Id], fixture.TechnicianOne.Id, null),
+            false, CancellationToken.None);
+        // Adding a second technician must not re-notify the first; changing only the lead notifies nobody.
+        await service.ApplyAssignmentsAsync(
+            fixture.Tenant.Id, fixture.WorkOrder.Id, fixture.Actor.Id,
+            new WorkOrderAssignmentUpdateRequest(fixture.AssignmentGroup.Id, [fixture.TechnicianOne.Id, fixture.TechnicianTwo.Id], fixture.TechnicianOne.Id, null),
+            true, CancellationToken.None);
+        await service.ApplyAssignmentsAsync(
+            fixture.Tenant.Id, fixture.WorkOrder.Id, fixture.Actor.Id,
+            new WorkOrderAssignmentUpdateRequest(fixture.AssignmentGroup.Id, [fixture.TechnicianOne.Id, fixture.TechnicianTwo.Id], fixture.TechnicianTwo.Id, null),
+            true, CancellationToken.None);
+
+        Assert.Collection(
+            pushQueue.Sent,
+            first => Assert.Equal([userOne], first.UserIds),
+            second => Assert.Equal([userTwo], second.UserIds));
+        Assert.All(pushQueue.Sent, sent =>
+        {
+            Assert.Equal(fixture.Tenant.Id, sent.TenantId);
+            Assert.Equal($"/tech/jobs/{fixture.WorkOrder.Id}", sent.Message.Url);
+            Assert.Contains(fixture.WorkOrder.WorkOrderNumber, sent.Message.Title);
+        });
+    }
+
+    [Fact]
     public async Task ApplyAssignments_ReassignAndUnassign_UpdatesCurrentAssignmentProjection()
     {
         await using var dbContext = CreateDbContext();
@@ -459,7 +498,7 @@ public sealed class WorkOrderPhase3Tests
             IsActive = true
         };
 
-    private static WorkOrderAssignmentWorkflowService CreateAssignmentWorkflowService(AppDbContext dbContext) =>
+    private static WorkOrderAssignmentWorkflowService CreateAssignmentWorkflowService(AppDbContext dbContext, IPushNotificationQueue? pushQueue = null) =>
         new(
             dbContext,
             new AuditLogService(dbContext, new HttpContextAccessor()),
@@ -468,7 +507,15 @@ public sealed class WorkOrderPhase3Tests
             new NoOpEmailSubjectRuleService(),
             new NoOpSlaService(),
             new NoOpEtaNotificationService(),
+            pushQueue ?? new RecordingPushQueue(),
             NullLogger<WorkOrderAssignmentWorkflowService>.Instance);
+
+    private sealed class RecordingPushQueue : IPushNotificationQueue
+    {
+        public List<(Guid TenantId, IReadOnlyCollection<Guid> UserIds, PushMessage Message)> Sent { get; } = [];
+
+        public void Enqueue(Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message) => Sent.Add((tenantId, userIds, message));
+    }
 
     private static WorkOrdersController CreateWorkOrdersController(AppDbContext dbContext, ControllerFixture fixture, IWorkOrderAssignmentWorkflowService? assignmentWorkflowService = null)
     {

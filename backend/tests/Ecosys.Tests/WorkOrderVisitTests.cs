@@ -130,7 +130,7 @@ public sealed class WorkOrderVisitTests
 
     private static WorkOrderAssignmentWorkflowService CreateWorkflow(AppDbContext db) =>
         new(db, new AuditLogService(db, new HttpContextAccessor()), null!, null!, null!, null!, new NoOpEtaNotificationService(),
-            NullLogger<WorkOrderAssignmentWorkflowService>.Instance);
+            null!, NullLogger<WorkOrderAssignmentWorkflowService>.Instance);
 
     private sealed class NoOpEtaNotificationService : IEtaNotificationService
     {

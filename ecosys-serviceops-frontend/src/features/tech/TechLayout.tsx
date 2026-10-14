@@ -9,6 +9,8 @@ import { cn } from '../../shared/utils/cn'
 import { usePendingActions } from './offline/hooks'
 import { OfflineStatus } from './offline/OfflineStatus'
 import { startOfflinePersistence } from './offline/persist'
+import { JobAlertsPrompt } from './JobAlerts'
+import { disablePush, resyncPush } from './push'
 
 const SECTIONS = [
   { to: '/tech', label: 'Jobs', icon: ClipboardList, match: (path: string) => path === '/tech' || path.startsWith('/tech/jobs') },
@@ -28,12 +30,16 @@ export function TechLayout() {
 
   // Keep this technician's jobs on the phone so the app works without a signal.
   useEffect(() => (userId ? startOfflinePersistence(queryClient, userId) : undefined), [queryClient, userId])
+  // Job alerts follow whoever is signed in on this phone.
+  useEffect(() => { if (userId) void resyncPush().catch(() => undefined) }, [userId])
 
   const signOut = async () => {
     if (pending.length > 0 && !window.confirm(`${pending.length} change${pending.length === 1 ? ' is' : 's are'} still waiting to sync. They stay on this phone and sync when you sign back in. Sign out anyway?`)) {
       return
     }
     const redirected = isImpersonating || isDemoTenant(tenant?.tenantId)
+    // Stop job alerts here before the session ends, so the next person on this phone doesn't get them.
+    await disablePush().catch(() => undefined)
     await logout()
     if (!redirected) navigate('/login')
   }
@@ -71,6 +77,7 @@ export function TechLayout() {
         </nav>
       </header>
       <main className="mx-auto max-w-xl px-4 pb-32 pt-4">
+        <JobAlertsPrompt />
         <Outlet />
       </main>
     </div>
