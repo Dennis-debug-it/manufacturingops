@@ -201,6 +201,11 @@ public sealed class SolarInstallationReportTests
 
         Assert.True(installed.Created);
         Assert.Equal(installed.TemplateId, listed.InstalledTemplateId);
+        // A work order template carrying the checklist, so New Work Order can pick it straight away.
+        var jobTemplate = Assert.Single(db.WorkOrderTemplates.IgnoreQueryFilters().Where(x => x.TenantId == tenant.Id));
+        Assert.Equal("Solar PV Installation", jobTemplate.Name);
+        Assert.Equal("NewInstallation", jobTemplate.JobType);
+        Assert.Equal(installed.TemplateId, jobTemplate.ChecklistTemplateId);
         // Once installed it can't be installed again (the button is gone; the API refuses too).
         await Assert.ThrowsAsync<Ecosys.Shared.Errors.ConflictException>(() => installer.InstallAsync(tenant.Id, SolarInstallationTemplate.LayoutKey, CancellationToken.None));
         Assert.Single(db.PmTemplates.IgnoreQueryFilters().Where(x => x.TenantId == tenant.Id));

@@ -148,6 +148,47 @@ public sealed class WorkOrderPhase3Tests
     }
 
     [Fact]
+    public async Task Create_NewInstallationFromInstalledSolarTemplate_AttachesTheChecklist()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedControllerFixtureAsync(dbContext);
+        fixture.Tenant.Name = "Plexus Energy";
+        await dbContext.SaveChangesAsync();
+        var installed = await new Ecosys.Infrastructure.Reports.ClientTemplateInstaller(dbContext, new PmTemplateService(dbContext))
+            .InstallAsync(fixture.Tenant.Id, Ecosys.Infrastructure.Reports.SolarInstallationTemplate.LayoutKey, CancellationToken.None);
+        var jobTemplate = await dbContext.WorkOrderTemplates.SingleAsync(x => x.TenantId == fixture.Tenant.Id && x.ChecklistTemplateId == installed.TemplateId);
+
+        var controller = new WorkOrdersController(
+            dbContext,
+            new FakeTenantContext(fixture.Tenant.Id, fixture.Actor.Id, fixture.Actor.Email),
+            new NoOpDocumentNumberingService(),
+            new AuditLogService(dbContext, new HttpContextAccessor()),
+            new NoOpUserAccessService(),
+            new NoOpBranchAccessService(),
+            new NoOpLicenseGuardService(),
+            new NoOpWorkOrderLifecycleService(),
+            new NoOpAssignmentWorkflowService(),
+            new PmWorkOrderChecklistService(dbContext, new AuditLogService(dbContext, new HttpContextAccessor())),
+            new NoOpSlaService(),
+            new NoOpWorkflowService());
+        controller.ControllerContext = CreateWorkOrdersController(dbContext, fixture).ControllerContext;
+
+        // What the New Work Order form sends after picking the "Solar PV Installation" template.
+        var result = await controller.Create(
+            new CreateWorkOrderRequest(
+                fixture.Client.Id, null, null, null, null, null, null, null, null, null, null,
+                "11 kWp hybrid install", null, WorkOrderPriorities.Medium, null,
+                WorkOrderTypes.NewInstallation, false, null, TemplateId: jobTemplate.Id),
+            CancellationToken.None);
+
+        var created = Assert.IsType<WorkOrderResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
+        dbContext.ChangeTracker.Clear();
+        var persisted = await dbContext.WorkOrders.Include(x => x.ChecklistItems).SingleAsync(x => x.Id == created.Id);
+        Assert.Equal(installed.TemplateId, persisted.PmTemplateId);
+        Assert.Equal(Ecosys.Infrastructure.Reports.SolarInstallationTemplate.Fields.Count, persisted.ChecklistItems.Count);
+    }
+
+    [Fact]
     public async Task Create_WithTechnician_AssignsOnCreation()
     {
         await using var dbContext = CreateDbContext();

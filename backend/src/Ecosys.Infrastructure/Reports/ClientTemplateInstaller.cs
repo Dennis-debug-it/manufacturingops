@@ -1,3 +1,4 @@
+using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Errors;
@@ -21,7 +22,11 @@ public interface IClientTemplateInstaller
 
 internal sealed class ClientTemplateInstaller(AppDbContext dbContext, IPmTemplateService pmTemplateService) : IClientTemplateInstaller
 {
-    private sealed record Definition(string Key, string Code, string Name, string Description, Func<string?, string?, bool> IsForTenant, Func<PmTemplateWriteCommand> Build);
+    /// <param name="JobTemplate">The work order template created alongside the checklist, so it can be picked
+    /// straight away in New Work Order (that form offers work order templates, which carry the checklist).</param>
+    private sealed record Definition(string Key, string Code, string Name, string Description, Func<string?, string?, bool> IsForTenant, Func<PmTemplateWriteCommand> Build, JobTemplateDefaults JobTemplate);
+
+    private sealed record JobTemplateDefaults(string Name, string JobType, string Description, string Priority);
 
     private static readonly IReadOnlyList<Definition> Catalog =
     [
@@ -31,7 +36,8 @@ internal sealed class ClientTemplateInstaller(AppDbContext dbContext, IPmTemplat
             SolarInstallationTemplate.Name,
             "Plexus Energy's Solar Power Installation Report: on-site checklist plus their report layout (PDF to client, editable Word download).",
             SolarInstallationTemplate.IsForTenant,
-            SolarInstallationTemplate.BuildCommand),
+            SolarInstallationTemplate.BuildCommand,
+            new("Solar PV Installation", "NewInstallation", "Installation, testing and commissioning of a solar PV system.", "Medium")),
     ];
 
     public async Task<IReadOnlyCollection<ClientTemplateSummary>> ListAsync(Guid tenantId, CancellationToken cancellationToken)
@@ -72,7 +78,38 @@ internal sealed class ClientTemplateInstaller(AppDbContext dbContext, IPmTemplat
         }
 
         var template = await pmTemplateService.CreateAsync(tenantId, definition.Build(), cancellationToken);
+        await EnsureJobTemplateAsync(tenantId, template.Id, definition.JobTemplate, cancellationToken);
         return new ClientTemplateInstallResult(template.Id, template.Name, template.Version, Created: true);
+    }
+
+    private async Task EnsureJobTemplateAsync(Guid tenantId, Guid checklistTemplateId, JobTemplateDefaults defaults, CancellationToken cancellationToken)
+    {
+        var sameName = await dbContext.WorkOrderTemplates
+            .IgnoreQueryFilters()
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Name == defaults.Name, cancellationToken);
+        if (sameName is not null)
+        {
+            // Names are unique per workspace; reuse theirs, but never repoint one already tied to another checklist.
+            if (sameName.ChecklistTemplateId is null)
+            {
+                sameName.ChecklistTemplateId = checklistTemplateId;
+                sameName.IsActive = true;
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+            return;
+        }
+
+        dbContext.WorkOrderTemplates.Add(new WorkOrderTemplate
+        {
+            TenantId = tenantId,
+            Name = defaults.Name,
+            JobType = defaults.JobType,
+            Description = defaults.Description,
+            DefaultPriority = defaults.Priority,
+            ChecklistTemplateId = checklistTemplateId,
+            IsActive = true,
+        });
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private List<Definition> ForTenant((string Name, string CompanyName) tenant) =>
