@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Ecosys.Api.Controllers;
 
-/// <summary>Installs client-specific checklist + report templates into one tenant's workspace.</summary>
+/// <summary>Installs client-specific checklist + report templates into the one workspace each is built for.</summary>
 [ApiController]
 [Authorize(Policy = "PlatformAdminAccess")]
 [Route("api/platform/tenants/{tenantId:guid}/client-templates")]
@@ -26,7 +26,7 @@ public sealed class PlatformClientTemplatesController(
         await auditLogService.LogAsync(
             tenantId,
             tenantContext.UserId,
-            result.Created ? "Client template installed" : "Client template updated",
+            "Client template installed",
             "PmTemplate",
             result.TemplateId.ToString(),
             $"Platform installed '{result.Name}' (v{result.Version}).",

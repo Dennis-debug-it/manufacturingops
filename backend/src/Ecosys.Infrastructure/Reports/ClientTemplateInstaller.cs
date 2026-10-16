@@ -10,8 +10,8 @@ public sealed record ClientTemplateInstallResult(Guid TemplateId, string Name, i
 
 /// <summary>
 /// Checklist templates (with their own report layout) built for one client and installed into that
-/// client's workspace only, unlike starter packs which every workspace can see. Installing again updates
-/// the template in place, as a new version, so jobs already using it keep their history.
+/// client's workspace only, unlike starter packs which every workspace can see. Each template is locked
+/// to its client's workspace and installs once; it can be installed again only after the workspace deletes it.
 /// </summary>
 public interface IClientTemplateInstaller
 {
@@ -21,7 +21,7 @@ public interface IClientTemplateInstaller
 
 internal sealed class ClientTemplateInstaller(AppDbContext dbContext, IPmTemplateService pmTemplateService) : IClientTemplateInstaller
 {
-    private sealed record Definition(string Key, string Code, string Name, string Description, Func<PmTemplateWriteCommand> Build);
+    private sealed record Definition(string Key, string Code, string Name, string Description, Func<string?, string?, bool> IsForTenant, Func<PmTemplateWriteCommand> Build);
 
     private static readonly IReadOnlyList<Definition> Catalog =
     [
@@ -30,20 +30,23 @@ internal sealed class ClientTemplateInstaller(AppDbContext dbContext, IPmTemplat
             SolarInstallationTemplate.Code,
             SolarInstallationTemplate.Name,
             "Plexus Energy's Solar Power Installation Report: on-site checklist plus their report layout (PDF to client, editable Word download).",
+            SolarInstallationTemplate.IsForTenant,
             SolarInstallationTemplate.BuildCommand),
     ];
 
     public async Task<IReadOnlyCollection<ClientTemplateSummary>> ListAsync(Guid tenantId, CancellationToken cancellationToken)
     {
-        await EnsureTenantAsync(tenantId, cancellationToken);
-        var codes = Catalog.Select(x => x.Code).ToList();
+        var available = ForTenant(await LoadTenantAsync(tenantId, cancellationToken));
+        if (available.Count == 0) return [];
+
+        var codes = available.Select(x => x.Code).ToList();
         var installed = await dbContext.PmTemplates
             .IgnoreQueryFilters()
             .Where(x => x.TenantId == tenantId && x.DeletedAt == null && x.Code != null && codes.Contains(x.Code))
             .Select(x => new { x.Id, x.Code, x.Version, x.IsActive })
             .ToListAsync(cancellationToken);
 
-        return Catalog.Select(def =>
+        return available.Select(def =>
         {
             var match = installed.FirstOrDefault(x => string.Equals(x.Code, def.Code, StringComparison.OrdinalIgnoreCase));
             return new ClientTemplateSummary(def.Key, def.Name, def.Description, match?.Id, match?.Version, match?.IsActive);
@@ -52,30 +55,37 @@ internal sealed class ClientTemplateInstaller(AppDbContext dbContext, IPmTemplat
 
     public async Task<ClientTemplateInstallResult> InstallAsync(Guid tenantId, string key, CancellationToken cancellationToken)
     {
-        await EnsureTenantAsync(tenantId, cancellationToken);
+        var tenant = await LoadTenantAsync(tenantId, cancellationToken);
         var definition = Catalog.FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase))
             ?? throw new NotFoundException("Client template was not found.");
+        if (!definition.IsForTenant(tenant.Name, tenant.CompanyName))
+        {
+            throw new BusinessRuleException($"'{definition.Name}' is built for another client and can't be installed in this workspace.");
+        }
 
-        var existingId = await dbContext.PmTemplates
+        var alreadyInstalled = await dbContext.PmTemplates
             .IgnoreQueryFilters()
-            .Where(x => x.TenantId == tenantId && x.DeletedAt == null && x.Code == definition.Code)
-            .OrderByDescending(x => x.IsActive)
-            .ThenByDescending(x => x.UpdatedAt ?? x.CreatedAt)
-            .Select(x => (Guid?)x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+            .AnyAsync(x => x.TenantId == tenantId && x.DeletedAt == null && x.Code == definition.Code, cancellationToken);
+        if (alreadyInstalled)
+        {
+            throw new ConflictException($"'{definition.Name}' is already installed in this workspace.");
+        }
 
-        var template = existingId.HasValue
-            ? await pmTemplateService.UpdateAsync(tenantId, existingId.Value, definition.Build(), cancellationToken)
-            : await pmTemplateService.CreateAsync(tenantId, definition.Build(), cancellationToken);
-
-        return new ClientTemplateInstallResult(template.Id, template.Name, template.Version, !existingId.HasValue);
+        var template = await pmTemplateService.CreateAsync(tenantId, definition.Build(), cancellationToken);
+        return new ClientTemplateInstallResult(template.Id, template.Name, template.Version, Created: true);
     }
 
-    private async Task EnsureTenantAsync(Guid tenantId, CancellationToken cancellationToken)
+    private List<Definition> ForTenant((string Name, string CompanyName) tenant) =>
+        Catalog.Where(x => x.IsForTenant(tenant.Name, tenant.CompanyName)).ToList();
+
+    private async Task<(string Name, string CompanyName)> LoadTenantAsync(Guid tenantId, CancellationToken cancellationToken)
     {
-        if (!await dbContext.Tenants.IgnoreQueryFilters().AnyAsync(x => x.Id == tenantId, cancellationToken))
-        {
-            throw new NotFoundException("Tenant was not found.");
-        }
+        var tenant = await dbContext.Tenants
+            .IgnoreQueryFilters()
+            .Where(x => x.Id == tenantId)
+            .Select(x => new { x.Name, x.CompanyName })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Tenant was not found.");
+        return (tenant.Name, tenant.CompanyName);
     }
 }

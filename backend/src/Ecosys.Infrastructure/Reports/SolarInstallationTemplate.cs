@@ -18,6 +18,17 @@ public static class SolarInstallationTemplate
     public const string Name = "Solar PV Installation & Commissioning";
     public const string Category = "Solar PV";
 
+    /// <summary>
+    /// Built for Plexus Energy only: it installs and renders only in a workspace whose name or company
+    /// name contains "Plexus Energy". Checked on the server, both when installing and when a report is made.
+    /// </summary>
+    public static bool IsForTenant(string? name, string? companyName) =>
+        ContainsPlexusEnergy(name) || ContainsPlexusEnergy(companyName);
+
+    private static bool ContainsPlexusEnergy(string? value) =>
+        string.Join(' ', (value ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+            .Contains("plexus energy", StringComparison.OrdinalIgnoreCase);
+
     public sealed record Field(
         string Key,
         string Section,

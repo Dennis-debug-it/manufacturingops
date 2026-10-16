@@ -55,6 +55,18 @@ public sealed class SolarInstallationReportTests
             new SolarReportSignature("John Client", "Facilities Manager", new DateTime(2026, 10, 15), Image));
     }
 
+    [Theory]
+    [InlineData("Plexus Energy", "", true)]
+    [InlineData("plexus  energy", "", true)]
+    [InlineData("Acme", "Plexus Energy Limited", true)]
+    [InlineData("Plexus", "Plexus Ltd", false)]
+    [InlineData("Sunrise Solar", "Sunrise Solar Ltd", false)]
+    [InlineData(null, null, false)]
+    public void Template_IsLockedToPlexusEnergy(string? name, string? companyName, bool expected)
+    {
+        Assert.Equal(expected, SolarInstallationTemplate.IsForTenant(name, companyName));
+    }
+
     [Fact]
     public void Template_IsAValidChecklistWithUniqueQuestions()
     {
@@ -173,27 +185,33 @@ public sealed class SolarInstallationReportTests
     }
 
     [Fact]
-    public async Task Installer_CreatesThenVersionsTheTemplate_AndJobAnswersReachTheReport()
+    public async Task Installer_InstallsOnceIntoPlexusOnly_AndJobAnswersReachTheReport()
     {
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"solar-install-{Guid.NewGuid():N}").Options);
         var tenant = new Tenant { Name = "Plexus Energy", CompanyName = "Plexus Energy Limited" };
-        db.Tenants.Add(tenant);
+        var otherTenant = new Tenant { Name = "Sunrise Solar", CompanyName = "Sunrise Solar Ltd" };
+        db.Tenants.AddRange(tenant, otherTenant);
         await db.SaveChangesAsync();
         var installer = new ClientTemplateInstaller(db, new PmTemplateService(db));
 
-        var first = await installer.InstallAsync(tenant.Id, SolarInstallationTemplate.LayoutKey, CancellationToken.None);
-        var second = await installer.InstallAsync(tenant.Id, SolarInstallationTemplate.LayoutKey, CancellationToken.None);
+        Assert.Null(Assert.Single(await installer.ListAsync(tenant.Id, CancellationToken.None)).InstalledTemplateId);
+        var installed = await installer.InstallAsync(tenant.Id, SolarInstallationTemplate.LayoutKey, CancellationToken.None);
         var listed = Assert.Single(await installer.ListAsync(tenant.Id, CancellationToken.None));
 
-        Assert.True(first.Created);
-        Assert.False(second.Created);
-        Assert.Equal(first.TemplateId, second.TemplateId);
-        Assert.Equal(first.Version + 1, second.Version);
-        Assert.Equal(second.Version, listed.InstalledVersion);
+        Assert.True(installed.Created);
+        Assert.Equal(installed.TemplateId, listed.InstalledTemplateId);
+        // Once installed it can't be installed again (the button is gone; the API refuses too).
+        await Assert.ThrowsAsync<Ecosys.Shared.Errors.ConflictException>(() => installer.InstallAsync(tenant.Id, SolarInstallationTemplate.LayoutKey, CancellationToken.None));
         Assert.Single(db.PmTemplates.IgnoreQueryFilters().Where(x => x.TenantId == tenant.Id));
+
+        // Any other workspace doesn't see it and can't install it.
+        Assert.Empty(await installer.ListAsync(otherTenant.Id, CancellationToken.None));
+        await Assert.ThrowsAsync<Ecosys.Shared.Errors.BusinessRuleException>(() => installer.InstallAsync(otherTenant.Id, SolarInstallationTemplate.LayoutKey, CancellationToken.None));
+        Assert.Empty(db.PmTemplates.IgnoreQueryFilters().Where(x => x.TenantId == otherTenant.Id));
         await Assert.ThrowsAsync<Ecosys.Shared.Errors.NotFoundException>(() => installer.InstallAsync(Guid.NewGuid(), SolarInstallationTemplate.LayoutKey, CancellationToken.None));
 
+        var second = installed;
         // Attach it to a job the normal way and answer a few questions as the technician would.
         var workOrder = new WorkOrder { TenantId = tenant.Id, WorkOrderNumber = "WO-1", Title = "Install 11 kWp" };
         db.WorkOrders.Add(workOrder);
