@@ -537,6 +537,23 @@ export function useDeleteSignature(id: string) {
 }
 
 // Service report
+/** Which report a job produces: a client's own layout (with a Word download and photo captions to use) or the standard one. */
+export interface ServiceReportLayout {
+  layout: string | null
+  wordAvailable: boolean
+  photoCaptions: string[]
+}
+
+export function useServiceReportLayout(id: string | undefined) {
+  return useQuery({
+    queryKey: ['work-orders', id, 'service-report-layout'],
+    queryFn: () => api.get<ServiceReportLayout>(endpoints.workOrders.serviceReportLayout(id ?? ''), undefined, { suppressGlobalErrorToast: true }),
+    enabled: Boolean(id),
+    staleTime: 10 * 60_000,
+    retry: false,
+  })
+}
+
 export function useServiceReport(id: string | undefined) {
   return useQuery({
     queryKey: ['work-orders', id, 'service-report'],

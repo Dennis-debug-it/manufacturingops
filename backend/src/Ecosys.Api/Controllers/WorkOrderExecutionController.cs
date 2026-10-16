@@ -604,9 +604,8 @@ public sealed partial class WorkOrderExecutionController(
     public async Task<IActionResult> DownloadServiceReportPdf(Guid workOrderId, CancellationToken cancellationToken)
     {
         userAccessService.EnsureTenantOperationalAccess();
-        var report = await BuildPdfModelAsync(workOrderId, cancellationToken);
-        var pdf = pdfRenderer.RenderWorkOrderReportPdf(report);
-        return File(pdf, "application/pdf", $"{report.WorkOrderNumber}-service-report.pdf");
+        var (pdf, fileName) = await RenderServiceReportPdfAsync(workOrderId, cancellationToken);
+        return File(pdf, "application/pdf", fileName);
     }
 
     /// <summary>
@@ -625,9 +624,8 @@ public sealed partial class WorkOrderExecutionController(
     public async Task<IActionResult> DownloadFollowUpSourceReportPdf(Guid workOrderId, CancellationToken cancellationToken)
     {
         var originalId = await ResolveFollowUpSourceAsync(workOrderId, cancellationToken);
-        var report = await BuildPdfModelAsync(originalId, cancellationToken, skipTechnicianScope: true);
-        var pdf = pdfRenderer.RenderWorkOrderReportPdf(report);
-        return File(pdf, "application/pdf", $"{report.WorkOrderNumber}-service-report.pdf");
+        var (pdf, fileName) = await RenderServiceReportPdfAsync(originalId, cancellationToken, skipTechnicianScope: true);
+        return File(pdf, "application/pdf", fileName);
     }
 
     private async Task<Guid> ResolveFollowUpSourceAsync(Guid workOrderId, CancellationToken cancellationToken)

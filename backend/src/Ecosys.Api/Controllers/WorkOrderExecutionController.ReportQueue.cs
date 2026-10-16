@@ -301,9 +301,8 @@ public sealed partial class WorkOrderExecutionController
         {
             foreach (var workOrder in workOrders)
             {
-                var model = await BuildPdfModelAsync(workOrder.Id, cancellationToken);
-                var pdf = pdfRenderer.RenderWorkOrderReportPdf(model);
-                var entry = archive.CreateEntry($"{workOrder.WorkOrderNumber}-service-report.pdf", CompressionLevel.Optimal);
+                var (pdf, fileName) = await RenderServiceReportPdfAsync(workOrder.Id, cancellationToken);
+                var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
                 await using var entryStream = entry.Open();
                 await entryStream.WriteAsync(pdf, cancellationToken);
             }
@@ -343,7 +342,7 @@ public sealed partial class WorkOrderExecutionController
 
         // "Sent" used to be a status flip only — nothing ever reached the client. Queue the PDF to the
         // client's saved contact first, so a missing contact or disabled template leaves it Approved.
-        var pdf = pdfRenderer.RenderWorkOrderReportPdf(await BuildPdfModelAsync(workOrder.Id, cancellationToken));
+        var (pdf, _) = await RenderServiceReportPdfAsync(workOrder.Id, cancellationToken);
         var recipient = await serviceReportDeliveryService.QueueAsync(TenantId, workOrder.Id, pdf, UserId, cancellationToken);
 
         workOrder.ReportStatus = ReportStatuses.Sent;

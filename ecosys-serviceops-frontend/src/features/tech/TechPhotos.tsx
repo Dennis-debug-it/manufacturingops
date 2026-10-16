@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Camera, ImagePlus } from 'lucide-react'
+import { Camera, Check, ImagePlus } from 'lucide-react'
 import { AuthenticatedImage } from '../../shared/components/AuthenticatedImage'
 import { cn } from '../../shared/utils/cn'
 import { formatRelative } from '../../shared/utils/dates'
+import { useServiceReportLayout } from '../work-orders/api'
 import type { WorkOrder } from '../work-orders/types'
 import { savedMessage, useTechActions } from './offline/actions'
 import { useTechBundle } from './offline/hooks'
@@ -31,6 +32,10 @@ export function TechPhotos({ job, editable }: { job: Pick<WorkOrder, 'id' | 'wor
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>('During')
   const [caption, setCaption] = useState('')
   const photos = bundle?.photos ?? []
+  // Jobs with a client report layout have named photo slots; a photo fills the slot whose name is its caption.
+  const { data: layout } = useServiceReportLayout(job.id)
+  const slotCaptions = layout?.photoCaptions ?? []
+  const takenCaptions = new Set(photos.map((photo) => photo.caption.trim().toLowerCase()))
 
   const choose = (picked: File | undefined) => {
     if (!picked) return
@@ -77,6 +82,27 @@ export function TechPhotos({ job, editable }: { job: Pick<WorkOrder, 'id' | 'wor
             <span className="max-w-full truncate px-3">{file ? file.name : 'Take or choose a photo'}</span>
             <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="sr-only" onChange={(event) => choose(event.target.files?.[0])} />
           </label>
+          {slotCaptions.length > 0 ? (
+            <div className="space-y-1.5">
+              <p className="text-xs text-slate-500">Photos the report needs. Tap one to use it as the caption:</p>
+              <div className="flex flex-wrap gap-1.5">
+                {slotCaptions.map((slot) => {
+                  const taken = takenCaptions.has(slot.toLowerCase())
+                  return (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => setCaption(slot)}
+                      aria-pressed={caption === slot}
+                      className={cn('inline-flex h-8 items-center gap-1 rounded-full border px-2.5 text-xs font-medium', caption === slot ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : taken ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-300 bg-white text-slate-700')}
+                    >
+                      {taken ? <Check className="h-3 w-3" /> : null}{slot}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
           <input value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Caption (optional)" aria-label="Photo caption" className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           <button type="button" onClick={() => void submit()} disabled={!file || actions.busy} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-slate-900 text-sm font-medium text-white disabled:opacity-50">
             {actions.busy ? 'Uploading…' : 'Upload evidence'}

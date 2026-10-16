@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IPreventiveMaintenancePlanService, PreventiveMaintenancePlanService>();
         services.AddScoped<IStarterPackService, StarterPackService>();
         services.AddScoped<IPmTemplateService, PmTemplateService>();
+        services.AddScoped<Reports.IClientTemplateInstaller, Reports.ClientTemplateInstaller>();
         services.AddScoped<IUserPermissionTemplateService, UserPermissionTemplateService>();
         services.AddScoped<IRolePermissionService, RolePermissionService>();
         services.AddScoped<IDynamicAccessService, DynamicAccessService>();
