@@ -23,6 +23,7 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");
 
         services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.SectionName));
+        services.Configure<WebPushOptions>(configuration.GetSection(WebPushOptions.SectionName));
         services.AddSingleton<IFileStorageService, LocalFileStorageService>();
 
         services.AddHttpContextAccessor();
@@ -47,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<IPreventiveMaintenancePlanService, PreventiveMaintenancePlanService>();
         services.AddScoped<IStarterPackService, StarterPackService>();
         services.AddScoped<IPmTemplateService, PmTemplateService>();
+        services.AddScoped<Reports.IClientTemplateInstaller, Reports.ClientTemplateInstaller>();
         services.AddScoped<IUserPermissionTemplateService, UserPermissionTemplateService>();
         services.AddScoped<IRolePermissionService, RolePermissionService>();
         services.AddScoped<IDynamicAccessService, DynamicAccessService>();
@@ -101,6 +103,12 @@ public static class DependencyInjection
         services.AddSingleton<IBackgroundWorkLease>(serviceProvider => new PostgresAdvisoryLockLease(
             connectionString,
             serviceProvider.GetRequiredService<ILogger<PostgresAdvisoryLockLease>>()));
+        // Push notifications: the queue is in-memory, so its sender runs on every instance (not leased).
+        services.AddHttpClient();
+        services.AddSingleton<IVapidKeyProvider, VapidKeyProvider>();
+        services.AddSingleton<PushNotificationQueue>();
+        services.AddSingleton<IPushNotificationQueue>(sp => sp.GetRequiredService<PushNotificationQueue>());
+        services.AddHostedService<PushNotificationWorker>();
         services.AddSingleInstanceHostedService<EmailOutboxWorker>();
         services.AddSingleInstanceHostedService<EmailIntakeWorker>();
         services.AddSingleInstanceHostedService<TrialLifecycleWorker>();

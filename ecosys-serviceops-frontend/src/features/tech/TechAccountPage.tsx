@@ -4,6 +4,7 @@ import { Truck } from 'lucide-react'
 import { Spinner } from '../../shared/components/Spinner'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { cn } from '../../shared/utils/cn'
+import { JobAlertsSetting } from './JobAlerts'
 import { useChangeMyPassword, useMyNotificationPreferences, useMyTechnician, useMyVan, useSaveMyNotificationPreferences } from './api'
 
 const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
@@ -133,6 +134,7 @@ export function TechAccountPage() {
       </section>
       <MyVan />
       <ChangePassword />
+      <JobAlertsSetting />
       <NotificationSettings />
     </div>
   )

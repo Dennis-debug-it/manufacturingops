@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
-import { ChevronDown, Download, Pencil, RefreshCw } from 'lucide-react'
+import { ChevronDown, Download, FileText, Pencil, RefreshCw } from 'lucide-react'
 import { apiClient } from '../../../shared/api/apiClient'
 import { endpoints } from '../../../shared/api/endpoints'
 import { EmptyState } from '../../../shared/components/EmptyState'
@@ -10,7 +10,7 @@ import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { usePermission } from '../../../shared/hooks/usePermission'
 import { cn } from '../../../shared/utils/cn'
 import { formatCurrency } from '../../../shared/utils/format'
-import { useAcknowledgeWorkOrder, useExecutionBundle, useGenerateServiceReport, useReportContent, useServiceReport, useUpdatePhoto } from '../api'
+import { useAcknowledgeWorkOrder, useExecutionBundle, useGenerateServiceReport, useReportContent, useServiceReport, useServiceReportLayout, useUpdatePhoto } from '../api'
 import { ReportEditNote, ReportEditor } from '../components/ReportEditor'
 import type { WorkOrder, WorkOrderPhoto } from '../types'
 
@@ -71,6 +71,7 @@ function reportStatus(workOrder: WorkOrder): string {
 export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
   const canGenerate = usePermission('work-orders.report.generate')
   const { data: report, isLoading, isError } = useServiceReport(workOrder.id)
+  const { data: layout } = useServiceReportLayout(workOrder.id)
   const generate = useGenerateServiceReport(workOrder.id)
   const acknowledge = useAcknowledgeWorkOrder(workOrder.id)
   const canEdit = usePermission('work-orders.complete')
@@ -79,7 +80,7 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
   const [editing, setEditing] = useState(false)
   const editable = canEdit && Boolean(content) && !content?.lockedReason
 
-  const [downloading, setDownloading] = useState(false)
+  const [downloading, setDownloading] = useState<'pdf' | 'docx' | null>(null)
   const [ackOpen, setAckOpen] = useState(false)
   const [ackName, setAckName] = useState('')
   const [ackComment, setAckComment] = useState('')
@@ -93,20 +94,21 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
     }
   }
 
-  const downloadPdf = async () => {
-    setDownloading(true)
+  const download = async (format: 'pdf' | 'docx') => {
+    setDownloading(format)
     try {
-      const response = await apiClient.get(endpoints.workOrders.serviceReportPdf(workOrder.id), { responseType: 'blob', suppressGlobalErrorToast: true })
-      const url = URL.createObjectURL(response.data as Blob)
+      const url = format === 'pdf' ? endpoints.workOrders.serviceReportPdf(workOrder.id) : endpoints.workOrders.serviceReportDocx(workOrder.id)
+      const response = await apiClient.get(url, { responseType: 'blob', suppressGlobalErrorToast: true })
+      const objectUrl = URL.createObjectURL(response.data as Blob)
       const link = document.createElement('a')
-      link.href = url
-      link.download = `${workOrder.workOrderNumber}-service-report.pdf`
+      link.href = objectUrl
+      link.download = `${workOrder.workOrderNumber}-${layout?.layout ? 'installation' : 'service'}-report.${format}`
       link.click()
-      URL.revokeObjectURL(url)
+      URL.revokeObjectURL(objectUrl)
     } catch {
-      toast.error('Could not download the PDF')
+      toast.error(format === 'pdf' ? 'Could not download the PDF' : 'Could not download the Word document')
     } finally {
-      setDownloading(false)
+      setDownloading(null)
     }
   }
 
@@ -156,9 +158,15 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
               {generate.isPending ? 'Regenerating…' : 'Regenerate'}
             </button>
           ) : null}
-          <button type="button" onClick={downloadPdf} disabled={downloading} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-3 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
+          {layout?.wordAvailable ? (
+            <button type="button" onClick={() => void download('docx')} disabled={downloading !== null} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60">
+              <FileText className="h-4 w-4" />
+              {downloading === 'docx' ? 'Preparing…' : 'Download Word'}
+            </button>
+          ) : null}
+          <button type="button" onClick={() => void download('pdf')} disabled={downloading !== null} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-3 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
             <Download className="h-4 w-4" />
-            {downloading ? 'Preparing…' : 'Download PDF'}
+            {downloading === 'pdf' ? 'Preparing…' : 'Download PDF'}
           </button>
           {workOrder.status === 'Completed' && !workOrder.acknowledgedByName ? (
             <button type="button" onClick={() => setAckOpen((value) => !value)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">

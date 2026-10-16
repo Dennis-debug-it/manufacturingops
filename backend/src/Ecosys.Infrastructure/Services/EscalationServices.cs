@@ -39,7 +39,8 @@ public interface IEscalationRuleService
 internal sealed class EscalationRuleService(
     AppDbContext dbContext,
     IEmailOutboxService emailOutboxService,
-    ILogger<EscalationRuleService> logger) : IEscalationRuleService
+    ILogger<EscalationRuleService> logger,
+    IPushNotificationQueue? pushNotificationQueue = null) : IEscalationRuleService
 {
     private static readonly string[] ClosedStatuses = WorkOrderStatuses.ClosedStatuses;
 
@@ -268,6 +269,7 @@ internal sealed class EscalationRuleService(
                 IsLead = true,
                 AssignedAt = DateTime.UtcNow,
             });
+            AssignmentPushNotifications.Enqueue(pushNotificationQueue, workOrder, [technician]);
         }
 
         var recipient = await dbContext.Users

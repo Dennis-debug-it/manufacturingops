@@ -90,6 +90,8 @@ export const endpoints = {
     serviceReport: (id: string) => `/api/workorders/${id}/service-report`,
     generateServiceReport: (id: string) => `/api/workorders/${id}/service-report/generate`,
     serviceReportPdf: (id: string) => `/api/workorders/${id}/service-report/pdf`,
+    serviceReportDocx: (id: string) => `/api/workorders/${id}/service-report/docx`,
+    serviceReportLayout: (id: string) => `/api/workorders/${id}/service-report/layout`,
     reportContent: (id: string) => `/api/workorders/${id}/report/content`,
     pause: (id: string) => `/api/workorders/${id}/pause`,
     resume: (id: string) => `/api/workorders/${id}/resume`,
@@ -319,6 +321,8 @@ export const endpoints = {
   },
   me: {
     notificationPreferences: '/api/me/notification-preferences',
+    pushPublicKey: '/api/me/push/public-key',
+    pushSubscriptions: '/api/me/push/subscriptions',
   },
   notificationTemplates: {
     eta: '/api/settings/notifications/eta',
@@ -486,6 +490,8 @@ export const endpoints = {
     dashboardSummary: '/api/platform/dashboard/summary',
     tenants: '/api/platform/tenants',
     tenant: (id: string) => `/api/platform/tenants/${id}`,
+    clientTemplates: (tenantId: string) => `/api/platform/tenants/${tenantId}/client-templates`,
+    installClientTemplate: (tenantId: string, key: string) => `/api/platform/tenants/${tenantId}/client-templates/${encodeURIComponent(key)}/install`,
     tenantActivate: (id: string) => `/api/platform/tenants/${id}/activate`,
     tenantSuspend: (id: string) => `/api/platform/tenants/${id}/suspend`,
     tenantDeactivate: (id: string) => `/api/platform/tenants/${id}/deactivate`,

@@ -10,26 +10,37 @@ export default defineConfig({
     // precaches the built shell and serves it as the navigation fallback, so the app opens without
     // a signal. Offline *data and writes* are not the service worker's job: the technician app
     // keeps its jobs in IndexedDB and queues its actions in an outbox it replays when back online
-    // (src/features/tech/offline). Office screens still need a connection.
+    // (src/features/tech/offline). Office screens still need a connection. Push notifications are
+    // handled by public/push-sw.js, which the generated worker imports.
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
       includeAssets: [],
       manifest: {
+        id: '/',
         name: 'ECOSYS',
         short_name: 'Ecosys',
+        description: 'Field service operations: work orders, technicians, assets and billing.',
         start_url: '/',
+        scope: '/',
         display: 'standalone',
         orientation: 'portrait',
-    background_color: '#F6F5EF',
-    theme_color: '#0F766E',
+        background_color: '#F6F5EF',
+        theme_color: '#0F766E',
+        // Chrome on Android only offers to install (and builds the home-screen app) from PNG icons
+        // of at least 192px and 512px; an SVG-only manifest is not installable there. The PNGs are
+        // rendered from logo-icon.svg; the maskable one keeps the mark inside the 80% safe zone.
         icons: [
+          { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
           { src: '/logo-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-          { src: '/logo-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
         ],
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        // Shows "new job assigned" push notifications and opens the job when one is tapped.
+        importScripts: ['push-sw.js'],
       },
     }),
   ],

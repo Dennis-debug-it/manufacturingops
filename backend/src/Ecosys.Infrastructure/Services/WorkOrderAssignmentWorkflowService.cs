@@ -37,6 +37,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
     IEmailSubjectRuleService emailSubjectRuleService,
     ISlaService slaService,
     IEtaNotificationService etaNotificationService,
+    IPushNotificationQueue pushNotificationQueue,
     ILogger<WorkOrderAssignmentWorkflowService> logger) : IWorkOrderAssignmentWorkflowService
 {
     public async Task ApplyAssignmentsAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, WorkOrderAssignmentUpdateRequest request, bool isReassignment, CancellationToken cancellationToken = default)
@@ -165,6 +166,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         if (newlyAssignedTechnicians.Count > 0)
         {
             await TryQueueAssignmentEmailsAsync(tenantId, workOrder, newlyAssignedTechnicians, cancellationToken);
+            AssignmentPushNotifications.Enqueue(pushNotificationQueue, workOrder, newlyAssignedTechnicians);
         }
     }
 
@@ -518,5 +520,24 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         technician.LastLocationAt = OccurredAt.UtcNow;
         technician.LastKnownLatitude = latitude;
         technician.LastKnownLongitude = longitude;
+    }
+}
+
+/// <summary>The "new job assigned" push sent to a technician's devices (only for newly added technicians).</summary>
+internal static class AssignmentPushNotifications
+{
+    public static void Enqueue(IPushNotificationQueue? queue, WorkOrder workOrder, IEnumerable<Technician> technicians)
+    {
+        if (queue is null) return;
+
+        var userIds = technicians.Where(x => x.UserId.HasValue).Select(x => x.UserId!.Value).Distinct().ToList();
+        if (userIds.Count == 0) return;
+
+        var title = string.IsNullOrWhiteSpace(workOrder.Title) ? "New job" : workOrder.Title.Trim();
+        queue.Enqueue(workOrder.TenantId, userIds, new PushMessage(
+            Title: $"New job assigned: {workOrder.WorkOrderNumber}",
+            Body: $"{title} · {workOrder.Priority} priority",
+            Url: $"/tech/jobs/{workOrder.Id}",
+            Tag: $"assigned-{workOrder.Id}"));
     }
 }

@@ -77,6 +77,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<TenantNotificationSetting> TenantNotificationSettings => Set<TenantNotificationSetting>();
     public DbSet<TenantNotificationRecipient> TenantNotificationRecipients => Set<TenantNotificationRecipient>();
     public DbSet<UserNotificationPreference> UserNotificationPreferences => Set<UserNotificationPreference>();
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<EmailIntakeSetting> EmailIntakeSettings => Set<EmailIntakeSetting>();
     public DbSet<EmailIntakeMessage> EmailIntakeMessages => Set<EmailIntakeMessage>();
@@ -1468,6 +1469,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasKey(x => x.Id);
             entity.Property(x => x.NotificationKey).HasMaxLength(120).IsRequired();
             entity.HasIndex(x => new { x.TenantId, x.UserId, x.NotificationKey }).IsUnique();
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PushSubscription>(entity =>
+        {
+            entity.ToTable("push_subscriptions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Endpoint).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.P256dh).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Auth).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.UserAgent).HasMaxLength(500);
+            entity.HasIndex(x => x.Endpoint).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.UserId });
             entity.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
