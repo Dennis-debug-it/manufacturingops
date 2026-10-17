@@ -12,6 +12,7 @@ describe('jobPhase', () => {
   it('walks a non-lead technician through accept → arrive → start → work', () => {
     expect(jobPhase(job('Assigned', []), assignment())).toBe('accept')
     expect(jobPhase(job('Assigned', []), assignment({ status: 'Accepted' }))).toBe('arrive')
+    expect(jobPhase(job('Assigned', []), assignment({ status: 'InTransit' }))).toBe('en-route')
     expect(jobPhase(job('Assigned', []), assignment({ status: 'Arrived', arrivalAt: '2026-10-08T09:00:00Z' }))).toBe('start')
     expect(jobPhase(job('In Progress', []), assignment({ status: 'Arrived', arrivalAt: '2026-10-08T09:00:00Z' }))).toBe('work')
   })

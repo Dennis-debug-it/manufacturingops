@@ -5,6 +5,7 @@ using Ecosys.Shared.Auth;
 using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,7 +22,8 @@ public sealed class TenantFinanceController(
     IPdfRenderer pdfRenderer,
     IEmailSender emailSender,
     IEmailOutboxService emailOutbox,
-    IFinancialRecipientResolver financialRecipientResolver) : TenantAwareControllerBase(tenantContext)
+    IFinancialRecipientResolver financialRecipientResolver,
+    IWebHostEnvironment environment) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet("overview")]
     public async Task<ActionResult<TenantFinanceOverviewResponse>> GetOverview(CancellationToken cancellationToken)
@@ -695,9 +697,6 @@ public sealed class TenantFinanceController(
             .ToUpperInvariant()
             .Replace(" ", "_")[..Math.Min(12, client.ClientName.Length)];
 
-        var tenantAddress = string.Join(", ", new[] { tenant?.Address, tenant?.City, tenant?.Country }
-            .Where(x => !string.IsNullOrWhiteSpace(x)));
-
         var templateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "statement");
 
         var model = new ClientStatementPdfModel(
@@ -713,15 +712,18 @@ public sealed class TenantFinanceController(
             closing,
             invoiceRows,
             paymentRows,
-            tenant?.CompanyName ?? "Ecosys",
-            string.IsNullOrWhiteSpace(tenantAddress) ? null : tenantAddress,
-            tenant?.Phone,
+            PdfTemplateHelper.CompanyName(tenant),
+            PdfTemplateHelper.CompanyAddress(tenant),
+            PdfTemplateHelper.CompanyPhone(tenant),
             tenant?.LogoUrl,
             templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
             FontFamily: templateConfig?.FontFamily ?? "Helvetica",
             FooterText: PdfTemplateHelper.ResolveFooterText(templateConfig),
             WatermarkText: templateConfig?.WatermarkText,
-            TemplateConfig: templateConfig
+            TemplateConfig: templateConfig,
+            Company: PdfTemplateHelper.CompanyDetails(tenant, environment),
+            ClientContact: PdfTemplateHelper.ClientContact(client),
+            Currency: invoices.Select(x => x.Currency).FirstOrDefault(c => !string.IsNullOrWhiteSpace(c)) ?? tenant?.Currency
         );
 
         return (model, clientCode);

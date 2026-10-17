@@ -5,6 +5,7 @@ using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
 using Ecosys.Shared.Contracts.Integration;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -26,7 +27,8 @@ public sealed class TenantInvoiceController(
     IEmailTemplateService emailTemplateService,
     IEmailSubjectRuleService emailSubjectRuleService,
     ILogger<TenantInvoiceController> logger,
-    IFinancialRecipientResolver financialRecipientResolver) : TenantAwareControllerBase(tenantContext)
+    IFinancialRecipientResolver financialRecipientResolver,
+    IWebHostEnvironment environment) : TenantAwareControllerBase(tenantContext)
 {
     // No platform-wide currency to inherit here: the tenant's own configured currency (derived from
     // its country, same as the frontend's getActiveCurrency()) is what the create/edit forms send
@@ -468,48 +470,7 @@ public sealed class TenantInvoiceController(
         var tenant = await dbContext.Tenants
             .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
 
-        var templateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "invoice");
-        var bankDetails = PdfTemplateHelper.ComposeBankDetails(templateConfig);
-
-        var termsText = templateConfig?.ShowTerms == true
-            ? (!string.IsNullOrWhiteSpace(invoice.TermsAndConditions)
-                ? invoice.TermsAndConditions
-                : templateConfig.InvoiceTerms ?? templateConfig.DefaultTermsText)
-            : null;
-
-        var model = new InvoicePdfModel(
-            InvoiceNumber:  invoice.InvoiceNumber,
-            Status:         invoice.Status,
-            InvoiceDate:    invoice.InvoiceDate,
-            DueDate:        invoice.DueDate,
-            ClientName:     invoice.Client?.ClientName ?? "Unknown",
-            ClientAddress:  null,
-            ClientEmail:    null,
-            Notes:          invoice.Notes,
-            Lines:          invoice.Lines.Select(l => new InvoiceLinePdfModel(
-                                l.Description, l.ItemType, l.Quantity, l.Unit,
-                                l.UnitRate, l.LineTotal, l.TaxRate, l.GrandTotal)).ToList(),
-            Subtotal:       invoice.Subtotal,
-            TaxAmount:      invoice.TaxAmount,
-            TotalAmount:    invoice.TotalAmount,
-            AmountPaid:     invoice.AmountPaid,
-            Balance:        invoice.Balance,
-            Currency:       invoice.Currency,
-            CompanyName:    tenant?.CompanyName ?? "Ecosys",
-            CompanyAddress: tenant?.Address,
-            CompanyPhone:   tenant?.Phone,
-            LogoUrl:        tenant?.LogoUrl,
-            PrimaryColor:   templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
-            FontFamily:     templateConfig?.FontFamily ?? "Helvetica",
-            FooterText:     PdfTemplateHelper.ResolveFooterText(templateConfig),
-            WatermarkText:  templateConfig?.WatermarkText,
-            BankDetails:    bankDetails,
-            PaymentInstructions: templateConfig?.ShowBankDetails == true ? templateConfig.PaymentInstructions : null,
-            TermsText:      termsText,
-            TemplateConfig: templateConfig
-        );
-
-        var bytes = pdfRenderer.RenderInvoicePdf(model);
+        var bytes = await RenderInvoicePdfAsync(invoice, tenant, cancellationToken);
         return File(bytes, "application/pdf", $"Invoice-{invoice.InvoiceNumber}.pdf");
     }
 
@@ -807,27 +768,7 @@ public sealed class TenantInvoiceController(
             .SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
 
         var client = payment.Client ?? payment.Invoice?.Client;
-        var receiptTemplateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "receipt");
-
-        var model = new ReceiptPdfModel(
-            ReceiptNumber:  payment.PaymentNumber,
-            InvoiceNumber:  payment.Invoice?.InvoiceNumber ?? "N/A",
-            ClientName:     client?.ClientName ?? "Unknown",
-            PaymentDate:    payment.PaymentDate,
-            Amount:         payment.Amount,
-            Currency:       payment.Invoice?.Currency ?? FallbackCurrency,
-            Method:         payment.Method,
-            Reference:      payment.Reference,
-            CompanyName:    tenant?.CompanyName ?? "Ecosys",
-            LogoUrl:        tenant?.LogoUrl,
-            PrimaryColor:   receiptTemplateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
-            FontFamily:     receiptTemplateConfig?.FontFamily ?? "Helvetica",
-            FooterText:     PdfTemplateHelper.ResolveFooterText(receiptTemplateConfig),
-            WatermarkText:  receiptTemplateConfig?.WatermarkText,
-            TemplateConfig: receiptTemplateConfig
-        );
-
-        var bytes = pdfRenderer.RenderReceiptPdf(model);
+        var bytes = RenderReceiptPdf(payment, client, tenant);
         return File(bytes, "application/pdf", $"Receipt-{payment.PaymentNumber}.pdf");
     }
 
@@ -958,7 +899,7 @@ public sealed class TenantInvoiceController(
         var subject = await emailSubjectRuleService.BuildFinalSubjectAsync(
             TenantId, "invoice.sent", template.Subject, cancellationToken: cancellationToken);
         var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken);
-        var pdf = RenderInvoicePdf(invoice, tenant);
+        var pdf = await RenderInvoicePdfAsync(invoice, tenant, cancellationToken);
         var cc = recipients.To.Skip(1).Concat(recipients.Cc).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
         await emailOutbox.QueueEmailAsync(
@@ -976,23 +917,98 @@ public sealed class TenantInvoiceController(
             cancellationToken);
     }
 
-    private byte[] RenderInvoicePdf(TenantInvoice invoice, Tenant? tenant)
+    /// <summary>
+    /// Builds the invoice PDF used by both the download endpoint and the "invoice sent" email, pulling in
+    /// the client contact, credit terms, linked work orders and the payments applied to the invoice.
+    /// </summary>
+    private async Task<byte[]> RenderInvoicePdfAsync(TenantInvoice invoice, Tenant? tenant, CancellationToken cancellationToken)
     {
         var templateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "invoice");
         var termsText = templateConfig?.ShowTerms == true
             ? (!string.IsNullOrWhiteSpace(invoice.TermsAndConditions) ? invoice.TermsAndConditions : templateConfig.InvoiceTerms ?? templateConfig.DefaultTermsText)
             : null;
+
+        var client = invoice.Client
+            ?? await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == invoice.ClientId, cancellationToken);
+
+        var creditTerm = invoice.CreditTermId is { } creditTermId
+            ? await dbContext.CreditTerms
+                .Where(x => x.TenantId == TenantId && x.Id == creditTermId)
+                .Select(x => x.Name)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
+        var workOrderIds = invoice.Lines
+            .Where(l => l.WorkOrderId.HasValue)
+            .Select(l => l.WorkOrderId!.Value)
+            .Distinct()
+            .ToList();
+        var workOrderRefs = workOrderIds.Count == 0
+            ? new List<string>()
+            : await dbContext.WorkOrders
+                .Where(w => w.TenantId == TenantId && workOrderIds.Contains(w.Id))
+                .Select(w => w.WorkOrderNumber)
+                .OrderBy(n => n)
+                .ToListAsync(cancellationToken);
+
+        // Payments applied to this invoice: actively allocated (showing the allocated share) or, for
+        // legacy payments without allocations, linked directly (showing the full amount).
+        var allocations = await dbContext.PaymentAllocations
+            .Where(a => a.TenantId == TenantId && a.InvoiceId == invoice.Id
+                        && a.SourceType == AllocationSourceTypes.Payment && a.Status == "Active")
+            .Select(a => new { a.SourceId, a.Amount })
+            .ToListAsync(cancellationToken);
+        var allocatedPaymentIds = allocations.Select(a => a.SourceId).Distinct().ToList();
+        var payments = await dbContext.TenantPayments
+            .Where(x => x.TenantId == TenantId && x.Status == "Confirmed"
+                        && (x.InvoiceId == invoice.Id || allocatedPaymentIds.Contains(x.Id)))
+            .OrderBy(x => x.PaymentDate)
+            .ToListAsync(cancellationToken);
+        var paymentRows = payments.Select(p =>
+        {
+            var applied = allocations.Where(a => a.SourceId == p.Id).ToList();
+            return new PdfPaymentRow(p.PaymentNumber, p.PaymentDate, p.Method, p.Reference,
+                applied.Count > 0 ? applied.Sum(a => a.Amount) : p.Amount);
+        }).ToList();
+
         var model = new InvoicePdfModel(
-            invoice.InvoiceNumber, invoice.Status, invoice.InvoiceDate, invoice.DueDate,
-            invoice.Client?.ClientName ?? "Unknown", null, null, invoice.Notes,
-            invoice.Lines.Select(l => new InvoiceLinePdfModel(l.Description, l.ItemType, l.Quantity, l.Unit, l.UnitRate, l.LineTotal, l.TaxRate, l.GrandTotal)).ToList(),
-            invoice.Subtotal, invoice.TaxAmount, invoice.TotalAmount, invoice.AmountPaid, invoice.Balance, invoice.Currency,
-            tenant?.CompanyName ?? "Ecosys", tenant?.Address, tenant?.Phone, tenant?.LogoUrl,
-            templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81", templateConfig?.FontFamily ?? "Helvetica",
-            PdfTemplateHelper.ResolveFooterText(templateConfig), templateConfig?.WatermarkText,
-            PdfTemplateHelper.ComposeBankDetails(templateConfig),
-            templateConfig?.ShowBankDetails == true ? templateConfig.PaymentInstructions : null,
-            termsText, templateConfig);
+            InvoiceNumber:  invoice.InvoiceNumber,
+            Status:         invoice.Status,
+            InvoiceDate:    invoice.InvoiceDate,
+            DueDate:        invoice.DueDate,
+            ClientName:     client?.ClientName ?? "Unknown",
+            ClientAddress:  client?.Location,
+            ClientEmail:    client?.Email,
+            Notes:          invoice.Notes,
+            Lines:          invoice.Lines.Select(l => new InvoiceLinePdfModel(
+                                l.Description, l.ItemType, l.Quantity, l.Unit,
+                                l.UnitRate, l.LineTotal, l.TaxRate, l.GrandTotal)).ToList(),
+            Subtotal:       invoice.Subtotal,
+            TaxAmount:      invoice.TaxAmount,
+            TotalAmount:    invoice.TotalAmount,
+            AmountPaid:     invoice.AmountPaid,
+            Balance:        invoice.Balance,
+            Currency:       invoice.Currency,
+            CompanyName:    PdfTemplateHelper.CompanyName(tenant),
+            CompanyAddress: PdfTemplateHelper.CompanyAddress(tenant),
+            CompanyPhone:   PdfTemplateHelper.CompanyPhone(tenant),
+            LogoUrl:        tenant?.LogoUrl,
+            PrimaryColor:   templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
+            FontFamily:     templateConfig?.FontFamily ?? "Helvetica",
+            FooterText:     PdfTemplateHelper.ResolveFooterText(templateConfig),
+            WatermarkText:  templateConfig?.WatermarkText,
+            BankDetails:    PdfTemplateHelper.ComposeBankDetails(templateConfig),
+            PaymentInstructions: templateConfig?.ShowBankDetails == true ? templateConfig.PaymentInstructions : null,
+            TermsText:      termsText,
+            TemplateConfig: templateConfig,
+            Company:        PdfTemplateHelper.CompanyDetails(tenant, environment),
+            ClientContact:  PdfTemplateHelper.ClientContact(client),
+            CreditTermsLabel: creditTerm,
+            WorkOrderRefs:  workOrderRefs,
+            Payments:       paymentRows,
+            DepositAmount:  invoice.DepositAmount,
+            DepositPaid:    invoice.DepositPaid,
+            IsProforma:     invoice.DocumentType == DocumentTypes.ProformaInvoice);
         return pdfRenderer.RenderInvoicePdf(model);
     }
 
@@ -1044,25 +1060,35 @@ public sealed class TenantInvoiceController(
         }
     }
 
-    private byte[] RenderReceiptPdf(TenantPayment payment, Client client, Tenant? tenant)
+    /// <summary>Builds the receipt PDF used by both the download endpoint and the receipt email.</summary>
+    private byte[] RenderReceiptPdf(TenantPayment payment, Client? client, Tenant? tenant)
     {
         var templateConfig = PdfTemplateHelper.ResolveForDocument(tenant?.ReportTemplateConfigJson, tenant?.DocumentDesignsJson, "receipt");
+        var invoice = payment.Invoice;
         return pdfRenderer.RenderReceiptPdf(new ReceiptPdfModel(
             payment.PaymentNumber,
-            payment.Invoice?.InvoiceNumber ?? "N/A",
-            client.ClientName,
+            invoice?.InvoiceNumber ?? "N/A",
+            client?.ClientName ?? "Unknown",
             payment.PaymentDate,
             payment.Amount,
-            payment.Invoice?.Currency ?? tenant?.Currency ?? "KES",
+            invoice?.Currency ?? tenant?.Currency ?? FallbackCurrency,
             payment.Method,
             payment.Reference,
-            tenant?.CompanyName ?? "Ecosys",
+            PdfTemplateHelper.CompanyName(tenant),
             tenant?.LogoUrl,
             templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
             FontFamily: templateConfig?.FontFamily ?? "Helvetica",
             FooterText: PdfTemplateHelper.ResolveFooterText(templateConfig),
             WatermarkText: templateConfig?.WatermarkText,
-            TemplateConfig: templateConfig));
+            TemplateConfig: templateConfig,
+            Company: PdfTemplateHelper.CompanyDetails(tenant, environment),
+            ClientContact: PdfTemplateHelper.ClientContact(client),
+            CompanyAddress: PdfTemplateHelper.CompanyAddress(tenant),
+            CompanyPhone: PdfTemplateHelper.CompanyPhone(tenant),
+            InvoiceDate: invoice?.InvoiceDate,
+            InvoiceTotal: invoice?.TotalAmount,
+            InvoiceBalanceAfter: invoice?.Balance,
+            Notes: payment.Notes));
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

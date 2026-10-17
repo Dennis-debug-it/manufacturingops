@@ -88,10 +88,31 @@ describe('applyToBundle', () => {
 
 describe('applyToAttendance', () => {
   it('follows queued clock actions in order', () => {
-    const status: MyAttendanceStatus = { technicianId: 't1', technicianName: 'Moses', status: 'NotClockedIn', clockInAt: null, lastLocation: null }
+    const status: MyAttendanceStatus = { technicianId: 't1', technicianName: 'Moses', status: 'NotClockedIn', clockInAt: null, lastLocation: null, currentWorkOrderId: null, currentWorkOrderNumber: null }
     const clockIn = entry('clock-in', { workOrderId: null })
     expect(applyToAttendance(status, [clockIn])).toMatchObject({ status: 'ClockedIn', clockInAt: clockIn.occurredAt })
     expect(applyToAttendance(status, [clockIn, entry('clock-status', { workOrderId: null, body: { status: 'OnBreak' } })]).status).toBe('OnBreak')
     expect(applyToAttendance(status, [clockIn, entry('clock-out', { workOrderId: null })]).status).toBe('NotClockedIn')
+  })
+})
+
+describe('trips and the clock', () => {
+  const status: MyAttendanceStatus = { technicianId: 't1', technicianName: 'Moses', status: 'NotClockedIn', clockInAt: null, lastLocation: null, currentWorkOrderId: null, currentWorkOrderNumber: null }
+
+  it('clocks in on the way, switches to on site on arrival and releases the job on departure', () => {
+    const onTheWay = entry('in-transit', { workOrderId: 'wo-1', label: 'On the way to site · WO-0042', body: { technicianId: 't1' } })
+    const travelling = applyToAttendance(status, [onTheWay])
+    expect(travelling).toMatchObject({ status: 'Travelling', clockInAt: onTheWay.occurredAt, currentWorkOrderId: 'wo-1', currentWorkOrderNumber: 'WO-0042' })
+
+    const arrived = applyToAttendance(status, [onTheWay, entry('arrive', { workOrderId: 'wo-1', body: { technicianId: 't1' } })])
+    expect(arrived).toMatchObject({ status: 'ClockedIn', clockInAt: onTheWay.occurredAt, currentWorkOrderId: 'wo-1' })
+
+    const left = applyToAttendance(status, [onTheWay, entry('arrive', { workOrderId: 'wo-1', body: { technicianId: 't1' } }), entry('depart', { workOrderId: 'wo-1', body: { technicianId: 't1' } })])
+    expect(left).toMatchObject({ status: 'ClockedIn', currentWorkOrderId: null })
+  })
+
+  it('shows the job as on the way until arrival', () => {
+    const view = applyToJob(job, [entry('in-transit', { body: { technicianId: 'tech-1' } })])
+    expect(view.technicianAssignments[0]!.status).toBe('InTransit')
   })
 })

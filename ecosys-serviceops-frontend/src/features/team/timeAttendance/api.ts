@@ -102,9 +102,44 @@ export interface TimesheetAuditEntry {
   action: string
 }
 
+/** One clock session; `autoClockedOut` marks hours the office still has to confirm. */
+export interface TimesheetClockEntry {
+  id: string
+  date: string
+  clockInAt: string
+  clockOutAt: string | null
+  breakMinutes: number
+  totalHours: number
+  note: string | null
+  autoClockedOut: boolean
+}
+
+/** Time on one job on one day, from its site visits. */
+export interface TimesheetJobEntry {
+  date: string
+  workOrderId: string
+  workOrderNumber: string
+  title: string
+  visits: number
+  travelMinutes: number
+  onSiteMinutes: number
+  inProgress: boolean
+}
+
 export interface TimesheetDetail extends TimesheetListItem {
   dailyBreakdown: TimesheetDailyEntry[]
   auditTrail: TimesheetAuditEntry[]
+  entries: TimesheetClockEntry[]
+  jobs: TimesheetJobEntry[]
+}
+
+export function useUpdateAttendanceEntry() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...payload }: { id: string; clockInAt: string; clockOutAt: string; breakMinutes: number; note?: string | null }) =>
+      api.put<TimesheetClockEntry>(`/api/attendance/entries/${id}`, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team', 'time-attendance'] }),
+  })
 }
 
 export function useTimesheetDetail(id: string | undefined) {
@@ -252,6 +287,8 @@ export interface MyAttendanceStatus {
   status: AttendanceStatus
   clockInAt: string | null
   lastLocation: string | null
+  currentWorkOrderId: string | null
+  currentWorkOrderNumber: string | null
 }
 
 // The "my" reads fail for accounts with no technician profile; the page explains that in place,
@@ -259,8 +296,10 @@ export interface MyAttendanceStatus {
 export function useMyAttendanceStatus() {
   return useQuery({
     queryKey: ['attendance', 'me', 'status'],
+    // An account without a technician profile gets a 400 here; callers hide the clock rather than toast it.
     queryFn: () => api.get<MyAttendanceStatus>('/api/attendance/me/status', undefined, { suppressGlobalErrorToast: true }),
     staleTime: 15_000,
+    retry: false,
   })
 }
 

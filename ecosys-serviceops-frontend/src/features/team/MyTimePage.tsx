@@ -10,6 +10,7 @@ import { cn } from '../../shared/utils/cn'
 import { useApplyForLeave, useLeaveTypes, useMyLeave, useMyTimesheet } from './timeAttendance/api'
 import { savedMessage, useTechActions } from '../tech/offline/actions'
 import { useMyAttendanceView } from '../tech/offline/hooks'
+import { ClockSessions, JobBreakdown } from './timeAttendance/TimesheetSections'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -230,13 +231,26 @@ function TimesheetSection() {
   )
 }
 
-export function MyTimePage() {
+function WhereTimeWent({ jobLinkPrefix }: { jobLinkPrefix: string }) {
+  const { data } = useMyTimesheet('week')
+  if (!data) return null
+  return (
+    <>
+      <JobBreakdown jobs={data.jobs ?? []} linkJobs={jobLinkPrefix} />
+      {(data.entries ?? []).some((entry) => entry.autoClockedOut) ? <ClockSessions entries={data.entries} canFix={false} /> : null}
+    </>
+  )
+}
+
+/** The technician's own clock, hours (with time by job) and leave. */
+export function MyTimePage({ jobLinkPrefix = '/tech/jobs/' }: { jobLinkPrefix?: string }) {
   return (
     <div className="space-y-4 pb-24">
-      <PageHeader title="My Time & Leave" subtitle="Clock in, apply for leave, and check your hours." />
+      <PageHeader title="My Time & Leave" subtitle="Clock in, check your hours, and apply for leave." />
       <ClockCard />
-      <LeaveSection />
       <TimesheetSection />
+      <WhereTimeWent jobLinkPrefix={jobLinkPrefix} />
+      <LeaveSection />
     </div>
   )
 }

@@ -282,6 +282,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         await UpdateTechnicianTrackingAsync(tenantId, request.TechnicianId, workOrderId, request.Latitude, request.Longitude, true, cancellationToken);
         await AddHistoryAsync(tenantId, workOrderId, "TechnicianInTransit", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
         await AddEventAsync(tenantId, workOrderId, actorUserId, "InTransit", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} is in transit to site.", request.Latitude, request.Longitude, cancellationToken);
+        await SyncOwnAttendanceAsync(tenantId, assignment.Technician, workOrderId, actorUserId, TripEvent.Travelling, travelStartedAt, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await RefreshAssignmentStatusAsync(tenantId, workOrderId, cancellationToken);
         await NotifyEtaAsync(tenantId, workOrderId, EtaNotificationEventTypes.EnRoute, assignment.Technician?.FullName, cancellationToken);
@@ -318,6 +319,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         await UpdateTechnicianTrackingAsync(tenantId, request.TechnicianId, workOrderId, request.Latitude, request.Longitude, true, cancellationToken);
         await AddHistoryAsync(tenantId, workOrderId, "TechnicianArrived", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
         await AddEventAsync(tenantId, workOrderId, actorUserId, "Arrival", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} arrived on site.", request.Latitude, request.Longitude, cancellationToken);
+        await SyncOwnAttendanceAsync(tenantId, assignment.Technician, workOrderId, actorUserId, TripEvent.Arrived, arrivedAt, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await RefreshAssignmentStatusAsync(tenantId, workOrderId, cancellationToken);
         await NotifyEtaAsync(tenantId, workOrderId, EtaNotificationEventTypes.Arrived, assignment.Technician?.FullName, cancellationToken);
@@ -350,6 +352,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         await UpdateTechnicianTrackingAsync(tenantId, request.TechnicianId, null, request.Latitude, request.Longitude, false, cancellationToken);
         await AddHistoryAsync(tenantId, workOrderId, "TechnicianDeparted", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
         await AddEventAsync(tenantId, workOrderId, actorUserId, "Departure", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} departed from site.", request.Latitude, request.Longitude, cancellationToken);
+        await SyncOwnAttendanceAsync(tenantId, assignment.Technician, workOrderId, actorUserId, TripEvent.Departed, departedAt, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -379,6 +382,73 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         if (workOrder is null) return;
 
         await etaNotificationService.NotifyAsync(tenantId, workOrder, eventType, technicianName, cancellationToken);
+    }
+
+    private enum TripEvent { Travelling, Arrived, Departed }
+
+    /// <summary>
+    /// Keeps a technician's clock in step with their own trips: heading out or arriving clocks them in
+    /// (if they weren't) against this job; leaving site drops the job but leaves them clocked in, since
+    /// they may drive to the next one. Office staff recording a trip for someone leave that clock alone.
+    /// </summary>
+    private async Task SyncOwnAttendanceAsync(Guid tenantId, Technician? technician, Guid workOrderId, Guid? actorUserId, TripEvent tripEvent, DateTime at, CancellationToken cancellationToken)
+    {
+        if (technician?.UserId is null || technician.UserId != actorUserId)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        if (at > now)
+        {
+            at = now;
+        }
+
+        var entry = await dbContext.AttendanceEntries
+            .Where(x => x.TenantId == tenantId && x.TechnicianId == technician.Id && x.ClockOutAt == null)
+            .OrderByDescending(x => x.ClockInAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (tripEvent == TripEvent.Departed)
+        {
+            if (entry is not null && entry.CurrentWorkOrderId == workOrderId)
+            {
+                entry.CurrentWorkOrderId = null;
+                if (entry.Status == AttendanceRules.Travelling)
+                {
+                    entry.Status = AttendanceRules.ClockedIn;
+                }
+
+                entry.UpdatedAt = now;
+            }
+
+            return;
+        }
+
+        if (entry is null)
+        {
+            var workOrderNumber = await dbContext.WorkOrders
+                .Where(x => x.TenantId == tenantId && x.Id == workOrderId)
+                .Select(x => x.WorkOrderNumber)
+                .SingleOrDefaultAsync(cancellationToken);
+            entry = new AttendanceEntry
+            {
+                TenantId = tenantId,
+                TechnicianId = technician.Id,
+                WorkDate = DateOnly.FromDateTime(at),
+                ClockInAt = at,
+                Note = $"Clocked in automatically: {(tripEvent == TripEvent.Travelling ? "on the way to" : "arrived at")} {workOrderNumber}",
+            };
+            dbContext.AttendanceEntries.Add(entry);
+        }
+        else if (entry.Status == AttendanceRules.OnBreak)
+        {
+            AttendanceRules.EndBreak(entry, at);
+        }
+
+        entry.Status = tripEvent == TripEvent.Travelling ? AttendanceRules.Travelling : AttendanceRules.ClockedIn;
+        entry.CurrentWorkOrderId = workOrderId;
+        entry.UpdatedAt = now;
     }
 
     /// <summary>The technician's visit that has not been closed by a departure yet, if any.</summary>

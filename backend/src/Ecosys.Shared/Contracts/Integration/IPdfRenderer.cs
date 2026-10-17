@@ -34,7 +34,10 @@ public sealed record QuotationPdfModel(
     string? BankDetails = null,
     string? PaymentInstructions = null,
     string? TermsText = null,
-    ReportTemplateConfig? TemplateConfig = null
+    ReportTemplateConfig? TemplateConfig = null,
+    PdfCompanyDetails? Company = null,
+    PdfContactDetails? ClientContact = null,
+    string? SiteLabel = null
 );
 
 public sealed record InvoicePdfModel(
@@ -64,7 +67,47 @@ public sealed record InvoicePdfModel(
     string? BankDetails = null,
     string? PaymentInstructions = null,
     string? TermsText = null,
-    ReportTemplateConfig? TemplateConfig = null
+    ReportTemplateConfig? TemplateConfig = null,
+    PdfCompanyDetails? Company = null,
+    PdfContactDetails? ClientContact = null,
+    string? CreditTermsLabel = null,
+    IReadOnlyList<string>? WorkOrderRefs = null,
+    IReadOnlyList<PdfPaymentRow>? Payments = null,
+    decimal? DepositAmount = null,
+    bool DepositPaid = false,
+    bool IsProforma = false
+);
+
+/// <summary>
+/// Seller identity printed in the header of finance documents (tax registration, contact, logo).
+/// Every field is optional; blank ones are simply left off the document.
+/// </summary>
+public sealed record PdfCompanyDetails(
+    string? LegalName = null,
+    string? Email = null,
+    string? Website = null,
+    string? PostalAddress = null,
+    string? TaxPin = null,
+    string? VatNumber = null,
+    string? RegistrationNumber = null,
+    byte[]? LogoBytes = null
+);
+
+/// <summary>Contact lines for the counter-party block (client or supplier).</summary>
+public sealed record PdfContactDetails(
+    string? ContactPerson = null,
+    string? Phone = null,
+    string? Email = null,
+    string? Address = null
+);
+
+/// <summary>A payment applied to a document, listed in its payment history.</summary>
+public sealed record PdfPaymentRow(
+    string PaymentNumber,
+    DateTime PaymentDate,
+    string Method,
+    string? Reference,
+    decimal Amount
 );
 
 public sealed record InvoiceLinePdfModel(
@@ -93,7 +136,15 @@ public sealed record ReceiptPdfModel(
     string FontFamily = "Helvetica",
     string? FooterText = null,
     string? WatermarkText = null,
-    ReportTemplateConfig? TemplateConfig = null
+    ReportTemplateConfig? TemplateConfig = null,
+    PdfCompanyDetails? Company = null,
+    PdfContactDetails? ClientContact = null,
+    string? CompanyAddress = null,
+    string? CompanyPhone = null,
+    DateTime? InvoiceDate = null,
+    decimal? InvoiceTotal = null,
+    decimal? InvoiceBalanceAfter = null,
+    string? Notes = null
 );
 
 public sealed record ClientStatementPdfModel(
@@ -117,7 +168,10 @@ public sealed record ClientStatementPdfModel(
     string FontFamily = "Helvetica",
     string? FooterText = null,
     string? WatermarkText = null,
-    ReportTemplateConfig? TemplateConfig = null
+    ReportTemplateConfig? TemplateConfig = null,
+    PdfCompanyDetails? Company = null,
+    PdfContactDetails? ClientContact = null,
+    string? Currency = null
 );
 
 public sealed record StatementInvoiceRow(
@@ -193,7 +247,9 @@ public sealed record PurchaseOrderPdfModel(
     string? FooterText = null,
     string? WatermarkText = null,
     string? TermsText = null,
-    ReportTemplateConfig? TemplateConfig = null
+    ReportTemplateConfig? TemplateConfig = null,
+    PdfCompanyDetails? Company = null,
+    PdfContactDetails? SupplierContact = null
 );
 
 public sealed record WorkOrderReportPdfTimestamp(string Label, string? Value);

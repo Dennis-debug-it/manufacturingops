@@ -68,7 +68,6 @@ const sampleReportSections: Record<string, string> = {
   problem: 'AHU-03 tripping on high static pressure alarm; airflow to Ward B reduced.',
   findings: 'Filters heavily loaded; belt tension low; pressure sensor within calibration.',
   'work-done': 'Replaced filter set, re-tensioned belt, verified static pressure at 320 Pa.',
-  timestamps: 'Arrived 09:15 · Completed 11:40 · Duration 2h 25m',
   checklist: 'All checklist items passed (12 of 12).',
   materials: 'Air filter set (MERV 13) × 4 · Drive belt A-42 × 1',
   photos: '3 evidence photos attached.',

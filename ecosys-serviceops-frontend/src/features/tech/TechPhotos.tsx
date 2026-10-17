@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Camera, Check, ImagePlus } from 'lucide-react'
+import { Camera, Check, ImagePlus, Pencil } from 'lucide-react'
 import { AuthenticatedImage } from '../../shared/components/AuthenticatedImage'
 import { cn } from '../../shared/utils/cn'
 import { formatRelative } from '../../shared/utils/dates'
-import { useServiceReportLayout } from '../work-orders/api'
-import type { WorkOrder } from '../work-orders/types'
+import { useServiceReportLayout, useUpdatePhoto } from '../work-orders/api'
+import type { WorkOrder, WorkOrderPhoto } from '../work-orders/types'
 import { savedMessage, useTechActions } from './offline/actions'
 import { useTechBundle } from './offline/hooks'
 import { isPendingPhoto, type PendingPhoto } from './offline/overlay'
@@ -22,6 +22,56 @@ function LocalPhoto({ photo, className }: { photo: PendingPhoto; className: stri
     return () => URL.revokeObjectURL(objectUrl)
   }, [photo.localBlob])
   return url ? <img src={url} alt={photo.caption} className={className} /> : <div className={className} />
+}
+
+/** A photo's caption, editable once it has uploaded (captions show in the report and fill its photo slots). */
+function PhotoCaption({ workOrderId, photo, editable }: { workOrderId: string; photo: WorkOrderPhoto; editable: boolean }) {
+  const update = useUpdatePhoto(workOrderId)
+  const [editing, setEditing] = useState(false)
+  const [caption, setCaption] = useState(photo.caption)
+  const pending = isPendingPhoto(photo)
+
+  const save = async () => {
+    try {
+      await update.mutateAsync({ photoId: photo.id, caption: caption.trim() || null, category: photo.category, includeInReport: photo.includeInReport })
+      setEditing(false)
+      toast.success('Caption updated')
+    } catch {
+      toast.error(navigator.onLine ? 'Could not update the caption' : 'Connect to the internet to edit a caption')
+    }
+  }
+
+  if (editing) {
+    return (
+      <div className="space-y-1">
+        <input
+          autoFocus
+          value={caption}
+          onChange={(event) => setCaption(event.target.value)}
+          onKeyDown={(event) => { if (event.key === 'Enter') void save() }}
+          aria-label="Edit caption"
+          className="h-9 w-full rounded-md border border-slate-300 px-2 text-xs outline-none focus:border-[var(--app-primary)]"
+        />
+        <div className="grid grid-cols-2 gap-1">
+          <button type="button" onClick={() => { setEditing(false); setCaption(photo.caption) }} className="h-8 rounded-md border border-slate-300 text-xs text-slate-700">Cancel</button>
+          <button type="button" onClick={() => void save()} disabled={update.isPending} className="h-8 rounded-md bg-slate-900 text-xs font-medium text-white disabled:opacity-60">{update.isPending ? 'Saving…' : 'Save'}</button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={!editable || pending}
+      onClick={() => setEditing(true)}
+      aria-label={`Edit caption for ${photo.caption || photo.fileName}`}
+      className="flex w-full items-center gap-1 text-left disabled:cursor-default"
+    >
+      <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-800">{photo.caption || photo.fileName}</span>
+      {editable && !pending ? <Pencil className="h-3 w-3 shrink-0 text-slate-400" /> : null}
+    </button>
+  )
 }
 
 export function TechPhotos({ job, editable }: { job: Pick<WorkOrder, 'id' | 'workOrderNumber'>; editable: boolean }) {
@@ -120,7 +170,7 @@ export function TechPhotos({ job, editable }: { job: Pick<WorkOrder, 'id' | 'wor
                 ? <LocalPhoto photo={photo} className="h-32 w-full object-cover" />
                 : <AuthenticatedImage src={photo.publicUrl ?? `/api/attachments/${photo.attachmentId}/download`} alt={photo.caption} className="h-32 w-full object-cover" />}
               <div className="p-2">
-                <p className="truncate text-xs font-medium text-slate-800">{photo.caption || photo.fileName}</p>
+                <PhotoCaption workOrderId={job.id} photo={photo} editable={editable} />
                 <p className="text-[11px] text-slate-500">{photo.category} · {isPendingPhoto(photo) ? 'waiting to upload' : formatRelative(photo.uploadedAt)}</p>
               </div>
             </li>
