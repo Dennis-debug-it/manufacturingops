@@ -56,15 +56,16 @@ public sealed class SolarInstallationReportTests
     }
 
     [Theory]
-    [InlineData("Plexus Energy", "", true)]
-    [InlineData("plexus  energy", "", true)]
-    [InlineData("Acme", "Plexus Energy Limited", true)]
-    [InlineData("Plexus", "Plexus Ltd", false)]
-    [InlineData("Sunrise Solar", "Sunrise Solar Ltd", false)]
-    [InlineData(null, null, false)]
-    public void Template_IsLockedToPlexusEnergy(string? name, string? companyName, bool expected)
+    [InlineData("plexus-energy", true)]
+    [InlineData("Plexus-Energy", true)]
+    [InlineData(" plexus-energy ", true)]
+    [InlineData("plexus-energy-2", false)]
+    [InlineData("plexus", false)]
+    [InlineData("sunrise-solar", false)]
+    [InlineData(null, false)]
+    public void Template_IsLockedToThePlexusEnergyWorkspaceSlug(string? slug, bool expected)
     {
-        Assert.Equal(expected, SolarInstallationTemplate.IsForTenant(name, companyName));
+        Assert.Equal(expected, SolarInstallationTemplate.IsForTenant(slug));
     }
 
     [Fact]
@@ -189,8 +190,9 @@ public sealed class SolarInstallationReportTests
     {
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase($"solar-install-{Guid.NewGuid():N}").Options);
-        var tenant = new Tenant { Name = "Plexus Energy", CompanyName = "Plexus Energy Limited" };
-        var otherTenant = new Tenant { Name = "Sunrise Solar", CompanyName = "Sunrise Solar Ltd" };
+        var tenant = new Tenant { Name = "Plexus", CompanyName = "Plexus Ltd", Slug = "plexus-energy" };
+        // Named like Plexus but a different workspace: the slug decides, not the name.
+        var otherTenant = new Tenant { Name = "Plexus Energy", CompanyName = "Plexus Energy Limited", Slug = "plexus-energy-demo" };
         db.Tenants.AddRange(tenant, otherTenant);
         await db.SaveChangesAsync();
         var installer = new ClientTemplateInstaller(db, new PmTemplateService(db));
