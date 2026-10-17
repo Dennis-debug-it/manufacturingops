@@ -152,7 +152,7 @@ public sealed class WorkOrderPhase3Tests
     {
         await using var dbContext = CreateDbContext();
         var fixture = await SeedControllerFixtureAsync(dbContext);
-        fixture.Tenant.Name = "Plexus Energy";
+        fixture.Tenant.Slug = Ecosys.Infrastructure.Reports.SolarInstallationTemplate.WorkspaceSlug;
         await dbContext.SaveChangesAsync();
         var installed = await new Ecosys.Infrastructure.Reports.ClientTemplateInstaller(dbContext, new PmTemplateService(dbContext))
             .InstallAsync(fixture.Tenant.Id, Ecosys.Infrastructure.Reports.SolarInstallationTemplate.LayoutKey, CancellationToken.None);

@@ -65,11 +65,11 @@ public sealed partial class WorkOrderExecutionController
 
         // The layout is Plexus Energy's: any other workspace keeps the standard report even if a
         // checklist of theirs carries the same code.
-        var tenant = await dbContext.Tenants
+        var slug = await dbContext.Tenants
             .Where(x => x.Id == TenantId)
-            .Select(x => new { x.Name, x.CompanyName })
+            .Select(x => x.Slug)
             .SingleAsync(cancellationToken);
-        return SolarInstallationTemplate.IsForTenant(tenant.Name, tenant.CompanyName) ? SolarInstallationTemplate.LayoutKey : null;
+        return SolarInstallationTemplate.IsForTenant(slug) ? SolarInstallationTemplate.LayoutKey : null;
     }
 
     private async Task<SolarInstallationReportData> BuildSolarReportDataAsync(WorkOrder workOrder, CancellationToken cancellationToken)

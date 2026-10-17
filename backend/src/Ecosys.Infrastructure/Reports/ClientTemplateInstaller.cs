@@ -24,7 +24,7 @@ internal sealed class ClientTemplateInstaller(AppDbContext dbContext, IPmTemplat
 {
     /// <param name="JobTemplate">The work order template created alongside the checklist, so it can be picked
     /// straight away in New Work Order (that form offers work order templates, which carry the checklist).</param>
-    private sealed record Definition(string Key, string Code, string Name, string Description, Func<string?, string?, bool> IsForTenant, Func<PmTemplateWriteCommand> Build, JobTemplateDefaults JobTemplate);
+    private sealed record Definition(string Key, string Code, string Name, string Description, Func<string?, bool> IsForTenant, Func<PmTemplateWriteCommand> Build, JobTemplateDefaults JobTemplate);
 
     private sealed record JobTemplateDefaults(string Name, string JobType, string Description, string Priority);
 
@@ -64,7 +64,7 @@ internal sealed class ClientTemplateInstaller(AppDbContext dbContext, IPmTemplat
         var tenant = await LoadTenantAsync(tenantId, cancellationToken);
         var definition = Catalog.FirstOrDefault(x => string.Equals(x.Key, key, StringComparison.OrdinalIgnoreCase))
             ?? throw new NotFoundException("Client template was not found.");
-        if (!definition.IsForTenant(tenant.Name, tenant.CompanyName))
+        if (!definition.IsForTenant(tenant.Slug))
         {
             throw new BusinessRuleException($"'{definition.Name}' is built for another client and can't be installed in this workspace.");
         }
@@ -112,17 +112,17 @@ internal sealed class ClientTemplateInstaller(AppDbContext dbContext, IPmTemplat
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private List<Definition> ForTenant((string Name, string CompanyName) tenant) =>
-        Catalog.Where(x => x.IsForTenant(tenant.Name, tenant.CompanyName)).ToList();
+    private List<Definition> ForTenant((string Slug, string Name) tenant) =>
+        Catalog.Where(x => x.IsForTenant(tenant.Slug)).ToList();
 
-    private async Task<(string Name, string CompanyName)> LoadTenantAsync(Guid tenantId, CancellationToken cancellationToken)
+    private async Task<(string Slug, string Name)> LoadTenantAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var tenant = await dbContext.Tenants
             .IgnoreQueryFilters()
             .Where(x => x.Id == tenantId)
-            .Select(x => new { x.Name, x.CompanyName })
+            .Select(x => new { x.Slug, x.Name })
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Tenant was not found.");
-        return (tenant.Name, tenant.CompanyName);
+        return (tenant.Slug, tenant.Name);
     }
 }
