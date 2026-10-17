@@ -5,6 +5,7 @@ import { CheckCircle2, MapPin, Phone, Star } from 'lucide-react'
 import { cn } from '../../shared/utils/cn'
 import { formatDate, formatDateTime, formatRelative } from '../../shared/utils/dates'
 import type { WorkOrder, WorkOrderChecklistItem } from '../work-orders/types'
+import { useAddWorkOrderNote, useWorkOrderNotes } from '../work-orders/api'
 import { savedMessage, useTechActions } from './offline/actions'
 import { useTechBundle } from './offline/hooks'
 
@@ -98,10 +99,21 @@ function ChecklistItem({ job, item, editable }: { job: WorkOrder; item: WorkOrde
   )
 }
 
+type UpdateKind = 'progress' | 'office' | 'client'
+const UPDATE_KINDS: { value: UpdateKind; label: string; hint: string; placeholder: string }[] = [
+  { value: 'progress', label: 'Progress', hint: 'Goes on the service report. Works offline.', placeholder: 'Day 1: Inspected generator, found faulty AVR, awaiting replacement.' },
+  { value: 'office', label: 'Note to office', hint: 'Only staff see this.', placeholder: 'Client asked for a quote to replace the second unit.' },
+  { value: 'client', label: 'Note to client', hint: 'The client can see this (e.g. in their portal).', placeholder: 'Replacement AVR ordered; we will return on Thursday.' },
+]
+
 export function TechOverview({ job, editable }: { job: WorkOrder; editable: boolean }) {
   const { data: bundle } = useTechBundle(job.id)
+  const { data: notes } = useWorkOrderNotes(job.id)
+  const addNote = useAddWorkOrderNote(job.id)
   const actions = useTechActions()
   const [update, setUpdate] = useState('')
+  const [kind, setKind] = useState<UpdateKind>('progress')
+  const kindInfo = UPDATE_KINDS.find((option) => option.value === kind)!
 
   const phone = job.siteContactPhone ?? job.clientContactPhone
   const mapUrl = job.siteLatitude != null && job.siteLongitude != null
@@ -110,14 +122,27 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
   const answered = job.checklistItems.filter((item) => item.isCompleted).length
 
   const postUpdate = async () => {
-    if (!update.trim()) return
+    const content = update.trim()
+    if (!content) return
     try {
-      toast.success(savedMessage('Update saved', await actions.saveNotes(job, { progressComment: update.trim() })))
+      if (kind === 'progress') {
+        toast.success(savedMessage('Update saved', await actions.saveNotes(job, { progressComment: content })))
+      } else {
+        // Office and client notes go straight to the server (they aren't part of the offline outbox).
+        await addNote.mutateAsync({ content, isClientVisible: kind === 'client' })
+        toast.success(kind === 'client' ? 'Note shared with the client' : 'Note sent to the office')
+      }
       setUpdate('')
     } catch {
-      // interceptor surfaces the error toast
+      if (kind !== 'progress' && !navigator.onLine) toast.error('Connect to the internet to send a note')
+      // otherwise the interceptor surfaces the error toast
     }
   }
+
+  const history = [
+    ...(bundle?.progressUpdates ?? []).map((entry) => ({ id: `p-${entry.id}`, text: entry.message, who: entry.actorUserName, at: entry.occurredAt, tag: null as string | null })),
+    ...(notes ?? []).map((note) => ({ id: `n-${note.id}`, text: note.content, who: note.createdByUserName, at: note.createdAt, tag: note.isClientVisible ? 'Client note' : 'Office note' })),
+  ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8)
 
   return (
     <div className="space-y-3">
@@ -190,27 +215,50 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
         </Card>
       ) : null}
 
-      <Card title="Progress updates">
-        <textarea
-          value={update}
-          onChange={(event) => setUpdate(event.target.value)}
-          rows={3}
-          placeholder="Day 1: Inspected generator, found faulty AVR, awaiting replacement."
-          className={cn(inputClass, 'py-2')}
-        />
-        <button type="button" onClick={() => void postUpdate()} disabled={!update.trim() || actions.busy} className="mt-2 inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-50">
-          {actions.busy ? 'Saving…' : 'Save update'}
-        </button>
-        {(bundle?.progressUpdates ?? []).length > 0 ? (
-          <ul className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-            {bundle!.progressUpdates.slice(0, 5).map((entry) => (
+      <Card title="Updates & notes">
+        {editable ? (
+          <>
+            <div className="mb-2 grid grid-cols-3 gap-1 rounded-lg border border-slate-200 p-1" role="radiogroup" aria-label="Kind of update">
+              {UPDATE_KINDS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={kind === option.value}
+                  onClick={() => setKind(option.value)}
+                  className={cn('h-9 rounded-md text-xs font-medium', kind === option.value ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600')}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={update}
+              onChange={(event) => setUpdate(event.target.value)}
+              rows={3}
+              aria-label={kindInfo.label}
+              placeholder={kindInfo.placeholder}
+              className={cn(inputClass, 'py-2')}
+            />
+            <p className="mt-1 text-xs text-slate-500">{kindInfo.hint}</p>
+            <button type="button" onClick={() => void postUpdate()} disabled={!update.trim() || actions.busy || addNote.isPending} className="mt-2 inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-50">
+              {actions.busy || addNote.isPending ? 'Saving…' : kind === 'progress' ? 'Save update' : 'Send note'}
+            </button>
+          </>
+        ) : null}
+        {history.length > 0 ? (
+          <ul className={cn('space-y-2', editable && 'mt-3 border-t border-slate-100 pt-3')}>
+            {history.map((entry) => (
               <li key={entry.id} className="text-sm">
-                <p className="text-slate-800">{entry.message}</p>
-                <p className="text-xs text-slate-500" title={formatDateTime(entry.occurredAt)}>{entry.actorUserName ?? 'Someone'} · {formatRelative(entry.occurredAt)}</p>
+                <p className="whitespace-pre-line text-slate-800">{entry.text}</p>
+                <p className="text-xs text-slate-500" title={formatDateTime(entry.at)}>
+                  {entry.tag ? <span className="mr-1 rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">{entry.tag}</span> : null}
+                  {entry.who ?? 'Someone'} · {formatRelative(entry.at)}
+                </p>
               </li>
             ))}
           </ul>
-        ) : null}
+        ) : !editable ? <p className="text-sm text-slate-500">No updates yet.</p> : null}
       </Card>
     </div>
   )

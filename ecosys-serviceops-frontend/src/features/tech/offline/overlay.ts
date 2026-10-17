@@ -39,6 +39,9 @@ export function applyToJob(job: WorkOrder, entries: OutboxEntry[]): WorkOrder {
       case 'respond':
         updateAssignment(() => body.response === 'Accepted' ? { status: 'Accepted', acceptedAt: at } : { status: 'Declined' })
         break
+      case 'in-transit':
+        updateAssignment(() => ({ status: 'InTransit' }))
+        break
       case 'arrive':
         updateAssignment((assignment) => ({ status: 'Arrived', arrivalAt: assignment.arrivalAt ?? at, lastArrivalAt: at }))
         next = { ...next, arrivalAt: next.arrivalAt ?? at }
@@ -151,9 +154,37 @@ export function applyToBundle(bundle: WorkOrderExecutionBundle, jobId: string, e
 export function applyToAttendance(status: MyAttendanceStatus, entries: OutboxEntry[]): MyAttendanceStatus {
   let next = status
   for (const entry of entries) {
-    if (entry.kind === 'clock-in') next = { ...next, status: 'ClockedIn', clockInAt: entry.occurredAt }
-    else if (entry.kind === 'clock-out') next = { ...next, status: 'NotClockedIn', clockInAt: null }
-    else if (entry.kind === 'clock-status') next = { ...next, status: String(bodyOf(entry).status) as MyAttendanceStatus['status'] }
+    const clockedIn = next.status !== 'NotClockedIn'
+    switch (entry.kind) {
+      case 'clock-in':
+        next = { ...next, status: 'ClockedIn', clockInAt: entry.occurredAt }
+        break
+      case 'clock-out':
+        next = { ...next, status: 'NotClockedIn', clockInAt: null, currentWorkOrderId: null, currentWorkOrderNumber: null }
+        break
+      case 'clock-status':
+        next = { ...next, status: String(bodyOf(entry).status) as MyAttendanceStatus['status'] }
+        break
+      // A technician's own trips move their clock, as the API does: heading out or arriving clocks them in
+      // against the job; leaving site releases the job but keeps them clocked in for the next one.
+      case 'in-transit':
+      case 'arrive':
+        next = {
+          ...next,
+          status: entry.kind === 'in-transit' ? 'Travelling' : 'ClockedIn',
+          clockInAt: clockedIn ? next.clockInAt : entry.occurredAt,
+          currentWorkOrderId: entry.workOrderId,
+          currentWorkOrderNumber: (entry.label.split(' · ')[1] ?? next.currentWorkOrderNumber) || null,
+        }
+        break
+      case 'depart':
+        if (clockedIn && next.currentWorkOrderId === entry.workOrderId) {
+          next = { ...next, status: next.status === 'Travelling' ? 'ClockedIn' : next.status, currentWorkOrderId: null, currentWorkOrderNumber: null }
+        }
+        break
+      default:
+        break
+    }
   }
   return next
 }

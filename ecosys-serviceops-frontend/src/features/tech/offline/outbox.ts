@@ -11,7 +11,7 @@ import { normalizeError } from '../../../shared/api/apiError'
  */
 
 export type OutboxKind =
-  | 'respond' | 'arrive' | 'depart' | 'start' | 'hold' | 'resume' | 'complete'
+  | 'respond' | 'in-transit' | 'arrive' | 'depart' | 'start' | 'hold' | 'resume' | 'complete'
   | 'notes' | 'checklist' | 'photo' | 'signature' | 'material'
   | 'clock-in' | 'clock-out' | 'clock-status'
 

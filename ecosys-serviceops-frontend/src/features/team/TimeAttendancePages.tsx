@@ -28,6 +28,7 @@ import { useTechnicians } from './api'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { TeamTabNav } from './components/TeamTabNav'
 import { TimeAttendanceTabNav } from './components/TimeAttendanceTabNav'
+import { ClockSessions, JobBreakdown } from './timeAttendance/TimesheetSections'
 
 
 export function LiveAttendancePage() {
@@ -124,12 +125,13 @@ export function TimesheetsPage() {
 export function TimesheetDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data, isLoading } = useTimesheetDetail(id)
+  const canManageTime = usePermission('team.manage')
 
   return (
     <div className="space-y-4">
       <PageHeader
         title={data?.technicianName ?? 'Timesheet Detail'}
-        subtitle="Daily breakdown and audit trail."
+        subtitle="Daily hours, time by job, and audit trail."
         breadcrumbs={[{ label: 'Timesheets', to: '/team/time-attendance/timesheets' }, { label: data?.periodLabel ?? 'Detail' }]}
       />
       {isLoading ? null : !data ? (
@@ -161,6 +163,10 @@ export function TimesheetDetailPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <JobBreakdown jobs={data.jobs ?? []} linkJobs="/work-orders/" />
+            <ClockSessions entries={data.entries ?? []} canFix={canManageTime} />
           </div>
           <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Audit Trail</h2>

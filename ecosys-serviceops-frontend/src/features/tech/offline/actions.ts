@@ -38,6 +38,11 @@ export function useTechActions() {
         onJob(job, 'respond', response === 'Accepted' ? 'Accepted job' : 'Declined job', {
           method: 'POST', url: endpoints.workOrders.technicianResponse(job.id), body: { technicianId, response, notes: null },
         }),
+      inTransit: (job: Job, technicianId: string, position: Position) =>
+        onJob(job, 'in-transit', 'On the way to site', {
+          // Also clocks the technician in against this job if they weren't (the API does it on their own trips).
+          method: 'POST', url: endpoints.workOrders.inTransit(job.id), body: { technicianId, ...position, inTransitAt: null, notes: null },
+        }),
       arrive: (job: Job, technicianId: string, position: Position) =>
         onJob(job, 'arrive', 'Arrived on site', {
           // No arrivedAt: the server dates it from when it was tapped (X-Occurred-At on a replay).
