@@ -5,6 +5,7 @@ using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
 using Ecosys.Shared.Contracts.Integration;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -24,7 +25,8 @@ public sealed class TenantQuotationController(
     IEmailOutboxService emailOutbox,
     IEmailTemplateService emailTemplateService,
     IEmailSubjectRuleService emailSubjectRuleService,
-    ILogger<TenantQuotationController> logger) : TenantAwareControllerBase(tenantContext)
+    ILogger<TenantQuotationController> logger,
+    IWebHostEnvironment environment) : TenantAwareControllerBase(tenantContext)
 {
     // No platform-wide currency to inherit here: the tenant's own configured currency (derived from
     // its country, same as the frontend's getActiveCurrency()) is what the create/edit forms send
@@ -284,6 +286,13 @@ public sealed class TenantQuotationController(
             ? templateConfig.QuoteTerms ?? templateConfig.DefaultTermsText
             : null;
 
+        var siteLabel = quote.SiteId is { } siteId
+            ? await dbContext.Sites
+                .Where(x => x.TenantId == TenantId && x.Id == siteId)
+                .Select(x => x.SiteName)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         var model = new QuotationPdfModel(
             QuoteNumber:    quote.QuoteNumber,
             Status:         quote.Status,
@@ -299,9 +308,9 @@ public sealed class TenantQuotationController(
             TaxAmount:      quote.TaxAmount,
             TotalAmount:    quote.TotalAmount,
             Currency:       quote.Currency,
-            CompanyName:    tenant?.CompanyName ?? "Ecosys",
-            CompanyAddress: tenant?.Address,
-            CompanyPhone:   tenant?.Phone,
+            CompanyName:    PdfTemplateHelper.CompanyName(tenant),
+            CompanyAddress: PdfTemplateHelper.CompanyAddress(tenant),
+            CompanyPhone:   PdfTemplateHelper.CompanyPhone(tenant),
             PrimaryColor:   templateConfig?.ReportPrimaryColor ?? tenant?.PrimaryColor ?? "#0F4C81",
             FontFamily:     templateConfig?.FontFamily ?? "Helvetica",
             FooterText:     PdfTemplateHelper.ResolveFooterText(templateConfig),
@@ -309,7 +318,10 @@ public sealed class TenantQuotationController(
             BankDetails:    PdfTemplateHelper.ComposeBankDetails(templateConfig),
             PaymentInstructions: templateConfig?.ShowBankDetails == true ? templateConfig.PaymentInstructions : null,
             TermsText:      termsText,
-            TemplateConfig: templateConfig
+            TemplateConfig: templateConfig,
+            Company:        PdfTemplateHelper.CompanyDetails(tenant, environment),
+            ClientContact:  PdfTemplateHelper.ClientContact(quote.Client),
+            SiteLabel:      siteLabel
         );
 
         var bytes = pdfRenderer.RenderQuotationPdf(model);

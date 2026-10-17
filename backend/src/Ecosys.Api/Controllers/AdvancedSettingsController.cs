@@ -6,6 +6,7 @@ using Ecosys.Shared.Auth;
 using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,7 +20,8 @@ public sealed class AdvancedSettingsController(
     ITenantContext tenantContext,
     IUserAccessService userAccessService,
     ILicenseGuardService licenseGuardService,
-    IPdfRenderer pdfRenderer) : TenantAwareControllerBase(tenantContext)
+    IPdfRenderer pdfRenderer,
+    IWebHostEnvironment? environment = null) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet("branding")]
     public async Task<ActionResult<BrandingSettingsResponse>> GetBranding(CancellationToken cancellationToken)
@@ -712,7 +714,8 @@ public sealed class AdvancedSettingsController(
         var config = PdfTemplateHelper.ResolveForDocument(tenant.ReportTemplateConfigJson, tenant.DocumentDesignsJson, slug)
                      ?? new ReportTemplateConfig();
 
-        var bytes = SampleDocumentBuilder.Render(slug, tenant, config, pdfRenderer);
+        var bytes = SampleDocumentBuilder.Render(slug, tenant, config, pdfRenderer,
+            PdfTemplateHelper.CompanyDetails(tenant, environment));
         return File(bytes, "application/pdf", $"sample-{slug}.pdf");
     }
 

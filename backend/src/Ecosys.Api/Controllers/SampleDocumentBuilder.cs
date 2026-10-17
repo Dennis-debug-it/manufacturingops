@@ -11,8 +11,18 @@ namespace Ecosys.Api.Controllers;
 /// </summary>
 internal static class SampleDocumentBuilder
 {
-    public static byte[] Render(string documentTypeSlug, Tenant tenant, ReportTemplateConfig config, IPdfRenderer renderer)
+    public static byte[] Render(string documentTypeSlug, Tenant tenant, ReportTemplateConfig config, IPdfRenderer renderer,
+        PdfCompanyDetails? companyDetails = null)
     {
+        // Real tenant identity (logo, PIN, VAT) where configured; sample values fill the gaps so the
+        // preview shows where each detail appears.
+        var details = (companyDetails ?? new PdfCompanyDetails()) with
+        {
+            Email = companyDetails?.Email ?? "accounts@yourcompany.co.ke",
+            TaxPin = companyDetails?.TaxPin ?? "P051234567X",
+        };
+        var clientContact = new PdfContactDetails("Jane Wanjiku, Finance", "+254 711 000 111",
+            "accounts@nairobihospital.co.ke", "Argwings Kodhek Rd, Nairobi");
         var company = string.IsNullOrWhiteSpace(tenant.CompanyName) ? "Your Company Ltd" : tenant.CompanyName;
         var address = string.Join(", ", new[] { tenant.Address, tenant.City, tenant.Country }
             .Where(x => !string.IsNullOrWhiteSpace(x)));
@@ -48,7 +58,9 @@ internal static class SampleDocumentBuilder
                 FontFamily: font, FooterText: footer, WatermarkText: watermark,
                 BankDetails: bankDetails, PaymentInstructions: config.PaymentInstructions,
                 TermsText: config.ShowTerms ? config.InvoiceTerms ?? config.DefaultTermsText : null,
-                TemplateConfig: config)),
+                TemplateConfig: config,
+                Company: details, ClientContact: clientContact,
+                CreditTermsLabel: "Net 30", WorkOrderRefs: ["WO-000078"])),
 
             "quotation" => renderer.RenderQuotationPdf(new QuotationPdfModel(
                 "QT-000045", "Sent", now, now.AddDays(30),
@@ -59,14 +71,18 @@ internal static class SampleDocumentBuilder
                 FontFamily: font, FooterText: footer, WatermarkText: watermark,
                 BankDetails: bankDetails, PaymentInstructions: config.PaymentInstructions,
                 TermsText: config.ShowTerms ? config.QuoteTerms ?? config.DefaultTermsText : null,
-                TemplateConfig: config)),
+                TemplateConfig: config,
+                Company: details, ClientContact: clientContact, SiteLabel: "Main Campus — Ward B")),
 
             "receipt" => renderer.RenderReceiptPdf(new ReceiptPdfModel(
                 "REC-000012", "INV-000123", "Nairobi Hospital", now,
                 total, currency, "MPesa", "QX12ABC34",
                 company, tenant.LogoUrl, primary,
                 FontFamily: font, FooterText: footer, WatermarkText: watermark,
-                TemplateConfig: config)),
+                TemplateConfig: config,
+                Company: details, ClientContact: clientContact,
+                CompanyAddress: address, CompanyPhone: phone,
+                InvoiceDate: now, InvoiceTotal: total, InvoiceBalanceAfter: 0m)),
 
             "statement" => renderer.RenderClientStatementPdf(new ClientStatementPdfModel(
                 "Nairobi Hospital", "accounts@nairobihospital.co.ke", address,
@@ -83,7 +99,8 @@ internal static class SampleDocumentBuilder
                 },
                 company, address, phone, tenant.LogoUrl, primary,
                 FontFamily: font, FooterText: footer, WatermarkText: watermark,
-                TemplateConfig: config)),
+                TemplateConfig: config,
+                Company: details, ClientContact: clientContact, Currency: currency)),
 
             "purchase-order" => renderer.RenderPurchaseOrderPdf(new PurchaseOrderPdfModel(
                 "PO-000078", "Approved", now, now.AddDays(14),
@@ -94,7 +111,9 @@ internal static class SampleDocumentBuilder
                 company, address, phone, tenant.LogoUrl, primary,
                 FontFamily: font, FooterText: footer, WatermarkText: watermark,
                 TermsText: config.ShowTerms ? config.DefaultTermsText : null,
-                TemplateConfig: config)),
+                TemplateConfig: config,
+                Company: details,
+                SupplierContact: new PdfContactDetails("Peter Kamau", "+254 722 000 222"))),
 
             "service-report" => renderer.RenderWorkOrderReportPdf(BuildSampleServiceReport(company, address, phone, tenant, config, now)),
 
