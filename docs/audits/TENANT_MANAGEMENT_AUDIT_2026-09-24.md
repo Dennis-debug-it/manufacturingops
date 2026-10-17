@@ -486,7 +486,7 @@ Priority: **P0** security/data-integrity · **P1** major functional · **P2** UX
 - **Files:** new `Ecosys.Infrastructure/Services/TenantLifecycleService.cs` (Activate, Suspend(reason, kind), Reactivate, Renew, Extend, ExtendTrial, Deactivate, ApplyPayment); callers: `PlatformTenantsController`, both workers, `PlatformBillingLifecycleService`, `PlatformLicensingController`; `LicenseAndSecurityServices.cs` (middleware message unification).
 - **Behaviour:** `TenantLicense.Status` + new `SuspensionReason` (Manual/NonPayment) is authoritative. `Tenant.Status/IsActive` are set only by the service. `Tenant.LicenseStatus` is derived. ExtendTrial only for trial states. Payment reactivates `TrialExpired` and NonPayment suspensions only. Remove the asset side effect on deactivation. One user-facing message per state.
 - **Tests:** P1-01…P1-05 audit tests green. Worker + service tests.
-- **Migration:** add `SuspensionReason` (nullable). Backfill: `license.Status=Suspended AND tenant.Status<>'Suspended'` ⇒ NonPayment, and reconcile `Tenant.Status/IsActive`. **Review the backfill SQL against production first** (a reconcile script precedent exists: `production_reconcile_serviceops_provisioning.sql`).
+- **Migration:** add `SuspensionReason` (nullable). Backfill: `license.Status=Suspended AND tenant.Status<>'Suspended'` ⇒ NonPayment, and reconcile `Tenant.Status/IsActive`. **Review the backfill SQL against production first** (a reconcile script precedent exists: `scripts/production_reconcile_serviceops_provisioning.sql`).
 - **Risk:** medium, since this touches every lifecycle path. Ship behind the audit tests.
 
 ### Phase 2 — User capacity and access

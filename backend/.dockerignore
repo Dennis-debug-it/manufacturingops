@@ -12,7 +12,6 @@ tests/
 *.err
 *.out
 *.pdf
-page1.pdf
 
 # EF/dev-only
 **/appsettings.Development.json

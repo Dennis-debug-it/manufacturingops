@@ -11,7 +11,6 @@ export default defineConfig([
     '.next',
     'playwright-report',
     'test-results',
-    'frontend-backup',
     'tmp',
   ]),
   {
