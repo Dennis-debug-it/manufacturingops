@@ -179,6 +179,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<CreditNoteLine> CreditNoteLines => Set<CreditNoteLine>();
     public DbSet<TenantQuotation> TenantQuotations => Set<TenantQuotation>();
     public DbSet<TenantQuotationLine> TenantQuotationLines => Set<TenantQuotationLine>();
+    public DbSet<SalesOpportunity> SalesOpportunities => Set<SalesOpportunity>();
+    public DbSet<SalesActivity> SalesActivities => Set<SalesActivity>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
 
@@ -812,6 +814,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Quote)
                 .WithMany()
                 .HasForeignKey(x => x.QuoteId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => x.SalesOpportunityId);
+            entity.HasOne(x => x.SalesOpportunity)
+                .WithMany(x => x.WorkOrders)
+                .HasForeignKey(x => x.SalesOpportunityId)
                 .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.ParentWorkOrder)
                 .WithMany(x => x.ChildWorkOrders)
@@ -3285,10 +3292,53 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Site).WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.ConvertedToInvoice).WithMany().HasForeignKey(x => x.ConvertedToInvoiceId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.ConvertedToWorkOrder).WithMany().HasForeignKey(x => x.ConvertedToWorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.SalesOpportunity).WithMany(x => x.Quotations).HasForeignKey(x => x.SalesOpportunityId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => x.SalesOpportunityId);
             entity.HasIndex(x => new { x.TenantId, x.QuoteNumber }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.Status });
         });
         ApplyTenantFilter<TenantQuotation>(modelBuilder);
+
+        // ── Sales CRM ────────────────────────────────────────────────────────
+        modelBuilder.Entity<SalesOpportunity>(entity =>
+        {
+            entity.ToTable("sales_opportunities");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Stage).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CompanyName).HasMaxLength(200);
+            entity.Property(x => x.ContactName).HasMaxLength(150);
+            entity.Property(x => x.ContactEmail).HasMaxLength(256);
+            entity.Property(x => x.ContactPhone).HasMaxLength(50);
+            entity.Property(x => x.Location).HasMaxLength(250);
+            entity.Property(x => x.Source).HasMaxLength(60);
+            entity.Property(x => x.ServiceType).HasMaxLength(50);
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.EstimatedValue).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.OwnerName).HasMaxLength(150);
+            entity.Property(x => x.LostReason).HasMaxLength(500);
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Site).WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.Stage });
+            entity.HasIndex(x => new { x.TenantId, x.ClientId });
+            entity.HasIndex(x => new { x.TenantId, x.OwnerUserId });
+        });
+        ApplyTenantFilter<SalesOpportunity>(modelBuilder);
+
+        modelBuilder.Entity<SalesActivity>(entity =>
+        {
+            entity.ToTable("sales_activities");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Type).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Summary).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.LoggedByName).HasMaxLength(150);
+            entity.HasOne(x => x.Opportunity).WithMany(x => x.Activities).HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.TenantId, x.OpportunityId, x.OccurredAt });
+            entity.HasIndex(x => new { x.TenantId, x.DueAt });
+        });
+        ApplyTenantFilter<SalesActivity>(modelBuilder);
 
         modelBuilder.Entity<TenantQuotationLine>(entity =>
         {

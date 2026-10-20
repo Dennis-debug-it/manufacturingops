@@ -451,6 +451,17 @@ export const endpoints = {
     reversePayment: (paymentId: string) => `/api/payments/${paymentId}`,
     generateFromWorkOrder: (workOrderId: string) => `/api/work-orders/${workOrderId}/generate-invoice`,
   },
+  crm: {
+    summary: '/api/crm/summary',
+    opportunities: '/api/crm/opportunities',
+    opportunity: (id: string) => `/api/crm/opportunities/${id}`,
+    stage: (id: string) => `/api/crm/opportunities/${id}/stage`,
+    activities: (id: string) => `/api/crm/opportunities/${id}/activities`,
+    completeActivity: (activityId: string) => `/api/crm/activities/${activityId}/complete`,
+    convertToClient: (id: string) => `/api/crm/opportunities/${id}/convert-to-client`,
+    convertToQuotation: (id: string) => `/api/crm/opportunities/${id}/convert-to-quotation`,
+    createWorkOrder: '/api/workorders/from-opportunity',
+  },
   quotations: {
     list: '/api/quotations',
     detail: (id: string) => `/api/quotations/${id}`,

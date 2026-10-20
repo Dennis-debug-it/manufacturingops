@@ -76,6 +76,8 @@ import { DocumentsPage } from '../features/finance/DocumentsPage'
 import { InvoiceDetailPage } from '../features/finance/InvoiceDetailPage'
 import { FinanceOverviewPage } from '../features/finance/FinanceOverviewPage'
 import { QuotesPage } from '../features/finance/QuotesPage'
+import { PipelinePage } from '../features/crm/PipelinePage'
+import { OpportunityDetailPage } from '../features/crm/OpportunityDetailPage'
 import { QuoteDetailPage } from '../features/finance/QuoteDetailPage'
 import { AgingPage as FinanceAgingPageReal } from '../features/finance/AgingPage'
 import { CreditControlPage } from '../features/finance/CreditControlPage'
@@ -291,6 +293,8 @@ export function AppRouter() {
       ['/maintenance/schedules/:id', MaintenanceScheduleDetailPage],
       ['/maintenance/compliance', MaintenanceCompliancePage],
       ['/maintenance/engine', MaintenanceEnginePage],
+      ['/crm', PipelinePage],
+      ['/crm/opportunities/:id', OpportunityDetailPage],
       ['/clients', ClientsPage],
       ['/clients/:id', ClientDetailPage],
       ['/clients/:id/sites/new', ClientWizardPage],

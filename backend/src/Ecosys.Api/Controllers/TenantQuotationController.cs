@@ -257,6 +257,7 @@ public sealed class TenantQuotationController(
             Status = "Open",
             Priority = "Medium",
             WorkType = "CorrectiveMaintenance",
+            SalesOpportunityId = quote.SalesOpportunityId,
             IsBillable = true,
         };
 

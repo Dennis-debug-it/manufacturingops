@@ -20,12 +20,14 @@ public sealed class TenantQuotation : AuditableEntity, ITenantEntity
     public Guid? ConvertedToInvoiceId { get; set; }
     public Guid? ConvertedToWorkOrderId { get; set; }
     public string? RejectionReason { get; set; }
+    public Guid? SalesOpportunityId { get; set; }
 
     public Tenant? Tenant { get; set; }
     public Client? Client { get; set; }
     public Site? Site { get; set; }
     public TenantInvoice? ConvertedToInvoice { get; set; }
     public WorkOrder? ConvertedToWorkOrder { get; set; }
+    public SalesOpportunity? SalesOpportunity { get; set; }
     public ICollection<TenantQuotationLine> Lines { get; set; } = new List<TenantQuotationLine>();
 }
 

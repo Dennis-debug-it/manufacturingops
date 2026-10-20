@@ -32,6 +32,7 @@ const rules: RouteRule[] = [
   { prefix: '/maintenance/schedules', allow: (can) => can('settings.manage') || can('work-orders.create') || can('work-orders.assign') },
   { prefix: '/maintenance', allow: (_, user) => Boolean(user.permissions.canViewWorkOrders) },
   { prefix: '/work-orders', allow: (_, user) => Boolean(user.permissions.canViewWorkOrders) },
+  { prefix: '/crm', allow: (can) => can('crm.view') },
   { prefix: '/clients', allow: (can) => can('clients.view') },
   { prefix: '/sites', allow: (can) => can('clients.view') },
   { prefix: '/assets', allow: (can) => can('clients.view') },
