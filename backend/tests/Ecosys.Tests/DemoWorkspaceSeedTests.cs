@@ -152,6 +152,34 @@ public sealed class DemoWorkspaceSeedTests
         Assert.False(await db.Tenants.AnyAsync(x => x.Id == DemoId));
     }
 
+    [Fact]
+    public async Task SalesCrm_HasAPipelineAtEveryStage_TiedIntoTheJobsAndQuotes()
+    {
+        await using var db = CreateDbContext();
+        await CreateService(db).ResetAsync(null, null, CancellationToken.None);
+
+        var deals = await db.SalesOpportunities.Where(x => x.TenantId == DemoId).ToListAsync();
+        Assert.Equal(["Lead", "Lost", "Negotiation", "Proposal", "Qualified", "Won"], deals.Select(x => x.Stage).Distinct().Order());
+        Assert.All(deals, deal => Assert.NotNull(deal.OwnerUserId));
+
+        // The won lighting deal carries the whole chain: accepted quote and closed job link back to it.
+        var lighting = deals.Single(x => x.Title == "Emergency lighting – corridor B");
+        Assert.Equal("Accepted", (await db.TenantQuotations.SingleAsync(x => x.SalesOpportunityId == lighting.Id)).Status);
+        Assert.Equal(WorkOrderStatuses.Closed, (await db.WorkOrders.SingleAsync(x => x.SalesOpportunityId == lighting.Id)).Status);
+        // …and one won deal is still waiting for its work order, so the hand-off button has something to do.
+        var wonDealIds = deals.Where(x => x.Stage == "Won").Select(x => x.Id).ToList();
+        Assert.Contains(wonDealIds, id => !db.WorkOrders.Any(w => w.SalesOpportunityId == id));
+
+        var tenders = await db.SalesTenders.Where(x => x.TenantId == DemoId).ToListAsync();
+        Assert.Equal(["NoBid", "Preparing", "Received", "Submitted"], tenders.Select(x => x.Status).Order());
+        Assert.NotNull(tenders.Single(x => x.Status == "Preparing").OpportunityId);
+        Assert.True(await db.SalesActivities.AnyAsync(x => x.TenantId == DemoId && x.DueAt < DateTime.UtcNow && x.CompletedAt == null),
+            "The demo should show an overdue follow-up.");
+
+        // The USD deal converts, because the demo carries a USD rate.
+        Assert.True(await db.ExchangeRates.AnyAsync(x => x.TenantId == DemoId && x.BaseCurrency == "USD" && x.QuoteCurrency == "KES"));
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

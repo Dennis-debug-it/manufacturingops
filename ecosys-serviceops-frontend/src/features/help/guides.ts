@@ -11,6 +11,7 @@ import {
   FileSignature,
   FileText,
   Globe,
+  Handshake,
   Inbox,
   Package,
   Rocket,
@@ -96,12 +97,12 @@ const usersAccess: Guide = {
       text: 'The role decides which screens someone sees and where they land after signing in.',
       steps: [
         'Admin — full access to everything, including settings and users.',
-        'Manager — operations, finance figures, approvals and reports.',
+        'Manager — operations, finance figures, approvals, reports and the sales pipeline.',
         'Dispatcher — work orders, the scheduling board, live map, clients and maintenance.',
         'Technician — the mobile technician app: their jobs, time & leave, guides.',
         'Materials Controller — stores and logistics: stock, issuing parts, purchase orders, suppliers, transfers and vans. Starts on Inventory.',
-        'Finance — quotes, invoices, payments, expenses and finance reports. Starts on Finance.',
-        'Viewer — read-only access to operations.',
+        'Finance — quotes, invoices, payments, expenses, finance reports and the sales pipeline. Starts on Finance.',
+        'Viewer — read-only access to operations and the sales pipeline.',
       ],
     },
     {
@@ -125,7 +126,7 @@ const usersAccess: Guide = {
     {
       title: 'Fine-tune permissions',
       steps: [
-        'Users & Access → Roles & Permissions: tick what each role can do (for example, let Materials Controllers override stock levels).',
+        'Users & Access → Roles & Permissions: tick what each role can do (for example, let Materials Controllers override stock levels, or give Dispatchers the sales pipeline under Sales CRM).',
         'On a person’s page you can adjust their own permissions, branch access and teams.',
         'Use Reset Password to send a reset link (or generate a password for people without email), and Deactivate when someone leaves.',
       ],
@@ -343,7 +344,7 @@ const workOrders: Guide = {
         'Enter the Title, Type, Priority, Due Date and a Description of the problem.',
         'Click Create Work Order. The SLA clock starts from the priority and the client’s SLA policy.',
       ],
-      tip: 'Emails to your intake address can create work orders automatically; see the Email intake guide.',
+      tip: 'Emails to your intake address can create work orders automatically; see the Email intake guide. On Suite, a won sales deal becomes a work order with one click; see the Sales pipeline guide.',
     },
     {
       title: 'Move a job along',
@@ -507,6 +508,57 @@ const finance: Guide = {
     {
       title: 'Finance reports',
       text: 'Reports has Revenue Summary, Collections, By Client, Outstanding Receivables, Payables Aging and Contract P&L.',
+    },
+  ],
+}
+
+const salesCrm: Guide = {
+  id: 'sales-crm',
+  title: 'Sales pipeline & RFPs/RFQs',
+  summary: 'Track leads and deals, log RFPs and RFQs with their deadlines, and turn what you win into quotes and work orders. Part of ServiceOps Suite.',
+  icon: Handshake,
+  path: '/crm',
+  pathLabel: 'Sales',
+  sections: [
+    {
+      title: 'Add a deal',
+      steps: [
+        'Open Sales and click New Opportunity.',
+        'Choose Existing client, or New prospect and enter the company and contact. Add the estimated value, currency, expected close date, type of work and source.',
+        'Pick the Owner (anyone who can manage the CRM) and click Create Opportunity.',
+      ],
+      tip: 'Use Mine on the pipeline to see only your own deals, or the owner filter to see a colleague’s.',
+    },
+    {
+      title: 'Work the pipeline',
+      text: 'Deals move through Lead, Qualified, Site Survey, Proposal and Negotiation. Change the stage from the dropdown on a card, or with the stage buttons on the deal. Log calls, emails, meetings and site visits under Activity; give one a Follow up on date and it shows as due on the card, and as overdue on the pipeline until you click Done.',
+    },
+    {
+      title: 'Win a deal and hand it over',
+      steps: [
+        'Click Mark Won. (Mark Lost asks for the reason, so you can see later why deals were lost.)',
+        'Click Create Work Order. Check the title, work type, priority and due date, then click Create Work Order. If the deal was a prospect, its client record is created for you.',
+        'To price it first, click Create Quote: a draft quote opens in Finance with the deal’s value, ready to edit and send.',
+      ],
+      tip: 'One deal can produce several work orders. Each job shows a From deal link back to it.',
+    },
+    {
+      title: 'RFPs and RFQs',
+      steps: [
+        'Open Sales → RFPs & RFQs and click Log RFP / RFQ. Enter their reference, who issued it, the clarification and submission deadlines, how to submit, any bid bond, and the value.',
+        'Upload the tender pack under Documents, and your submission when it goes in.',
+        'Decide: Bid — Create Opportunity puts it in the pipeline; No Bid asks for the reason.',
+        'Click Mark Submitted with the amount you bid, then Won or Lost when the award comes in. The linked deal follows: a won tender’s deal is marked won, ready for its work order.',
+      ],
+      tip: 'The list flags deadlines due within three days in amber and missed ones in red.',
+    },
+    {
+      title: 'Deals in other currencies',
+      text: 'Pipeline totals are in your workspace currency. Click Rates to enter today’s rate for each other currency (for example 1 USD = 129.40 KES); deals in a currency with no rate are left out of the totals and the page says so. Rates are shared with Finance → Exchange Rates.',
+    },
+    {
+      title: 'Who can use it',
+      text: 'An admin sets this per role under Users & Access → Roles & Permissions → Sales CRM: View lets someone see the pipeline and RFPs/RFQs; Manage lets them add and change deals and RFPs/RFQs and enter exchange rates. By default Managers and Finance can manage it and Viewers can see it.',
     },
   ],
 }
@@ -719,6 +771,7 @@ export const guides: Guide[] = [
   scheduling,
   maintenance,
   clients,
+  salesCrm,
   assets,
   inventory,
   contracts,

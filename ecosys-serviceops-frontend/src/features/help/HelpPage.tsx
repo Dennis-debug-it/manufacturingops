@@ -3,16 +3,19 @@ import { Link, useParams } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useEntitlements } from '../../shared/hooks/useEntitlements'
 import { cn } from '../../shared/utils/cn'
 import { canOpenPath } from '../../shared/utils/routeAccess'
 import type { AuthUser } from '../../shared/types/auth'
 import { guides, type Guide } from './guides'
 
 /** Guides for the areas this person can actually open; admins see everything. */
-export function visibleGuides(user: AuthUser | null | undefined): Guide[] {
+export function visibleGuides(user: AuthUser | null | undefined, onPlan: (path: string) => boolean = () => true): Guide[] {
   if (!user) return []
   return guides.filter((guide) => {
     if (guide.technicianOnly) return false
+    // A screen the workspace's plan doesn't include (e.g. Sales on Operations) gets no guide either.
+    if (guide.path && !onPlan(guide.path)) return false
     if (user.role === 'admin') return true
     if (guide.adminOnly) return false
     if (guide.roles && !guide.roles.includes(user.role)) return false
@@ -56,7 +59,8 @@ export function HelpPage() {
   const { user } = useAuth()
   const { guideId } = useParams<{ guideId: string }>()
   const [query, setQuery] = useState('')
-  const available = useMemo(() => visibleGuides(user), [user])
+  const { canAccessPath } = useEntitlements()
+  const available = useMemo(() => visibleGuides(user, canAccessPath), [user, canAccessPath])
   const filtered = query.trim() ? available.filter((guide) => matches(guide, query.trim().toLowerCase())) : available
   const selected = available.find((guide) => guide.id === guideId) ?? filtered[0] ?? available[0]
 

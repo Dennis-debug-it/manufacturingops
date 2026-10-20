@@ -26,6 +26,19 @@ describe('visibleGuides', () => {
     expect(finance).not.toContain('client-portal')
   })
 
+  it('shows the sales guide to whoever holds the CRM capability', () => {
+    expect(ids(user('dispatcher', { canViewWorkOrders: true, canViewCrm: true }))).toContain('sales-crm')
+    expect(ids(user('manager', { canViewWorkOrders: true, canViewCrm: false }))).not.toContain('sales-crm')
+  })
+
+  it("hides guides for screens the workspace's plan doesn't include", () => {
+    const operationsOnly = (path: string) => !path.startsWith('/crm') && !path.startsWith('/finance')
+    const guidesOnOperations = visibleGuides(user('admin', {}), operationsOnly).map((guide) => guide.id)
+    expect(guidesOnOperations).not.toContain('sales-crm')
+    expect(guidesOnOperations).not.toContain('finance')
+    expect(guidesOnOperations).toContain('work-orders')
+  })
+
   it('returns nothing when signed out', () => {
     expect(visibleGuides(null)).toEqual([])
   })
