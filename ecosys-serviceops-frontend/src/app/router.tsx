@@ -78,6 +78,8 @@ import { FinanceOverviewPage } from '../features/finance/FinanceOverviewPage'
 import { QuotesPage } from '../features/finance/QuotesPage'
 import { PipelinePage } from '../features/crm/PipelinePage'
 import { OpportunityDetailPage } from '../features/crm/OpportunityDetailPage'
+import { TendersPage } from '../features/crm/TendersPage'
+import { TenderDetailPage } from '../features/crm/TenderDetailPage'
 import { QuoteDetailPage } from '../features/finance/QuoteDetailPage'
 import { AgingPage as FinanceAgingPageReal } from '../features/finance/AgingPage'
 import { CreditControlPage } from '../features/finance/CreditControlPage'
@@ -295,6 +297,8 @@ export function AppRouter() {
       ['/maintenance/engine', MaintenanceEnginePage],
       ['/crm', PipelinePage],
       ['/crm/opportunities/:id', OpportunityDetailPage],
+      ['/crm/tenders', TendersPage],
+      ['/crm/tenders/:id', TenderDetailPage],
       ['/clients', ClientsPage],
       ['/clients/:id', ClientDetailPage],
       ['/clients/:id/sites/new', ClientWizardPage],

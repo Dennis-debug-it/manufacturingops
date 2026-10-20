@@ -23,10 +23,12 @@ import {
   useConvertToQuotation,
   useDeleteOpportunity,
   useOpportunity,
+  useReassignOpportunityOwner,
 } from './api'
 import { ConvertToWorkOrderDrawer } from './components/ConvertToWorkOrderDrawer'
 import { OpportunityFormDrawer } from './components/OpportunityFormDrawer'
-import { OPEN_STAGES, activityTypeOptions, opportunityParty, stageLabels, type SalesStage } from './types'
+import { OwnerSelect } from './components/OwnerSelect'
+import { OPEN_STAGES, activityTypeOptions, opportunityParty, stageLabels, tenderStatusLabels, type SalesStage } from './types'
 
 const outlineButton = 'inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60'
 const primaryButton = 'inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60'
@@ -46,6 +48,7 @@ export function OpportunityDetailPage() {
   const deleteOpportunity = useDeleteOpportunity()
   const addActivity = useAddActivity(id)
   const completeActivity = useCompleteActivity()
+  const reassignOwner = useReassignOpportunityOwner(id)
 
   const [showEdit, setShowEdit] = useState(false)
   const [showWorkOrder, setShowWorkOrder] = useState(false)
@@ -172,12 +175,32 @@ export function OpportunityDetailPage() {
             ['Site', opportunity.siteName ?? '—'],
             ['Contact', [opportunity.contactName, opportunity.contactPhone, opportunity.contactEmail].filter(Boolean).join(' · ') || '—'],
             ['Location', opportunity.location ?? '—'],
-            ['Estimated value', formatCurrency(opportunity.estimatedValue, opportunity.currency)],
+            ['Estimated value', opportunity.currency === opportunity.reportingCurrency ? formatCurrency(opportunity.estimatedValue, opportunity.currency) : (
+              <span key="v">
+                {formatCurrency(opportunity.estimatedValue, opportunity.currency)}
+                <span className={cn('block text-xs', opportunity.convertedValue === null ? 'text-amber-700' : 'text-slate-500')}>
+                  {opportunity.convertedValue === null ? `No ${opportunity.currency} rate yet — not in pipeline totals` : `≈ ${formatCurrency(opportunity.convertedValue, opportunity.reportingCurrency)}`}
+                </span>
+              </span>
+            )],
             ['Probability', `${opportunity.probability}%`],
             ['Expected close', opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : '—'],
             ['Type of work', workTypeLabel ?? '—'],
             ['Source', opportunity.source ?? '—'],
-            ['Owner', opportunity.ownerName ?? '—'],
+            ['Owner', canManage ? (
+              <OwnerSelect
+                key="o"
+                aria-label="Owner"
+                value={opportunity.ownerUserId ?? ''}
+                emptyLabel={opportunity.ownerUserId ? undefined : 'Unassigned'}
+                disabled={reassignOwner.isPending}
+                onChange={(ownerUserId) => {
+                  if (!ownerUserId) return
+                  reassignOwner.mutateAsync(ownerUserId).then((updated) => toast.success(`Reassigned to ${updated.ownerName}`)).catch(() => undefined)
+                }}
+                className="-my-1 h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-[var(--app-primary)]"
+              />
+            ) : (opportunity.ownerName ?? '—')],
             ['Created', formatDate(opportunity.createdAt)],
             ['Won', opportunity.wonAt ? formatDate(opportunity.wonAt) : '—'],
           ].map(([label, value]) => (
@@ -266,6 +289,22 @@ export function OpportunityDetailPage() {
             )}
           </SummarySection>
 
+          {opportunity.tenders.length > 0 ? (
+            <SummarySection title="RFPs & RFQs" description="The tender this deal is bidding on.">
+              <ul className="divide-y divide-slate-100">
+                {opportunity.tenders.map((tender) => (
+                  <li key={tender.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                    <Link to={`/crm/tenders/${tender.id}`} className="min-w-0">
+                      <div className="text-slate-900 underline decoration-slate-300 underline-offset-4">{tender.type} {tender.reference ?? ''}</div>
+                      <div className="truncate text-slate-500">Due {formatDate(tender.submissionDeadline)}</div>
+                    </Link>
+                    <StatusBadge status={tenderStatusLabels[tender.status]} />
+                  </li>
+                ))}
+              </ul>
+            </SummarySection>
+          ) : null}
+
           {hasModule('finance') ? (
             <SummarySection title="Quotes" description="Quotations prepared for this deal.">
               {opportunity.quotations.length === 0 ? (
@@ -319,7 +358,7 @@ export function OpportunityDetailPage() {
       <ConfirmDialog
         open={showDelete}
         title="Delete opportunity?"
-        message="This removes the deal and its activity log. Deals with quotes or work orders can't be deleted — mark them lost instead."
+        message="This removes the deal and its activity log. Deals with quotes, work orders or an RFP/RFQ can't be deleted — mark them lost instead."
         confirmLabel="Delete"
         danger
         onCancel={() => setShowDelete(false)}

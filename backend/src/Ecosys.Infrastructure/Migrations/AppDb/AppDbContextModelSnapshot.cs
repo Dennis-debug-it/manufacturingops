@@ -6910,6 +6910,126 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("sales_opportunities", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesTender", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("BidBondAmount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("BidBondRequired")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("ClarificationDeadline")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("ContactPhone")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<decimal>("EstimatedValue")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("IssuerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("OpportunityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OutcomeNotes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("OwnerName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTime>("SubmissionDeadline")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SubmissionMethod")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("SubmittedValue")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("OpportunityId");
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.HasIndex("TenantId", "SubmissionDeadline");
+
+                    b.ToTable("sales_tenders", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.ScheduledReport", b =>
                 {
                     b.Property<Guid>("Id")
@@ -13017,6 +13137,31 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesTender", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.SalesOpportunity", "Opportunity")
+                        .WithMany("Tenders")
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Opportunity");
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.ScheduledReport", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
@@ -14739,6 +14884,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Activities");
 
                     b.Navigation("Quotations");
+
+                    b.Navigation("Tenders");
 
                     b.Navigation("WorkOrders");
                 });

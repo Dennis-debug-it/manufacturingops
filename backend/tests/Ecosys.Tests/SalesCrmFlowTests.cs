@@ -90,6 +90,127 @@ public sealed class SalesCrmFlowTests
         Assert.NotNull(stored.LostAt);
     }
 
+    [Fact]
+    public async Task PipelineTotals_ConvertForeignDeals_AndFlagCurrenciesWithoutARate()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        await crm.CreateOpportunity(Deal("Local job", 100_000m, "KES"), CancellationToken.None);
+        await crm.CreateOpportunity(Deal("Donor-funded job", 1_000m, "USD"), CancellationToken.None);
+
+        var before = Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None));
+        Assert.Equal("KES", before.ReportingCurrency);
+        Assert.Equal(100_000m, before.OpenValue);
+        var missing = Assert.Single(before.UnconvertedCurrencies);
+        Assert.Equal("USD", missing.Currency);
+        Assert.Equal(1_000m, missing.Value);
+
+        var settings = Ok<SalesCurrencySettings>(await crm.SetExchangeRate(new SetSalesExchangeRateRequest("usd", 129.5m), CancellationToken.None));
+        Assert.Empty(settings.MissingCurrencies);
+        Assert.Equal(129.5m, Assert.Single(settings.Rates).RateToReporting);
+
+        var after = Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None));
+        Assert.Empty(after.UnconvertedCurrencies);
+        Assert.Equal(229_500m, after.OpenValue);
+        Assert.Equal(22_950m, after.WeightedValue); // both at Lead, 10%
+
+        // The rate lands in the same history Finance › Exchange Rates shows.
+        var stored = await dbContext.ExchangeRates.SingleAsync();
+        Assert.Equal(("USD", "KES"), (stored.BaseCurrency, stored.QuoteCurrency));
+    }
+
+    [Fact]
+    public async Task RateEnteredTheOtherWayRound_IsInverted()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        dbContext.ExchangeRates.Add(new ExchangeRate { TenantId = tenant.Id, BaseCurrency = "KES", QuoteCurrency = "EUR", Rate = 0.008m, EffectiveFrom = DateTime.UtcNow.AddDays(-1) });
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        await crm.CreateOpportunity(Deal("EU-funded job", 800m, "EUR"), CancellationToken.None);
+
+        var summary = Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None));
+        Assert.Equal(100_000m, summary.OpenValue);
+    }
+
+    [Fact]
+    public async Task Owner_CanBeReassigned_ButOnlyToAnActiveCrmUser()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var manager = new User { TenantId = tenant.Id, FullName = "Grace Manager", Email = "grace@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+        var technician = new User { TenantId = tenant.Id, FullName = "Tom Tech", Email = "tom@acme.test", PasswordHash = "hash", Role = AppRoles.Technician, IsActive = true };
+        dbContext.Users.AddRange(manager, technician);
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        var created = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+            (await crm.CreateOpportunity(Deal("Chiller service", 50_000m, "KES"), CancellationToken.None)).Result).Value);
+
+        var owners = Ok<IReadOnlyCollection<SalesOwnerOption>>(await crm.ListOwners(CancellationToken.None));
+        Assert.Contains(owners, x => x.Id == manager.Id);
+        Assert.DoesNotContain(owners, x => x.Id == technician.Id);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.ReassignOwner(created.Id, new ReassignSalesOwnerRequest(technician.Id), CancellationToken.None));
+
+        var reassigned = Ok<SalesOpportunityDetailResponse>(await crm.ReassignOwner(created.Id, new ReassignSalesOwnerRequest(manager.Id), CancellationToken.None));
+        Assert.Equal(manager.Id, reassigned.OwnerUserId);
+        Assert.Equal("Grace Manager", reassigned.OwnerName);
+        Assert.Contains(reassigned.Activities, x => x.Summary == "Owner changed from Sales Admin to Grace Manager.");
+    }
+
+    [Fact]
+    public async Task Tender_BidThenWon_WinsItsOpportunity()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var tenders = CreateTendersController(dbContext, tenant.Id, actor);
+
+        var created = Assert.IsType<SalesTenderDetailResponse>(Assert.IsType<CreatedAtActionResult>((await tenders.Create(
+            new UpsertSalesTenderRequest("rfq", "KPLC/RFQ/2026/114", "Substation HVAC maintenance", null, "Kenya Power",
+                "Procurement Desk", "tenders@kplc.test", null, null, DateTime.UtcNow.AddDays(3), DateTime.UtcNow.AddDays(10),
+                "Supplier portal", true, 50_000m, "Two substations, 12 months.", 2_400_000m, "KES", null),
+            CancellationToken.None)).Result).Value);
+        Assert.Equal("RFQ", created.Type);
+        Assert.Equal(SalesTenderStatuses.Received, created.Status);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() =>
+            tenders.ChangeStatus(created.Id, new ChangeSalesTenderStatusRequest(SalesTenderStatuses.NoBid, null, null), CancellationToken.None));
+
+        var bid = Ok<SalesTenderDetailResponse>(await tenders.CreateOpportunity(created.Id, CancellationToken.None));
+        Assert.NotNull(bid.OpportunityId);
+        Assert.Equal(SalesTenderStatuses.Preparing, bid.Status);
+
+        await tenders.ChangeStatus(created.Id, new ChangeSalesTenderStatusRequest(SalesTenderStatuses.Submitted, null, 2_250_000m), CancellationToken.None);
+        var won = Ok<SalesTenderDetailResponse>(await tenders.ChangeStatus(created.Id, new ChangeSalesTenderStatusRequest(SalesTenderStatuses.Won, "Award letter received", null), CancellationToken.None));
+        Assert.Equal(SalesStages.Won, won.OpportunityStage);
+
+        var opportunity = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == bid.OpportunityId);
+        Assert.Equal(2_250_000m, opportunity.EstimatedValue);
+        Assert.Equal("Kenya Power", opportunity.CompanyName);
+        Assert.Equal("Tender", opportunity.Source);
+
+        var summary = Ok<SalesPipelineSummary>(await CreateCrmController(dbContext, tenant.Id, actor).GetSummary(CancellationToken.None));
+        Assert.Equal(0, summary.OpenTenders);
+    }
+
+    private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
+        new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
+
+    private static T Ok<T>(ActionResult<T> result) =>
+        Assert.IsType<T>(Assert.IsType<OkObjectResult>(result.Result).Value, exactMatch: false);
+
+    private static SalesTendersController CreateTendersController(AppDbContext dbContext, Guid tenantId, User actor) =>
+        new(
+            dbContext,
+            new FakeTenantContext(tenantId, actor.Id, actor.Email),
+            new AuditLogService(dbContext, new HttpContextAccessor()),
+            new NoOpUserAccessService(),
+            new NoOpLicenseGuardService())
+        {
+            ControllerContext = CreateControllerContext(actor)
+        };
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

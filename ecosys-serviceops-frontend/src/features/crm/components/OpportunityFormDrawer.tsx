@@ -5,7 +5,9 @@ import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { getActiveCurrency } from '../../../shared/utils/currency'
 import { useClients, useSites } from '../../clients/api'
 import { workTypeOptions } from '../../work-orders/schemas'
+import { useAuth } from '../../../shared/hooks/useAuth'
 import { useCreateOpportunity, useUpdateOpportunity } from '../api'
+import { OwnerSelect } from './OwnerSelect'
 import { sourceOptions, type SalesOpportunityDetail } from '../types'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
@@ -27,9 +29,10 @@ interface FormState {
   estimatedValue: string
   currency: string
   expectedCloseDate: string
+  ownerUserId: string
 }
 
-function toForm(opportunity?: SalesOpportunityDetail | null): FormState {
+function toForm(opportunity: SalesOpportunityDetail | null | undefined, currentUserId: string): FormState {
   return {
     title: opportunity?.title ?? '',
     partyMode: opportunity?.clientId ? 'client' : 'prospect',
@@ -46,6 +49,7 @@ function toForm(opportunity?: SalesOpportunityDetail | null): FormState {
     estimatedValue: opportunity ? String(opportunity.estimatedValue) : '',
     currency: opportunity?.currency ?? getActiveCurrency(),
     expectedCloseDate: opportunity?.expectedCloseDate ? opportunity.expectedCloseDate.slice(0, 10) : '',
+    ownerUserId: opportunity ? (opportunity.ownerUserId ?? '') : currentUserId,
   }
 }
 
@@ -54,7 +58,9 @@ const orNull = (value: string) => (value.trim() ? value.trim() : null)
 export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: boolean; onClose: () => void; opportunity?: SalesOpportunityDetail | null }) {
   const navigate = useNavigate()
   const isEdit = Boolean(opportunity)
-  const [form, setForm] = useState<FormState>(() => toForm(opportunity))
+  const { user } = useAuth()
+  const currentUserId = user?.userId ?? ''
+  const [form, setForm] = useState<FormState>(() => toForm(opportunity, currentUserId))
   const { data: clients } = useClients()
   const { data: sites } = useSites(form.partyMode === 'client' && form.clientId ? form.clientId : undefined)
   const create = useCreateOpportunity()
@@ -62,8 +68,8 @@ export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: bo
   const saving = create.isPending || update.isPending
 
   useEffect(() => {
-    if (open) setForm(toForm(opportunity))
-  }, [open, opportunity])
+    if (open) setForm(toForm(opportunity, currentUserId))
+  }, [open, opportunity, currentUserId])
 
   const set = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }))
 
@@ -96,7 +102,7 @@ export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: bo
       currency: form.currency.trim().toUpperCase() || getActiveCurrency(),
       probability: null,
       expectedCloseDate: form.expectedCloseDate ? new Date(form.expectedCloseDate).toISOString() : null,
-      ownerUserId: opportunity?.ownerUserId ?? null,
+      ownerUserId: form.ownerUserId || null,
     }
     try {
       if (isEdit) {
@@ -214,7 +220,7 @@ export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: bo
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <label className={labelClass} htmlFor="opp-service">Type of work</label>
             <select id="opp-service" value={form.serviceType} onChange={(event) => set({ serviceType: event.target.value })} className={fieldClass}>
@@ -223,6 +229,10 @@ export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: bo
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="opp-owner">Owner</label>
+            <OwnerSelect id="opp-owner" value={form.ownerUserId} onChange={(ownerUserId) => set({ ownerUserId })} className={fieldClass} emptyLabel="Unassigned" />
           </div>
           <div>
             <label className={labelClass} htmlFor="opp-source">Source</label>

@@ -47,6 +47,7 @@ public sealed class SalesOpportunity : AuditableEntity, ITenantEntity
     public ICollection<SalesActivity> Activities { get; set; } = new List<SalesActivity>();
     public ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
     public ICollection<TenantQuotation> Quotations { get; set; } = new List<TenantQuotation>();
+    public ICollection<SalesTender> Tenders { get; set; } = new List<SalesTender>();
 }
 
 /// <summary>A call, email, meeting, site visit, note or follow-up logged against an opportunity.</summary>
@@ -63,5 +64,53 @@ public sealed class SalesActivity : AuditableEntity, ITenantEntity
     public Guid? LoggedByUserId { get; set; }
     public string? LoggedByName { get; set; }
 
+    public SalesOpportunity? Opportunity { get; set; }
+}
+
+/// <summary>
+/// A request for proposal (RFP) or request for quotation (RFQ) the tenant has received from a client
+/// or prospect. Tracked from receipt through the bid / no-bid decision and submission to the
+/// award. A tender the tenant bids on usually gets an opportunity, so the award flows into the
+/// same won-deal → work order hand-off; the outcome is mirrored onto that opportunity.
+/// </summary>
+public sealed class SalesTender : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public string Type { get; set; } = "RFQ"; // RFP|RFQ
+    /// <summary>The issuer's own reference, e.g. "KPLC/RFQ/2026/114".</summary>
+    public string? Reference { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string Status { get; set; } = "Received"; // Received|Reviewing|Preparing|Submitted|Won|Lost|NoBid|Cancelled
+
+    public Guid? ClientId { get; set; }
+    public string? IssuerName { get; set; }
+    public string? ContactName { get; set; }
+    public string? ContactEmail { get; set; }
+    public string? ContactPhone { get; set; }
+
+    public DateTime ReceivedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ClarificationDeadline { get; set; }
+    public DateTime SubmissionDeadline { get; set; }
+    /// <summary>How the bid is lodged: email, portal, hand delivery…</summary>
+    public string? SubmissionMethod { get; set; }
+    public bool BidBondRequired { get; set; }
+    public decimal? BidBondAmount { get; set; }
+
+    public string? Description { get; set; }
+    public decimal EstimatedValue { get; set; }
+    public string Currency { get; set; } = "KES";
+    /// <summary>The amount actually bid, captured when the tender is marked submitted.</summary>
+    public decimal? SubmittedValue { get; set; }
+    public DateTime? SubmittedAt { get; set; }
+    public DateTime? DecidedAt { get; set; }
+    /// <summary>Why it was a no-bid, lost or cancelled; or award notes when won.</summary>
+    public string? OutcomeNotes { get; set; }
+
+    public Guid? OwnerUserId { get; set; }
+    public string? OwnerName { get; set; }
+    public Guid? OpportunityId { get; set; }
+
+    public Tenant? Tenant { get; set; }
+    public Client? Client { get; set; }
     public SalesOpportunity? Opportunity { get; set; }
 }

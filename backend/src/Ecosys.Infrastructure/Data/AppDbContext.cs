@@ -181,6 +181,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<TenantQuotationLine> TenantQuotationLines => Set<TenantQuotationLine>();
     public DbSet<SalesOpportunity> SalesOpportunities => Set<SalesOpportunity>();
     public DbSet<SalesActivity> SalesActivities => Set<SalesActivity>();
+    public DbSet<SalesTender> SalesTenders => Set<SalesTender>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
 
@@ -3339,6 +3340,35 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.DueAt });
         });
         ApplyTenantFilter<SalesActivity>(modelBuilder);
+
+        modelBuilder.Entity<SalesTender>(entity =>
+        {
+            entity.ToTable("sales_tenders");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Type).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.Reference).HasMaxLength(120);
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.IssuerName).HasMaxLength(200);
+            entity.Property(x => x.ContactName).HasMaxLength(150);
+            entity.Property(x => x.ContactEmail).HasMaxLength(256);
+            entity.Property(x => x.ContactPhone).HasMaxLength(50);
+            entity.Property(x => x.SubmissionMethod).HasMaxLength(120);
+            entity.Property(x => x.BidBondAmount).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.EstimatedValue).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.SubmittedValue).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.OutcomeNotes).HasMaxLength(1000);
+            entity.Property(x => x.OwnerName).HasMaxLength(150);
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Opportunity).WithMany(x => x.Tenders).HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasIndex(x => new { x.TenantId, x.SubmissionDeadline });
+            entity.HasIndex(x => x.OpportunityId);
+        });
+        ApplyTenantFilter<SalesTender>(modelBuilder);
 
         modelBuilder.Entity<TenantQuotationLine>(entity =>
         {

@@ -67,6 +67,7 @@ public sealed class SalesCrmController(
                 (x.Client != null && x.Client.ClientName.ToLower().Contains(s)));
         }
 
+        var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
         var rows = await query
             .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
             .Select(x => new
@@ -81,7 +82,7 @@ public sealed class SalesCrmController(
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(rows.Select(x => MapListItem(x.Opportunity, x.WorkOrderCount, x.NextFollowUpAt)).ToList());
+        return Ok(rows.Select(x => MapListItem(x.Opportunity, x.WorkOrderCount, x.NextFollowUpAt, converter)).ToList());
     }
 
     [HttpGet("summary")]
@@ -92,12 +93,15 @@ public sealed class SalesCrmController(
         var now = DateTime.UtcNow;
         var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var winRateWindowStart = now.AddDays(-90);
+        var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
 
-        var opportunities = await dbContext.SalesOpportunities
+        var opportunities = (await dbContext.SalesOpportunities
             .AsNoTracking()
             .Where(x => x.TenantId == TenantId)
-            .Select(x => new { x.Stage, x.EstimatedValue, x.Probability, x.WonAt, x.LostAt })
-            .ToListAsync(cancellationToken);
+            .Select(x => new { x.Stage, x.EstimatedValue, x.Currency, x.Probability, x.WonAt, x.LostAt })
+            .ToListAsync(cancellationToken))
+            .Select(x => new { x.Stage, x.EstimatedValue, x.Currency, x.Probability, x.WonAt, x.LostAt, Value = converter.Convert(x.EstimatedValue, x.Currency) })
+            .ToList();
 
         var open = opportunities.Where(x => !SalesStages.IsClosed(x.Stage)).ToList();
         var wonRecently = opportunities.Count(x => x.Stage == SalesStages.Won && x.WonAt >= winRateWindowStart);
@@ -108,23 +112,122 @@ public sealed class SalesCrmController(
             .AsNoTracking()
             .CountAsync(x => x.TenantId == TenantId && x.DueAt != null && x.CompletedAt == null && x.DueAt < now, cancellationToken);
 
+        var weekAhead = now.AddDays(7);
+        var openTenders = await dbContext.SalesTenders
+            .AsNoTracking()
+            .Where(x => x.TenantId == TenantId && SalesTenderStatuses.OpenStatuses.Contains(x.Status))
+            .Select(x => x.SubmissionDeadline)
+            .ToListAsync(cancellationToken);
+
         var stages = SalesStages.All
             .Select(stage =>
             {
                 var inStage = opportunities.Where(x => x.Stage == stage).ToList();
-                return new SalesStageSummary(stage, inStage.Count, inStage.Sum(x => x.EstimatedValue));
+                return new SalesStageSummary(stage, inStage.Count, inStage.Sum(x => x.Value ?? 0));
             })
             .ToList();
 
+        // Deals in a currency with no rate are left out of every total above and listed here, so the
+        // page can say "excludes 2 USD deals — add a rate" instead of silently under-reporting.
+        var unconverted = opportunities
+            .Where(x => x.Value is null && !SalesStages.IsClosed(x.Stage))
+            .GroupBy(x => SalesCurrencyConverter.Normalize(x.Currency))
+            .Select(g => new SalesUnconvertedCurrency(g.Key, g.Count(), g.Sum(x => x.EstimatedValue)))
+            .OrderBy(x => x.Currency)
+            .ToList();
+
         return Ok(new SalesPipelineSummary(
+            ReportingCurrency: converter.ReportingCurrency,
             OpenCount: open.Count,
-            OpenValue: open.Sum(x => x.EstimatedValue),
-            WeightedValue: Math.Round(open.Sum(x => x.EstimatedValue * x.Probability / 100m), 2),
+            OpenValue: open.Sum(x => x.Value ?? 0),
+            WeightedValue: Math.Round(open.Sum(x => (x.Value ?? 0) * x.Probability / 100m), 2),
             WonThisMonthCount: wonThisMonth.Count,
-            WonThisMonthValue: wonThisMonth.Sum(x => x.EstimatedValue),
+            WonThisMonthValue: wonThisMonth.Sum(x => x.Value ?? 0),
             WinRate: wonRecently + lostRecently == 0 ? null : Math.Round(wonRecently * 100m / (wonRecently + lostRecently), 1),
             OverdueFollowUps: overdueFollowUps,
-            Stages: stages));
+            OpenTenders: openTenders.Count,
+            TendersDueThisWeek: openTenders.Count(x => x >= now && x <= weekAhead),
+            Stages: stages,
+            UnconvertedCurrencies: unconverted));
+    }
+
+    // ── Owners & currency ────────────────────────────────────────────────────
+
+    /// <summary>The people a deal or tender can be assigned to.</summary>
+    [HttpGet("owners")]
+    public async Task<ActionResult<IReadOnlyCollection<SalesOwnerOption>>> ListOwners(CancellationToken cancellationToken)
+    {
+        EnsureCanView();
+        var users = await dbContext.Users
+            .AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.IsActive)
+            .Select(x => new { x.Id, x.FullName, x.Role })
+            .ToListAsync(cancellationToken);
+
+        return Ok(users
+            .Where(x => SalesCrmAccess.IsOwnerRole(x.Role))
+            .OrderBy(x => x.FullName)
+            .Select(x => new SalesOwnerOption(x.Id, x.FullName, x.Role))
+            .ToList());
+    }
+
+    /// <summary>
+    /// The reporting currency, the rate in use for every other currency, and the currencies open
+    /// deals or tenders use that still have no rate.
+    /// </summary>
+    [HttpGet("currency")]
+    public async Task<ActionResult<SalesCurrencySettings>> GetCurrencySettings(CancellationToken cancellationToken)
+    {
+        EnsureCanView();
+        var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
+        var used = (await dbContext.SalesOpportunities.AsNoTracking()
+                .Where(x => x.TenantId == TenantId && x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost)
+                .Select(x => x.Currency).Distinct().ToListAsync(cancellationToken))
+            .Concat(await dbContext.SalesTenders.AsNoTracking()
+                .Where(x => x.TenantId == TenantId && SalesTenderStatuses.OpenStatuses.Contains(x.Status))
+                .Select(x => x.Currency).Distinct().ToListAsync(cancellationToken))
+            .Select(SalesCurrencyConverter.Normalize)
+            .Distinct();
+
+        return Ok(new SalesCurrencySettings(
+            converter.ReportingCurrency,
+            converter.Rates,
+            used.Where(x => !converter.CanConvert(x)).OrderBy(x => x).ToList()));
+    }
+
+    /// <summary>
+    /// Records today's rate for a currency: 1 <c>Currency</c> = <c>Rate</c> reporting-currency units.
+    /// Stored in the tenant's exchange-rate history (Finance › Exchange Rates shows the same rows);
+    /// earlier rates are kept, the newest one is used from now on.
+    /// </summary>
+    [HttpPost("exchange-rates")]
+    public async Task<ActionResult<SalesCurrencySettings>> SetExchangeRate([FromBody] SetSalesExchangeRateRequest request, CancellationToken cancellationToken)
+    {
+        await EnsureCanManageAsync(cancellationToken);
+        var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
+        var currency = SalesCurrencyConverter.Normalize(request.Currency);
+        if (currency.Length != 3 || !currency.All(char.IsAsciiLetterUpper))
+            throw new BusinessRuleException("Use a 3-letter currency code, e.g. USD.");
+        if (currency == converter.ReportingCurrency)
+            throw new BusinessRuleException($"{currency} is already the reporting currency.");
+        if (request.Rate <= 0)
+            throw new BusinessRuleException("Rate must be greater than zero.");
+
+        var rate = new ExchangeRate
+        {
+            TenantId = TenantId,
+            BaseCurrency = currency,
+            QuoteCurrency = converter.ReportingCurrency,
+            Rate = request.Rate,
+            EffectiveFrom = DateTime.UtcNow,
+            UpdatedByUserId = UserId,
+            UpdatedByName = await ResolveUserNameAsync(UserId, cancellationToken) ?? "Unknown",
+        };
+        dbContext.ExchangeRates.Add(rate);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "finance.exchange_rate.set", nameof(ExchangeRate), rate.Id.ToString(), $"Set {currency}/{converter.ReportingCurrency} = {request.Rate} from the sales pipeline", cancellationToken);
+
+        return await GetCurrencySettings(cancellationToken);
     }
 
     [HttpGet("opportunities/{id:guid}")]
@@ -166,8 +269,12 @@ public sealed class SalesCrmController(
     {
         await EnsureCanManageAsync(cancellationToken);
         var opportunity = await LoadAsync(id, cancellationToken);
+        var previousOwnerId = opportunity.OwnerUserId;
+        var previousOwnerName = opportunity.OwnerName ?? "nobody";
 
         await ApplyAsync(opportunity, request, cancellationToken);
+        if (opportunity.OwnerUserId != previousOwnerId)
+            await AddSystemActivityAsync(opportunity, $"Owner changed from {previousOwnerName} to {opportunity.OwnerName}.", cancellationToken);
         if (request.Probability.HasValue)
             opportunity.Probability = request.Probability.Value;
 
@@ -206,6 +313,25 @@ public sealed class SalesCrmController(
         return Ok(await LoadDetailAsync(id, cancellationToken));
     }
 
+    [HttpPost("opportunities/{id:guid}/owner")]
+    public async Task<ActionResult<SalesOpportunityDetailResponse>> ReassignOwner(
+        Guid id, [FromBody] ReassignSalesOwnerRequest request, CancellationToken cancellationToken)
+    {
+        await EnsureCanManageAsync(cancellationToken);
+        var opportunity = await LoadAsync(id, cancellationToken);
+        if (opportunity.OwnerUserId == request.OwnerUserId)
+            return Ok(await LoadDetailAsync(id, cancellationToken));
+
+        var previous = opportunity.OwnerName ?? "nobody";
+        opportunity.OwnerUserId = request.OwnerUserId;
+        opportunity.OwnerName = await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, TenantId, request.OwnerUserId, cancellationToken);
+        var note = $"Owner changed from {previous} to {opportunity.OwnerName}.";
+        await AddSystemActivityAsync(opportunity, note, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "crm.opportunity.owner_changed", nameof(SalesOpportunity), opportunity.Id.ToString(), note, cancellationToken);
+        return Ok(await LoadDetailAsync(id, cancellationToken));
+    }
+
     [HttpDelete("opportunities/{id:guid}")]
     public async Task<IActionResult> DeleteOpportunity(Guid id, CancellationToken cancellationToken)
     {
@@ -213,9 +339,10 @@ public sealed class SalesCrmController(
         var opportunity = await LoadAsync(id, cancellationToken);
 
         var hasLinkedWork = await dbContext.WorkOrders.AnyAsync(x => x.TenantId == TenantId && x.SalesOpportunityId == id, cancellationToken)
-            || await dbContext.TenantQuotations.AnyAsync(x => x.TenantId == TenantId && x.SalesOpportunityId == id, cancellationToken);
+            || await dbContext.TenantQuotations.AnyAsync(x => x.TenantId == TenantId && x.SalesOpportunityId == id, cancellationToken)
+            || await dbContext.SalesTenders.AnyAsync(x => x.TenantId == TenantId && x.OpportunityId == id, cancellationToken);
         if (hasLinkedWork)
-            throw new BusinessRuleException("This opportunity has quotations or work orders linked to it. Mark it lost instead of deleting it.");
+            throw new BusinessRuleException("This opportunity has quotations, work orders or an RFP/RFQ linked to it. Mark it lost instead of deleting it.");
 
         dbContext.SalesOpportunities.Remove(opportunity);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -374,30 +501,21 @@ public sealed class SalesCrmController(
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// CRM has no dedicated permission column yet, so it follows the office roles that sell and
-    /// quote: Admin, Manager and Finance manage the pipeline; Viewer can read it.
-    /// </summary>
+    /// <summary>See <see cref="SalesCrmAccess"/> for who may read and manage the pipeline.</summary>
     private void EnsureCanView()
     {
         userAccessService.EnsureTenantOperationalAccess();
-        if (CanManageRole() || tenantContext.HasRole(AppRoles.Viewer))
-            return;
-        throw new ForbiddenException("You do not have access to the sales pipeline.");
+        if (!SalesCrmAccess.CanView(tenantContext))
+            throw new ForbiddenException("You do not have access to the sales pipeline.");
     }
 
     private async Task EnsureCanManageAsync(CancellationToken cancellationToken)
     {
         userAccessService.EnsureTenantOperationalAccess();
-        if (!CanManageRole())
+        if (!SalesCrmAccess.CanManage(tenantContext))
             throw new ForbiddenException("You do not have permission to manage the sales pipeline.");
         await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
     }
-
-    private bool CanManageRole() =>
-        tenantContext.IsAdmin
-        || tenantContext.HasRole(AppRoles.Manager)
-        || tenantContext.HasRole(AppRoles.FinanceUser);
 
     private async Task<SalesOpportunity> LoadAsync(Guid id, CancellationToken cancellationToken) =>
         await dbContext.SalesOpportunities
@@ -427,12 +545,14 @@ public sealed class SalesCrmController(
             var siteBelongs = await dbContext.Sites.AnyAsync(x => x.TenantId == TenantId && x.Id == request.SiteId.Value && x.ClientId == request.ClientId.Value, cancellationToken);
             if (!siteBelongs) throw new BusinessRuleException("The selected site does not belong to the selected client.");
         }
-        if (request.OwnerUserId.HasValue)
+        if (request.OwnerUserId.HasValue && request.OwnerUserId != opportunity.OwnerUserId)
         {
+            opportunity.OwnerName = await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, TenantId, request.OwnerUserId.Value, cancellationToken);
             opportunity.OwnerUserId = request.OwnerUserId.Value;
-            opportunity.OwnerName = await ResolveUserNameAsync(request.OwnerUserId.Value, cancellationToken)
-                ?? throw new NotFoundException("Owner not found.");
         }
+        var currency = SalesCurrencyConverter.Normalize(request.Currency);
+        if (currency.Length != 0 && (currency.Length != 3 || !currency.All(char.IsAsciiLetterUpper)))
+            throw new BusinessRuleException("Use a 3-letter currency code, e.g. KES or USD.");
 
         opportunity.Title = request.Title.Trim();
         opportunity.ClientId = request.ClientId;
@@ -446,7 +566,7 @@ public sealed class SalesCrmController(
         opportunity.ServiceType = string.IsNullOrWhiteSpace(request.ServiceType) ? null : WorkOrderTypes.Normalize(request.ServiceType);
         opportunity.Description = request.Description?.Trim();
         opportunity.EstimatedValue = request.EstimatedValue;
-        opportunity.Currency = string.IsNullOrWhiteSpace(request.Currency) ? FallbackCurrency : request.Currency.Trim().ToUpper();
+        opportunity.Currency = currency.Length == 0 ? FallbackCurrency : currency;
         opportunity.ExpectedCloseDate = request.ExpectedCloseDate.HasValue
             ? DateTime.SpecifyKind(request.ExpectedCloseDate.Value, DateTimeKind.Utc)
             : null;
@@ -497,6 +617,15 @@ public sealed class SalesCrmController(
             .Select(x => new SalesLinkedQuotation(x.Id, x.QuoteNumber, x.Status, x.TotalAmount, x.Currency, x.CreatedAt))
             .ToListAsync(cancellationToken);
 
+        var tenders = await dbContext.SalesTenders
+            .AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.OpportunityId == id)
+            .OrderByDescending(x => x.SubmissionDeadline)
+            .Select(x => new SalesLinkedTender(x.Id, x.Type, x.Reference, x.Title, x.Status, x.SubmissionDeadline))
+            .ToListAsync(cancellationToken);
+
+        var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
+
         return new SalesOpportunityDetailResponse(
             opportunity.Id, opportunity.Title, opportunity.Stage,
             opportunity.ClientId, opportunity.Client?.ClientName,
@@ -508,13 +637,17 @@ public sealed class SalesCrmController(
             opportunity.WonAt, opportunity.LostAt, opportunity.CreatedAt, opportunity.UpdatedAt,
             opportunity.Activities.OrderByDescending(x => x.OccurredAt).Select(MapActivity).ToList(),
             workOrders,
-            quotations);
+            quotations,
+            tenders,
+            converter.Convert(opportunity.EstimatedValue, opportunity.Currency),
+            converter.ReportingCurrency);
     }
 
-    private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt) =>
+    private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt, SalesCurrencyConverter converter) =>
         new(x.Id, x.Title, x.Stage, x.ClientId, x.Client?.ClientName, x.CompanyName, x.ContactName,
             x.EstimatedValue, x.Currency, x.Probability, x.ExpectedCloseDate, x.OwnerUserId, x.OwnerName,
-            x.ServiceType, workOrderCount, nextFollowUpAt, x.LastActivityAt, x.CreatedAt);
+            x.ServiceType, workOrderCount, nextFollowUpAt, x.LastActivityAt, x.CreatedAt,
+            converter.Convert(x.EstimatedValue, x.Currency));
 
     private static SalesActivityResponse MapActivity(SalesActivity x) =>
         new(x.Id, x.OpportunityId, x.Type, x.Summary, x.OccurredAt, x.DueAt, x.CompletedAt, x.LoggedByName);
@@ -598,7 +731,8 @@ public sealed record SalesOpportunityListItem(
     string? CompanyName, string? ContactName,
     decimal EstimatedValue, string Currency, int Probability, DateTime? ExpectedCloseDate,
     Guid? OwnerUserId, string? OwnerName, string? ServiceType,
-    int WorkOrderCount, DateTime? NextFollowUpAt, DateTime? LastActivityAt, DateTime CreatedAt);
+    int WorkOrderCount, DateTime? NextFollowUpAt, DateTime? LastActivityAt, DateTime CreatedAt,
+    decimal? ConvertedValue);
 
 public sealed record SalesOpportunityDetailResponse(
     Guid Id, string Title, string Stage,
@@ -610,7 +744,10 @@ public sealed record SalesOpportunityDetailResponse(
     DateTime? WonAt, DateTime? LostAt, DateTime CreatedAt, DateTime? UpdatedAt,
     IReadOnlyCollection<SalesActivityResponse> Activities,
     IReadOnlyCollection<SalesLinkedWorkOrder> WorkOrders,
-    IReadOnlyCollection<SalesLinkedQuotation> Quotations);
+    IReadOnlyCollection<SalesLinkedQuotation> Quotations,
+    IReadOnlyCollection<SalesLinkedTender> Tenders,
+    decimal? ConvertedValue,
+    string ReportingCurrency);
 
 public sealed record SalesActivityResponse(
     Guid Id, Guid OpportunityId, string Type, string Summary,
@@ -620,10 +757,31 @@ public sealed record SalesLinkedWorkOrder(Guid Id, string WorkOrderNumber, strin
 
 public sealed record SalesLinkedQuotation(Guid Id, string QuoteNumber, string Status, decimal TotalAmount, string Currency, DateTime CreatedAt);
 
+public sealed record SalesLinkedTender(Guid Id, string Type, string? Reference, string Title, string Status, DateTime SubmissionDeadline);
+
+/// <summary>Stage totals are in <see cref="SalesPipelineSummary.ReportingCurrency"/>.</summary>
 public sealed record SalesStageSummary(string Stage, int Count, decimal Value);
 
+/// <summary>Open deals in a currency with no exchange rate, left out of the converted totals.</summary>
+public sealed record SalesUnconvertedCurrency(string Currency, int Count, decimal Value);
+
+/// <summary>All values are converted to <see cref="ReportingCurrency"/>.</summary>
 public sealed record SalesPipelineSummary(
+    string ReportingCurrency,
     int OpenCount, decimal OpenValue, decimal WeightedValue,
     int WonThisMonthCount, decimal WonThisMonthValue,
     decimal? WinRate, int OverdueFollowUps,
-    IReadOnlyCollection<SalesStageSummary> Stages);
+    int OpenTenders, int TendersDueThisWeek,
+    IReadOnlyCollection<SalesStageSummary> Stages,
+    IReadOnlyCollection<SalesUnconvertedCurrency> UnconvertedCurrencies);
+
+public sealed record SalesOwnerOption(Guid Id, string FullName, string Role);
+
+public sealed record ReassignSalesOwnerRequest(Guid OwnerUserId);
+
+public sealed record SalesCurrencySettings(
+    string ReportingCurrency,
+    IReadOnlyCollection<SalesCurrencyRate> Rates,
+    IReadOnlyCollection<string> MissingCurrencies);
+
+public sealed record SetSalesExchangeRateRequest([StringLength(10)] string Currency, decimal Rate);
