@@ -1,11 +1,14 @@
 export type ServiceOpsModule = 'operations' | 'finance'
 
 const operationsPaths = ['/dashboard', '/work-orders', '/dispatch', '/maintenance', '/inventory', '/assets', '/sites', '/systems', '/contracts', '/reports', '/whatsapp', '/team/technicians', '/team/skills', '/team/groups', '/team/time-attendance', '/settings/pm-templates', '/settings/asset-categories', '/settings/inventory', '/settings/time-attendance', '/settings/email-intake', '/settings/monitoring-intake', '/settings/monitoring', '/settings/notification-templates', '/settings/whatsapp', '/settings/workflows', '/settings/escalation-rules', '/settings/wo-templates', '/settings/sla-policies', '/settings/executive-dashboard']
+/** Suite-only: the sales CRM joins an RFQ's quote (Finance) to its job (Operations), so it needs both. */
+const suitePaths = ['/crm']
 const financePaths = ['/finance', '/approvals', '/settings/payments', '/settings/credit-control', '/settings/approval-matrices', '/settings/approval-matrix']
 
 export function requiredModulesForPath(path: string): ServiceOpsModule[] {
   const matches = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`)
   if (matches('/finance/billable-work')) return ['operations', 'finance']
+  if (suitePaths.some(matches)) return ['operations', 'finance']
   if (operationsPaths.some(matches)) return ['operations']
   if (financePaths.some(matches)) return ['finance']
   return []

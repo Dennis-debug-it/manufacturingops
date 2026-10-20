@@ -32,6 +32,7 @@ for (const code of ['operations', 'finance', 'suite'] as const) {
     await expect(nav.getByRole('link', { name: 'Users & Access' })).toBeVisible()
     await expect(nav.getByRole('link', { name: 'Work Orders', exact: true })).toHaveCount(code === 'finance' ? 0 : 1)
     await expect(nav.getByRole('link', { name: 'Finance', exact: true })).toHaveCount(code === 'operations' ? 0 : 1)
+    await expect(nav.getByRole('link', { name: 'Sales', exact: true })).toHaveCount(code === 'suite' ? 1 : 0)
     await expect(page.getByRole('link', { name: /Payments M-Pesa/ })).toHaveCount(code === 'operations' ? 0 : 1)
     await expect(page.getByRole('link', { name: /PM Templates Preventive/ })).toHaveCount(code === 'finance' ? 0 : 1)
     const blocked = code === 'operations' ? '/finance' : code === 'finance' ? '/work-orders' : null
@@ -48,4 +49,7 @@ test('cross-module workflow paths require both modules and shared settings stay 
   expect(canAccessModulePath('/finance/billable-work', ['operations', 'finance'])).toBe(true)
   expect(canAccessModulePath('/settings/numbering', ['operations'])).toBe(true)
   expect(canAccessModulePath('/clients', ['finance'])).toBe(true)
+  expect(canAccessModulePath('/crm/tenders', ['operations'])).toBe(false)
+  expect(canAccessModulePath('/crm', ['finance'])).toBe(false)
+  expect(canAccessModulePath('/crm', ['operations', 'finance'])).toBe(true)
 })

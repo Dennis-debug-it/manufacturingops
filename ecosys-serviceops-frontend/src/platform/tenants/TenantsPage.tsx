@@ -291,7 +291,12 @@ export function TenantsPage() {
               {(['operations', 'finance', 'suite'] as const).map((code) => (
                 <label key={code} className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm ${createForm.planCode === code ? 'border-slate-900 bg-slate-50 font-semibold text-slate-900' : 'border-slate-200 text-slate-600'}`}>
                   <input type="radio" name="plan" value={code} checked={createForm.planCode === code} onChange={() => setCreateForm((current) => ({ ...current, planCode: code }))} />
-                  ServiceOps {code === 'suite' ? 'Suite' : code === 'finance' ? 'Finance' : 'Operations'}
+                  <span>
+                    ServiceOps {code === 'suite' ? 'Suite' : code === 'finance' ? 'Finance' : 'Operations'}
+                    <span className="block text-xs font-normal text-slate-500">
+                      {code === 'suite' ? 'Operations + Finance + Sales CRM' : code === 'finance' ? 'Quotes, invoices, payments' : 'Jobs, maintenance, inventory'}
+                    </span>
+                  </span>
                 </label>
               ))}
             </div>

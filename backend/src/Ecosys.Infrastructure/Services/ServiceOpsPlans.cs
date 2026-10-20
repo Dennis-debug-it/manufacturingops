@@ -56,8 +56,18 @@ public static class ServiceOpsPlans
     {
         "AccessControl", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "ClientPortalContacts",
         "Clients", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "PortalAuth", "PortalKnowledge",
-        "PublicWorkOrder", "PushSubscriptions", "RolePermissions", "SalesCrm", "SalesTenders", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
+        "PublicWorkOrder", "PushSubscriptions", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users"
+    };
+
+    /// <summary>
+    /// Suite-only features: the sales CRM (pipeline, RFPs/RFQs). Its point is the whole chain from an
+    /// RFQ to a quote (Finance) to the job (Operations) to the invoice, so it needs both modules, which
+    /// is what Suite is. A custom plan that includes both modules gets it too.
+    /// </summary>
+    public static readonly IReadOnlySet<string> SuiteControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "SalesCrm", "SalesTenders"
     };
 
     /// <summary>Controllers whose module requirement is decided per route inside <see cref="RequiredModules"/>.</summary>
@@ -70,6 +80,7 @@ public static class ServiceOpsPlans
         OperationsControllers.Contains(controller)
         || FinanceControllers.Contains(controller)
         || SharedControllers.Contains(controller)
+        || SuiteControllers.Contains(controller)
         || RouteClassifiedControllers.Contains(controller);
 
     public static IReadOnlyList<string> RequiredModules(string? controller, string path)
@@ -81,6 +92,8 @@ public static class ServiceOpsPlans
             if (!route.StartsWith("/api/portal/profile")) return [Operations];
         }
         if (controller == "WorkOrderBilling" || route.Contains("/generate-invoice") || route.Contains("/convert-to-work-order") || route.EndsWith("/from-quote"))
+            return [Operations, Finance];
+        if ((controller is not null && SuiteControllers.Contains(controller)) || route.EndsWith("/from-opportunity"))
             return [Operations, Finance];
         if (controller is not null && OperationsControllers.Contains(controller)) return [Operations];
         if (controller is not null && FinanceControllers.Contains(controller)) return [Finance];

@@ -46,6 +46,16 @@ public sealed class ServiceOpsPlanTests
     [InlineData("finance", "Clients", "/api/clients", true)]
     [InlineData("finance", "Settings", "/api/settings/email-intake", false)]
     [InlineData("operations", "Integrations", "/api/settings/payments", false)]
+    // The sales CRM is a Suite feature: neither single-module plan reaches it.
+    [InlineData("operations", "SalesCrm", "/api/crm/opportunities", false)]
+    [InlineData("finance", "SalesCrm", "/api/crm/opportunities", false)]
+    [InlineData("suite", "SalesCrm", "/api/crm/opportunities", true)]
+    [InlineData("operations", "SalesTenders", "/api/crm/tenders", false)]
+    [InlineData("finance", "SalesTenders", "/api/crm/tenders", false)]
+    [InlineData("suite", "SalesTenders", "/api/crm/tenders", true)]
+    [InlineData("Professional", "SalesCrm", "/api/crm/summary", true)]
+    [InlineData("operations", "WorkOrders", "/api/workorders/from-opportunity", false)]
+    [InlineData("suite", "WorkOrders", "/api/workorders/from-opportunity", true)]
     public async Task ActualLicenseMiddleware_EnforcesPlanForMatchedApiIncludingAliases(string planCode, string controller, string path, bool allowed)
     {
         var tenantId = Guid.NewGuid();
