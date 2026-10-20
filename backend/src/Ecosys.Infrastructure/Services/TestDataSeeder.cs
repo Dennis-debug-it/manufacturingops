@@ -177,7 +177,9 @@ internal sealed class TestDataSeeder(
             CanManageFinanceApprovals = true,
             CanViewBillableWork       = true,
             CanManageBillableWork     = true,
-            CanOverrideMaterialStock  = true,
+            CanOverrideMaterialStock = true,
+            CanViewCrm = true,
+            CanManageCrm = true,
             CreatedAt                 = now,
         };
         dbContext.Users.Add(manager);

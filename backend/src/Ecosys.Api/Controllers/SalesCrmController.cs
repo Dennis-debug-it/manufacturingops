@@ -25,7 +25,8 @@ public sealed class SalesCrmController(
     IDocumentNumberingService documentNumberingService,
     IAuditLogService auditLogService,
     IUserAccessService userAccessService,
-    ILicenseGuardService licenseGuardService) : TenantAwareControllerBase(tenantContext)
+    ILicenseGuardService licenseGuardService,
+    IRolePermissionService rolePermissionService) : TenantAwareControllerBase(tenantContext)
 {
     private const string FallbackCurrency = "KES";
 
@@ -158,17 +159,7 @@ public sealed class SalesCrmController(
     public async Task<ActionResult<IReadOnlyCollection<SalesOwnerOption>>> ListOwners(CancellationToken cancellationToken)
     {
         EnsureCanView();
-        var users = await dbContext.Users
-            .AsNoTracking()
-            .Where(x => x.TenantId == TenantId && x.IsActive)
-            .Select(x => new { x.Id, x.FullName, x.Role })
-            .ToListAsync(cancellationToken);
-
-        return Ok(users
-            .Where(x => SalesCrmAccess.IsOwnerRole(x.Role))
-            .OrderBy(x => x.FullName)
-            .Select(x => new SalesOwnerOption(x.Id, x.FullName, x.Role))
-            .ToList());
+        return Ok(await SalesCrmAccess.ListEligibleOwnersAsync(dbContext, rolePermissionService, TenantId, cancellationToken));
     }
 
     /// <summary>
@@ -324,7 +315,7 @@ public sealed class SalesCrmController(
 
         var previous = opportunity.OwnerName ?? "nobody";
         opportunity.OwnerUserId = request.OwnerUserId;
-        opportunity.OwnerName = await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, TenantId, request.OwnerUserId, cancellationToken);
+        opportunity.OwnerName = await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, rolePermissionService, TenantId, request.OwnerUserId, cancellationToken);
         var note = $"Owner changed from {previous} to {opportunity.OwnerName}.";
         await AddSystemActivityAsync(opportunity, note, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -547,7 +538,7 @@ public sealed class SalesCrmController(
         }
         if (request.OwnerUserId.HasValue && request.OwnerUserId != opportunity.OwnerUserId)
         {
-            opportunity.OwnerName = await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, TenantId, request.OwnerUserId.Value, cancellationToken);
+            opportunity.OwnerName = await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, rolePermissionService, TenantId, request.OwnerUserId.Value, cancellationToken);
             opportunity.OwnerUserId = request.OwnerUserId.Value;
         }
         var currency = SalesCurrencyConverter.Normalize(request.Currency);

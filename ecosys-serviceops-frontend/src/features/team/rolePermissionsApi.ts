@@ -27,6 +27,8 @@ export interface RoleCapabilities {
   canViewBillableWork: boolean
   canManageBillableWork: boolean
   canOverrideMaterialStock: boolean
+  canViewCrm: boolean
+  canManageCrm: boolean
 }
 
 export type CapabilityKey = keyof RoleCapabilities
@@ -56,9 +58,11 @@ export const EMPTY_CAPABILITIES: RoleCapabilities = {
   canViewBillableWork: false,
   canManageBillableWork: false,
   canOverrideMaterialStock: false,
+  canViewCrm: false,
+  canManageCrm: false,
 }
 
-/** All 23 capabilities set to true — used to show Admin's implicit full access. */
+/** Every capability set to true — used to show Admin's implicit full access. */
 export const FULL_CAPABILITIES: RoleCapabilities = (Object.keys(EMPTY_CAPABILITIES) as CapabilityKey[]).reduce(
   (acc, key) => {
     acc[key] = true
@@ -140,6 +144,13 @@ export const capabilityGroups: Array<{ group: string; items: Array<{ key: Capabi
       { key: 'canManageFinanceApprovals', label: 'Manage invoice approvals' },
       { key: 'canViewBillableWork', label: 'View billable work' },
       { key: 'canManageBillableWork', label: 'Manage billable work' },
+    ],
+  },
+  {
+    group: 'Sales CRM',
+    items: [
+      { key: 'canViewCrm', label: 'View sales pipeline & RFPs/RFQs' },
+      { key: 'canManageCrm', label: 'Manage deals, RFPs/RFQs & exchange rates' },
     ],
   },
   {

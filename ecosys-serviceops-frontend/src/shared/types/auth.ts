@@ -26,6 +26,8 @@ export interface PermissionSet {
   canViewBillableWork: boolean
   canManageBillableWork: boolean
   canOverrideMaterialStock: boolean
+  canViewCrm: boolean
+  canManageCrm: boolean
   canViewPlatformTenants: boolean
   canCreatePlatformTenants: boolean
   canEditPlatformTenants: boolean

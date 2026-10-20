@@ -1752,6 +1752,8 @@ public sealed class PlatformTenantsController(
             CanViewBillableWork = permissions.CanViewBillableWork,
             CanManageBillableWork = permissions.CanManageBillableWork,
             CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
+            CanViewCrm = permissions.CanViewCrm,
+            CanManageCrm = permissions.CanManageCrm,
         };
 
     private static UserPermission ToEntity(UserPermissionsModel permissions) =>
@@ -1775,6 +1777,8 @@ public sealed class PlatformTenantsController(
             CanViewBillableWork = permissions.CanViewBillableWork,
             CanManageBillableWork = permissions.CanManageBillableWork,
             CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
+            CanViewCrm = permissions.CanViewCrm,
+            CanManageCrm = permissions.CanManageCrm,
         };
 
     private static string GenerateTemporaryPassword()

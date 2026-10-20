@@ -6673,6 +6673,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("CanManageBillableWork")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("CanManageCrm")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("CanManageFinance")
                         .HasColumnType("boolean");
 
@@ -6698,6 +6701,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanViewBillableWork")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewCrm")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanViewFinance")
@@ -9232,6 +9238,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("CanManageBillableWork")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("CanManageCrm")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("CanManageFinance")
                         .HasColumnType("boolean");
 
@@ -9257,6 +9266,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanViewBillableWork")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewCrm")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanViewFinance")

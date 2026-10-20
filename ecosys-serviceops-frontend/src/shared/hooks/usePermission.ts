@@ -42,8 +42,6 @@ const rolePermissions: Record<AppRole, string[]> = {
     'maintenance.trigger',
     'whatsapp.view',
     'dispatch.view',
-    'crm.view',
-    'crm.manage',
   ],
   dispatcher: [
     'dashboard.view',
@@ -84,8 +82,6 @@ const rolePermissions: Record<AppRole, string[]> = {
     'finance.view',
     'reports.view',
     'contracts.view',
-    'crm.view',
-    'crm.manage',
   ],
   viewer: [
     'dashboard.view',
@@ -99,7 +95,6 @@ const rolePermissions: Record<AppRole, string[]> = {
     'maintenance.view',
     'contracts.view',
     'whatsapp.view',
-    'crm.view',
   ],
   super_admin: ['*'],
   platform_sales: [
@@ -151,6 +146,8 @@ const permissionSetLookup: Partial<Record<string, keyof PermissionSet>> = {
   'inventory.transfers.manage': 'canManageMaterials',
   'inventory.materials.manage': 'canManageMaterials',
   'pm-templates.manage': 'canManageSettings',
+  'crm.view': 'canViewCrm',
+  'crm.manage': 'canManageCrm',
 }
 
 /**

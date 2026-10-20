@@ -24,7 +24,8 @@ public sealed class SalesTendersController(
     ITenantContext tenantContext,
     IAuditLogService auditLogService,
     IUserAccessService userAccessService,
-    ILicenseGuardService licenseGuardService) : TenantAwareControllerBase(tenantContext)
+    ILicenseGuardService licenseGuardService,
+    IRolePermissionService rolePermissionService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<SalesTenderListItem>>> List(
@@ -154,7 +155,7 @@ public sealed class SalesTendersController(
         if (tender.OwnerUserId != request.OwnerUserId)
         {
             var previous = tender.OwnerName ?? "nobody";
-            tender.OwnerName = await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, TenantId, request.OwnerUserId, cancellationToken);
+            tender.OwnerName = await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, rolePermissionService, TenantId, request.OwnerUserId, cancellationToken);
             tender.OwnerUserId = request.OwnerUserId;
             await dbContext.SaveChangesAsync(cancellationToken);
             await auditLogService.LogAsync(TenantId, UserId, "crm.tender.owner_changed", nameof(SalesTender), tender.Id.ToString(), $"Owner changed from {previous} to {tender.OwnerName}.", cancellationToken);
@@ -320,7 +321,7 @@ public sealed class SalesTendersController(
             throw new NotFoundException("Client not found.");
         if (request.OwnerUserId.HasValue && request.OwnerUserId != tender.OwnerUserId)
         {
-            tender.OwnerName = await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, TenantId, request.OwnerUserId.Value, cancellationToken);
+            tender.OwnerName = await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, rolePermissionService, TenantId, request.OwnerUserId.Value, cancellationToken);
             tender.OwnerUserId = request.OwnerUserId.Value;
         }
 

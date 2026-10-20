@@ -89,6 +89,27 @@ public sealed class RoleLoginTests
         Assert.True(login.User.Permissions.CanViewWorkOrders, $"Role '{role}' resolved to no work-order access at all.");
     }
 
+    [Theory]
+    [InlineData(AppRoles.Manager, true, true)]
+    [InlineData(AppRoles.FinanceUser, true, true)]
+    [InlineData(AppRoles.Viewer, true, false)]
+    [InlineData(AppRoles.Dispatcher, false, false)]
+    [InlineData(AppRoles.Technician, false, false)]
+    public async Task CrmCapabilities_ReachTheLoginAndTheToken(string role, bool canView, bool canManage)
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedAsync(dbContext, role);
+
+        var login = await LoginAsync(dbContext, fixture);
+
+        Assert.Equal(canView, login.User.Permissions.CanViewCrm);
+        Assert.Equal(canManage, login.User.Permissions.CanManageCrm);
+        // The API checks the claim, not the login body, so the token has to carry it too.
+        var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(login.Token);
+        Assert.Equal(canView.ToString(), token.Claims.Single(x => x.Type == PermissionNames.CrmView).Value);
+        Assert.Equal(canManage.ToString(), token.Claims.Single(x => x.Type == PermissionNames.CrmManage).Value);
+    }
+
     [Fact]
     public async Task MaterialsController_RunsTheStores_ButNotDispatchOrFinance()
     {
@@ -332,7 +353,9 @@ public sealed class RoleLoginTests
                 CanViewKnowledge = false,
                 CanManageFinance = true,
                 CanManageFinanceRates = true,
-                CanOverrideMaterialStock = true
+                CanOverrideMaterialStock = true,
+                CanViewCrm = true,
+                CanManageCrm = true
             }
         };
         user.PasswordHash = new PasswordHasher<User>().HashPassword(user, Password);

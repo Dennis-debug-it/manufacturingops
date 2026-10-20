@@ -37,6 +37,8 @@ public sealed class RolePermission : AuditableEntity, ITenantEntity
     public bool CanViewBillableWork { get; set; }
     public bool CanManageBillableWork { get; set; }
     public bool CanOverrideMaterialStock { get; set; }
+    public bool CanViewCrm { get; set; }
+    public bool CanManageCrm { get; set; }
 
     public Tenant? Tenant { get; set; }
 }

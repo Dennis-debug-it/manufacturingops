@@ -33,6 +33,8 @@ public sealed record UserPermissionsModel
     public bool CanViewBillableWork { get; init; }
     public bool CanManageBillableWork { get; init; }
     public bool CanOverrideMaterialStock { get; init; }
+    public bool CanViewCrm { get; init; }
+    public bool CanManageCrm { get; init; }
 }
 
 public interface IUserPermissionTemplateService
@@ -168,7 +170,9 @@ internal sealed class UserPermissionTemplateService : IUserPermissionTemplateSer
             CanManageFinanceApprovals = true,
             CanViewBillableWork = true,
             CanManageBillableWork = true,
-            CanOverrideMaterialStock = true
+            CanOverrideMaterialStock = true,
+            CanViewCrm = true,
+            CanManageCrm = true
         };
 
     public UserPermissionsModel GetSuperAdminPermissions() => new();

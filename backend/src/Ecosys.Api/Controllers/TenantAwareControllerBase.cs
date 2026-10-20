@@ -59,6 +59,7 @@ public abstract class TenantAwareControllerBase(ITenantContext tenantContext) : 
             PermissionNames.FinanceViewBillableWork,
             PermissionNames.FinanceManageBillableWork,
             PermissionNames.MaterialsOverrideStock,
+            PermissionNames.CrmManage,
         };
 
         if (managementPermissions.Any(p => tenantContext.HasPermission(p)))

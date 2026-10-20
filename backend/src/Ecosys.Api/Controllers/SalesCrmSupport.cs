@@ -1,4 +1,5 @@
 using Ecosys.Infrastructure.Data;
+using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
 using Microsoft.EntityFrameworkCore;
@@ -6,37 +7,82 @@ using Microsoft.EntityFrameworkCore;
 namespace Ecosys.Api.Controllers;
 
 /// <summary>
-/// Who may use the sales CRM. There is no dedicated permission column yet, so it follows the office
-/// roles that sell and quote: Admin, Manager and Finance manage the pipeline; Viewer can read it.
-/// The same roles are the ones a deal or tender can be owned by.
+/// Who may use the sales CRM: the <see cref="PermissionNames.CrmView"/> and
+/// <see cref="PermissionNames.CrmManage"/> capabilities, granted per role in the role matrix (and
+/// adjustable per user or permission group like any other capability). Admin holds both.
 /// </summary>
 internal static class SalesCrmAccess
 {
-    public static readonly string[] ManagerRoles = [AppRoles.Admin, AppRoles.Manager, AppRoles.FinanceUser];
-
     public static bool CanManage(ITenantContext tenantContext) =>
-        tenantContext.IsAdmin || ManagerRoles.Any(tenantContext.HasRole);
+        tenantContext.IsAdmin || tenantContext.HasPermission(PermissionNames.CrmManage);
 
     public static bool CanView(ITenantContext tenantContext) =>
-        CanManage(tenantContext) || tenantContext.HasRole(AppRoles.Viewer);
+        CanManage(tenantContext) || tenantContext.HasPermission(PermissionNames.CrmView);
 
-    public static bool IsOwnerRole(string role) =>
-        ManagerRoles.Any(x => string.Equals(x, role, StringComparison.OrdinalIgnoreCase));
-
-    /// <summary>Resolves an owner for a deal or tender: an active user of this tenant in a CRM role.</summary>
-    public static async Task<string> ResolveOwnerNameAsync(AppDbContext dbContext, Guid tenantId, Guid ownerUserId, CancellationToken cancellationToken)
+    /// <summary>
+    /// The active users who can manage the pipeline, and so can own a deal or RFP/RFQ. Resolved in
+    /// a handful of set queries with the same layering as <c>DynamicAccessService</c>: the role
+    /// matrix is the baseline, a permission group adds to it, and a per-user override has the last
+    /// word either way.
+    /// </summary>
+    public static async Task<IReadOnlyList<SalesOwnerOption>> ListEligibleOwnersAsync(
+        AppDbContext dbContext, IRolePermissionService rolePermissionService, Guid tenantId, CancellationToken cancellationToken)
     {
-        var owner = await dbContext.Users
+        var capability = PermissionNames.CrmManage.ToLower();
+        var users = await dbContext.Users
             .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.Id == ownerUserId)
-            .Select(x => new { x.FullName, x.Role, x.IsActive })
-            .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException("Owner not found.");
+            .Where(x => x.TenantId == tenantId && x.IsActive)
+            .Select(x => new { x.Id, x.FullName, x.Role })
+            .ToListAsync(cancellationToken);
 
-        if (!owner.IsActive || !IsOwnerRole(owner.Role))
-            throw new BusinessRuleException("The owner must be an active Admin, Manager or Finance user.");
+        var matrix = await rolePermissionService.GetMatrixAsync(tenantId, cancellationToken);
+        var viewerRow = matrix.FirstOrDefault(x => string.Equals(x.Role, AppRoles.Viewer, StringComparison.OrdinalIgnoreCase));
+        bool RoleGrants(string role)
+        {
+            if (string.Equals(role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase)) return true;
+            // Unknown and legacy roles resolve as Viewer, exactly as RolePermissionService does.
+            var row = matrix.FirstOrDefault(x => string.Equals(x.Role, role, StringComparison.OrdinalIgnoreCase)) ?? viewerRow;
+            return row?.Permissions.CanManageCrm == true;
+        }
 
-        return owner.FullName;
+        var grantingGroups = await dbContext.GroupCapabilities
+            .AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.Capability.ToLower() == capability)
+            .Select(x => x.PermissionGroupId)
+            .ToListAsync(cancellationToken);
+        var groupMembers = (await dbContext.UserPermissionGroups
+                .AsNoTracking()
+                .Where(x => x.TenantId == tenantId && grantingGroups.Contains(x.PermissionGroupId))
+                .Select(x => x.UserId)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+        var overrides = (await dbContext.UserPermissionOverrides
+                .AsNoTracking()
+                .Where(x => x.TenantId == tenantId && x.Capability.ToLower() == capability)
+                .Select(x => new { x.UserId, x.IsAllowed })
+                .ToListAsync(cancellationToken))
+            .GroupBy(x => x.UserId)
+            .ToDictionary(g => g.Key, g => g.First().IsAllowed);
+
+        return users
+            .Where(user => overrides.TryGetValue(user.Id, out var allowed)
+                ? allowed
+                : RoleGrants(user.Role) || groupMembers.Contains(user.Id))
+            .OrderBy(x => x.FullName)
+            .Select(x => new SalesOwnerOption(x.Id, x.FullName, x.Role))
+            .ToList();
+    }
+
+    /// <summary>Resolves an owner for a deal or tender: an active user of this tenant who can manage the pipeline.</summary>
+    public static async Task<string> ResolveOwnerNameAsync(
+        AppDbContext dbContext, IRolePermissionService rolePermissionService, Guid tenantId, Guid ownerUserId, CancellationToken cancellationToken)
+    {
+        if (!await dbContext.Users.AnyAsync(x => x.TenantId == tenantId && x.Id == ownerUserId, cancellationToken))
+            throw new NotFoundException("Owner not found.");
+
+        var eligible = await ListEligibleOwnersAsync(dbContext, rolePermissionService, tenantId, cancellationToken);
+        return eligible.FirstOrDefault(x => x.Id == ownerUserId)?.FullName
+            ?? throw new BusinessRuleException("The owner must be an active user who can manage the sales pipeline.");
     }
 }
 

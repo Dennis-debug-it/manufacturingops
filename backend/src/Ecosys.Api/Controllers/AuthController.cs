@@ -328,6 +328,8 @@ public sealed class AuthController(
             CanViewBillableWork = permissions.CanViewBillableWork,
             CanManageBillableWork = permissions.CanManageBillableWork,
             CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
+            CanViewCrm = permissions.CanViewCrm,
+            CanManageCrm = permissions.CanManageCrm,
             CanViewPlatformTenants = isPlatformOwner,
             CanCreatePlatformTenants = isPlatformOwner,
             CanEditPlatformTenants = isPlatformOwner,
@@ -428,6 +430,8 @@ public sealed record PermissionResponse
     public bool CanViewBillableWork { get; init; }
     public bool CanManageBillableWork { get; init; }
     public bool CanOverrideMaterialStock { get; init; }
+    public bool CanViewCrm { get; init; }
+    public bool CanManageCrm { get; init; }
     public bool CanViewPlatformTenants { get; init; }
     public bool CanCreatePlatformTenants { get; init; }
     public bool CanEditPlatformTenants { get; init; }

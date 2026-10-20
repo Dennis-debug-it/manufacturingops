@@ -194,19 +194,85 @@ public sealed class SalesCrmFlowTests
         Assert.Equal(0, summary.OpenTenders);
     }
 
+    [Fact]
+    public async Task Access_FollowsTheCrmCapability_NotTheRole()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+
+        // A manager whose role has had CRM switched off in the matrix is refused…
+        var managerWithoutCrm = CreateCrmController(dbContext, tenant.Id, actor, new ScopedTenantContext(tenant.Id, actor.Id, AppRoles.Manager));
+        await Assert.ThrowsAsync<ForbiddenException>(() => managerWithoutCrm.GetSummary(CancellationToken.None));
+
+        // …a read-only grant can look but not change anything…
+        var reader = CreateCrmController(dbContext, tenant.Id, actor, new ScopedTenantContext(tenant.Id, actor.Id, AppRoles.Viewer, PermissionNames.CrmView));
+        Ok<SalesPipelineSummary>(await reader.GetSummary(CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => reader.CreateOpportunity(Deal("Not allowed", 1m, "KES"), CancellationToken.None));
+        var readerTenders = CreateTendersController(dbContext, tenant.Id, actor, new ScopedTenantContext(tenant.Id, actor.Id, AppRoles.Viewer, PermissionNames.CrmView));
+        await Assert.ThrowsAsync<ForbiddenException>(() => readerTenders.Delete(Guid.NewGuid(), CancellationToken.None));
+
+        // …and a dispatcher granted CRM manage works the pipeline like anyone else.
+        var dispatcher = CreateCrmController(dbContext, tenant.Id, actor, new ScopedTenantContext(tenant.Id, actor.Id, AppRoles.Dispatcher, PermissionNames.CrmManage));
+        Assert.IsType<CreatedAtActionResult>((await dispatcher.CreateOpportunity(Deal("Dispatcher-sourced lead", 10_000m, "KES"), CancellationToken.None)).Result);
+    }
+
+    [Fact]
+    public async Task Owners_AreWhoeverCanManageTheCrm_ByRoleGroupOrOverride()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        User NewUser(string name, string role) => new() { TenantId = tenant.Id, FullName = name, Email = $"{Guid.NewGuid():N}@acme.test", PasswordHash = "hash", Role = role, IsActive = true };
+        var manager = NewUser("Manager by role", AppRoles.Manager);
+        var deniedManager = NewUser("Manager overridden off", AppRoles.Manager);
+        var groupDispatcher = NewUser("Dispatcher via group", AppRoles.Dispatcher);
+        var overrideTech = NewUser("Technician via override", AppRoles.Technician);
+        var plainDispatcher = NewUser("Plain dispatcher", AppRoles.Dispatcher);
+        var viewer = NewUser("Read-only viewer", AppRoles.Viewer);
+        var group = new PermissionGroup { TenantId = tenant.Id, Name = "Sales desk" };
+        dbContext.AddRange(manager, deniedManager, groupDispatcher, overrideTech, plainDispatcher, viewer, group);
+        dbContext.GroupCapabilities.Add(new GroupCapability { TenantId = tenant.Id, PermissionGroupId = group.Id, Capability = PermissionNames.CrmManage });
+        dbContext.UserPermissionGroups.Add(new UserPermissionGroup { TenantId = tenant.Id, PermissionGroupId = group.Id, UserId = groupDispatcher.Id });
+        dbContext.UserPermissionOverrides.AddRange(
+            new UserPermissionOverride { TenantId = tenant.Id, UserId = overrideTech.Id, Capability = PermissionNames.CrmManage, IsAllowed = true },
+            new UserPermissionOverride { TenantId = tenant.Id, UserId = deniedManager.Id, Capability = PermissionNames.CrmManage, IsAllowed = false });
+        await dbContext.SaveChangesAsync();
+
+        var owners = Ok<IReadOnlyCollection<SalesOwnerOption>>(await CreateCrmController(dbContext, tenant.Id, actor).ListOwners(CancellationToken.None))
+            .Select(x => x.FullName).ToList();
+
+        Assert.Equal(["Dispatcher via group", "Manager by role", "Sales Admin", "Technician via override"], owners);
+    }
+
+    [Fact]
+    public async Task RoleDefaults_GiveCrmToTheRolesThatHadIt()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, _) = await SeedAsync(dbContext);
+        var matrix = (await new RolePermissionService(dbContext).GetMatrixAsync(tenant.Id))
+            .ToDictionary(x => x.Role, x => (x.Permissions.CanViewCrm, x.Permissions.CanManageCrm), StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal((true, true), matrix[AppRoles.Manager]);
+        Assert.Equal((true, true), matrix[AppRoles.FinanceUser]);
+        Assert.Equal((true, false), matrix[AppRoles.Viewer]);
+        Assert.Equal((false, false), matrix[AppRoles.Dispatcher]);
+        Assert.Equal((false, false), matrix[AppRoles.Technician]);
+        Assert.Equal((false, false), matrix[AppRoles.MaterialsController]);
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 
     private static T Ok<T>(ActionResult<T> result) =>
         Assert.IsType<T>(Assert.IsType<OkObjectResult>(result.Result).Value, exactMatch: false);
 
-    private static SalesTendersController CreateTendersController(AppDbContext dbContext, Guid tenantId, User actor) =>
+    private static SalesTendersController CreateTendersController(AppDbContext dbContext, Guid tenantId, User actor, ITenantContext? tenantContext = null) =>
         new(
             dbContext,
-            new FakeTenantContext(tenantId, actor.Id, actor.Email),
+            tenantContext ?? new FakeTenantContext(tenantId, actor.Id, actor.Email),
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpUserAccessService(),
-            new NoOpLicenseGuardService())
+            new NoOpLicenseGuardService(),
+            new RolePermissionService(dbContext))
         {
             ControllerContext = CreateControllerContext(actor)
         };
@@ -262,14 +328,15 @@ public sealed class SalesCrmFlowTests
         }
     };
 
-    private static SalesCrmController CreateCrmController(AppDbContext dbContext, Guid tenantId, User actor) =>
+    private static SalesCrmController CreateCrmController(AppDbContext dbContext, Guid tenantId, User actor, ITenantContext? tenantContext = null) =>
         new(
             dbContext,
-            new FakeTenantContext(tenantId, actor.Id, actor.Email),
+            tenantContext ?? new FakeTenantContext(tenantId, actor.Id, actor.Email),
             new NoOpDocumentNumberingService(),
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpUserAccessService(),
-            new NoOpLicenseGuardService())
+            new NoOpLicenseGuardService(),
+            new RolePermissionService(dbContext))
         {
             ControllerContext = CreateControllerContext(actor)
         };
@@ -291,6 +358,25 @@ public sealed class SalesCrmFlowTests
         {
             ControllerContext = CreateControllerContext(actor)
         };
+
+    /// <summary>A non-admin caller holding exactly the given capabilities, as the login claims would carry them.</summary>
+    private sealed class ScopedTenantContext(Guid tenantId, Guid userId, string role, params string[] permissions) : ITenantContext
+    {
+        public Guid? TenantId => tenantId;
+        public Guid? UserId => userId;
+        public Guid? SessionId => Guid.NewGuid();
+        public string? Email => "staff@acme.test";
+        public string? Role => role;
+        public string? JobTitle => role;
+        public bool IsAuthenticated => true;
+        public bool IsSuperAdmin => false;
+        public bool IsAdmin => false;
+        public bool HasRole(string candidate) => string.Equals(candidate, role, StringComparison.OrdinalIgnoreCase);
+        public bool HasPermission(string permissionName) => permissions.Contains(permissionName, StringComparer.OrdinalIgnoreCase);
+        public Guid GetRequiredTenantId() => tenantId;
+        public Guid GetRequiredUserId() => userId;
+        public Guid GetRequiredSessionId() => SessionId!.Value;
+    }
 
     private sealed class FakeTenantContext(Guid tenantId, Guid userId, string email) : ITenantContext
     {
