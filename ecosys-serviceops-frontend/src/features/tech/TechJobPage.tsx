@@ -17,6 +17,7 @@ import { TechOverview } from './TechOverview'
 import { TechParts } from './TechParts'
 import { TechPreviousVisit } from './TechPreviousVisit'
 import { TechPhotos } from './TechPhotos'
+import { currentPosition } from './location'
 
 type Section = 'overview' | 'photos' | 'parts' | 'complete'
 const HOLD_TYPES = [
@@ -24,24 +25,6 @@ const HOLD_TYPES = [
   { value: 'WaitingOnClient', label: 'Waiting on client' },
   { value: 'OnHold', label: 'Other' },
 ] as const
-
-/**
- * Best-effort location for arrival/departure; never blocks the action. The browser's own timeout
- * only starts once the permission prompt is answered, so an ignored prompt would hang forever —
- * hence the separate cap.
- */
-function currentPosition(): Promise<{ latitude: number | null; longitude: number | null }> {
-  const none = { latitude: null, longitude: null }
-  return new Promise((resolve) => {
-    if (!('geolocation' in navigator)) return resolve(none)
-    const cap = window.setTimeout(() => resolve(none), 6000)
-    navigator.geolocation.getCurrentPosition(
-      (position) => { window.clearTimeout(cap); resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude }) },
-      () => { window.clearTimeout(cap); resolve(none) },
-      { timeout: 5000, maximumAge: 60_000 },
-    )
-  })
-}
 
 export function TechJobPage() {
   const { id = '', section: rawSection } = useParams<{ id: string; section?: string }>()

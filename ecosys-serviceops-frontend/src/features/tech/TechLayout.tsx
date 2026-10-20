@@ -10,6 +10,7 @@ import { usePendingActions } from './offline/hooks'
 import { OfflineStatus } from './offline/OfflineStatus'
 import { startOfflinePersistence } from './offline/persist'
 import { JobAlertsPrompt } from './JobAlerts'
+import { LocationPrompt } from './LocationPrompt'
 import { disablePush, resyncPush } from './push'
 
 const SECTIONS = [
@@ -77,6 +78,7 @@ export function TechLayout() {
         </nav>
       </header>
       <main className="mx-auto max-w-xl px-4 pb-32 pt-4">
+        <LocationPrompt />
         <JobAlertsPrompt />
         <Outlet />
       </main>
