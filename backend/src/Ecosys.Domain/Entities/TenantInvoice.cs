@@ -6,6 +6,8 @@ public sealed class TenantInvoice : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
     public Guid ClientId { get; set; }
+    public Guid? ProjectId { get; set; }
+    public Guid? ProjectValuationId { get; set; }
     public string InvoiceNumber { get; set; } = string.Empty;
     public string DocumentType { get; set; } = "Invoice"; // Invoice|ProformaInvoice
     public string Status { get; set; } = "Draft"; // Draft|Sent|PartiallyPaid|Paid|Overdue|Void

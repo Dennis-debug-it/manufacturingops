@@ -66,6 +66,57 @@ public static class ProjectVariationKinds
     public static readonly string[] All = [Addition, Omission];
 }
 
+public static class ProjectMusterStatuses
+{
+    public const string Present = "Present";
+    public const string HalfDay = "HalfDay";
+    public const string Absent = "Absent";
+
+    public static readonly string[] All = [Present, HalfDay, Absent];
+
+    public static decimal DayFraction(string status) => status switch
+    {
+        Present => 1m,
+        HalfDay => 0.5m,
+        _ => 0m,
+    };
+}
+
+public static class ProjectWorkerEngagements
+{
+    public const string Casual = "Casual";
+    public const string Permanent = "Permanent";
+    public const string Subcontractor = "Subcontractor";
+
+    public static readonly string[] All = [Casual, Permanent, Subcontractor];
+}
+
+public static class ProjectCostCategories
+{
+    public const string Materials = "Materials";
+    public const string Labour = "Labour";
+    public const string Subcontractor = "Subcontractor";
+    public const string Equipment = "Equipment";
+    public const string Other = "Other";
+
+    public static readonly string[] All = [Materials, Labour, Subcontractor, Equipment, Other];
+}
+
+public static class ProjectValuationStatuses
+{
+    public const string Draft = "Draft";
+    public const string Submitted = "Submitted";
+    public const string Certified = "Certified";
+    public const string Invoiced = "Invoiced";
+    public const string Void = "Void";
+}
+
+public static class ProjectRetentionStages
+{
+    public const string PracticalCompletion = "PracticalCompletion";
+    public const string EndOfDefectsLiability = "EndOfDefectsLiability";
+}
+
 public static class ProjectVariationStatuses
 {
     public const string Draft = "Draft";
@@ -153,6 +204,20 @@ public sealed class Project : AuditableEntity, ITenantEntity
     public string? ProgressOverrideReason { get; set; }
 
     public bool VisibleInClientPortal { get; set; } = true;
+
+    // Billing terms (D9). Null retention means none is held.
+    public decimal? RetentionPercent { get; set; }
+    public decimal? RetentionCapAmount { get; set; }
+    /// <summary>Share of retention held released at practical completion; the rest at the end of defects liability.</summary>
+    public decimal RetentionReleaseAtCompletionPercent { get; set; } = 50;
+    public int? DefectsLiabilityMonths { get; set; }
+    public decimal? AdvancePaymentAmount { get; set; }
+    /// <summary>Percentage of each valuation's work done in the period recovered against the advance.</summary>
+    public decimal? AdvanceRecoveryPercent { get; set; }
+    public Guid? AdvanceInvoiceId { get; set; }
+
+    public Guid? SourceQuotationId { get; set; }
+    public Guid? MaintenanceContractId { get; set; }
 
     public DateTime? HandedOverAt { get; set; }
     public DateTime? ClosedAt { get; set; }
@@ -282,4 +347,157 @@ public sealed class ProjectVariation : AuditableEntity, ITenantEntity
 
     public Tenant? Tenant { get; set; }
     public Project? Project { get; set; }
+}
+
+/// <summary>
+/// Someone on site who may not have an Ecosys login (D8). The supervisor can add them; only the
+/// office sets their pay (<see cref="ProjectWorkerRate"/>). No national ID is stored.
+/// </summary>
+public sealed class ProjectWorker : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public Guid? TechnicianId { get; set; }
+    public string FullName { get; set; } = string.Empty;
+    public string? Phone { get; set; }
+    public string? Trade { get; set; }
+    public string EngagementType { get; set; } = ProjectWorkerEngagements.Casual;
+    public bool IsActive { get; set; } = true;
+
+    public Tenant? Tenant { get; set; }
+    public Project? Project { get; set; }
+    public Technician? Technician { get; set; }
+    public ICollection<ProjectWorkerRate> Rates { get; set; } = new List<ProjectWorkerRate>();
+}
+
+/// <summary>A dated daily rate set by the office. A later rate never changes days before its effective date.</summary>
+public sealed class ProjectWorkerRate : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectWorkerId { get; set; }
+    public DateOnly EffectiveFrom { get; set; }
+    public decimal DailyRate { get; set; }
+    public Guid SetByUserId { get; set; }
+    public string? Note { get; set; }
+
+    public Tenant? Tenant { get; set; }
+    public ProjectWorker? Worker { get; set; }
+}
+
+/// <summary>One mark per worker per project per day, made by the site supervisor. Holds no money.</summary>
+public sealed class ProjectMusterEntry : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public Guid ProjectWorkerId { get; set; }
+    public DateOnly WorkDate { get; set; }
+    public string Status { get; set; } = ProjectMusterStatuses.Present;
+    public decimal DayFraction { get; set; } = 1;
+    public Guid MarkedByUserId { get; set; }
+    public string? Note { get; set; }
+
+    public Tenant? Tenant { get; set; }
+    public Project? Project { get; set; }
+    public ProjectWorker? Worker { get; set; }
+}
+
+public sealed class ProjectDiaryEntry : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public DateOnly EntryDate { get; set; }
+    public Guid AuthorUserId { get; set; }
+    public string? WorkCompleted { get; set; }
+    public string? IssuesAndDelays { get; set; }
+    public string? InstructionsReceived { get; set; }
+    public string? Weather { get; set; }
+    /// <summary>Locked once submitted; corrections are new entries.</summary>
+    public DateTime? SubmittedAt { get; set; }
+
+    public Tenant? Tenant { get; set; }
+    public Project? Project { get; set; }
+    public User? AuthorUser { get; set; }
+}
+
+/// <summary>Planned cost by category. Actual costs are derived from the records that hold them.</summary>
+public sealed class ProjectBudgetLine : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public string Category { get; set; } = ProjectCostCategories.Materials;
+    public string? Description { get; set; }
+    public decimal Amount { get; set; }
+
+    public Tenant? Tenant { get; set; }
+    public Project? Project { get; set; }
+}
+
+/// <summary>A cost with no natural home elsewhere: equipment hire, a one-off site cost, permanent staff labour.</summary>
+public sealed class ProjectCostEntry : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public string Category { get; set; } = ProjectCostCategories.Other;
+    public string Description { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+    public DateOnly IncurredOn { get; set; }
+    public Guid RecordedByUserId { get; set; }
+
+    public Tenant? Tenant { get; set; }
+    public Project? Project { get; set; }
+}
+
+/// <summary>
+/// An interim valuation / payment certificate, recorded as totals (D9). The QS's BQ workings and the
+/// signed certificate are attachments. All "ToDate" figures are cumulative.
+/// </summary>
+public sealed class ProjectValuation : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public string ValuationNumber { get; set; } = string.Empty;
+    public DateOnly PeriodEnd { get; set; }
+    public decimal WorkDoneToDate { get; set; }
+    public decimal MaterialsOnSite { get; set; }
+    public decimal GrossValueToDate { get; set; }
+    public decimal RetentionToDate { get; set; }
+    public decimal AdvanceRecoveredToDate { get; set; }
+    public decimal PreviouslyCertified { get; set; }
+    public decimal AmountDue { get; set; }
+    public string Status { get; set; } = ProjectValuationStatuses.Draft;
+    public Guid? CertifiedByConsultantId { get; set; }
+    public string? CertificateReference { get; set; }
+    public DateOnly? CertifiedOn { get; set; }
+    public decimal? CertifiedAmount { get; set; }
+    public Guid? InvoiceId { get; set; }
+    public string? Notes { get; set; }
+
+    public Tenant? Tenant { get; set; }
+    public Project? Project { get; set; }
+    public Consultant? CertifiedByConsultant { get; set; }
+    public TenantInvoice? Invoice { get; set; }
+}
+
+public sealed class ProjectRetentionRelease : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public string Stage { get; set; } = ProjectRetentionStages.PracticalCompletion;
+    public decimal Amount { get; set; }
+    public DateOnly ReleasedOn { get; set; }
+    public Guid? InvoiceId { get; set; }
+    public Guid ReleasedByUserId { get; set; }
+
+    public Tenant? Tenant { get; set; }
+    public Project? Project { get; set; }
+    public TenantInvoice? Invoice { get; set; }
+}
+
+/// <summary>Sent-marker for date-based project reminders, so a reminder goes once per entity, key and date.</summary>
+public sealed class ProjectReminderLog : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid EntityId { get; set; }
+    public string NotificationKey { get; set; } = string.Empty;
+    public DateOnly ForDate { get; set; }
 }

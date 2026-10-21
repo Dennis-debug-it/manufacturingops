@@ -490,8 +490,10 @@ internal sealed class ProjectService(
         var blockers = new List<string>();
         if (await dbContext.ProjectVariations.AnyAsync(x => x.TenantId == tenantId && x.ProjectId == project.Id && x.Status == ProjectVariationStatuses.Submitted, cancellationToken))
             blockers.Add("variations are still awaiting a decision");
+        // Draft, awaiting approval or approved-but-not-issued issues are still open; issued,
+        // returned, rejected and cancelled ones are settled.
         if (await dbContext.MaterialIssues.AnyAsync(x => x.TenantId == tenantId && x.ProjectId == project.Id
-                && x.IssueStatus != "issued" && x.IssueStatus != "rejected" && x.IssueStatus != "cancelled", cancellationToken))
+                && (x.IssueStatus == "draft" || x.IssueStatus == "pending_approval" || x.IssueStatus == "approved"), cancellationToken))
             blockers.Add("material issues are still open");
 
         if (blockers.Count > 0)

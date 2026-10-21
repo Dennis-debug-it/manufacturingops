@@ -29,4 +29,5 @@ public static class AllocationSourceTypes
 {
     public const string Payment = "Payment";
     public const string CreditNote = "CreditNote";
+    public const string Withholding = "Withholding";
 }
