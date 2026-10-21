@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { readVariationPrefill } from '../../activities/logic'
 import toast from 'react-hot-toast'
 import { Plus } from 'lucide-react'
 import { DataTable, type DataTableColumn } from '../../../shared/components/DataTable'
@@ -36,6 +38,15 @@ export function VariationsTab({ project }: { project: ProjectDetail }) {
   const decideVariation = useDecideVariation(projectId)
   const voidVariation = useVoidVariation(projectId)
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // "Raise variation from this" on minutes or a diary entry lands here with a title and description.
+  useEffect(() => {
+    const prefill = readVariationPrefill(searchParams)
+    if (!prefill) return
+    if (canEdit) setDraft({ ...emptyDraft, title: prefill.title, description: prefill.description })
+    setSearchParams({ tab: 'variations' }, { replace: true })
+  }, [searchParams, setSearchParams, canEdit])
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [note, setNote] = useState('')
   const money = (value: number) => formatCurrency(value, project.summary.currency)

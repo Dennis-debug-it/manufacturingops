@@ -106,6 +106,14 @@ public static class DependencyInjection
         services.AddScoped<IProjectFinancialsService, ProjectFinancialsService>();
         services.AddScoped<IProjectInvoiceService, ProjectInvoiceService>();
         services.AddScoped<IProjectReminderRunner, ProjectReminderRunner>();
+        // Calendar & Activities (Release 3 step 3b).
+        services.AddScoped<IAccessViewerFactory, AccessViewerFactory>();
+        services.AddScoped<ILinkedRecordService, LinkedRecordService>();
+        services.AddScoped<ActivityNotifier>();
+        services.AddScoped<IActivityService, ActivityService>();
+        services.AddScoped<ICalendarService, CalendarService>();
+        services.AddScoped<ICalendarFeedService, CalendarFeedService>();
+        services.AddScoped<IActivityReminderRunner, ActivityReminderRunner>();
         services.AddSingleton<IPdfRenderer, QuestPdfRenderer>();
         services.AddScoped<IScheduledReportService, ScheduledReportService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
@@ -141,6 +149,7 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<SubscriptionLifecycleWorker>();
         services.AddSingleInstanceHostedService<NotificationPushWorker>();
         services.AddSingleInstanceHostedService<NotificationHousekeepingWorker>();
+        services.AddSingleInstanceHostedService<ActivityReminderWorker>();
 
         return services;
     }

@@ -201,6 +201,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<ProjectValuation> ProjectValuations => Set<ProjectValuation>();
     public DbSet<ProjectRetentionRelease> ProjectRetentionReleases => Set<ProjectRetentionRelease>();
     public DbSet<ProjectReminderLog> ProjectReminderLogs => Set<ProjectReminderLog>();
+    public DbSet<Activity> Activities => Set<Activity>();
+    public DbSet<ActivityAttendee> ActivityAttendees => Set<ActivityAttendee>();
+    public DbSet<ActivityMinutesAddendum> ActivityMinutesAddenda => Set<ActivityMinutesAddendum>();
+    public DbSet<ActionItem> ActionItems => Set<ActionItem>();
+    public DbSet<ActivityReminderLog> ActivityReminderLogs => Set<ActivityReminderLog>();
+    public DbSet<CalendarFeedToken> CalendarFeedTokens => Set<CalendarFeedToken>();
     public DbSet<WithholdingCertificate> WithholdingCertificates => Set<WithholdingCertificate>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
@@ -3996,6 +4002,115 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.EntityId, x.NotificationKey, x.ForDate }).IsUnique();
         });
         ApplyTenantFilter<ProjectReminderLog>(modelBuilder);
+
+        // ── Activities, action items and the calendar feed (Release 3 step 3b) ──
+
+        modelBuilder.Entity<Activity>(entity =>
+        {
+            entity.ToTable("activities", tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint("CK_activities_type", "\"Type\" IN ('Meeting', 'SiteVisit', 'Inspection', 'Call')");
+                tableBuilder.HasCheckConstraint("CK_activities_status", "\"Status\" IN ('Scheduled', 'Held', 'Cancelled')");
+                tableBuilder.HasCheckConstraint("CK_activities_times", "\"EndsAt\" >= \"StartsAt\"");
+            });
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Type).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Location).HasMaxLength(500);
+            entity.Property(x => x.EntityType).HasMaxLength(30);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Agenda).HasMaxLength(4000);
+            entity.Property(x => x.Minutes).HasMaxLength(20000);
+            entity.Property(x => x.CancellationReason).HasMaxLength(500);
+            // The calendar (by time), the linked record's page, and the reminder worker.
+            entity.HasIndex(x => new { x.TenantId, x.StartsAt });
+            entity.HasIndex(x => new { x.TenantId, x.OrganizerUserId, x.StartsAt });
+            entity.HasIndex(x => new { x.TenantId, x.EntityType, x.EntityId });
+            entity.HasIndex(x => new { x.Status, x.StartsAt });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.OrganizerUser).WithMany().HasForeignKey(x => x.OrganizerUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        ApplyTenantFilter<Activity>(modelBuilder);
+
+        modelBuilder.Entity<ActivityAttendee>(entity =>
+        {
+            entity.ToTable("activity_attendees", tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint("CK_activity_attendees_response", "\"Response\" IN ('Pending', 'Accepted', 'Declined')");
+                // Exactly one kind of attendee.
+                tableBuilder.HasCheckConstraint("CK_activity_attendees_one_kind",
+                    "(CASE WHEN \"UserId\" IS NULL THEN 0 ELSE 1 END) + (CASE WHEN \"ConsultantId\" IS NULL THEN 0 ELSE 1 END)"
+                    + " + (CASE WHEN \"ClientContactId\" IS NULL THEN 0 ELSE 1 END)"
+                    + " + (CASE WHEN \"ExternalEmail\" IS NULL AND \"ExternalName\" IS NULL THEN 0 ELSE 1 END) = 1");
+            });
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ExternalName).HasMaxLength(200);
+            entity.Property(x => x.ExternalEmail).HasMaxLength(256);
+            entity.Property(x => x.Response).HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.ActivityId });
+            // "Activities I attend" for the calendar and the reminder worker.
+            entity.HasIndex(x => new { x.TenantId, x.UserId });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Activity).WithMany(x => x.Attendees).HasForeignKey(x => x.ActivityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Consultant).WithMany().HasForeignKey(x => x.ConsultantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ClientContact).WithMany().HasForeignKey(x => x.ClientContactId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ActivityAttendee>(modelBuilder);
+
+        modelBuilder.Entity<ActivityMinutesAddendum>(entity =>
+        {
+            entity.ToTable("activity_minutes_addenda");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Text).HasMaxLength(4000).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.ActivityId });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Activity).WithMany(x => x.Addenda).HasForeignKey(x => x.ActivityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.AuthorUser).WithMany().HasForeignKey(x => x.AuthorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        ApplyTenantFilter<ActivityMinutesAddendum>(modelBuilder);
+
+        modelBuilder.Entity<ActionItem>(entity =>
+        {
+            entity.ToTable("action_items", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_action_items_status", "\"Status\" IN ('Open', 'Done', 'Cancelled')"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.AssigneeExternalName).HasMaxLength(200);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.EntityType).HasMaxLength(30);
+            entity.HasIndex(x => new { x.TenantId, x.AssigneeUserId, x.Status });
+            entity.HasIndex(x => new { x.TenantId, x.EntityType, x.EntityId });
+            entity.HasIndex(x => new { x.TenantId, x.ActivityId });
+            entity.HasIndex(x => new { x.Status, x.DueDate });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Activity).WithMany().HasForeignKey(x => x.ActivityId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.AssigneeUser).WithMany().HasForeignKey(x => x.AssigneeUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<ActionItem>(modelBuilder);
+
+        modelBuilder.Entity<ActivityReminderLog>(entity =>
+        {
+            entity.ToTable("activity_reminder_logs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.NotificationKey).HasMaxLength(80).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.EntityId, x.NotificationKey, x.ForTime }).IsUnique();
+            entity.HasIndex(x => x.CreatedAt);
+        });
+        ApplyTenantFilter<ActivityReminderLog>(modelBuilder);
+
+        modelBuilder.Entity<CalendarFeedToken>(entity =>
+        {
+            entity.ToTable("calendar_feed_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(64).IsRequired();
+            // The anonymous feed looks a token up by its hash alone.
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.UserId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<CalendarFeedToken>(modelBuilder);
 
         modelBuilder.Entity<WithholdingCertificate>(entity =>
         {

@@ -19,6 +19,7 @@ namespace Ecosys.Infrastructure.Services;
 /// Limits the channels for this one send, for a caller that delivers a channel itself (the work-order
 /// assignment emails the technician record, not the user). Preferences still apply within it.
 /// </param>
+/// <param name="Attachments">Files for the email only, e.g. published meeting minutes as a PDF.</param>
 public sealed record NotificationRequest(
     Guid TenantId,
     string Key,
@@ -30,7 +31,8 @@ public sealed record NotificationRequest(
     Guid? EntityId,
     IReadOnlyDictionary<string, string?> TemplateValues,
     string Severity = NotificationSeverities.Info,
-    NotificationChannels Channels = NotificationKeyDescriptor.AnyChannel);
+    NotificationChannels Channels = NotificationKeyDescriptor.AnyChannel,
+    IReadOnlyCollection<EmailAttachment>? Attachments = null);
 
 /// <summary>
 /// The single way to notify tenant users. For each recipient it applies their preference for the key
@@ -256,7 +258,7 @@ internal sealed class NotificationDispatcher(
             var subject = await emailSubjectRuleService.BuildFinalSubjectAsync(request.TenantId, request.Key, template.Subject, cancellationToken: cancellationToken);
             await emailOutboxService.QueueEmailAsync(new QueueEmailRequest(
                 request.TenantId, request.Key, request.Key, recipient.Email, recipient.FullName, template.SenderNameOverride,
-                null, null, subject, template.HtmlBody, template.TextBody, null), cancellationToken);
+                null, null, subject, template.HtmlBody, template.TextBody, null, Attachments: request.Attachments), cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

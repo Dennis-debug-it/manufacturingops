@@ -10,6 +10,7 @@ import { formatDate } from '../../shared/utils/dates'
 import { prefetchJobForOffline, useMyTechnician } from './api'
 import { FINAL_STATUSES, jobPhase, myAssignmentOf, PHASE_LABEL, PHASE_TONE } from './jobState'
 import { useTechJobsView } from './offline/hooks'
+import { TechActionItemsCard } from '../activities/TechActionItemsCard'
 
 const PRIORITY_RANK: Record<string, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 }
 
@@ -52,6 +53,8 @@ export function TechJobsPage() {
         <h1 className="text-xl font-semibold text-slate-900">My Jobs</h1>
         <p className="text-sm text-slate-500">Hi {user?.fullName?.split(' ')[0] ?? 'there'} — {rows.active.length} active job{rows.active.length === 1 ? '' : 's'}.</p>
       </div>
+
+      <TechActionItemsCard />
 
       <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-white p-1" role="tablist">
         {(['active', 'done'] as const).map((id) => (

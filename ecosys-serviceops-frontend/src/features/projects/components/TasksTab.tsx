@@ -6,6 +6,7 @@ import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { formatDate } from '../../../shared/utils/dates'
 import { useCreateTask, useDeleteTask, useProjectMilestones, useProjectTasks, useUpdateTask } from '../api'
+import { RecordActivitiesPanel } from '../../activities/RecordActivitiesPanel'
 import type { ProjectDetail, ProjectTask, TaskStatus } from '../types'
 import { dateInputValue, dateOrNull, fieldClass, labelClass, primaryButtonClass, secondaryButtonClass, smallButtonClass, textAreaClass, textOrNull } from './formStyles'
 
@@ -104,6 +105,7 @@ export function TasksTab({ project, readOnly }: { project: ProjectDetail; readOn
 
   return (
     <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-slate-900">Project tasks</h3>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" checked={showDone} onChange={(event) => setShowDone(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
@@ -112,6 +114,11 @@ export function TasksTab({ project, readOnly }: { project: ProjectDetail; readOn
         {!readOnly ? <button type="button" className={primaryButtonClass} onClick={() => setDraft(emptyDraft)}><Plus className="h-4 w-4" />Add task</button> : null}
       </div>
       <DataTable columns={columns} data={visible} loading={isLoading} emptyTitle="No open tasks" emptyDescription="Tasks assigned on this project will appear here." />
+
+      {/* Meeting follow-ups live in their own list (R3), shown here beside the project's tasks. */}
+      <div className="border-t border-slate-200 pt-4">
+        <RecordActivitiesPanel entityType="Project" entityId={projectId} clientId={project.summary.clientId} readOnly={readOnly} />
+      </div>
 
       <FormDrawer
         open={draft !== null}

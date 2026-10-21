@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Lock, Plus } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { FilePlus2, Lock, Plus } from 'lucide-react'
+import { variationPrefillUrl } from '../../activities/logic'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import { formatDate, formatDateTime } from '../../../shared/utils/dates'
@@ -36,6 +38,7 @@ export function DiaryTab({ project }: { project: ProjectDetail }) {
   const { user } = useAuth()
   const isFinal = project.summary.stageCategory === 'Closed' || project.summary.stageCategory === 'Cancelled'
   const canWrite = project.abilities.canRunSite && !isFinal
+  const canRaiseVariation = project.features.variations && project.abilities.canSubmitVariations && !isFinal
   const { data: entries, isLoading } = useDiary(projectId)
   const saveDiary = useSaveDiary(projectId)
   const submitDiary = useSubmitDiary(projectId)
@@ -113,6 +116,11 @@ export function DiaryTab({ project }: { project: ProjectDetail }) {
                 <Section label="Work completed" text={entry.workCompleted} />
                 <Section label="Issues and delays" text={entry.issuesAndDelays} />
                 <Section label="Instructions received" text={entry.instructionsReceived} />
+                {entry.instructionsReceived && canRaiseVariation ? (
+                  <Link className={smallButtonClass} to={variationPrefillUrl(projectId, `Site instruction ${formatDate(entry.entryDate)}`, entry.instructionsReceived)}>
+                    <FilePlus2 className="h-3.5 w-3.5" />Raise variation from this
+                  </Link>
+                ) : null}
                 {entry.materialIssues.length > 0 ? <p className="text-xs text-slate-500">Materials issued: {entry.materialIssues.join(', ')}</p> : null}
               </article>
             )

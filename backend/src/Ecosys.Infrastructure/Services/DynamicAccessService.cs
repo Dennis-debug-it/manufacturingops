@@ -92,13 +92,30 @@ internal static class CapabilityRoleDefaults
     // Manager member; the capability alone opens nothing else.
     private static readonly string[] FieldSupervisors = [PermissionNames.ProjectsMusterMark];
 
-    public static IReadOnlyList<string> For(string? role)
+    public static IReadOnlyList<string> For(string? role) => [.. ProjectDefaults(role), .. ActivityDefaults(role)];
+
+    private static IReadOnlyList<string> ProjectDefaults(string? role)
     {
         if (string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)) return ProjectManagers;
         if (string.Equals(role, AppRoles.FinanceUser, StringComparison.OrdinalIgnoreCase)) return ProjectFinance;
         if (string.Equals(role, AppRoles.Dispatcher, StringComparison.OrdinalIgnoreCase)
             || string.Equals(role, AppRoles.Viewer, StringComparison.OrdinalIgnoreCase)) return ProjectViewers;
         if (string.Equals(role, AppRoles.Technician, StringComparison.OrdinalIgnoreCase)) return FieldSupervisors;
+        return [];
+    }
+
+    /// <summary>
+    /// Every staff role sees meetings and action items and can organise its own; managers organise any
+    /// meeting; managers and dispatchers get the calendar's team view.
+    /// </summary>
+    private static IReadOnlyList<string> ActivityDefaults(string? role)
+    {
+        if (string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase))
+            return [PermissionNames.ActivitiesView, PermissionNames.ActivitiesManage, PermissionNames.CalendarTeam];
+        if (string.Equals(role, AppRoles.Dispatcher, StringComparison.OrdinalIgnoreCase))
+            return [PermissionNames.ActivitiesView, PermissionNames.CalendarTeam];
+        if (AppRoles.TenantRoles.Contains(role ?? "", StringComparer.OrdinalIgnoreCase))
+            return [PermissionNames.ActivitiesView];
         return [];
     }
 }
