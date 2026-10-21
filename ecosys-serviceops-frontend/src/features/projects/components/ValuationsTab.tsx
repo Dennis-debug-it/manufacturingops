@@ -197,7 +197,7 @@ export function ValuationsTab({ project }: { project: ProjectDetail }) {
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-start justify-between gap-2">
             <h3 className="text-sm font-semibold text-slate-900">Billing terms</h3>
-            {canManage && terms && !isClosed ? <button type="button" className={smallButtonClass} onClick={() => setTermsDraft(termsDraftFrom(terms))}>Edit</button> : null}
+            {canManage && terms && !isClosed ? <button type="button" className={smallButtonClass} onClick={() => setTermsDraft(termsDraftFrom(terms))}>Edit terms</button> : null}
           </div>
           {terms ? (
             <div className="mt-2">
