@@ -109,7 +109,7 @@ public const string Projects = "projects";
   `suite`) are **unchanged** — existing tenants do not silently gain or lose anything. Projects is enabled
   by adding the key to a plan (or a new plan code, decided commercially).
 - New controllers (`Projects`, `ProjectSettings`) go in a new `ProjectsControllers` set, so
-  `ServiceOpsModuleClassificationTests` keeps catching unclassified controllers.
+  the controller-classification check in `TenantLifecycleConsistencyTests` keeps catching unclassified controllers.
 - Route-level dependencies (in `RequiredModules`):
   - `/api/projects/{id}/materials*`, `/work-orders*`, `/attendance*` → `[projects, operations]`
   - `/api/projects/{id}/financials*`, `/invoices*` → `[projects, finance]`
@@ -647,7 +647,7 @@ reminders, cross-module role dashboards.
 
 - **Tenant isolation:** for every new entity and every new `ProjectId` FK, cross-tenant IDs are
   rejected on write and invisible on read (existing tenant-isolation test patterns).
-- **Licensing:** `ServiceOpsModuleClassificationTests` covers the new controllers. Route tests cover the
+- **Licensing:** the controller-classification check (`TenantLifecycleConsistencyTests`, via `ServiceOpsPlans.IsClassified`) covers the new controllers. Route tests cover the
   `[projects, operations]` and `[projects, finance]` dependencies.
 - **Domain:** variation state machine (only Approved moves values; void reverses; no negative revised
   value); progress calculation (weights, override, verified-only mode); closure checks.
