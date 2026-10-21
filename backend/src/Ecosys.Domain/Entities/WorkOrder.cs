@@ -12,6 +12,7 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public Guid? AssetId { get; set; }
     public Guid? AssignmentGroupId { get; set; }
     public Guid? ContractId { get; set; }
+    public Guid? ProjectId { get; set; }
     public Guid? RateCardId { get; set; }
     public string AssignmentType { get; set; } = "IndividualTechnician";
     public string WorkOrderNumber { get; set; } = string.Empty;
@@ -113,6 +114,7 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public Asset? Asset { get; set; }
     public AssignmentGroup? AssignmentGroup { get; set; }
     public Contract? Contract { get; set; }
+    public Project? Project { get; set; }
     public ContractRateCard? RateCard { get; set; }
     public Technician? AssignedTechnician { get; set; }
     public Technician? LeadTechnician { get; set; }
