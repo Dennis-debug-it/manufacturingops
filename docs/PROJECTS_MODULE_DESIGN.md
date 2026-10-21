@@ -16,7 +16,7 @@ document assumes the default.
 | # | Decision | Recommended default | Alternative |
 |---|---|---|---|
 | D1 | Which record is the project's "client"? | **`Client`** (tenant-scoped, already used by contracts, work orders, invoices). The Platform CRM (`PlatformLead`, `CrmContact`) has no `TenantId` and is Ecosys's own sales CRM — it must not hold tenants' customers. | Make the Platform CRM multi-tenant (not recommended: mixes Ecosys sales data with tenant data). |
-| D2 | How are consultants modelled? | A consultant is a **`Client` with `ClientType = "Consultant"`**, linked to projects through `ProjectParty`. No new organisation table; consultants get sites/contacts/portal for free. | A separate `Consultant` entity. |
+| D2 | How are consultants modelled? | **Confirmed.** A new tenant-scoped **`Consultant` directory**: firm name and contact details only, with no sites, assets, invoices or portal. Projects link to consultants through `ProjectConsultant`. Consultants are not `Client` records. | — |
 | D3 | Licensing | New commercial module key **`projects`**, sold on its own or with Operations/Finance. Tabs that touch inventory/work orders require `operations`; financial tabs require `finance` (same pattern as `WorkOrderBilling` requiring both today). | Bundle Projects into `operations`. |
 | D4 | Progress method | **Weighted milestones** (weights default to equal), with a permission-gated manual override that is recorded and shown as "overridden". | Task-count based; or manual only. |
 | D5 | Variation approval | Reuse the **Approval Matrix** with a new document type `ProjectVariation` (amount bands, permission/user approvers, reminders already exist). | A simple single-approver flag on the variation. |
@@ -75,7 +75,7 @@ document assumes the default.
 ## 3. Module boundaries
 
 ```
-                    ┌──────────── Client (+ Sites, Consultants as Clients) ────────────┐
+                    ┌──────────── Client (+ Sites) ── Consultant directory  ────────────┐
                     │                                                                  │
         ┌───────────▼───────────┐     handover (optional)      ┌──────────────────────▼─┐
         │       PROJECTS        │ ───────────────────────────▶ │   CONTRACTS (AMC)      │
@@ -111,7 +111,7 @@ public const string Projects = "projects";
 - `Modules(plan)` accepts `projects` in `ModulesIncluded`. Canonical plans (`operations`, `finance`,
   `suite`) are **unchanged** — existing tenants do not silently gain or lose anything. Projects is enabled
   by adding the key to a plan (or a new plan code, decided commercially).
-- New controllers (`Projects`, `ProjectSettings`) go in a new `ProjectsControllers` set, so
+- New controllers (`Projects`, `ProjectSettings`, `Consultants`) go in a new `ProjectsControllers` set, so
   the controller-classification check in `TenantLifecycleConsistencyTests` keeps catching unclassified controllers.
 - Route-level dependencies (in `RequiredModules`):
   - `/api/projects/{id}/materials*`, `/work-orders*`, `/attendance*` → `[projects, operations]`
@@ -254,7 +254,7 @@ public sealed class Project : AuditableEntity, ITenantEntity
 Unique index: `(TenantId, ProjectNumber)`. Indexes: `(TenantId, ClientId)`, `(TenantId, StageId)`,
 `(TenantId, ProjectManagerUserId)`.
 
-### 5.3 People and parties
+### 5.3 People and consultants
 
 ```csharp
 // Internal team. Either a User (office) or a Technician (field), or both when linked.
@@ -270,21 +270,35 @@ public sealed class ProjectMember : AuditableEntity, ITenantEntity
     public DateOnly? ToDate { get; set; }
 }
 
-// External organisations on the project besides the client (D2).
-public sealed class ProjectParty : AuditableEntity, ITenantEntity
+// Consultant directory (D2): a contact list, nothing more. Shared by all of the tenant's projects.
+public sealed class Consultant : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public string FirmName { get; set; } = string.Empty;      // "XYZ Engineering"
+    public string? Discipline { get; set; }                   // optional free text: QS, M&E, Architect, Structural…
+    public string? ContactPerson { get; set; }
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public string? PhysicalAddress { get; set; }
+    public string? Notes { get; set; }
+    public bool IsActive { get; set; } = true;                // deactivate rather than delete once used on a project
+}
+
+// Which consultants are on which project.
+public sealed class ProjectConsultant : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
     public Guid ProjectId { get; set; }
-    public Guid ClientId { get; set; }                 // a Client with ClientType Consultant/Subcontractor/…
-    public string Role { get; set; } = "Consultant";   // Consultant | MainContractor | Subcontractor | Other
-    public string? ContactName { get; set; }
-    public string? ContactPhone { get; set; }
-    public string? ContactEmail { get; set; }
+    public Guid ConsultantId { get; set; }
+    public string? RoleOnProject { get; set; }                // optional: "Lead consultant", "QS"…
 }
 ```
 
 Project-scoped access: a user with `projects.view` sees all projects unless the tenant enables
 "members only" visibility, in which case non-managers see only projects where they are a `ProjectMember`.
+
+Consultant firm names are unique per tenant (case-insensitive). A consultant linked to any project can
+be deactivated but not deleted.
 
 ### 5.4 Milestones and tasks
 
@@ -451,6 +465,7 @@ public sealed class ProjectValuation : AuditableEntity, ITenantEntity
     public decimal PreviouslyCertified { get; set; }    // net amount of earlier certified valuations
     public decimal AmountDue { get; set; }              // Gross − Retention − AdvanceRecovered − PreviouslyCertified
     public string Status { get; set; } = "Draft";       // Draft | Submitted | Certified | Invoiced | Void
+    public Guid? CertifiedByConsultantId { get; set; }  // which project consultant certified it
     public string? CertificateReference { get; set; }   // consultant / QS certificate number
     public DateOnly? CertifiedOn { get; set; }
     public decimal? CertifiedAmount { get; set; }       // may differ from AmountDue; the certified figure is what gets invoiced
@@ -611,7 +626,8 @@ POST   /api/projects/{id}/progress-override  { percent | null, reason }
 POST   /api/projects/{id}/close | /reopen
 
 GET|POST|PUT|DELETE /api/projects/{id}/members[/{memberId}]
-GET|POST|PUT|DELETE /api/projects/{id}/parties[/{partyId}]
+GET|POST|DELETE     /api/projects/{id}/consultants[/{projectConsultantId}]
+GET|POST|PUT        /api/consultants[/{consultantId}]        directory (search, deactivate)
 GET|POST|PUT|DELETE /api/projects/{id}/milestones[/{milestoneId}]
 POST                /api/projects/{id}/milestones/{milestoneId}/complete | /verify
 GET|POST|PUT|DELETE /api/projects/{id}/tasks[/{taskId}]
@@ -655,7 +671,7 @@ New constants in `PermissionNames` (and `All`), mapped to roles through the exis
 | Permission | Grants |
 |---|---|
 | `projects.view` | Register and workspace (non-financial tabs) |
-| `projects.manage` | Create/edit projects, members, parties, milestones, tasks, stage changes |
+| `projects.manage` | Create/edit projects, members, consultant links and the consultant directory, milestones, tasks, stage changes |
 | `projects.muster.mark` | Add workers to the roster and mark the daily muster roll (site supervisors). No access to rates |
 | `projects.variations.submit` | Draft and submit variations |
 | `projects.variations.approve` | Direct approval when no approval matrix applies |
@@ -737,7 +753,7 @@ features/settings/…/ProjectSettingsPage.tsx   types, stages, templates, toggle
 ## 13. Releases
 
 ### Release 1: Projects core
-Types, stages, templates, project CRUD, members, parties (consultants), milestones, tasks, weighted
+Types, stages, templates, project CRUD, members, consultant directory and project links, milestones, tasks, weighted
 progress, variations with approval, documents (attachments), `ProjectId` on `WorkOrder` and
 `MaterialIssue`, register and workspace (Overview, Milestones, Tasks, Team, Variations, Work Orders,
 Materials, Documents), permissions, licensing, notifications for members, tasks and variations.
