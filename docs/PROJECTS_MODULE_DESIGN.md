@@ -22,7 +22,10 @@ contract rate cards (`ContractRateRule`, `RateCard`) are out of scope and stay a
 | D6 | Labour unit and cost | **Confirmed.** Labour is measured in **man-days, never hours**: work in Kenya isn't billed or costed per hour. Casual site workers have an agreed **daily rate**, **entered by the office, never by the site supervisor**, so labour cost = days worked × that rate. Permanent staff are not costed automatically (no salary data in Ecosys); a tenant that wants them costed adds a manual "Labour" cost entry. | Labour as a cost entry only, with no daily rates at all. |
 | D7 | Material requests for projects | **Confirmed.** Allow `MaterialRequest` to target a project directly (make `WorkOrderId` nullable, add `ProjectId`, require exactly one). | Force every project material request through a work order. |
 | D8 | Site attendance for casual workers | **Confirmed.** Most people on site (fundis, helpers, casuals) have no Ecosys login and aren't `Technician` records, so they can't clock in. The supervisor marks a **daily muster roll** per project (Present / Half day / Absent) against a project **worker roster**. Technicians with logins can still clock in as they do today; the muster roll is what counts man-days. Supervisors record **presence only**; they never enter or see rates. | Require every worker to be a `Technician` with a login. |
-| D9 | How projects are billed | **Confirmed.** **Valuations (interim payment certificates)**: each period, value the work done to date, deduct **retention** (typically 5–10%, released after the defects liability period) and previously certified amounts; the result becomes a `TenantInvoice`. A project with simple milestone or lump-sum billing just skips retention. | Plain invoices with a `ProjectId`, with no valuation or retention tracking. |
+| D9 | How projects are billed | **Confirmed.** **Valuations (interim payment certificates)**, recorded as **totals, not BQ line items**: the QS works the valuation from the bill of quantities outside Ecosys and attaches it; Ecosys records work done to date and materials on site, deducts **retention** and **advance recovery** and previously certified amounts, and the certified amount becomes a `TenantInvoice`. Retention is released in two parts (practical completion and end of defects liability). Projects with simple milestone or lump-sum billing skip retention. | Hold the full BQ in Ecosys and value line by line (rejected: much larger model for the same certificate). |
+| D10 | Withholding VAT / tax | **Confirmed.** Some clients withhold tax (e.g. 2% VAT) when paying a certificate. A **withholding certificate** settles that part of the invoice exactly like a payment does, so project receivables reconcile. This is a Finance-wide change: it works on every `TenantInvoice`, not just project invoices. | Leave invoices showing a permanent shortfall. |
+| D11 | Client portal | **Confirmed.** Clients see their projects in the existing client portal: stage, progress (planned vs actual), milestones, approved variations, certified valuations and project invoices. They never see costs, budget, margins, the muster roll, rates, internal tasks or the diary. | No portal access. |
+| D12 | Deleting projects | **Confirmed.** Projects are never deleted; they are **cancelled** (stage category Cancelled), which keeps linked work orders, issues and invoices traceable. | Allow deleting projects with nothing linked. |
 
 ---
 
@@ -114,7 +117,9 @@ public const string Projects = "projects";
   the controller-classification check in `TenantLifecycleConsistencyTests` keeps catching unclassified controllers.
 - Route-level dependencies (in `RequiredModules`):
   - `/api/projects/{id}/materials*`, `/work-orders*`, `/attendance*` → `[projects, operations]`
-  - `/api/projects/{id}/financials*`, `/invoices*` → `[projects, finance]`
+  - `/api/projects/{id}/financials*`, `/invoices*`, `/valuations*` → `[projects, finance]`
+  - `/api/portal/projects*` → `[projects]`; `/api/portal/projects/{id}/valuations*`, `/invoices*` → `[projects, finance]`
+  - Withholding certificates sit with the existing finance controllers → `[finance]`
 
 ### 4.2 Feature toggles
 
@@ -132,9 +137,15 @@ Stored as `TenantModuleSetting` with `ModuleKey = "projects"`:
   "financials": true,
   "documents": true,
   "progressMethod": "WeightedMilestones",
-  "allowManualProgressOverride": true
+  "allowManualProgressOverride": true,
+  "visibility": "AllProjects",
+  "clientPortal": true
 }
 ```
+
+`visibility` is `AllProjects` (anyone with `projects.view`) or `MembersOnly` (non-managers see only
+projects where they are a `ProjectMember`). `clientPortal` switches the portal Projects page on for the
+whole tenant; each project can also be hidden individually (`Project.VisibleInClientPortal`).
 
 Toggles hide tabs, nav entries and endpoints (the API returns 404/403 for disabled features); they
 never delete rows. A toggle that depends on an unlicensed module (e.g. `materials` without `operations`)
@@ -237,9 +248,13 @@ public sealed class Project : AuditableEntity, ITenantEntity
     // Billing terms (D9, Release 2)
     public decimal? RetentionPercent { get; set; }     // null = no retention
     public decimal? RetentionCapAmount { get; set; }   // optional ceiling on total retention held
-    public int? DefectsLiabilityMonths { get; set; }   // retention release due HandedOverAt + this period
-    public decimal? AdvancePaymentAmount { get; set; } // recovered across valuations
-    public DateTime? RetentionReleasedAt { get; set; }
+    public decimal RetentionReleaseAtCompletionPercent { get; set; } = 50; // share released at practical completion; 0 = all at end
+    public int? DefectsLiabilityMonths { get; set; }   // final retention release due HandedOverAt + this period
+    public decimal? AdvancePaymentAmount { get; set; } // paid up front, recovered across valuations
+    public decimal? AdvanceRecoveryPercent { get; set; } // % of each valuation's work done this period, until fully recovered
+
+    // Client portal (D11)
+    public bool VisibleInClientPortal { get; set; } = true;
 
     // Handover / closure
     public Guid? MaintenanceContractId { get; set; }   // Contract created at handover
@@ -293,8 +308,7 @@ public sealed class ProjectConsultant : AuditableEntity, ITenantEntity
 }
 ```
 
-Project-scoped access: a user with `projects.view` sees all projects unless the tenant enables
-"members only" visibility, in which case non-managers see only projects where they are a `ProjectMember`.
+Project-scoped access: see the `visibility` setting in 4.2.
 
 Consultant firm names are unique per tenant (case-insensitive). A consultant linked to any project can
 be deactivated but not deleted.
@@ -363,8 +377,11 @@ public sealed class ProjectVariation : AuditableEntity, ITenantEntity
 ```
 
 Rules:
-- Only `Approved` variations change `ApprovedAdditions` / `ApprovedOmissions`, inside the same
-  transaction as the status change.
+- Only `Approved` variations change `ApprovedAdditions` / `ApprovedOmissions`. On every approve or
+  void, the totals are **recomputed from the variation rows** (`SUM` of Approved additions and omissions)
+  inside the same transaction as the status change, never incremented, so two decisions landing
+  together can't leave the totals wrong. Approval goes through a new `ProjectVariation` case in
+  `ApprovalWorkflowService.ApplyOutcomeAsync`, alongside the existing `Expense` and `PurchaseOrder` cases.
 - Submit creates an `ApprovalRequest` with `DocumentType = ApprovalDocumentTypes.ProjectVariation`
   (added to `ApprovalDocumentTypes.All`). If the tenant has no active matrix for it, a holder of
   `projects.variations.approve` approves directly.
@@ -419,7 +436,6 @@ public sealed class ProjectWorker : AuditableEntity, ITenantEntity
     public Guid ProjectId { get; set; }
     public Guid? TechnicianId { get; set; }             // set when the worker is also a Technician
     public string FullName { get; set; } = string.Empty;
-    public string? NationalIdNumber { get; set; }       // optional; visible only with financials permission
     public string? Phone { get; set; }                  // M-Pesa number for wage payments
     public string? Trade { get; set; }                  // from the tenant trade list (5.7)
     public string EngagementType { get; set; } = "Casual"; // Casual | Permanent | Subcontractor
@@ -458,11 +474,14 @@ public sealed class ProjectValuation : AuditableEntity, ITenantEntity
     public Guid ProjectId { get; set; }
     public string ValuationNumber { get; set; } = string.Empty;  // NumberingSetting "ProjectValuation", prefix "VAL"
     public DateOnly PeriodEnd { get; set; }
-    public decimal GrossValueToDate { get; set; }       // work done to date, incl. approved variations
+    // Totals only (D9). The QS's BQ workings are an Attachment on the valuation, not rows in Ecosys.
+    public decimal WorkDoneToDate { get; set; }         // measured work to date, incl. approved variations
+    public decimal MaterialsOnSite { get; set; }        // unfixed materials on site, valued this period
+    public decimal GrossValueToDate { get; set; }       // WorkDoneToDate + MaterialsOnSite
     public decimal RetentionToDate { get; set; }        // GrossValueToDate × RetentionPercent, capped
-    public decimal AdvanceRecoveredToDate { get; set; }
-    public decimal PreviouslyCertified { get; set; }    // net amount of earlier certified valuations
-    public decimal AmountDue { get; set; }              // Gross − Retention − AdvanceRecovered − PreviouslyCertified
+    public decimal AdvanceRecoveredToDate { get; set; } // cumulative; see 8.5
+    public decimal PreviouslyCertified { get; set; }    // net amount of the previous certified valuation
+    public decimal AmountDue { get; set; }              // Gross − RetentionToDate − AdvanceRecoveredToDate − PreviouslyCertified
     public string Status { get; set; } = "Draft";       // Draft | Submitted | Certified | Invoiced | Void
     public Guid? CertifiedByConsultantId { get; set; }  // which project consultant certified it
     public string? CertificateReference { get; set; }   // consultant / QS certificate number
@@ -470,7 +489,42 @@ public sealed class ProjectValuation : AuditableEntity, ITenantEntity
     public decimal? CertifiedAmount { get; set; }       // may differ from AmountDue; the certified figure is what gets invoiced
     public Guid? InvoiceId { get; set; }                // TenantInvoice raised from this valuation
 }
+
+// Retention release (D9): normally two per project.
+public sealed class ProjectRetentionRelease : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public string Stage { get; set; } = "PracticalCompletion";  // PracticalCompletion | EndOfDefectsLiability
+    public decimal Amount { get; set; }
+    public DateOnly ReleasedOn { get; set; }
+    public Guid? InvoiceId { get; set; }                // the release invoice
+    public Guid ReleasedByUserId { get; set; }
+}
 ```
+
+**Finance-wide addition (D10)**, in the existing finance module rather than Projects:
+
+```csharp
+// A withholding certificate issued by the client. Settles part of an invoice like a payment does.
+public sealed class WithholdingCertificate : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ClientId { get; set; }
+    public Guid InvoiceId { get; set; }
+    public string TaxType { get; set; } = "VAT";        // VAT | IncomeTax
+    public decimal? RatePercent { get; set; }           // e.g. 2; informational
+    public decimal Amount { get; set; }
+    public string CertificateNumber { get; set; } = string.Empty;  // the client's / KRA certificate number
+    public DateOnly CertificateDate { get; set; }
+    public string Status { get; set; } = "Confirmed";   // Confirmed | Reversed (same as TenantPayment)
+}
+```
+
+It allocates through the existing `PaymentAllocation` table with a new
+`AllocationSourceTypes.Withholding = "Withholding"` (the column allows 20 characters), so
+`InvoiceBalanceCalculator`, overdue status and client statements treat it as settlement with no special
+cases. The certificate scan is an `Attachment`. Ecosys does not file anything with KRA.
 
 Photos are `Attachment` rows with `EntityType = "ProjectDiaryEntry"`, and the consultant's signed
 certificate is an `Attachment` on the valuation. Workers present and materials used on a given day are
@@ -503,6 +557,8 @@ the project belongs to the tenant and (where the row has a `ClientId`) to the sa
 | `TenantInvoice` | `+ ProjectId`, `+ ProjectValuationId` | Valuation, milestone, final and retention-release invoices against a project |
 | `Contract` | `+ SourceProjectId` | AMC created at handover |
 | `ApprovalDocumentTypes` | `+ ProjectVariation` | Variation approvals |
+| `PaymentAllocation` | `+ AllocationSourceTypes.Withholding` | Withholding certificates settle invoices (D10) |
+| `Attachment` | `+ SharedWithClient` (bool, default false) | Documents shown in the client portal (D11) |
 | `NumberingSetting` defaults | `+ Project (PRJ)`, `+ ProjectVariation (VO)`, `+ ProjectValuation (VAL)` | Document numbers |
 
 ---
@@ -523,14 +579,15 @@ traced on screen.
 | Subcontractor / supplier cost | Σ `SupplierBill.Amount` with `ProjectId` = p |
 | Expenses | Σ `Expense.Amount` with status Approved or Reimbursed and `ProjectId` = p |
 | Other costs | Σ `ProjectCostEntry.Amount` |
-| **Actual cost** | Sum of the five lines above |
+| **Actual cost** | Materials cost + labour cost + subcontractor/supplier cost + expenses + other costs (man-days and uncosted days are counts, not costs) |
 | Committed cost | Open `PurchaseOrder` value for p not yet billed |
 | Invoiced | Σ `TenantInvoice.TotalAmount − TaxAmount` (not Void) with `ProjectId` = p |
-| Received | Σ allocated `TenantPayment` against those invoices |
+| Received | Σ allocations against those invoices from payments **and** withholding certificates (shown split: cash received / tax withheld) |
 | Outstanding | Σ `TenantInvoice.Balance` for those invoices; overdue = past `DueDate` |
 | Certified to date | `GrossValueToDate` of the latest Certified valuation |
-| Retention held | `RetentionToDate` of the latest Certified valuation, until a retention-release invoice is raised |
-| Retention due | Retention held, once `HandedOverAt + DefectsLiabilityMonths` has passed |
+| Retention held | `RetentionToDate` of the latest Certified valuation − Σ `ProjectRetentionRelease.Amount` |
+| Retention due | First part: `RetentionReleaseAtCompletionPercent` of retention held, once `HandedOverAt` is set. Balance: once `HandedOverAt + DefectsLiabilityMonths` has passed |
+| Advance outstanding | `AdvancePaymentAmount − AdvanceRecoveredToDate` of the latest Certified valuation |
 | Unbilled value | Revised value − certified to date |
 | Indicative margin | `(Revised value − Actual cost) / Revised value` |
 | Forecast margin | `(Revised value − (Actual cost + Committed cost)) / Revised value` |
@@ -562,6 +619,7 @@ Planning ──▶ Active ◀──▶ OnHold
 | → Completed | Sets `ActualEndDate`, `HandedOverAt`; offers "Create maintenance contract" |
 | → Closed | **Blocks** if: variations still Submitted, material issues not Issued/Rejected, unbilled revised value > tolerance (tenant setting), or invoices outstanding (warning only). Requires `projects.close`. Project becomes read-only except attachments. |
 | Reopen | `projects.close` holder, reason required, audited |
+| Delete | Not available (D12). Cancel instead; a cancelled project stays visible under a "Cancelled" filter |
 
 ### 8.2 Award from quotation
 
@@ -595,19 +653,61 @@ after that is the existing contract workflow. Requires `operations` and contract
   "Project" picker. If a technician is also on the roster (`ProjectWorker.TechnicianId`), their clock-in
   pre-fills their muster mark, so they're never counted twice.
 
-### 8.5 Valuations and retention
+### 8.5 Valuations, advance and retention
 
-1. The PM or QS creates a valuation for a period: gross value of work done to date (by default the
-   project's progress % × revised value, editable), with retention and advance recovery calculated from
-   the project's billing terms.
-2. Submit → the consultant certifies outside Ecosys. The user records the certificate number, date and
-   **certified amount**, and attaches the signed certificate.
-3. "Raise invoice" creates a `TenantInvoice` for the certified amount (with tax), linked by
-   `ProjectValuationId`. From there it's the existing invoice, payment and overdue flow.
-4. After the defects liability period, "Release retention" raises a final invoice for the retention held.
-   A `project.retention-due` reminder fires when it becomes due.
+**Advance (optional).** "Raise advance invoice" invoices `AdvancePaymentAmount` at the start. It is then
+recovered from each valuation:
+
+```
+work this period         = WorkDoneToDate − previous valuation's WorkDoneToDate
+recovery this valuation  = min(work this period × AdvanceRecoveryPercent, advance still outstanding)
+AdvanceRecoveredToDate   = previous AdvanceRecoveredToDate + recovery this valuation
+```
+
+Recovery applies to work done, not to materials on site.
+
+**Each valuation:**
+1. The PM or QS enters work done to date and materials on site. Work done defaults to
+   progress % × revised value as a starting point only; the QS overwrites it with the BQ figure and
+   attaches the BQ workings.
+2. Ecosys calculates retention (capped), advance recovery and the amount due.
+3. Submit → the consultant certifies outside Ecosys. The user records the certifying consultant, the
+   certificate number and date, the **certified amount**, and attaches the signed certificate.
+4. "Raise invoice" creates a `TenantInvoice` for the certified amount plus VAT, linked by
+   `ProjectValuationId`. From there it's the existing invoice, payment and overdue flow. If the client
+   withholds tax, finance records the withholding certificate against that invoice (D10).
+
+**Retention, released in two parts:**
+1. At practical completion (`HandedOverAt` set), "Release retention" offers
+   `RetentionReleaseAtCompletionPercent` (default 50%) of the retention held and raises an invoice.
+2. When the defects liability period ends, it offers the balance. A `project.retention-due` reminder
+   fires at each point.
+
+A tenant can set the completion share to 0% (all retention released at the end) or 100% (all at
+completion). Each release is a `ProjectRetentionRelease` row, so retention held is always traceable.
 
 Projects without retention or valuations skip all of this and invoice milestones or the lump sum directly.
+
+### 8.6 Client portal (D11)
+
+Portal users already see their own client's work orders, invoices, quotations and contracts
+(`PortalController`, scoped by `IPortalContext.ClientId`). A **Projects** page is added on the same basis:
+
+| Portal shows | Portal never shows |
+|---|---|
+| Project name, number, site, stage, planned and actual dates | Costs, budget, margins, committed cost |
+| Progress: planned vs actual | Muster roll, workers, rates, wage sheet |
+| Milestones: name, planned date, status | Tasks, diary, internal notes |
+| Approved variations (number, title, addition/omission, amount) | Draft, submitted or rejected variations |
+| Certified valuations and their certificates | Draft or submitted valuations |
+| Project invoices and retention held (needs `finance`) | Consultants' contact details |
+| Project documents marked "Share with client" | All other attachments |
+
+- Shown only when the tenant's `clientPortal` setting is on **and** the project's
+  `VisibleInClientPortal` is true.
+- Documents are internal by default. An `Attachment` on a project is shared only when someone ticks
+  "Share with client" (new `Attachment.SharedWithClient` flag, default false).
+- Read-only in Release 1 and 2. The client can't approve variations or certificates through the portal.
 
 ---
 
@@ -648,7 +748,15 @@ GET          /api/projects/{id}/wage-sheet?from&to          man-days × rate, CS
 
 GET|POST|PUT /api/projects/{id}/valuations[/{valuationId}]                              [projects, finance]  (R2)
 POST         /api/projects/{id}/valuations/{valuationId}/submit | /certify | /raise-invoice | /void
-POST         /api/projects/{id}/release-retention                                       [projects, finance]  (R2)
+POST         /api/projects/{id}/advance-invoice                                         [projects, finance]  (R2)
+POST         /api/projects/{id}/retention-releases     { stage }                        [projects, finance]  (R2)
+
+GET|POST     /api/tenant-invoices/{id}/withholding-certificates                         [finance]            (R2)
+POST         /api/withholding-certificates/{id}/reverse                                 [finance]            (R2)
+
+GET  /api/portal/projects                    the client's visible projects              [projects]
+GET  /api/portal/projects/{id}               header, progress, milestones, approved variations, shared documents
+GET  /api/portal/projects/{id}/valuations    certified valuations, invoices, retention  [projects, finance]  (R2)
 
 POST /api/tenant-quotations/{id}/award-as-project                                      [projects, finance]
 POST /api/projects/{id}/create-maintenance-contract                                    [projects, operations]
@@ -675,14 +783,20 @@ New constants in `PermissionNames` (and `All`), mapped to roles through the exis
 | `projects.variations.submit` | Draft and submit variations |
 | `projects.variations.approve` | Direct approval when no approval matrix applies |
 | `projects.financials.view` | Financials tab, budget, margins, workers' daily rates and ID numbers, wage sheet |
-| `projects.financials.manage` | Budget lines, cost entries, workers' daily rates, valuations, retention release |
+| `projects.financials.manage` | Budget lines, cost entries, workers' daily rates, valuations, advance invoice, retention releases |
 | `projects.close` | Close / reopen |
 | `projects.settings` | Types, stages, templates, toggles |
 
+Withholding certificates use the existing `finance.manage` permission. Portal access uses the existing
+client-portal login; no new portal permissions.
+
 Default role mapping on seed: admin = all; manager = all except settings; finance = view + financials;
 dispatcher/viewer = view; technician = none (field staff reach projects through attendance, work orders
-and the diary, gated by membership). A project `Supervisor` member gets `projects.muster.mark` for
-that project. Rates are never shown on the muster screen, whatever the user's permissions.
+and the diary, gated by membership). The role-permission system is tenant-wide, so project-level actions use **two checks**: the user holds
+the permission **and** has the right role on that project. For example, marking a project's muster roll
+needs `projects.muster.mark` **and** a `Supervisor` (or `ProjectManager`) membership on that project. This
+check is built once (`ProjectAccess.RequireRole(projectId, roles)`) and reused by every project
+endpoint. Rates are never shown on the muster screen, whatever the user's permissions.
 
 ---
 
@@ -704,7 +818,7 @@ templates. Users control them through the existing `UserNotificationPreference` 
 | `project.end-date-approaching` | PM | N days before planned end |
 | `project.muster-missing` | Supervisor, PM | Muster roll not submitted by a configured time on an active working day |
 | `project.valuation-certified` | PM, finance | Certified amount recorded (prompt to raise the invoice) |
-| `project.retention-due` | PM, finance | Defects liability period ended with retention still held |
+| `project.retention-due` | PM, finance | Practical completion reached, and again when the defects liability period ends, with retention still held |
 
 Date-based reminders run in a new `ProjectReminderWorker` using the existing `BackgroundWorkLease`
 (the same pattern as `ApprovalReminderWorker`), with a sent-marker per (entity, key, date) for idempotency.
@@ -742,9 +856,11 @@ features/settings/…/ProjectSettingsPage.tsx   types, stages, templates, toggle
   clock-in, expense form, supplier bill form, PO form, invoice form, and a "Project" column/filter on
   their lists.
 - **Mobile:** the muster roll and diary are built mobile-first (supervisors on site, often on patchy
-  data). The muster screen is one list with large Present / Half day / Absent buttons. It should work
-  offline: marks are queued on the phone and replayed through the existing idempotency and `OccurredAt`
-  handling in `Ecosys.Api/Offline`, so a mark made without signal keeps its real time and is never duplicated.
+  data). The muster screen is one list with large Present / Half day / Absent buttons. Offline marking
+  is **new frontend work**: the app today only shows a connectivity banner, with no queue for offline
+  writes. The server side already exists: the idempotency and `OccurredAt` handling in
+  `Ecosys.Api/Offline` means a replayed mark keeps its real time and is never duplicated. Offline is
+  scoped to the muster roll only.
   The rest is responsive but office-first.
 
 ---
@@ -755,7 +871,8 @@ features/settings/…/ProjectSettingsPage.tsx   types, stages, templates, toggle
 Types, stages, templates, project CRUD, members, consultant directory and project links, milestones, tasks, weighted
 progress, variations with approval, documents (attachments), `ProjectId` on `WorkOrder` and
 `MaterialIssue`, register and workspace (Overview, Milestones, Tasks, Team, Variations, Work Orders,
-Materials, Documents), permissions, licensing, notifications for members, tasks and variations.
+Materials, Documents), permissions and project-role checks, licensing, notifications for members, tasks
+and variations, client portal Projects page (progress, milestones, approved variations, shared documents).
 
 *Accepted when:* a tenant can award a project to a client, plan weighted milestones, approve an
 addition and an omission and see the revised value change only on approval, link work orders and
@@ -764,14 +881,16 @@ material issues, and a tenant without the `projects` module gets a 403 on every 
 ### Release 2: Field and commercial
 Worker roster and daily muster roll, wage sheet, technician clock-in against projects, material
 requests/returns for projects, site diary, budget lines, cost entries, `ProjectId` on expenses, supplier
-bills, POs and invoices, valuations with retention and advance recovery, retention release, the
+bills, POs and invoices, valuations (totals) with advance recovery, two-part retention release,
+withholding certificates (finance-wide), portal valuations and invoices, offline muster marking, the
 financials tab (section 7), award-from-quotation, handover → maintenance contract, closure checks,
 milestone/deadline/muster/retention reminders.
 
 *Accepted when:* the financial breakdown for a seeded project reconciles line by line against the
 underlying issues, returns, muster roll, bills, expenses and invoices; and a valuation sequence
-(advance, two interim certificates, retention release) produces the same amounts as a hand-worked
-example.
+(advance, two interim certificates with materials on site, half retention at practical completion,
+the balance at end of defects liability) produces the same amounts as a hand-worked example; and an
+invoice part-settled by a 2% withholding certificate shows as fully paid.
 
 ### Release 3: Shared platform (separate design)
 In-app notification inbox, Calendar & Activities (meetings, minutes, action items), WhatsApp project
@@ -790,8 +909,15 @@ reminders, cross-module role dashboards.
 - **Financials:** a fixture project with known issues, returns, muster marks, bills, expenses and
   invoices must produce exact expected figures. A new rate with a later effective date must not change
   earlier days' cost; days with no rate show as uncosted and are excluded from labour cost.
-- **Valuations:** retention cap, advance recovery, "previously certified" chaining, a certified amount
-  that differs from the calculated one, and voiding a valuation that has already been invoiced (blocked).
+- **Valuations:** retention cap, advance recovery (stops at the advance amount, ignores materials on
+  site), "previously certified" chaining, a certified amount that differs from the calculated one, and
+  voiding a valuation that has already been invoiced (blocked).
+- **Retention:** 50/50, 0/100 and 100/0 splits; releases never exceed retention held.
+- **Withholding:** a certificate reduces the invoice balance like a payment; reversing it restores the
+  balance; it can't exceed the invoice balance.
+- **Variations:** two approvals at the same moment leave the totals equal to the `SUM` of approved rows.
+- **Portal:** a portal user sees only their own client's visible projects; costs, rates, muster data,
+  unapproved variations and unshared documents never appear in any portal response.
 - **Muster roll:** one mark per worker per day; the muster API never returns or accepts rates; the lock point is enforced; a technician who clocked in
   and is also on the roster counts once.
 - **Migrations:** additive only, nullable columns, applied against a copy of production-shaped data.
@@ -810,8 +936,11 @@ These ideas came up during brainstorming. They don't fit the existing codebase, 
 | Restructure into `Ecosys.Modules/*` | A rewrite with no user value; follow the existing layering |
 | `/api/v1/...` routes, a separate worker process | Not the repo's conventions; hosted services + `BackgroundWorkLease` already cover jobs |
 | Project-specific material, invoice or expense tables | Each would duplicate an existing ledger; use `ProjectId` on the existing rows. (The muster roll is the one exception: `AttendanceEntry` only covers technicians with logins, and casual workers don't have them, D8.) |
-| Hourly labour costing or hourly rates per person | Work in Kenya isn't billed or costed per hour, and per-person rates would put salary data in Ecosys. Labour is man-days × casuals' daily rates (D6) |
+| Hourly labour costing; salaries for permanent staff | Work in Kenya isn't billed or costed per hour. The only rates in Ecosys are casual workers' daily rates, entered by the office (D6) |
 | Payroll, statutory deductions, paying workers | Ecosys records what casuals are owed (wage sheet); paying them and payroll (PAYE, SHIF, NSSF, housing levy) stay outside |
+| Bill of quantities held in Ecosys | Valuations are recorded as totals with the QS's BQ attached (D9) |
+| eTIMS / KRA filing | Not needed for this module; withholding certificates are recorded, not filed (D10) |
+| National ID numbers for workers | Dropped: no purpose that justifies holding them under the Data Protection Act |
 | Gantt charts, dependencies, resource levelling | Primavera territory; revisit after real usage |
 | Arbitrary typed-in progress percentage | Replaced by weighted milestones + audited override (D4) |
 | Building on the `Ecosys.ServiceOps` project (`Customer`, its own `WorkOrder`) | Not referenced by the API or Infrastructure; appears to be legacy |
