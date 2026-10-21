@@ -19,8 +19,10 @@ document assumes the default.
 | D3 | Licensing | New commercial module key **`projects`**, sold on its own or with Operations/Finance. Tabs that touch inventory/work orders require `operations`; financial tabs require `finance` (same pattern as `WorkOrderBilling` requiring both today). | Bundle Projects into `operations`. |
 | D4 | Progress method | **Weighted milestones** (weights default to equal), with a permission-gated manual override that is recorded and shown as "overridden". | Task-count based; or manual only. |
 | D5 | Variation approval | Reuse the **Approval Matrix** with a new document type `ProjectVariation` (amount bands, permission/user approvers, reminders already exist). | A simple single-approver flag on the variation. |
-| D6 | Labour cost | Labour cost = attendance hours on the project × a **cost rate per technician** (new nullable `Technician.HourlyCostRate`). Without a rate, labour is shown as hours only. | Labour entered manually as a cost line. |
+| D6 | Labour unit and cost | Labour is measured in **man-days, never hours**: work in Kenya isn't billed or costed per hour. Casual site workers carry an agreed **daily rate**, so labour cost = days worked × that rate. Permanent staff are not costed automatically (no salary data in Ecosys); a tenant that wants them costed adds a manual "Labour" cost entry. | Labour as a cost entry only, with no daily rates at all. |
 | D7 | Material requests for projects | Allow `MaterialRequest` to target a project directly (make `WorkOrderId` nullable, add `ProjectId`, require exactly one). | Force every project material request through a work order. |
+| D8 | Site attendance for casual workers | Most people on site (fundis, helpers, casuals) have no Ecosys login and aren't `Technician` records, so they can't clock in. The supervisor marks a **daily muster roll** per project (Present / Half day / Absent) against a project **worker roster**. Technicians with logins can still clock in as they do today; the muster roll is what counts man-days. | Require every worker to be a `Technician` with a login. |
+| D9 | How projects are billed | **Valuations (interim payment certificates)**: each period, value the work done to date, deduct **retention** (typically 5–10%, released after the defects liability period) and previously certified amounts; the result becomes a `TenantInvoice`. A project with simple milestone or lump-sum billing just skips retention. | Plain invoices with a `ProjectId`, with no valuation or retention tracking. |
 
 ---
 
@@ -125,7 +127,8 @@ Stored as `TenantModuleSetting` with `ModuleKey = "projects"`:
   "variations": true,
   "siteDiary": false,
   "materials": true,
-  "attendance": true,
+  "musterRoll": true,
+  "valuations": true,
   "financials": true,
   "documents": true,
   "progressMethod": "WeightedMilestones",
@@ -230,6 +233,13 @@ public sealed class Project : AuditableEntity, ITenantEntity
     public decimal? ProgressOverridePercent { get; set; }
     public Guid? ProgressOverrideByUserId { get; set; }
     public string? ProgressOverrideReason { get; set; }
+
+    // Billing terms (D9, Release 2)
+    public decimal? RetentionPercent { get; set; }     // null = no retention
+    public decimal? RetentionCapAmount { get; set; }   // optional ceiling on total retention held
+    public int? DefectsLiabilityMonths { get; set; }   // retention release due HandedOverAt + this period
+    public decimal? AdvancePaymentAmount { get; set; } // recovered across valuations
+    public DateTime? RetentionReleasedAt { get; set; }
 
     // Handover / closure
     public Guid? MaintenanceContractId { get; set; }   // Contract created at handover
@@ -385,14 +395,61 @@ public sealed class ProjectDiaryEntry : AuditableEntity, ITenantEntity
     public string? IssuesAndDelays { get; set; }
     public string? InstructionsReceived { get; set; }   // feeds variations
     public string? Weather { get; set; }
-    public int? HeadcountOverride { get; set; }         // otherwise derived from attendance for the date
     public DateTime? SubmittedAt { get; set; }          // locked once submitted; corrections are new entries
+}
+
+// Project worker roster (D8): casuals and anyone else on site without an Ecosys login.
+public sealed class ProjectWorker : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public Guid? TechnicianId { get; set; }             // set when the worker is also a Technician
+    public string FullName { get; set; } = string.Empty;
+    public string? NationalIdNumber { get; set; }       // optional; visible only with financials permission
+    public string? Phone { get; set; }                  // M-Pesa number for wage payments
+    public string? Trade { get; set; }                  // from the tenant trade list (5.7)
+    public string EngagementType { get; set; } = "Casual"; // Casual | Permanent | Subcontractor
+    public decimal? DailyRate { get; set; }             // KES per full day; null for permanent staff
+    public bool IsActive { get; set; } = true;
+}
+
+// Daily muster roll: one row per worker per day, marked by the site supervisor.
+public sealed class ProjectMusterEntry : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public Guid ProjectWorkerId { get; set; }
+    public DateOnly WorkDate { get; set; }
+    public string Status { get; set; } = "Present";     // Present | HalfDay | Absent
+    public decimal DayFraction { get; set; } = 1;       // 1, 0.5 or 0, derived from Status
+    public decimal? RateApplied { get; set; }           // DailyRate copied at marking time, so later rate changes don't rewrite history
+    public Guid MarkedByUserId { get; set; }
+    public string? Note { get; set; }
+}
+
+// Valuation / interim payment certificate (D9).
+public sealed class ProjectValuation : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
+    public string ValuationNumber { get; set; } = string.Empty;  // NumberingSetting "ProjectValuation", prefix "VAL"
+    public DateOnly PeriodEnd { get; set; }
+    public decimal GrossValueToDate { get; set; }       // work done to date, incl. approved variations
+    public decimal RetentionToDate { get; set; }        // GrossValueToDate × RetentionPercent, capped
+    public decimal AdvanceRecoveredToDate { get; set; }
+    public decimal PreviouslyCertified { get; set; }    // net amount of earlier certified valuations
+    public decimal AmountDue { get; set; }              // Gross − Retention − AdvanceRecovered − PreviouslyCertified
+    public string Status { get; set; } = "Draft";       // Draft | Submitted | Certified | Invoiced | Void
+    public string? CertificateReference { get; set; }   // consultant / QS certificate number
+    public DateOnly? CertifiedOn { get; set; }
+    public decimal? CertifiedAmount { get; set; }       // may differ from AmountDue; the certified figure is what gets invoiced
+    public Guid? InvoiceId { get; set; }                // TenantInvoice raised from this valuation
 }
 ```
 
-Photos are `Attachment` rows with `EntityType = "ProjectDiaryEntry"`. Workers present and materials
-used that day are **derived** from `AttendanceEntry` and `MaterialIssue` for the project and date, not
-re-entered.
+Photos are `Attachment` rows with `EntityType = "ProjectDiaryEntry"`, and the consultant's signed
+certificate is an `Attachment` on the valuation. Workers present and materials used on a given day are
+**derived** from the muster roll and `MaterialIssue` for the project and date, not re-entered in the diary.
 
 ### 5.7 Trades
 
@@ -413,16 +470,15 @@ the project belongs to the tenant and (where the row has a `ClientId`) to the sa
 | `MaterialIssue` | `+ ProjectId` | Issue stock to a project/site directly (`WorkOrderId` already nullable) |
 | `MaterialRequest` | `+ ProjectId`, `WorkOrderId` → nullable, check: exactly one set (D7) | Project material requisitions |
 | `PartsReturn` | `+ ProjectId` | Returns reduce project material cost |
-| `AttendanceEntry` | `+ ProjectId` | Clock in "on site" for a project (alongside the existing `CurrentWorkOrderId`) |
-| `Technician` | `+ HourlyCostRate` (decimal?) | Labour costing (D6); visible only with finance permission |
+| `AttendanceEntry` | `+ ProjectId` | Technicians with logins clock in "on site" for a project (alongside the existing `CurrentWorkOrderId`) |
 | `Expense` | `+ ProjectId` | Staff claims charged to a project |
 | `SupplierBill` | `+ ProjectId` | Subcontractor and supplier costs |
 | `PurchaseOrder` | `+ ProjectId` | Committed (not yet billed) cost |
 | `TenantQuotation` | `+ ConvertedToProjectId` | "Award as project", mirroring `ConvertedToWorkOrderId` |
-| `TenantInvoice` | `+ ProjectId` | Progress / milestone / final invoices against a project |
+| `TenantInvoice` | `+ ProjectId`, `+ ProjectValuationId` | Valuation, milestone, final and retention-release invoices against a project |
 | `Contract` | `+ SourceProjectId` | AMC created at handover |
 | `ApprovalDocumentTypes` | `+ ProjectVariation` | Variation approvals |
-| `NumberingSetting` defaults | `+ Project (PRJ)`, `+ ProjectVariation (VO)` | Document numbers |
+| `NumberingSetting` defaults | `+ Project (PRJ)`, `+ ProjectVariation (VO)`, `+ ProjectValuation (VAL)` | Document numbers |
 
 ---
 
@@ -436,7 +492,8 @@ traced on screen.
 | Revised value | `OriginalValue + ApprovedAdditions − ApprovedOmissions` |
 | Pending variations | Sum of `Submitted` variations (shown separately, never added to the revised value) |
 | Materials cost | Σ `MaterialIssue.TotalIssuedCost` (status Issued, `ProjectId` = p) − value of `PartsReturn` for p |
-| Labour cost | Σ attendance hours on p (clock-in to clock-out minus breaks) × `Technician.HourlyCostRate` |
+| Man-days | Σ `ProjectMusterEntry.DayFraction` for p (shown by trade and by week) |
+| Labour cost | Σ `DayFraction × RateApplied` for p (casual workers only; permanent staff via manual cost entries, D6) |
 | Subcontractor / supplier cost | Σ `SupplierBill.Amount` with `ProjectId` = p |
 | Expenses | Σ `Expense.Amount` with status Approved or Reimbursed and `ProjectId` = p |
 | Other costs | Σ `ProjectCostEntry.Amount` |
@@ -445,6 +502,10 @@ traced on screen.
 | Invoiced | Σ `TenantInvoice.TotalAmount − TaxAmount` (not Void) with `ProjectId` = p |
 | Received | Σ allocated `TenantPayment` against those invoices |
 | Outstanding | Σ `TenantInvoice.Balance` for those invoices; overdue = past `DueDate` |
+| Certified to date | `GrossValueToDate` of the latest Certified valuation |
+| Retention held | `RetentionToDate` of the latest Certified valuation, until a retention-release invoice is raised |
+| Retention due | Retention held, once `HandedOverAt + DefectsLiabilityMonths` has passed |
+| Unbilled value | Revised value − certified to date |
 | Indicative margin | `(Revised value − Actual cost) / Revised value` |
 | Forecast margin | `(Revised value − (Actual cost + Committed cost)) / Revised value` |
 
@@ -489,11 +550,34 @@ assets created during the project (assets whose `SiteId` matches and `CreatedAt`
 project), start date = handover date. It saves a **Draft** `Contract` with `SourceProjectId`; everything
 after that is the existing contract workflow. Requires `operations` and contract permissions.
 
-### 8.4 Site attendance
+### 8.4 Site attendance (muster roll)
 
-Technicians clock in through the existing attendance flow, with an optional "Project" picker (projects
-where they are a member and the stage category is Active or Handover). `AttendanceAutoClockOutWorker`
-is unchanged.
+- The supervisor opens the project on their phone each day and sees the active roster with yesterday's
+  marks pre-filled. They tap Present / Half day / Absent for each worker and submit. A new worker can be
+  added to the roster from the same screen.
+- One mark per worker per project per day (unique index). Marks can be corrected until the tenant's
+  lock point (default: end of the following day). After that a correction needs `projects.manage` and
+  is audited.
+- `RateApplied` is copied from the worker's `DailyRate` when the mark is made.
+- Weekly **wage sheet**: man-days × rate per worker for a date range, exportable for paying casuals
+  (cash or M-Pesa). Ecosys records what's owed; it doesn't pay anyone or run payroll.
+- Technicians with logins can still clock in through the existing attendance flow with an optional
+  "Project" picker. If a technician is also on the roster (`ProjectWorker.TechnicianId`), their clock-in
+  pre-fills their muster mark, so they're never counted twice.
+
+### 8.5 Valuations and retention
+
+1. The PM or QS creates a valuation for a period: gross value of work done to date (by default the
+   project's progress % × revised value, editable), with retention and advance recovery calculated from
+   the project's billing terms.
+2. Submit → the consultant certifies outside Ecosys. The user records the certificate number, date and
+   **certified amount**, and attaches the signed certificate.
+3. "Raise invoice" creates a `TenantInvoice` for the certified amount (with tax), linked by
+   `ProjectValuationId`. From there it's the existing invoice, payment and overdue flow.
+4. After the defects liability period, "Release retention" raises a final invoice for the retention held.
+   A `project.retention-due` reminder fires when it becomes due.
+
+Projects without retention or valuations skip all of this and invoice milestones or the lump sum directly.
 
 ---
 
@@ -521,10 +605,18 @@ POST                /api/projects/{id}/variations/{variationId}/submit | /approv
 
 GET  /api/projects/{id}/work-orders          existing work orders filtered by project   [projects, operations]
 GET  /api/projects/{id}/materials            issues, requests, returns for the project  [projects, operations]
-GET  /api/projects/{id}/attendance?from&to   sessions on the project                    [projects, operations]
 GET  /api/projects/{id}/financials           section 7 breakdown                        [projects, finance]
 GET|POST|PUT /api/projects/{id}/budget-lines | /cost-entries                            [projects, finance]  (R2)
 GET|POST|PUT /api/projects/{id}/diary[/{entryId}], POST …/{entryId}/submit             (R2)
+
+GET|POST|PUT /api/projects/{id}/workers[/{workerId}]        roster                     (R2)
+GET          /api/projects/{id}/muster?date=YYYY-MM-DD      day sheet, pre-filled      (R2)
+PUT          /api/projects/{id}/muster?date=YYYY-MM-DD      submit marks for the day   (R2)
+GET          /api/projects/{id}/wage-sheet?from&to          man-days × rate, CSV export [projects, finance] (R2)
+
+GET|POST|PUT /api/projects/{id}/valuations[/{valuationId}]                              [projects, finance]  (R2)
+POST         /api/projects/{id}/valuations/{valuationId}/submit | /certify | /raise-invoice | /void
+POST         /api/projects/{id}/release-retention                                       [projects, finance]  (R2)
 
 POST /api/tenant-quotations/{id}/award-as-project                                      [projects, finance]
 POST /api/projects/{id}/create-maintenance-contract                                    [projects, operations]
@@ -547,16 +639,18 @@ New constants in `PermissionNames` (and `All`), mapped to roles through the exis
 |---|---|
 | `projects.view` | Register and workspace (non-financial tabs) |
 | `projects.manage` | Create/edit projects, members, parties, milestones, tasks, stage changes |
+| `projects.muster.mark` | Maintain the roster and mark the daily muster roll (site supervisors) |
 | `projects.variations.submit` | Draft and submit variations |
 | `projects.variations.approve` | Direct approval when no approval matrix applies |
-| `projects.financials.view` | Financials tab, budget, margins, labour rates |
-| `projects.financials.manage` | Budget lines, cost entries |
+| `projects.financials.view` | Financials tab, budget, margins, workers' daily rates and ID numbers, wage sheet |
+| `projects.financials.manage` | Budget lines, cost entries, valuations, retention release |
 | `projects.close` | Close / reopen |
 | `projects.settings` | Types, stages, templates, toggles |
 
 Default role mapping on seed: admin = all; manager = all except settings; finance = view + financials;
 dispatcher/viewer = view; technician = none (field staff reach projects through attendance, work orders
-and the diary, gated by membership).
+and the diary, gated by membership). A project `Supervisor` member gets `projects.muster.mark` for
+that project. A supervisor without `projects.financials.view` sees the roster and marks but no rates.
 
 ---
 
@@ -576,6 +670,9 @@ templates. Users control them through the existing `UserNotificationPreference` 
 | `project.variation-submitted` | Approvers (via the approval matrix, so existing reminders apply) | Submit |
 | `project.variation-decided` | Submitter, PM | Approve / reject |
 | `project.end-date-approaching` | PM | N days before planned end |
+| `project.muster-missing` | Supervisor, PM | Muster roll not submitted by a configured time on an active working day |
+| `project.valuation-certified` | PM, finance | Certified amount recorded (prompt to raise the invoice) |
+| `project.retention-due` | PM, finance | Defects liability period ended with retention still held |
 
 Date-based reminders run in a new `ProjectReminderWorker` using the existing `BackgroundWorkLease`
 (the same pattern as `ApprovalReminderWorker`), with a sent-marker per (entity, key, date) for idempotency.
@@ -597,7 +694,7 @@ features/projects/
   ProjectDetailPage.tsx       workspace with tabs
   components/
     OverviewTab, MilestonesTab, TasksTab, TeamTab, VariationsTab,
-    WorkOrdersTab, MaterialsTab, AttendanceTab, FinancialsTab, DiaryTab, DocumentsTab
+    WorkOrdersTab, MaterialsTab, MusterRollTab, ValuationsTab, FinancialsTab, DiaryTab, DocumentsTab
     ProjectForm, VariationForm, StageBadge, ProgressBar
 features/settings/…/ProjectSettingsPage.tsx   types, stages, templates, toggles, trades
 ```
@@ -612,8 +709,11 @@ features/settings/…/ProjectSettingsPage.tsx   types, stages, templates, toggle
 - **Existing screens gain a Project field:** the work-order form, material request/issue form, attendance
   clock-in, expense form, supplier bill form, PO form, invoice form, and a "Project" column/filter on
   their lists.
-- **Mobile:** the diary and attendance flows are built mobile-first (supervisors on site). The rest is
-  responsive but office-first.
+- **Mobile:** the muster roll and diary are built mobile-first (supervisors on site, often on patchy
+  data). The muster screen is one list with large Present / Half day / Absent buttons. It should work
+  offline: marks are queued on the phone and replayed through the existing idempotency and `OccurredAt`
+  handling in `Ecosys.Api/Offline`, so a mark made without signal keeps its real time and is never duplicated.
+  The rest is responsive but office-first.
 
 ---
 
@@ -630,12 +730,16 @@ addition and an omission and see the revised value change only on approval, link
 material issues, and a tenant without the `projects` module gets a 403 on every Projects endpoint.
 
 ### Release 2: Field and commercial
-Site attendance against projects, material requests/returns for projects, site diary, budget lines,
-cost entries, `ProjectId` on expenses, supplier bills, POs and invoices, the financials tab (section 7),
-award-from-quotation, handover → maintenance contract, closure checks, milestone/deadline reminders.
+Worker roster and daily muster roll, wage sheet, technician clock-in against projects, material
+requests/returns for projects, site diary, budget lines, cost entries, `ProjectId` on expenses, supplier
+bills, POs and invoices, valuations with retention and advance recovery, retention release, the
+financials tab (section 7), award-from-quotation, handover → maintenance contract, closure checks,
+milestone/deadline/muster/retention reminders.
 
 *Accepted when:* the financial breakdown for a seeded project reconciles line by line against the
-underlying issues, returns, attendance, bills, expenses and invoices.
+underlying issues, returns, muster roll, bills, expenses and invoices; and a valuation sequence
+(advance, two interim certificates, retention release) produces the same amounts as a hand-worked
+example.
 
 ### Release 3: Shared platform (separate design)
 In-app notification inbox, Calendar & Activities (meetings, minutes, action items), WhatsApp project
@@ -651,8 +755,13 @@ reminders, cross-module role dashboards.
   `[projects, operations]` and `[projects, finance]` dependencies.
 - **Domain:** variation state machine (only Approved moves values; void reverses; no negative revised
   value); progress calculation (weights, override, verified-only mode); closure checks.
-- **Financials:** a fixture project with known issues, returns, attendance, bills, expenses and invoices
-  must produce exact expected figures.
+- **Financials:** a fixture project with known issues, returns, muster marks, bills, expenses and
+  invoices must produce exact expected figures. Changing a worker's daily rate must not change past
+  labour cost.
+- **Valuations:** retention cap, advance recovery, "previously certified" chaining, a certified amount
+  that differs from the calculated one, and voiding a valuation that has already been invoiced (blocked).
+- **Muster roll:** one mark per worker per day; the lock point is enforced; a technician who clocked in
+  and is also on the roster counts once.
 - **Migrations:** additive only, nullable columns, applied against a copy of production-shaped data.
   Existing work-order, material and invoice tests pass unchanged.
 
@@ -668,7 +777,9 @@ These ideas came up during brainstorming. They don't fit the existing codebase, 
 | Rebuild AMC as a new module | `Contract`, PM plans and renewals already are the AMC module |
 | Restructure into `Ecosys.Modules/*` | A rewrite with no user value; follow the existing layering |
 | `/api/v1/...` routes, a separate worker process | Not the repo's conventions; hosted services + `BackgroundWorkLease` already cover jobs |
-| Project-specific attendance, material, invoice or expense tables | Each would duplicate an existing ledger; use `ProjectId` on the existing rows |
+| Project-specific material, invoice or expense tables | Each would duplicate an existing ledger; use `ProjectId` on the existing rows. (The muster roll is the one exception: `AttendanceEntry` only covers technicians with logins, and casual workers don't have them, D8.) |
+| Hourly labour costing or hourly rates per person | Work in Kenya isn't billed or costed per hour, and per-person rates would put salary data in Ecosys. Labour is man-days × casuals' daily rates (D6) |
+| Payroll, statutory deductions, paying workers | Ecosys records what casuals are owed (wage sheet); paying them and payroll (PAYE, SHIF, NSSF, housing levy) stay outside |
 | Gantt charts, dependencies, resource levelling | Primavera territory; revisit after real usage |
 | Arbitrary typed-in progress percentage | Replaced by weighted milestones + audited override (D4) |
 | Building on the `Ecosys.ServiceOps` project (`Customer`, its own `WorkOrder`) | Not referenced by the API or Infrastructure; appears to be legacy |
