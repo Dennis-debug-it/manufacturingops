@@ -1,6 +1,6 @@
 # Release 3: Shared platform — design for review
 
-Status: **draft for review. Nothing here is built.**
+Status: **decisions made (October 2026). Ready to build.**
 Scope: the four items the Projects design (section 13) deferred because they serve every module, not
 just Projects:
 
@@ -13,18 +13,18 @@ Each part can ship on its own. Part 1 comes first because parts 2–4 send notif
 
 ---
 
-## 0. Decisions needed
+## 0. Decisions
 
-| # | Question | Recommendation |
+| # | Question | Decision |
 |---|---|---|
-| R1 | Live updates for the bell: a SignalR connection, or polling every 60 s? | **SignalR**, with polling as the fallback. The hub already exists; only the frontend client is missing. |
-| R2 | How long are notifications kept? | **90 days**, then deleted. Read ones can be archived by the user before that. |
-| R3 | Meeting action items: a new shared `ActionItem` list, or create `ProjectTask`s? | **New `ActionItem`**, shown on the linked record (a project's Tasks tab lists both, clearly labelled). Meetings also happen for clients and contracts, which have no task list. |
-| R4 | Calendar sync with Google/Outlook: one-way feed, or two-way? | **One-way**: a private calendar feed (ICS link) each user can subscribe to, plus `.ics` invites by email. Two-way sync needs OAuth apps with Google and Microsoft and is a project of its own. |
-| R5 | WhatsApp number: each tenant connects its own WhatsApp Business account, or one shared Ecosys number? | **Each tenant's own account.** The existing `WhatsAppSetting` is already shaped for it, messages carry the tenant's name, and Meta bills the tenant directly. |
-| R6 | WhatsApp for staff only, or clients too? | **Staff first** (supervisors, PMs, technicians). Client messages (e.g. "your technician is on the way") come later, under the same opt-in rules. |
-| R7 | SMS fallback (e.g. Africa's Talking) when WhatsApp fails? | **Not now.** Add it as a fourth channel later if tenants ask. |
-| R8 | Can users rearrange their own dashboard? | **No.** Layouts are set per role in code, and a tenant admin can hide widgets for a role. Personal layouts add storage and support cost for little gain. |
+| R1 | Live updates for the bell | **SignalR**, with polling every 60 s as the fallback when the connection drops. The hub already exists; only the frontend client is missing. |
+| R2 | How long are notifications kept? | **90 days**, then deleted. A user can archive read ones before that. |
+| R3 | Meeting action items | **A new `ActionItem` list**, shown on the linked record (a project's Tasks tab lists both, clearly labelled). Meetings also happen for clients and contracts, which have no task list. |
+| R4 | External calendars | **No emailed meeting invites for now.** Staff are told about meetings in the bell and by email (no `.ics` attached). The in-app calendar and the private one-way feed link stay (3.5). Two-way sync is not planned. |
+| R5 | WhatsApp number | **One shared Ecosys number for now.** Ecosys owns the WhatsApp Business account and its templates, and pays Meta. Every message names the tenant. Built so a tenant can move to its own number later (4.1). |
+| R6 | Who gets WhatsApp | **Staff and clients from the start**, both opt-in only (4.2). |
+| R7 | SMS | **No SMS.** Email is the fallback channel. |
+| R8 | Dashboard layouts | **Users can rearrange their own.** Each role has a default layout; a user can reorder, hide and add widgets they're allowed to see, and reset to the default. A tenant admin can still hide widgets for a role (5.1). |
 
 ---
 
@@ -208,10 +208,11 @@ public sealed class ActionItem : AuditableEntity, ITenantEntity
 
 ### 3.3 Workflows
 
-- **Schedule:** the organiser picks the time, attendees and the linked record. Staff get an in-app
-  notification and an email with an `.ics` invite. External attendees (consultants, client contacts,
-  other emails) get the email with the `.ics` only. Moving or cancelling the meeting sends an
-  update or cancellation `.ics` with the same UID.
+- **Schedule:** the organiser picks the time, attendees and the linked record. Staff attendees get
+  `activity.scheduled` in the bell and by email, under their preferences. No `.ics` invite is sent
+  (R4). External attendees (consultants, client contacts, other emails) are recorded on the meeting
+  but not emailed; the organiser invites them as they do today. Moving or cancelling the meeting
+  sends `activity.updated` / `activity.cancelled` to staff attendees.
 - **Reminders:** `activity.reminder` goes to staff attendees `ReminderMinutesBefore` minutes ahead.
   A worker runs every 5 minutes and logs what it sent, like `ProjectReminderLog`.
 - **Minutes:** after the meeting, the organiser marks it Held, ticks who attended, writes the minutes
@@ -246,7 +247,7 @@ agenda view is the default on phones.
 
 ### 3.5 External calendars (R4)
 
-Each user can create a private feed URL (`/api/calendar/feed/{token}.ics`) to subscribe to from
+No meeting invites are emailed for now. Each user can create a private feed URL (`/api/calendar/feed/{token}.ics`) to subscribe to from
 Google or Outlook. The token is random, stored hashed, revocable, and only reveals that user's items.
 The feed holds titles, times and locations only, never amounts. It updates when the external
 calendar polls it (usually every few hours), which the screen says plainly.
@@ -270,54 +271,79 @@ their own modules.
 
 ## 4. Part 3: WhatsApp reminders
 
-### 4.1 Provider
+### 4.1 Provider and the shared number (R5)
 
-Use the **Meta WhatsApp Cloud API** with each tenant's own business account (R5). The existing
-`WhatsAppSetting` holds the business account id, phone number id, access token and webhook verify
-token. It gains `AppSecret` (to check webhook signatures). The access token is encrypted at rest with
-the same protection as other stored credentials.
+Use the **Meta WhatsApp Cloud API** with **one WhatsApp Business account owned by Ecosys**. Its
+phone number id, access token, app secret and webhook verify token are platform configuration
+(environment secrets), not tenant data. The existing per-tenant `WhatsAppSetting` is kept for a later
+move to tenant-owned numbers: the sender takes the sending account from a resolver, which returns the
+Ecosys account for every tenant today.
 
 ```csharp
 public interface IWhatsAppSender
 {
-    Task<WhatsAppSendResult> SendTemplateAsync(Guid tenantId, string toE164, string templateName,
-        string language, IReadOnlyList<string> bodyParameters, CancellationToken cancellationToken);
+    Task<WhatsAppSendResult> SendTemplateAsync(string toE164, string templateName, string language,
+        IReadOnlyList<string> bodyParameters, CancellationToken cancellationToken);
 }
 ```
 
-Messages go through an outbox table (`WhatsAppOutboxMessage`), like email, so a slow or failing API
-never blocks a request. Retries back off, with a final failure logged on the notification.
+Messages go through an outbox table (`WhatsAppOutboxMessage`, tenant-owned, so each tenant's usage
+can be counted), like email, so a slow or failing API never blocks a request. Retries back off, with
+a final failure recorded on the outbox row and shown in the tenant's WhatsApp log.
+
+What sharing one number means:
+- **Sender name:** messages arrive from "Ecosys". Every template's first parameter is the tenant's
+  name, e.g. "*Acme Builders*: today's muster roll for Westlands Mall hasn't been marked yet."
+- **Cost:** Meta bills Ecosys. Each tenant's outbox rows are counted per month, so the cost can be
+  recovered in plan pricing. A platform setting caps messages per tenant per month (default 1,000);
+  beyond it, WhatsApp is skipped and email still goes.
+- **Replies:** one number serves every tenant, and one person can work with two tenants, so a reply
+  can't always be tied to one tenant. For now only STOP/START are acted on; other replies are logged
+  on the platform side and not shown to tenants.
+- **Templates:** Ecosys submits and maintains one set of templates. Tenants don't manage templates.
 
 ### 4.2 Rules that come from WhatsApp itself
 
 - **Templates:** a business can only start a conversation with a pre-approved template. Ecosys ships
-  a small set of *utility* templates the tenant submits for approval from the WhatsApp settings page
-  (with suggested wording), for example:
-  - `muster_missing`: "Today's muster roll for {{1}} hasn't been marked yet."
-  - `task_due`
-  - `valuation_certified`
-  - `retention_due`
-  - `meeting_reminder`
-  - `work_order_assigned`
-- **Opt-in:** a user must agree, in Ecosys, to receive WhatsApp messages on a confirmed number.
-  - The number is stored in E.164 format and confirmed with a one-time code sent by WhatsApp.
-  - Opting out is one tap, and replying "STOP" also opts out (handled through the webhook).
-- **Cost:** Meta charges the tenant per conversation. The settings page says so, and a tenant chooses
-  which keys may use WhatsApp at all. By default only `project.muster-missing`, `work-order.assigned`
-  and `activity.reminder` can.
+  a small set of *utility* templates, each tied to a notification key:
+  - Staff: `muster_missing`, `task_due`, `valuation_certified`, `retention_due`, `meeting_reminder`,
+    `action_item_due`, `work_order_assigned`.
+  - Clients (R6): `technician_on_the_way`, `work_order_completed`, `invoice_issued`,
+    `valuation_certified_client`.
+- **Opt-in, staff:** a user agrees in Ecosys (office settings or the technician app) to receive
+  WhatsApp messages on a confirmed number. The number is stored in E.164 and confirmed with a
+  one-time code sent over WhatsApp.
+- **Opt-in, clients (R6):**
+  - A portal user opts in from the portal the same way, with a one-time code.
+  - For a client contact with no portal login, office staff can record that the contact agreed
+    (who recorded it, when, and how: in person, by phone, in writing). The contact's first message
+    says why they're getting it and that STOP ends it.
+  - Client messages go to the contacts the client record marks for them, never to every contact.
+- **Opting out:** one tap in Ecosys, or replying STOP. Because the number is shared, STOP blocks that
+  phone number for every tenant (a platform-wide `WhatsAppOptOut` list), and START lifts it. This is
+  what Meta expects from one sender.
+- **Which keys may use WhatsApp:** a tenant chooses which keys may use it at all. By default only
+  `project.muster-missing`, `work-order.assigned`, `activity.reminder` and `technician-on-the-way`
+  can.
 
 ### 4.3 Webhook
 
-`POST /api/whatsapp/webhook/{tenantSlug}` checks the `X-Hub-Signature-256` signature with the app
-secret, then records delivery status (sent, delivered, read, failed) on the outbox row and handles
-STOP. The GET verification handshake uses the verify token. Inbound chat (the existing conversations
-inbox) stays behind its feature flag. It isn't part of this release.
+One endpoint for the shared number: `POST /api/whatsapp/webhook`. It checks the
+`X-Hub-Signature-256` signature with the platform app secret, records delivery status (sent,
+delivered, read, failed) on the outbox row by Meta's message id, and handles STOP/START. The GET
+verification handshake uses the platform verify token. Inbound chat (the existing conversations
+inbox) stays behind its feature flag and isn't part of this release.
 
 ### 4.4 Data changes
 
 - `User`: `WhatsAppNumber` (E.164), `WhatsAppVerifiedAt`, `WhatsAppOptedInAt`, `WhatsAppOptedOutAt`.
-- `WhatsAppSetting`: `AppSecret`, plus `AllowedNotificationKeys` (JSON).
-- `WhatsAppTemplate`: `NotificationKey`, plus the approval status read back from Meta.
+  Portal users are `User`s too, so they get the same fields.
+- `ClientContact`: `WhatsAppNumber`, `WhatsAppConsentAt`, `WhatsAppConsentRecordedByUserId`,
+  `WhatsAppConsentMethod`, `ReceivesWhatsApp`.
+- `WhatsAppSetting` (per tenant): `AllowedNotificationKeys` (JSON). Account fields stay unused while
+  the number is shared.
+- New: `WhatsAppOutboxMessage` (tenant-owned), `WhatsAppOptOut` (platform-wide, by phone number),
+  `WhatsAppVerificationCode` (hashed, 10-minute expiry, 5 attempts).
 
 ---
 
@@ -328,8 +354,14 @@ inbox) stays behind its feature flag. It isn't part of this release.
 - A **widget catalogue** in code. Each widget has a key, a title, the module(s) and permission it
   needs, and one backend query.
 - A **default layout per role**, also in code. A tenant admin can hide widgets for a role (stored in
-  the `dashboards` module setting), but can't add custom queries (R8).
-- The dashboard page asks `GET /api/dashboard/layout` for the caller's widgets. It then loads each one
+  the `dashboards` module setting). No one can add custom queries.
+- **Personal layouts (R8):** a user can reorder, hide and add widgets from the ones they're allowed to
+  see, and pick a widget's size (small or wide). Their layout is saved in `UserDashboardLayout`
+  (TenantId, UserId, an ordered JSON list of `{key, size}`, UpdatedAt). "Reset to default" deletes the
+  row. A widget the user loses access to, or the admin hides, simply drops out of their layout; a new
+  widget added to their role's default shows up at the end once.
+- The dashboard page asks `GET /api/dashboard/layout` for the caller's widgets (their saved layout, or
+  the role default) and saves changes with `PUT /api/dashboard/layout`. It then loads each one
   from `GET /api/dashboard/widgets/{key}` in parallel, so one slow widget doesn't hold up the page.
 - Results are cached per tenant, widget and scope for 5 minutes. Anything a widget's own data changes
   can invalidate it.
@@ -372,13 +404,14 @@ Technicians keep the technician app home, plus a "My action items" card.
     honour them.
   - **Push:** survives a restart (row-based); stale pushes are dropped.
   - **Inbox:** shows only the caller's rows; read and read-all.
-  - **Activities:** the `.ics` UID stays stable across updates and cancellation; minutes lock on
-    publish; action items carry the linked record.
+  - **Activities:** staff attendees are notified on schedule, move and cancel; minutes lock on
+    publish; action items carry the linked record. The feed's event UIDs stay stable across updates.
   - **Calendar:** no source the user lacks the module or permission for appears; the feed token
     can't reach another user.
   - **WhatsApp:** webhook signature checked; STOP opts out; nothing is sent without opt-in or for a
     key the tenant hasn't allowed; outbox retries.
-  - **Dashboards:** each widget returns 403 without its module or permission; layout hiding works.
+  - **Dashboards:** each widget returns 403 without its module or permission; admin hiding works;
+    a saved personal layout can't include a widget the user isn't allowed; reset restores the default.
 
 ---
 
@@ -387,19 +420,24 @@ Technicians keep the technician app home, plus a "My action items" card.
 | Step | Contents | Depends on |
 |---|---|---|
 | 3a | Dispatcher, `Notification` table, bell, SignalR client, office preferences page, row-based push, housekeeping. Existing senders moved onto it | — |
-| 3b | Activities, attendees, minutes, action items, `.ics` invites, reminders, My calendar, calendar feed | 3a |
-| 3c | Widget catalogue, role layouts, tenant hiding, dashboard page | 3a for "action items due"; otherwise independent |
-| 3d | WhatsApp sender, outbox, webhook, opt-in and number check, templates, per-key allow-list | 3a; a tenant with an approved WhatsApp Business account to test against |
+| 3b | Activities, attendees, minutes, action items, reminders, My calendar, calendar feed | 3a |
+| 3c | Widget catalogue, role layouts, tenant hiding, personal layouts, dashboard page | 3a for "action items due"; otherwise independent |
+| 3d | WhatsApp sender, outbox, webhook, staff and client opt-in, number check, templates, per-key allow-list, monthly cap | 3a; the Ecosys WhatsApp Business account with approved templates to test against |
 
-3c and 3d can run in parallel once 3a is in. 3d needs a real WhatsApp Business account and Meta
-template approval, which takes days and is outside our control. Start that paperwork early.
+3d can be built and tested against a fake sender, but it can't go live until the Ecosys WhatsApp
+Business account is verified and its templates are approved by Meta.
+
+3c and 3d can run in parallel once 3a is in. Meta's business verification and template approval
+take days and are outside our control. Start that paperwork early.
 
 ---
 
 ## 8. Not doing
 
-- Two-way Google/Outlook sync (R4). Room booking and resource calendars.
+- Emailed `.ics` meeting invites, for now (R4). Two-way Google/Outlook sync. Room booking and
+  resource calendars.
 - Inbound WhatsApp chat as a support channel. It stays behind its existing flag.
+- Tenant-owned WhatsApp numbers, for now (R5). The sender is built so they can be added later.
 - SMS (R7).
-- User-built dashboards or custom report queries (R8).
+- Custom report queries or user-built widgets. Users arrange existing widgets only (R8).
 - Notification digests (one daily email). Worth adding later, using the inbox rows as the source.
