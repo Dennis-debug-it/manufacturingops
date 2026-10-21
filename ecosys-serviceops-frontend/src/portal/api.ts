@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { portalApi } from './api/portalApiClient'
+import { portalApi, portalApiClient } from './api/portalApiClient'
 import { endpoints } from '../shared/api/endpoints'
 import { formatCurrency } from '../shared/utils/format'
 
@@ -11,6 +11,8 @@ export interface PortalSettings {
   showContracts: boolean
   showAssetRegister: boolean
   welcomeMessage: string | null
+  /** True when the tenant licenses Projects and shows it in the portal. */
+  showProjects?: boolean
 }
 
 export function usePortalSettings() {
@@ -287,6 +289,57 @@ export interface PortalContractListItem {
 
 export function usePortalContracts() {
   return useQuery({ queryKey: ['portal', 'contracts'], queryFn: () => portalApi.get<PortalContractListItem[]>(endpoints.portal.contracts), staleTime: 60_000 })
+}
+
+export interface PortalProjectListItem {
+  id: string
+  projectNumber: string
+  name: string
+  siteName: string | null
+  stageName: string
+  stageCategory: string
+  currency: string
+  contractValue: number
+  progressPercent: number
+  plannedProgressPercent: number
+  plannedStartDate: string | null
+  plannedEndDate: string | null
+}
+
+export interface PortalProjectDetail {
+  summary: PortalProjectListItem
+  description: string | null
+  actualStartDate: string | null
+  actualEndDate: string | null
+  approvedAdditions: number
+  approvedOmissions: number
+  milestones: Array<{ name: string; plannedDate: string | null; status: string; isOverdue: boolean }>
+  variations: Array<{ variationNumber: string; kind: string; title: string; amount: number; clientReference: string | null; approvedAt: string | null }>
+  documents: Array<{ id: string; fileName: string; fileSize: number; mimeType: string; createdAt: string }>
+}
+
+export function usePortalProjects() {
+  return useQuery({ queryKey: ['portal', 'projects'], queryFn: () => portalApi.get<PortalProjectListItem[]>(endpoints.portal.projects), staleTime: 60_000 })
+}
+
+export function usePortalProject(id: string | undefined) {
+  return useQuery({
+    enabled: Boolean(id),
+    queryKey: ['portal', 'projects', id],
+    queryFn: () => portalApi.get<PortalProjectDetail>(endpoints.portal.project(id ?? '')),
+    staleTime: 60_000,
+  })
+}
+
+/** Downloads a document the tenant has shared on this project. */
+export async function downloadPortalProjectDocument(projectId: string, document: { id: string; fileName: string }) {
+  const response = await portalApiClient.get(endpoints.portal.projectDocument(projectId, document.id), { responseType: 'blob' })
+  const url = URL.createObjectURL(response.data as Blob)
+  const link = window.document.createElement('a')
+  link.href = url
+  link.download = document.fileName
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 export interface PortalProfile {

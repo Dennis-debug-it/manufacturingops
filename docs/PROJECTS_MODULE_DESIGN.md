@@ -1,6 +1,6 @@
 # Ecosys Projects — Module Design
 
-**Status:** Approved for build. All decisions in section 0 are confirmed. No code has been written yet.
+**Status:** Approved. **Release 1 is implemented** (see "Release 1: what was built" at the end); Release 2 and 3 are not started.
 **Scope:** A new, tenant-configurable **Projects** module for finite work (installations, fit-outs,
 rollouts, engagements) that sits beside the existing **Contracts (AMC)** module and reuses the
 existing clients, work orders, inventory, attendance, finance, approvals and notification plumbing.
@@ -944,3 +944,31 @@ These ideas came up during brainstorming. They don't fit the existing codebase, 
 | Gantt charts, dependencies, resource levelling | Primavera territory; revisit after real usage |
 | Arbitrary typed-in progress percentage | Replaced by weighted milestones + audited override (D4) |
 | Building on the `Ecosys.ServiceOps` project (`Customer`, its own `WorkOrder`) | Not referenced by the API or Infrastructure; appears to be legacy |
+
+---
+
+## Release 1: what was built
+
+Built to sections 4–12 for Release 1, with these implementation choices:
+
+- **Permissions** are capabilities (`projects.view`, `.manage`, `.variations.submit`, `.variations.approve`,
+  `.close`, `.settings`) rather than new role-matrix columns. Role defaults live in code
+  (`CapabilityRoleDefaults`: Manager gets all but settings; Dispatcher, Finance and Viewer get view;
+  Admin gets everything). Tenants grant or deny them per user or per permission group in Access Control.
+  Login and `/api/auth/me` return them as `user.capabilities`.
+- **Licensing:** `projects` is an add-on key in `LicensePlan.ModulesIncluded`, usable on any plan
+  (including Operations, Finance and Suite). No existing plan includes it.
+- **Work orders and material issues** are linked to a project from the project workspace (link and
+  unlink, same client only). The existing create forms don't have a Project field yet.
+- **People picker:** `GET /api/projects/people` lists active users and technicians for team building,
+  because the full user list is admin-only.
+- **Project settings** live at `/projects/settings` (not under `/settings`, which is admin-only), so a
+  manager granted `projects.settings` can use them.
+- **Client portal:** `/api/portal/settings` gains `showProjects` (module licensed and portal page on);
+  the portal Projects page and document download are in `PortalProjectsController`.
+- **Notifications:** email and web push for member added, task assigned, variation submitted and
+  variation decided. Decisions made from the Approvals inbox (matrix approvals) update the project but
+  don't send the "decided" notification.
+
+Not in Release 1, as planned: date-based reminders (`ProjectReminderWorker`), award from quotation,
+handover → maintenance contract, and everything listed under Release 2.

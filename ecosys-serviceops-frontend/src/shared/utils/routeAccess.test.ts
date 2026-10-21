@@ -34,4 +34,18 @@ describe('canOpenPath', () => {
   it('matches whole path segments only', () => {
     expect(canOpenPath(dispatcher, '/financed-thing')).toBe(true)
   })
+
+  it('opens Projects from the capabilities the server granted, not from the role', () => {
+    const viewer = { ...user('viewer', {}), capabilities: ['projects.view'] } as AuthUser
+    const projectManager = { ...user('manager', {}), capabilities: ['projects.view', 'projects.manage', 'projects.settings'] } as AuthUser
+    const deniedManager = { ...user('manager', {}), capabilities: [] } as AuthUser
+
+    expect(canOpenPath(viewer, '/projects')).toBe(true)
+    expect(canOpenPath(viewer, '/projects/123')).toBe(true)
+    expect(canOpenPath(viewer, '/projects/settings')).toBe(false)
+    expect(canOpenPath(projectManager, '/projects/settings')).toBe(true)
+    expect(canOpenPath(deniedManager, '/projects')).toBe(false)
+    // Sessions stored before capabilities existed carry none.
+    expect(canOpenPath(user('manager', {}), '/projects')).toBe(false)
+  })
 })

@@ -126,8 +126,9 @@ export const useIssueMaterialRequest = (id: string) => useMaterialRequestAction(
 export const useCloseMaterialRequest = (id: string) => useMaterialRequestAction(endpoints.materialRequests.close(id))
 
 // Material Issues
-export function useMaterialIssues(branchId?: string) {
+export function useMaterialIssues(branchId?: string, enabled = true) {
   return useQuery({
+    enabled,
     queryKey: ['material-issues', branchId ?? ''],
     queryFn: () => api.get<MaterialIssue[]>(endpoints.materialIssues.list, { branchId }),
     staleTime: 30_000,

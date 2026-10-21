@@ -197,6 +197,27 @@ public sealed class ProjectsController(
 
     // ── Team ───────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// People who can be put on a project: active users and technicians, with just enough to pick
+    /// them. The full user list is admin-only, and project managers need to build teams.
+    /// </summary>
+    [HttpGet("people")]
+    public async Task<ActionResult<ProjectPeopleResponse>> ListPeople(CancellationToken cancellationToken)
+    {
+        projectAccessService.Ensure(PermissionNames.ProjectsView);
+        var users = await dbContext.Users
+            .Where(x => x.TenantId == TenantId && x.IsActive)
+            .OrderBy(x => x.FullName)
+            .Select(x => new ProjectPersonOption(x.Id, x.FullName, x.Role, x.JobTitle))
+            .ToListAsync(cancellationToken);
+        var technicians = await dbContext.Technicians
+            .Where(x => x.TenantId == TenantId && x.IsActive)
+            .OrderBy(x => x.FullName)
+            .Select(x => new ProjectTechnicianOption(x.Id, x.UserId, x.FullName, x.SkillCategory))
+            .ToListAsync(cancellationToken);
+        return Ok(new ProjectPeopleResponse(users, technicians));
+    }
+
     [HttpGet("{id:guid}/members")]
     public async Task<ActionResult<IReadOnlyCollection<ProjectMemberResponse>>> ListMembers(Guid id, CancellationToken cancellationToken)
     {
@@ -956,6 +977,12 @@ public sealed record UpsertProjectRequest(
 public sealed record ChangeProjectStageRequest(Guid StageId, string? Note);
 
 public sealed record ProgressOverrideRequest(decimal? Percent, string? Reason);
+
+public sealed record ProjectPersonOption(Guid Id, string FullName, string Role, string? JobTitle);
+
+public sealed record ProjectTechnicianOption(Guid Id, Guid? UserId, string FullName, string? SkillCategory);
+
+public sealed record ProjectPeopleResponse(IReadOnlyList<ProjectPersonOption> Users, IReadOnlyList<ProjectTechnicianOption> Technicians);
 
 public sealed record ProjectMemberResponse(
     Guid Id, Guid? UserId, Guid? TechnicianId, string Name, string? Email, string Role, string? Trade, DateOnly? FromDate, DateOnly? ToDate);

@@ -48,6 +48,11 @@ export interface AuthUser {
   defaultBranchId: string | null
   mustChangePassword: boolean
   permissions: PermissionSet
+  /**
+   * Granted capabilities that have no `PermissionSet` field, such as `projects.view`. Sent by
+   * login and /api/auth/me; absent on sessions stored before the field existed.
+   */
+  capabilities?: string[]
 }
 
 export interface AuthTenant {

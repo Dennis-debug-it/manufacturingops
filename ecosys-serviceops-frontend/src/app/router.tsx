@@ -71,6 +71,10 @@ import { GroupsPage as TeamGroupsPageReal } from '../features/team/GroupsPage'
 import { LiveAttendancePage, TimesheetsPage, TimesheetDetailPage, LeavePage, TimeAttendanceReportsPage } from '../features/team/TimeAttendancePages'
 import { ContractsPage as ContractsPageReal } from '../features/contracts/ContractsPage'
 import { ContractDetailPage as ContractDetailPageReal } from '../features/contracts/ContractDetailPage'
+import { ProjectsPage } from '../features/projects/ProjectsPage'
+import { ProjectDetailPage } from '../features/projects/ProjectDetailPage'
+import { ConsultantsPage } from '../features/projects/ConsultantsPage'
+import { ProjectSettingsPage } from '../features/projects/ProjectSettingsPage'
 import { InvoicesPage } from '../features/finance/InvoicesPage'
 import { DocumentsPage } from '../features/finance/DocumentsPage'
 import { InvoiceDetailPage } from '../features/finance/InvoiceDetailPage'
@@ -344,6 +348,10 @@ export function AppRouter() {
       ['/help/:guideId', HelpPage],
       ['/contracts', ContractsPage],
       ['/contracts/:id', ContractDetailPage],
+      ['/projects', ProjectsPage],
+      ['/projects/consultants', ConsultantsPage],
+      ['/projects/settings', ProjectSettingsPage],
+      ['/projects/:id', ProjectDetailPage],
       ['/finance', FinanceOverviewPage],
       ['/finance/documents', DocumentsPage],
       ['/finance/quotes', FinanceQuotesPage],
