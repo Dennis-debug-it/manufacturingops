@@ -9,7 +9,8 @@ existing clients, work orders, inventory, attendance, finance, approvals and not
 
 ## 0. Decisions needed before coding
 
-These are the questions that change the data model. Each has a recommended default; the rest of the
+These are the questions that change the data model. Rows marked **Confirmed** have been agreed; the
+others have a recommended default awaiting review. The rest of the
 document assumes the default.
 
 | # | Decision | Recommended default | Alternative |
@@ -19,10 +20,10 @@ document assumes the default.
 | D3 | Licensing | New commercial module key **`projects`**, sold on its own or with Operations/Finance. Tabs that touch inventory/work orders require `operations`; financial tabs require `finance` (same pattern as `WorkOrderBilling` requiring both today). | Bundle Projects into `operations`. |
 | D4 | Progress method | **Weighted milestones** (weights default to equal), with a permission-gated manual override that is recorded and shown as "overridden". | Task-count based; or manual only. |
 | D5 | Variation approval | Reuse the **Approval Matrix** with a new document type `ProjectVariation` (amount bands, permission/user approvers, reminders already exist). | A simple single-approver flag on the variation. |
-| D6 | Labour unit and cost | Labour is measured in **man-days, never hours**: work in Kenya isn't billed or costed per hour. Casual site workers have an agreed **daily rate**, **entered by the office, never by the site supervisor**, so labour cost = days worked × that rate. Permanent staff are not costed automatically (no salary data in Ecosys); a tenant that wants them costed adds a manual "Labour" cost entry. | Labour as a cost entry only, with no daily rates at all. |
+| D6 | Labour unit and cost | **Confirmed.** Labour is measured in **man-days, never hours**: work in Kenya isn't billed or costed per hour. Casual site workers have an agreed **daily rate**, **entered by the office, never by the site supervisor**, so labour cost = days worked × that rate. Permanent staff are not costed automatically (no salary data in Ecosys); a tenant that wants them costed adds a manual "Labour" cost entry. | Labour as a cost entry only, with no daily rates at all. |
 | D7 | Material requests for projects | Allow `MaterialRequest` to target a project directly (make `WorkOrderId` nullable, add `ProjectId`, require exactly one). | Force every project material request through a work order. |
-| D8 | Site attendance for casual workers | Most people on site (fundis, helpers, casuals) have no Ecosys login and aren't `Technician` records, so they can't clock in. The supervisor marks a **daily muster roll** per project (Present / Half day / Absent) against a project **worker roster**. Technicians with logins can still clock in as they do today; the muster roll is what counts man-days. Supervisors record **presence only**; they never enter or see rates. | Require every worker to be a `Technician` with a login. |
-| D9 | How projects are billed | **Valuations (interim payment certificates)**: each period, value the work done to date, deduct **retention** (typically 5–10%, released after the defects liability period) and previously certified amounts; the result becomes a `TenantInvoice`. A project with simple milestone or lump-sum billing just skips retention. | Plain invoices with a `ProjectId`, with no valuation or retention tracking. |
+| D8 | Site attendance for casual workers | **Confirmed.** Most people on site (fundis, helpers, casuals) have no Ecosys login and aren't `Technician` records, so they can't clock in. The supervisor marks a **daily muster roll** per project (Present / Half day / Absent) against a project **worker roster**. Technicians with logins can still clock in as they do today; the muster roll is what counts man-days. Supervisors record **presence only**; they never enter or see rates. | Require every worker to be a `Technician` with a login. |
+| D9 | How projects are billed | **Confirmed.** **Valuations (interim payment certificates)**: each period, value the work done to date, deduct **retention** (typically 5–10%, released after the defects liability period) and previously certified amounts; the result becomes a `TenantInvoice`. A project with simple milestone or lump-sum billing just skips retention. | Plain invoices with a `ProjectId`, with no valuation or retention tracking. |
 
 ---
 
