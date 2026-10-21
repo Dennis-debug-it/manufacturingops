@@ -17,6 +17,7 @@ import { TechJobsPage } from '../features/tech/TechJobsPage'
 import { TechJobPage } from '../features/tech/TechJobPage'
 import { TechGuidePage, TechGuidesPage } from '../features/tech/TechGuides'
 import { TechAccountPage } from '../features/tech/TechAccountPage'
+import { TechSitePage } from '../features/tech/TechSitePage'
 import { MyTimePage } from '../features/team/MyTimePage'
 import { AppShell } from '../shared/layout/AppShell'
 import { createModulePage, type ModulePageConfig } from '../shared/pages/ModulePage'
@@ -455,6 +456,7 @@ export function AppRouter() {
           <Route path="jobs/:id" element={<TechJobPage />} />
           <Route path="jobs/:id/:section" element={<TechJobPage />} />
           <Route path="time" element={<MyTimePage />} />
+          <Route path="site" element={<TechSitePage />} />
           <Route path="guides" element={<TechGuidesPage />} />
           <Route path="guides/:id" element={<TechGuidePage />} />
           <Route path="help" element={<TechHelpPage />} />

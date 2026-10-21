@@ -857,10 +857,10 @@ features/settings/…/ProjectSettingsPage.tsx   types, stages, templates, toggle
   their lists.
 - **Mobile:** the muster roll and diary are built mobile-first (supervisors on site, often on patchy
   data). The muster screen is one list with large Present / Half day / Absent buttons. Offline marking
-  is **new frontend work**: the app today only shows a connectivity banner, with no queue for offline
-  writes. The server side already exists: the idempotency and `OccurredAt` handling in
-  `Ecosys.Api/Offline` means a replayed mark keeps its real time and is never duplicated. Offline is
-  scoped to the muster roll only.
+  reuses the technician app's existing outbox (`features/tech/offline`), which already queues job
+  actions and replays them with `Idempotency-Key` and `X-Occurred-At`; the muster save is one more kind
+  of queued action, and the server upserts one mark per worker per day, so a replay is never duplicated.
+  Offline is scoped to the muster roll only.
   The rest is responsive but office-first.
 
 ---
@@ -972,3 +972,56 @@ Built to sections 4–12 for Release 1, with these implementation choices:
 
 Not in Release 1, as planned: date-based reminders (`ProjectReminderWorker`), award from quotation,
 handover → maintenance contract, and everything listed under Release 2.
+
+---
+
+## Release 2: what was built
+
+Built to sections 5.6, 7, 8.2–8.5 and 11, with these implementation choices:
+
+- **Site work** is a separate controller, `api/project-site/{projectId}/…` (workers, muster, diary) plus
+  `GET api/project-site/mine` for the technician app. Writing needs `projects.manage`, or
+  `projects.muster.mark` **and** a Supervisor or Project Manager place on that project's team. A caller
+  with neither sees "not found", not the project. Technicians get `projects.muster.mark` by default.
+- **No rates on site.** Roster and muster responses carry no rate or cost field (a test pins this).
+  Daily rates are set by the office (`projects.financials.manage`) on the project's Labour & wages tab;
+  a rate applies from its effective date until the next one, so a new rate never rewrites earlier days.
+  Days with no rate in effect are counted as uncosted and flagged until a rate covers them.
+- **Muster lock:** supervisors can correct marks up to `MusterLockDays` (default 1) after the work date.
+  Later corrections need `projects.manage` and are audited as `projects.muster.corrected`.
+- **Technician clock-in** accepts an optional project (the technician must be on its team and it must be
+  open). A rostered technician who clocked in on the project is *suggested* Present on the day sheet; it
+  counts only once the supervisor saves the sheet, so nobody is counted twice.
+- **The money side** (`ProjectCommercialController`, `[projects, finance]`): billing terms, worker rates,
+  wage sheet (JSON or CSV, up to three months, formula-safe), budget lines, cost entries, financials,
+  valuations, advance invoice and retention releases. Reading needs `projects.financials.view`;
+  changing needs `projects.financials.manage` (Finance and Manager roles by default).
+- **D7 (materials)** is implemented through `MaterialIssue.ProjectId` (issued cost less returns on those
+  issues). `PartsReturn` gets no `ProjectId`; `MaterialRequest` is unchanged.
+- **Valuations:** one in progress at a time; each builds on the last certified one. Retention and
+  advance terms lock once a valuation is certified. The certified amount is what's invoiced; "raise
+  invoice" creates a **Draft** tax invoice (tenant VAT, client credit term) for finance to send. Only
+  the latest valuation can be voided, and an invoiced one only after its invoice is voided; a
+  valuation whose invoice was voided can raise a new one.
+- **Retention:** two releases at most (unique per stage), each raising a draft invoice; a release whose
+  invoice was voided can raise a fresh one. Releases are allowed after closure, since the money is owed
+  whatever the stage.
+- **Withholding certificates** work on every tax invoice (not only projects), from the invoice page.
+- **Award from quotation** is `POST /api/projects/from-quotation/{quotationId}` (Accepted quotations
+  only; the quotation becomes Converted). **Handover → AMC** is
+  `POST /api/projects/{id}/create-maintenance-contract`: a Draft contract covering the project site and
+  the assets created there during the project.
+- **Closure** is also blocked by a valuation in progress or a certified valuation not yet invoiced, and,
+  when the tenant sets `ClosureUnbilledTolerancePercent`, by uninvoiced value above that share. The
+  tolerance is off by default, for tenants that bill projects outside Ecosys.
+- **Reminders:** `ProjectReminderWorker` (every 15 minutes, under the background-work lease) sends
+  task-due, milestone-due, milestone-overdue, end-date-approaching, muster-missing (Monday to Saturday,
+  after `MusterReminderHour`, active projects with workers) and retention-due, once per entity, key and
+  date (`ProjectReminderLog`). `project.valuation-certified` is sent when a certificate is recorded.
+- **Existing forms** (work order, material issue, expense claim, supplier bill, purchase order, invoice)
+  take an optional Project, checked to be open and, where the record has a client, the same client.
+- **Portal:** `GET /api/portal/projects/{id}/valuations` returns certified valuations, the project's
+  non-draft invoices and retention held, when Finance is licensed and the portal shows invoices.
+
+Known limits: voiding an invoice doesn't reverse its allocations (existing behaviour, unchanged); the
+muster reminder doesn't know about public holidays.
