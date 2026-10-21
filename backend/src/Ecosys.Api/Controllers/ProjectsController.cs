@@ -880,12 +880,19 @@ public sealed class ProjectsController(
             await LoadMembersAsync(id, cancellationToken),
             await LoadConsultantsAsync(id, cancellationToken),
             new ProjectFeatureFlagsResponse(settings.Milestones, settings.Tasks, settings.Variations, settings.Materials, settings.Documents,
-                settings.AllowManualProgressOverride),
+                settings.AllowManualProgressOverride, settings.MusterRoll, settings.SiteDiary, settings.Valuations, settings.Financials),
             new ProjectAbilitiesResponse(
                 CanManage: projectAccessService.Can(PermissionNames.ProjectsManage),
                 CanSubmitVariations: projectAccessService.Can(PermissionNames.ProjectsVariationsSubmit) || projectAccessService.Can(PermissionNames.ProjectsManage),
                 CanApproveVariations: projectAccessService.Can(PermissionNames.ProjectsVariationsApprove),
-                CanClose: projectAccessService.Can(PermissionNames.ProjectsClose)));
+                CanClose: projectAccessService.Can(PermissionNames.ProjectsClose),
+                CanRunSite: projectAccessService.Can(PermissionNames.ProjectsManage)
+                    || (projectAccessService.Can(PermissionNames.ProjectsMusterMark)
+                        && await projectAccessService.HasProjectRoleAsync(TenantId, id, ProjectMemberRoles.SiteRoles, cancellationToken)),
+                CanViewFinancials: projectAccessService.Can(PermissionNames.ProjectsFinancialsView) || projectAccessService.Can(PermissionNames.ProjectsFinancialsManage),
+                CanManageFinancials: projectAccessService.Can(PermissionNames.ProjectsFinancialsManage)),
+            project.SourceQuotationId,
+            project.MaintenanceContractId);
     }
 
     private static ProjectListItemResponse MapListItem(Project x)
@@ -1032,9 +1039,13 @@ public sealed record ProjectRegisterSummaryResponse(
     int ActiveProjects, int OpenProjects, decimal TotalRevisedValue, int BehindSchedule,
     int PendingVariationsCount, decimal PendingVariationsValue);
 
-public sealed record ProjectFeatureFlagsResponse(bool Milestones, bool Tasks, bool Variations, bool Materials, bool Documents, bool AllowManualProgressOverride);
+public sealed record ProjectFeatureFlagsResponse(
+    bool Milestones, bool Tasks, bool Variations, bool Materials, bool Documents, bool AllowManualProgressOverride,
+    bool MusterRoll = false, bool SiteDiary = false, bool Valuations = false, bool Financials = false);
 
-public sealed record ProjectAbilitiesResponse(bool CanManage, bool CanSubmitVariations, bool CanApproveVariations, bool CanClose);
+public sealed record ProjectAbilitiesResponse(
+    bool CanManage, bool CanSubmitVariations, bool CanApproveVariations, bool CanClose,
+    bool CanRunSite = false, bool CanViewFinancials = false, bool CanManageFinancials = false);
 
 public sealed record ProjectDetailResponse(
     ProjectListItemResponse Summary,
@@ -1050,7 +1061,9 @@ public sealed record ProjectDetailResponse(
     IReadOnlyList<ProjectMemberResponse> Members,
     IReadOnlyList<ProjectConsultantResponse> Consultants,
     ProjectFeatureFlagsResponse Features,
-    ProjectAbilitiesResponse Abilities);
+    ProjectAbilitiesResponse Abilities,
+    Guid? SourceQuotationId = null,
+    Guid? MaintenanceContractId = null);
 
 public sealed record UpsertProjectRequest(
     string Name,

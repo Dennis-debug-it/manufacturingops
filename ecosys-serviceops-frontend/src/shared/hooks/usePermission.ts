@@ -185,6 +185,9 @@ const capabilityActions = new Set([
   'projects.variations.approve',
   'projects.close',
   'projects.settings',
+  'projects.muster.mark',
+  'projects.financials.view',
+  'projects.financials.manage',
 ])
 
 /** The same check as usePermission, for code that isn't a component (e.g. route access rules). */

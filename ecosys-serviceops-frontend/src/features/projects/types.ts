@@ -109,8 +109,16 @@ export interface ProjectDetail {
   materialIssues: number
   members: ProjectMember[]
   consultants: ProjectConsultantLink[]
-  features: { milestones: boolean; tasks: boolean; variations: boolean; materials: boolean; documents: boolean; allowManualProgressOverride: boolean }
-  abilities: { canManage: boolean; canSubmitVariations: boolean; canApproveVariations: boolean; canClose: boolean }
+  features: {
+    milestones: boolean; tasks: boolean; variations: boolean; materials: boolean; documents: boolean; allowManualProgressOverride: boolean
+    musterRoll: boolean; siteDiary: boolean; valuations: boolean; financials: boolean
+  }
+  abilities: {
+    canManage: boolean; canSubmitVariations: boolean; canApproveVariations: boolean; canClose: boolean
+    canRunSite: boolean; canViewFinancials: boolean; canManageFinancials: boolean
+  }
+  sourceQuotationId: string | null
+  maintenanceContractId: string | null
 }
 
 export interface ProjectMilestone {
@@ -250,4 +258,266 @@ export interface ProjectSettings {
   progressRequiresVerification: boolean
   allowManualProgressOverride: boolean
   trades: string[]
+  musterRoll: boolean
+  siteDiary: boolean
+  valuations: boolean
+  financials: boolean
+  musterLockDays: number
+  musterReminderHour: number
+  reminderLeadDays: number
+  closureUnbilledTolerancePercent: number | null
+}
+
+// ── Release 2: site work ──────────────────────────────────────────────────────
+
+export type MusterStatus = 'Present' | 'HalfDay' | 'Absent'
+export type WorkerEngagement = 'Casual' | 'Permanent' | 'Subcontractor'
+
+export interface MySite {
+  projectId: string
+  projectNumber: string
+  name: string
+  clientName: string
+  siteName: string | null
+  roles: string[]
+  canMarkMuster: boolean
+  canWriteDiary: boolean
+}
+
+export interface ProjectWorker {
+  id: string
+  fullName: string
+  phone: string | null
+  trade: string | null
+  engagementType: WorkerEngagement
+  technicianId: string | null
+  isActive: boolean
+}
+
+export interface MusterRow {
+  workerId: string
+  fullName: string
+  trade: string | null
+  engagementType: WorkerEngagement
+  status: MusterStatus | null
+  isSuggestion: boolean
+  note: string | null
+  isActive: boolean
+}
+
+export interface MusterDaySheet {
+  workDate: string
+  isSubmitted: boolean
+  isLocked: boolean
+  rows: MusterRow[]
+  manDays: number
+}
+
+export interface DiaryEntry {
+  id: string
+  entryDate: string
+  authorUserId: string
+  authorName: string | null
+  workCompleted: string | null
+  issuesAndDelays: string | null
+  instructionsReceived: string | null
+  weather: string | null
+  submittedAt: string | null
+  headcount: number
+  materialIssues: string[]
+  photoCount: number
+}
+
+// ── Release 2: commercial ─────────────────────────────────────────────────────
+
+export type CostCategory = 'Materials' | 'Labour' | 'Subcontractor' | 'Equipment' | 'Other'
+export const costCategories: CostCategory[] = ['Materials', 'Labour', 'Subcontractor', 'Equipment', 'Other']
+
+export interface BillingTerms {
+  currency: string
+  retentionPercent: number | null
+  retentionCapAmount: number | null
+  retentionReleaseAtCompletionPercent: number
+  defectsLiabilityMonths: number | null
+  advancePaymentAmount: number | null
+  advanceRecoveryPercent: number | null
+  advanceInvoiceId: string | null
+  advanceInvoiceNumber: string | null
+  advanceInvoiceStatus: string | null
+  calculationTermsLocked: boolean
+}
+
+export interface WorkerRate {
+  id: string
+  effectiveFrom: string
+  dailyRate: number
+  note: string | null
+  setByUserId: string
+}
+
+export interface WorkerRates {
+  workerId: string
+  fullName: string
+  phone: string | null
+  trade: string | null
+  engagementType: WorkerEngagement
+  isActive: boolean
+  currentRate: number | null
+  manDays: number
+  uncostedDays: number
+  labourCost: number
+  rates: WorkerRate[]
+}
+
+export interface WageSheetRow {
+  workerId: string
+  fullName: string
+  phone: string | null
+  trade: string | null
+  engagementType: WorkerEngagement
+  fullDays: number
+  halfDays: number
+  manDays: number
+  currentRate: number | null
+  amount: number
+  uncostedDays: number
+}
+
+export interface WageSheet {
+  projectNumber: string
+  projectName: string
+  currency: string
+  from: string
+  to: string
+  rows: WageSheetRow[]
+  totalManDays: number
+  totalAmount: number
+  workersWithUncostedDays: number
+}
+
+export interface BudgetLine {
+  id: string
+  category: CostCategory
+  description: string | null
+  amount: number
+}
+
+export interface CostEntry {
+  id: string
+  category: CostCategory
+  description: string
+  amount: number
+  incurredOn: string
+  recordedByUserId: string
+}
+
+export interface FinancialsCategory {
+  category: CostCategory
+  budget: number
+  actual: number
+  source: string
+}
+
+export interface ProjectFinancials {
+  currency: string
+  originalValue: number
+  revisedValue: number
+  pendingVariations: number
+  budgetTotal: number
+  categories: FinancialsCategory[]
+  manDays: number
+  uncostedDays: number
+  actualCost: number
+  committedCost: number
+  invoiced: number
+  cashReceived: number
+  taxWithheld: number
+  outstanding: number
+  overdue: number
+  certifiedToDate: number
+  retentionHeld: number
+  retentionDueNow: number
+  advanceOutstanding: number
+  unbilledValue: number
+  indicativeMarginPercent: number | null
+  forecastMarginPercent: number | null
+}
+
+export type ValuationStatus = 'Draft' | 'Submitted' | 'Certified' | 'Invoiced' | 'Void'
+
+export interface Valuation {
+  id: string
+  valuationNumber: string
+  periodEnd: string
+  workDoneToDate: number
+  materialsOnSite: number
+  grossValueToDate: number
+  retentionToDate: number
+  advanceRecoveredToDate: number
+  previouslyCertified: number
+  amountDue: number
+  status: ValuationStatus
+  certifiedByConsultantId: string | null
+  certifiedByConsultantName: string | null
+  certificateReference: string | null
+  certifiedOn: string | null
+  certifiedAmount: number | null
+  invoiceId: string | null
+  invoiceNumber: string | null
+  invoiceStatus: string | null
+  notes: string | null
+  createdAt: string
+}
+
+export interface ValuationPreview {
+  suggestedWorkDoneToDate: number
+  workDoneToDate: number
+  materialsOnSite: number
+  grossValueToDate: number
+  retentionToDate: number
+  advanceRecoveredToDate: number
+  previouslyCertified: number
+  amountDue: number
+  previousWorkDoneToDate: number
+}
+
+export type RetentionStage = 'PracticalCompletion' | 'EndOfDefectsLiability'
+
+export interface RetentionRelease {
+  id: string
+  stage: RetentionStage
+  amount: number
+  releasedOn: string
+  invoiceId: string | null
+  invoiceNumber: string | null
+  invoiceStatus: string | null
+}
+
+export interface RetentionPosition {
+  currency: string
+  retentionPercent: number | null
+  retentionReleaseAtCompletionPercent: number
+  held: number
+  completionDue: number
+  finalDue: number
+  handedOverAt: string | null
+  defectsLiabilityEnds: string | null
+  releases: RetentionRelease[]
+}
+
+export interface WithholdingCertificate {
+  id: string
+  invoiceId: string
+  invoiceNumber: string | null
+  clientId: string
+  clientName: string | null
+  taxType: 'VAT' | 'IncomeTax'
+  ratePercent: number | null
+  amount: number
+  currency: string
+  certificateNumber: string
+  certificateDate: string
+  status: 'Confirmed' | 'Reversed'
+  notes: string | null
+  createdAt: string
 }
