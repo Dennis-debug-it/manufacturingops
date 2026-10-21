@@ -672,6 +672,7 @@ export const endpoints = {
     projects: '/api/portal/projects',
     project: (id: string) => `/api/portal/projects/${id}`,
     projectDocument: (id: string, documentId: string) => `/api/portal/projects/${id}/documents/${documentId}/download`,
+    projectBilling: (id: string) => `/api/portal/projects/${id}/valuations`,
     profile: '/api/portal/profile',
     knowledgeCategories: '/api/portal/knowledge/categories',
     knowledgeArticles: '/api/portal/knowledge/articles',
