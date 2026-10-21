@@ -19,9 +19,9 @@ document assumes the default.
 | D3 | Licensing | New commercial module key **`projects`**, sold on its own or with Operations/Finance. Tabs that touch inventory/work orders require `operations`; financial tabs require `finance` (same pattern as `WorkOrderBilling` requiring both today). | Bundle Projects into `operations`. |
 | D4 | Progress method | **Weighted milestones** (weights default to equal), with a permission-gated manual override that is recorded and shown as "overridden". | Task-count based; or manual only. |
 | D5 | Variation approval | Reuse the **Approval Matrix** with a new document type `ProjectVariation` (amount bands, permission/user approvers, reminders already exist). | A simple single-approver flag on the variation. |
-| D6 | Labour unit and cost | Labour is measured in **man-days, never hours**: work in Kenya isn't billed or costed per hour. Casual site workers carry an agreed **daily rate**, so labour cost = days worked × that rate. Permanent staff are not costed automatically (no salary data in Ecosys); a tenant that wants them costed adds a manual "Labour" cost entry. | Labour as a cost entry only, with no daily rates at all. |
+| D6 | Labour unit and cost | Labour is measured in **man-days, never hours**: work in Kenya isn't billed or costed per hour. Casual site workers have an agreed **daily rate**, **entered by the office, never by the site supervisor**, so labour cost = days worked × that rate. Permanent staff are not costed automatically (no salary data in Ecosys); a tenant that wants them costed adds a manual "Labour" cost entry. | Labour as a cost entry only, with no daily rates at all. |
 | D7 | Material requests for projects | Allow `MaterialRequest` to target a project directly (make `WorkOrderId` nullable, add `ProjectId`, require exactly one). | Force every project material request through a work order. |
-| D8 | Site attendance for casual workers | Most people on site (fundis, helpers, casuals) have no Ecosys login and aren't `Technician` records, so they can't clock in. The supervisor marks a **daily muster roll** per project (Present / Half day / Absent) against a project **worker roster**. Technicians with logins can still clock in as they do today; the muster roll is what counts man-days. | Require every worker to be a `Technician` with a login. |
+| D8 | Site attendance for casual workers | Most people on site (fundis, helpers, casuals) have no Ecosys login and aren't `Technician` records, so they can't clock in. The supervisor marks a **daily muster roll** per project (Present / Half day / Absent) against a project **worker roster**. Technicians with logins can still clock in as they do today; the muster roll is what counts man-days. Supervisors record **presence only**; they never enter or see rates. | Require every worker to be a `Technician` with a login. |
 | D9 | How projects are billed | **Valuations (interim payment certificates)**: each period, value the work done to date, deduct **retention** (typically 5–10%, released after the defects liability period) and previously certified amounts; the result becomes a `TenantInvoice`. A project with simple milestone or lump-sum billing just skips retention. | Plain invoices with a `ProjectId`, with no valuation or retention tracking. |
 
 ---
@@ -409,8 +409,19 @@ public sealed class ProjectWorker : AuditableEntity, ITenantEntity
     public string? Phone { get; set; }                  // M-Pesa number for wage payments
     public string? Trade { get; set; }                  // from the tenant trade list (5.7)
     public string EngagementType { get; set; } = "Casual"; // Casual | Permanent | Subcontractor
-    public decimal? DailyRate { get; set; }             // KES per full day; null for permanent staff
     public bool IsActive { get; set; } = true;
+    // No rate here: the supervisor can create a worker on site; the office sets the rate (ProjectWorkerRate).
+}
+
+// Daily rate, entered by the office. Rates are dated, so a new rate never rewrites earlier days.
+public sealed class ProjectWorkerRate : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid ProjectWorkerId { get; set; }
+    public DateOnly EffectiveFrom { get; set; }        // applies to work dates on or after this, until the next rate
+    public decimal DailyRate { get; set; }             // KES per full day
+    public Guid SetByUserId { get; set; }
+    public string? Note { get; set; }
 }
 
 // Daily muster roll: one row per worker per day, marked by the site supervisor.
@@ -422,7 +433,6 @@ public sealed class ProjectMusterEntry : AuditableEntity, ITenantEntity
     public DateOnly WorkDate { get; set; }
     public string Status { get; set; } = "Present";     // Present | HalfDay | Absent
     public decimal DayFraction { get; set; } = 1;       // 1, 0.5 or 0, derived from Status
-    public decimal? RateApplied { get; set; }           // DailyRate copied at marking time, so later rate changes don't rewrite history
     public Guid MarkedByUserId { get; set; }
     public string? Note { get; set; }
 }
@@ -493,7 +503,8 @@ traced on screen.
 | Pending variations | Sum of `Submitted` variations (shown separately, never added to the revised value) |
 | Materials cost | Σ `MaterialIssue.TotalIssuedCost` (status Issued, `ProjectId` = p) − value of `PartsReturn` for p |
 | Man-days | Σ `ProjectMusterEntry.DayFraction` for p (shown by trade and by week) |
-| Labour cost | Σ `DayFraction × RateApplied` for p (casual workers only; permanent staff via manual cost entries, D6) |
+| Labour cost | Σ `DayFraction ×` the worker's `ProjectWorkerRate` in effect on `WorkDate`, for p (casual workers only; permanent staff via manual cost entries, D6) |
+| Uncosted days | Man-days with no rate in effect yet, shown as a count with a prompt to the office. They're excluded from labour cost until a rate is set |
 | Subcontractor / supplier cost | Σ `SupplierBill.Amount` with `ProjectId` = p |
 | Expenses | Σ `Expense.Amount` with status Approved or Reimbursed and `ProjectId` = p |
 | Other costs | Σ `ProjectCostEntry.Amount` |
@@ -558,9 +569,13 @@ after that is the existing contract workflow. Requires `operations` and contract
 - One mark per worker per project per day (unique index). Marks can be corrected until the tenant's
   lock point (default: end of the following day). After that a correction needs `projects.manage` and
   is audited.
-- `RateApplied` is copied from the worker's `DailyRate` when the mark is made.
-- Weekly **wage sheet**: man-days × rate per worker for a date range, exportable for paying casuals
-  (cash or M-Pesa). Ecosys records what's owed; it doesn't pay anyone or run payroll.
+- **Supervisors mark presence only.** The muster screen shows no rates and has no rate field. A worker
+  added on site starts with no rate.
+- **The office sets rates** (`projects.financials.manage`) from the project's Workers screen, before or
+  after the days are worked. Each rate has an effective-from date. Days already marked are costed as soon
+  as a rate covers them, and a later rate change only affects days from its own effective date.
+- Weekly **wage sheet** (office only): man-days × rate per worker for a date range, exportable for paying casuals
+  (cash or M-Pesa). Workers with uncosted days are flagged at the top. Ecosys records what's owed; it doesn't pay anyone or run payroll.
 - Technicians with logins can still clock in through the existing attendance flow with an optional
   "Project" picker. If a technician is also on the roster (`ProjectWorker.TechnicianId`), their clock-in
   pre-fills their muster mark, so they're never counted twice.
@@ -610,6 +625,7 @@ GET|POST|PUT /api/projects/{id}/budget-lines | /cost-entries                    
 GET|POST|PUT /api/projects/{id}/diary[/{entryId}], POST …/{entryId}/submit             (R2)
 
 GET|POST|PUT /api/projects/{id}/workers[/{workerId}]        roster                     (R2)
+GET|POST     /api/projects/{id}/workers/{workerId}/rates  daily rates (office)        [projects, finance] (R2)
 GET          /api/projects/{id}/muster?date=YYYY-MM-DD      day sheet, pre-filled      (R2)
 PUT          /api/projects/{id}/muster?date=YYYY-MM-DD      submit marks for the day   (R2)
 GET          /api/projects/{id}/wage-sheet?from&to          man-days × rate, CSV export [projects, finance] (R2)
@@ -639,18 +655,18 @@ New constants in `PermissionNames` (and `All`), mapped to roles through the exis
 |---|---|
 | `projects.view` | Register and workspace (non-financial tabs) |
 | `projects.manage` | Create/edit projects, members, parties, milestones, tasks, stage changes |
-| `projects.muster.mark` | Maintain the roster and mark the daily muster roll (site supervisors) |
+| `projects.muster.mark` | Add workers to the roster and mark the daily muster roll (site supervisors). No access to rates |
 | `projects.variations.submit` | Draft and submit variations |
 | `projects.variations.approve` | Direct approval when no approval matrix applies |
 | `projects.financials.view` | Financials tab, budget, margins, workers' daily rates and ID numbers, wage sheet |
-| `projects.financials.manage` | Budget lines, cost entries, valuations, retention release |
+| `projects.financials.manage` | Budget lines, cost entries, workers' daily rates, valuations, retention release |
 | `projects.close` | Close / reopen |
 | `projects.settings` | Types, stages, templates, toggles |
 
 Default role mapping on seed: admin = all; manager = all except settings; finance = view + financials;
 dispatcher/viewer = view; technician = none (field staff reach projects through attendance, work orders
 and the diary, gated by membership). A project `Supervisor` member gets `projects.muster.mark` for
-that project. A supervisor without `projects.financials.view` sees the roster and marks but no rates.
+that project. Rates are never shown on the muster screen, whatever the user's permissions.
 
 ---
 
@@ -756,11 +772,11 @@ reminders, cross-module role dashboards.
 - **Domain:** variation state machine (only Approved moves values; void reverses; no negative revised
   value); progress calculation (weights, override, verified-only mode); closure checks.
 - **Financials:** a fixture project with known issues, returns, muster marks, bills, expenses and
-  invoices must produce exact expected figures. Changing a worker's daily rate must not change past
-  labour cost.
+  invoices must produce exact expected figures. A new rate with a later effective date must not change
+  earlier days' cost; days with no rate show as uncosted and are excluded from labour cost.
 - **Valuations:** retention cap, advance recovery, "previously certified" chaining, a certified amount
   that differs from the calculated one, and voiding a valuation that has already been invoiced (blocked).
-- **Muster roll:** one mark per worker per day; the lock point is enforced; a technician who clocked in
+- **Muster roll:** one mark per worker per day; the muster API never returns or accepts rates; the lock point is enforced; a technician who clocked in
   and is also on the roster counts once.
 - **Migrations:** additive only, nullable columns, applied against a copy of production-shaped data.
   Existing work-order, material and invoice tests pass unchanged.
