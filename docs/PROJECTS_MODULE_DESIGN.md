@@ -1,27 +1,26 @@
 # Ecosys Projects — Module Design
 
-**Status:** Draft for review. No code has been written against this design.
+**Status:** Approved for build. All decisions in section 0 are confirmed. No code has been written yet.
 **Scope:** A new, tenant-configurable **Projects** module for finite work (installations, fit-outs,
 rollouts, engagements) that sits beside the existing **Contracts (AMC)** module and reuses the
 existing clients, work orders, inventory, attendance, finance, approvals and notification plumbing.
 
 ---
 
-## 0. Decisions needed before coding
+## 0. Decisions
 
-These are the questions that change the data model. Rows marked **Confirmed** have been agreed; the
-others have a recommended default awaiting review. The rest of the
-document assumes the default.
+These are the decisions that shape the data model. All are confirmed. The existing hourly fields on
+contract rate cards (`ContractRateRule`, `RateCard`) are out of scope and stay as they are.
 
-| # | Decision | Recommended default | Alternative |
+| # | Decision | Agreed approach | Alternative considered |
 |---|---|---|---|
-| D1 | Which record is the project's "client"? | **`Client`** (tenant-scoped, already used by contracts, work orders, invoices). The Platform CRM (`PlatformLead`, `CrmContact`) has no `TenantId` and is Ecosys's own sales CRM — it must not hold tenants' customers. | Make the Platform CRM multi-tenant (not recommended: mixes Ecosys sales data with tenant data). |
+| D1 | Which record is the project's "client"? | **Confirmed.** **`Client`** (tenant-scoped, already used by contracts, work orders, invoices). The Platform CRM (`PlatformLead`, `CrmContact`) has no `TenantId` and is Ecosys's own sales CRM — it must not hold tenants' customers. | Make the Platform CRM multi-tenant (not recommended: mixes Ecosys sales data with tenant data). |
 | D2 | How are consultants modelled? | **Confirmed.** A new tenant-scoped **`Consultant` directory**: firm name and contact details only, with no sites, assets, invoices or portal. Projects link to consultants through `ProjectConsultant`. Consultants are not `Client` records. | — |
-| D3 | Licensing | New commercial module key **`projects`**, sold on its own or with Operations/Finance. Tabs that touch inventory/work orders require `operations`; financial tabs require `finance` (same pattern as `WorkOrderBilling` requiring both today). | Bundle Projects into `operations`. |
-| D4 | Progress method | **Weighted milestones** (weights default to equal), with a permission-gated manual override that is recorded and shown as "overridden". | Task-count based; or manual only. |
-| D5 | Variation approval | Reuse the **Approval Matrix** with a new document type `ProjectVariation` (amount bands, permission/user approvers, reminders already exist). | A simple single-approver flag on the variation. |
+| D3 | Licensing | **Confirmed.** New commercial module key **`projects`**, sold on its own or with Operations/Finance. Tabs that touch inventory/work orders require `operations`; financial tabs require `finance` (same pattern as `WorkOrderBilling` requiring both today). | Bundle Projects into `operations`. |
+| D4 | Progress method | **Confirmed.** **Weighted milestones** (weights default to equal), with a permission-gated manual override that is recorded and shown as "overridden". | Task-count based; or manual only. |
+| D5 | Variation approval | **Confirmed.** Reuse the **Approval Matrix** with a new document type `ProjectVariation` (amount bands, permission/user approvers, reminders already exist). | A simple single-approver flag on the variation. |
 | D6 | Labour unit and cost | **Confirmed.** Labour is measured in **man-days, never hours**: work in Kenya isn't billed or costed per hour. Casual site workers have an agreed **daily rate**, **entered by the office, never by the site supervisor**, so labour cost = days worked × that rate. Permanent staff are not costed automatically (no salary data in Ecosys); a tenant that wants them costed adds a manual "Labour" cost entry. | Labour as a cost entry only, with no daily rates at all. |
-| D7 | Material requests for projects | Allow `MaterialRequest` to target a project directly (make `WorkOrderId` nullable, add `ProjectId`, require exactly one). | Force every project material request through a work order. |
+| D7 | Material requests for projects | **Confirmed.** Allow `MaterialRequest` to target a project directly (make `WorkOrderId` nullable, add `ProjectId`, require exactly one). | Force every project material request through a work order. |
 | D8 | Site attendance for casual workers | **Confirmed.** Most people on site (fundis, helpers, casuals) have no Ecosys login and aren't `Technician` records, so they can't clock in. The supervisor marks a **daily muster roll** per project (Present / Half day / Absent) against a project **worker roster**. Technicians with logins can still clock in as they do today; the muster roll is what counts man-days. Supervisors record **presence only**; they never enter or see rates. | Require every worker to be a `Technician` with a login. |
 | D9 | How projects are billed | **Confirmed.** **Valuations (interim payment certificates)**: each period, value the work done to date, deduct **retention** (typically 5–10%, released after the defects liability period) and previously certified amounts; the result becomes a `TenantInvoice`. A project with simple milestone or lump-sum billing just skips retention. | Plain invoices with a `ProjectId`, with no valuation or retention tracking. |
 
