@@ -694,8 +694,22 @@ public sealed partial class ProjectsModuleTests
             throw new NotSupportedException();
     }
 
-    private sealed class NoOpProjectNotifications : IProjectNotificationService
+    internal sealed class NoOpProjectNotifications : IProjectNotificationService
     {
+        public List<(string Key, Guid ProjectId, IReadOnlyCollection<Guid> UserIds)> Sent { get; } = [];
+        public Task ValuationCertifiedAsync(Guid tenantId, Project project, ProjectValuation valuation, CancellationToken cancellationToken = default)
+        {
+            Sent.Add(("project.valuation-certified", project.Id, []));
+            return Task.CompletedTask;
+        }
+        public Task NotifyAsync(Guid tenantId, string key, Project project, IReadOnlyCollection<Guid> userIds, IReadOnlyDictionary<string, string?> values,
+            string pushTitle, string pushBody, string pushTag, CancellationToken cancellationToken = default)
+        {
+            Sent.Add((key, project.Id, userIds));
+            return Task.CompletedTask;
+        }
+        public Task<IReadOnlyList<Guid>> ManagerAndRolesAsync(Guid tenantId, Project project, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Guid>>(project.ProjectManagerUserId is { } pm ? [pm] : []);
         public Task MemberAddedAsync(Guid tenantId, Project project, Guid userId, string role, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task TaskAssignedAsync(Guid tenantId, Project project, ProjectTask task, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task VariationSubmittedAsync(Guid tenantId, Project project, ProjectVariation variation, CancellationToken cancellationToken = default) => Task.CompletedTask;

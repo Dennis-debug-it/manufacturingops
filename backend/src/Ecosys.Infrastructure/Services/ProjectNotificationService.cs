@@ -12,6 +12,13 @@ public static class ProjectNotificationKeys
     public const string TaskAssigned = "project.task-assigned";
     public const string VariationSubmitted = "project.variation-submitted";
     public const string VariationDecided = "project.variation-decided";
+    public const string TaskDue = "project.task-due";
+    public const string MilestoneDue = "project.milestone-due";
+    public const string MilestoneOverdue = "project.milestone-overdue";
+    public const string EndDateApproaching = "project.end-date-approaching";
+    public const string MusterMissing = "project.muster-missing";
+    public const string ValuationCertified = "project.valuation-certified";
+    public const string RetentionDue = "project.retention-due";
 }
 
 /// <summary>
@@ -25,6 +32,17 @@ public interface IProjectNotificationService
     Task TaskAssignedAsync(Guid tenantId, Project project, ProjectTask task, CancellationToken cancellationToken = default);
     Task VariationSubmittedAsync(Guid tenantId, Project project, ProjectVariation variation, CancellationToken cancellationToken = default);
     Task VariationDecidedAsync(Guid tenantId, Project project, ProjectVariation variation, CancellationToken cancellationToken = default);
+    Task ValuationCertifiedAsync(Guid tenantId, Project project, ProjectValuation valuation, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends a project notification to the given users. <paramref name="values"/> are the template
+    /// placeholders; RecipientName, ProjectNumber and ProjectName are added for each recipient.
+    /// </summary>
+    Task NotifyAsync(Guid tenantId, string key, Project project, IReadOnlyCollection<Guid> userIds, IReadOnlyDictionary<string, string?> values,
+        string pushTitle, string pushBody, string pushTag, CancellationToken cancellationToken = default);
+
+    /// <summary>The project manager plus active users in the given tenant roles.</summary>
+    Task<IReadOnlyList<Guid>> ManagerAndRolesAsync(Guid tenantId, Project project, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default);
 }
 
 internal sealed class ProjectNotificationService(
@@ -93,6 +111,44 @@ internal sealed class ProjectNotificationService(
             recipient => VariationValues(recipient, project, variation),
             new PushMessage($"Variation {variation.VariationNumber} {variation.Status.ToLowerInvariant()}", $"{project.ProjectNumber}: {variation.Title}", ProjectUrl(project), $"project-variation-{variation.Id}"),
             cancellationToken);
+    }
+
+    public async Task ValuationCertifiedAsync(Guid tenantId, Project project, ProjectValuation valuation, CancellationToken cancellationToken = default)
+    {
+        var recipients = await ManagerAndRolesAsync(tenantId, project, [AppRoles.Admin, AppRoles.FinanceUser], cancellationToken);
+        var amount = $"{project.Currency} {valuation.CertifiedAmount ?? valuation.AmountDue:N2}";
+        await NotifyAsync(tenantId, ProjectNotificationKeys.ValuationCertified, project, recipients,
+            new Dictionary<string, string?>
+            {
+                ["ValuationNumber"] = valuation.ValuationNumber,
+                ["CertificateReference"] = valuation.CertificateReference,
+                ["CertifiedAmount"] = amount,
+            },
+            $"Valuation {valuation.ValuationNumber} certified", $"{project.ProjectNumber}: {amount} certified. Raise the invoice.", $"project-valuation-{valuation.Id}",
+            cancellationToken);
+    }
+
+    public Task NotifyAsync(Guid tenantId, string key, Project project, IReadOnlyCollection<Guid> userIds, IReadOnlyDictionary<string, string?> values,
+        string pushTitle, string pushBody, string pushTag, CancellationToken cancellationToken = default) =>
+        SendAsync(tenantId, key, project, userIds.Distinct().ToList(),
+            recipient => new Dictionary<string, string?>(values)
+            {
+                ["RecipientName"] = recipient.FullName,
+                ["ProjectNumber"] = project.ProjectNumber,
+                ["ProjectName"] = project.Name,
+            },
+            new PushMessage(pushTitle, pushBody, ProjectUrl(project), pushTag),
+            cancellationToken);
+
+    public async Task<IReadOnlyList<Guid>> ManagerAndRolesAsync(Guid tenantId, Project project, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default)
+    {
+        var users = await dbContext.Users.IgnoreQueryFilters()
+            .Where(x => x.TenantId == tenantId && x.IsActive && roles.Contains(x.Role))
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+        if (project.ProjectManagerUserId.HasValue)
+            users.Add(project.ProjectManagerUserId.Value);
+        return users.Distinct().ToList();
     }
 
     private static Dictionary<string, string?> VariationValues(RecipientInfo recipient, Project project, ProjectVariation variation) => new()

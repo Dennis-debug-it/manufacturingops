@@ -27,6 +27,7 @@ public sealed class ProjectCommercialController(
     IProjectSettingsService projectSettingsService,
     IProjectFinancialsService financialsService,
     IProjectInvoiceService projectInvoiceService,
+    IProjectNotificationService projectNotificationService,
     IDocumentNumberingService documentNumberingService,
     ITenantTimeZoneService tenantTimeZoneService,
     IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
@@ -399,6 +400,7 @@ public sealed class ProjectCommercialController(
         await auditLogService.LogAsync(TenantId, UserId, "projects.valuation.certified", nameof(ProjectValuation), valuation.Id.ToString(),
             $"Valuation {valuation.ValuationNumber} certified under {valuation.CertificateReference} for {project.Currency} {valuation.CertifiedAmount:N2}"
             + (valuation.CertifiedAmount != valuation.AmountDue ? $" (calculated {project.Currency} {valuation.AmountDue:N2})." : "."), cancellationToken);
+        await projectNotificationService.ValuationCertifiedAsync(TenantId, project, valuation, cancellationToken);
         await LoadValuationNavigationsAsync(valuation, cancellationToken);
         return Ok(MapValuation(valuation));
     }

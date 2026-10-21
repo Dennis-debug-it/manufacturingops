@@ -98,6 +98,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectNotificationService, ProjectNotificationService>();
         services.AddScoped<IProjectFinancialsService, ProjectFinancialsService>();
         services.AddScoped<IProjectInvoiceService, ProjectInvoiceService>();
+        services.AddScoped<IProjectReminderRunner, ProjectReminderRunner>();
         services.AddSingleton<IPdfRenderer, QuestPdfRenderer>();
         services.AddScoped<IScheduledReportService, ScheduledReportService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
@@ -125,6 +126,7 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<ContractReminderWorker>();
         services.AddSingleInstanceHostedService<ScheduledReportWorker>();
         services.AddSingleInstanceHostedService<ApprovalReminderWorker>();
+        services.AddSingleInstanceHostedService<ProjectReminderWorker>();
         services.AddSingleInstanceHostedService<AttendanceAutoClockOutWorker>();
         services.AddSingleInstanceHostedService<EscalationRuleWorker>();
         services.AddSingleInstanceHostedService<SubscriptionLifecycleWorker>();
