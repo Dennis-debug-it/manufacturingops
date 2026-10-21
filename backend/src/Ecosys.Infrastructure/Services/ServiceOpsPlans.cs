@@ -69,7 +69,10 @@ public static class ServiceOpsPlans
         "AccessControl", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "ClientPortalContacts",
         "Clients", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "Notifications", "PortalAuth", "PortalKnowledge",
         "PublicWorkOrder", "PushSubscriptions", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
-        "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users"
+        "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
+        // WhatsApp reminders (Release 3 design 6): every plan, gated by the tenant feature flag "whatsapp".
+        // The older WhatsApp (inbox) controller stays in Operations.
+        "MyWhatsApp", "WhatsAppNotifications", "ClientWhatsAppConsent", "PortalWhatsApp", "WhatsAppWebhook"
     };
 
     /// <summary>Controllers whose module requirement is decided per route inside <see cref="RequiredModules"/>.</summary>

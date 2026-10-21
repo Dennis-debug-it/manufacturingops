@@ -46,7 +46,8 @@ public interface IProjectNotificationService
 
 internal sealed class ProjectNotificationService(
     AppDbContext dbContext,
-    INotificationDispatcher dispatcher) : IProjectNotificationService
+    INotificationDispatcher dispatcher,
+    IClientWhatsAppNotifier? clientWhatsAppNotifier = null) : IProjectNotificationService
 {
     public Task MemberAddedAsync(Guid tenantId, Project project, Guid userId, string role, CancellationToken cancellationToken = default) =>
         NotifyAsync(tenantId, ProjectNotificationKeys.MemberAdded, project, [userId],
@@ -112,6 +113,16 @@ internal sealed class ProjectNotificationService(
             },
             $"Valuation {valuation.ValuationNumber} certified", $"{project.ProjectNumber}: {amount} certified. Raise the invoice.",
             cancellationToken, url: $"{ProjectUrl(project)}?tab=valuations");
+
+        // The client hears too, by WhatsApp, when the tenant allows it and a contact agreed (design 4.2).
+        if (clientWhatsAppNotifier is not null)
+            await clientWhatsAppNotifier.NotifyClientAsync(tenantId, project.ClientId, ClientWhatsAppKeys.ValuationCertified,
+                new Dictionary<string, string?>
+                {
+                    ["ValuationNumber"] = valuation.ValuationNumber,
+                    ["ProjectName"] = project.Name,
+                    ["CertifiedAmount"] = amount,
+                }, "ProjectValuation", valuation.Id, onceScope: valuation.Id.ToString("N"), cancellationToken: cancellationToken);
     }
 
     public Task NotifyAsync(Guid tenantId, string key, Project project, IReadOnlyCollection<Guid> userIds, IReadOnlyDictionary<string, string?> values,

@@ -33,7 +33,7 @@ public static class NotificationKeyDescriptor
 
     private static readonly IReadOnlyList<NotificationDescriptor> All =
     [
-        Inbox("work-order.assigned",  "Work order assigned to me",        "Work Orders"),
+        Inbox("work-order.assigned",  "Work order assigned to me",        "Work Orders", whatsApp: true),
         EmailOnly("work-order.started",   "Work order started (admin alert)",  "Work Orders"),
         EmailOnly("work-order.on-hold",   "Work order placed on hold",         "Work Orders"),
         EmailOnly("email-intake.email-intake-received", "Email request received (auto-reply)", "Email Intake"),
@@ -50,13 +50,13 @@ public static class NotificationKeyDescriptor
         Inbox("project.task-assigned",       "Project task assigned to me",    "Projects"),
         Inbox("project.variation-submitted", "Project variation to review",    "Projects"),
         Inbox("project.variation-decided",   "Project variation decided",      "Projects"),
-        Inbox("project.task-due", "Project task due soon", "Projects"),
+        Inbox("project.task-due", "Project task due soon", "Projects", whatsApp: true),
         Inbox("project.milestone-due", "Project milestone coming up", "Projects"),
         Inbox("project.milestone-overdue", "Project milestone overdue", "Projects"),
         Inbox("project.end-date-approaching", "Project end date approaching", "Projects"),
-        Inbox("project.muster-missing", "Muster roll not marked", "Projects"),
-        Inbox("project.valuation-certified", "Project valuation certified", "Projects"),
-        Inbox("project.retention-due", "Project retention due for release", "Projects"),
+        Inbox("project.muster-missing", "Muster roll not marked", "Projects", whatsApp: true),
+        Inbox("project.valuation-certified", "Project valuation certified", "Projects", whatsApp: true),
+        Inbox("project.retention-due", "Project retention due for release", "Projects", whatsApp: true),
         EmailOnly("invoice.sent",         "Invoice sent to client",            "Finance"),
         EmailOnly("quotation.sent",       "Quotation sent to client",          "Finance"),
         EmailOnly("users.invited",        "User invited / account setup",      "Account"),
@@ -76,8 +76,12 @@ public static class NotificationKeyDescriptor
     /// A key sent through the dispatcher. Pass <paramref name="defaults"/> for a noisy key that should
     /// start in the bell only (e.g. <c>NotificationChannels.InApp</c>); users can still turn the rest on.
     /// </summary>
-    private static NotificationDescriptor Inbox(string key, string label, string category, NotificationChannels defaults = Staff) =>
-        new(key, label, category, Staff, defaults);
+    /// <param name="whatsApp">
+    /// The key can also go by WhatsApp (Release 3 design 4.2): it has a template in
+    /// <see cref="WhatsAppTemplateCatalogue"/>. Never on by default; a user opts in.
+    /// </param>
+    private static NotificationDescriptor Inbox(string key, string label, string category, NotificationChannels defaults = Staff, bool whatsApp = false) =>
+        new(key, label, category, whatsApp ? Staff | NotificationChannels.WhatsApp : Staff, defaults & ~NotificationChannels.WhatsApp);
 
     private static NotificationDescriptor EmailOnly(string key, string label, string category) =>
         new(key, label, category, NotificationChannels.Email, NotificationChannels.Email);

@@ -329,6 +329,17 @@ export const endpoints = {
     notificationRead: (id: string) => `/api/me/notifications/${id}/read`,
     notificationsReadAll: '/api/me/notifications/read-all',
     notificationArchive: (id: string) => `/api/me/notifications/${id}/archive`,
+    whatsApp: '/api/me/whatsapp',
+    whatsAppStart: '/api/me/whatsapp/start',
+    whatsAppVerify: '/api/me/whatsapp/verify',
+    whatsAppOptIn: '/api/me/whatsapp/opt-in',
+    whatsAppOptOut: '/api/me/whatsapp/opt-out',
+  },
+  whatsAppNotifications: {
+    settings: '/api/whatsapp-notifications/settings',
+    outbox: '/api/whatsapp-notifications/outbox',
+    contactConsent: (clientId: string, contactId: string) => `/api/clients/${clientId}/portal-users/${contactId}/whatsapp`,
+    platformTenant: (tenantId: string) => `/api/platform/whatsapp/tenants/${tenantId}`,
   },
   hubs: {
     // SignalR, not under /api: nginx proxies /hubs with WebSocket upgrade.
@@ -684,6 +695,10 @@ export const endpoints = {
     projectDocument: (id: string, documentId: string) => `/api/portal/projects/${id}/documents/${documentId}/download`,
     projectBilling: (id: string) => `/api/portal/projects/${id}/valuations`,
     profile: '/api/portal/profile',
+    whatsApp: '/api/portal/profile/whatsapp',
+    whatsAppStart: '/api/portal/profile/whatsapp/start',
+    whatsAppVerify: '/api/portal/profile/whatsapp/verify',
+    whatsAppOptOut: '/api/portal/profile/whatsapp/opt-out',
     knowledgeCategories: '/api/portal/knowledge/categories',
     knowledgeArticles: '/api/portal/knowledge/articles',
     knowledgeArticle: (slug: string) => `/api/portal/knowledge/articles/${slug}`,

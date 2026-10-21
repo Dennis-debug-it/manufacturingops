@@ -49,13 +49,16 @@ internal sealed class EtaNotificationService(
     AppDbContext dbContext,
     IEmailOutboxService emailOutboxService,
     IOptions<PublicAppOptions> publicAppOptions,
-    ILogger<EtaNotificationService> logger) : IEtaNotificationService
+    ILogger<EtaNotificationService> logger,
+    IClientWhatsAppNotifier? clientWhatsAppNotifier = null) : IEtaNotificationService
 {
     public async Task NotifyAsync(Guid tenantId, WorkOrder workOrder, string eventType, string? technicianName, CancellationToken cancellationToken = default)
     {
         try
         {
             if (!workOrder.NotifyClient) return;
+
+            await TryNotifyWhatsAppAsync(tenantId, workOrder, eventType, technicianName, cancellationToken);
 
             var settings = await dbContext.EtaNotificationSettings
                 .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.EventType == eventType, cancellationToken);
@@ -104,6 +107,39 @@ internal sealed class EtaNotificationService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to queue ETA notification ({EventType}) for work order {WorkOrderId}.", eventType, workOrder.Id);
+        }
+    }
+
+    /// <summary>
+    /// The client WhatsApp messages for "on the way" and "completed" (Release 3 design 4.2). Independent of
+    /// the email settings below; the client notifier checks the tenant's allowed keys and contact consent.
+    /// </summary>
+    private async Task TryNotifyWhatsAppAsync(Guid tenantId, WorkOrder workOrder, string eventType, string? technicianName, CancellationToken cancellationToken)
+    {
+        var key = eventType switch
+        {
+            EtaNotificationEventTypes.EnRoute => ClientWhatsAppKeys.TechnicianOnTheWay,
+            EtaNotificationEventTypes.Completed => ClientWhatsAppKeys.WorkOrderCompleted,
+            _ => null,
+        };
+        if (key is null || clientWhatsAppNotifier is null || workOrder.ClientId == Guid.Empty)
+            return;
+
+        try
+        {
+            await EnsureTrackingTokenAsync(workOrder, cancellationToken);
+            await clientWhatsAppNotifier.NotifyClientAsync(tenantId, workOrder.ClientId, key, new Dictionary<string, string?>
+            {
+                ["TechnicianName"] = string.IsNullOrWhiteSpace(technicianName) ? "Your technician" : technicianName,
+                ["WorkOrderNumber"] = workOrder.WorkOrderNumber,
+                ["TrackingLink"] = $"{publicAppOptions.Value.PublicUrl.TrimEnd('/')}/track/{workOrder.TrackingToken}",
+            }, "WorkOrder", workOrder.Id,
+                onceScope: key == ClientWhatsAppKeys.WorkOrderCompleted ? workOrder.Id.ToString("N") : null,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Failed to queue WhatsApp {EventType} for work order {WorkOrderId}.", eventType, workOrder.Id);
         }
     }
 

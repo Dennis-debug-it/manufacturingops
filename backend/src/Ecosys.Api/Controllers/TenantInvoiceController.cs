@@ -396,6 +396,14 @@ public sealed class TenantInvoiceController(
             throw;
         }
         await auditLogService.LogAsync(TenantId, UserId, "finance.invoice.sent", nameof(TenantInvoice), invoice.Id.ToString(), $"Sent invoice {invoice.InvoiceNumber}; delivery queued.", cancellationToken);
+        // A WhatsApp note to the client's opted-in contacts (Release 3 design 4.2). Never fails the send.
+        if (HttpContext?.RequestServices.GetService(typeof(IClientWhatsAppNotifier)) is IClientWhatsAppNotifier whatsApp)
+            await whatsApp.NotifyClientAsync(TenantId, invoice.ClientId, ClientWhatsAppKeys.InvoiceIssued, new Dictionary<string, string?>
+            {
+                ["InvoiceNumber"] = invoice.InvoiceNumber,
+                ["TotalAmount"] = $"{invoice.Currency} {invoice.TotalAmount:N2}",
+                ["DueDate"] = invoice.DueDate.ToString("yyyy-MM-dd"),
+            }, nameof(TenantInvoice), invoice.Id, onceScope: invoice.Id.ToString("N"), cancellationToken: cancellationToken);
         return Ok(MapDetail(invoice));
     }
 

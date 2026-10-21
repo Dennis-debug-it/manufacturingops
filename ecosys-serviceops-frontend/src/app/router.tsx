@@ -126,6 +126,7 @@ import { SettingsOverviewPage as SettingsOverviewPageReal } from '../features/se
 import { TimeAttendanceSettingsPage as SettingsTimeAttendancePageReal } from '../features/settings/TimeAttendanceSettingsPage'
 import { InventorySettingsPage as SettingsInventoryPageReal } from '../features/settings/InventorySettingsPage'
 import { WhatsAppSettingsPage as SettingsWhatsAppPageReal } from '../features/settings/WhatsAppSettingsPage'
+import { WhatsAppRemindersSettingsPage } from '../features/settings/WhatsAppRemindersSettingsPage'
 import { PaymentsSettingsPage as SettingsPaymentsPageReal } from '../features/settings/PaymentsSettingsPage'
 import { PortalSettingsPage as SettingsPortalPageReal } from '../features/settings/PortalSettingsPage'
 import { IntegrationsSettingsPage as SettingsIntegrationsPageReal } from '../features/settings/IntegrationsSettingsPage'
@@ -397,6 +398,7 @@ export function AppRouter() {
       ['/settings/email-intake', SettingsEmailIntakePage],
       ['/settings/monitoring', SettingsMonitoringIntakePage],
       ['/settings/whatsapp', SettingsWhatsAppPage],
+      ['/settings/whatsapp-reminders', WhatsAppRemindersSettingsPage],
       ['/settings/payments', SettingsPaymentsPage],
       ['/settings/credit-control', SettingsCreditControlPage],
       ['/settings/portal', SettingsPortalPage],
@@ -469,7 +471,8 @@ export function AppRouter() {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={tenantRoles}><TenantShellRoute /></ProtectedRoute>}>
-          {tenantRouteComponents.filter(([path]) => WHATSAPP_ENABLED || !path.includes('whatsapp')).map(([path, Component]) => (
+          {/* WHATSAPP_ENABLED hides the inbound chat inbox and its old account page; WhatsApp reminders (shared number) are always routed. */}
+          {tenantRouteComponents.filter(([path]) => WHATSAPP_ENABLED || !(path.startsWith('/whatsapp') || path === '/settings/whatsapp')).map(([path, Component]) => (
             <Route key={path} path={path} element={<Component />} />
           ))}
         </Route>

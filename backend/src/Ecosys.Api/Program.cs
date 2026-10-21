@@ -140,6 +140,19 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
+    // Meta's webhook calls all come from Meta's servers, so the public 30/min would drop delivery
+    // updates; this still caps a flood from any one address (each call is signature-checked).
+    options.AddPolicy(Ecosys.Api.Controllers.WhatsAppWebhookController.WebhookRateLimitPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            $"whatsapp-webhook:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 600,
+                Window = TimeSpan.FromSeconds(60),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+
     options.AddPolicy("AuthEndpoints", httpContext =>
     {
         var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";

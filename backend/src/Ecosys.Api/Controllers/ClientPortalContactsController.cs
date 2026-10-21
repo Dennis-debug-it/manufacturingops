@@ -187,10 +187,13 @@ public sealed class ClientPortalContactsController(
     }
 
     private static ClientPortalContactResponse Map(ClientPortalUser x) =>
-        new(x.Id, x.FullName, x.Email, x.Phone, x.IsActive, x.IsPendingApproval, x.LastLoginAt, x.CreatedAt);
+        new(x.Id, x.FullName, x.Email, x.Phone, x.IsActive, x.IsPendingApproval, x.LastLoginAt, x.CreatedAt,
+            x.ReceivesWhatsApp, x.WhatsAppNumber, x.WhatsAppConsentAt, x.WhatsAppConsentMethod);
 }
 
-public sealed record ClientPortalContactResponse(Guid Id, string FullName, string Email, string? Phone, bool IsActive, bool IsPendingApproval, DateTime? LastLoginAt, DateTime CreatedAt);
+/// <param name="ReceivesWhatsApp">Gets the client WhatsApp messages (consent recorded; see ClientWhatsAppConsentController).</param>
+public sealed record ClientPortalContactResponse(Guid Id, string FullName, string Email, string? Phone, bool IsActive, bool IsPendingApproval, DateTime? LastLoginAt, DateTime CreatedAt,
+    bool ReceivesWhatsApp = false, string? WhatsAppNumber = null, DateTime? WhatsAppConsentAt = null, string? WhatsAppConsentMethod = null);
 public sealed record CreateClientPortalContactRequest(string FullName, string Email, string? Phone);
 public sealed record UpdateClientPortalContactStatusRequest(bool IsActive);
 

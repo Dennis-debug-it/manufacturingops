@@ -275,6 +275,11 @@ export interface ClientPortalContact {
   isPendingApproval: boolean
   lastLoginAt: string | null
   createdAt: string
+  /** Gets the client WhatsApp messages: consent recorded by the office or confirmed from the portal. */
+  receivesWhatsApp?: boolean
+  whatsAppNumber?: string | null
+  whatsAppConsentAt?: string | null
+  whatsAppConsentMethod?: string | null
 }
 
 export function useClientPortalContacts(clientId: string | undefined) {

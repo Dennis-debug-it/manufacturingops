@@ -5,6 +5,8 @@ import { PageHeader } from '../shared/components/PageHeader'
 import { Spinner } from '../shared/components/Spinner'
 import { formatDateTime } from '../shared/utils/dates'
 import { usePortalProfile, useUpdatePortalProfile } from './api'
+import { WhatsAppOptInCard } from '../features/whatsapp/WhatsAppOptInCard'
+import { portalWhatsAppApi } from '../features/whatsapp/remindersApi'
 
 export function PortalProfilePage() {
   const { data, isLoading, isError } = usePortalProfile()
@@ -88,6 +90,9 @@ export function PortalProfilePage() {
             </div>
           ))}
         </dl>
+      </div>
+      <div className="max-w-xl">
+        <WhatsAppOptInCard source={portalWhatsAppApi} audience="client" />
       </div>
       <div className="max-w-xl rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">
         Email cannot be changed here — contact your account manager to update your sign-in address.

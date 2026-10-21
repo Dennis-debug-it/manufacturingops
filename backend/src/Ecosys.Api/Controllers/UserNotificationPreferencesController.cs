@@ -55,6 +55,8 @@ public sealed class UserNotificationPreferencesController(
             .ToListAsync(cancellationToken);
 
         var savedByKey = saved.ToDictionary(p => p.NotificationKey, StringComparer.OrdinalIgnoreCase);
+        // WhatsApp is offered only for keys this workspace allows it on, and only when it has the feature.
+        var whatsApp = await WhatsAppTenantPolicy.LoadAsync(db, tenantId, cancellationToken);
 
         var result = NotificationKeyDescriptor.List()
             .Select(descriptor =>
@@ -70,6 +72,7 @@ public sealed class UserNotificationPreferencesController(
                     WhatsAppEnabled: channels.HasFlag(NotificationChannels.WhatsApp),
                     Channels: Enum.GetValues<NotificationChannels>()
                         .Where(c => c != NotificationChannels.None && descriptor.Channels.HasFlag(c))
+                        .Where(c => c != NotificationChannels.WhatsApp || whatsApp.Allows(descriptor.Key))
                         .Select(c => c.ToString())
                         .ToList());
             })
