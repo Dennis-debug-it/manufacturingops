@@ -701,3 +701,27 @@ internal sealed class ProjectService(
         ProjectVariationKinds.All.FirstOrDefault(x => string.Equals(x, kind?.Trim(), StringComparison.OrdinalIgnoreCase))
         ?? throw new BusinessRuleException("Variation kind must be Addition or Omission.");
 }
+
+/// <summary>
+/// Checks the optional project on a record created from an existing form (work order, material
+/// issue, expense, bill, purchase order, invoice): it must exist, be open and, where the record
+/// has a client, belong to that client.
+/// </summary>
+public static class ProjectLinks
+{
+    public static async Task<Guid?> ResolveAsync(AppDbContext dbContext, Guid tenantId, Guid? projectId, Guid? clientId, CancellationToken cancellationToken = default)
+    {
+        if (projectId is not { } id)
+            return null;
+        var project = await dbContext.Projects
+            .Where(x => x.TenantId == tenantId && x.Id == id)
+            .Select(x => new { x.ProjectNumber, x.ClientId, x.Stage!.Category })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new BusinessRuleException("Select a valid project.");
+        if (project.Category is ProjectStageCategories.Closed or ProjectStageCategories.Cancelled)
+            throw new BusinessRuleException($"Project {project.ProjectNumber} is {project.Category.ToLowerInvariant()}.");
+        if (clientId.HasValue && clientId != project.ClientId)
+            throw new BusinessRuleException($"Project {project.ProjectNumber} belongs to a different client.");
+        return id;
+    }
+}

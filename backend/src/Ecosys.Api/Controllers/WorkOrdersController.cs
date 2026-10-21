@@ -372,6 +372,7 @@ public sealed class WorkOrdersController(
             TenantId = TenantId,
             BranchId = branchId,
             ClientId = request.ClientId,
+            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, request.ClientId, cancellationToken),
             SiteId = request.SiteId,
             SystemId = request.SystemId,
             AssetId = request.AssetId,
@@ -2404,7 +2405,8 @@ public sealed record CreateWorkOrderRequest(
     [StringLength(256)] string? ClientContactEmail = null,
     Guid? TemplateId = null,
     Guid? ParentWorkOrderId = null,
-    Guid? FollowUpOfWorkOrderId = null);
+    Guid? FollowUpOfWorkOrderId = null,
+    Guid? ProjectId = null);
 
 public sealed record UpdateWorkOrderRequest(
     Guid ClientId,

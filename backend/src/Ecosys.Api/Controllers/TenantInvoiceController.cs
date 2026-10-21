@@ -128,6 +128,7 @@ public sealed class TenantInvoiceController(
         {
             TenantId = TenantId,
             ClientId = request.ClientId,
+            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, request.ClientId, cancellationToken),
             CreditTermId = creditTerm?.Id,
             InvoiceNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.Invoice, cancellationToken),
             DocumentType = DocumentTypes.Invoice,

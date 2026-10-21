@@ -10,7 +10,8 @@ public sealed record CreateInvoiceRequest(
     string? TermsAndConditions,
     string? Currency,
     Guid? CreditTermId,
-    List<CreateInvoiceLineRequest> Lines);
+    List<CreateInvoiceLineRequest> Lines,
+    Guid? ProjectId = null);
 
 public sealed record CreateInvoiceLineRequest(
     string Description,

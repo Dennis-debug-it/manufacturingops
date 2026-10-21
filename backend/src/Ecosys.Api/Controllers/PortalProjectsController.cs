@@ -80,6 +80,41 @@ public sealed class PortalProjectsController(
             documents));
     }
 
+    /// <summary>
+    /// Certified valuations, the project's invoices and retention held. Draft and submitted
+    /// valuations stay internal, as do draft invoices. Needs the Finance module and the portal's
+    /// invoices page switched on.
+    /// </summary>
+    [HttpGet("{id:guid}/valuations")]
+    public async Task<ActionResult<PortalProjectBilling>> GetBilling(Guid id, CancellationToken cancellationToken)
+    {
+        await EnsureEnabledAsync(cancellationToken);
+        if (!(await PortalModuleSettings.LoadAsync(dbContext, TenantId, cancellationToken)).ShowInvoices)
+            throw new ForbiddenException("Invoices are not available in this portal.");
+        var project = await VisibleProjects().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Project not found.");
+
+        var valuations = await dbContext.ProjectValuations
+            .Where(x => x.TenantId == TenantId && x.ProjectId == id
+                && (x.Status == ProjectValuationStatuses.Certified || x.Status == ProjectValuationStatuses.Invoiced))
+            .ToListAsync(cancellationToken);
+        var releases = await dbContext.ProjectRetentionReleases.Where(x => x.TenantId == TenantId && x.ProjectId == id).ToListAsync(cancellationToken);
+        var invoices = await dbContext.TenantInvoices
+            .Where(x => x.TenantId == TenantId && x.ClientId == ClientId && x.ProjectId == id && x.Status != "Draft" && x.Status != "Void")
+            .OrderByDescending(x => x.InvoiceDate)
+            .Select(x => new PortalInvoiceListItem(x.Id, x.InvoiceNumber, x.Status, x.InvoiceDate, x.DueDate, x.TotalAmount, x.AmountPaid, x.Balance, x.Currency))
+            .ToListAsync(cancellationToken);
+
+        return Ok(new PortalProjectBilling(
+            project.Currency,
+            valuations.OrderByDescending(x => x.PeriodEnd)
+                .Select(x => new PortalProjectValuation(x.ValuationNumber, x.PeriodEnd, x.CertificateReference, x.CertifiedOn, x.GrossValueToDate,
+                    x.RetentionToDate, x.CertifiedAmount ?? x.AmountDue))
+                .ToList(),
+            invoices,
+            ProjectValuationCalculator.RetentionHeld(valuations, releases)));
+    }
+
     [HttpGet("{id:guid}/documents/{documentId:guid}/download")]
     public async Task<IActionResult> DownloadDocument(Guid id, Guid documentId, CancellationToken cancellationToken)
     {
@@ -121,6 +156,11 @@ public sealed record PortalProjectListItem(
 public sealed record PortalProjectMilestone(string Name, DateOnly? PlannedDate, string Status, bool IsOverdue);
 
 public sealed record PortalProjectVariation(string VariationNumber, string Kind, string Title, decimal Amount, string? ClientReference, DateTime? ApprovedAt);
+
+public sealed record PortalProjectValuation(
+    string ValuationNumber, DateOnly PeriodEnd, string? CertificateReference, DateOnly? CertifiedOn, decimal GrossValueToDate, decimal RetentionToDate, decimal CertifiedAmount);
+
+public sealed record PortalProjectBilling(string Currency, IReadOnlyList<PortalProjectValuation> Valuations, IReadOnlyList<PortalInvoiceListItem> Invoices, decimal RetentionHeld);
 
 public sealed record PortalProjectDocument(Guid Id, string FileName, long FileSize, string MimeType, DateTime CreatedAt);
 

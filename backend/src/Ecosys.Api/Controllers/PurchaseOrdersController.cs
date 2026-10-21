@@ -69,6 +69,7 @@ public sealed class PurchaseOrdersController(
             SupplierId = supplier.Id,
             ExpectedAt = request.ExpectedAt is null ? null : DateTime.SpecifyKind(request.ExpectedAt.Value, DateTimeKind.Utc),
             Notes = request.Notes?.Trim(),
+            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, null, cancellationToken),
         };
         foreach (var line in request.Lines)
         {
@@ -378,7 +379,7 @@ public sealed record PurchaseOrderDetailResponse(
 public sealed record CreatePurchaseOrderLineRequest(string ItemName, decimal QuantityOrdered, decimal UnitCost);
 
 public sealed record CreatePurchaseOrderRequest(
-    Guid SupplierId, DateTime? ExpectedAt, IReadOnlyList<CreatePurchaseOrderLineRequest> Lines, string? Notes = null);
+    Guid SupplierId, DateTime? ExpectedAt, IReadOnlyList<CreatePurchaseOrderLineRequest> Lines, string? Notes = null, Guid? ProjectId = null);
 
 public sealed record PurchaseOrderStatusRequest(string Status);
 
