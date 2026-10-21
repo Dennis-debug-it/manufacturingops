@@ -63,6 +63,7 @@ public static class DashboardWidgetCatalog
     public const string ProjectsValuationsAwaiting = "projects.valuations-awaiting";
     public const string ProjectsMusterToday = "projects.muster-today";
     public const string ProjectsUncostedLabour = "projects.uncosted-labour";
+    public const string ActionItemsDue = "action-items.due";
 
     private static readonly string[] Ops = [ServiceOpsPlans.Operations];
     private static readonly string[] Fin = [ServiceOpsPlans.Finance];
@@ -85,6 +86,7 @@ public static class DashboardWidgetCatalog
     private static readonly string[] FinanceData = [DashboardDataAreas.Finance];
     private static readonly string[] ProjectData = [DashboardDataAreas.Projects];
     private static readonly string[] ProjectFinanceData = [DashboardDataAreas.Projects, DashboardDataAreas.Finance];
+    private static readonly string[] ActivityData = [DashboardDataAreas.Activities];
 
     public static readonly IReadOnlyList<DashboardWidgetDefinition> All =
     [
@@ -134,6 +136,8 @@ public static class DashboardWidgetCatalog
             Prj, [PermissionNames.ProjectsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
         new(ProjectsUncostedLabour, "Uncosted labour days", "Days on the muster roll with no daily rate set for the worker.",
             PrjFin, [PermissionNames.ProjectsFinancialsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
+        new(ActionItemsDue, "My action items", "Your open action items: overdue, and due in the next seven days.",
+            [], [PermissionNames.ActivitiesView], DashboardWidgetSizes.Small, DashboardWidgetScope.User, ActivityData),
     ];
 
     private static readonly Dictionary<string, DashboardWidgetDefinition> ByKey =
@@ -180,10 +184,10 @@ public static class DashboardRoleDefaults
         DashboardWidgetCatalog.ProjectsBillingWaiting,
     ];
 
-    // "Action items due" joins this list once 3b's ActionItem is merged.
     private static readonly string[] ProjectManagerWidgets =
     [
         DashboardWidgetCatalog.ProjectsMine,
+        DashboardWidgetCatalog.ActionItemsDue,
         DashboardWidgetCatalog.ProjectsPendingVariations,
         DashboardWidgetCatalog.ProjectsValuationsAwaiting,
         DashboardWidgetCatalog.ProjectsMusterToday,

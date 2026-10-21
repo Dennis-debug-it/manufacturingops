@@ -487,9 +487,11 @@ Built as designed above; only the deviations and details worth knowing are liste
   `PUT /api/dashboard/settings/roles/{role}` (`{ hiddenKeys }`). The old `DashboardController` (`/summary`,
   Operations) is unchanged and still feeds the executive view. Each widget checks its own modules (403
   `license_module_*`) and permission (403) on every request.
-- **Catalogue.** 23 widgets in `DashboardWidgetCatalog`; a widget needs *all* its modules and *any* of its
+- **Catalogue.** 24 widgets in `DashboardWidgetCatalog`; a widget needs *all* its modules and *any* of its
   permissions (admins always pass; "Contracts expiring" needs none, as contracts are open to all staff).
-  "Action items due" is not in yet: it waits for 3b's `ActionItem`.
+  "My action items" (`action-items.due`, added after 3b merged) needs no module, only `activities.view`:
+  the caller's open items, overdue and due in the next seven days, linking to `/action-items?due=overdue`
+  and `?due=week`. It is in the project-manager default and anyone can add it.
 - **Project manager** is not a login role. Anyone who manages an open project (or is on one as its
   project manager) gets the project-manager widgets appended to their own role's default, and the admin
   screen lists "Project managers" as a role to hide widgets for. Viewers (and legacy "User") get the

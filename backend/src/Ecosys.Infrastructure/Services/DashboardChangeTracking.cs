@@ -21,6 +21,7 @@ public static class DashboardDataAreas
     public const string Materials = "materials";
     public const string Finance = "finance";
     public const string Projects = "projects";
+    public const string Activities = "activities";
 
     /// <summary>
     /// Only the entities a widget query reads (or shows the name of). Everything else — audit rows,
@@ -51,6 +52,7 @@ public static class DashboardDataAreas
         [typeof(ProjectWorker)] = Projects,
         [typeof(ProjectWorkerRate)] = Projects,
         [typeof(ProjectMusterEntry)] = Projects,
+        [typeof(ActionItem)] = Activities,
     };
 
     public static string? ForEntity(Type type) => ByEntity.GetValueOrDefault(type);

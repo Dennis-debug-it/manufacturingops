@@ -25,6 +25,14 @@ public sealed class RoleDashboardTests
         return data;
     }
 
+    public static TheoryData<string> ModuleGatedWidgets()
+    {
+        var data = new TheoryData<string>();
+        foreach (var widget in DashboardWidgetCatalog.All.Where(x => x.Modules.Count > 0))
+            data.Add(widget.Key);
+        return data;
+    }
+
     public static TheoryData<string> PermissionGatedWidgets()
     {
         var data = new TheoryData<string>();
@@ -48,7 +56,7 @@ public sealed class RoleDashboardTests
     // ── Server-side enforcement ────────────────────────────────────────────────
 
     [Theory]
-    [MemberData(nameof(AllWidgets))]
+    [MemberData(nameof(ModuleGatedWidgets))]
     public async Task EachWidget_Returns403_WithoutItsModule(string key)
     {
         var widget = DashboardWidgetCatalog.Find(key)!;
@@ -357,7 +365,7 @@ public sealed class RoleDashboardTests
     public void Catalogue_EveryWidgetReadsAKnownArea()
     {
         string[] known = [DashboardDataAreas.WorkOrders, DashboardDataAreas.Maintenance, DashboardDataAreas.Contracts,
-            DashboardDataAreas.Materials, DashboardDataAreas.Finance, DashboardDataAreas.Projects];
+            DashboardDataAreas.Materials, DashboardDataAreas.Finance, DashboardDataAreas.Projects, DashboardDataAreas.Activities];
         Assert.All(DashboardWidgetCatalog.All, widget => Assert.NotEmpty(widget.Areas));
         Assert.All(DashboardWidgetCatalog.All.SelectMany(x => x.Areas), area => Assert.Contains(area, known));
     }
@@ -550,6 +558,35 @@ public sealed class RoleDashboardTests
         Assert.StartsWith("/projects?stage=all&ids=", link);
         Assert.Contains(project.Id.ToString(), link);
         Assert.Contains(second.Id.ToString(), link);
+    }
+
+    [Fact]
+    public async Task ActionItemsWidget_CountsOnlyTheCallersOpenItems_ByDueDate()
+    {
+        var harness = await Harness.CreateAsync(modules: []);
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        void Add(string title, Guid? assignee, DateOnly? due, string status = ActionItemStatuses.Open) =>
+            harness.Db.ActionItems.Add(new ActionItem { TenantId = harness.TenantId, Title = title, AssigneeUserId = assignee, DueDate = due, Status = status });
+        Add("Late", harness.ManagerId, today.AddDays(-2));
+        Add("Soon", harness.ManagerId, today.AddDays(3));
+        Add("Later", harness.ManagerId, today.AddDays(30));
+        Add("No date", harness.ManagerId, null);
+        Add("Done late", harness.ManagerId, today.AddDays(-5), ActionItemStatuses.Done);
+        Add("Someone else's", harness.ViewerId, today.AddDays(-1));
+        await harness.Db.SaveChangesAsync();
+
+        // Shared: no module needed, only activities.view.
+        var manager = harness.Service(harness.ManagerId, AppRoles.Manager, permissions: [PermissionNames.ActivitiesView]);
+        var data = await manager.GetWidgetAsync(DashboardWidgetCatalog.ActionItemsDue, null, true);
+        decimal Stat(string label) => data.Stats.Single(x => x.Label == label).Value;
+        Assert.Equal(1, Stat("Overdue"));
+        Assert.Equal(1, Stat("Due this week"));
+        Assert.Equal(4, Stat("Open"));
+        Assert.Equal("/action-items?due=overdue", data.Stats.Single(x => x.Label == "Overdue").Link);
+        Assert.Equal(["Late", "Soon"], data.Items.Select(x => x.Label));
+
+        // It's in the project manager's default layout.
+        Assert.Contains(DashboardWidgetCatalog.ActionItemsDue, DashboardRoleDefaults.For(DashboardRoleDefaults.ProjectManager));
     }
 
     // ── PostgreSQL ─────────────────────────────────────────────────────────────

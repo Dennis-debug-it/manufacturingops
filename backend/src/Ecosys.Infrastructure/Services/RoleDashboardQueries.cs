@@ -60,6 +60,7 @@ internal sealed class RoleDashboardQueries(
             DashboardWidgetCatalog.ProjectsValuationsAwaiting => await ValuationsAwaitingAsync(viewer, cancellationToken),
             DashboardWidgetCatalog.ProjectsMusterToday => await MusterTodayAsync(viewer, clock, cancellationToken),
             DashboardWidgetCatalog.ProjectsUncostedLabour => await UncostedLabourAsync(viewer, cancellationToken),
+            DashboardWidgetCatalog.ActionItemsDue => await ActionItemsDueAsync(viewer, clock, cancellationToken),
             _ => throw new InvalidOperationException($"No query for dashboard widget '{widget.Key}'."),
         };
         return new DashboardWidgetData(widget.Key, widget.Title, stats, items, note, clock.UtcNow);
@@ -580,5 +581,31 @@ internal sealed class RoleDashboardQueries(
             .Take(ListLimit)
             .ToList();
         return new Result(stats, items);
+    }
+
+    // ── Activities ───────────────────────────────────────────────────────────
+
+    /// <summary>Days ahead that count as "due this week", today included (the action items page's <c>?due=week</c>).</summary>
+    private const int ActionItemsDueSoonDays = 7;
+
+    private async Task<Result> ActionItemsDueAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
+    {
+        var lastSoon = clock.Today.AddDays(ActionItemsDueSoonDays - 1);
+        var rows = await dbContext.ActionItems.AsNoTracking()
+            .Where(x => x.TenantId == viewer.TenantId && x.AssigneeUserId == viewer.UserId && x.Status == ActionItemStatuses.Open)
+            .Select(x => new { x.Title, x.DueDate })
+            .ToListAsync(ct);
+        var overdue = rows.Where(x => x.DueDate < clock.Today).OrderBy(x => x.DueDate).ToList();
+        var soon = rows.Where(x => x.DueDate >= clock.Today && x.DueDate <= lastSoon).OrderBy(x => x.DueDate).ToList();
+        return new Result(
+            [
+                Count("Overdue", overdue.Count, "/action-items?due=overdue", "danger"),
+                Count("Due this week", soon.Count, "/action-items?due=week", "warning"),
+                Count("Open", rows.Count, "/action-items"),
+            ],
+            [.. overdue.Concat(soon).Take(ListLimit).Select(x => new DashboardListItem(x.Title,
+                x.DueDate < clock.Today ? $"Overdue since {x.DueDate:dd MMM}" : $"Due {x.DueDate:dd MMM}",
+                null, null, null, x.DueDate < clock.Today ? "/action-items?due=overdue" : "/action-items?due=week",
+                x.DueDate < clock.Today ? "danger" : null))]);
     }
 }
