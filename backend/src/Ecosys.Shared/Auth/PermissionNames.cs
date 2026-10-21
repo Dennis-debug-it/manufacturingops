@@ -33,6 +33,9 @@ public static class PermissionNames
     public const string ProjectsVariationsApprove = "projects.variations.approve";
     public const string ProjectsClose = "projects.close";
     public const string ProjectsSettings = "projects.settings";
+    public const string ProjectsMusterMark = "projects.muster.mark";
+    public const string ProjectsFinancialsView = "projects.financials.view";
+    public const string ProjectsFinancialsManage = "projects.financials.manage";
 
     /// <summary>
     /// Capabilities with no column in the legacy role/user permission tables. Their baseline comes
@@ -46,7 +49,10 @@ public static class PermissionNames
         ProjectsVariationsSubmit,
         ProjectsVariationsApprove,
         ProjectsClose,
-        ProjectsSettings
+        ProjectsSettings,
+        ProjectsMusterMark,
+        ProjectsFinancialsView,
+        ProjectsFinancialsManage
     ];
 
     public static readonly string[] All =
@@ -81,6 +87,9 @@ public static class PermissionNames
         ProjectsVariationsSubmit,
         ProjectsVariationsApprove,
         ProjectsClose,
-        ProjectsSettings
+        ProjectsSettings,
+        ProjectsMusterMark,
+        ProjectsFinancialsView,
+        ProjectsFinancialsManage
     ];
 }

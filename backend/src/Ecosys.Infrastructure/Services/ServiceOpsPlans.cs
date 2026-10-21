@@ -50,7 +50,7 @@ public static class ServiceOpsPlans
     private static readonly HashSet<string> FinanceControllers = new(StringComparer.OrdinalIgnoreCase)
     {
         "ApprovalMatrix", "CreditTerms", "ExchangeRates", "ExpensesPayables", "TenantCreditNote",
-        "TenantFinance", "TenantInvoice", "TenantQuotation"
+        "TenantFinance", "TenantInvoice", "TenantQuotation", "WithholdingCertificates"
     };
 
     private static readonly HashSet<string> ProjectsControllers = new(StringComparer.OrdinalIgnoreCase)

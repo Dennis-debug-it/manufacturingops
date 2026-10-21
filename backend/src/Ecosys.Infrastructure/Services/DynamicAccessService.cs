@@ -75,15 +75,30 @@ internal static class CapabilityRoleDefaults
         PermissionNames.ProjectsManage,
         PermissionNames.ProjectsVariationsSubmit,
         PermissionNames.ProjectsVariationsApprove,
-        PermissionNames.ProjectsClose
+        PermissionNames.ProjectsClose,
+        PermissionNames.ProjectsMusterMark,
+        PermissionNames.ProjectsFinancialsView,
+        PermissionNames.ProjectsFinancialsManage
     ];
+
+    private static readonly string[] ProjectFinance =
+    [
+        PermissionNames.ProjectsView,
+        PermissionNames.ProjectsFinancialsView,
+        PermissionNames.ProjectsFinancialsManage
+    ];
+
+    // Field staff mark the muster roll only on projects where they are a Supervisor or Project
+    // Manager member; the capability alone opens nothing else.
+    private static readonly string[] FieldSupervisors = [PermissionNames.ProjectsMusterMark];
 
     public static IReadOnlyList<string> For(string? role)
     {
         if (string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)) return ProjectManagers;
-        if (string.Equals(role, AppRoles.FinanceUser, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(role, AppRoles.Dispatcher, StringComparison.OrdinalIgnoreCase)
+        if (string.Equals(role, AppRoles.FinanceUser, StringComparison.OrdinalIgnoreCase)) return ProjectFinance;
+        if (string.Equals(role, AppRoles.Dispatcher, StringComparison.OrdinalIgnoreCase)
             || string.Equals(role, AppRoles.Viewer, StringComparison.OrdinalIgnoreCase)) return ProjectViewers;
+        if (string.Equals(role, AppRoles.Technician, StringComparison.OrdinalIgnoreCase)) return FieldSupervisors;
         return [];
     }
 }

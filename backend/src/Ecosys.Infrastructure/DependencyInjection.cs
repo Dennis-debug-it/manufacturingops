@@ -96,6 +96,8 @@ public static class DependencyInjection
         services.AddScoped<IProjectAccessService, ProjectAccessService>();
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<IProjectNotificationService, ProjectNotificationService>();
+        services.AddScoped<IProjectFinancialsService, ProjectFinancialsService>();
+        services.AddScoped<IProjectInvoiceService, ProjectInvoiceService>();
         services.AddSingleton<IPdfRenderer, QuestPdfRenderer>();
         services.AddScoped<IScheduledReportService, ScheduledReportService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();

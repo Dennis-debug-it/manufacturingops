@@ -27,6 +27,16 @@ public sealed record ProjectSettingsModel
     public bool ProgressRequiresVerification { get; init; }
     public bool AllowManualProgressOverride { get; init; } = true;
     public IReadOnlyList<string> Trades { get; init; } = [];
+    public bool MusterRoll { get; init; } = true;
+    public bool SiteDiary { get; init; } = true;
+    public bool Valuations { get; init; } = true;
+    public bool Financials { get; init; } = true;
+    /// <summary>Days after the work date that the supervisor can still correct marks (0 = same day only).</summary>
+    public int MusterLockDays { get; init; } = 1;
+    /// <summary>Hour of the working day (tenant time) after which a missing muster roll is flagged.</summary>
+    public int MusterReminderHour { get; init; } = 11;
+    /// <summary>How many days ahead milestone, task and end-date reminders are sent.</summary>
+    public int ReminderLeadDays { get; init; } = 3;
 }
 
 public interface IProjectSettingsService
@@ -60,6 +70,12 @@ internal sealed class ProjectSettingsService(AppDbContext dbContext) : IProjectS
     {
         if (settings.Visibility is not (ProjectVisibility.AllProjects or ProjectVisibility.MembersOnly))
             throw new BusinessRuleException("Visibility must be AllProjects or MembersOnly.");
+        if (settings.MusterLockDays is < 0 or > 31)
+            throw new BusinessRuleException("The muster lock must be between 0 and 31 days.");
+        if (settings.MusterReminderHour is < 0 or > 23)
+            throw new BusinessRuleException("The muster reminder hour must be between 0 and 23.");
+        if (settings.ReminderLeadDays is < 0 or > 60)
+            throw new BusinessRuleException("Reminder lead time must be between 0 and 60 days.");
 
         var normalized = settings with
         {
