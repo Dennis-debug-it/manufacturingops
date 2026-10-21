@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Ecosys.Infrastructure.Migrations.AppDb
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20261021070221_AddProjectsModule")]
+    [Migration("20261021071519_AddProjectsModule")]
     partial class AddProjectsModule
     {
         /// <inheritdoc />
@@ -6540,6 +6540,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ValueVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
 
                     b.Property<bool>("VisibleInClientPortal")
                         .ValueGeneratedOnAdd()

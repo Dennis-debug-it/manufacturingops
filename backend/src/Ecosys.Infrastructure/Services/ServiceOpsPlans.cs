@@ -9,6 +9,11 @@ public static class ServiceOpsPlans
     public const string Operations = "operations";
     public const string Finance = "finance";
     public const string Suite = "suite";
+    /// <summary>
+    /// Add-on module, not a plan code: any plan (canonical or custom) gets Projects by listing
+    /// "projects" in <see cref="LicensePlan.ModulesIncluded"/>. No existing plan includes it.
+    /// </summary>
+    public const string Projects = "projects";
     public static bool IsCommercial(string code) => code is Operations or Finance or Suite;
     public static string DisplayName(string code) => code switch
     {
@@ -22,13 +27,15 @@ public static class ServiceOpsPlans
     {
         // Canonical offerings have fixed module boundaries. Feature flags and capacity
         // overrides continue to use the existing licensing mechanisms.
-        if (plan.PlanCode == Operations) return [Operations];
-        if (plan.PlanCode == Finance) return [Finance];
-        if (plan.PlanCode == Suite) return [Operations, Finance];
-        var explicitModules = (plan.ModulesIncluded ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(x => x.ToLowerInvariant()).Where(x => x is Operations or Finance).Distinct().ToArray();
+        var included = (plan.ModulesIncluded ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.ToLowerInvariant()).ToArray();
+        string[] addOns = included.Contains(Projects) ? [Projects] : [];
+        if (plan.PlanCode == Operations) return [Operations, .. addOns];
+        if (plan.PlanCode == Finance) return [Finance, .. addOns];
+        if (plan.PlanCode == Suite) return [Operations, Finance, .. addOns];
+        var explicitModules = included.Where(x => x is Operations or Finance).Distinct().ToArray();
         // Existing plans had no module restrictions. Preserve their paid/demo access.
-        return explicitModules.Length > 0 ? explicitModules : [Operations, Finance];
+        return [.. (explicitModules.Length > 0 ? explicitModules : [Operations, Finance]), .. addOns];
     }
 
     private static readonly HashSet<string> OperationsControllers = new(StringComparer.OrdinalIgnoreCase)
@@ -44,6 +51,11 @@ public static class ServiceOpsPlans
     {
         "ApprovalMatrix", "CreditTerms", "ExchangeRates", "ExpensesPayables", "TenantCreditNote",
         "TenantFinance", "TenantInvoice", "TenantQuotation"
+    };
+
+    private static readonly HashSet<string> ProjectsControllers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Projects", "ProjectSettings", "Consultants", "PortalProjects"
     };
 
     /// <summary>
@@ -69,6 +81,7 @@ public static class ServiceOpsPlans
     public static bool IsClassified(string controller) =>
         OperationsControllers.Contains(controller)
         || FinanceControllers.Contains(controller)
+        || ProjectsControllers.Contains(controller)
         || SharedControllers.Contains(controller)
         || RouteClassifiedControllers.Contains(controller);
 
@@ -77,11 +90,18 @@ public static class ServiceOpsPlans
         var route = path.ToLowerInvariant();
         if (controller == "Portal")
         {
+            if (route.StartsWith("/api/portal/projects")) return [Projects];
             if (route.StartsWith("/api/portal/invoices") || route.StartsWith("/api/portal/quotations")) return [Finance];
             if (!route.StartsWith("/api/portal/profile")) return [Operations];
         }
         if (controller == "WorkOrderBilling" || route.Contains("/generate-invoice") || route.Contains("/convert-to-work-order") || route.EndsWith("/from-quote"))
             return [Operations, Finance];
+        if (controller is not null && ProjectsControllers.Contains(controller))
+        {
+            // A project's work orders and material issues live in Operations.
+            if (route.Contains("/work-orders") || route.Contains("/material-issues")) return [Projects, Operations];
+            return [Projects];
+        }
         if (controller is not null && OperationsControllers.Contains(controller)) return [Operations];
         if (controller is not null && FinanceControllers.Contains(controller)) return [Finance];
         if (route.StartsWith("/api/settings/"))

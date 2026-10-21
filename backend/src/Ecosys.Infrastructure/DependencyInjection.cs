@@ -91,6 +91,11 @@ public static class DependencyInjection
         services.AddScoped<IContractPricingService, ContractPricingService>();
         services.AddScoped<IContractLifecycleService, ContractLifecycleService>();
         services.AddScoped<IContractOperationalService, ContractOperationalService>();
+        services.AddScoped<IProjectSettingsService, ProjectSettingsService>();
+        services.AddScoped<IProjectSetupService, ProjectSetupService>();
+        services.AddScoped<IProjectAccessService, ProjectAccessService>();
+        services.AddScoped<IProjectService, ProjectService>();
+        services.AddScoped<IProjectNotificationService, ProjectNotificationService>();
         services.AddSingleton<IPdfRenderer, QuestPdfRenderer>();
         services.AddScoped<IScheduledReportService, ScheduledReportService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();

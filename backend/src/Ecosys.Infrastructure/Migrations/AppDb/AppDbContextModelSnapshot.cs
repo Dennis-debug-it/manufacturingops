@@ -6538,6 +6538,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("ValueVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
                     b.Property<bool>("VisibleInClientPortal")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

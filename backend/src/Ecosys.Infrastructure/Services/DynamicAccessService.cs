@@ -31,7 +31,8 @@ internal sealed class DynamicAccessService(AppDbContext dbContext, IRolePermissi
         var scopes = await dbContext.AccessScopes.AsNoTracking().Where(x => x.TenantId == tenantId && (x.UserId == userId || (x.PermissionGroupId.HasValue && memberships.Contains(x.PermissionGroupId.Value)))).ToListAsync(cancellationToken);
         var thresholds = await dbContext.PermissionThresholds.AsNoTracking().Where(x => x.TenantId == tenantId && (x.UserId == userId || (x.PermissionGroupId.HasValue && memberships.Contains(x.PermissionGroupId.Value)))).ToListAsync(cancellationToken);
         var roleBaseline = await rolePermissionService.ResolveAsync(tenantId, user.Role, cancellationToken);
-        var roleGrants = PermissionMap.FromModel(roleBaseline).Where(x => x.Value).Select(x => x.Key).ToArray();
+        var roleGrants = PermissionMap.FromModel(roleBaseline).Where(x => x.Value).Select(x => x.Key)
+            .Concat(CapabilityRoleDefaults.For(user.Role)).ToArray();
         var all = PermissionNames.All.Concat(groupGrants).Concat(roleGrants).Concat(overrides.Select(x => x.Capability)).Distinct(StringComparer.OrdinalIgnoreCase);
 
         return all.Select(capability =>
@@ -52,7 +53,38 @@ internal sealed class DynamicAccessService(AppDbContext dbContext, IRolePermissi
     {
         var effective = await GetEffectiveAccessAsync(tenantId, userId, cancellationToken);
         var grants = effective.Where(x => x.Allowed).Select(x => x.Capability).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return PermissionMap.ToModel(grants);
+        return PermissionMap.ToModel(grants) with
+        {
+            Capabilities = PermissionNames.CapabilityOnly.Where(grants.Contains).ToArray()
+        };
+    }
+}
+
+/// <summary>
+/// Role baseline for <see cref="PermissionNames.CapabilityOnly"/> capabilities. These have no
+/// role-matrix column, so the defaults live here; a tenant adjusts them per user or per group
+/// through Access Control (grants and explicit denies). Admin is granted everything elsewhere.
+/// </summary>
+internal static class CapabilityRoleDefaults
+{
+    private static readonly string[] ProjectViewers = [PermissionNames.ProjectsView];
+
+    private static readonly string[] ProjectManagers =
+    [
+        PermissionNames.ProjectsView,
+        PermissionNames.ProjectsManage,
+        PermissionNames.ProjectsVariationsSubmit,
+        PermissionNames.ProjectsVariationsApprove,
+        PermissionNames.ProjectsClose
+    ];
+
+    public static IReadOnlyList<string> For(string? role)
+    {
+        if (string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)) return ProjectManagers;
+        if (string.Equals(role, AppRoles.FinanceUser, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, AppRoles.Dispatcher, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, AppRoles.Viewer, StringComparison.OrdinalIgnoreCase)) return ProjectViewers;
+        return [];
     }
 }
 

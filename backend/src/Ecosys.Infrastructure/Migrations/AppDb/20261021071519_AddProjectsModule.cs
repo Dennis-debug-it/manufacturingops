@@ -156,6 +156,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     OriginalValue = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
                     ApprovedAdditions = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
                     ApprovedOmissions = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
+                    ValueVersion = table.Column<int>(type: "integer", nullable: false),
                     PlannedStartDate = table.Column<DateOnly>(type: "date", nullable: true),
                     PlannedEndDate = table.Column<DateOnly>(type: "date", nullable: true),
                     ActualStartDate = table.Column<DateOnly>(type: "date", nullable: true),

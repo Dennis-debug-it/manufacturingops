@@ -135,6 +135,11 @@ public sealed class Project : AuditableEntity, ITenantEntity
     public decimal ApprovedAdditions { get; set; }
     /// <summary>Sum of approved omissions (a positive number); recomputed like <see cref="ApprovedAdditions"/>.</summary>
     public decimal ApprovedOmissions { get; set; }
+    /// <summary>
+    /// Concurrency token for the commercial totals. Bumped on every recompute, so two variation
+    /// decisions saved at the same moment cannot both win: the second gets a concurrency conflict.
+    /// </summary>
+    public int ValueVersion { get; set; }
 
     public DateOnly? PlannedStartDate { get; set; }
     public DateOnly? PlannedEndDate { get; set; }

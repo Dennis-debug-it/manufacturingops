@@ -285,7 +285,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     public async Task EnsureModuleEnabledAsync(Guid tenantId, string moduleName, CancellationToken cancellationToken = default)
     {
         var normalized = moduleName.Trim().ToLowerInvariant();
-        if (normalized is not (ServiceOpsPlans.Operations or ServiceOpsPlans.Finance))
+        if (normalized is not (ServiceOpsPlans.Operations or ServiceOpsPlans.Finance or ServiceOpsPlans.Projects))
         {
             throw new BusinessRuleException("Unknown ServiceOps module.");
         }

@@ -3711,6 +3711,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.OriginalValue).HasPrecision(18, 2);
             entity.Property(x => x.ApprovedAdditions).HasPrecision(18, 2);
             entity.Property(x => x.ApprovedOmissions).HasPrecision(18, 2);
+            entity.Property(x => x.ValueVersion).IsConcurrencyToken();
             entity.Property(x => x.ProgressPercent).HasPrecision(5, 2);
             entity.Property(x => x.ProgressOverridePercent).HasPrecision(5, 2);
             entity.Property(x => x.ProgressOverrideReason).HasMaxLength(1000);
