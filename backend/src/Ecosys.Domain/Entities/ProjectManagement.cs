@@ -33,6 +33,8 @@ public static class ProjectMemberRoles
     public const string Viewer = "Viewer";
 
     public static readonly string[] All = [ProjectManager, Supervisor, Member, Viewer];
+    /// <summary>Roles that run the site day to day: mark the muster roll and write the diary.</summary>
+    public static readonly string[] SiteRoles = [ProjectManager, Supervisor];
 
     public static bool IsSupported(string? value) =>
         value is not null && All.Contains(value, StringComparer.OrdinalIgnoreCase);

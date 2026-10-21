@@ -55,7 +55,7 @@ public static class ServiceOpsPlans
 
     private static readonly HashSet<string> ProjectsControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Projects", "ProjectSettings", "Consultants", "PortalProjects"
+        "Projects", "ProjectSettings", "Consultants", "PortalProjects", "ProjectSite", "ProjectCommercial"
     };
 
     /// <summary>
@@ -98,6 +98,10 @@ public static class ServiceOpsPlans
             return [Operations, Finance];
         if (controller is not null && ProjectsControllers.Contains(controller))
         {
+            // Money on a project (rates, wage sheet, budgets, valuations, invoices) lives in Finance.
+            if (controller.Equals("ProjectCommercial", StringComparison.OrdinalIgnoreCase)
+                || (controller.Equals("PortalProjects", StringComparison.OrdinalIgnoreCase) && (route.Contains("/valuations") || route.Contains("/invoices"))))
+                return [Projects, Finance];
             // A project's work orders and material issues live in Operations.
             if (route.Contains("/work-orders") || route.Contains("/material-issues")) return [Projects, Operations];
             return [Projects];

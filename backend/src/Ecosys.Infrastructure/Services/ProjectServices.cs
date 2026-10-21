@@ -231,6 +231,19 @@ public interface IProjectAccessService
     Task<IQueryable<Project>> VisibleProjectsAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     Task<Project> LoadVisibleAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken = default);
+
+    /// <summary>Whether the caller is on the project team in one of <paramref name="roles"/> (directly or through their technician profile).</summary>
+    Task<bool> HasProjectRoleAsync(Guid tenantId, Guid projectId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Site work (muster roll, roster, diary) needs projects.manage, or projects.muster.mark together
+    /// with a Supervisor or Project Manager place on this project's team. Permissions are tenant-wide,
+    /// so the second check is what scopes a supervisor to their own sites.
+    /// </summary>
+    Task<Project> LoadForSiteWorkAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken = default);
+
+    /// <summary>Site records can be read by anyone who can see the project, or who can run its site.</summary>
+    Task<Project> LoadForSiteReadAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken = default);
 }
 
 internal sealed class ProjectAccessService(
@@ -272,6 +285,35 @@ internal sealed class ProjectAccessService(
         var query = await VisibleProjectsAsync(tenantId, cancellationToken);
         return await query.SingleOrDefaultAsync(x => x.Id == projectId, cancellationToken)
             ?? throw new NotFoundException("Project not found.");
+    }
+
+
+    public async Task<bool> HasProjectRoleAsync(Guid tenantId, Guid projectId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default)
+    {
+        var userId = tenantContext.GetRequiredUserId();
+        return await dbContext.ProjectMembers.AnyAsync(x => x.TenantId == tenantId && x.ProjectId == projectId && roles.Contains(x.Role)
+            && (x.UserId == userId || (x.Technician != null && x.Technician.UserId == userId)), cancellationToken);
+    }
+
+    public async Task<Project> LoadForSiteWorkAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken = default)
+    {
+        var project = await dbContext.Projects.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == projectId, cancellationToken)
+            ?? throw new NotFoundException("Project not found.");
+        if (Can(PermissionNames.ProjectsManage))
+            return project;
+        if (Can(PermissionNames.ProjectsMusterMark) && await HasProjectRoleAsync(tenantId, projectId, ProjectMemberRoles.SiteRoles, cancellationToken))
+            return project;
+        // Don't reveal projects the caller has nothing to do with.
+        if (!Can(PermissionNames.ProjectsView))
+            throw new NotFoundException("Project not found.");
+        throw new ForbiddenException("Only this project's supervisors and managers can record site work.");
+    }
+
+    public async Task<Project> LoadForSiteReadAsync(Guid tenantId, Guid projectId, CancellationToken cancellationToken = default)
+    {
+        if (Can(PermissionNames.ProjectsView))
+            return await LoadVisibleAsync(tenantId, projectId, cancellationToken);
+        return await LoadForSiteWorkAsync(tenantId, projectId, cancellationToken);
     }
 }
 
