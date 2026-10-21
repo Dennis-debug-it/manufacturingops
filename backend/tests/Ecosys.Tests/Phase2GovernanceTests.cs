@@ -23,6 +23,13 @@ public sealed class Phase2GovernanceTests
 
         Assert.Equal(
             [
+                "action-item.assigned",
+                "action-item.due",
+                "activity.cancelled",
+                "activity.minutes-published",
+                "activity.reminder",
+                "activity.scheduled",
+                "activity.updated",
                 "auth.password-reset.requested",
                 "auth.signup.verify-email",
                 "csat.survey",

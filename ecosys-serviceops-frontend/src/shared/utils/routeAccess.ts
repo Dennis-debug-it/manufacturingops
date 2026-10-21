@@ -41,6 +41,9 @@ const rules: RouteRule[] = [
   { prefix: '/projects/settings', allow: (can) => can('projects.settings') },
   { prefix: '/projects', allow: (can) => can('projects.view') },
   { prefix: '/whatsapp', allow: (can) => can('whatsapp.view') },
+  { prefix: '/calendar', allow: (can) => can('activities.view') },
+  { prefix: '/activities', allow: (can) => can('activities.view') },
+  { prefix: '/action-items', allow: (can) => can('activities.view') },
   { prefix: '/knowledge', allow: (can) => can('knowledge.view') },
 ]
 

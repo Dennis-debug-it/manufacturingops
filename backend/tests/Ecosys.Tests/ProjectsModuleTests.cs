@@ -173,11 +173,12 @@ public sealed partial class ProjectsModuleTests
     // ── Capabilities ──────────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData(AppRoles.Manager, "projects.view,projects.manage,projects.variations.submit,projects.variations.approve,projects.close,projects.muster.mark,projects.financials.view,projects.financials.manage")]
-    [InlineData(AppRoles.Viewer, "projects.view")]
-    [InlineData(AppRoles.Dispatcher, "projects.view")]
-    [InlineData(AppRoles.FinanceUser, "projects.view,projects.financials.view,projects.financials.manage")]
-    [InlineData(AppRoles.Technician, "projects.muster.mark")]
+    [InlineData(AppRoles.Manager, "projects.view,projects.manage,projects.variations.submit,projects.variations.approve,projects.close,projects.muster.mark,projects.financials.view,projects.financials.manage,activities.view,activities.manage,calendar.team")]
+    [InlineData(AppRoles.Viewer, "projects.view,activities.view")]
+    [InlineData(AppRoles.Dispatcher, "projects.view,activities.view,calendar.team")]
+    [InlineData(AppRoles.FinanceUser, "projects.view,projects.financials.view,projects.financials.manage,activities.view")]
+    [InlineData(AppRoles.Technician, "projects.muster.mark,activities.view")]
+    [InlineData(AppRoles.MaterialsController, "activities.view")]
     public async Task RoleDefaults_GrantProjectCapabilities(string role, string expected)
     {
         await using var db = new AppDbContext(InMemory(Guid.NewGuid().ToString()));

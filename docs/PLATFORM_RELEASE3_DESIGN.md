@@ -542,3 +542,51 @@ Built as designed above; only the deviations and details worth knowing are liste
   "Add a widget" list and "Reset to default"; there is no drag and drop. The admin screen is
   `/settings/dashboards`. The executive view gained a "Projects" row (register totals) when the tenant
   has Projects and the user `projects.view`.
+
+## 3b: what was built
+
+Built as designed above (with R3 and R4); only the deviations and details worth knowing are listed here.
+
+- **Extra columns.** `Activity` gains `MinutesPublishedByUserId`, `CancelledAt` and `CancellationReason`;
+  `ActionItem` gains `CreatedByUserId` and `CompletedAt`. Corrections to published minutes are rows in a
+  new `ActivityMinutesAddendum` table (text, author, time), not text appended to `Minutes`.
+- **Client contacts.** There is no `ClientContact` table, so `ActivityAttendee.ClientContactId` points at
+  the client's portal contact (`ClientPortalUser`). Consultants are offered only with Projects.
+- **Who sees what.** An activity is visible to its organiser and staff attendees, to `activities.manage`,
+  and to anyone with `activities.view` who can open its linked record (project visibility, Operations for
+  contracts and work orders). An unlinked activity is private to the people on it. Action items: the
+  assignee, the creator, the meeting's organiser and `activities.manage` can edit; an item made from a
+  meeting always takes the meeting's linked record. Only the organiser (or a manager) adds items to a meeting.
+- **Notifications.** All seven keys go through the dispatcher; the person making the change is never
+  notified. Editing a meeting sends `activity.scheduled` to staff added, `activity.cancelled` to staff
+  removed, and `activity.updated` to the rest only when the title, time, all-day flag or place changed.
+  `activity.reminder` defaults to bell and push (no email). `NotificationRequest` gained an optional
+  `Attachments` (email only), used for the minutes PDF; the PDF uses the generic sections renderer.
+- **Reminders.** `ActivityReminderLog` is keyed by (entity, key, `ForTime`): the meeting's start or the
+  item's due date, so a moved meeting or due date earns a fresh reminder. All-day activities get no timed
+  reminder. Action items are reminded when due tomorrow (or today if that run was missed), in the tenant's
+  time zone. The worker runs every 5 minutes under the lease.
+- **Calendar sources.** `activities` and `action-items` need `activities.view`; `work-orders` needs
+  Operations and `can_view_workorders` (visits whose technician is linked to the user); `maintenance`
+  (plans due) needs Operations and `can_manage_settings` or `can_assign_workorders`, the people who plan
+  it; `projects` needs Projects and `projects.view` (milestones of projects the user manages, tasks
+  assigned to them, only on projects they can see); `contracts` needs Operations (contracts the user
+  owns or account-manages; everyone's with `can_manage_settings`). The team view (week, one row per
+  person, up to 50) leaves out the tenant-wide sources (maintenance, contracts). A request covers at most
+  100 days.
+- **Feed.** `GET /api/me/calendar-feed` reports whether a link exists; `POST` makes a new one (revoking
+  the old) and is the only time the link is shown; `DELETE` revokes. The token is 32 random bytes
+  (base64url), stored as SHA-256 hex. The feed covers a month back and six months ahead, from the
+  owner's current effective access; it stops for a deactivated user or a suspended or inactive tenant.
+  UIDs are `{source}-{id}@ecosys` (contracts: `contract-expiry-` / `contract-renewal-`; PM plans include
+  the due date, so each occurrence is its own event). Cancelled activities are left out of the feed.
+- **Extra endpoints.** `GET /api/activities/people` (staff, consultants, a client's contacts),
+  `POST /api/activities/{id}/respond` (accept/decline), `POST /api/activities/{id}/minutes/addenda`,
+  `GET /api/activities/{id}/minutes.pdf`.
+- **Frontend.** `/calendar` (month, week, agenda; agenda on phones), `/calendar/feed`,
+  `/activities/{id}`, `/action-items`; "Meetings & actions" tabs on client and contract pages; the
+  project Tasks tab lists project tasks, then action items and meetings under their own headings; a
+  "My action items" card on the technician home. "Raise variation from this" (minutes of a
+  project-linked meeting, a diary entry's instructions) opens the project's variation form prefilled
+  through the URL. Times in the calendar are shown in the browser's time zone.
+- **Migration.** Not included in this step; the combined Release 3 migration adds the six tables.

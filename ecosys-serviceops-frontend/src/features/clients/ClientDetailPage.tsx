@@ -18,6 +18,7 @@ import { SiteFormDrawer } from './components/SiteFormDrawer'
 import { AssetFormDrawer } from './components/AssetFormDrawer'
 import { ClientPortalContactsTab } from './components/ClientPortalContactsTab'
 import type { ClientSiteSummary } from './types'
+import { RecordActivitiesPanel } from '../activities/RecordActivitiesPanel'
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -175,6 +176,11 @@ export function ClientDetailPage() {
                 emptyDescription="Contracts covering this client will appear here once created in the Contracts module."
               />
             ),
+          },
+          {
+            id: 'activities',
+            label: 'Meetings & actions',
+            content: <RecordActivitiesPanel entityType="Client" entityId={id} clientId={id} />,
           },
           {
             id: 'documents',

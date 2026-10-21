@@ -78,6 +78,10 @@ import { ProjectsPage } from '../features/projects/ProjectsPage'
 import { ProjectDetailPage } from '../features/projects/ProjectDetailPage'
 import { ConsultantsPage } from '../features/projects/ConsultantsPage'
 import { ProjectSettingsPage } from '../features/projects/ProjectSettingsPage'
+import { CalendarPage as MyCalendarPage } from '../features/activities/CalendarPage'
+import { CalendarFeedPage } from '../features/activities/CalendarFeedPage'
+import { ActivityDetailPage } from '../features/activities/ActivityDetailPage'
+import { ActionItemsPage } from '../features/activities/ActionItemsPage'
 import { InvoicesPage } from '../features/finance/InvoicesPage'
 import { DocumentsPage } from '../features/finance/DocumentsPage'
 import { InvoiceDetailPage } from '../features/finance/InvoiceDetailPage'
@@ -356,6 +360,10 @@ export function AppRouter() {
       ['/projects/consultants', ConsultantsPage],
       ['/projects/settings', ProjectSettingsPage],
       ['/projects/:id', ProjectDetailPage],
+      ['/calendar', MyCalendarPage],
+      ['/calendar/feed', CalendarFeedPage],
+      ['/activities/:id', ActivityDetailPage],
+      ['/action-items', ActionItemsPage],
       ['/finance', FinanceOverviewPage],
       ['/finance/documents', DocumentsPage],
       ['/finance/quotes', FinanceQuotesPage],

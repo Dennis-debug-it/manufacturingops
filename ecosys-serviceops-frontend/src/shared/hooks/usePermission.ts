@@ -188,6 +188,9 @@ const capabilityActions = new Set([
   'projects.muster.mark',
   'projects.financials.view',
   'projects.financials.manage',
+  'activities.view',
+  'activities.manage',
+  'calendar.team',
 ])
 
 /** The same check as usePermission, for code that isn't a component (e.g. route access rules). */

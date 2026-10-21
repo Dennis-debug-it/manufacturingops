@@ -334,6 +334,26 @@ export const endpoints = {
     notificationRead: (id: string) => `/api/me/notifications/${id}/read`,
     notificationsReadAll: '/api/me/notifications/read-all',
     notificationArchive: (id: string) => `/api/me/notifications/${id}/archive`,
+    calendarFeed: '/api/me/calendar-feed',
+  },
+  activities: {
+    list: '/api/activities',
+    people: '/api/activities/people',
+    detail: (id: string) => `/api/activities/${id}`,
+    cancel: (id: string) => `/api/activities/${id}/cancel`,
+    respond: (id: string) => `/api/activities/${id}/respond`,
+    held: (id: string) => `/api/activities/${id}/held`,
+    minutes: (id: string) => `/api/activities/${id}/minutes`,
+    publishMinutes: (id: string) => `/api/activities/${id}/publish-minutes`,
+    addenda: (id: string) => `/api/activities/${id}/minutes/addenda`,
+    minutesPdf: (id: string) => `/api/activities/${id}/minutes.pdf`,
+  },
+  actionItems: {
+    list: '/api/action-items',
+    detail: (id: string) => `/api/action-items/${id}`,
+  },
+  calendar: {
+    items: '/api/calendar',
   },
   hubs: {
     // SignalR, not under /api: nginx proxies /hubs with WebSocket upgrade.

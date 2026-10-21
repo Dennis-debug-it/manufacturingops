@@ -66,7 +66,7 @@ public static class ServiceOpsPlans
     /// </summary>
     public static readonly IReadOnlySet<string> SharedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "AccessControl", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "ClientPortalContacts",
+        "AccessControl", "ActionItems", "Activities", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "Calendar", "CalendarFeed", "ClientPortalContacts",
         "Clients", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "Notifications", "PortalAuth", "PortalKnowledge",
         "PublicWorkOrder", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users"
