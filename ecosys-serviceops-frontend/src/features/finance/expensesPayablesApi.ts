@@ -43,6 +43,7 @@ export interface CreateExpensePayload {
   amount: number
   incurredAt: string
   description?: string | undefined
+  projectId?: string | null
 }
 
 export function useCreateExpense() {
@@ -102,6 +103,7 @@ export interface CreatePayablePayload {
   amount: number
   dueDate: string
   notes?: string | undefined
+  projectId?: string | null
 }
 
 export function useCreatePayable() {

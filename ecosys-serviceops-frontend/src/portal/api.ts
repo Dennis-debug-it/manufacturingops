@@ -331,6 +331,38 @@ export function usePortalProject(id: string | undefined) {
   })
 }
 
+/** A certified (or invoiced) valuation on a project. Drafts and submitted valuations stay internal. */
+export interface PortalProjectValuation {
+  valuationNumber: string
+  periodEnd: string
+  certificateReference: string | null
+  certifiedOn: string | null
+  grossValueToDate: number
+  retentionToDate: number
+  certifiedAmount: number
+}
+
+export interface PortalProjectBilling {
+  currency: string
+  valuations: PortalProjectValuation[]
+  invoices: PortalInvoiceListItem[]
+  retentionHeld: number
+}
+
+/**
+ * Certified valuations, invoices and retention held on a project. The API answers 403 when the
+ * tenant has no Finance module or hides invoices in the portal, so the global error toast is
+ * suppressed and callers hide the section quietly.
+ */
+export function usePortalProjectBilling(id: string | undefined, enabled = true) {
+  return useQuery({
+    enabled: Boolean(id) && enabled,
+    queryKey: ['portal', 'projects', id, 'billing'],
+    queryFn: () => portalApi.get<PortalProjectBilling>(endpoints.portal.projectBilling(id ?? ''), undefined, { suppressGlobalErrorToast: true }),
+    staleTime: 60_000,
+  })
+}
+
 /** Downloads a document the tenant has shared on this project. */
 export async function downloadPortalProjectDocument(projectId: string, document: { id: string; fileName: string }) {
   const response = await portalApiClient.get(endpoints.portal.projectDocument(projectId, document.id), { responseType: 'blob' })

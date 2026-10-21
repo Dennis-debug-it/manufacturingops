@@ -42,6 +42,7 @@ export interface CreateInvoicePayload {
   dueDate: string
   notes?: string | null
   currency?: string
+  projectId?: string | null
   lines: Array<{ description: string; itemType: string; quantity: number; unit: string; unitRate: number; taxRate: number }>
 }
 

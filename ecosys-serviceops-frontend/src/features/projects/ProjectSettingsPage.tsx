@@ -20,32 +20,77 @@ import { stageCategories, stageCategoryLabels, type ProjectSettings, type Projec
 import { fieldClass, labelClass, primaryButtonClass, secondaryButtonClass, smallButtonClass, textAreaClass, textOrNull } from './components/formStyles'
 import { StageBadge } from './components/ProjectBadges'
 
-const featureToggles: Array<{ key: keyof Pick<ProjectSettings, 'milestones' | 'tasks' | 'variations' | 'materials' | 'documents'>; label: string; description: string }> = [
+const featureToggles: Array<{ key: keyof Pick<ProjectSettings, 'milestones' | 'tasks' | 'variations' | 'materials' | 'documents' | 'musterRoll' | 'siteDiary' | 'valuations' | 'financials'>; label: string; description: string }> = [
   { key: 'milestones', label: 'Milestones', description: 'Weighted stages that drive progress.' },
   { key: 'tasks', label: 'Tasks', description: 'Assigned work items with due dates.' },
   { key: 'variations', label: 'Variations', description: 'Approved additions and omissions to the contract value.' },
   { key: 'materials', label: 'Materials', description: 'Material issues linked to projects (needs Operations).' },
   { key: 'documents', label: 'Documents', description: 'Drawings, approvals and handover files.' },
+  { key: 'musterRoll', label: 'Muster roll', description: 'Daily attendance of site workers, marked by the supervisor.' },
+  { key: 'siteDiary', label: 'Site diary', description: 'A daily log of work done, weather, visitors and issues on site.' },
+  { key: 'valuations', label: 'Valuations', description: 'Interim valuations, certificates and retention, ready to invoice.' },
+  { key: 'financials', label: 'Financials', description: 'Budget, costs and margin for each project.' },
 ]
+
+/** Whole-number settings and the range the API accepts for each. */
+const numberSettings = {
+  musterLockDays: { min: 0, max: 31, label: 'Muster lock (days)' },
+  musterReminderHour: { min: 0, max: 23, label: 'Muster reminder hour' },
+  reminderLeadDays: { min: 0, max: 60, label: 'Reminder lead time (days)' },
+} as const
+type NumberSettingKey = keyof typeof numberSettings
+
+const toNumberDrafts = (settings: ProjectSettings): Record<NumberSettingKey, string> => ({
+  musterLockDays: String(settings.musterLockDays),
+  musterReminderHour: String(settings.musterReminderHour),
+  reminderLeadDays: String(settings.reminderLeadDays),
+})
+
+const formatHour = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
 export function ProjectSettingsPage() {
   const { data: settings, isLoading } = useProjectSettings()
   const saveSettings = useSaveProjectSettings()
   const [draft, setDraft] = useState<ProjectSettings | null>(null)
   const [tradesText, setTradesText] = useState('')
+  const [numberDrafts, setNumberDrafts] = useState<Record<NumberSettingKey, string>>({ musterLockDays: '', musterReminderHour: '', reminderLeadDays: '' })
+  const [toleranceText, setToleranceText] = useState('')
 
   useEffect(() => {
     if (settings) {
       setDraft(settings)
       setTradesText(settings.trades.join('\n'))
+      setNumberDrafts(toNumberDrafts(settings))
+      setToleranceText(settings.closureUnbilledTolerancePercent != null ? String(settings.closureUnbilledTolerancePercent) : '')
     }
   }, [settings])
 
   if (isLoading || !draft) return <Spinner label="Loading project settings" />
 
+  const closureCheckOn = draft.closureUnbilledTolerancePercent != null
+
   const save = async () => {
+    const numbers = {} as Record<NumberSettingKey, number>
+    for (const key of Object.keys(numberSettings) as NumberSettingKey[]) {
+      const { min, max, label } = numberSettings[key]
+      const value = Number(numberDrafts[key])
+      if (numberDrafts[key].trim() === '' || !Number.isInteger(value) || value < min || value > max) {
+        toast.error(`${label} must be a whole number from ${min} to ${max}.`)
+        return
+      }
+      numbers[key] = value
+    }
+    let closureUnbilledTolerancePercent: number | null = null
+    if (closureCheckOn) {
+      const tolerance = Number(toleranceText)
+      if (toleranceText.trim() === '' || !Number.isFinite(tolerance) || tolerance < 0 || tolerance > 100) {
+        toast.error('Unbilled tolerance must be a percentage from 0 to 100.')
+        return
+      }
+      closureUnbilledTolerancePercent = tolerance
+    }
     try {
-      await saveSettings.mutateAsync({ ...draft, trades: tradesText.split('\n').map((t) => t.trim()).filter(Boolean) })
+      await saveSettings.mutateAsync({ ...draft, ...numbers, closureUnbilledTolerancePercent, trades: tradesText.split('\n').map((t) => t.trim()).filter(Boolean) })
       toast.success('Project settings saved')
     } catch {
       // toast from the API client
@@ -93,6 +138,56 @@ export function ProjectSettingsPage() {
               <option value="MembersOnly">People see only projects they are on (managers see all)</option>
             </select>
           </div>
+        </div>
+      </SummarySection>
+
+      <SummarySection title="Site work and reminders" description="How muster rolls are corrected and when reminders go out.">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <label className={labelClass} htmlFor="muster-lock-days">Muster lock (days)</label>
+            <input id="muster-lock-days" type="number" inputMode="numeric" min={0} max={31} step={1} value={numberDrafts.musterLockDays} onChange={(event) => setNumberDrafts({ ...numberDrafts, musterLockDays: event.target.value })} className={fieldClass} aria-describedby="muster-lock-days-help" />
+            <p id="muster-lock-days-help" className="mt-1 text-xs text-slate-500">How many days after the work date a supervisor can still correct attendance marks. 0 means same day only (0–31).</p>
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="muster-reminder-hour">Muster reminder hour</label>
+            <select id="muster-reminder-hour" value={numberDrafts.musterReminderHour} onChange={(event) => setNumberDrafts({ ...numberDrafts, musterReminderHour: event.target.value })} className={fieldClass} aria-describedby="muster-reminder-hour-help">
+              {Array.from({ length: 24 }, (_, hour) => (<option key={hour} value={String(hour)}>{formatHour(hour)}</option>))}
+            </select>
+            <p id="muster-reminder-hour-help" className="mt-1 text-xs text-slate-500">After this time (your local time), a site with no muster roll for the day is flagged.</p>
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="reminder-lead-days">Reminder lead time (days)</label>
+            <input id="reminder-lead-days" type="number" inputMode="numeric" min={0} max={60} step={1} value={numberDrafts.reminderLeadDays} onChange={(event) => setNumberDrafts({ ...numberDrafts, reminderLeadDays: event.target.value })} className={fieldClass} aria-describedby="reminder-lead-days-help" />
+            <p id="reminder-lead-days-help" className="mt-1 text-xs text-slate-500">How many days ahead to remind people about upcoming milestones, task due dates and project end dates (0–60).</p>
+          </div>
+        </div>
+      </SummarySection>
+
+      <SummarySection title="Closing projects">
+        <div className="space-y-3">
+          <label className="flex items-start gap-3 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={closureCheckOn}
+              onChange={(event) => {
+                // The percentage itself is read from the field on save; the draft only records on/off here.
+                const on = event.target.checked
+                if (on && toleranceText.trim() === '') setToleranceText('0')
+                setDraft({ ...draft, closureUnbilledTolerancePercent: on ? 0 : null })
+              }}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300"
+            />
+            <span>Block closing a project while too much of its value is still uninvoiced.</span>
+          </label>
+          {closureCheckOn ? (
+            <div className="max-w-xs">
+              <label className={labelClass} htmlFor="closure-tolerance">Unbilled tolerance (%)</label>
+              <input id="closure-tolerance" type="number" inputMode="decimal" min={0} max={100} step="any" value={toleranceText} onChange={(event) => setToleranceText(event.target.value)} className={fieldClass} aria-describedby="closure-tolerance-help" />
+              <p id="closure-tolerance-help" className="mt-1 text-xs text-slate-500">A project can be closed only when no more than this percentage of its revised value is uninvoiced. 0 means everything must be invoiced first.</p>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">Off: projects can be closed regardless of how much is invoiced.</p>
+          )}
         </div>
       </SummarySection>
 

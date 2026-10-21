@@ -138,6 +138,7 @@ export function useMaterialIssues(branchId?: string, enabled = true) {
 export interface CreateMaterialIssuePayload {
   branchId?: string | null
   workOrderId?: string | null
+  projectId?: string | null
   notes?: string | null
   lines: Array<{ materialItemId: string; quantityRequested: number; notes?: string | null }>
 }

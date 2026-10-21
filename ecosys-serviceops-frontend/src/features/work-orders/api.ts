@@ -98,6 +98,7 @@ export interface CreateWorkOrderPayload {
   templateId?: string | null
   parentWorkOrderId?: string | null
   followUpOfWorkOrderId?: string | null
+  projectId?: string | null
 }
 
 export interface CompleteWorkOrderPayload {

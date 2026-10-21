@@ -9,7 +9,18 @@ import { SummarySection } from '../shared/pages/ModulePage'
 import { formatCurrency } from '../shared/utils/format'
 import { formatDate } from '../shared/utils/dates'
 import { ProgressBar, StageBadge } from '../features/projects/components/ProjectBadges'
-import { downloadPortalProjectDocument, usePortalProject, usePortalProjects, type PortalProjectDetail, type PortalProjectListItem } from './api'
+import { normalizeError } from '../shared/api/apiError'
+import {
+  downloadPortalProjectDocument,
+  usePortalProject,
+  usePortalProjectBilling,
+  usePortalProjects,
+  usePortalSettings,
+  type PortalInvoiceListItem,
+  type PortalProjectDetail,
+  type PortalProjectListItem,
+  type PortalProjectValuation,
+} from './api'
 
 const milestoneLabels: Record<string, string> = { NotStarted: 'Not started', InProgress: 'In progress', Completed: 'Completed', Verified: 'Verified' }
 
@@ -92,6 +103,8 @@ function PortalProjectView({ projectId, project }: { projectId: string; project:
         />
       </SummarySection>
 
+      <PortalProjectBillingSection projectId={projectId} />
+
       <SummarySection title="Documents">
         <DataTable
           columns={[
@@ -113,5 +126,133 @@ function PortalProjectView({ projectId, project }: { projectId: string; project:
         />
       </SummarySection>
     </div>
+  )
+}
+
+/** Read-only billing: certified valuations, the project's invoices and retention held. Only shown when the portal shows invoices. */
+function PortalProjectBillingSection({ projectId }: { projectId: string }) {
+  const { data: settings } = usePortalSettings()
+  const showInvoices = settings?.showInvoices === true
+  const { data: billing, isLoading, isError, error } = usePortalProjectBilling(projectId, showInvoices)
+
+  if (!showInvoices) return null
+  // 403: no Finance module or invoices hidden for this portal — hide the section quietly.
+  if (isError && normalizeError(error).status === 403) return null
+
+  if (isLoading) {
+    return (
+      <SummarySection title="Billing">
+        <Spinner label="Loading billing" />
+      </SummarySection>
+    )
+  }
+
+  if (isError || !billing) {
+    return (
+      <SummarySection title="Billing">
+        <p className="text-sm text-slate-500">Billing details could not be loaded right now.</p>
+      </SummarySection>
+    )
+  }
+
+  const money = (value: number, currency = billing.currency) => formatCurrency(value, currency)
+  const valuations = billing.valuations.map((v) => ({ ...v, id: v.valuationNumber }))
+
+  const valuationColumns: DataTableColumn<PortalProjectValuation & { id: string }>[] = [
+    { key: 'valuationNumber', header: 'Valuation', cell: (row) => <span className="font-mono text-slate-900">{row.valuationNumber}</span> },
+    { key: 'periodEnd', header: 'Period to', cell: (row) => formatDate(row.periodEnd) },
+    { key: 'certificateReference', header: 'Certificate', cell: (row) => <ValuationCertificate valuation={row} /> },
+    { key: 'certifiedAmount', header: 'Certified amount', className: 'text-right', cell: (row) => money(row.certifiedAmount) },
+  ]
+
+  const invoiceColumns: DataTableColumn<PortalInvoiceListItem>[] = [
+    { key: 'invoiceNumber', header: 'Invoice #', cell: (row) => <InvoiceLink invoice={row} /> },
+    { key: 'invoiceDate', header: 'Date', cell: (row) => formatDate(row.invoiceDate) },
+    { key: 'totalAmount', header: 'Total', className: 'text-right', cell: (row) => money(row.totalAmount, row.currency) },
+    { key: 'balance', header: 'Balance', className: 'text-right', cell: (row) => money(row.balance, row.currency) },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+  ]
+
+  return (
+    <SummarySection title="Billing" description="Certified valuations and invoices for this project.">
+      <div className="space-y-5">
+        <div className="rounded-xl border border-slate-200 bg-white/70 px-4 py-3">
+          <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Retention held</div>
+          <div className="mt-1 text-lg font-semibold text-slate-900">{money(billing.retentionHeld)}</div>
+          <p className="mt-1 text-xs text-slate-500">Retention deducted from certified valuations and not yet released.</p>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-slate-900">Certified valuations</h3>
+          {valuations.length === 0 ? (
+            <p className="text-sm text-slate-500">No valuations have been certified yet.</p>
+          ) : (
+            <>
+              <ul className="space-y-2 sm:hidden">
+                {valuations.map((row) => (
+                  <li key={row.id} className="rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="min-w-0 break-words font-mono text-slate-900">{row.valuationNumber}</span>
+                      <span className="shrink-0 font-medium text-slate-900">{money(row.certifiedAmount)}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">Period to {formatDate(row.periodEnd)}</div>
+                    <div className="mt-1 break-words text-xs text-slate-500">Certificate: <ValuationCertificate valuation={row} /></div>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden sm:block">
+                <DataTable columns={valuationColumns} data={valuations} />
+              </div>
+            </>
+          )}
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-slate-900">Invoices</h3>
+          {billing.invoices.length === 0 ? (
+            <p className="text-sm text-slate-500">No invoices have been raised for this project yet.</p>
+          ) : (
+            <>
+              <ul className="space-y-2 sm:hidden">
+                {billing.invoices.map((row) => (
+                  <li key={row.id} className="rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="min-w-0 break-words"><InvoiceLink invoice={row} /></span>
+                      <StatusBadge status={row.status} />
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">{formatDate(row.invoiceDate)}</div>
+                    <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-slate-600">
+                      <span>Total {money(row.totalAmount, row.currency)}</span>
+                      <span>Balance <span className="font-medium text-slate-900">{money(row.balance, row.currency)}</span></span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden sm:block">
+                <DataTable columns={invoiceColumns} data={billing.invoices} />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </SummarySection>
+  )
+}
+
+function ValuationCertificate({ valuation }: { valuation: PortalProjectValuation }) {
+  if (!valuation.certificateReference && !valuation.certifiedOn) return <>—</>
+  return (
+    <>
+      {valuation.certificateReference ?? 'Certified'}
+      {valuation.certifiedOn ? <span className="text-slate-500"> · {formatDate(valuation.certifiedOn)}</span> : null}
+    </>
+  )
+}
+
+function InvoiceLink({ invoice }: { invoice: PortalInvoiceListItem }) {
+  return (
+    <Link to={`/portal/invoices/${invoice.id}`} className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4">
+      {invoice.invoiceNumber}
+    </Link>
   )
 }

@@ -1,3 +1,6 @@
+import { addDays, format, parseISO } from 'date-fns'
+import { toWorkspaceDate } from '../../../shared/utils/dates'
+
 export const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)] disabled:bg-slate-50'
 export const textAreaClass = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--app-primary)]'
 export const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -12,3 +15,11 @@ export const dateInputValue = (value: string | null | undefined) => (value ? val
 export const dateOrNull = (value: string) => (value ? value : null)
 
 export const textOrNull = (value: string) => (value.trim() ? value.trim() : null)
+
+/** Today's date (yyyy-MM-dd) in the workspace's time zone, for date inputs. */
+export const todayInput = () => format(toWorkspaceDate(new Date()), 'yyyy-MM-dd')
+
+/** A yyyy-MM-dd date moved by whole days. */
+export const shiftDateInput = (value: string, days: number) => format(addDays(parseISO(value), days), 'yyyy-MM-dd')
+
+export const numberOrNull = (value: string) => (value.trim() === '' ? null : Number(value))

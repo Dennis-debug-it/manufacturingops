@@ -53,6 +53,7 @@ export interface CreatePurchaseOrderPayload {
   expectedAt?: string | undefined
   lines: Array<{ itemName: string; quantityOrdered: number; unitCost: number }>
   notes?: string | undefined
+  projectId?: string | null
 }
 
 export function useCreatePurchaseOrder() {

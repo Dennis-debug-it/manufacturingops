@@ -6,6 +6,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
+import { ProjectPicker } from '../../shared/components/ProjectPicker'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDateTime } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
@@ -154,11 +155,14 @@ function NewIssueDrawer({ open, onClose }: { open: boolean; onClose: () => void 
   const { data: materials } = useMaterials({ status: 'all' })
   const { data: workOrders } = useWorkOrders()
   const [workOrderId, setWorkOrderId] = useState('')
+  const [projectId, setProjectId] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([{ materialItemId: '', quantity: '1' }])
+  const workOrderClientId = (workOrders ?? []).find((wo) => wo.id === workOrderId)?.clientId ?? null
 
   const close = () => {
     setWorkOrderId('')
+    setProjectId('')
     setNotes('')
     setLines([{ materialItemId: '', quantity: '1' }])
     onClose()
@@ -175,6 +179,7 @@ function NewIssueDrawer({ open, onClose }: { open: boolean; onClose: () => void 
     try {
       const created = await createIssue.mutateAsync({
         workOrderId: workOrderId || null,
+        projectId: projectId || null,
         notes: notes.trim() || null,
         lines: payloadLines,
       })
@@ -202,13 +207,23 @@ function NewIssueDrawer({ open, onClose }: { open: boolean; onClose: () => void 
       <div className="space-y-4">
         <div>
           <label className={labelClass} htmlFor="issue-wo">Work Order (optional)</label>
-          <select id="issue-wo" value={workOrderId} onChange={(event) => setWorkOrderId(event.target.value)} className={fieldClass}>
+          <select
+            id="issue-wo"
+            value={workOrderId}
+            onChange={(event) => {
+              setWorkOrderId(event.target.value)
+              // The project list follows the work order's client, so a new work order clears it.
+              setProjectId('')
+            }}
+            className={fieldClass}
+          >
             <option value="">Not linked to a work order</option>
             {(workOrders ?? []).map((wo) => (
               <option key={wo.id} value={wo.id}>{wo.workOrderNumber} — {wo.title}</option>
             ))}
           </select>
         </div>
+        <ProjectPicker id="issue-project" value={projectId} onChange={setProjectId} clientId={workOrderClientId} className={fieldClass} labelClassName={labelClass} />
         <div>
           <span className={labelClass}>Lines</span>
           <div className="space-y-2">

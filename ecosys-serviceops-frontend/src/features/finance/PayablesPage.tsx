@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { ErrorState } from '../../shared/components/ErrorState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
+import { ProjectPicker } from '../../shared/components/ProjectPicker'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
@@ -27,17 +28,19 @@ export function PayablesPage() {
   const [amount, setAmount] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [notes, setNotes] = useState('')
+  const [projectId, setProjectId] = useState('')
 
   const submit = async () => {
     if (!supplierId) return toast.error('Select a supplier')
     if (!amount || !dueDate) return toast.error('Amount and due date are required')
-    await createPayable.mutateAsync({ supplierId, amount: Number(amount), dueDate, notes: notes || undefined })
+    await createPayable.mutateAsync({ supplierId, amount: Number(amount), dueDate, notes: notes || undefined, projectId: projectId || null })
     toast.success('Bill created')
     setShowNewBill(false)
     setSupplierId('')
     setAmount('')
     setDueDate('')
     setNotes('')
+    setProjectId('')
   }
 
   const columns: DataTableColumn<PayableListItem>[] = [
@@ -107,6 +110,7 @@ export function PayablesPage() {
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Notes</label>
             <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
+          <ProjectPicker id="bill-project" value={projectId} onChange={setProjectId} />
           <button
             type="button"
             disabled={!supplierId || !amount || !dueDate || createPayable.isPending}

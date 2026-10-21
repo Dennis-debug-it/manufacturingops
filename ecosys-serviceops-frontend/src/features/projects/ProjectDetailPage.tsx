@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { Pencil, ArrowRightLeft } from 'lucide-react'
+import { Pencil, ArrowRightLeft, FileSignature } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DetailLayout, type DetailTab } from '../../shared/components/DetailLayout'
 import { EmptyState } from '../../shared/components/EmptyState'
@@ -18,6 +18,13 @@ import { TeamTab } from './components/TeamTab'
 import { VariationsTab } from './components/VariationsTab'
 import { LinkedRecordsTab } from './components/LinkedRecordsTab'
 import { DocumentsTab } from './components/DocumentsTab'
+import { SiteTab } from './components/SiteTab'
+import { DiaryTab } from './components/DiaryTab'
+import { FinancialsTab } from './components/FinancialsTab'
+import { WagesTab } from './components/WagesTab'
+import { ValuationsTab } from './components/ValuationsTab'
+import { useCreateMaintenanceContract } from './siteApi'
+import { usePermission } from '../../shared/hooks/usePermission'
 import { fieldClass, labelClass, secondaryButtonClass, textAreaClass, textOrNull } from './components/formStyles'
 import { stageCategoryLabels } from './types'
 
@@ -29,6 +36,11 @@ export function ProjectDetailPage() {
   const { data: stages } = useProjectStages()
   const { hasModule } = useEntitlements()
   const changeStage = useChangeProjectStage(id)
+  const createContract = useCreateMaintenanceContract(id)
+  const canManageContracts = usePermission('contracts.manage')
+  const navigate = useNavigate()
+  const [contractDialog, setContractDialog] = useState(false)
+  const [contractMonths, setContractMonths] = useState('12')
   const [editing, setEditing] = useState(false)
   const [stageDialog, setStageDialog] = useState(false)
   const [stageId, setStageId] = useState('')
@@ -63,6 +75,22 @@ export function ProjectDetailPage() {
     }
   }
 
+  const createMaintenanceContract = async () => {
+    try {
+      const created = await createContract.mutateAsync({ name: null, durationMonths: Number(contractMonths) })
+      toast.success(`Draft contract ${created.contractNumber} created with ${created.assetCount} asset(s)`)
+      setContractDialog(false)
+      navigate(`/contracts/${created.contractId}`)
+    } catch {
+      // toast from the API client
+    }
+  }
+
+  // Money tabs need Finance as well as Projects; site tabs follow the tenant's feature toggles.
+  const showMoney = hasModule('finance') && abilities.canViewFinancials
+  const atHandover = ['Handover', 'Completed', 'Closed'].includes(summary.stageCategory)
+  const canCreateContract = hasModule('operations') && canManageContracts && atHandover && !project.maintenanceContractId
+
   const tabs: DetailTab[] = [
     { id: 'overview', label: 'Overview', content: <OverviewTab project={project} /> },
     ...(features.milestones ? [{ id: 'milestones', label: 'Milestones', content: <MilestonesTab projectId={id} readOnly={readOnly} /> }] : []),
@@ -71,6 +99,11 @@ export function ProjectDetailPage() {
     ...(features.variations ? [{ id: 'variations', label: 'Variations', content: <VariationsTab project={project} /> }] : []),
     // A project's work orders and material issues live in the Operations module.
     ...(hasModule('operations') ? [{ id: 'work', label: features.materials ? 'Work & Materials' : 'Work Orders', content: <LinkedRecordsTab project={project} readOnly={readOnly} showMaterials={features.materials} /> }] : []),
+    ...(features.musterRoll ? [{ id: 'site', label: 'Muster roll', content: <SiteTab project={project} /> }] : []),
+    ...(features.siteDiary ? [{ id: 'diary', label: 'Site diary', content: <DiaryTab project={project} /> }] : []),
+    ...(showMoney && features.valuations ? [{ id: 'valuations', label: 'Valuations', content: <ValuationsTab project={project} /> }] : []),
+    ...(showMoney && features.financials ? [{ id: 'financials', label: 'Financials', content: <FinancialsTab project={project} /> }] : []),
+    ...(showMoney && features.musterRoll ? [{ id: 'wages', label: 'Labour & wages', content: <WagesTab project={project} /> }] : []),
     ...(features.documents ? [{ id: 'documents', label: 'Documents', content: <DocumentsTab project={project} readOnly={readOnly} /> }] : []),
   ]
 
@@ -83,8 +116,17 @@ export function ProjectDetailPage() {
             subtitle={`${summary.projectNumber} · ${summary.clientName}${summary.siteName ? ` · ${summary.siteName}` : ''}`}
             breadcrumbs={[{ label: 'Projects', to: '/projects' }, { label: summary.projectNumber }]}
             titleAdornment={<StageBadge name={summary.stageName} category={summary.stageCategory} />}
-            secondaryActions={abilities.canManage && !isFinal ? (
-              <button type="button" onClick={() => setEditing(true)} className={secondaryButtonClass}><Pencil className="h-4 w-4" />Edit</button>
+            secondaryActions={(abilities.canManage && !isFinal) || canCreateContract || project.maintenanceContractId ? (
+              <>
+                {project.maintenanceContractId ? (
+                  <Link to={`/contracts/${project.maintenanceContractId}`} className={secondaryButtonClass}><FileSignature className="h-4 w-4" />Maintenance contract</Link>
+                ) : canCreateContract ? (
+                  <button type="button" onClick={() => setContractDialog(true)} className={secondaryButtonClass}><FileSignature className="h-4 w-4" />Create maintenance contract</button>
+                ) : null}
+                {abilities.canManage && !isFinal ? (
+                  <button type="button" onClick={() => setEditing(true)} className={secondaryButtonClass}><Pencil className="h-4 w-4" />Edit</button>
+                ) : null}
+              </>
             ) : undefined}
             primaryAction={abilities.canManage && selectableStages.length > 0 ? (
               <button type="button" onClick={openStageDialog} className={secondaryButtonClass}><ArrowRightLeft className="h-4 w-4" />{isFinal ? 'Reopen' : 'Change stage'}</button>
@@ -95,6 +137,21 @@ export function ProjectDetailPage() {
       />
 
       <ProjectFormDrawer open={editing} onClose={() => setEditing(false)} project={project} />
+
+      <ConfirmDialog
+        open={contractDialog}
+        title="Create maintenance contract"
+        message={`A draft contract for ${summary.clientName}, covering ${summary.siteName ?? 'the project site'} and the assets installed there during the project, starting on the handover date. You finish it in Contracts.`}
+        confirmLabel="Create draft contract"
+        confirmDisabled={!(Number(contractMonths) >= 1) || createContract.isPending}
+        onCancel={() => setContractDialog(false)}
+        onConfirm={() => void createMaintenanceContract()}
+      >
+        <div className="text-left">
+          <label className={labelClass} htmlFor="contract-months">Length (months)</label>
+          <input id="contract-months" type="number" min="1" max="120" value={contractMonths} onChange={(event) => setContractMonths(event.target.value)} className={fieldClass} />
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={stageDialog}

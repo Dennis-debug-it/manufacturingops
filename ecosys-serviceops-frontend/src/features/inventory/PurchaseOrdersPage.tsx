@@ -8,6 +8,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { ErrorState } from '../../shared/components/ErrorState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
+import { ProjectPicker } from '../../shared/components/ProjectPicker'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { InventoryTabNav } from './components/InventoryTabNav'
@@ -44,9 +45,11 @@ export function PurchaseOrdersPage() {
   const [expectedAt, setExpectedAt] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([{ ...emptyLine }])
+  const [projectId, setProjectId] = useState('')
 
   const resetForm = () => {
     setSupplierId('')
+    setProjectId('')
     setExpectedAt('')
     setNotes('')
     setLines([{ ...emptyLine }])
@@ -59,7 +62,7 @@ export function PurchaseOrdersPage() {
   const submit = async () => {
     if (!supplierId) return toast.error('Select a supplier')
     if (validLines.length === 0) return toast.error('Add at least one line item')
-    await createPo.mutateAsync({ supplierId, expectedAt: expectedAt || undefined, lines: validLines, notes: notes || undefined })
+    await createPo.mutateAsync({ supplierId, expectedAt: expectedAt || undefined, lines: validLines, notes: notes || undefined, projectId: projectId || null })
     toast.success('Purchase order created')
     setShowNewPo(false)
     resetForm()
@@ -124,6 +127,7 @@ export function PurchaseOrdersPage() {
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Expected Delivery Date</label>
             <input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
+          <ProjectPicker id="po-project" value={projectId} onChange={setProjectId} />
 
           <div>
             <div className="mb-1.5 flex items-center justify-between">
