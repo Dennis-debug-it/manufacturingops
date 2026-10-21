@@ -18,6 +18,7 @@ const PARAM_KEYS: Record<keyof WorkOrderListState, string> = {
   priority: 'priority',
   slaStatus: 'slaStatus',
   unassignedOnly: 'unassigned',
+  state: 'state',
   fromDate: 'from',
   toDate: 'to',
 }
@@ -31,6 +32,7 @@ const FILTER_KEYS: (keyof WorkOrderFilterValues)[] = [
   'priority',
   'slaStatus',
   'unassignedOnly',
+  'state',
   'fromDate',
   'toDate',
 ]
@@ -53,6 +55,7 @@ export function useWorkOrderListState() {
       priority: searchParams.get(PARAM_KEYS.priority) ?? '',
       slaStatus: searchParams.get(PARAM_KEYS.slaStatus) ?? '',
       unassignedOnly: searchParams.get(PARAM_KEYS.unassignedOnly) === '1',
+      state: searchParams.get(PARAM_KEYS.state) ?? '',
       fromDate: searchParams.get(PARAM_KEYS.fromDate) ?? '',
       toDate: searchParams.get(PARAM_KEYS.toDate) ?? '',
     }

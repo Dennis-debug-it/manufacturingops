@@ -65,7 +65,8 @@ public sealed class WorkOrdersController(
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
         CancellationToken cancellationToken,
-        [FromQuery] bool? followUp = null)
+        [FromQuery] bool? followUp = null,
+        [FromQuery] string? state = null)
     {
         EnsureGeneralWorkspaceAccess(PermissionNames.CanViewWorkOrders);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
@@ -138,6 +139,12 @@ public sealed class WorkOrdersController(
         if (!string.IsNullOrWhiteSpace(slaStatus))
         {
             query = ApplySlaStatusFilter(query, slaStatus, DateTime.UtcNow);
+        }
+
+        if (!string.IsNullOrWhiteSpace(state))
+        {
+            // open | overdue: what the dashboards count, so their figures link to exactly these rows.
+            query = WorkOrderListStates.Apply(query, state, DateTime.UtcNow);
         }
 
         var ordered = query.OrderByDescending(x => x.CreatedAt);

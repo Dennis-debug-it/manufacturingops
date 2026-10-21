@@ -130,6 +130,7 @@ import { PaymentsSettingsPage as SettingsPaymentsPageReal } from '../features/se
 import { PortalSettingsPage as SettingsPortalPageReal } from '../features/settings/PortalSettingsPage'
 import { IntegrationsSettingsPage as SettingsIntegrationsPageReal } from '../features/settings/IntegrationsSettingsPage'
 import { ExecutiveDashboardSettingsPage as SettingsExecutiveDashboardPageReal } from '../features/settings/ExecutiveDashboardSettingsPage'
+import { SettingsDashboardsPage } from '../features/settings/SettingsDashboardsPage'
 import { ApprovalMatrixSettingsPage } from '../features/settings/ApprovalMatrixSettingsPage'
 import { NotificationTemplatesPage } from '../features/settings/NotificationTemplatesPage'
 import { SlaPoliciesPage } from '../features/settings/SlaPoliciesPage'
@@ -405,6 +406,7 @@ export function AppRouter() {
       ['/settings/integrations', SettingsIntegrationsPage],
       ['/settings/security', SettingsSecurityPage],
       ['/settings/executive-dashboard', SettingsExecutiveDashboardPage],
+      ['/settings/dashboards', SettingsDashboardsPage],
       ['/settings/account', SettingsAccountPage],
       ['/settings/audit-logs', SettingsAuditLogsPage],
       ['/settings/approval-matrix', ApprovalMatrixSettingsPage],

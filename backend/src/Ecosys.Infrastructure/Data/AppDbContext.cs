@@ -48,6 +48,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
     public DbSet<WhatsAppTemplate> WhatsAppTemplates => Set<WhatsAppTemplate>();
     public DbSet<TenantModuleSetting> TenantModuleSettings => Set<TenantModuleSetting>();
+    public DbSet<UserDashboardLayout> UserDashboardLayouts => Set<UserDashboardLayout>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<WorkOrderTemplate> WorkOrderTemplates => Set<WorkOrderTemplate>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
@@ -3689,6 +3690,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<TenantModuleSetting>(modelBuilder);
+
+        modelBuilder.Entity<UserDashboardLayout>(entity =>
+        {
+            entity.ToTable("user_dashboard_layouts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.LayoutJson).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
+            entity.HasIndex(x => x.UserId);
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<UserDashboardLayout>(modelBuilder);
 
         ConfigureProjects(modelBuilder);
     }

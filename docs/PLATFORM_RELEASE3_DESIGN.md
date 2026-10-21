@@ -475,3 +475,45 @@ Built as designed above; only the deviations and details worth knowing are liste
 - **Paging.** `GET /api/me/notifications` returns `{ items, hasMore }`; `before` is the last item's
   `createdAt`. `limit` defaults to 50 and is capped at 100. Read, read-all and archive return the new
   unread count and broadcast it to the user's other tabs.
+
+---
+
+## 3c: what was built
+
+Built as designed above; only the deviations and details worth knowing are listed here.
+
+- **Controller.** `RoleDashboardController` (Shared, every plan) serves `GET|PUT|DELETE /api/dashboard/layout`,
+  `GET /api/dashboard/widgets/{key}?branchId&refresh`, and the admin's `GET /api/dashboard/settings` and
+  `PUT /api/dashboard/settings/roles/{role}` (`{ hiddenKeys }`). The old `DashboardController` (`/summary`,
+  Operations) is unchanged and still feeds the executive view. Each widget checks its own modules (403
+  `license_module_*`) and permission (403) on every request.
+- **Catalogue.** 23 widgets in `DashboardWidgetCatalog`; a widget needs *all* its modules and *any* of its
+  permissions (admins always pass; "Contracts expiring" needs none, as contracts are open to all staff).
+  "Action items due" is not in yet: it waits for 3b's `ActionItem`.
+- **Project manager** is not a login role. Anyone who manages an open project (or is on one as its
+  project manager) gets the project-manager widgets appended to their own role's default, and the admin
+  screen lists "Project managers" as a role to hide widgets for. Viewers (and legacy "User") get the
+  manager default, filtered by their permissions.
+- **Saving strips, it doesn't refuse.** `PUT /layout` drops unknown, disallowed and duplicate widgets and
+  fixes bad sizes, so a change of access while the editor is open can't block a save.
+- **New defaults once.** The stored JSON is `{ items: [{key, size}], seenDefaults: [key] }`. A save marks
+  every default the user can see as seen; a default they can't see yet (hidden by the admin, no
+  permission) is not marked, so it is offered when it becomes available.
+- **Cache.** 5 minutes in `IMemoryCache`, keyed by tenant, widget and scope (tenant-wide; branch scope;
+  or branch scope plus user for project widgets, whose visibility is per user). There is no event-driven
+  invalidation: each widget has a Refresh button that recomputes (`?refresh=true`).
+- **Branch scoping.** Work orders, technicians (through their work orders), PM plans, stock, material
+  issues and projects follow `branchId` and the user's branch access. Invoices, payments, withholding,
+  contracts and purchase orders have no branch, so finance, contract and PO widgets are tenant-wide.
+- **Links.** Every figure links to the list behind it. To make "open" and "overdue" exact, the work-order
+  list gained a `state=open|overdue` filter (API and URL, with a filter chip). Lists without URL filters
+  (invoices, ageing, purchase orders, material issues, projects) are linked unfiltered; single-project
+  figures link to the project's tab (`?tab=variations|valuations|site|wages|financials|milestones`).
+- **Money** is shown per currency (one figure per currency present). Receipts take the currency of
+  their invoice, KES when unapplied.
+- **Dates.** "Today" and "this month" are the tenant's local day (tenant time zone).
+- **Frontend.** `/dashboard` is now the role dashboard: layout first, then one request per widget
+  (skeleton, error or "no longer have access" per card). "Customise" gives up/down, small/wide, hide, an
+  "Add a widget" list and "Reset to default"; there is no drag and drop. The admin screen is
+  `/settings/dashboards`. The executive view gained a "Projects" row (register totals) when the tenant
+  has Projects and the user `projects.view`.

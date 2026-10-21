@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
   Radio, MessageCircle, CreditCard, ShieldCheck, Users, Bell, Plug, LineChart,
-  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Rocket, Percent,
+  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Rocket, Percent, LayoutDashboard,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
@@ -73,6 +73,7 @@ const groups: SettingsGroup[] = [
       { to: '/settings/notification-templates', label: 'Notification Templates', description: 'Client ETA emails for job milestones.', icon: MapPin },
       { to: '/settings/security', label: 'Security', description: 'Session and authentication policy.', icon: ShieldCheck },
       { to: '/settings/executive-dashboard', label: 'Executive Dashboard Settings', description: 'Metric targets and thresholds.', icon: LineChart },
+      { to: '/settings/dashboards', label: 'Dashboards', description: 'Hide dashboard widgets for a role.', icon: LayoutDashboard },
     ],
   },
   {

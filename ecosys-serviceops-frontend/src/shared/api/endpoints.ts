@@ -45,6 +45,11 @@ export const endpoints = {
   },
   dashboard: {
     summary: '/api/dashboard/summary',
+    // Role dashboards (Release 3 part 4): GET/PUT/DELETE the caller's layout, one widget, admin hiding.
+    layout: '/api/dashboard/layout',
+    widget: (key: string) => `/api/dashboard/widgets/${encodeURIComponent(key)}`,
+    settings: '/api/dashboard/settings',
+    roleHidden: (role: string) => `/api/dashboard/settings/roles/${encodeURIComponent(role)}`,
   },
   workOrders: {
     list: '/api/workorders',

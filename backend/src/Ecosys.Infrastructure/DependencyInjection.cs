@@ -104,6 +104,11 @@ public static class DependencyInjection
         services.AddScoped<INotificationPushProcessor, NotificationPushProcessor>();
         services.AddScoped<INotificationHousekeeping, NotificationHousekeeping>();
         services.AddScoped<IProjectFinancialsService, ProjectFinancialsService>();
+        // Role dashboards (Release 3 design part 4).
+        services.AddScoped<ITenantModuleResolver, LicenseTenantModuleResolver>();
+        services.AddScoped<IDashboardSettingsService, DashboardSettingsService>();
+        services.AddScoped<RoleDashboardQueries>();
+        services.AddScoped<IRoleDashboardService, RoleDashboardService>();
         services.AddScoped<IProjectInvoiceService, ProjectInvoiceService>();
         services.AddScoped<IProjectReminderRunner, ProjectReminderRunner>();
         services.AddSingleton<IPdfRenderer, QuestPdfRenderer>();

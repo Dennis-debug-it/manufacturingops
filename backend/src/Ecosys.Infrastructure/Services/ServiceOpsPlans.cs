@@ -68,7 +68,7 @@ public static class ServiceOpsPlans
     {
         "AccessControl", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "ClientPortalContacts",
         "Clients", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "Notifications", "PortalAuth", "PortalKnowledge",
-        "PublicWorkOrder", "PushSubscriptions", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
+        "PublicWorkOrder", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users"
     };
 

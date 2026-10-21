@@ -26,6 +26,7 @@ export interface WorkOrderListFilters {
   technicianId?: string
   assignmentGroupId?: string
   unassigned?: boolean
+  state?: string
   search?: string
   fromDate?: string
   toDate?: string
