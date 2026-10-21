@@ -173,11 +173,11 @@ public sealed partial class ProjectsModuleTests
     // ── Capabilities ──────────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData(AppRoles.Manager, "projects.view,projects.manage,projects.variations.submit,projects.variations.approve,projects.close")]
+    [InlineData(AppRoles.Manager, "projects.view,projects.manage,projects.variations.submit,projects.variations.approve,projects.close,projects.muster.mark,projects.financials.view,projects.financials.manage")]
     [InlineData(AppRoles.Viewer, "projects.view")]
     [InlineData(AppRoles.Dispatcher, "projects.view")]
-    [InlineData(AppRoles.FinanceUser, "projects.view")]
-    [InlineData(AppRoles.Technician, "")]
+    [InlineData(AppRoles.FinanceUser, "projects.view,projects.financials.view,projects.financials.manage")]
+    [InlineData(AppRoles.Technician, "projects.muster.mark")]
     public async Task RoleDefaults_GrantProjectCapabilities(string role, string expected)
     {
         await using var db = new AppDbContext(InMemory(Guid.NewGuid().ToString()));

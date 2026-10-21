@@ -398,6 +398,20 @@ public sealed class TimeAttendanceController(
         if (await FindOpenEntryAsync(technician.Id, cancellationToken) is not null)
             throw new BusinessRuleException("You are already clocked in.");
 
+        string? projectNumber = null;
+        if (request.ProjectId is { } projectId)
+        {
+            // Clocking in on a project site: the technician must be on its team and it must be open.
+            var project = await dbContext.Projects
+                .Where(x => x.TenantId == TenantId && x.Id == projectId && x.Members.Any(m => m.TechnicianId == technician.Id || (m.UserId != null && m.UserId == technician.UserId)))
+                .Select(x => new { x.ProjectNumber, x.Stage!.Category })
+                .SingleOrDefaultAsync(cancellationToken)
+                ?? throw new BusinessRuleException("You aren't on that project's team.");
+            if (!ProjectStageCategories.Open.Contains(project.Category))
+                throw new BusinessRuleException($"Project {project.ProjectNumber} isn't open.");
+            projectNumber = project.ProjectNumber;
+        }
+
         var now = OccurredAt.UtcNow;
         var entry = new AttendanceEntry
         {
@@ -407,10 +421,12 @@ public sealed class TimeAttendanceController(
             ClockInAt = now,
             Status = "ClockedIn",
             LastLocation = request.Location?.Trim(),
+            ProjectId = request.ProjectId,
         };
         dbContext.AttendanceEntries.Add(entry);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(TenantId, UserId, "attendance.clock_in", nameof(AttendanceEntry), entry.Id.ToString(), $"{technician.FullName} clocked in", cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "attendance.clock_in", nameof(AttendanceEntry), entry.Id.ToString(),
+            projectNumber is null ? $"{technician.FullName} clocked in" : $"{technician.FullName} clocked in on project {projectNumber}", cancellationToken);
 
         return Ok(await MapMyStatusAsync(technician, entry, cancellationToken));
     }
@@ -709,12 +725,16 @@ public sealed class TimeAttendanceController(
     private async Task<MyAttendanceStatusResponse> MapMyStatusAsync(Technician technician, AttendanceEntry? open, CancellationToken cancellationToken)
     {
         if (open is null || open.Status == "ClockedOut")
-            return new MyAttendanceStatusResponse(technician.Id, technician.FullName, "NotClockedIn", null, open?.LastLocation, null, null);
+            return new MyAttendanceStatusResponse(technician.Id, technician.FullName, "NotClockedIn", null, open?.LastLocation, null, null, null, null);
 
         var workOrderNumber = open.CurrentWorkOrderId is { } workOrderId
             ? await dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.Id == workOrderId).Select(x => x.WorkOrderNumber).SingleOrDefaultAsync(cancellationToken)
             : null;
-        return new MyAttendanceStatusResponse(technician.Id, technician.FullName, open.Status, open.ClockInAt, open.LastLocation, open.CurrentWorkOrderId, workOrderNumber);
+        var project = open.ProjectId is { } projectId
+            ? await dbContext.Projects.Where(x => x.TenantId == TenantId && x.Id == projectId).Select(x => new { x.ProjectNumber, x.Name }).SingleOrDefaultAsync(cancellationToken)
+            : null;
+        return new MyAttendanceStatusResponse(technician.Id, technician.FullName, open.Status, open.ClockInAt, open.LastLocation, open.CurrentWorkOrderId, workOrderNumber,
+            open.ProjectId, project is null ? null : $"{project.ProjectNumber} {project.Name}");
     }
 
     private async Task<AttendanceEntry?> FindOpenEntryAsync(Guid technicianId, CancellationToken cancellationToken) =>
@@ -877,13 +897,13 @@ public sealed record CreateLeaveRequestRequest(
 public sealed record CreateMyLeaveRequest(
     string LeaveType, DateOnly StartDate, DateOnly EndDate, string? Reason = null);
 
-public sealed record SelfClockRequest(string? Location = null);
+public sealed record SelfClockRequest(string? Location = null, Guid? ProjectId = null);
 
 public sealed record SelfStatusRequest(string Status, string? Location = null);
 
 public sealed record MyAttendanceStatusResponse(
     Guid TechnicianId, string TechnicianName, string Status, DateTime? ClockInAt, string? LastLocation,
-    Guid? CurrentWorkOrderId, string? CurrentWorkOrderNumber);
+    Guid? CurrentWorkOrderId, string? CurrentWorkOrderNumber, Guid? ProjectId = null, string? ProjectName = null);
 
 public sealed record LeaveDecisionRequest(bool Approve, string? Note = null);
 
