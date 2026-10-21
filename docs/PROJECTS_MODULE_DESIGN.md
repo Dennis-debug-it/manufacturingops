@@ -892,7 +892,7 @@ underlying issues, returns, muster roll, bills, expenses and invoices; and a val
 the balance at end of defects liability) produces the same amounts as a hand-worked example; and an
 invoice part-settled by a 2% withholding certificate shows as fully paid.
 
-### Release 3: Shared platform (separate design)
+### Release 3: Shared platform (separate design: `docs/PLATFORM_RELEASE3_DESIGN.md`)
 In-app notification inbox, Calendar & Activities (meetings, minutes, action items), WhatsApp project
 reminders, cross-module role dashboards.
 
