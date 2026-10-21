@@ -25,6 +25,8 @@ public static class DependencyInjection
 
         services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.SectionName));
         services.Configure<WebPushOptions>(configuration.GetSection(WebPushOptions.SectionName));
+        services.Configure<WhatsAppOptions>(configuration.GetSection(WhatsAppOptions.SectionName));
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IFileStorageService, LocalFileStorageService>();
 
         services.AddHttpContextAccessor();
@@ -107,11 +109,21 @@ public static class DependencyInjection
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<IProjectNotificationService, ProjectNotificationService>();
         // One way to notify (Release 3 design 2.1). The Api replaces the no-op live notifier with
-        // SignalR. Further channels register as INotificationChannel (WhatsApp, step 3d).
+        // SignalR. Further channels register as INotificationChannel (WhatsApp, below).
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
         services.TryAddSingleton<IInboxNotifier, NullInboxNotifier>();
         services.AddScoped<INotificationPushProcessor, NotificationPushProcessor>();
         services.AddScoped<INotificationHousekeeping, NotificationHousekeeping>();
+        // WhatsApp reminders from the shared Ecosys number (Release 3 design 4).
+        services.AddScoped<INotificationChannel, WhatsAppNotificationChannel>();
+        services.AddSingleton<IWhatsAppAccountResolver, SharedWhatsAppAccountResolver>();
+        services.AddHttpClient(MetaWhatsAppSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
+        services.AddScoped<IWhatsAppSender, MetaWhatsAppSender>();
+        services.AddScoped<IWhatsAppOutbox, WhatsAppOutbox>();
+        services.AddScoped<IWhatsAppOutboxProcessor, WhatsAppOutboxProcessor>();
+        services.AddScoped<IWhatsAppVerificationService, WhatsAppVerificationService>();
+        services.AddScoped<IWhatsAppWebhookProcessor, WhatsAppWebhookProcessor>();
+        services.AddScoped<IClientWhatsAppNotifier, ClientWhatsAppNotifier>();
         services.AddScoped<IProjectFinancialsService, ProjectFinancialsService>();
         // Role dashboards (Release 3 design part 4).
         services.AddScoped<ITenantModuleResolver, LicenseTenantModuleResolver>();
@@ -164,6 +176,7 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<NotificationPushWorker>();
         services.AddSingleInstanceHostedService<NotificationHousekeepingWorker>();
         services.AddSingleInstanceHostedService<ActivityReminderWorker>();
+        services.AddSingleInstanceHostedService<WhatsAppOutboxWorker>();
 
         return services;
     }

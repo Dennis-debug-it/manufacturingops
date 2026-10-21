@@ -7,12 +7,15 @@ import { usePushStatus } from '../tech/push'
 import { sendTestPush, useNotificationPreferences, useSaveNotificationPreferences } from './api'
 import { CHANNEL_FIELDS, groupPreferences } from './logic'
 import type { NotificationPreference } from './types'
+import { WhatsAppOptInCard } from '../whatsapp/WhatsAppOptInCard'
+import { staffWhatsAppApi } from '../whatsapp/remindersApi'
 
 type Field = (typeof CHANNEL_FIELDS)[number]['field']
 
 /**
  * The signed-in user's choices per notification and channel, grouped by category. Each toggle
- * saves at once. Only the channels a notification can use get a toggle (WhatsApp none yet).
+ * saves at once. Only the channels a notification can use get a toggle; WhatsApp shows only for the
+ * notifications the workspace allows on WhatsApp, and sends only once the person has opted in.
  */
 export function NotificationPreferencesList() {
   const { data, isLoading, isError } = useNotificationPreferences()
@@ -132,8 +135,9 @@ function DevicePush() {
 export function MyNotificationSettingsPage() {
   return (
     <div className="space-y-4">
-      <PageHeader title="My notifications" subtitle="Choose how you hear about each event: in the bell, as a push notification, or by email." />
+      <PageHeader title="My notifications" subtitle="Choose how you hear about each event: in the bell, as a push notification, by email or on WhatsApp." />
       <DevicePush />
+      <WhatsAppOptInCard source={staffWhatsAppApi} audience="staff" />
       <NotificationPreferencesList />
     </div>
   )

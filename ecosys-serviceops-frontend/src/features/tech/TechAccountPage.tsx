@@ -6,6 +6,8 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { cn } from '../../shared/utils/cn'
 import { JobAlertsSetting } from './JobAlerts'
 import { NotificationPreferencesList } from '../notifications/NotificationPreferences'
+import { WhatsAppOptInCard } from '../whatsapp/WhatsAppOptInCard'
+import { staffWhatsAppApi } from '../whatsapp/remindersApi'
 import { useChangeMyPassword, useMyTechnician, useMyVan } from './api'
 
 const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
@@ -51,6 +53,7 @@ function NotificationSettings() {
   return (
     <section className="space-y-2">
       <h2 className="px-1 text-sm font-semibold text-slate-900">Notifications</h2>
+      <WhatsAppOptInCard source={staffWhatsAppApi} audience="staff" />
       <NotificationPreferencesList />
     </section>
   )

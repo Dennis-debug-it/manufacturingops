@@ -590,3 +590,51 @@ Built as designed above (with R3 and R4); only the deviations and details worth 
   project-linked meeting, a diary entry's instructions) opens the project's variation form prefilled
   through the URL. Times in the calendar are shown in the browser's time zone.
 - **Migration.** Not included in this step; the combined Release 3 migration adds the six tables.
+
+## 3d: what was built
+
+Built as designed in section 4; deviations and details worth knowing:
+
+- **Client contacts are `ClientPortalUser`.** There is no `ClientContact` table, and portal users are
+  `ClientPortalUser` rows, not `User`s. The 4.4 client fields (`WhatsAppNumber`, `WhatsAppConsentAt`,
+  `WhatsAppConsentRecordedByUserId`, `WhatsAppConsentMethod`, `ReceivesWhatsApp`, plus
+  `WhatsAppVerifiedAt`) are on `ClientPortalUser`, the client's contact list (the Client Portal tab). A
+  contact who never signs in is one whose consent the office records (in person, by phone, in writing);
+  a contact who confirms a code in the portal gets method `Portal`. Such a contact still needs an email.
+- **Feature flag.** There was no generic tenant flag, so `whatsapp` is `TenantLicense.WhatsAppEnabled`
+  (default off), exposed as `TenantLicenseSnapshot.WhatsApp` / `LicenseFeatures.WhatsApp` and set by
+  Ecosys at `PUT /api/platform/whatsapp/tenants/{id}` (Platform → tenant → Users tab). The new
+  controllers are Shared (every plan); the old `WhatsApp` inbox controller stays Operations and behind
+  `WHATSAPP_ENABLED`.
+- **Webhook URL.** One URL, `/api/whatsapp/webhook`, checked with the platform app secret (section 6's
+  "tenant from the URL" predates R5). Delivery status finds its tenant through the outbox row.
+  Rate-limited 600/min per IP, body capped at 512 KB.
+- **Sender interface** takes the resolved account: `SendTemplateAsync(account, to, template, language,
+  bodyParameters, buttonParameters, ct)`. `IWhatsAppAccountResolver` returns the shared account for every
+  tenant, or null when the platform isn't configured; the worker then marks rows Skipped (no separate
+  fake sender is registered).
+- **Templates** are a string-keyed catalogue in code (`WhatsAppTemplateCatalogue`), including
+  `activity.reminder` and `action-item.due` for 3b. A staff key sends only when its descriptor lists
+  WhatsApp; 3a's `Inbox(..., whatsApp: true)` adds it without touching `DefaultChannels`. The number
+  confirmation uses an Authentication template (`ecosys_verification_code`) whose text Meta fixes, so it
+  is the one template without the tenant name.
+- **Opting in turns WhatsApp on** for the WhatsApp-capable keys the tenant allows (preference rows are
+  created from the key defaults where missing). Staff then turn individual keys off as usual. The
+  preferences screens show the WhatsApp toggle only for keys the tenant allows, and only with the flag.
+- **STOP.** Confirming a number again with a code lifts a STOP on it (fresh consent); asking for a code
+  is not blocked by STOP. An in-app opt-out is per person (`User.WhatsAppOptedInAt` cleared /
+  `ClientPortalUser.ReceivesWhatsApp` off), not platform-wide.
+- **Cap.** Counted per tenant per UTC calendar month over every outbox row except Skipped. A message over
+  the cap is written as a Skipped row so the log shows it.
+- **Retries.** Network errors, 429 and 5xx retry after 1, 5, 15, 60 minutes (5 attempts; 2 for codes);
+  any other Meta error fails at once. A row stuck in Sending for 10 minutes is returned to the queue. A
+  sent code is removed from the outbox row.
+- **Client hooks.** "On the way" and "completed" hook `EtaNotificationService` (EnRoute / Completed),
+  respecting the work order's `NotifyClient` but not the ETA email settings; "invoice issued" hooks
+  `SendInvoice`; "valuation certified" hooks `ProjectNotificationService.ValuationCertifiedAsync`.
+  Completed, invoice and valuation messages go once per contact per record.
+- **Work-order assignment** now passes WhatsApp in its channel limit and sends `WorkOrderNumber`,
+  `WorkOrderTitle` and `Priority` as template values.
+- **Routes.** Office settings page `/settings/whatsapp-reminders`; the router's `WHATSAPP_ENABLED` filter
+  now hides only `/whatsapp*` and the old `/settings/whatsapp` account page.
+- **Setup** for the shared number, template texts and environment variables: `docs/WHATSAPP_SETUP.md`.

@@ -79,9 +79,15 @@ public sealed class NotificationInboxTests
         Assert.False(await harness.Db.Notifications.AnyAsync());
         Assert.Single(harness.Outbox.Queued);
 
-        // WhatsApp is not yet among any key's channels (step 3d adds it), so the hook is not called.
+        // A variation is not a WhatsApp key, so the hook is not called even though Bob turned WhatsApp on.
         await dispatcher.NotifyAsync(Request(harness, [harness.Bob]));
         Assert.Empty(whatsApp.Deliveries);
+
+        // A task-due reminder is (step 3d), but only for a user who turned it on: WhatsApp is never a default.
+        harness.Db.UserNotificationPreferences.Add(Preference(harness, harness.Bob, inApp: true, push: true, email: true, whatsApp: true, key: ProjectNotificationKeys.TaskDue));
+        await harness.Db.SaveChangesAsync();
+        await dispatcher.NotifyAsync(Request(harness, [harness.Alice, harness.Bob], key: ProjectNotificationKeys.TaskDue));
+        Assert.Equal(harness.Bob, Assert.Single(whatsApp.Deliveries).UserId);
     }
 
     [Fact]

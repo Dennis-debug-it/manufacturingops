@@ -47,6 +47,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<WhatsAppConversation> WhatsAppConversations => Set<WhatsAppConversation>();
     public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
     public DbSet<WhatsAppTemplate> WhatsAppTemplates => Set<WhatsAppTemplate>();
+    public DbSet<WhatsAppOutboxMessage> WhatsAppOutboxMessages => Set<WhatsAppOutboxMessage>();
+    public DbSet<WhatsAppOptOut> WhatsAppOptOuts => Set<WhatsAppOptOut>();
+    public DbSet<WhatsAppVerificationCode> WhatsAppVerificationCodes => Set<WhatsAppVerificationCode>();
     public DbSet<TenantModuleSetting> TenantModuleSettings => Set<TenantModuleSetting>();
     public DbSet<UserDashboardLayout> UserDashboardLayouts => Set<UserDashboardLayout>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
@@ -310,6 +313,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.PasswordHash).HasMaxLength(2000).IsRequired();
             entity.Property(x => x.Role).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Phone).HasMaxLength(50);
+            entity.Property(x => x.WhatsAppNumber).HasMaxLength(20);
             entity.Property(x => x.JobTitle).HasMaxLength(150);
             entity.Property(x => x.Department).HasMaxLength(150);
             entity.Property(x => x.InviteTokenHash).HasMaxLength(512);
@@ -494,6 +498,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         modelBuilder.Entity<ClientPortalUser>(entity =>
         {
             entity.Property(x => x.AccessLinkNonce).HasMaxLength(64);
+            entity.Property(x => x.WhatsAppNumber).HasMaxLength(20);
+            entity.Property(x => x.WhatsAppConsentMethod).HasMaxLength(20);
             entity.ToTable("client_portal_users");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
@@ -3641,6 +3647,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.AccessToken).HasMaxLength(500);
             entity.Property(x => x.WebhookVerifyToken).HasMaxLength(200);
             entity.Property(x => x.AutoReplyMessage).HasMaxLength(1000);
+            entity.Property(x => x.AllowedNotificationKeys).HasMaxLength(4000);
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -3685,6 +3692,56 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<WhatsAppTemplate>(modelBuilder);
+
+        // WhatsApp reminders (Release 3 design 4.4).
+        modelBuilder.Entity<WhatsAppOutboxMessage>(entity =>
+        {
+            entity.ToTable("whatsapp_outbox_messages", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_whatsapp_outbox_messages_status",
+                    "\"Status\" IN ('Pending', 'Sending', 'Sent', 'Delivered', 'Read', 'Failed', 'Skipped')"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.NotificationKey).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.TemplateName).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Language).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ParametersJson).HasMaxLength(4000);
+            entity.Property(x => x.ToPhone).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.RecipientName).HasMaxLength(200);
+            entity.Property(x => x.EntityType).HasMaxLength(80);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ProviderMessageId).HasMaxLength(128);
+            entity.Property(x => x.ErrorMessage).HasMaxLength(1000);
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(200);
+            // The worker's queue.
+            entity.HasIndex(x => new { x.Status, x.NextAttemptAt });
+            // The tenant's log and monthly count.
+            entity.HasIndex(x => new { x.TenantId, x.CreatedAt });
+            entity.HasIndex(x => x.ProviderMessageId).IsUnique().HasFilter("\"ProviderMessageId\" IS NOT NULL");
+            entity.HasIndex(x => x.IdempotencyKey).IsUnique().HasFilter("\"IdempotencyKey\" IS NOT NULL");
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<WhatsAppOutboxMessage>(modelBuilder);
+
+        // Platform-wide by design: no tenant, no tenant filter.
+        modelBuilder.Entity<WhatsAppOptOut>(entity =>
+        {
+            entity.ToTable("whatsapp_opt_outs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Keyword).HasMaxLength(40);
+            entity.HasIndex(x => x.PhoneNumber).IsUnique();
+        });
+
+        modelBuilder.Entity<WhatsAppVerificationCode>(entity =>
+        {
+            entity.ToTable("whatsapp_verification_codes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.CodeHash).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.UserId, x.CreatedAt });
+            entity.HasIndex(x => new { x.TenantId, x.ClientPortalUserId, x.CreatedAt });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<WhatsAppVerificationCode>(modelBuilder);
 
         modelBuilder.Entity<TenantModuleSetting>(entity =>
         {

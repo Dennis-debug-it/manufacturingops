@@ -626,7 +626,13 @@ internal static class AssignmentNotifications
             Url: $"/tech/jobs/{workOrder.Id}",
             EntityType: "WorkOrder",
             EntityId: workOrder.Id,
-            TemplateValues: new Dictionary<string, string?>(),
-            Channels: NotificationChannels.InApp | NotificationChannels.Push), cancellationToken);
+            TemplateValues: new Dictionary<string, string?>
+            {
+                ["WorkOrderNumber"] = workOrder.WorkOrderNumber,
+                ["WorkOrderTitle"] = title,
+                ["Priority"] = workOrder.Priority,
+            },
+            // The email goes to the technician record from the workflow service; WhatsApp only to an opted-in user.
+            Channels: NotificationChannels.InApp | NotificationChannels.Push | NotificationChannels.WhatsApp), cancellationToken);
     }
 }

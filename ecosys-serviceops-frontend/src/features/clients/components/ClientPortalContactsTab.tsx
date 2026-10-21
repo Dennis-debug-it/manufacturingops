@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Copy, Link2, Plus, RefreshCw } from 'lucide-react'
+import { Copy, Link2, MessageCircle, Plus, RefreshCw } from 'lucide-react'
 import { DataTable, type DataTableColumn } from '../../../shared/components/DataTable'
 import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { ConfirmDialog } from '../../../shared/components/ConfirmDialog'
@@ -8,6 +8,9 @@ import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { usePermission } from '../../../shared/hooks/usePermission'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import { formatDateTime } from '../../../shared/utils/dates'
+import { ContactWhatsAppDrawer } from '../../whatsapp/ContactWhatsAppDrawer'
+import { formatWhatsAppNumber } from '../../whatsapp/reminderLogic'
+import { staffWhatsAppApi, useWhatsAppMyStatus } from '../../whatsapp/remindersApi'
 import {
   portalLoginUrl,
   useClientPortalContacts,
@@ -66,8 +69,9 @@ function NewContactDrawer({ open, clientId, onClose }: { open: boolean; clientId
   )
 }
 
-function ContactRowActions({ clientId, contact }: { clientId: string; contact: ClientPortalContact }) {
+function ContactRowActions({ clientId, contact, whatsApp }: { clientId: string; contact: ClientPortalContact; whatsApp: boolean }) {
   const canManage = usePermission('clients.edit')
+  const [showWhatsApp, setShowWhatsApp] = useState(false)
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
   const updateStatus = useUpdateClientPortalContactStatus(clientId)
@@ -122,6 +126,19 @@ function ContactRowActions({ clientId, contact }: { clientId: string; contact: C
 
   return (
     <div className="flex justify-end gap-2">
+      {whatsApp ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowWhatsApp(true)}
+            title="Record that this contact agreed to WhatsApp updates"
+            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            <MessageCircle className="h-3.5 w-3.5" />WhatsApp
+          </button>
+          <ContactWhatsAppDrawer open={showWhatsApp} clientId={clientId} contact={contact} onClose={() => setShowWhatsApp(false)} />
+        </>
+      ) : null}
       <button
         type="button"
         onClick={async () => {
@@ -223,6 +240,8 @@ export function ClientPortalContactsTab({ clientId }: { clientId: string }) {
   const canManage = usePermission('clients.edit')
   const { data, isLoading, isError } = useClientPortalContacts(clientId)
   const [showInvite, setShowInvite] = useState(false)
+  // WhatsApp updates only when the workspace has the feature (Release 3 design 4.2).
+  const whatsApp = useWhatsAppMyStatus(staffWhatsAppApi).data?.featureEnabled ?? false
 
   const columns: DataTableColumn<ClientPortalContact>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <span className="font-medium text-slate-900">{row.fullName}</span> },
@@ -230,7 +249,8 @@ export function ClientPortalContactsTab({ clientId }: { clientId: string }) {
     { key: 'phone', header: 'Phone', cell: (row) => row.phone ?? '—' },
     { key: 'isActive', header: 'Status', cell: (row) => <StatusBadge status={row.isPendingApproval ? 'Pending Approval' : row.isActive ? 'Active' : 'Inactive'} /> },
     { key: 'lastLoginAt', header: 'Last Sign-In', cell: (row) => (row.lastLoginAt ? formatDateTime(row.lastLoginAt) : 'Never') },
-    { key: 'actions', header: '', cell: (row) => <ContactRowActions clientId={clientId} contact={row} /> },
+    ...(whatsApp ? [{ key: 'whatsApp', header: 'WhatsApp', cell: (row: ClientPortalContact) => (row.receivesWhatsApp ? formatWhatsAppNumber(row.whatsAppNumber) : 'Off') }] : []),
+    { key: 'actions', header: '', cell: (row) => <ContactRowActions clientId={clientId} contact={row} whatsApp={whatsApp} /> },
   ]
 
   return (

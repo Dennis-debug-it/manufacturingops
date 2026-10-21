@@ -89,7 +89,9 @@ public sealed class WorkOrderPhase3Tests
             Assert.Equal($"/tech/jobs/{fixture.WorkOrder.Id}", sent.Url);
             Assert.Contains(fixture.WorkOrder.WorkOrderNumber, sent.Title);
             // The email goes to the technician record separately, so the dispatcher sends only bell and push.
-            Assert.Equal(NotificationChannels.InApp | NotificationChannels.Push, sent.Channels);
+            // Not email (the workflow emails the technician record); WhatsApp only reaches an opted-in user.
+            Assert.Equal(NotificationChannels.InApp | NotificationChannels.Push | NotificationChannels.WhatsApp, sent.Channels);
+            Assert.Equal(fixture.WorkOrder.WorkOrderNumber, sent.TemplateValues["WorkOrderNumber"]);
         });
     }
 

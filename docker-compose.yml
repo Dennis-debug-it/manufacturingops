@@ -55,6 +55,15 @@ services:
       # appsettings.json only carries a localhost placeholder, so this MUST be set for any
       # real deployment or every emailed link points at the wrong host (EC-P1-06c).
       App__PublicUrl: ${ECOSYS_PUBLIC_URL:?set ECOSYS_PUBLIC_URL in .env}
+      # WhatsApp reminders from the shared Ecosys number (optional; see docs/WHATSAPP_SETUP.md).
+      WhatsApp__Enabled: ${ECOSYS_WHATSAPP_ENABLED:-false}
+      WhatsApp__PhoneNumberId: ${ECOSYS_WHATSAPP_PHONE_NUMBER_ID:-}
+      WhatsApp__BusinessAccountId: ${ECOSYS_WHATSAPP_BUSINESS_ACCOUNT_ID:-}
+      WhatsApp__AccessToken: ${ECOSYS_WHATSAPP_ACCESS_TOKEN:-}
+      WhatsApp__AppSecret: ${ECOSYS_WHATSAPP_APP_SECRET:-}
+      WhatsApp__WebhookVerifyToken: ${ECOSYS_WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      WhatsApp__DisplayPhoneNumber: ${ECOSYS_WHATSAPP_DISPLAY_NUMBER:-}
+      WhatsApp__MonthlyCapPerTenant: ${ECOSYS_WHATSAPP_MONTHLY_CAP:-1000}
       # File storage inside the container (mapped to the `uploads` volume).
       Storage__LocalBasePath: /app/storage/uploads
       Storage__BaseUrl: ${ECOSYS_PUBLIC_URL}/files
