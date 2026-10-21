@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, Settings2, Contact } from 'lucide-react'
+import { Plus, Search, Settings2, Contact, X } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatCard } from '../../shared/components/StatCard'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
+import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
+import { parseIdList } from '../../shared/utils/urlFilters'
 import { formatCurrency } from '../../shared/utils/format'
 import { formatDate } from '../../shared/utils/dates'
 import { getActiveCurrency } from '../../shared/utils/currency'
@@ -13,6 +15,7 @@ import { useProjects, useProjectSummary, useProjectTypes } from './api'
 import { ProjectFormDrawer } from './components/ProjectFormDrawer'
 import { ProgressBar, StageBadge } from './components/ProjectBadges'
 import { primaryButtonClass, secondaryButtonClass } from './components/formStyles'
+import { filterProjects, projectListFilterSpec, stageCategoryFor, stageParamFor } from './listFilters'
 import { stageCategories, stageCategoryLabels, type ProjectListItem } from './types'
 
 const filterClass = 'h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[var(--app-primary)]'
@@ -21,7 +24,10 @@ export function ProjectsPage() {
   const canManage = usePermission('projects.manage')
   const canConfigure = usePermission('projects.settings')
   const [search, setSearch] = useState('')
-  const [stageCategory, setStageCategory] = useState('Open')
+  // Stage, health, "mine" and the dashboard's id list live in the URL, so figures open the register filtered.
+  const { filters, update } = useUrlFilters(projectListFilterSpec)
+  const stageCategory = stageCategoryFor(filters.stage)
+  const linkedIds = parseIdList(filters.ids).length
   const [projectTypeId, setProjectTypeId] = useState('')
   const [showForm, setShowForm] = useState(false)
   const debouncedSearch = useDebounce(search, 300)
@@ -30,14 +36,16 @@ export function ProjectsPage() {
   const { data, isLoading, isError } = useProjects({
     ...(stageCategory ? { stageCategory } : {}),
     ...(projectTypeId ? { projectTypeId } : {}),
+    ...(filters.mine ? { mine: true } : {}),
   })
 
   const rows = useMemo(() => {
+    const narrowed = filterProjects(data ?? [], filters)
     const query = debouncedSearch.trim().toLowerCase()
-    if (!query) return data ?? []
-    return (data ?? []).filter((project) => [project.projectNumber, project.name, project.clientName, project.siteName]
+    if (!query) return narrowed
+    return narrowed.filter((project) => [project.projectNumber, project.name, project.clientName, project.siteName]
       .some((value) => (value ?? '').toLowerCase().includes(query)))
-  }, [data, debouncedSearch])
+  }, [data, debouncedSearch, filters])
 
   const currency = rows[0]?.currency ?? getActiveCurrency()
 
@@ -106,7 +114,7 @@ export function ProjectsPage() {
           <Search className="h-4 w-4 text-slate-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by project, number, client or site" className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400" />
         </label>
-        <select aria-label="Stage" value={stageCategory} onChange={(event) => setStageCategory(event.target.value)} className={filterClass}>
+        <select aria-label="Stage" value={stageCategory} onChange={(event) => update({ stage: stageParamFor(event.target.value) })} className={filterClass}>
           <option value="Open">Open projects</option>
           <option value="">All projects</option>
           {stageCategories.map((category) => (<option key={category} value={category}>{stageCategoryLabels[category]}</option>))}
@@ -115,6 +123,19 @@ export function ProjectsPage() {
           <option value="">All types</option>
           {(types ?? []).map((type) => (<option key={type.id} value={type.id}>{type.name}</option>))}
         </select>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" checked={filters.mine === 'true'} onChange={(event) => update({ mine: event.target.checked ? 'true' : '' })} />
+          Mine
+        </label>
+        <label className="flex items-center gap-2 whitespace-nowrap text-sm text-slate-600">
+          <input type="checkbox" checked={filters.health === 'behind'} onChange={(event) => update({ health: event.target.checked ? 'behind' : '' })} />
+          Behind schedule
+        </label>
+        {linkedIds > 0 ? (
+          <button type="button" onClick={() => update({ ids: '' })} className="inline-flex h-11 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50">
+            {linkedIds} from the dashboard<X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
       </div>
 
       <DataTable

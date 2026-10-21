@@ -1,13 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { addItem, addableWidgets, moveItem, normalizeLayout, removeItem, sameLayout, setItemSize } from './layoutModel'
+import { addItem, addableWidgets, moveItem, normalizeLayout, removeItem, sameLayout, setItemSize, widgetKeysForAreas } from './layoutModel'
 import type { DashboardLayoutItem, DashboardWidgetInfo } from './roleDashboardTypes'
 
-const widget = (key: string, defaultSize: 'small' | 'wide' = 'small'): DashboardWidgetInfo => ({
+const widget = (key: string, defaultSize: 'small' | 'wide' = 'small', areas: string[] = ['work-orders']): DashboardWidgetInfo => ({
   key,
   title: key,
   description: '',
   defaultSize,
   modules: ['operations'],
+  areas,
 })
 
 const available = [widget('a'), widget('b', 'wide'), widget('c')]
@@ -57,5 +58,12 @@ describe('dashboard layout model', () => {
     expect(sameLayout(layout, moveItem(layout, 'b', 1))).toBe(false)
     expect(sameLayout(layout, setItemSize(layout, 'c', 'wide'))).toBe(false)
     expect(sameLayout(layout, removeItem(layout, 'c'))).toBe(false)
+  })
+
+  it('picks the widgets that read a changed data area', () => {
+    const catalogue = [widget('wo'), widget('pm', 'small', ['maintenance', 'work-orders']), widget('cash', 'small', ['finance']), widget('billing', 'wide', ['projects', 'finance'])]
+    expect(widgetKeysForAreas(catalogue, ['work-orders'])).toEqual(['wo', 'pm'])
+    expect(widgetKeysForAreas(catalogue, ['finance', 'contracts'])).toEqual(['cash', 'billing'])
+    expect(widgetKeysForAreas(catalogue, [])).toEqual([])
   })
 })

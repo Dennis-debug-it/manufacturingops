@@ -14,11 +14,15 @@ export interface PurchaseOrderListItem {
   currency: string
 }
 
-export function usePurchaseOrders(status?: PurchaseOrderStatus | 'All') {
+/** `state` is `open` (not yet fully received) or `late` (sent and past its expected date). */
+export function usePurchaseOrders(status?: PurchaseOrderStatus | 'All', state?: 'open' | 'late') {
   return useQuery({
-    queryKey: ['inventory', 'purchase-orders', status ?? 'All'],
+    queryKey: ['inventory', 'purchase-orders', status ?? 'All', state ?? ''],
     queryFn: () =>
-      api.get<PurchaseOrderListItem[]>('/api/purchase-orders', status && status !== 'All' ? { status } : undefined),
+      api.get<PurchaseOrderListItem[]>('/api/purchase-orders', {
+        ...(status && status !== 'All' ? { status } : {}),
+        ...(state ? { state } : {}),
+      }),
     staleTime: 30_000,
   })
 }

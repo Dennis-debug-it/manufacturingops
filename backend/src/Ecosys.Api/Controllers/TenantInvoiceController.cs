@@ -37,6 +37,11 @@ public sealed class TenantInvoiceController(
 
     // ── List ─────────────────────────────────────────────────────────────────
 
+    /// <param name="age">
+    /// Receivables only: <c>overdue</c>, <c>current</c> (not yet due) or an ageing bucket (<c>1-30</c>,
+    /// <c>31-60</c>, <c>61-90</c>, <c>90-plus</c> days past due, against the tenant's today), exactly as
+    /// the finance dashboard widgets count them (<see cref="ReceivableAges"/>).
+    /// </param>
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<TenantInvoiceListItem>>> ListInvoices(
         [FromQuery] string? status,
@@ -45,6 +50,9 @@ public sealed class TenantInvoiceController(
         [FromQuery] DateTime? dateFrom,
         [FromQuery] DateTime? dateTo,
         [FromQuery] string? search,
+        [FromQuery] string? age,
+        [FromQuery] string? currency,
+        [FromServices] ITenantTimeZoneService tenantTimeZoneService,
         CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceView);
@@ -62,6 +70,13 @@ public sealed class TenantInvoiceController(
         }
         if (clientId.HasValue)
             query = query.Where(x => x.ClientId == clientId.Value);
+        if (!string.IsNullOrWhiteSpace(age))
+        {
+            var zone = await tenantTimeZoneService.GetTimeZoneAsync(TenantId, cancellationToken);
+            query = ReceivableAges.Apply(query, age, TenantDay.StartUtc(zone, DateTime.UtcNow));
+        }
+        if (!string.IsNullOrWhiteSpace(currency))
+            query = query.Where(x => x.Currency == currency.Trim().ToUpper());
         if (dateFrom.HasValue)
             query = query.Where(x => x.InvoiceDate >= dateFrom.Value);
         if (dateTo.HasValue)

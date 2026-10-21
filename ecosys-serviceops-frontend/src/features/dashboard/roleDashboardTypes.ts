@@ -11,6 +11,8 @@ export interface DashboardWidgetInfo {
   description: string
   defaultSize: WidgetSize
   modules: string[]
+  /** The data areas the widget reads (`work-orders`, `finance`, ...), as `DashboardChanged` names them. */
+  areas: string[]
 }
 
 /** `GET /api/dashboard/layout`: the caller's widgets in order, and every widget they may add. */

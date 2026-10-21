@@ -499,16 +499,41 @@ Built as designed above; only the deviations and details worth knowing are liste
 - **New defaults once.** The stored JSON is `{ items: [{key, size}], seenDefaults: [key] }`. A save marks
   every default the user can see as seen; a default they can't see yet (hidden by the admin, no
   permission) is not marked, so it is offered when it becomes available.
-- **Cache.** 5 minutes in `IMemoryCache`, keyed by tenant, widget and scope (tenant-wide; branch scope;
-  or branch scope plus user for project widgets, whose visibility is per user). There is no event-driven
-  invalidation: each widget has a Refresh button that recomputes (`?refresh=true`).
+- **Cache.** `IMemoryCache`, keyed by tenant, widget and scope (tenant-wide; branch scope; or branch scope
+  plus user for project widgets, whose visibility is per user) and by the tenant's version of each data
+  area the widget reads. Every widget names its areas in the catalogue (`work-orders`, `maintenance`,
+  `contracts`, `materials`, `finance`, `projects`). `DashboardChangeInterceptor` (an EF Core
+  `SaveChangesInterceptor` on `AppDbContext`) notes, before each save, which areas the tracked changes
+  touch, by each entity's own `TenantId`, so background workers count too. After the save succeeds it
+  bumps those areas for those tenants (`IDashboardDataVersions`, in memory). The next read of an affected
+  widget recomputes; other areas and other tenants stay cached. The 5-minute expiry remains as a backstop
+  for time-based figures ("overdue", "today"), and Refresh (`?refresh=true`) is still on each card.
+- **Live updates.** After a save that bumps areas, `IDashboardChangeBroadcaster` sends `DashboardChanged`
+  (the area list, no figures) to `tenant-{tenantId}` through `IDashboardNotifier` (SignalR in the Api,
+  no-op elsewhere). It sends at most once per tenant every 10 s: the first change goes at once, and later
+  ones are merged into a trailing send. Sending runs off the save path, and a failure is only logged.
+  Staff connections now join their tenant group in `ServiceOpsHub.OnConnectedAsync`. The dashboard listens
+  on the bell's connection (`useLiveNotifications().subscribe`), refetches the widgets whose `areas`
+  (carried on `DashboardWidgetInfo`) include a changed one, and refetches every widget after a reconnect.
+  While disconnected, visible widgets poll every 2 minutes. The versions, the cache and the throttle are
+  per API instance: with more than one replica, a save is only seen by the instance that made it (others
+  catch up at the 5-minute expiry), and bulk `ExecuteUpdate`/`ExecuteDelete` bypass the interceptor (none
+  touches a dashboard area today).
 - **Branch scoping.** Work orders, technicians (through their work orders), PM plans, stock, material
   issues and projects follow `branchId` and the user's branch access. Invoices, payments, withholding,
   contracts and purchase orders have no branch, so finance, contract and PO widgets are tenant-wide.
-- **Links.** Every figure links to the list behind it. To make "open" and "overdue" exact, the work-order
-  list gained a `state=open|overdue` filter (API and URL, with a filter chip). Lists without URL filters
-  (invoices, ageing, purchase orders, material issues, projects) are linked unfiltered; single-project
-  figures link to the project's tab (`?tab=variations|valuations|site|wages|financials|milestones`).
+- **Links.** Every figure links to the list behind it, filtered through the list's URL to the rows it
+  counts. Each list page reads its filters from the query string and writes them back when changed
+  (`useUrlFilters`, the work-order list's pattern made generic). The work-order list has `state=open|overdue`.
+  Invoices have `age=overdue|current|1-30|31-60|61-90|90-plus`, `currency` and `status` (new server
+  `age`/`currency` params, using `ReceivableAges`, which the finance widgets also use; buckets count any
+  part of a day past due, so the ageing buckets match "overdue"). Purchase orders have `state=open|late`
+  (new server param, `PurchaseOrderListStates`), material issues `status`, contracts `expiring=30|90`,
+  receipts `status&from`, and projects `stage`, `health=behind`, `mine=true` (new server param) and
+  `ids=` (the projects behind a figure). Single-project figures link to the project's tab
+  (`?tab=variations|valuations|site|wages|financials|milestones`). "Tax withheld" still opens Receipts:
+  there is no list of withholding certificates. Links don't carry the branch picked on the dashboard, so a
+  branch-filtered figure opens the list for every branch the user can see.
 - **Money** is shown per currency (one figure per currency present). Receipts take the currency of
   their invoice, KES when unapplied.
 - **Dates.** "Today" and "this month" are the tenant's local day (tenant time zone).

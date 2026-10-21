@@ -7,6 +7,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
+import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import { formatDate } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { apiClient } from '../../shared/api/apiClient'
@@ -14,11 +15,17 @@ import { endpoints } from '../../shared/api/endpoints'
 import { useClients } from '../clients/api'
 import { useAllPayments, useInvoices, useReceivePayment, type PaymentListItem } from './api'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
+import { filterReceipts, receiptListFilterSpec } from './receiptListFilters'
+
+const filterClass = 'h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 
 const paymentMethods = ['Cash', 'MPesa', 'BankTransfer', 'Cheque', 'Card'] as const
 
 export function ReceiptsPage() {
   const { data, isLoading, isError } = useAllPayments()
+  // `?status=&from=` comes from the dashboard's "Cash received this month".
+  const { filters, update } = useUrlFilters(receiptListFilterSpec)
+  const rows = useMemo(() => filterReceipts(data ?? [], filters), [data, filters])
   const canManage = usePermission('finance.manage')
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [showReceive, setShowReceive] = useState(false)
@@ -94,9 +101,20 @@ export function ReceiptsPage() {
         }
       />
       <FinanceWorkspaceNav />
+      <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-3 shadow-sm backdrop-blur-[var(--glass-blur-md)]">
+        <select aria-label="Status" value={filters.status} onChange={(event) => update({ status: event.target.value })} className={filterClass}>
+          <option value="">Any status</option>
+          <option value="Confirmed">Confirmed</option>
+          <option value="Reversed">Reversed</option>
+        </select>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          From
+          <input type="date" aria-label="From date" value={filters.from} onChange={(event) => update({ from: event.target.value })} className={filterClass} />
+        </label>
+      </div>
       <DataTable
         columns={columns}
-        data={data ?? []}
+        data={rows}
         loading={isLoading}
         emptyTitle={isError ? 'Receipts unavailable' : 'No receipts'}
         emptyDescription={isError ? 'Payments could not be loaded.' : 'Payments recorded against invoices will appear here.'}

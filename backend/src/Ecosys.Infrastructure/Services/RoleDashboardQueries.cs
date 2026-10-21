@@ -14,7 +14,7 @@ public sealed record DashboardQueryViewer(Guid TenantId, Guid UserId, bool IsAdm
 
 /// <summary>
 /// One query per catalogue widget (<see cref="DashboardWidgetCatalog"/>). Every figure carries the link
-/// to the office list behind it, using that list's existing query parameters. Lists are short (at most
+/// to the office list behind it, filtered (through that list's URL) to exactly the rows it counts. Lists are short (at most
 /// <see cref="ListLimit"/> rows) and every money figure is per currency.
 /// </summary>
 internal sealed class RoleDashboardQueries(
@@ -89,6 +89,28 @@ internal sealed class RoleDashboardQueries(
 
     private static DashboardStat Count(string label, int value, string link, string? tone = null) =>
         new(label, value, "number", null, link, value > 0 ? tone : null);
+
+    /// <summary>Past this many projects a figure links to the whole register rather than a long id list.</summary>
+    private const int MaxLinkedProjects = 50;
+
+    /// <summary>
+    /// The projects behind a figure: one opens on the right tab; several open the register narrowed to
+    /// just them (<c>?ids=</c>, every stage, since some are handed over).
+    /// </summary>
+    private static string ProjectsLink(IEnumerable<Guid> projectIds, string tab)
+    {
+        var ids = projectIds.Distinct().ToList();
+        return ids.Count switch
+        {
+            0 => "/projects",
+            1 => $"/projects/{ids[0]}?tab={tab}",
+            > MaxLinkedProjects => "/projects?stage=all",
+            _ => $"/projects?stage=all&ids={string.Join(',', ids)}",
+        };
+    }
+
+    private static string InvoicesLink(string age, string? currency = null) =>
+        currency is null ? $"/finance/invoices?age={age}" : $"/finance/invoices?age={age}&currency={Uri.EscapeDataString(currency)}";
 
     // ── Operations ───────────────────────────────────────────────────────────
 
@@ -228,7 +250,7 @@ internal sealed class RoleDashboardQueries(
             .Select(x => new { x.Id, x.ContractNumber, x.Name, x.EndDate })
             .ToListAsync(ct);
         return new Result(
-            [Count("Within 30 days", in30, "/contracts", "warning"), Count("Within 90 days", in90, "/contracts")],
+            [Count("Within 30 days", in30, "/contracts?expiring=30", "warning"), Count("Within 90 days", in90, "/contracts?expiring=90")],
             [.. soonest.Select(x => new DashboardListItem($"{x.ContractNumber} {x.Name}", $"Ends {x.EndDate:dd MMM yyyy}", null, null, null, $"/contracts/{x.Id}"))]);
     }
 
@@ -266,22 +288,21 @@ internal sealed class RoleDashboardQueries(
             .Select(x => new { x.IssueNumber, x.IssueStatus, x.TotalEstimatedCost })
             .ToListAsync(ct);
         return new Result(
-            [Count("Awaiting approval", awaitingApproval, "/inventory/issues", "warning"), Count("Approved, not issued", awaitingIssue, "/inventory/issues")],
-            [.. oldest.Select(x => new DashboardListItem(x.IssueNumber, x.IssueStatus == "approved" ? "Approved, not issued" : "Awaiting approval", null, null, null, "/inventory/issues"))]);
+            [Count("Awaiting approval", awaitingApproval, "/inventory/issues?status=pending_approval", "warning"), Count("Approved, not issued", awaitingIssue, "/inventory/issues?status=approved")],
+            [.. oldest.Select(x => new DashboardListItem(x.IssueNumber, x.IssueStatus == "approved" ? "Approved, not issued" : "Awaiting approval", null, null, null, $"/inventory/issues?status={x.IssueStatus}"))]);
     }
 
     private async Task<Result> OpenPurchaseOrdersAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
     {
-        string[] openStatuses = ["Draft", "Sent", "PartiallyReceived"];
-        var orders = dbContext.PurchaseOrders.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && openStatuses.Contains(x.Status));
+        var all = dbContext.PurchaseOrders.AsNoTracking().Where(x => x.TenantId == viewer.TenantId);
+        var orders = PurchaseOrderListStates.Apply(all, PurchaseOrderListStates.Open, clock.TodayStartUtc);
         var open = await orders.CountAsync(ct);
-        var late = await orders.CountAsync(x => x.Status != "Draft" && x.ExpectedAt != null && x.ExpectedAt < clock.TodayStartUtc, ct);
+        var late = await PurchaseOrderListStates.Apply(all, PurchaseOrderListStates.Late, clock.TodayStartUtc).CountAsync(ct);
         var list = await orders.OrderBy(x => x.ExpectedAt == null).ThenBy(x => x.ExpectedAt).ThenBy(x => x.OrderedAt).Take(ListLimit)
             .Select(x => new { x.Id, x.PoNumber, Supplier = x.Supplier!.SupplierName, x.Status, x.ExpectedAt, x.TotalAmount, x.Currency })
             .ToListAsync(ct);
         return new Result(
-            [Count("Open", open, "/inventory/purchase-orders"), Count("Past expected date", late, "/inventory/purchase-orders", "danger")],
+            [Count("Open", open, "/inventory/purchase-orders?state=open"), Count("Past expected date", late, "/inventory/purchase-orders?state=late", "danger")],
             [.. list.Select(x => new DashboardListItem($"{x.PoNumber} {x.Supplier}",
                 x.ExpectedAt is null ? x.Status : $"{x.Status} · expected {x.ExpectedAt:dd MMM}", x.TotalAmount, "money", x.Currency,
                 $"/inventory/purchase-orders/{x.Id}", x.Status != "Draft" && x.ExpectedAt < clock.TodayStartUtc ? "danger" : null))]);
@@ -289,44 +310,34 @@ internal sealed class RoleDashboardQueries(
 
     // ── Finance ──────────────────────────────────────────────────────────────
 
-    /// <summary>Issued invoices with something still to pay (not drafts, proformas or void).</summary>
-    private IQueryable<TenantInvoice> Receivables(DashboardQueryViewer viewer) =>
-        dbContext.TenantInvoices.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && x.DocumentType == "Invoice" && x.Status != "Draft" && x.Status != "Void" && x.Balance > 0);
+    /// <summary>The tenant's invoices; <see cref="ReceivableAges"/> narrows them as the invoice list's <c>age</c> filter does.</summary>
+    private IQueryable<TenantInvoice> Invoices(DashboardQueryViewer viewer) =>
+        dbContext.TenantInvoices.AsNoTracking().Where(x => x.TenantId == viewer.TenantId);
 
     private async Task<Result> ReceivablesOverdueAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
     {
-        var overdue = await Receivables(viewer).Where(x => x.DueDate < clock.TodayStartUtc)
+        var overdue = await ReceivableAges.Apply(Invoices(viewer), ReceivableAges.Overdue, clock.TodayStartUtc)
             .Select(x => new { x.Id, x.InvoiceNumber, Client = x.Client!.ClientName, x.Currency, x.Balance, x.DueDate })
             .ToListAsync(ct);
-        var stats = new List<DashboardStat> { Count("Overdue invoices", overdue.Count, "/finance/aging", "danger") };
+        var stats = new List<DashboardStat> { Count("Overdue invoices", overdue.Count, InvoicesLink(ReceivableAges.Overdue), "danger") };
         stats.AddRange(overdue.GroupBy(x => x.Currency).OrderByDescending(g => g.Count())
-            .Select(g => new DashboardStat("Overdue balance", g.Sum(x => x.Balance), "money", g.Key, "/finance/aging", "danger")));
+            .Select(g => new DashboardStat("Overdue balance", g.Sum(x => x.Balance), "money", g.Key, InvoicesLink(ReceivableAges.Overdue, g.Key), "danger")));
         return new Result(stats,
             [.. overdue.OrderBy(x => x.DueDate).Take(ListLimit).Select(x => new DashboardListItem($"{x.InvoiceNumber} {x.Client}",
-                $"{(clock.TodayStartUtc - x.DueDate).Days} days overdue", x.Balance, "money", x.Currency, $"/finance/invoices/{x.Id}", "danger"))]);
+                $"{ReceivableAges.DaysOverdue(x.DueDate, clock.TodayStartUtc)} days overdue", x.Balance, "money", x.Currency, $"/finance/invoices/{x.Id}", "danger"))]);
     }
 
     private async Task<Result> ReceivablesAgeingAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
     {
-        var rows = await Receivables(viewer).Select(x => new { x.Currency, x.Balance, x.DueDate }).ToListAsync(ct);
-        var buckets = new (string Label, int From, int To, string? Tone)[]
-        {
-            ("Not yet due", int.MinValue, 0, null), ("1–30 days", 1, 30, "warning"), ("31–60 days", 31, 60, "warning"),
-            ("61–90 days", 61, 90, "danger"), ("90+ days", 91, int.MaxValue, "danger"),
-        };
+        var rows = await ReceivableAges.Receivables(Invoices(viewer)).Select(x => new { x.Currency, x.Balance, x.DueDate }).ToListAsync(ct);
         var stats = new List<DashboardStat>();
         var currencies = rows.GroupBy(x => x.Currency).OrderByDescending(g => g.Sum(x => x.Balance)).ToList();
         foreach (var currency in currencies)
         {
-            foreach (var bucket in buckets)
+            foreach (var bucket in ReceivableAges.Buckets)
             {
-                var amount = currency.Where(x =>
-                {
-                    var days = (clock.TodayStartUtc - x.DueDate).Days;
-                    return days >= bucket.From && days <= bucket.To;
-                }).Sum(x => x.Balance);
-                stats.Add(new DashboardStat(bucket.Label, amount, "money", currency.Key, "/finance/aging", amount > 0 ? bucket.Tone : null));
+                var amount = currency.Where(x => ReceivableAges.BucketOf(x.DueDate, clock.TodayStartUtc) == bucket.Key).Sum(x => x.Balance);
+                stats.Add(new DashboardStat(bucket.Label, amount, "money", currency.Key, InvoicesLink(bucket.Key, currency.Key), amount > 0 ? bucket.Tone : null));
             }
         }
         return new Result(stats, [], rows.Count == 0 ? "Nothing is owed." : null);
@@ -338,9 +349,10 @@ internal sealed class RoleDashboardQueries(
             .Where(x => x.TenantId == viewer.TenantId && x.Status == "Confirmed" && x.PaymentDate >= clock.MonthStartUtc && x.PaymentDate < clock.TodayEndUtc)
             .Select(x => new { Currency = x.Invoice != null ? x.Invoice.Currency : null, x.Amount })
             .ToListAsync(ct);
-        var stats = new List<DashboardStat> { Count("Receipts", payments.Count, "/finance/receipts") };
+        var link = $"/finance/receipts?status=Confirmed&from={clock.MonthStart:yyyy-MM-dd}";
+        var stats = new List<DashboardStat> { Count("Receipts", payments.Count, link) };
         stats.AddRange(payments.GroupBy(x => x.Currency ?? "KES").OrderByDescending(g => g.Count())
-            .Select(g => new DashboardStat("Received", g.Sum(x => x.Amount), "money", g.Key, "/finance/receipts")));
+            .Select(g => new DashboardStat("Received", g.Sum(x => x.Amount), "money", g.Key, link)));
         return new Result(stats, []);
     }
 
@@ -365,7 +377,7 @@ internal sealed class RoleDashboardQueries(
             .Select(x => new { x.Id, x.InvoiceNumber, Client = x.Client!.ClientName, x.TotalAmount, x.Currency })
             .ToListAsync(ct);
         return new Result(
-            [Count("Drafts", count, "/finance/invoices", "warning")],
+            [Count("Drafts", count, "/finance/invoices?status=Draft", "warning")],
             [.. oldest.Select(x => new DashboardListItem($"{x.InvoiceNumber} {x.Client}", null, x.TotalAmount, "money", x.Currency, $"/finance/invoices/{x.Id}"))]);
     }
 
@@ -414,15 +426,13 @@ internal sealed class RoleDashboardQueries(
             .OrderByDescending(x => x.Planned - x.Project.EffectiveProgressPercent)
             .ToList();
         return new Result(
-            [Count("Behind schedule", behind.Count, "/projects", "danger"), Count("Open projects", projects.Count, "/projects")],
+            [Count("Behind schedule", behind.Count, "/projects?health=behind", "danger"), Count("Open projects", projects.Count, "/projects?stage=Open")],
             [.. behind.Take(ListLimit).Select(x => ProgressItem(x.Project, x.Planned))]);
     }
 
     private async Task<Result> MyProjectsAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
     {
-        var userId = viewer.UserId;
-        var mine = (await VisibleProjectsAsync(viewer, ct))
-            .Where(x => x.ProjectManagerUserId == userId || x.Members.Any(m => m.UserId == userId || (m.Technician != null && m.Technician.UserId == userId)));
+        var mine = (await VisibleProjectsAsync(viewer, ct)).Where(ProjectListFilters.InvolvesUser(viewer.UserId));
         var projects = await OpenProjectsWithMilestonesAsync(mine, ct);
         var rows = projects
             .Select(x => new { Project = x, Planned = ProjectCommercials.ComputePlannedProgress(x.Milestones, clock.Today) })
@@ -430,9 +440,9 @@ internal sealed class RoleDashboardQueries(
             .ToList();
         return new Result(
             [
-                Count("My open projects", rows.Count, "/projects"),
+                Count("My open projects", rows.Count, "/projects?mine=true"),
                 Count("Behind schedule", rows.Count(x => x.Project.Stage!.Category != ProjectStageCategories.OnHold
-                    && ProjectCommercials.IsBehindSchedule(x.Project.EffectiveProgressPercent, x.Planned)), "/projects", "danger"),
+                    && ProjectCommercials.IsBehindSchedule(x.Project.EffectiveProgressPercent, x.Planned)), "/projects?mine=true&health=behind", "danger"),
             ],
             [.. rows.Take(ListLimit).Select(x => ProgressItem(x.Project, x.Planned))],
             rows.Count == 0 ? "You are not on any open project." : null);
@@ -448,10 +458,10 @@ internal sealed class RoleDashboardQueries(
             .ToListAsync(ct);
         var stats = new List<DashboardStat>
         {
-            Count("Awaiting decision", rows.Count, rows.Count == 1 ? $"/projects/{rows[0].ProjectId}?tab=variations" : "/projects", "warning"),
+            Count("Awaiting decision", rows.Count, ProjectsLink(rows.Select(x => x.ProjectId), "variations"), "warning"),
         };
         stats.AddRange(rows.GroupBy(x => x.Currency).Select(g => new DashboardStat("Net value",
-            g.Sum(x => x.Kind == ProjectVariationKinds.Omission ? -x.Amount : x.Amount), "money", g.Key, "/projects")));
+            g.Sum(x => x.Kind == ProjectVariationKinds.Omission ? -x.Amount : x.Amount), "money", g.Key, ProjectsLink(g.Select(x => x.ProjectId), "variations"))));
         return new Result(stats,
             [.. rows.Take(ListLimit).Select(x => new DashboardListItem($"{x.VariationNumber} {x.Title}", x.ProjectNumber,
                 x.Kind == ProjectVariationKinds.Omission ? -x.Amount : x.Amount, "money", x.Currency, $"/projects/{x.ProjectId}?tab=variations"))]);
@@ -468,12 +478,10 @@ internal sealed class RoleDashboardQueries(
             .ToListAsync(ct);
         var submitted = rows.Where(x => x.Status == ProjectValuationStatuses.Submitted).ToList();
         var certified = rows.Where(x => x.Status == ProjectValuationStatuses.Certified).ToList();
-        string LinkFor<T>(IReadOnlyList<T> list, Func<T, Guid> project) =>
-            list.Select(project).Distinct().Count() == 1 ? $"/projects/{project(list[0])}?tab=valuations" : "/projects";
         return new Result(
             [
-                Count("Awaiting certificate", submitted.Count, LinkFor(submitted, x => x.ProjectId), "warning"),
-                Count("Certified, not invoiced", certified.Count, LinkFor(certified, x => x.ProjectId), "warning"),
+                Count("Awaiting certificate", submitted.Count, ProjectsLink(submitted.Select(x => x.ProjectId), "valuations"), "warning"),
+                Count("Certified, not invoiced", certified.Count, ProjectsLink(certified.Select(x => x.ProjectId), "valuations"), "warning"),
             ],
             [.. rows.Take(ListLimit).Select(x => new DashboardListItem($"{x.ProjectNumber} {x.ValuationNumber}",
                 x.Status == ProjectValuationStatuses.Submitted ? "Awaiting certificate" : "Certified, not invoiced",
@@ -501,8 +509,8 @@ internal sealed class RoleDashboardQueries(
         var notMarked = projects.Where(x => x.Marked == 0).OrderBy(x => x.ProjectNumber).ToList();
         return new Result(
             [
-                Count("Not marked yet", notMarked.Count, notMarked.Count == 1 ? $"/projects/{notMarked[0].Id}?tab=site" : "/projects", "warning"),
-                Count("Marked", projects.Count - notMarked.Count, "/projects"),
+                Count("Not marked yet", notMarked.Count, ProjectsLink(notMarked.Select(x => x.Id), "site"), "warning"),
+                Count("Marked", projects.Count - notMarked.Count, ProjectsLink(projects.Where(x => x.Marked > 0).Select(x => x.Id), "site")),
             ],
             [.. projects.OrderBy(x => x.Marked > 0).ThenBy(x => x.ProjectNumber).Take(ListLimit).Select(x => new DashboardListItem(
                 $"{x.ProjectNumber} {x.Name}", x.Marked > 0 ? $"{x.Marked} of {x.Workers} marked" : $"Not marked · {x.Workers} workers",
@@ -530,7 +538,7 @@ internal sealed class RoleDashboardQueries(
             .Select(x => new { x.Id, x.ProjectNumber, x.Name }).ToDictionaryAsync(x => x.Id, ct);
         var total = byProject.Sum(x => x.Uncosted);
         return new Result(
-            [new DashboardStat("Uncosted days", total, "number", null, byProject.Count == 1 ? $"/projects/{byProject[0].ProjectId}?tab=wages" : "/projects", total > 0 ? "warning" : null)],
+            [new DashboardStat("Uncosted days", total, "number", null, ProjectsLink(byProject.Select(x => x.ProjectId), "wages"), total > 0 ? "warning" : null)],
             [.. byProject.Take(ListLimit).Select(x => new DashboardListItem($"{names[x.ProjectId].ProjectNumber} {names[x.ProjectId].Name}", "days with no daily rate",
                 x.Uncosted, "number", null, $"/projects/{x.ProjectId}?tab=wages", "warning"))]);
     }
@@ -561,11 +569,11 @@ internal sealed class RoleDashboardQueries(
 
         var stats = new List<DashboardStat>
         {
-            Count("Certified, not invoiced", certified.Count, certified.Select(x => x.ProjectId).Distinct().Count() == 1 ? $"/projects/{certified[0].ProjectId}?tab=valuations" : "/projects", "warning"),
+            Count("Certified, not invoiced", certified.Count, ProjectsLink(certified.Select(x => x.ProjectId), "valuations"), "warning"),
         };
-        stats.AddRange(certified.GroupBy(x => x.Currency).Select(g => new DashboardStat("To invoice", g.Sum(x => x.Amount), "money", g.Key, "/projects", "warning")));
-        stats.Add(Count("Retention due", retention.Count, retention.Count == 1 ? $"/projects/{retention[0].Project.Id}?tab=financials" : "/projects", "warning"));
-        stats.AddRange(retention.GroupBy(x => x.Project.Currency).Select(g => new DashboardStat("Retention to release", g.Sum(x => x.Due), "money", g.Key, "/projects", "warning")));
+        stats.AddRange(certified.GroupBy(x => x.Currency).Select(g => new DashboardStat("To invoice", g.Sum(x => x.Amount), "money", g.Key, ProjectsLink(g.Select(x => x.ProjectId), "valuations"), "warning")));
+        stats.Add(Count("Retention due", retention.Count, ProjectsLink(retention.Select(x => x.Project.Id), "financials"), "warning"));
+        stats.AddRange(retention.GroupBy(x => x.Project.Currency).Select(g => new DashboardStat("Retention to release", g.Sum(x => x.Due), "money", g.Key, ProjectsLink(g.Select(x => x.Project.Id), "financials"), "warning")));
 
         var items = certified.Select(x => new DashboardListItem($"{x.ProjectNumber} {x.ValuationNumber}", "Certified, not invoiced", x.Amount, "money", x.Currency, $"/projects/{x.ProjectId}?tab=valuations"))
             .Concat(retention.Select(x => new DashboardListItem($"{x.Project.ProjectNumber} {x.Project.Name}", "Retention can be released", x.Due, "money", x.Project.Currency, $"/projects/{x.Project.Id}?tab=financials")))

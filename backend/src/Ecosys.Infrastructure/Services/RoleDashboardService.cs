@@ -21,7 +21,8 @@ public sealed record DashboardWidgetData(
     string? Note,
     DateTime GeneratedAt);
 
-public sealed record DashboardWidgetInfo(string Key, string Title, string Description, string DefaultSize, IReadOnlyList<string> Modules);
+/// <param name="Areas">The data areas the widget reads; a live <c>DashboardChanged</c> naming one means refetch it.</param>
+public sealed record DashboardWidgetInfo(string Key, string Title, string Description, string DefaultSize, IReadOnlyList<string> Modules, IReadOnlyList<string> Areas);
 
 public sealed record DashboardLayoutResponse(
     string Role,
@@ -69,8 +70,13 @@ internal sealed class RoleDashboardService(
     ITenantModuleResolver moduleResolver,
     IDashboardSettingsService settingsService,
     RoleDashboardQueries queries,
-    IMemoryCache cache) : IRoleDashboardService
+    IMemoryCache cache,
+    IDashboardDataVersions dataVersions) : IRoleDashboardService
 {
+    /// <summary>
+    /// A backstop: a save to a widget's data areas already makes it recompute (see <see cref="CacheKey"/>),
+    /// but time-based figures ("overdue", "today") change without any write.
+    /// </summary>
     public static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
 
     private sealed record Viewer(Guid TenantId, Guid UserId, string Role, IReadOnlyList<string> Defaults, IReadOnlySet<string> Allowed, IReadOnlyCollection<string> Modules);
@@ -122,7 +128,9 @@ internal sealed class RoleDashboardService(
             throw new ForbiddenException("You do not have access to this dashboard widget.");
 
         var scope = await branchAccessService.GetQueryScopeAsync(viewer.TenantId, branchId, cancellationToken);
-        var cacheKey = CacheKey(viewer, widget, scope);
+        // Read the versions before the query runs: a save landing mid-query bumps them, so this result
+        // is filed under the old key and the next read recomputes.
+        var cacheKey = CacheKey(viewer, widget, scope, dataVersions);
         if (!refresh && cache.TryGetValue(cacheKey, out DashboardWidgetData? cached) && cached is not null)
             return cached;
 
@@ -197,14 +205,15 @@ internal sealed class RoleDashboardService(
         new(viewer.Role, customized, items,
             DashboardWidgetCatalog.All.Where(x => viewer.Allowed.Contains(x.Key)).Select(Info).ToList());
 
-    private static DashboardWidgetInfo Info(DashboardWidgetDefinition x) => new(x.Key, x.Title, x.Description, x.DefaultSize, x.Modules);
+    private static DashboardWidgetInfo Info(DashboardWidgetDefinition x) => new(x.Key, x.Title, x.Description, x.DefaultSize, x.Modules, x.Areas);
 
     /// <summary>
     /// Per tenant, widget and scope. Branch-scoped widgets key on the requested branch and the caller's
-    /// branch access; per-user widgets also on the caller. Nothing invalidates an entry early except the
-    /// widget's own Refresh, which re-runs the query and replaces it.
+    /// branch access; per-user widgets also on the caller. The tenant's version of each of the widget's
+    /// data areas is part of the key, so a save to that data retires the entry (it then just expires);
+    /// Refresh re-runs the query and replaces it too.
     /// </summary>
-    private static string CacheKey(Viewer viewer, DashboardWidgetDefinition widget, BranchQueryScope scope)
+    private static string CacheKey(Viewer viewer, DashboardWidgetDefinition widget, BranchQueryScope scope, IDashboardDataVersions versions)
     {
         var branch = $"{scope.HasConfiguredBranches}:{scope.RequestedBranchId}:{scope.IncludeUnassignedRecords}:{string.Join(',', scope.AccessibleBranchIds.OrderBy(x => x))}";
         var scopeKey = widget.Scope switch
@@ -213,6 +222,7 @@ internal sealed class RoleDashboardService(
             DashboardWidgetScope.Branch => branch,
             _ => $"{branch}:user:{viewer.UserId}",
         };
-        return $"role-dashboard:{viewer.TenantId}:{widget.Key}:{scopeKey}";
+        var data = string.Join('.', widget.Areas.Select(area => versions.Get(viewer.TenantId, area)));
+        return $"role-dashboard:{viewer.TenantId}:{widget.Key}:{scopeKey}:v{data}";
     }
 }

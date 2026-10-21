@@ -36,7 +36,16 @@ public static class DependencyInjection
 
         services.AddSingleton<IRuntimeMetrics, RuntimeMetrics>();
 
-        services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
+        // Dashboard data versions (Release 3 part 4): every save bumps the areas it touches, so cached
+        // widgets recompute and open dashboards hear about it. The Api replaces the no-op notifier.
+        services.TryAddSingleton<IDashboardNotifier, NullDashboardNotifier>();
+        services.AddSingleton<IDashboardDataVersions, DashboardDataVersions>();
+        services.AddSingleton<IDashboardChangeBroadcaster, DashboardChangeBroadcaster>();
+        services.AddSingleton<DashboardChangeInterceptor>();
+
+        services.AddDbContext<AppDbContext>((serviceProvider, options) => options
+            .UseNpgsql(connectionString)
+            .AddInterceptors(serviceProvider.GetRequiredService<DashboardChangeInterceptor>()));
         services.AddHealthChecks()
             .AddDbContextCheck<AppDbContext>("postgres", tags: ["ready"]);
 

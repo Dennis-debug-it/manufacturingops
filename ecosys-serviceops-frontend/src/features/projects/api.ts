@@ -42,6 +42,8 @@ export interface ProjectListFilters {
   projectTypeId?: string
   clientId?: string
   search?: string
+  /** Only projects the caller manages or is on. */
+  mine?: boolean
 }
 
 export function useProjects(filters?: ProjectListFilters) {

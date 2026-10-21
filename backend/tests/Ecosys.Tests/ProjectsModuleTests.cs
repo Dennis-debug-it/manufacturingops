@@ -458,6 +458,20 @@ public sealed partial class ProjectsModuleTests
     }
 
     [Fact]
+    public async Task RegisterMineFilter_ListsOnlyProjectsTheCallerIsOn()
+    {
+        var harness = await Harness.CreateAsync();
+        var mine = await harness.CreateProjectAsync(name: "Mine");
+        await harness.CreateProjectAsync(name: "Not mine");
+        harness.Db.ProjectMembers.Add(new ProjectMember { TenantId = harness.TenantId, ProjectId = mine.Summary.Id, UserId = harness.ViewerUserId, Role = ProjectMemberRoles.Member });
+        await harness.Db.SaveChangesAsync();
+
+        var viewer = harness.ControllerFor(harness.ViewerUserId, AppRoles.Viewer, PermissionNames.ProjectsView);
+        Assert.Equal(2, Ok(await viewer.List(null, null, null, null, null, CancellationToken.None)).Count);
+        Assert.Equal([mine.Summary.Id], Ok(await viewer.List(null, null, null, null, null, CancellationToken.None, mine: true)).Select(x => x.Id));
+    }
+
+    [Fact]
     public async Task WithoutProjectsView_NothingIsReadable()
     {
         var harness = await Harness.CreateAsync();

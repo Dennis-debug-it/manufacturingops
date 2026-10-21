@@ -15,7 +15,7 @@ import { useWhatsAppConversations } from '../whatsapp/api'
 import { WHATSAPP_ENABLED } from '../../shared/config/features'
 import { DashboardWidgetCard } from './DashboardWidgetCard'
 import { addItem, addableWidgets, moveItem, normalizeLayout, removeItem, sameLayout, setItemSize } from './layoutModel'
-import { useDashboardLayout, useResetDashboardLayout, useSaveDashboardLayout } from './roleDashboardApi'
+import { useDashboardLayout, useDashboardLiveUpdates, useResetDashboardLayout, useSaveDashboardLayout } from './roleDashboardApi'
 import type { DashboardLayoutItem } from './roleDashboardTypes'
 
 const buttonClass =
@@ -41,6 +41,7 @@ export function DashboardPage() {
 
   const available = useMemo(() => layout.data?.available ?? [], [layout.data])
   const infoByKey = useMemo(() => new Map(available.map((widget) => [widget.key, widget])), [available])
+  useDashboardLiveUpdates(available)
   const editing = draft !== null
   const items = draft ?? layout.data?.items ?? []
   const addable = addableWidgets(items, available)
@@ -86,7 +87,7 @@ export function DashboardPage() {
     <div className="space-y-4">
       <PageHeader
         title="Dashboard"
-        subtitle={editing ? 'Reorder, resize, hide or add widgets, then save.' : 'Your day at a glance. Every figure opens the list behind it.'}
+        subtitle={editing ? 'Reorder, resize, hide or add widgets, then save.' : 'Your day at a glance, kept up to date as work changes. Every figure opens the list behind it.'}
         secondaryActions={
           <div className="flex flex-wrap items-center gap-2">
             {branches.length > 1 && !editing ? (

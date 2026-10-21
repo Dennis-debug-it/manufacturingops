@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Ecosys.Domain.Entities;
 using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
@@ -26,6 +27,7 @@ public sealed class ProjectsController(
 
     // ── Register ───────────────────────────────────────────────────────────────
 
+    /// <param name="mine">Only projects the caller manages or is on, as the "My projects" widget counts them.</param>
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<ProjectListItemResponse>>> List(
         [FromQuery] string? stageCategory,
@@ -33,9 +35,10 @@ public sealed class ProjectsController(
         [FromQuery] Guid? clientId,
         [FromQuery] Guid? projectManagerUserId,
         [FromQuery] string? search,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] bool mine = false)
     {
-        var projects = await LoadRegisterAsync(cancellationToken);
+        var projects = await LoadRegisterAsync(cancellationToken, mine ? ProjectListFilters.InvolvesUser(UserId) : null);
         var items = projects
             .Where(x => string.IsNullOrWhiteSpace(stageCategory)
                 || string.Equals(stageCategory, "Open", StringComparison.OrdinalIgnoreCase) && ProjectStageCategories.Open.Contains(x.Stage!.Category)
@@ -804,9 +807,11 @@ public sealed class ProjectsController(
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    private async Task<List<Project>> LoadRegisterAsync(CancellationToken cancellationToken)
+    private async Task<List<Project>> LoadRegisterAsync(CancellationToken cancellationToken, Expression<Func<Project, bool>>? filter = null)
     {
         var query = await projectAccessService.VisibleProjectsAsync(TenantId, cancellationToken);
+        if (filter is not null)
+            query = query.Where(filter);
         return await query
             .Include(x => x.Client)
             .Include(x => x.Site)

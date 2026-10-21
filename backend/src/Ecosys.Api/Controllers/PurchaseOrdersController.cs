@@ -22,9 +22,13 @@ public sealed class PurchaseOrdersController(
 {
     // ── Purchase orders ──────────────────────────────────────────────────────
 
+    /// <param name="state"><c>open</c> (not yet fully received) or <c>late</c> (sent and past its expected date), as the dashboard counts them.</param>
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<PurchaseOrderListItemResponse>>> ListPurchaseOrders(
-        [FromQuery] string? status, CancellationToken cancellationToken)
+        [FromQuery] string? status,
+        [FromQuery] string? state,
+        [FromServices] ITenantTimeZoneService tenantTimeZoneService,
+        CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials);
 
@@ -33,6 +37,11 @@ public sealed class PurchaseOrdersController(
             .Where(x => x.TenantId == TenantId);
         if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
             query = query.Where(x => x.Status == status.Trim());
+        if (!string.IsNullOrWhiteSpace(state))
+        {
+            var zone = await tenantTimeZoneService.GetTimeZoneAsync(TenantId, cancellationToken);
+            query = PurchaseOrderListStates.Apply(query, state, TenantDay.StartUtc(zone, DateTime.UtcNow));
+        }
 
         var orders = await query
             .OrderByDescending(x => x.OrderedAt)

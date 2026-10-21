@@ -53,3 +53,9 @@ export function addableWidgets(items: DashboardLayoutItem[], available: Dashboar
 export function sameLayout(a: DashboardLayoutItem[], b: DashboardLayoutItem[]): boolean {
   return a.length === b.length && a.every((item, index) => item.key === b[index]?.key && item.size === b[index]?.size)
 }
+
+/** The widgets to refetch when a live `DashboardChanged` names these data areas. */
+export function widgetKeysForAreas(available: DashboardWidgetInfo[], areas: readonly string[]): string[] {
+  const changed = new Set(areas)
+  return available.filter((widget) => (widget.areas ?? []).some((area) => changed.has(area))).map((widget) => widget.key)
+}

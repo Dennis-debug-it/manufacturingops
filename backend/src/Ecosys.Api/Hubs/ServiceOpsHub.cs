@@ -9,14 +9,19 @@ public sealed class ServiceOpsHub : Hub
 {
     public static string UserGroup(Guid userId) => $"user-{userId}";
 
+    public static string TenantGroup(Guid tenantId) => $"tenant-{tenantId}";
+
     /// <summary>
     /// Every staff connection joins its own user's group, which carries the bell's
-    /// NotificationCreated and UnreadCountChanged events. Done here rather than by a client call so a
-    /// reconnect can never miss it. The group comes from the token, never from the client.
+    /// NotificationCreated and UnreadCountChanged events, and its tenant's group, which carries
+    /// WorkOrderUpdated and DashboardChanged. Done here rather than by a client call so a reconnect
+    /// can never miss it. The groups come from the token, never from the client.
     /// </summary>
     public override async Task OnConnectedAsync()
     {
         await JoinUserGroup();
+        if (Context.User?.FindFirst(TenantClaimTypes.UserId) is not null && Context.User.FindFirst(TenantClaimTypes.PortalUserId) is null)
+            await JoinTenantGroup();
         await base.OnConnectedAsync();
     }
 

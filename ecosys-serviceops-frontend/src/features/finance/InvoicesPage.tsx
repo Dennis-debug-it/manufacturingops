@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, X } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useDebounce } from '../../shared/hooks/useDebounce'
+import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { useInvoices } from './api'
+import { invoiceAgeLabels, invoiceListFilterSpec, invoiceListParams, invoiceStatusOptions } from './invoiceListFilters'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 import { NewInvoiceFormDrawer } from './components/NewInvoiceFormDrawer'
 import type { InvoiceListItem } from './types'
+
+const filterClass = 'h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 
 const documentFilters = [
   { value: 'all', label: 'All documents' },
@@ -37,16 +41,20 @@ export function InvoicesPage({
   const [documentType, setDocumentType] = useState<FinanceDocumentFilter>(defaultDocumentType)
   const debouncedSearch = useDebounce(search, 300)
   const [showForm, setShowForm] = useState(false)
+  // Status, age and currency live in the URL, so dashboard figures open the list already filtered.
+  const { filters, update } = useUrlFilters(invoiceListFilterSpec)
   useEffect(() => {
     setDocumentType(defaultDocumentType)
   }, [defaultDocumentType])
   const invoiceFilters = {
     search: debouncedSearch,
     ...(documentType === 'all' ? {} : { documentType }),
+    ...invoiceListParams(filters),
   }
   const { data, isLoading, isError } = useInvoices(invoiceFilters)
 
   const rows = useMemo(() => data ?? [], [data])
+  const filtered = Boolean(filters.status || filters.age || filters.currency || debouncedSearch)
 
   const columns: DataTableColumn<InvoiceListItem>[] = [
     {
@@ -102,8 +110,8 @@ export function InvoicesPage({
         })}
       </div>
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+      <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm sm:flex-row sm:items-center">
+        <label className="flex flex-1 items-center gap-2 text-sm text-slate-600">
           <Search className="h-4 w-4 text-slate-400" />
           <input
             value={search}
@@ -112,6 +120,23 @@ export function InvoicesPage({
             className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400"
           />
         </label>
+        <select aria-label="Status" value={filters.status} onChange={(event) => update({ status: event.target.value })} className={filterClass}>
+          <option value="">Any status</option>
+          {invoiceStatusOptions.map((status) => (
+            <option key={status} value={status}>{status === 'PartiallyPaid' ? 'Partially paid' : status}</option>
+          ))}
+        </select>
+        <select aria-label="Age" value={filters.age} onChange={(event) => update({ age: event.target.value })} className={filterClass}>
+          <option value="">Any age</option>
+          {Object.entries(invoiceAgeLabels).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+        {filters.currency ? (
+          <button type="button" onClick={() => update({ currency: '' })} className="inline-flex h-11 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 hover:bg-slate-50" aria-label={`Clear currency ${filters.currency}`}>
+            {filters.currency.toUpperCase()} only<X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
       </div>
 
       <DataTable
@@ -121,7 +146,9 @@ export function InvoicesPage({
         emptyTitle={
           isError
             ? 'Documents unavailable'
-            : documentType === 'ProformaInvoice'
+            : filtered
+              ? 'No matching documents'
+              : documentType === 'ProformaInvoice'
               ? 'No proformas yet'
               : documentType === 'Invoice'
                 ? 'No invoices yet'
@@ -130,7 +157,9 @@ export function InvoicesPage({
         emptyDescription={
           isError
             ? 'Documents could not be loaded.'
-            : documentType === 'ProformaInvoice'
+            : filtered
+              ? 'Change or clear the filters to see more.'
+              : documentType === 'ProformaInvoice'
               ? 'Build a proforma invoice from accepted quotations to get started.'
               : documentType === 'Invoice'
                 ? 'Create your first invoice to get started.'

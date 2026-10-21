@@ -10,9 +10,11 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { ProjectPicker } from '../../shared/components/ProjectPicker'
 import { usePermission } from '../../shared/hooks/usePermission'
+import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import { formatDate } from '../../shared/utils/dates'
 import { InventoryTabNav } from './components/InventoryTabNav'
 import { MaterialAutocomplete } from './components/MaterialAutocomplete'
+import { purchaseOrderChoice, purchaseOrderFiltersFor, purchaseOrderListFilterSpec, purchaseOrderStatuses, type PurchaseOrderChoice } from './listFilters'
 import {
   useCreatePurchaseOrder,
   usePurchaseOrder,
@@ -21,10 +23,10 @@ import {
   useSetPurchaseOrderStatus,
   useSuppliers,
   type PurchaseOrderListItem,
-  type PurchaseOrderStatus,
 } from './purchaseOrdersApi'
 
-const statusOptions: Array<PurchaseOrderStatus | 'All'> = ['All', 'Draft', 'Sent', 'PartiallyReceived', 'Received', 'Cancelled']
+const choices: PurchaseOrderChoice[] = ['All', 'open', 'late', ...purchaseOrderStatuses]
+const choiceLabels: Partial<Record<PurchaseOrderChoice, string>> = { open: 'Open', late: 'Past expected date', PartiallyReceived: 'Partially Received' }
 
 interface DraftLine {
   itemName: string
@@ -36,8 +38,13 @@ const emptyLine: DraftLine = { itemName: '', quantityOrdered: '1', unitCost: '0'
 
 export function PurchaseOrdersPage() {
   const canEdit = usePermission('inventory.edit')
-  const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | 'All'>('All')
-  const { data, isLoading, isError, refetch } = usePurchaseOrders(statusFilter)
+  // The filter lives in the URL, so the dashboard's "Open" and "Past expected date" open it filtered.
+  const { filters, update } = useUrlFilters(purchaseOrderListFilterSpec)
+  const choice = purchaseOrderChoice(filters)
+  const { data, isLoading, isError, refetch } = usePurchaseOrders(
+    choice === 'open' || choice === 'late' ? 'All' : choice,
+    choice === 'open' || choice === 'late' ? choice : undefined,
+  )
   const { data: suppliers } = useSuppliers()
   const createPo = useCreatePurchaseOrder()
   const [showNewPo, setShowNewPo] = useState(false)
@@ -92,14 +99,14 @@ export function PurchaseOrdersPage() {
       />
       <InventoryTabNav />
       <div className="flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-3 shadow-sm">
-        {statusOptions.map((status) => (
+        {choices.map((option) => (
           <button
-            key={status}
+            key={option}
             type="button"
-            onClick={() => setStatusFilter(status)}
-            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${statusFilter === status ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            onClick={() => update(purchaseOrderFiltersFor(option))}
+            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${choice === option ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
           >
-            {status === 'PartiallyReceived' ? 'Partially Received' : status}
+            {choiceLabels[option] ?? option}
           </button>
         ))}
       </div>

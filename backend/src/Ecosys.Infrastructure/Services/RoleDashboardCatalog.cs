@@ -23,6 +23,7 @@ public enum DashboardWidgetScope
 
 /// <param name="Modules">Every module the widget needs; the tenant must have all of them.</param>
 /// <param name="AnyPermissions">The caller needs one of these (admins always pass). Empty means any staff member.</param>
+/// <param name="Areas">The <see cref="DashboardDataAreas"/> the widget's query reads; a save touching one recomputes it.</param>
 public sealed record DashboardWidgetDefinition(
     string Key,
     string Title,
@@ -30,7 +31,8 @@ public sealed record DashboardWidgetDefinition(
     IReadOnlyList<string> Modules,
     IReadOnlyList<string> AnyPermissions,
     string DefaultSize,
-    DashboardWidgetScope Scope);
+    DashboardWidgetScope Scope,
+    IReadOnlyList<string> Areas);
 
 /// <summary>
 /// The widget catalogue (Release 3, 5.1). Users arrange these; nobody adds queries. Each key has exactly
@@ -76,54 +78,62 @@ public static class DashboardWidgetCatalog
     ];
     private static readonly string[] ViewFinance = [PermissionNames.FinanceView];
 
+    private static readonly string[] WorkOrderData = [DashboardDataAreas.WorkOrders];
+    private static readonly string[] PmData = [DashboardDataAreas.Maintenance, DashboardDataAreas.WorkOrders];
+    private static readonly string[] ContractData = [DashboardDataAreas.Contracts];
+    private static readonly string[] MaterialData = [DashboardDataAreas.Materials];
+    private static readonly string[] FinanceData = [DashboardDataAreas.Finance];
+    private static readonly string[] ProjectData = [DashboardDataAreas.Projects];
+    private static readonly string[] ProjectFinanceData = [DashboardDataAreas.Projects, DashboardDataAreas.Finance];
+
     public static readonly IReadOnlyList<DashboardWidgetDefinition> All =
     [
         new(WorkOrdersOpenOverdue, "Open and overdue work orders", "Work orders still open, and those past their due date.",
-            Ops, ViewWorkOrders, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch),
+            Ops, ViewWorkOrders, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, WorkOrderData),
         new(WorkOrdersSlaAtRisk, "SLA at risk", "Open work orders within two hours of their resolution deadline, and those already breached.",
-            Ops, ViewWorkOrders, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch),
+            Ops, ViewWorkOrders, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, WorkOrderData),
         new(WorkOrdersUnassigned, "Unassigned work orders", "Open work orders with no technician and no assignment group.",
-            Ops, Dispatch, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch),
+            Ops, Dispatch, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, WorkOrderData),
         new(DispatchTodaysVisits, "Today's visits by technician", "Visits scheduled to start today, per technician.",
-            Ops, Dispatch, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch),
+            Ops, Dispatch, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch, WorkOrderData),
         new(TechniciansWorkload, "Technician workload", "Open work orders per technician, with responses still pending.",
-            Ops, Dispatch, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch),
+            Ops, Dispatch, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch, WorkOrderData),
         new(TechniciansOnSite, "Technicians on site", "Technicians who have arrived on a job and not yet left.",
-            Ops, Dispatch, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch),
+            Ops, Dispatch, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, WorkOrderData),
         new(MaintenancePmCompliance, "PM compliance", "Preventive maintenance done on time over the last 30 days, and plans overdue.",
-            Ops, [PermissionNames.CanViewWorkOrders, PermissionNames.CanManageSettings], DashboardWidgetSizes.Small, DashboardWidgetScope.Branch),
+            Ops, [PermissionNames.CanViewWorkOrders, PermissionNames.CanManageSettings], DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, PmData),
         new(ContractsExpiring, "Contracts expiring", "Contracts ending in the next 30 and 90 days.",
-            Ops, [], DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant),
+            Ops, [], DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, ContractData),
         new(MaterialsLowStock, "Low stock", "Materials at or below their reorder level.",
-            Ops, ViewMaterials, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch),
+            Ops, ViewMaterials, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, MaterialData),
         new(MaterialsPendingIssues, "Pending material issues", "Issues waiting for approval, and approved issues not yet handed out.",
-            Ops, [PermissionNames.CanIssueMaterials, PermissionNames.CanApproveMaterials, PermissionNames.CanManageMaterials], DashboardWidgetSizes.Small, DashboardWidgetScope.Branch),
+            Ops, [PermissionNames.CanIssueMaterials, PermissionNames.CanApproveMaterials, PermissionNames.CanManageMaterials], DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, MaterialData),
         new(PurchaseOrdersOpen, "Open purchase orders", "Purchase orders not yet fully received, and those past their expected date.",
-            Ops, [PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials], DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant),
+            Ops, [PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials], DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, MaterialData),
         new(FinanceReceivablesOverdue, "Receivables overdue", "Unpaid invoice balances past their due date.",
-            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant),
+            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
         new(FinanceReceivablesAgeing, "Receivables ageing", "Unpaid invoice balances by days past due.",
-            Fin, ViewFinance, DashboardWidgetSizes.Wide, DashboardWidgetScope.Tenant),
+            Fin, ViewFinance, DashboardWidgetSizes.Wide, DashboardWidgetScope.Tenant, FinanceData),
         new(FinanceCashReceived, "Cash received this month", "Confirmed receipts since the first of the month.",
-            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant),
+            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
         new(FinanceTaxWithheld, "Tax withheld this month", "Withholding certificates dated this month.",
-            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant),
+            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
         new(FinanceInvoicesToSend, "Invoices to send", "Draft invoices not yet issued.",
-            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant),
+            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
         new(ProjectsBillingWaiting, "Project billing waiting", "Certified valuations not yet invoiced, and retention that can be released.",
-            PrjFin, ViewFinance, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch),
+            PrjFin, ViewFinance, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch, ProjectFinanceData),
         new(ProjectsBehindSchedule, "Projects behind schedule", "Open projects whose progress is behind their planned milestones.",
-            Prj, [PermissionNames.ProjectsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User),
+            Prj, [PermissionNames.ProjectsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
         new(ProjectsMine, "My projects", "Projects you manage or are on, with progress against plan.",
-            Prj, [PermissionNames.ProjectsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User),
+            Prj, [PermissionNames.ProjectsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
         new(ProjectsPendingVariations, "Pending variations", "Variations submitted and waiting for a decision.",
-            Prj, [PermissionNames.ProjectsVariationsApprove, PermissionNames.ProjectsManage], DashboardWidgetSizes.Small, DashboardWidgetScope.User),
+            Prj, [PermissionNames.ProjectsVariationsApprove, PermissionNames.ProjectsManage], DashboardWidgetSizes.Small, DashboardWidgetScope.User, ProjectData),
         new(ProjectsValuationsAwaiting, "Valuations awaiting certificate or invoice", "Submitted valuations not yet certified, and certified ones not yet invoiced.",
-            PrjFin, [PermissionNames.ProjectsFinancialsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User),
+            PrjFin, [PermissionNames.ProjectsFinancialsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
         new(ProjectsMusterToday, "Today's muster roll", "Active projects with workers, and whether today's roll has been marked.",
-            Prj, [PermissionNames.ProjectsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User),
+            Prj, [PermissionNames.ProjectsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
         new(ProjectsUncostedLabour, "Uncosted labour days", "Days on the muster roll with no daily rate set for the worker.",
-            PrjFin, [PermissionNames.ProjectsFinancialsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User),
+            PrjFin, [PermissionNames.ProjectsFinancialsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
     ];
 
     private static readonly Dictionary<string, DashboardWidgetDefinition> ByKey =
