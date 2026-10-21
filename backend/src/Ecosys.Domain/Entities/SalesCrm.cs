@@ -61,6 +61,9 @@ public sealed class SalesActivity : AuditableEntity, ITenantEntity
     /// <summary>For follow-ups: when it is due. Open until <see cref="CompletedAt"/> is set.</summary>
     public DateTime? DueAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+    /// <summary>When the owner was last reminded about this follow-up, and how many times in all.</summary>
+    public DateTime? ReminderSentAt { get; set; }
+    public int ReminderCount { get; set; }
     public Guid? LoggedByUserId { get; set; }
     public string? LoggedByName { get; set; }
 
@@ -109,6 +112,11 @@ public sealed class SalesTender : AuditableEntity, ITenantEntity
     public Guid? OwnerUserId { get; set; }
     public string? OwnerName { get; set; }
     public Guid? OpportunityId { get; set; }
+    /// <summary>
+    /// Which deadline reminders have gone out: 0 none, 1 the three-day warning, 2 the final-day
+    /// warning. Reset when the deadline moves, so a new date gets its own reminders.
+    /// </summary>
+    public int DeadlineReminderStage { get; set; }
 
     public Tenant? Tenant { get; set; }
     public Client? Client { get; set; }

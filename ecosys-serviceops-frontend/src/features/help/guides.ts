@@ -531,7 +531,7 @@ const salesCrm: Guide = {
     },
     {
       title: 'Work the pipeline',
-      text: 'Deals move through Lead, Qualified, Site Survey, Proposal and Negotiation. Change the stage from the dropdown on a card, or with the stage buttons on the deal. Log calls, emails, meetings and site visits under Activity; give one a Follow up on date and it shows as due on the card, and as overdue on the pipeline until you click Done.',
+      text: 'Deals move through Lead, Qualified, Site Survey, Proposal and Negotiation. Change the stage from the dropdown on a card, or with the stage buttons on the deal. Log calls, emails, meetings and site visits under Activity; give one a Follow up on date and it shows as due on the card, and as overdue on the pipeline until you click Done. The deal’s owner gets a reminder by email and push notification when it comes due, then up to twice more a day apart.',
     },
     {
       title: 'Win a deal and hand it over',
@@ -550,11 +550,15 @@ const salesCrm: Guide = {
         'Decide: Bid — Create Opportunity puts it in the pipeline; No Bid asks for the reason.',
         'Click Mark Submitted with the amount you bid, then Won or Lost when the award comes in. The linked deal follows: a won tender’s deal is marked won, ready for its work order.',
       ],
-      tip: 'The list flags deadlines due within three days in amber and missed ones in red.',
+      tip: 'The list flags deadlines due within three days in amber and missed ones in red. The owner also gets an email and push reminder three days and one day before a deadline, until the request is marked submitted.',
     },
     {
       title: 'Deals in other currencies',
       text: 'Pipeline totals are in your workspace currency. Click Rates to enter today’s rate for each other currency (for example 1 USD = 129.40 KES); deals in a currency with no rate are left out of the totals and the page says so. Rates are shared with Finance → Exchange Rates.',
+    },
+    {
+      title: 'Reminders',
+      text: 'Follow-up and RFP/RFQ deadline reminders go to the owner by email and push notification. Each person can switch either channel off under My account (click your name at the top) → Notifications → Sales CRM, and an admin can change the wording under Settings → Email Templates.',
     },
     {
       title: 'Who can use it',

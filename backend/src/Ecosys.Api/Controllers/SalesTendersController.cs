@@ -335,6 +335,8 @@ public sealed class SalesTendersController(
         tender.ContactPhone = request.ContactPhone?.Trim();
         tender.ReceivedAt = received;
         tender.ClarificationDeadline = clarification;
+        if (tender.SubmissionDeadline != deadline)
+            tender.DeadlineReminderStage = 0;
         tender.SubmissionDeadline = deadline;
         tender.SubmissionMethod = request.SubmissionMethod?.Trim();
         tender.BidBondRequired = request.BidBondRequired;

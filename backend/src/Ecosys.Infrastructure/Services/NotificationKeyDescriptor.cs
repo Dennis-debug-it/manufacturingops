@@ -24,6 +24,8 @@ public static class NotificationKeyDescriptor
         new("service-report.sent",  "Service report sent to client",     "Work Orders"),
         new("invoice.sent",         "Invoice sent to client",            "Finance"),
         new("quotation.sent",       "Quotation sent to client",          "Finance"),
+        new(SalesReminderKeys.FollowUpDue,     "Follow-up due on my deal",          "Sales CRM"),
+        new(SalesReminderKeys.TenderDeadline,  "RFP/RFQ submission deadline near",  "Sales CRM"),
         new("users.invited",        "User invited / account setup",      "Account"),
         new("auth.password-reset.requested", "Password reset requested", "Account"),
         new("user.password-reset.admin",     "Admin password reset",     "Account"),

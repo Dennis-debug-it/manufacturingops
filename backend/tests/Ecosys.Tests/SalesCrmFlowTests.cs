@@ -259,6 +259,27 @@ public sealed class SalesCrmFlowTests
         Assert.Equal((false, false), matrix[AppRoles.MaterialsController]);
     }
 
+    [Fact]
+    public async Task MovingATenderDeadline_ResetsItsReminders()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var tenders = CreateTendersController(dbContext, tenant.Id, actor);
+        UpsertSalesTenderRequest Request(DateTime deadline) => new("RFQ", "REF-1", "Generator spares", null, "Kilele Hotel", null, null, null,
+            DateTime.UtcNow.AddDays(-1), null, deadline, null, false, null, null, 100m, "KES", null);
+        var deadline = DateTime.UtcNow.AddDays(2);
+        var created = Assert.IsType<SalesTenderDetailResponse>(Assert.IsType<CreatedAtActionResult>((await tenders.Create(Request(deadline), CancellationToken.None)).Result).Value);
+        var stored = await dbContext.SalesTenders.SingleAsync(x => x.Id == created.Id);
+        stored.DeadlineReminderStage = 2;
+        await dbContext.SaveChangesAsync();
+
+        await tenders.Update(created.Id, Request(deadline) with { Title = "Generator spares (rev 2)" }, CancellationToken.None);
+        Assert.Equal(2, (await dbContext.SalesTenders.SingleAsync(x => x.Id == created.Id)).DeadlineReminderStage);
+
+        await tenders.Update(created.Id, Request(deadline.AddDays(7)), CancellationToken.None);
+        Assert.Equal(0, (await dbContext.SalesTenders.SingleAsync(x => x.Id == created.Id)).DeadlineReminderStage);
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 

@@ -58,6 +58,7 @@ export function OpportunityDetailPage() {
   const [activityType, setActivityType] = useState('Call')
   const [activitySummary, setActivitySummary] = useState('')
   const [activityDue, setActivityDue] = useState('')
+  const [activityDueTime, setActivityDueTime] = useState('09:00')
 
   if (isLoading) return <Spinner label="Loading opportunity" />
   if (isError || !opportunity) return <EmptyState title="Opportunity unavailable" description="This opportunity could not be loaded." />
@@ -95,10 +96,11 @@ export function OpportunityDetailPage() {
       await addActivity.mutateAsync({
         type: activityType,
         summary: activitySummary.trim(),
-        dueAt: activityDue ? new Date(activityDue).toISOString() : null,
+        dueAt: activityDue ? new Date(`${activityDue}T${activityDueTime || '09:00'}`).toISOString() : null,
       })
       setActivitySummary('')
       setActivityDue('')
+      setActivityDueTime('09:00')
     } catch {
       // interceptor surfaces the error toast
     }
@@ -230,9 +232,17 @@ export function OpportunityDetailPage() {
                   <label className="flex items-center gap-2 text-sm text-slate-600">
                     Follow up on
                     <input type="date" value={activityDue} onChange={(event) => setActivityDue(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+                    {activityDue ? (
+                      <input type="time" aria-label="Follow-up time" value={activityDueTime} onChange={(event) => setActivityDueTime(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+                    ) : null}
                   </label>
                   <button type="button" disabled={addActivity.isPending} onClick={() => void logActivity()} className={primaryButton}>Log Activity</button>
                 </div>
+                {activityDue ? (
+                  <p className="text-xs text-slate-500">
+                    {opportunity.ownerName ?? 'The owner'} gets a reminder by email and push notification at that time, then up to twice more a day apart until it is marked done.
+                  </p>
+                ) : null}
               </div>
             ) : null}
             <ol className="divide-y divide-slate-100">

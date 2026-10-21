@@ -225,6 +225,7 @@ export function TenderFormDrawer({ open, onClose, tender }: { open: boolean; onC
               <input id="tender-deadline" type="date" value={form.submissionDeadline} onChange={(event) => set({ submissionDeadline: event.target.value })} className={fieldClass} />
               <input aria-label="Deadline time" type="time" value={form.submissionTime} onChange={(event) => set({ submissionTime: event.target.value })} className={`${fieldClass} w-32`} />
             </div>
+            <p className="mt-1 text-xs text-slate-500">The owner is reminded 3 days and 1 day before, until it is marked submitted.</p>
           </div>
           <div>
             <label className={labelClass} htmlFor="tender-method">How to submit</label>

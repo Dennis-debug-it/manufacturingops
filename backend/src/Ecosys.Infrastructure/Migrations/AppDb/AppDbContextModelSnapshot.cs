@@ -6777,6 +6777,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid>("OpportunityId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ReminderCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("ReminderSentAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Summary")
                         .IsRequired()
                         .HasMaxLength(2000)
@@ -6953,6 +6959,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired()
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)");
+
+                    b.Property<int>("DeadlineReminderStage")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("DecidedAt")
                         .HasColumnType("timestamp with time zone");
