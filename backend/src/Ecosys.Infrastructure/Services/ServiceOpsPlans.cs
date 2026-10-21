@@ -102,7 +102,9 @@ public static class ServiceOpsPlans
             if (controller.Equals("ProjectCommercial", StringComparison.OrdinalIgnoreCase)
                 || (controller.Equals("PortalProjects", StringComparison.OrdinalIgnoreCase) && (route.Contains("/valuations") || route.Contains("/invoices"))))
                 return [Projects, Finance];
-            // A project's work orders and material issues live in Operations.
+            if (route.Contains("/from-quotation/")) return [Projects, Finance];
+            // A project's work orders, material issues and maintenance contract live in Operations.
+            if (route.Contains("/create-maintenance-contract")) return [Projects, Operations];
             if (route.Contains("/work-orders") || route.Contains("/material-issues")) return [Projects, Operations];
             return [Projects];
         }

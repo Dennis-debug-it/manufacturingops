@@ -1,4 +1,5 @@
 using Ecosys.Domain.Entities;
+using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
@@ -85,6 +86,99 @@ public sealed class ProjectsController(
         if (project.ProjectManagerUserId.HasValue)
             await projectNotificationService.MemberAddedAsync(TenantId, project, project.ProjectManagerUserId.Value, ProjectMemberRoles.ProjectManager, cancellationToken);
         return Ok(await BuildDetailAsync(project.Id, cancellationToken));
+    }
+
+    /// <summary>
+    /// "Award as project" on an accepted quotation: the project takes the client, site, value
+    /// (quotation subtotal, before tax) and currency, and the quotation is marked converted.
+    /// </summary>
+    [HttpPost("from-quotation/{quotationId:guid}")]
+    public async Task<ActionResult<ProjectDetailResponse>> AwardFromQuotation(Guid quotationId, [FromBody] AwardFromQuotationRequest request, CancellationToken cancellationToken)
+    {
+        projectAccessService.Ensure(PermissionNames.ProjectsManage);
+        var quote = await dbContext.TenantQuotations.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == quotationId, cancellationToken)
+            ?? throw new NotFoundException("Quotation not found.");
+        if (quote.ConvertedToProjectId.HasValue)
+            throw new BusinessRuleException("This quotation is already awarded as a project.");
+        if (quote.Status != "Accepted")
+            throw new BusinessRuleException(quote.Status == "Converted"
+                ? "This quotation is already converted to other work."
+                : "Only an accepted quotation can be awarded as a project.");
+
+        var project = await projectService.CreateAsync(TenantId, UserId, new CreateProjectCommand(
+            string.IsNullOrWhiteSpace(request.Name) ? quote.Subject ?? $"Project from quotation {quote.QuoteNumber}" : request.Name,
+            quote.ClientId, quote.SiteId, request.ProjectTypeId, null, request.ProjectManagerUserId, request.BranchId,
+            quote.Subtotal, quote.Currency, request.PlannedStartDate, request.PlannedEndDate, quote.Notes, request.TemplateId), cancellationToken);
+        project.SourceQuotationId = quote.Id;
+        quote.ConvertedToProjectId = project.Id;
+        quote.Status = "Converted";
+        await projectService.RecalculateProgressAsync(TenantId, project, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "projects.awarded-from-quotation", nameof(Project), project.Id.ToString(),
+            $"Quotation {quote.QuoteNumber} awarded as project {project.ProjectNumber}.", cancellationToken);
+        if (project.ProjectManagerUserId.HasValue)
+            await projectNotificationService.MemberAddedAsync(TenantId, project, project.ProjectManagerUserId.Value, ProjectMemberRoles.ProjectManager, cancellationToken);
+        return Ok(await BuildDetailAsync(project.Id, cancellationToken));
+    }
+
+    /// <summary>
+    /// Handover to maintenance: saves a Draft contract for the client, covering the project site and
+    /// the assets installed there during the project, starting on the handover date. Everything
+    /// after that is the existing contract workflow.
+    /// </summary>
+    [HttpPost("{id:guid}/create-maintenance-contract")]
+    public async Task<ActionResult<MaintenanceContractCreatedResponse>> CreateMaintenanceContract(
+        Guid id, [FromBody] CreateMaintenanceContractRequest request,
+        [FromServices] IContractAccessService contractAccessService, [FromServices] IContractLifecycleService contractLifecycleService,
+        CancellationToken cancellationToken)
+    {
+        contractAccessService.EnsureCanManageContracts();
+        var project = await projectAccessService.LoadVisibleAsync(TenantId, id, cancellationToken);
+        var category = await dbContext.ProjectStages.Where(x => x.Id == project.StageId).Select(x => x.Category).SingleAsync(cancellationToken);
+        if (category is not (ProjectStageCategories.Handover or ProjectStageCategories.Completed or ProjectStageCategories.Closed))
+            throw new BusinessRuleException("A maintenance contract is set up at handover. Move the project to handover or completion first.");
+        if (project.MaintenanceContractId is { } existingId
+            && await dbContext.Contracts.AnyAsync(x => x.TenantId == TenantId && x.Id == existingId && x.Status != ContractStatus.Cancelled, cancellationToken))
+            throw new BusinessRuleException("This project already has a maintenance contract.");
+        var months = request.DurationMonths ?? 12;
+        if (months is < 1 or > 120)
+            throw new BusinessRuleException("Contract length must be between 1 and 120 months.");
+
+        var start = DateTime.SpecifyKind((project.HandedOverAt ?? DateTime.UtcNow).Date, DateTimeKind.Utc);
+        var contract = new Contract
+        {
+            TenantId = TenantId,
+            ContractNumber = $"CNT-{DateTime.UtcNow:yyyyMMddHHmmss}",
+            ClientId = project.ClientId,
+            SourceProjectId = project.Id,
+            Name = string.IsNullOrWhiteSpace(request.Name) ? $"Maintenance: {project.Name}" : request.Name.Trim(),
+            Status = ContractStatus.Draft,
+            StartDate = start,
+            EndDate = start.AddMonths(months).AddDays(-1),
+            DurationMonths = months,
+            Currency = project.Currency,
+            Description = $"Maintenance after handover of project {project.ProjectNumber}.",
+            AccountManagerUserId = project.ProjectManagerUserId,
+        };
+        contract.RenewalRisk = contractLifecycleService.CalculateRenewalRisk(contract.EndDate);
+        dbContext.Contracts.Add(contract);
+
+        var assetCount = 0;
+        if (project.SiteId is { } siteId)
+        {
+            dbContext.ContractSites.Add(new ContractSite { TenantId = TenantId, ContractId = contract.Id, SiteId = siteId });
+            var installedUntil = (project.HandedOverAt ?? DateTime.UtcNow).AddDays(1);
+            var assetIds = await dbContext.Assets
+                .Where(x => x.TenantId == TenantId && x.SiteId == siteId && x.CreatedAt >= project.CreatedAt && x.CreatedAt <= installedUntil)
+                .Select(x => x.Id).ToListAsync(cancellationToken);
+            dbContext.ContractAssets.AddRange(assetIds.Select(assetId => new ContractAsset { TenantId = TenantId, ContractId = contract.Id, AssetId = assetId }));
+            assetCount = assetIds.Count;
+        }
+        project.MaintenanceContractId = contract.Id;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "projects.maintenance-contract.created", nameof(Project), project.Id.ToString(),
+            $"Draft maintenance contract {contract.ContractNumber} created from project {project.ProjectNumber} ({assetCount} asset(s)).", cancellationToken);
+        return Ok(new MaintenanceContractCreatedResponse(contract.Id, contract.ContractNumber, assetCount));
     }
 
     [HttpGet("{id:guid}")]
@@ -1030,3 +1124,10 @@ public sealed record ProjectDocumentResponse(
     Guid Id, string FileName, long FileSize, string MimeType, string DownloadUrl, bool SharedWithClient, string? UploadedByName, DateTime CreatedAt);
 
 public sealed record DocumentSharingRequest(bool SharedWithClient);
+
+public sealed record AwardFromQuotationRequest(
+    string? Name, Guid? ProjectTypeId, Guid? ProjectManagerUserId, Guid? BranchId, DateOnly? PlannedStartDate, DateOnly? PlannedEndDate, Guid? TemplateId);
+
+public sealed record CreateMaintenanceContractRequest(string? Name, int? DurationMonths);
+
+public sealed record MaintenanceContractCreatedResponse(Guid ContractId, string ContractNumber, int AssetCount);

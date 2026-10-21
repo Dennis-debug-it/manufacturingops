@@ -37,6 +37,11 @@ public sealed record ProjectSettingsModel
     public int MusterReminderHour { get; init; } = 11;
     /// <summary>How many days ahead milestone, task and end-date reminders are sent.</summary>
     public int ReminderLeadDays { get; init; } = 3;
+    /// <summary>
+    /// Closing is blocked while more than this share of the revised value is still uninvoiced.
+    /// Null turns the check off, for tenants that bill projects outside Ecosys.
+    /// </summary>
+    public decimal? ClosureUnbilledTolerancePercent { get; init; }
 }
 
 public interface IProjectSettingsService
@@ -76,6 +81,8 @@ internal sealed class ProjectSettingsService(AppDbContext dbContext) : IProjectS
             throw new BusinessRuleException("The muster reminder hour must be between 0 and 23.");
         if (settings.ReminderLeadDays is < 0 or > 60)
             throw new BusinessRuleException("Reminder lead time must be between 0 and 60 days.");
+        if (settings.ClosureUnbilledTolerancePercent is < 0 or > 100)
+            throw new BusinessRuleException("The unbilled tolerance must be between 0 and 100%.");
 
         var normalized = settings with
         {
@@ -553,6 +560,24 @@ internal sealed class ProjectService(
         if (await dbContext.MaterialIssues.AnyAsync(x => x.TenantId == tenantId && x.ProjectId == project.Id
                 && (x.IssueStatus == "draft" || x.IssueStatus == "pending_approval" || x.IssueStatus == "approved"), cancellationToken))
             blockers.Add("material issues are still open");
+        var valuationStatuses = await dbContext.ProjectValuations
+            .Where(x => x.TenantId == tenantId && x.ProjectId == project.Id && x.Status != ProjectValuationStatuses.Void && x.Status != ProjectValuationStatuses.Invoiced)
+            .Select(x => x.Status).ToListAsync(cancellationToken);
+        if (valuationStatuses.Any(x => x is ProjectValuationStatuses.Draft or ProjectValuationStatuses.Submitted))
+            blockers.Add("a valuation is still in progress");
+        if (valuationStatuses.Contains(ProjectValuationStatuses.Certified))
+            blockers.Add("a certified valuation hasn't been invoiced");
+
+        var tolerance = (await projectSettingsService.GetAsync(tenantId, cancellationToken)).ClosureUnbilledTolerancePercent;
+        if (tolerance.HasValue && project.RevisedValue > 0)
+        {
+            var invoiced = await dbContext.TenantInvoices
+                .Where(x => x.TenantId == tenantId && x.ProjectId == project.Id && x.Status != "Void" && x.DocumentType == "Invoice")
+                .SumAsync(x => (decimal?)(x.TotalAmount - x.TaxAmount), cancellationToken) ?? 0m;
+            var unbilled = project.RevisedValue - invoiced;
+            if (unbilled > project.RevisedValue * tolerance.Value / 100m)
+                blockers.Add($"{project.Currency} {unbilled:N2} of the revised value is still uninvoiced");
+        }
 
         if (blockers.Count > 0)
             throw new BusinessRuleException($"This project can't be closed yet: {string.Join("; ", blockers)}.");
