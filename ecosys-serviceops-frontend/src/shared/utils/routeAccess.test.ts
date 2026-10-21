@@ -18,6 +18,10 @@ describe('canOpenPath', () => {
     expect(canOpenPath(dispatcher, '/settings/branding')).toBe(false)
     expect(canOpenPath(dispatcher, '/team/users')).toBe(false)
     expect(canOpenPath(dispatcher, '/settings/account')).toBe(true)
+    // Everyone chooses their own notifications; the workspace matrix stays with the admin.
+    expect(canOpenPath(dispatcher, '/settings/notifications')).toBe(true)
+    expect(canOpenPath(dispatcher, '/settings/workspace-notifications')).toBe(false)
+    expect(canOpenPath(dispatcher, '/notifications')).toBe(true)
   })
 
   it('opens each area to the roles whose work it is', () => {

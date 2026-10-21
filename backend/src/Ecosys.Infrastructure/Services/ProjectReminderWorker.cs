@@ -85,7 +85,7 @@ internal sealed class ProjectReminderRunner(
             // The marker is saved first: a crash after it loses one reminder, never repeats one.
             dbContext.ProjectReminderLogs.Add(new ProjectReminderLog { TenantId = tenantId, EntityId = entityId, NotificationKey = key, ForDate = forDate });
             await dbContext.SaveChangesAsync(cancellationToken);
-            await notifications.NotifyAsync(tenantId, key, project, userIds, values, title, body, $"{key}-{entityId}-{forDate:yyyyMMdd}", cancellationToken);
+            await notifications.NotifyAsync(tenantId, key, project, userIds, values, title, body, cancellationToken);
             sent++;
         }
 

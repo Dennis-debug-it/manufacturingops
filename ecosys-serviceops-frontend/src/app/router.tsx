@@ -18,6 +18,8 @@ import { TechJobPage } from '../features/tech/TechJobPage'
 import { TechGuidePage, TechGuidesPage } from '../features/tech/TechGuides'
 import { TechAccountPage } from '../features/tech/TechAccountPage'
 import { TechSitePage } from '../features/tech/TechSitePage'
+import { NotificationsPage, TechNotificationsPage } from '../features/notifications/NotificationsPage'
+import { MyNotificationSettingsPage } from '../features/notifications/NotificationPreferences'
 import { MyTimePage } from '../features/team/MyTimePage'
 import { AppShell } from '../shared/layout/AppShell'
 import { createModulePage, type ModulePageConfig } from '../shared/pages/ModulePage'
@@ -398,7 +400,8 @@ export function AppRouter() {
       ['/settings/payments', SettingsPaymentsPage],
       ['/settings/credit-control', SettingsCreditControlPage],
       ['/settings/portal', SettingsPortalPage],
-      ['/settings/notifications', SettingsNotificationsPage],
+      ['/settings/notifications', MyNotificationSettingsPage],
+      ['/settings/workspace-notifications', SettingsNotificationsPage],
       ['/settings/integrations', SettingsIntegrationsPage],
       ['/settings/security', SettingsSecurityPage],
       ['/settings/executive-dashboard', SettingsExecutiveDashboardPage],
@@ -415,6 +418,7 @@ export function AppRouter() {
       ['/approvals', MyApprovalsPage],
       ['/my-time', MyTimePage],
       ['/me', TechAccountPage],
+      ['/notifications', NotificationsPage],
       ['/onboarding', OnboardingPage],
       ['/dispatch/map', LiveMapPage],
       ['/dispatch/route/:technicianId', DailyRouteView],
@@ -461,6 +465,7 @@ export function AppRouter() {
           <Route path="guides/:id" element={<TechGuidePage />} />
           <Route path="help" element={<TechHelpPage />} />
           <Route path="account" element={<TechAccountPage />} />
+          <Route path="notifications" element={<TechNotificationsPage />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={tenantRoles}><TenantShellRoute /></ProtectedRoute>}>

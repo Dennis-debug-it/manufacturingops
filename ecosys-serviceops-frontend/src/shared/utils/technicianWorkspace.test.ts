@@ -30,6 +30,8 @@ describe('techPathFor', () => {
     expect(techPathFor('/me')).toBe('/tech/account')
     expect(techPathFor('/settings/account')).toBe('/tech/account')
     expect(techPathFor('/inventory/vans/v1')).toBe('/tech/account')
+    expect(techPathFor('/settings/notifications')).toBe('/tech/account')
+    expect(techPathFor('/notifications')).toBe('/tech/notifications')
   })
 
   it('sends any other office page to My Jobs', () => {

@@ -11,6 +11,7 @@ import { cn } from '../../shared/utils/cn'
 import { usePendingActions } from './offline/hooks'
 import { OfflineStatus } from './offline/OfflineStatus'
 import { startOfflinePersistence } from './offline/persist'
+import { NotificationBell } from '../notifications/NotificationBell'
 import { JobAlertsPrompt } from './JobAlerts'
 import { disablePush, resyncPush } from './push'
 
@@ -61,6 +62,7 @@ export function TechLayout() {
           </Link>
           <div className="flex items-center gap-2">
             <OfflineStatus />
+            <NotificationBell viewAllPath="/tech/notifications" preferencesPath="/tech/account" />
             <span className="hidden truncate text-xs text-slate-500 sm:block">{user?.fullName}</span>
             <button type="button" onClick={() => void signOut()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
               <LogOut className="h-3.5 w-3.5" />Sign out

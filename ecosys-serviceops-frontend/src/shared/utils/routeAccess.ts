@@ -19,6 +19,8 @@ const adminOnly = (_: Can, user: AuthUser) => user.role === 'admin'
  */
 const rules: RouteRule[] = [
   { prefix: '/settings/account', allow: everyone },
+  // Each person's own notification choices (the workspace-wide matrix stays admin-only).
+  { prefix: '/settings/notifications', allow: everyone },
   { prefix: '/settings/audit-logs', allow: (can) => can('reports.view') },
   { prefix: '/settings', allow: adminOnly },
   { prefix: '/onboarding', allow: adminOnly },

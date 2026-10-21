@@ -703,7 +703,7 @@ public sealed partial class ProjectsModuleTests
             return Task.CompletedTask;
         }
         public Task NotifyAsync(Guid tenantId, string key, Project project, IReadOnlyCollection<Guid> userIds, IReadOnlyDictionary<string, string?> values,
-            string pushTitle, string pushBody, string pushTag, CancellationToken cancellationToken = default)
+            string title, string body, CancellationToken cancellationToken = default)
         {
             Sent.Add((key, project.Id, userIds));
             return Task.CompletedTask;

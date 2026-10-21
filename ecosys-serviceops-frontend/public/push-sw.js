@@ -1,5 +1,5 @@
 /* Imported by the generated service worker (vite.config.ts → workbox.importScripts).
- * The API sends { title, body, url, tag } — currently only "new job assigned" (WebPush.cs). */
+ * The API sends { title, body, url, tag } for every notification the user has set to Push (WebPush.cs). */
 self.addEventListener('push', (event) => {
   let data = {}
   try {

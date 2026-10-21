@@ -54,6 +54,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<IServiceOpsNotifier, SignalRServiceOpsNotifier>();
+builder.Services.AddScoped<IInboxNotifier, SignalRInboxNotifier>();
 
 var allowedCorsOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")

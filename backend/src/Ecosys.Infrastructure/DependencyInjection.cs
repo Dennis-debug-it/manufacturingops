@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace Ecosys.Infrastructure;
@@ -96,6 +97,12 @@ public static class DependencyInjection
         services.AddScoped<IProjectAccessService, ProjectAccessService>();
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<IProjectNotificationService, ProjectNotificationService>();
+        // One way to notify (Release 3 design 2.1). The Api replaces the no-op live notifier with
+        // SignalR. Further channels register as INotificationChannel (WhatsApp, step 3d).
+        services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+        services.TryAddSingleton<IInboxNotifier, NullInboxNotifier>();
+        services.AddScoped<INotificationPushProcessor, NotificationPushProcessor>();
+        services.AddScoped<INotificationHousekeeping, NotificationHousekeeping>();
         services.AddScoped<IProjectFinancialsService, ProjectFinancialsService>();
         services.AddScoped<IProjectInvoiceService, ProjectInvoiceService>();
         services.AddScoped<IProjectReminderRunner, ProjectReminderRunner>();
@@ -111,9 +118,11 @@ public static class DependencyInjection
         services.AddSingleton<IBackgroundWorkLease>(serviceProvider => new PostgresAdvisoryLockLease(
             connectionString,
             serviceProvider.GetRequiredService<ILogger<PostgresAdvisoryLockLease>>()));
-        // Push notifications: the queue is in-memory, so its sender runs on every instance (not leased).
+        // Push notifications. Inbox pushes are rows, sent by the leased NotificationPushWorker below;
+        // the in-memory queue (test pushes only) is per instance, so its sender runs everywhere.
         services.AddHttpClient();
         services.AddSingleton<IVapidKeyProvider, VapidKeyProvider>();
+        services.AddSingleton<IWebPushSender, WebPushSender>();
         services.AddSingleton<PushNotificationQueue>();
         services.AddSingleton<IPushNotificationQueue>(sp => sp.GetRequiredService<PushNotificationQueue>());
         services.AddHostedService<PushNotificationWorker>();
@@ -130,6 +139,8 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<AttendanceAutoClockOutWorker>();
         services.AddSingleInstanceHostedService<EscalationRuleWorker>();
         services.AddSingleInstanceHostedService<SubscriptionLifecycleWorker>();
+        services.AddSingleInstanceHostedService<NotificationPushWorker>();
+        services.AddSingleInstanceHostedService<NotificationHousekeepingWorker>();
 
         return services;
     }

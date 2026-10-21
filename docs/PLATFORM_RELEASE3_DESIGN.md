@@ -441,3 +441,37 @@ take days and are outside our control. Start that paperwork early.
 - SMS (R7).
 - Custom report queries or user-built widgets. Users arrange existing widgets only (R8).
 - Notification digests (one daily email). Worth adding later, using the inbox rows as the source.
+
+---
+
+## 3a: what was built
+
+Built as designed above; only the deviations and details worth knowing are listed here.
+
+- **Channels per key.** `NotificationDescriptor` has both `Channels` (what the key can use) and
+  `DefaultChannels` (what a missing preference row means). Keys sent through the dispatcher
+  (`work-order.assigned` and the `project.*` keys) offer bell, push and email; every other key is an
+  email its own module sends, so it offers email only and the preferences screens show only that
+  toggle. No key offers WhatsApp yet, so the WhatsApp toggle stays hidden until 3d adds it to a key.
+- **`NotificationRequest` gained an optional `Channels` limit.** The work-order assignment and the
+  escalation reassignment send bell and push only through the dispatcher: the assignment email still
+  goes to the technician record's own address (which may have no login), and the escalation sends its
+  own escalation email. The assignment email now also honours the technician's `EmailEnabled` for
+  `work-order.assigned` when the technician has a login.
+- **Push-only rows.** A user who turns the bell off but push on still gets a `Notification` row (so
+  the push survives a restart), written already read and archived so it never shows in the bell.
+- **Migration.** Before this release `InAppEnabled` was the push switch, so `AddNotificationInbox`
+  copies it into the new `PushEnabled` for existing rows; nobody who turned push off starts getting it.
+- **Push tag.** The row does not store the old per-call push tag; the worker uses `{key}-{entityId}`
+  (or `notification-{id}`), so a newer push about the same record replaces the older one on the device.
+- **Test push.** `POST /api/me/push/test` sends straight to the caller's devices through the
+  in-memory queue (no row), from a "Send a test" button on the office preferences page.
+- **SignalR.** The hub joins `user-{userId}` in `OnConnectedAsync` from the `user_id` claim (no client
+  call needed; `JoinUserGroup` exists and is idempotent). The client is `@microsoft/signalr` 10.0.0
+  (matching the .NET 10 server); `LiveNotificationsProvider` keeps one connection per tab.
+- **Routes.** `/settings/notifications` is now each person's own preferences (open to all staff). The
+  tenant-wide matrix that lived there moved to `/settings/workspace-notifications` (admin only).
+  The full inbox is `/notifications` in the office and `/tech/notifications` in the technician app.
+- **Paging.** `GET /api/me/notifications` returns `{ items, hasMore }`; `before` is the last item's
+  `createdAt`. `limit` defaults to 50 and is capped at 100. Read, read-all and archive return the new
+  unread count and broadcast it to the user's other tabs.

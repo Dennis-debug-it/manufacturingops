@@ -323,6 +323,16 @@ export const endpoints = {
     notificationPreferences: '/api/me/notification-preferences',
     pushPublicKey: '/api/me/push/public-key',
     pushSubscriptions: '/api/me/push/subscriptions',
+    pushTest: '/api/me/push/test',
+    notifications: '/api/me/notifications',
+    notificationsUnreadCount: '/api/me/notifications/unread-count',
+    notificationRead: (id: string) => `/api/me/notifications/${id}/read`,
+    notificationsReadAll: '/api/me/notifications/read-all',
+    notificationArchive: (id: string) => `/api/me/notifications/${id}/archive`,
+  },
+  hubs: {
+    // SignalR, not under /api: nginx proxies /hubs with WebSocket upgrade.
+    serviceOps: '/hubs/serviceops',
   },
   notificationTemplates: {
     eta: '/api/settings/notifications/eta',

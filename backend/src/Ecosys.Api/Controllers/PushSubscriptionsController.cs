@@ -14,7 +14,8 @@ public sealed record SavePushSubscriptionInput(string? Endpoint, PushSubscriptio
 public sealed record DeletePushSubscriptionInput(string? Endpoint);
 
 /// <summary>
-/// Lets a signed-in user's browser register for push notifications (currently: new job assignments).
+/// Lets a signed-in user's browser register for push notifications (anything the dispatcher sends
+/// with push on), and send itself a test push.
 /// </summary>
 [ApiController]
 [Authorize]
@@ -22,6 +23,7 @@ public sealed record DeletePushSubscriptionInput(string? Endpoint);
 public sealed class PushSubscriptionsController(
     AppDbContext db,
     IVapidKeyProvider vapidKeyProvider,
+    IPushNotificationQueue pushNotificationQueue,
     ITenantContext tenantContext) : TenantAwareControllerBase(tenantContext)
 {
     /// <summary>
@@ -97,6 +99,15 @@ public sealed class PushSubscriptionsController(
         }
 
         return NoContent();
+    }
+
+    /// <summary>"Send me a test push": straight to this user's devices, with no inbox row.</summary>
+    [HttpPost("test")]
+    public IActionResult SendTest()
+    {
+        pushNotificationQueue.Enqueue(TenantId, [UserId], new PushMessage(
+            "Test notification", "Push notifications are working on this device.", "/notifications", "push-test"));
+        return Accepted();
     }
 
     public static bool IsAllowedEndpoint(string? endpoint)

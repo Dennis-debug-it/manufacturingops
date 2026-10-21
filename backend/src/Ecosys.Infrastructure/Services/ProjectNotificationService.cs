@@ -2,7 +2,6 @@ using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Auth;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 
 namespace Ecosys.Infrastructure.Services;
 
@@ -22,9 +21,9 @@ public static class ProjectNotificationKeys
 }
 
 /// <summary>
-/// Email (through the outbox) and web push for project events. Each channel honours the
-/// recipient's <see cref="UserNotificationPreference"/>; a missing row means "on". Failures are
-/// logged and swallowed: a notification must never undo the change that triggered it.
+/// Project events, sent through <see cref="INotificationDispatcher"/>: the bell, push and email, each
+/// honouring the recipient's <see cref="UserNotificationPreference"/> (a missing row means the key's
+/// defaults). Failures are logged and swallowed: a notification must never undo the change that triggered it.
 /// </summary>
 public interface IProjectNotificationService
 {
@@ -36,10 +35,10 @@ public interface IProjectNotificationService
 
     /// <summary>
     /// Sends a project notification to the given users. <paramref name="values"/> are the template
-    /// placeholders; RecipientName, ProjectNumber and ProjectName are added for each recipient.
+    /// placeholders; ProjectNumber and ProjectName are added, and RecipientName for each recipient.
     /// </summary>
     Task NotifyAsync(Guid tenantId, string key, Project project, IReadOnlyCollection<Guid> userIds, IReadOnlyDictionary<string, string?> values,
-        string pushTitle, string pushBody, string pushTag, CancellationToken cancellationToken = default);
+        string title, string body, CancellationToken cancellationToken = default);
 
     /// <summary>The project manager plus active users in the given tenant roles.</summary>
     Task<IReadOnlyList<Guid>> ManagerAndRolesAsync(Guid tenantId, Project project, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default);
@@ -47,38 +46,25 @@ public interface IProjectNotificationService
 
 internal sealed class ProjectNotificationService(
     AppDbContext dbContext,
-    IEmailTemplateService emailTemplateService,
-    IEmailSubjectRuleService emailSubjectRuleService,
-    IEmailOutboxService emailOutboxService,
-    IPushNotificationQueue pushNotificationQueue,
-    ILogger<ProjectNotificationService> logger) : IProjectNotificationService
+    INotificationDispatcher dispatcher) : IProjectNotificationService
 {
     public Task MemberAddedAsync(Guid tenantId, Project project, Guid userId, string role, CancellationToken cancellationToken = default) =>
-        SendAsync(tenantId, ProjectNotificationKeys.MemberAdded, project, [userId],
-            recipient => new Dictionary<string, string?>
-            {
-                ["RecipientName"] = recipient.FullName,
-                ["ProjectNumber"] = project.ProjectNumber,
-                ["ProjectName"] = project.Name,
-                ["Role"] = HumanizeRole(role),
-            },
-            new PushMessage($"Added to {project.ProjectNumber}", $"You are on the {project.Name} team as {HumanizeRole(role)}.", ProjectUrl(project), $"project-member-{project.Id}"),
+        NotifyAsync(tenantId, ProjectNotificationKeys.MemberAdded, project, [userId],
+            new Dictionary<string, string?> { ["Role"] = HumanizeRole(role) },
+            $"Added to {project.ProjectNumber}", $"You are on the {project.Name} team as {HumanizeRole(role)}.",
             cancellationToken);
 
     public Task TaskAssignedAsync(Guid tenantId, Project project, ProjectTask task, CancellationToken cancellationToken = default) =>
         task.AssigneeUserId is not Guid assignee
             ? Task.CompletedTask
-            : SendAsync(tenantId, ProjectNotificationKeys.TaskAssigned, project, [assignee],
-                recipient => new Dictionary<string, string?>
+            : NotifyAsync(tenantId, ProjectNotificationKeys.TaskAssigned, project, [assignee],
+                new Dictionary<string, string?>
                 {
-                    ["RecipientName"] = recipient.FullName,
-                    ["ProjectNumber"] = project.ProjectNumber,
-                    ["ProjectName"] = project.Name,
                     ["TaskTitle"] = task.Title,
                     ["DueDate"] = task.DueDate?.ToString("yyyy-MM-dd") ?? "Not set",
                 },
-                new PushMessage($"Task on {project.ProjectNumber}", task.Title, ProjectUrl(project), $"project-task-{task.Id}"),
-                cancellationToken);
+                $"Task on {project.ProjectNumber}", task.Title,
+                cancellationToken, url: $"{ProjectUrl(project)}?tab=tasks");
 
     public async Task VariationSubmittedAsync(Guid tenantId, Project project, ProjectVariation variation, CancellationToken cancellationToken = default)
     {
@@ -92,10 +78,10 @@ internal sealed class ProjectNotificationService(
             approvers.Add(project.ProjectManagerUserId.Value);
         approvers.Remove(variation.SubmittedByUserId ?? Guid.Empty);
 
-        await SendAsync(tenantId, ProjectNotificationKeys.VariationSubmitted, project, approvers.Distinct().ToList(),
-            recipient => VariationValues(recipient, project, variation),
-            new PushMessage($"Variation {variation.VariationNumber} to review", $"{variation.Kind} of {project.Currency} {variation.Amount:N2} on {project.ProjectNumber}.", ProjectUrl(project), $"project-variation-{variation.Id}"),
-            cancellationToken);
+        await NotifyAsync(tenantId, ProjectNotificationKeys.VariationSubmitted, project, approvers,
+            VariationValues(project, variation),
+            $"Variation {variation.VariationNumber} to review", $"{variation.Kind} of {project.Currency} {variation.Amount:N2} on {project.ProjectNumber}.",
+            cancellationToken, url: $"{ProjectUrl(project)}?tab=variations");
     }
 
     public async Task VariationDecidedAsync(Guid tenantId, Project project, ProjectVariation variation, CancellationToken cancellationToken = default)
@@ -107,10 +93,10 @@ internal sealed class ProjectNotificationService(
             recipients.Add(project.ProjectManagerUserId.Value);
         recipients.Remove(variation.DecidedByUserId ?? Guid.Empty);
 
-        await SendAsync(tenantId, ProjectNotificationKeys.VariationDecided, project, recipients.Distinct().ToList(),
-            recipient => VariationValues(recipient, project, variation),
-            new PushMessage($"Variation {variation.VariationNumber} {variation.Status.ToLowerInvariant()}", $"{project.ProjectNumber}: {variation.Title}", ProjectUrl(project), $"project-variation-{variation.Id}"),
-            cancellationToken);
+        await NotifyAsync(tenantId, ProjectNotificationKeys.VariationDecided, project, recipients,
+            VariationValues(project, variation),
+            $"Variation {variation.VariationNumber} {variation.Status.ToLowerInvariant()}", $"{project.ProjectNumber}: {variation.Title}",
+            cancellationToken, url: $"{ProjectUrl(project)}?tab=variations");
     }
 
     public async Task ValuationCertifiedAsync(Guid tenantId, Project project, ProjectValuation valuation, CancellationToken cancellationToken = default)
@@ -124,21 +110,13 @@ internal sealed class ProjectNotificationService(
                 ["CertificateReference"] = valuation.CertificateReference,
                 ["CertifiedAmount"] = amount,
             },
-            $"Valuation {valuation.ValuationNumber} certified", $"{project.ProjectNumber}: {amount} certified. Raise the invoice.", $"project-valuation-{valuation.Id}",
-            cancellationToken);
+            $"Valuation {valuation.ValuationNumber} certified", $"{project.ProjectNumber}: {amount} certified. Raise the invoice.",
+            cancellationToken, url: $"{ProjectUrl(project)}?tab=valuations");
     }
 
     public Task NotifyAsync(Guid tenantId, string key, Project project, IReadOnlyCollection<Guid> userIds, IReadOnlyDictionary<string, string?> values,
-        string pushTitle, string pushBody, string pushTag, CancellationToken cancellationToken = default) =>
-        SendAsync(tenantId, key, project, userIds.Distinct().ToList(),
-            recipient => new Dictionary<string, string?>(values)
-            {
-                ["RecipientName"] = recipient.FullName,
-                ["ProjectNumber"] = project.ProjectNumber,
-                ["ProjectName"] = project.Name,
-            },
-            new PushMessage(pushTitle, pushBody, ProjectUrl(project), pushTag),
-            cancellationToken);
+        string title, string body, CancellationToken cancellationToken = default) =>
+        NotifyAsync(tenantId, key, project, userIds, values, title, body, cancellationToken, url: null);
 
     public async Task<IReadOnlyList<Guid>> ManagerAndRolesAsync(Guid tenantId, Project project, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default)
     {
@@ -151,66 +129,24 @@ internal sealed class ProjectNotificationService(
         return users.Distinct().ToList();
     }
 
-    private static Dictionary<string, string?> VariationValues(RecipientInfo recipient, Project project, ProjectVariation variation) => new()
+    private Task NotifyAsync(Guid tenantId, string key, Project project, IReadOnlyCollection<Guid> userIds, IReadOnlyDictionary<string, string?> values,
+        string title, string body, CancellationToken cancellationToken, string? url) =>
+        dispatcher.NotifyAsync(new NotificationRequest(
+            tenantId, key, userIds, title, body, url ?? ProjectUrl(project), "Project", project.Id,
+            new Dictionary<string, string?>(values)
+            {
+                ["ProjectNumber"] = project.ProjectNumber,
+                ["ProjectName"] = project.Name,
+            }), cancellationToken);
+
+    private static Dictionary<string, string?> VariationValues(Project project, ProjectVariation variation) => new()
     {
-        ["RecipientName"] = recipient.FullName,
-        ["ProjectNumber"] = project.ProjectNumber,
-        ["ProjectName"] = project.Name,
         ["VariationNumber"] = variation.VariationNumber,
         ["VariationTitle"] = variation.Title,
         ["Kind"] = variation.Kind,
         ["Amount"] = $"{project.Currency} {variation.Amount:N2}",
         ["Status"] = variation.Status,
     };
-
-    private async Task SendAsync(
-        Guid tenantId,
-        string eventKey,
-        Project project,
-        IReadOnlyCollection<Guid> userIds,
-        Func<RecipientInfo, Dictionary<string, string?>> values,
-        PushMessage push,
-        CancellationToken cancellationToken)
-    {
-        if (userIds.Count == 0)
-            return;
-
-        try
-        {
-            var recipients = await dbContext.Users
-                .Where(x => x.TenantId == tenantId && x.IsActive && userIds.Contains(x.Id))
-                .Select(x => new RecipientInfo(x.Id, x.FullName, x.Email))
-                .ToListAsync(cancellationToken);
-            var preferences = await dbContext.UserNotificationPreferences
-                .Where(x => x.TenantId == tenantId && userIds.Contains(x.UserId) && x.NotificationKey == eventKey)
-                .ToListAsync(cancellationToken);
-
-            var pushUsers = recipients
-                .Where(r => preferences.FirstOrDefault(p => p.UserId == r.Id)?.InAppEnabled ?? true)
-                .Select(r => r.Id)
-                .ToList();
-            if (pushUsers.Count > 0)
-                pushNotificationQueue.Enqueue(tenantId, pushUsers, push);
-
-            foreach (var recipient in recipients.Where(r => !string.IsNullOrWhiteSpace(r.Email)))
-            {
-                if (!(preferences.FirstOrDefault(p => p.UserId == recipient.Id)?.EmailEnabled ?? true))
-                    continue;
-
-                var template = await emailTemplateService.RenderTenantTemplateAsync(tenantId, eventKey, values(recipient), cancellationToken);
-                if (!template.Enabled)
-                    continue;
-                var subject = await emailSubjectRuleService.BuildFinalSubjectAsync(tenantId, eventKey, template.Subject, cancellationToken: cancellationToken);
-                await emailOutboxService.QueueEmailAsync(new QueueEmailRequest(
-                    tenantId, eventKey, eventKey, recipient.Email!, recipient.FullName, template.SenderNameOverride,
-                    null, null, subject, template.HtmlBody, template.TextBody, null), cancellationToken);
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to send {EventKey} notifications for project {ProjectId}.", eventKey, project.Id);
-        }
-    }
 
     private static string ProjectUrl(Project project) => $"/projects/{project.Id}";
 
@@ -219,6 +155,4 @@ internal sealed class ProjectNotificationService(
         ProjectMemberRoles.ProjectManager => "Project Manager",
         _ => role,
     };
-
-    private sealed record RecipientInfo(Guid Id, string FullName, string? Email);
 }

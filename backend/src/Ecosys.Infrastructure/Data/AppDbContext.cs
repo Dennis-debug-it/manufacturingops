@@ -78,6 +78,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<TenantNotificationRecipient> TenantNotificationRecipients => Set<TenantNotificationRecipient>();
     public DbSet<UserNotificationPreference> UserNotificationPreferences => Set<UserNotificationPreference>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<EmailIntakeSetting> EmailIntakeSettings => Set<EmailIntakeSetting>();
     public DbSet<EmailIntakeMessage> EmailIntakeMessages => Set<EmailIntakeMessage>();
@@ -1515,6 +1516,28 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("notifications", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_notifications_severity", "\"Severity\" IN ('Info', 'Warning', 'Critical')"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Key).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(InboxNotifications.TitleMaxLength).IsRequired();
+            entity.Property(x => x.Body).HasMaxLength(InboxNotifications.BodyMaxLength).IsRequired();
+            entity.Property(x => x.Url).HasMaxLength(InboxNotifications.UrlMaxLength);
+            entity.Property(x => x.EntityType).HasMaxLength(80);
+            entity.Property(x => x.Severity).HasMaxLength(20).IsRequired();
+            // The bell: a user's live rows, newest first.
+            entity.HasIndex(x => new { x.TenantId, x.UserId, x.ArchivedAt, x.CreatedAt })
+                .IsDescending(false, false, false, true);
+            // The push worker and housekeeping.
+            entity.HasIndex(x => x.PushPendingSince).HasFilter("\"PushPendingSince\" IS NOT NULL");
+            entity.HasIndex(x => x.CreatedAt);
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<Notification>(modelBuilder);
 
         modelBuilder.Entity<IdempotencyRecord>(entity =>
         {
