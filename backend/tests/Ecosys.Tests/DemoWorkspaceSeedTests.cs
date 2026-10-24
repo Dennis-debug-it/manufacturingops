@@ -6,6 +6,7 @@ using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 
 namespace Ecosys.Tests;
 
@@ -40,7 +41,7 @@ public sealed class DemoWorkspaceSeedTests
         Assert.False((await db.EmailSettings.SingleAsync(x => x.TenantId == DemoId)).IsEnabled);
         Assert.True(result.Status.Exists);
         Assert.Equal(4, result.Status.Clients);
-        Assert.Equal(19, result.Status.WorkOrders);
+        Assert.Equal(20, result.Status.WorkOrders);
     }
 
     [Fact]
@@ -80,7 +81,7 @@ public sealed class DemoWorkspaceSeedTests
         var technicianUser = await db.Users.SingleAsync(x => x.TenantId == DemoId && x.Username == "technician");
         var technician = await db.Technicians.SingleAsync(x => x.UserId == technicianUser.Id);
         Assert.True(await db.UserBranchAssignments.AnyAsync(x => x.UserId == technicianUser.Id));
-        Assert.Equal(4, assignments.Count(x => x.TechnicianId == technician.Id));
+        Assert.Equal(5, assignments.Count(x => x.TechnicianId == technician.Id));
 
         // History is back-dated rather than all "created just now".
         Assert.True(jobs.Count(x => x.CreatedAt < DateTime.UtcNow.AddDays(-7)) >= 8);
@@ -150,6 +151,103 @@ public sealed class DemoWorkspaceSeedTests
 
         await Assert.ThrowsAsync<BusinessRuleException>(() => CreateService(db).ResetAsync(null, null, CancellationToken.None));
         Assert.False(await db.Tenants.AnyAsync(x => x.Id == DemoId));
+    }
+
+    [Fact]
+    public async Task Projects_AreSeededAtThreeStages_WithConsistentMoney()
+    {
+        await using var db = CreateDbContext();
+        await CreateService(db).ResetAsync(null, null, CancellationToken.None);
+
+        var projects = await db.Projects.Include(x => x.Stage).Where(x => x.TenantId == DemoId).ToListAsync();
+        Assert.Equal(
+            [ProjectStageCategories.Active, ProjectStageCategories.Handover, ProjectStageCategories.Planning],
+            projects.Select(x => x.Stage!.Category).Order().ToArray());
+        Assert.All(projects, project => Assert.Equal(DemoId, project.TenantId));
+
+        var solar = projects.Single(x => x.Stage!.Category == ProjectStageCategories.Active);
+        Assert.Equal(19_150_000m, solar.RevisedValue);
+        Assert.Equal(30m, solar.ProgressPercent);
+        Assert.True(await db.ProjectMusterEntries.AnyAsync(x => x.ProjectId == solar.Id));
+        Assert.True(await db.ProjectDiaryEntries.AnyAsync(x => x.ProjectId == solar.Id && x.SubmittedAt == null));
+
+        // Every valuation that reached an invoice points at an invoice on the same project, for its amount due.
+        var valuations = await db.ProjectValuations.Where(x => x.TenantId == DemoId).ToListAsync();
+        Assert.Equal(3, valuations.Count);
+        foreach (var valuation in valuations.Where(x => x.InvoiceId.HasValue))
+        {
+            var invoice = await db.TenantInvoices.SingleAsync(x => x.Id == valuation.InvoiceId);
+            Assert.Equal(valuation.ProjectId, invoice.ProjectId);
+            Assert.Equal(valuation.AmountDue, invoice.Subtotal);
+        }
+
+        // Both awarded projects trace back to an accepted quote that points at them.
+        foreach (var project in projects.Where(x => x.SourceQuotationId.HasValue))
+        {
+            var quote = await db.TenantQuotations.SingleAsync(x => x.Id == project.SourceQuotationId);
+            Assert.Equal(("Accepted", project.Id), (quote.Status, quote.ConvertedToProjectId));
+        }
+
+        // The Financials tab reads the seeded records: certified value, retention held, cash received and labour cost.
+        var financials = new ProjectFinancialsService(db);
+        var solarMoney = await financials.ComputeAsync(DemoId, solar);
+        Assert.Equal(730_000m, solarMoney.RetentionHeld);
+        Assert.True(solarMoney.CashReceived > 0);
+        Assert.True(solarMoney.ActualCost > 10_000_000m);
+        var theatre = projects.Single(x => x.Stage!.Category == ProjectStageCategories.Handover);
+        Assert.Equal(155_000m, (await financials.ComputeAsync(DemoId, theatre)).RetentionDueNow);
+
+        var numbering = await db.NumberingSettings.Where(x => x.TenantId == DemoId).ToDictionaryAsync(x => x.DocumentType, x => x.NextNumber);
+        Assert.Equal(4, numbering[DocumentTypes.Project]);
+        Assert.Equal(4, numbering[DocumentTypes.ProjectValuation]);
+    }
+
+    /// <summary>
+    /// The purge runs raw SQL over every tenant table, so a reset that leaves project rows behind (or trips over
+    /// their foreign keys) only shows up on PostgreSQL. Reset twice against a migrated database.
+    /// </summary>
+    [Fact]
+    [Trait("Category", "PostgreSql")]
+    public async Task Postgres_ResetTwice_ReplacesTheProjectsCleanly()
+    {
+        var serverConnection = Environment.GetEnvironmentVariable("ECOSYS_TEST_DB_CONNECTION")
+            ?? "Host=localhost;Port=5432;Database=ecosys_test;Username=postgres;Password=postgres";
+        var databaseName = $"ecosys_demo_{Guid.NewGuid():N}";
+        var databaseConnection = new NpgsqlConnectionStringBuilder(serverConnection) { Database = databaseName, Pooling = false }.ConnectionString;
+        var adminConnection = new NpgsqlConnectionStringBuilder(serverConnection) { Database = "postgres", Pooling = false }.ConnectionString;
+
+        await ExecuteAdminAsync(adminConnection, $"CREATE DATABASE \"{databaseName}\"");
+        try
+        {
+            await using (var setup = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(databaseConnection).Options))
+            {
+                await setup.Database.MigrateAsync();
+            }
+
+            for (var run = 0; run < 2; run++)
+            {
+                await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(databaseConnection).Options);
+                await CreateService(db).ResetAsync(null, null, CancellationToken.None);
+            }
+
+            await using var verify = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(databaseConnection).Options);
+            Assert.Equal(3, await verify.Projects.IgnoreQueryFilters().CountAsync(x => x.TenantId == DemoId));
+            Assert.Equal(3, await verify.ProjectValuations.IgnoreQueryFilters().CountAsync(x => x.TenantId == DemoId));
+            Assert.Equal(7, await verify.ProjectStages.IgnoreQueryFilters().CountAsync(x => x.TenantId == DemoId));
+        }
+        finally
+        {
+            NpgsqlConnection.ClearAllPools();
+            await ExecuteAdminAsync(adminConnection, $"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)");
+        }
+    }
+
+    private static async Task ExecuteAdminAsync(string connectionString, string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static AppDbContext CreateDbContext()

@@ -86,9 +86,9 @@ internal sealed partial class DemoWorkspaceService(
     private static readonly DemoWorkspaceLogin[] Logins =
     [
         new("admin", "Amina Otieno", AppRoles.Admin, "Everything: settings, finance, users, reports."),
-        new("manager", "Brian Mwangi", AppRoles.Manager, "Operations oversight, approvals and reports."),
+        new("manager", "Brian Mwangi", AppRoles.Manager, "Operations oversight, projects, approvals and reports."),
         new("dispatcher", "Grace Njeri", AppRoles.Dispatcher, "Job intake, scheduling and technician dispatch."),
-        new("technician", "Kevin Ochieng", AppRoles.Technician, "The field view: assigned jobs, check-in, completion."),
+        new("technician", "Kevin Ochieng", AppRoles.Technician, "The field view: assigned jobs, check-in, completion, and the solar project's muster roll."),
     ];
 
     public async Task<DemoWorkspaceStatus> GetStatusAsync(CancellationToken cancellationToken = default)
@@ -595,6 +595,8 @@ internal sealed partial class DemoWorkspaceService(
             AddInvoice(bank, "Paid", d.AddDays(-25), d.AddDays(5), [("Lobby lighting upgrade", 1, "lot", 95_000m)], paid: 110_200m, method: "Cheque");
             AddInvoice(hotel, "Sent", d.AddDays(-10), d.AddDays(20), [("Chiller quarterly service", 1, "visit", 850m)], currency: "USD");
 
+            AddProjects(admin, users["manager"], users["technician"], kevin, faith, bank, bankHq, hospital, hospitalMain, hotel, hotelSite, nairobi, mombasa);
+
             // Client portal contact for the hospital (no mailbox — the platform issues the sign-in link)
             db.ClientPortalUsers.Add(new ClientPortalUser
             {
@@ -618,7 +620,11 @@ internal sealed partial class DemoWorkspaceService(
                 "Open **Quotes**, review the lines and total, then choose **Accept Quote** or **Decline**. If you decline, tell us why so we can revise the proposal.");
 
             // Numbering continues after the seeded documents, so the next job or invoice a visitor creates is unique.
-            foreach (var (documentType, prefix) in new[] { (DocumentTypes.WorkOrder, "WO"), (DocumentTypes.Quotation, "QT"), (DocumentTypes.Invoice, "INV"), (DocumentTypes.Receipt, "REC"), (DocumentTypes.Contract, "CON") })
+            foreach (var (documentType, prefix) in new[]
+            {
+                (DocumentTypes.WorkOrder, "WO"), (DocumentTypes.Quotation, "QT"), (DocumentTypes.Invoice, "INV"), (DocumentTypes.Receipt, "REC"), (DocumentTypes.Contract, "CON"),
+                (DocumentTypes.Project, "PRJ"), (DocumentTypes.ProjectVariation, "VO"), (DocumentTypes.ProjectValuation, "VAL"),
+            })
             {
                 db.NumberingSettings.Add(new NumberingSetting
                 {
@@ -631,6 +637,301 @@ internal sealed partial class DemoWorkspaceService(
                     IsActive = true,
                 });
             }
+        }
+
+        /// <summary>
+        /// Three projects at different points in their life: a rooftop solar installation in progress (milestones,
+        /// tasks, variations, muster roll, site diary, budget, costs and two valuations against an advance and
+        /// retention), an HVAC upgrade at handover with retention due, and a refurbishment just awarded from an
+        /// accepted quote.
+        /// </summary>
+        private void AddProjects(User admin, User manager, User technicianUser, Technician kevin, Technician faith,
+            Client bank, Site bankHq, Client hospital, Site hospitalMain, Client hotel, Site hotelSite, Branch nairobi, Branch mombasa)
+        {
+            var today = DateOnly.FromDateTime(_now);
+            DateOnly Day(int offset) => today.AddDays(offset);
+
+            // Setup: the same stages a new tenant gets, three project types, a template and the settings.
+            var stages = new[]
+            {
+                ("Awarded", ProjectStageCategories.Planning), ("In Progress", ProjectStageCategories.Active), ("On Hold", ProjectStageCategories.OnHold),
+                ("Testing & Handover", ProjectStageCategories.Handover), ("Completed", ProjectStageCategories.Completed), ("Closed", ProjectStageCategories.Closed),
+                ("Cancelled", ProjectStageCategories.Cancelled),
+            }.Select((stage, i) => Add(_db.ProjectStages, new ProjectStage { TenantId = tenantId, Name = stage.Item1, Category = stage.Item2, SortOrder = (i + 1) * 10 }))
+             .ToDictionary(x => x.Category);
+
+            var solarTemplate = Add(_db.ProjectTemplates, new ProjectTemplate
+            {
+                TenantId = tenantId,
+                Name = "Rooftop solar PV",
+                ItemsJson = JsonSerializer.Serialize(new[]
+                {
+                    new ProjectTemplateItem("Site survey & design", 1, 0, [new("Structural roof survey", 0), new("Single-line diagram", 5)]),
+                    new ProjectTemplateItem("Panel & inverter delivery", 2, 21),
+                    new ProjectTemplateItem("Roof mounting & panels", 3, 35),
+                    new ProjectTemplateItem("Electrical & grid tie", 2, 56),
+                    new ProjectTemplateItem("Testing & commissioning", 1, 70),
+                    new ProjectTemplateItem("Handover", 1, 77),
+                }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            });
+            var solarType = Add(_db.ProjectTypes, new ProjectType { TenantId = tenantId, Name = "Solar PV installation", DefaultTemplateId = solarTemplate.Id, SortOrder = 10 });
+            var hvacType = Add(_db.ProjectTypes, new ProjectType { TenantId = tenantId, Name = "HVAC installation", SortOrder = 20 });
+            var refitType = Add(_db.ProjectTypes, new ProjectType { TenantId = tenantId, Name = "Refurbishment", SortOrder = 30 });
+            _db.TenantModuleSettings.Add(new TenantModuleSetting
+            {
+                TenantId = tenantId,
+                ModuleKey = ProjectSettingsService.ModuleKey,
+                ValueJson = JsonSerializer.Serialize(new ProjectSettingsModel { Trades = ["Electrical", "Solar PV", "HVAC", "Civil", "Plumbing"] }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            });
+
+            var engineer = Add(_db.Consultants, new Consultant
+            {
+                TenantId = tenantId, FirmName = "Apex Engineering Consultants", Discipline = "Electrical engineering", ContactPerson = "Eng. Daniel Kimani",
+                Phone = "+254 722 300 400", Email = "daniel.kimani@apexengineering.example", PhysicalAddress = "Kilimani, Nairobi",
+            });
+            var quantitySurveyor = Add(_db.Consultants, new Consultant
+            {
+                TenantId = tenantId, FirmName = "Mwangaza Quantity Surveyors", Discipline = "Quantity surveying", ContactPerson = "Ann Wanjiku",
+                Phone = "+254 722 300 500", Email = "ann.wanjiku@mwangazaqs.example", PhysicalAddress = "Upper Hill, Nairobi",
+            });
+
+            // ── 1. Rooftop solar PV, in progress ───────────────────────────────────
+            var solarQuote = AddQuote(bank, "200 kWp rooftop solar PV system – Head Office", "Accepted", _now.Date.AddDays(-75),
+                [("Solar PV modules, inverters and mounting", 1, "lot", 13_200_000m), ("Electrical works and grid tie", 1, "lot", 3_100_000m), ("Installation and commissioning", 1, "lot", 2_200_000m)]);
+            var solar = Add(_db.Projects, new Project
+            {
+                TenantId = tenantId, BranchId = nairobi.Id, ProjectNumber = Next(DocumentTypes.Project, "PRJ"),
+                Name = "200 kWp rooftop solar PV – Savannah Bank HQ",
+                Description = "Design, supply and installation of a 200 kWp grid-tied rooftop solar system with monitoring, on the Upper Hill head office.",
+                ClientId = bank.Id, SiteId = bankHq.Id, ProjectTypeId = solarType.Id, StageId = stages[ProjectStageCategories.Active].Id,
+                ProjectManagerUserId = manager.Id, OriginalValue = 18_500_000m, ApprovedAdditions = 650_000m,
+                PlannedStartDate = Day(-60), PlannedEndDate = Day(30), ActualStartDate = Day(-58),
+                RetentionPercent = 10, RetentionReleaseAtCompletionPercent = 50, DefectsLiabilityMonths = 12,
+                AdvancePaymentAmount = 3_700_000m, AdvanceRecoveryPercent = 20, SourceQuotationId = solarQuote.Id,
+            });
+            solarQuote.ConvertedToProjectId = solar.Id;
+            _createdDates.Add((solar, _now.AddDays(-62)));
+
+            var solarMilestones = new[]
+            {
+                ("Site survey & design", 1m, -50, ProjectMilestoneStatuses.Verified),
+                ("Panel & inverter delivery", 2m, -30, ProjectMilestoneStatuses.Completed),
+                ("Roof mounting & panels", 3m, -2, ProjectMilestoneStatuses.InProgress),
+                ("Electrical & grid tie", 2m, 12, ProjectMilestoneStatuses.NotStarted),
+                ("Testing & commissioning", 1m, 24, ProjectMilestoneStatuses.NotStarted),
+                ("Handover", 1m, 30, ProjectMilestoneStatuses.NotStarted),
+            }.Select((m, i) => Add(_db.ProjectMilestones, new ProjectMilestone
+            {
+                TenantId = tenantId, ProjectId = solar.Id, Name = m.Item1, Weight = m.Item2, SortOrder = (i + 1) * 10, PlannedDate = Day(m.Item3),
+                // The roof works are running late: the forecast slips past the plan.
+                ForecastDate = m.Item4 == ProjectMilestoneStatuses.InProgress ? Day(6) : null,
+                Status = m.Item4,
+                CompletedAt = m.Item4 is ProjectMilestoneStatuses.Completed or ProjectMilestoneStatuses.Verified ? _now.AddDays(m.Item3) : null,
+                CompletedByUserId = m.Item4 is ProjectMilestoneStatuses.Completed or ProjectMilestoneStatuses.Verified ? manager.Id : null,
+                VerifiedAt = m.Item4 == ProjectMilestoneStatuses.Verified ? _now.AddDays(m.Item3 + 2) : null,
+                VerifiedByUserId = m.Item4 == ProjectMilestoneStatuses.Verified ? admin.Id : null,
+            })).ToList();
+            solar.ProgressPercent = ProjectCommercials.ComputeProgress(solarMilestones, requireVerification: false);
+
+            foreach (var (title, milestone, assignee, due, status) in new[]
+            {
+                ("Structural roof survey", 0, admin, -55, ProjectTaskStatuses.Done),
+                ("Submit single-line diagram to consultant", 0, manager, -48, ProjectTaskStatuses.Done),
+                ("Confirm crane booking for panel lift", 2, manager, 1, ProjectTaskStatuses.InProgress),
+                ("Install mounting rails – roof section C", 2, technicianUser, 2, ProjectTaskStatuses.Open),
+                ("Apply for Kenya Power net-metering approval", 3, admin, 8, ProjectTaskStatuses.Open),
+                ("Order monitoring gateway", 4, manager, -3, ProjectTaskStatuses.Open),
+            })
+            {
+                _db.ProjectTasks.Add(new ProjectTask
+                {
+                    TenantId = tenantId, ProjectId = solar.Id, MilestoneId = solarMilestones[milestone].Id, Title = title, AssigneeUserId = assignee.Id,
+                    DueDate = Day(due), Status = status, CompletedAt = status == ProjectTaskStatuses.Done ? _now.AddDays(due) : null,
+                });
+            }
+
+            _db.ProjectMembers.AddRange(
+                new ProjectMember { TenantId = tenantId, ProjectId = solar.Id, UserId = manager.Id, Role = ProjectMemberRoles.ProjectManager },
+                new ProjectMember { TenantId = tenantId, ProjectId = solar.Id, UserId = technicianUser.Id, TechnicianId = kevin.Id, Role = ProjectMemberRoles.Supervisor, Trade = "Electrical", FromDate = Day(-58) },
+                new ProjectMember { TenantId = tenantId, ProjectId = solar.Id, TechnicianId = faith.Id, Role = ProjectMemberRoles.Member, Trade = "Electrical", FromDate = Day(-40) });
+            _db.ProjectConsultants.AddRange(
+                new ProjectConsultant { TenantId = tenantId, ProjectId = solar.Id, ConsultantId = engineer.Id, RoleOnProject = "Consulting engineer" },
+                new ProjectConsultant { TenantId = tenantId, ProjectId = solar.Id, ConsultantId = quantitySurveyor.Id, RoleOnProject = "Quantity surveyor" });
+
+            _db.ProjectVariations.AddRange(
+                new ProjectVariation
+                {
+                    TenantId = tenantId, ProjectId = solar.Id, VariationNumber = Next(DocumentTypes.ProjectVariation, "VO"), Kind = ProjectVariationKinds.Addition,
+                    Amount = 650_000m, Title = "Ventilation for the battery room", Description = "Two extract fans and louvres for the new battery room.",
+                    ClientReference = "AI-07", Status = ProjectVariationStatuses.Approved, SubmittedByUserId = manager.Id, SubmittedAt = _now.AddDays(-20),
+                    DecidedAt = _now.AddDays(-17), DecidedByUserId = admin.Id, DecisionNote = "Approved per architect's instruction AI-07.",
+                },
+                new ProjectVariation
+                {
+                    TenantId = tenantId, ProjectId = solar.Id, VariationNumber = Next(DocumentTypes.ProjectVariation, "VO"), Kind = ProjectVariationKinds.Omission,
+                    Amount = 120_000m, Title = "Client supplies cable trays", Description = "Savannah Bank will supply the cable trays from its own stores.",
+                    ClientReference = "SVB/FM/112", Status = ProjectVariationStatuses.Submitted, SubmittedByUserId = manager.Id, SubmittedAt = _now.AddDays(-2),
+                });
+
+            // Site: a crew of five, with daily rates and the last two weeks of the muster roll.
+            var crew = new[]
+            {
+                ("Kevin Ochieng", "Electrical", ProjectWorkerEngagements.Permanent, 3_500m, (Technician?)kevin),
+                ("Faith Wambui", "Electrical", ProjectWorkerEngagements.Permanent, 3_200m, faith),
+                ("Joseph Mutiso", "Solar PV", ProjectWorkerEngagements.Casual, 1_800m, null),
+                ("Daniel Korir", "Civil", ProjectWorkerEngagements.Casual, 1_500m, null),
+                ("Esther Nduta", "Solar PV", ProjectWorkerEngagements.Casual, 1_800m, null),
+            }.Select((w, i) =>
+            {
+                var worker = Add(_db.ProjectWorkers, new ProjectWorker
+                {
+                    TenantId = tenantId, ProjectId = solar.Id, TechnicianId = w.Item5?.Id, FullName = w.Item1, Trade = w.Item2, EngagementType = w.Item3,
+                    Phone = $"+254 733 400 {100 + i}",
+                });
+                worker.Rates.Add(new ProjectWorkerRate { TenantId = tenantId, EffectiveFrom = Day(-58), DailyRate = w.Item4, SetByUserId = admin.Id });
+                return worker;
+            }).ToList();
+            for (var offset = -13; offset <= 0; offset++)
+            {
+                var date = Day(offset);
+                if (date.DayOfWeek == DayOfWeek.Sunday)
+                    continue;
+                for (var i = 0; i < crew.Count; i++)
+                {
+                    // A realistic roll: the odd absence and half day, and today's roll not yet marked for the casuals.
+                    if (offset == 0 && i >= 2)
+                        continue;
+                    var status = (offset + i) % 9 == 0 ? ProjectMusterStatuses.Absent
+                        : (offset + i) % 7 == 0 || date.DayOfWeek == DayOfWeek.Saturday ? ProjectMusterStatuses.HalfDay
+                        : ProjectMusterStatuses.Present;
+                    _db.ProjectMusterEntries.Add(new ProjectMusterEntry
+                    {
+                        TenantId = tenantId, ProjectId = solar.Id, ProjectWorkerId = crew[i].Id, WorkDate = date, Status = status,
+                        DayFraction = ProjectMusterStatuses.DayFraction(status), MarkedByUserId = technicianUser.Id,
+                    });
+                }
+            }
+
+            foreach (var (offset, weather, done, issues, instructions, submitted) in new[]
+            {
+                (-2, "Sunny", "Mounting rails installed on roof sections A and B. 96 panels lifted and fixed.", "Crane arrived 2 hours late.", (string?)null, true),
+                (-1, "Overcast, light rain after 3pm", "112 panels fixed on section B. DC cabling started on string 1–6.", "Work stopped at 3pm for rain; roof unsafe.", "Engineer asked for an extra earthing point on section C (AI-09).", true),
+                (0, "Sunny", "Section C rails 50% complete.", null, null, false),
+            })
+            {
+                _db.ProjectDiaryEntries.Add(new ProjectDiaryEntry
+                {
+                    TenantId = tenantId, ProjectId = solar.Id, EntryDate = Day(offset), AuthorUserId = technicianUser.Id, Weather = weather,
+                    WorkCompleted = done, IssuesAndDelays = issues, InstructionsReceived = instructions, SubmittedAt = submitted ? _now.AddDays(offset).AddHours(17) : null,
+                });
+            }
+
+            foreach (var (category, description, amount) in new[]
+            {
+                (ProjectCostCategories.Materials, "Panels, inverters, mounting and cabling", 11_000_000m),
+                (ProjectCostCategories.Labour, "Installation crew", 2_400_000m),
+                (ProjectCostCategories.Subcontractor, "Structural works and crane", 1_200_000m),
+                (ProjectCostCategories.Equipment, "Scaffolding and access equipment", 600_000m),
+            })
+            {
+                _db.ProjectBudgetLines.Add(new ProjectBudgetLine { TenantId = tenantId, ProjectId = solar.Id, Category = category, Description = description, Amount = amount });
+            }
+            foreach (var (category, description, amount, offset) in new[]
+            {
+                (ProjectCostCategories.Materials, "Solar modules (400 × 550 W) – supplier invoice SP-2231", 7_900_000m, -32),
+                (ProjectCostCategories.Materials, "String inverters (2 × 100 kW)", 2_300_000m, -30),
+                (ProjectCostCategories.Equipment, "Scaffolding hire – 6 weeks", 180_000m, -20),
+                (ProjectCostCategories.Subcontractor, "Mobile crane – panel lift (2 days)", 190_000m, -3),
+            })
+            {
+                _db.ProjectCostEntries.Add(new ProjectCostEntry
+                {
+                    TenantId = tenantId, ProjectId = solar.Id, Category = category, Description = description, Amount = amount, IncurredOn = Day(offset), RecordedByUserId = admin.Id,
+                });
+            }
+
+            // Billing: a paid advance, a certified and invoiced first valuation, and a second one awaiting the certificate.
+            var advanceInvoice = AddInvoice(bank, "Paid", _now.Date.AddDays(-58), _now.Date.AddDays(-44), [("Advance payment – 20% of contract sum", 1, "lot", 3_700_000m)],
+                paid: 3_700_000m * 1.16m, projectId: solar.Id);
+            solar.AdvanceInvoiceId = advanceInvoice.Id;
+
+            var firstWork = 4_500_000m;
+            var firstMaterials = 2_800_000m;
+            var first = ProjectValuationCalculator.Compute(solar, firstWork, firstMaterials, previous: null, certifiedBefore: 0m);
+            var firstInvoice = AddInvoice(bank, "PartiallyPaid", _now.Date.AddDays(-12), _now.Date.AddDays(18), [("Interim valuation 1 – work to date", 1, "lot", first.AmountDue)],
+                paid: 4_000_000m, projectId: solar.Id);
+            var firstValuation = Add(_db.ProjectValuations, new ProjectValuation
+            {
+                TenantId = tenantId, ProjectId = solar.Id, ValuationNumber = Next(DocumentTypes.ProjectValuation, "VAL"), PeriodEnd = Day(-20),
+                WorkDoneToDate = firstWork, MaterialsOnSite = firstMaterials, GrossValueToDate = first.GrossValueToDate, RetentionToDate = first.RetentionToDate,
+                AdvanceRecoveredToDate = first.AdvanceRecoveredToDate, PreviouslyCertified = first.PreviouslyCertified, AmountDue = first.AmountDue,
+                Status = ProjectValuationStatuses.Invoiced, CertifiedByConsultantId = quantitySurveyor.Id, CertificateReference = "IPC-01", CertifiedOn = Day(-14),
+                CertifiedAmount = first.AmountDue, InvoiceId = firstInvoice.Id,
+            });
+            var second = ProjectValuationCalculator.Compute(solar, 7_200_000m, 1_500_000m, firstValuation, certifiedBefore: first.AmountDue);
+            _db.ProjectValuations.Add(new ProjectValuation
+            {
+                TenantId = tenantId, ProjectId = solar.Id, ValuationNumber = Next(DocumentTypes.ProjectValuation, "VAL"), PeriodEnd = Day(-1),
+                WorkDoneToDate = 7_200_000m, MaterialsOnSite = 1_500_000m, GrossValueToDate = second.GrossValueToDate, RetentionToDate = second.RetentionToDate,
+                AdvanceRecoveredToDate = second.AdvanceRecoveredToDate, PreviouslyCertified = second.PreviouslyCertified, AmountDue = second.AmountDue,
+                Status = ProjectValuationStatuses.Submitted, Notes = "Panels on sections A and B fixed; section C in progress.",
+            });
+
+            // A job on the project, so the Work Orders tab and the project's costs have something to show.
+            var survey = AddJob(bank, bankHq, null, kevin, "Structural roof survey for solar PV", "Medium", WorkOrderStatuses.Closed, due: _now.Date.AddDays(-54), created: _now.AddDays(-58),
+                started: _now.AddDays(-56), completed: _now.AddDays(-56).AddHours(5), closed: _now.AddDays(-55), workDone: "Roof slab and parapets inspected; load capacity confirmed for ballast-free mounting.");
+            survey.ProjectId = solar.Id;
+
+            // ── 2. HVAC upgrade at handover: retention due, ready for a maintenance contract ──
+            var theatre = Add(_db.Projects, new Project
+            {
+                TenantId = tenantId, BranchId = nairobi.Id, ProjectNumber = Next(DocumentTypes.Project, "PRJ"),
+                Name = "Theatre block HVAC upgrade – Nairobi West Hospital",
+                Description = "Replace the theatre block air handling units and controls to meet operating-theatre air change standards.",
+                ClientId = hospital.Id, SiteId = hospitalMain.Id, ProjectTypeId = hvacType.Id, StageId = stages[ProjectStageCategories.Handover].Id,
+                ProjectManagerUserId = manager.Id, OriginalValue = 6_200_000m, PlannedStartDate = Day(-120), PlannedEndDate = Day(-10),
+                ActualStartDate = Day(-118), ActualEndDate = Day(-8), RetentionPercent = 5, RetentionReleaseAtCompletionPercent = 50, DefectsLiabilityMonths = 6,
+                HandedOverAt = _now.AddDays(-8),
+            });
+            _createdDates.Add((theatre, _now.AddDays(-125)));
+            var theatreMilestones = new[] { ("Design & approvals", 1m, -100), ("AHU supply", 2m, -70), ("Installation", 3m, -30), ("Testing & balancing", 1m, -12), ("Handover", 1m, -8) }
+                .Select((m, i) => Add(_db.ProjectMilestones, new ProjectMilestone
+                {
+                    TenantId = tenantId, ProjectId = theatre.Id, Name = m.Item1, Weight = m.Item2, SortOrder = (i + 1) * 10, PlannedDate = Day(m.Item3),
+                    Status = ProjectMilestoneStatuses.Completed, CompletedAt = _now.AddDays(m.Item3), CompletedByUserId = manager.Id,
+                })).ToList();
+            theatre.ProgressPercent = ProjectCommercials.ComputeProgress(theatreMilestones, requireVerification: false);
+            _db.ProjectMembers.Add(new ProjectMember { TenantId = tenantId, ProjectId = theatre.Id, UserId = manager.Id, Role = ProjectMemberRoles.ProjectManager });
+            _db.ProjectConsultants.Add(new ProjectConsultant { TenantId = tenantId, ProjectId = theatre.Id, ConsultantId = engineer.Id, RoleOnProject = "Mechanical engineer" });
+            var final = ProjectValuationCalculator.Compute(theatre, 6_200_000m, 0m, previous: null, certifiedBefore: 0m);
+            var finalInvoice = AddInvoice(hospital, "Sent", _now.Date.AddDays(-6), _now.Date.AddDays(24), [("Final valuation – theatre HVAC upgrade", 1, "lot", final.AmountDue)], projectId: theatre.Id);
+            _db.ProjectValuations.Add(new ProjectValuation
+            {
+                TenantId = tenantId, ProjectId = theatre.Id, ValuationNumber = Next(DocumentTypes.ProjectValuation, "VAL"), PeriodEnd = Day(-8),
+                WorkDoneToDate = 6_200_000m, GrossValueToDate = final.GrossValueToDate, RetentionToDate = final.RetentionToDate, AdvanceRecoveredToDate = final.AdvanceRecoveredToDate,
+                PreviouslyCertified = 0m, AmountDue = final.AmountDue, Status = ProjectValuationStatuses.Invoiced, CertifiedByConsultantId = engineer.Id,
+                CertificateReference = "FC-01", CertifiedOn = Day(-7), CertifiedAmount = final.AmountDue, InvoiceId = finalInvoice.Id,
+            });
+
+            // ── 3. Refurbishment just awarded from an accepted quote ─────────────────
+            var poolQuote = AddQuote(hotel, "Pool plant room refurbishment", "Accepted", _now.Date.AddDays(-6),
+                [("Pumps, filters and pipework", 1, "lot", 2_350_000m), ("Electrical panel and controls", 1, "lot", 780_000m), ("Labour and commissioning", 1, "lot", 470_000m)]);
+            var pool = Add(_db.Projects, new Project
+            {
+                TenantId = tenantId, BranchId = mombasa.Id, ProjectNumber = Next(DocumentTypes.Project, "PRJ"),
+                Name = "Pool plant room refurbishment – Coral Beach Hotel",
+                Description = "Replace the pool pumps, sand filters and pipework, and rebuild the plant room electrical panel.",
+                ClientId = hotel.Id, SiteId = hotelSite.Id, ProjectTypeId = refitType.Id, StageId = stages[ProjectStageCategories.Planning].Id,
+                ProjectManagerUserId = manager.Id, OriginalValue = 3_600_000m, PlannedStartDate = Day(10), PlannedEndDate = Day(55),
+                RetentionPercent = 5, DefectsLiabilityMonths = 6, SourceQuotationId = poolQuote.Id,
+            });
+            poolQuote.ConvertedToProjectId = pool.Id;
+            foreach (var (name, weight, offset) in new[] { ("Mobilisation", 1m, 10), ("Strip-out", 1m, 18), ("Install pumps & filters", 3m, 38), ("Electrical panel", 2m, 46), ("Commissioning & handover", 1m, 55) })
+            {
+                _db.ProjectMilestones.Add(new ProjectMilestone { TenantId = tenantId, ProjectId = pool.Id, Name = name, Weight = weight, PlannedDate = Day(offset) });
+            }
+            _db.ProjectMembers.Add(new ProjectMember { TenantId = tenantId, ProjectId = pool.Id, UserId = manager.Id, Role = ProjectMemberRoles.ProjectManager });
+            _db.ProjectTasks.Add(new ProjectTask { TenantId = tenantId, ProjectId = pool.Id, Title = "Agree pool shutdown dates with the hotel", AssigneeUserId = manager.Id, DueDate = Day(3) });
         }
 
         public void ApplyCreatedDates()
@@ -817,7 +1118,7 @@ internal sealed partial class DemoWorkspaceService(
             return job;
         }
 
-        private void AddQuote(Client client, string subject, string status, DateTime date, (string Description, decimal Quantity, string Unit, decimal Rate)[] lines,
+        private TenantQuotation AddQuote(Client client, string subject, string status, DateTime date, (string Description, decimal Quantity, string Unit, decimal Rate)[] lines,
             string? rejectionReason = null, string currency = "KES")
         {
             var quote = Add(_db.TenantQuotations, new TenantQuotation
@@ -844,10 +1145,11 @@ internal sealed partial class DemoWorkspaceService(
             }
 
             quote.TotalAmount = quote.Subtotal + quote.TaxAmount;
+            return quote;
         }
 
-        private void AddInvoice(Client client, string status, DateTime date, DateTime due, (string Description, decimal Quantity, string Unit, decimal Rate)[] lines,
-            decimal paid = 0, string method = "BankTransfer", string currency = "KES")
+        private TenantInvoice AddInvoice(Client client, string status, DateTime date, DateTime due, (string Description, decimal Quantity, string Unit, decimal Rate)[] lines,
+            decimal paid = 0, string method = "BankTransfer", string currency = "KES", Guid? projectId = null)
         {
             var invoice = Add(_db.TenantInvoices, new TenantInvoice
             {
@@ -858,6 +1160,7 @@ internal sealed partial class DemoWorkspaceService(
                 InvoiceDate = date,
                 DueDate = due,
                 Currency = currency,
+                ProjectId = projectId,
             });
             _createdDates.Add((invoice, date));
 
@@ -877,7 +1180,7 @@ internal sealed partial class DemoWorkspaceService(
 
             if (invoice.AmountPaid > 0)
             {
-                _db.TenantPayments.Add(new TenantPayment
+                var payment = Add(_db.TenantPayments, new TenantPayment
                 {
                     TenantId = tenantId,
                     ClientId = client.Id,
@@ -889,7 +1192,15 @@ internal sealed partial class DemoWorkspaceService(
                     Reference = method == "MPesa" ? "QHX4K2P9LM" : $"TRX-{date:yyMMdd}",
                     Status = "Confirmed",
                 });
+                // Allocations are what the app reads as "paid" (statements, project cash received), as for a real payment.
+                _db.PaymentAllocations.Add(new PaymentAllocation
+                {
+                    TenantId = tenantId, SourceType = AllocationSourceTypes.Payment, SourceId = payment.Id, Invoice = invoice,
+                    Amount = invoice.AmountPaid, AllocatedAt = payment.PaymentDate,
+                });
             }
+
+            return invoice;
         }
 
         private void AddArticle(KnowledgeCategory category, Guid authorId, string title, string slug, string summary, string body) =>
