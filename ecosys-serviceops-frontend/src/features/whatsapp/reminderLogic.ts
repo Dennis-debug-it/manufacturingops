@@ -90,3 +90,12 @@ export function usagePercent(used: number, cap: number): number {
   if (cap <= 0) return 100
   return Math.min(100, Math.round((used / cap) * 100))
 }
+
+/**
+ * What the opt-in card shows: nothing without the workspace flag; a "not live yet" note while the
+ * shared number isn't set up (staff still see WhatsApp toggles then); otherwise the opt-in form.
+ */
+export function optInCardState(status: { featureEnabled: boolean; available: boolean } | undefined): 'hidden' | 'unavailable' | 'ready' {
+  if (!status?.featureEnabled) return 'hidden'
+  return status.available ? 'ready' : 'unavailable'
+}

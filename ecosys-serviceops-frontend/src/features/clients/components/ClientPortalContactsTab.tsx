@@ -69,9 +69,8 @@ function NewContactDrawer({ open, clientId, onClose }: { open: boolean; clientId
   )
 }
 
-function ContactRowActions({ clientId, contact, whatsApp }: { clientId: string; contact: ClientPortalContact; whatsApp: boolean }) {
+function ContactRowActions({ clientId, contact, onWhatsApp }: { clientId: string; contact: ClientPortalContact; onWhatsApp: (() => void) | null }) {
   const canManage = usePermission('clients.edit')
-  const [showWhatsApp, setShowWhatsApp] = useState(false)
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
   const updateStatus = useUpdateClientPortalContactStatus(clientId)
@@ -126,18 +125,15 @@ function ContactRowActions({ clientId, contact, whatsApp }: { clientId: string; 
 
   return (
     <div className="flex justify-end gap-2">
-      {whatsApp ? (
-        <>
-          <button
-            type="button"
-            onClick={() => setShowWhatsApp(true)}
-            title="Record that this contact agreed to WhatsApp updates"
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-          >
-            <MessageCircle className="h-3.5 w-3.5" />WhatsApp
-          </button>
-          <ContactWhatsAppDrawer open={showWhatsApp} clientId={clientId} contact={contact} onClose={() => setShowWhatsApp(false)} />
-        </>
+      {onWhatsApp ? (
+        <button
+          type="button"
+          onClick={onWhatsApp}
+          title="Record that this contact agreed to WhatsApp updates"
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          <MessageCircle className="h-3.5 w-3.5" />WhatsApp
+        </button>
       ) : null}
       <button
         type="button"
@@ -242,6 +238,8 @@ export function ClientPortalContactsTab({ clientId }: { clientId: string }) {
   const [showInvite, setShowInvite] = useState(false)
   // WhatsApp updates only when the workspace has the feature (Release 3 design 4.2).
   const whatsApp = useWhatsAppMyStatus(staffWhatsAppApi).data?.featureEnabled ?? false
+  // Rendered outside the table: inside a row the drawer was clipped by the table's scroll container.
+  const [whatsAppContact, setWhatsAppContact] = useState<ClientPortalContact | null>(null)
 
   const columns: DataTableColumn<ClientPortalContact>[] = [
     { key: 'fullName', header: 'Name', cell: (row) => <span className="font-medium text-slate-900">{row.fullName}</span> },
@@ -250,7 +248,7 @@ export function ClientPortalContactsTab({ clientId }: { clientId: string }) {
     { key: 'isActive', header: 'Status', cell: (row) => <StatusBadge status={row.isPendingApproval ? 'Pending Approval' : row.isActive ? 'Active' : 'Inactive'} /> },
     { key: 'lastLoginAt', header: 'Last Sign-In', cell: (row) => (row.lastLoginAt ? formatDateTime(row.lastLoginAt) : 'Never') },
     ...(whatsApp ? [{ key: 'whatsApp', header: 'WhatsApp', cell: (row: ClientPortalContact) => (row.receivesWhatsApp ? formatWhatsAppNumber(row.whatsAppNumber) : 'Off') }] : []),
-    { key: 'actions', header: '', cell: (row) => <ContactRowActions clientId={clientId} contact={row} whatsApp={whatsApp} /> },
+    { key: 'actions', header: '', cell: (row) => <ContactRowActions clientId={clientId} contact={row} onWhatsApp={whatsApp ? () => setWhatsAppContact(row) : null} /> },
   ]
 
   return (
@@ -272,6 +270,7 @@ export function ClientPortalContactsTab({ clientId }: { clientId: string }) {
         emptyDescription={isError ? 'Portal contacts could not be loaded.' : 'Invite a contact to give this client access to the self-service portal.'}
       />
       <NewContactDrawer open={showInvite} clientId={clientId} onClose={() => setShowInvite(false)} />
+      {whatsAppContact ? <ContactWhatsAppDrawer open clientId={clientId} contact={whatsAppContact} onClose={() => setWhatsAppContact(null)} /> : null}
     </div>
   )
 }

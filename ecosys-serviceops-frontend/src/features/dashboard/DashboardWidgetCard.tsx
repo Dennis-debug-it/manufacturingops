@@ -98,10 +98,12 @@ export function DashboardWidgetCard({ item, info, branchId, edit }: Props) {
                 <Link
                   key={`${stat.label}-${stat.currency ?? ''}-${index}`}
                   to={stat.link}
-                  className="min-w-0 rounded-lg border border-[var(--app-border)] bg-white/60 px-3 py-2 transition hover:bg-white"
+                  // Money gets a whole row: in a half-width tile "Ksh 23,200.00" was cut to "Ksh …".
+                  className={cn('min-w-0 rounded-lg border border-[var(--app-border)] bg-white/60 px-3 py-2 transition hover:bg-white', stat.format === 'money' && 'col-span-2')}
                 >
-                  <div className="truncate text-xs text-slate-500">{stat.label}</div>
-                  <div className={cn('truncate text-lg font-semibold text-slate-900', stat.tone ? toneText[stat.tone] : '')}>
+                  {/* Wrap rather than truncate, so narrow cards still show the whole label and figure. */}
+                  <div className="break-words text-xs text-slate-500">{stat.label}</div>
+                  <div className={cn('break-words text-lg font-semibold text-slate-900', stat.tone ? toneText[stat.tone] : '')}>
                     {formatWidgetValue(stat.value, stat.format, stat.currency)}
                   </div>
                 </Link>

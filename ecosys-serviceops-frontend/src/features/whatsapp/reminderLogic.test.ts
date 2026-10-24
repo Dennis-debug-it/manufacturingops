@@ -5,6 +5,7 @@ import {
   consentMethodLabel,
   formatWhatsAppNumber,
   normalizeWhatsAppNumber,
+  optInCardState,
   outboxStatusLabel,
   toggleAllowedKey,
   usagePercent,
@@ -70,5 +71,20 @@ describe('settings helpers', () => {
     expect(usagePercent(250, 1000)).toBe(25)
     expect(usagePercent(1200, 1000)).toBe(100)
     expect(usagePercent(1, 0)).toBe(100)
+  })
+})
+
+describe('optInCardState', () => {
+  it('hides the card without the workspace flag', () => {
+    expect(optInCardState(undefined)).toBe('hidden')
+    expect(optInCardState({ featureEnabled: false, available: false })).toBe('hidden')
+  })
+
+  it('explains, rather than hides, when the shared number is not set up', () => {
+    expect(optInCardState({ featureEnabled: true, available: false })).toBe('unavailable')
+  })
+
+  it('shows the form when WhatsApp can be used', () => {
+    expect(optInCardState({ featureEnabled: true, available: true })).toBe('ready')
   })
 })

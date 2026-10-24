@@ -3,7 +3,7 @@ import toast from 'react-hot-toast'
 import { MessageCircle } from 'lucide-react'
 import { resolveErrorMessage } from '../../shared/api/apiError'
 import { cn } from '../../shared/utils/cn'
-import { cleanVerificationCode, codeTimeLeft, formatWhatsAppNumber, normalizeWhatsAppNumber } from './reminderLogic'
+import { cleanVerificationCode, codeTimeLeft, formatWhatsAppNumber, normalizeWhatsAppNumber, optInCardState } from './reminderLogic'
 import { useWhatsAppMyStatus, useWhatsAppOptInMutations, type WhatsAppOptInApi } from './remindersApi'
 
 const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
@@ -24,7 +24,8 @@ function useNow(active: boolean) {
 /**
  * Opt in to WhatsApp messages on a confirmed number (Release 3 design 4.2): enter a number, get a
  * six-digit code over WhatsApp, enter it. Used on the office preferences page, the technician app's
- * account page and the client portal profile. Hidden when the workspace doesn't have WhatsApp.
+ * account page and the client portal profile. Hidden when the workspace doesn't have WhatsApp; a
+ * short note while the shared number isn't live.
  */
 export function WhatsAppOptInCard({ source, audience }: { source: WhatsAppOptInApi; audience: 'staff' | 'client' }) {
   const { data: status, isLoading, isError } = useWhatsAppMyStatus(source)
@@ -35,7 +36,26 @@ export function WhatsAppOptInCard({ source, audience }: { source: WhatsAppOptInA
   const waiting = Boolean(status?.pendingNumber && status.pendingExpiresAt)
   const now = useNow(waiting)
 
-  if (isLoading || isError || !status?.available) return null
+  const cardState = optInCardState(status)
+  if (isLoading || isError || !status || cardState === 'hidden') return null
+
+  // The workspace has WhatsApp but the shared number isn't live: say so rather than hiding the card,
+  // since staff already see WhatsApp toggles on their preferences (kept for when it goes live).
+  if (cardState === 'unavailable') {
+    return (
+      <section className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+        <MessageCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-sm font-semibold text-slate-900">WhatsApp messages</h2>
+          <p className="mt-0.5 text-sm text-slate-500">
+            {audience === 'staff'
+              ? 'The Ecosys WhatsApp number isn’t live yet, so you can’t confirm your number for now. Your WhatsApp choices below are kept and apply once it is.'
+              : 'WhatsApp updates aren’t available yet. You can turn them on here once they are.'}
+          </p>
+        </div>
+      </section>
+    )
+  }
 
   const run = async (action: () => Promise<unknown>, success?: string) => {
     try {

@@ -71,7 +71,9 @@ export function NotificationBell({ viewAllPath, preferencesPath, className }: No
         ) : null}
       </button>
       {open ? (
-        <div role="dialog" aria-label="Notifications" className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+        // Phones: span the screen under the header. Anchored to the bell, a 20rem panel ran off the
+        // left edge, because the bell is not at the right edge of the header.
+        <div role="dialog" aria-label="Notifications" className="fixed inset-x-4 top-[4.5rem] z-30 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80">
           <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2">
             <span className="text-sm font-semibold text-slate-900">Notifications</span>
             <span className="flex items-center gap-1">
