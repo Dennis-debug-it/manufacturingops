@@ -2,6 +2,13 @@
 
 Status: agreed · 2026-10-24
 
+**Builds on `claude/great-wozniak-22dw4x`** (not yet merged into `main`), which already contains:
+Projects Releases 1–2 (`docs/PROJECTS_MODULE_DESIGN.md`) and the shared-platform Release 3
+(`docs/PLATFORM_RELEASE3_DESIGN.md`): notification inbox, Calendar & Activities with minutes and action
+items, WhatsApp reminders from the shared Ecosys number (`docs/WHATSAPP_SETUP.md`), and role dashboards.
+That branch licenses Projects as a `projects` module listed on any plan and WhatsApp as a
+`TenantLicense.WhatsAppEnabled` flag. This plan replaces both with editions and the WhatsApp add-on.
+
 ## Summary
 
 Replace module licensing (Operations / Finance / Suite) with **editions × seat types + usage packs**:
@@ -28,7 +35,7 @@ undermines time & attendance, GPS and audit data.
 | Basic reports & dashboard | ✓ | ✓ | ✓ |
 | CRM — lead capture, lead → client, quotation follow-up | ✓ | ✓ | ✓ |
 | CRM — pipeline board, stages, owners, activities, forecast | | ✓ | ✓ |
-| Projects — phases, linked work orders, budget vs actual, milestone invoicing | | ✓ | ✓ |
+| Projects — milestones, tasks, variations, linked work orders and materials, site diary, muster roll, budget and costs, valuations, retention, client portal (built) | | ✓ | ✓ |
 | Preventive maintenance, PM templates, assets, asset categories, systems | | ✓ | ✓ |
 | Contracts, SLA policies, escalation rules | | ✓ | ✓ |
 | Inventory — materials, vans, purchase orders, parts, stock transfers | | ✓ | ✓ |
@@ -84,9 +91,10 @@ edition. Tenants that don't take it pay nothing for it and see no WhatsApp scree
 Tenants no longer connect their own Meta account. Ecosys owns the WhatsApp Business setup, holds the
 credentials and pays Meta. A tenant's add-on fee and message usage cover that cost.
 
-- **One Meta Business account, owned by Ecosys.** Ecosys registers as a Meta Tech Provider. All access
-  tokens and webhook secrets live in platform settings and are never shown to tenants.
-- **Shared Ecosys number (Notifications):** outbound notifications only — job booked, technician on the
+- **One Meta Business account, owned by Ecosys.** Ecosys registers as a Meta Tech Provider. The access
+  token, app secret and webhook verify token stay environment secrets, as built, and are never shown to
+  tenants.
+- **Shared Ecosys number (Notifications):** already built on `great-wozniak` (see Part 3). Outbound notifications only — job booked, technician on the
   way, report ready, invoice sent. Messages carry the tenant's name in an approved template. Replies to
   this number get an auto-reply pointing the client to the tenant's contact details, because a shared
   number cannot reliably route an inbound message to the right tenant.
@@ -98,7 +106,7 @@ credentials and pays Meta. A tenant's add-on fee and message usage cover that co
   the platform submits it to Meta and approves it on the tenant's behalf.
 - **Control:** the platform can pause sending for a tenant (non-payment, spam complaints, quality rating
   drop) without touching the rest of the account.
-- **Metering:** messages are counted per tenant against the bundle that comes with the add-on (see Part 4).
+- **Metering:** messages are counted per tenant against the bundle that comes with the add-on (see Part 3).
   Usage packs (§3) do not cover WhatsApp.
 - **Turning it off:** sending stops, the dedicated number is released after 30 days, and the
   conversation history stays read-only.
@@ -152,21 +160,37 @@ mistake.
 
 # Implementation
 
-Five parts, each shippable on its own: **Licensing core → Projects → CRM → Platform WhatsApp → Usage packs**.
-Rough effort for one developer: 13–18 weeks total. WhatsApp metering ships in Part 4 itself, so the
-platform never pays for messages it can't bill.
+Parts 0–4, each shippable on its own. **Projects needs no build work of its own**: it is already
+built, and Part 1 moves it into Professional.
 
-## Part 1 — Licensing core (2–3 weeks)
+| Part | What | Effort (one developer) |
+|---|---|---|
+| 0 | Merge `claude/great-wozniak-22dw4x` into `main` | Review and QA of that branch |
+| 1 | Licensing core, including Projects and Release 3 gating | 2.5–3.5 weeks |
+| 2 | CRM, reusing Activities and action items | 2–3 weeks |
+| 3 | WhatsApp add-on (Notifications built; pricing, metering, Business) | 1–1.5 weeks |
+| 4 | Usage packs | ~1 week |
 
-Includes the add-on mechanism that WhatsApp needs, so Part 4 does not have to build it.
+About 7–9 developer-weeks in total.
+
+## Part 0 — Merge the Projects branch first
+
+`great-wozniak` rewrites `ServiceOpsPlans.cs`, `LicenseAndSecurityServices.cs`, `entitlements.ts` and
+`navigation.ts`, the same files Part 1 replaces. Building Part 1 on `main` first would mean a large
+conflict later and Projects ungated or wrongly gated. Merge that branch, then start Part 1 from the
+merged `main`.
+
+## Part 1 — Licensing core (2.5–3.5 weeks)
+
+Includes the add-on mechanism that WhatsApp needs, so Part 3 does not have to build it.
 
 ### 1.1 Feature keys replace modules
 
-- Replace the `operations`/`finance` module sets in
+- Replace the `operations` / `finance` / `projects` module sets in
   `backend/src/Ecosys.Infrastructure/Services/ServiceOpsPlans.cs` with a `LicenseFeatures` catalogue
   (e.g. `work_orders`, `maintenance`, `inventory`, `contracts_sla`, `workflows`, `time_attendance`,
   `expenses`, `approvals`, `crm_basic`, `crm_pipeline`, `projects`, `multi_branch`, `api_webhooks`,
-  `monitoring`, `approval_matrix`, `custom_reports`).
+  `monitoring`, `approval_matrix`, `custom_reports`, `whatsapp_notifications`, `whatsapp_business`).
 - Tag every tenant controller with exactly one feature key, or mark it shared. Keep the rule enforced by
   the classification check in `TenantLifecycleConsistencyTests`: an unclassified controller fails the build.
 - An edition is a fixed set of feature keys, defined in code (`Editions.cs`) so the boundaries are
@@ -176,7 +200,25 @@ Includes the add-on mechanism that WhatsApp needs, so Part 4 does not have to bu
 - `TenantLicenseEnforcementMiddleware` checks `snapshot.Features` instead of `snapshot.Modules`. Remove
   the route-classification special cases where a single feature key now covers the route.
 
-### 1.2 Data model
+### 1.2 Projects and Release 3 under editions
+
+- **Projects:** the controllers `Projects`, `ProjectSettings`, `Consultants`, `ProjectSite`,
+  `ProjectCommercial` and `PortalProjects` all take the `projects` feature (Professional+). The
+  `[Projects, Finance]` and `[Projects, Operations]` route rules in `RequiredModules` go away: every tab
+  they protect (commercial, valuations, invoices, award from quotation, work orders, material issues,
+  handover to a maintenance contract) is inside Professional anyway.
+- `WithholdingCertificates` (finance-wide) joins the base invoicing feature, so it is in every edition.
+- The Projects tab rule (`docs/PROJECTS_MODULE_DESIGN.md` §12: a tab shows only when its toggle is on
+  **and** the tenant holds the module it needs) changes to check feature keys. The `TenantModuleSetting`
+  toggles for `projects` stay as they are.
+- The Projects design decision D3 ("sold on its own or with Operations/Finance") is superseded by this
+  plan. Note this in that document when Part 1 merges.
+- **Release 3:** the role-dashboard widget catalogue and the calendar sources declare the module(s) they
+  need. Each declaration changes to a feature key, so a widget or calendar item only appears when the
+  edition has its feature. Notifications, Calendar, Activities and action items stay shared (every
+  edition).
+
+### 1.3 Data model
 
 - `license_plans`: rows `essentials`, `professional`, `enterprise`. Prices: monthly/annual for office
   seats, monthly/annual for field seats, and minimum office seats. All editable on the platform.
@@ -186,12 +228,14 @@ Includes the add-on mechanism that WhatsApp needs, so Part 4 does not have to bu
   `CK_tenant_licenses_LicensedUsers_Positive`: office seats > 0, field seats ≥ 0.
 - Add-ons: `license_add_ons (Code, Name, MonthlyPrice, AnnualPrice, IncludedMessages, ExtraMessagePrice,
   ExtraNumberPrice, IsActive)` and `tenant_license_add_ons (TenantLicenseId, AddOnCode, StartedAt, EndedAt,
-  PriceOverride, IncludedMessagesOverride, ExtraMessagePriceOverride)`. A tenant's
-  features are its edition's features plus its active add-ons' features, minus its overrides. The
-  only add-ons at launch are `whatsapp_notifications` and `whatsapp_business`.
+  PriceOverride, IncludedMessagesOverride, ExtraMessagePriceOverride)`. A tenant's features are its
+  edition's features plus its active add-ons' features, minus its overrides. The only add-ons at launch
+  are `whatsapp_notifications` and `whatsapp_business`.
+- `TenantLicense.WhatsAppEnabled` (from `great-wozniak`) is replaced by the `whatsapp_notifications`
+  add-on.
 - Drop `LicensePlan.ModulesIncluded`, `EmailIngestion`, `MonitoringIntegration` and `MaxBranches`.
 
-### 1.3 Seat enforcement
+### 1.4 Seat enforcement
 
 - `LicenseGuardService.CountSeatsUsedAsync` returns `(office, field)`, grouping active users by role into
   a seat type. One helper `SeatTypes.For(role)` holds the mapping.
@@ -199,108 +243,108 @@ Includes the add-on mechanism that WhatsApp needs, so Part 4 does not have to bu
   row lock on the license.
 - Call sites to update: tenant user create/reactivate, platform add-user, CSV import, and **role change**
   (new; today a role change never touches seats).
+- Project site workers on the muster roll are not users and take no seat.
 - Error codes: `license_office_seats_reached`, `license_field_seats_reached`.
 
-### 1.4 Migration of existing tenants
+### 1.5 Migration of existing tenants
 
 One SQL migration, following the pattern of `RetireLegacyPlansAndRequireLicensedUsers`:
 
-1. Insert the three edition plans.
-2. Move every license on `operations`, `finance` or `suite` to `professional`. No tenant loses access.
-   Tenants already using multiple branches, monitoring or API keys move to `enterprise` instead.
+1. Insert the three edition plans and the two WhatsApp add-ons.
+2. Move every license on `operations`, `finance` or `suite` to `professional`, including any with
+   `projects` in `ModulesIncluded`. No tenant loses access. Tenants already using multiple branches,
+   monitoring or API keys move to `enterprise` instead.
 3. Split seats: `FieldSeats` = active technicians; `OfficeSeats` = max(edition minimum,
    `LicensedUsers` − field seats, active office users). No existing user may end up over a limit.
 4. Convert existing overrides into `tenant_license_feature_overrides`.
-5. Delete the old plans, and drop the old columns in a follow-up migration once the release is stable.
+5. WhatsApp: `WhatsAppEnabled = true` → `whatsapp_notifications`. A tenant with the older inbox
+   (`WhatsAppSetting.IsEnabled`) → `whatsapp_business`. Both are free until the tenant's renewal.
+6. Delete the old plans, and drop the old columns in a follow-up migration once the release is stable.
 
 Current prices are honoured until each tenant's next renewal. Record each tenant's price-lock end date in
 `Notes`, or add a `PriceLockedUntil` column.
 
 Dry-run the migration against a production snapshot and diff the access for each tenant before running it.
 
-### 1.5 Frontend
+### 1.6 Frontend
 
 - `ecosys-serviceops-frontend/src/shared/utils/entitlements.ts`: map path prefixes to feature keys
-  instead of the two module lists.
-- `useEntitlements`: expose `hasFeature`, `edition`, `officeSeats`/`fieldSeats` and their usage.
+  instead of module lists (including the Projects paths added on `great-wozniak`).
+- `useEntitlements`: expose `hasFeature`, `edition`, `addOns`, `officeSeats`/`fieldSeats` and their usage.
 - `navigation.ts`: hide features the edition lacks, or show them locked with an upgrade prompt.
+- Projects tabs, dashboard widgets and calendar sources: switch their module checks to `hasFeature`.
 - `features/team` (users page, new-user drawer, role change): show seat usage for each pool and the
   seat-limit errors.
 - Platform screens (`PlansSettingsPage`, `LicensingPage`, `TenantDetailPage`, `LicenseTermDialog`,
-  `licensedUsers.ts`): edit edition prices, set office/field seats, set feature overrides.
+  `licensedUsers.ts`): edit edition and add-on prices, set office/field seats, turn add-ons on, set
+  feature and price overrides.
 - Update MRR snapshots and platform billing (`MrrSnapshotWorker`, `PlatformBillingLifecycleService`) to
-  calculate price as seats × rate for each seat type.
+  calculate price as seats × rate for each seat type, plus add-ons.
 
-### 1.6 Tests
+### 1.7 Tests
 
 - Rewrite `ServiceOpsPlanTests` around editions and feature keys, with one test per edition boundary.
+- Projects: the Release 1 acceptance test "a tenant without the `projects` module gets a 403 on every
+  Projects endpoint" becomes "an Essentials tenant gets a 403". Remove tests for the
+  `[Projects, Finance]` / `[Projects, Operations]` combinations.
+- Release 3: every dashboard widget and calendar source is hidden without its feature.
 - Rewrite `TenantLicensedUserLimitTests` for two seat pools, including a role change between pools.
 - Add a migration test: tenants on the old plans end up with access equal to or greater than before.
 - Update the e2e tests `serviceops-plans.spec.ts` and `platform-tenant-management.spec.ts`.
 
-## Part 2 — Projects (4–5 weeks; about 2 without costing)
-
-Feature key: `projects` (Professional+).
-
-- **Domain:** `Project` (client, site, code, name, manager, status, start/end, budget, currency);
-  `ProjectPhase` (name, order, planned dates, milestone amount); nullable `WorkOrder.ProjectId` and
-  `WorkOrder.ProjectPhaseId`.
-- **Progress:** work orders completed out of total, per phase and for the whole project.
-- **Costing:** actual cost = materials issued + labour (time & attendance hours × rate) + expenses
-  tagged to the project, compared against the budget.
-- **Billing:** invoice a phase milestone, or a percentage of progress, through the existing tenant invoice
-  service.
-- **Screens:** project list, project detail with phases and a work-order timeline, "New work order" from a
-  project, and a project picker on the work-order form.
-- **Enterprise:** a profitability report across projects and branches, and approval for budget changes.
-- **First customer:** Plexus solar installations, with the solar checklist delivered as an industry pack.
-
-## Part 3 — CRM (3–4 weeks)
+## Part 2 — CRM (2–3 weeks)
 
 Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
 
+Reuse what Release 3 built rather than adding CRM copies of it: **Activities** (calls, meetings, site
+visits) with minutes, **action items** (follow-ups with an owner and a due date), **My calendar**, and the
+**notification dispatcher**. Release 3 activities link to a project, client, contract or work order;
+add lead and opportunity as link targets.
+
 - **crm_basic:**
-  - `Lead` entity (source: web form / email intake / WhatsApp with the Business add-on / manual; contact details; status; owner).
+  - `Lead` entity (source: web form / email intake / WhatsApp with the Business add-on / manual; contact
+    details; status; owner).
   - Convert a lead to a `Client`.
   - Quotation follow-up view based on `TenantQuotation.Status` (Draft → Sent → Accepted/Rejected/Expired),
-    with reminders to chase quotes.
+    with action items to chase quotes.
 - **crm_pipeline:**
   - `Opportunity` (client or lead, value, expected close date, owner).
   - Configurable `PipelineStage` list, shown as a Kanban board.
-  - `CrmActivity` (call, meeting, note, follow-up with due date).
   - Win/loss reasons and a weighted pipeline forecast.
-  - A won opportunity converts to a project or a contract.
+  - A won opportunity → quotation → project, using the existing **award from quotation** in Projects;
+    or → a maintenance contract.
+  - CRM dashboard widgets added to the Release 3 widget catalogue.
 - **Intake:** an intake protocol action "create lead" alongside "create work order".
 - This is separate from the operator-side `PlatformCrm` / `PlatformLeads`. Nothing is shared except UI
   components.
 
-## Part 4 — Platform-run WhatsApp (1.5–2 weeks)
+## Part 3 — WhatsApp add-on (1–1.5 weeks)
 
-- Move the Meta credentials out of `WhatsAppSetting` (`BusinessAccountId`, `AccessToken`,
-  `WebhookVerifyToken`) into platform settings, encrypted. `WhatsAppSetting` keeps only tenant
-  preferences (enabled, auto-reply text) plus the `PhoneNumberId` of the tenant's dedicated number, now
-  set by the platform.
-- Tenant `PUT /api/whatsapp/settings` stops accepting credentials. New platform endpoints and screen:
-  connect the Ecosys Meta account, provision or detach a tenant number, pause or resume a tenant, view
-  per-tenant usage and number quality rating.
-- The WhatsApp controllers, the settings route and the screens are gated by the add-on's feature key,
-  not by edition. The tenant screen offers to turn the add-on on, and shows what it costs.
-- Message metering: a per-tenant monthly message count against the add-on's `IncludedMessages`. Messages
-  beyond the bundle are billed in arrears on the next invoice. The platform can set a hard cap for each
-  tenant.
-- One `PlatformWhatsAppSender` used by every send path: chooses the tenant's dedicated number, or falls
-  back to the shared number for outbound notifications; applies the usage meter; logs every send.
-- One platform webhook: route inbound messages by receiving `PhoneNumberId` to the tenant; on the shared
-  number, send the auto-reply only.
-- Template management moves to the platform, with a per-tenant request-and-approve flow.
-- Migration: tenants who have WhatsApp enabled today get the WhatsApp Business add-on, free until
-  their renewal. Tenants who don't keep WhatsApp off. Tenants who already entered their own credentials
-  keep working until the platform moves
+**Already built on `great-wozniak`:** the Meta Cloud API sender behind `IWhatsAppSender`; the Ecosys
+account in environment secrets; a resolver that picks the sending account (the Ecosys account for every
+tenant today); `WhatsAppOutboxMessage` per tenant with retries; a monthly cap per tenant (default 1,000,
+then email only); STOP/START handling; Ecosys-owned templates; client consent; the webhook; and the
+tenant WhatsApp log. Gated today by `TenantLicense.WhatsAppEnabled`.
+
+Remaining work:
+
+- **Notifications add-on:** the reminder controllers (`MyWhatsApp`, `WhatsAppNotifications`,
+  `ClientWhatsAppConsent`, `PortalWhatsApp`) take the `whatsapp_notifications` feature instead of the flag.
+  The tenant screen offers to turn the add-on on and shows its price.
+- **Metering and billing:** count outbox rows per month against the add-on's `IncludedMessages`. Messages
+  beyond the bundle are billed in arrears on the next invoice instead of being skipped. The existing
+  per-tenant cap becomes an optional hard cap the platform sets.
+- **Business add-on:** the resolver returns the tenant's own number when it has one; the webhook routes
+  inbound messages by receiving `PhoneNumberId` to that tenant; the older two-way inbox
+  (`WhatsAppController`, currently in Operations) moves to `whatsapp_business`. Platform screen to
+  provision or detach a number and pause or resume a tenant.
+- **Old tenant credentials:** `WhatsAppSetting` stops accepting `BusinessAccountId`, `AccessToken` and
+  `WebhookVerifyToken` from tenants. Tenants who entered their own keep working until the platform moves
   their number into the Ecosys account (Meta number migration), then their stored token is deleted.
-- Tests: tenant isolation on inbound routing, metering on every send path, and no credential ever
-  returned by a tenant endpoint.
+- Tests: tenant isolation on inbound routing, metering on every send path, overage on the invoice, and no
+  credential ever returned by a tenant endpoint.
 
-## Part 5 — Usage packs (~1 week)
+## Part 4 — Usage packs (~1 week)
 
 - `tenant_usage_counters (TenantId, Meter, PeriodStart, Used)` and
   `tenant_usage_allowances (TenantId, Meter, Included, PurchasedTopUp)`.
@@ -310,12 +354,13 @@ Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
 
 ## Rollout
 
-1. Ship Part 1 behind a configuration switch. Run the migration on staging from a production snapshot and
+1. Merge `great-wozniak` (Part 0).
+2. Ship Part 1 behind a configuration switch. Run the migration on staging from a production snapshot and
    review the per-tenant access diff.
-2. Publish the new pricing page and help guides (`features/help/guides.ts`), and email tenants about the
+3. Publish the new pricing page and help guides (`features/help/guides.ts`), and email tenants about the
    change and their price lock.
-3. Turn on Part 1 in production. Ship Projects, then CRM, then platform WhatsApp, then usage packs, each
-   as its own release.
+4. Turn on Part 1 in production. Then ship CRM, the WhatsApp add-on and usage packs, each as its own
+   release.
 
 ## Decisions
 
