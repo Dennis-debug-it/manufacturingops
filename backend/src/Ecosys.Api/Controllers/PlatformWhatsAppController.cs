@@ -9,8 +9,10 @@ using Microsoft.Extensions.Options;
 
 namespace Ecosys.Api.Controllers;
 
-public sealed record PlatformTenantWhatsAppResponse(Guid TenantId, bool Enabled, int UsedThisMonth, int MonthlyCap, bool Configured);
-public sealed record SetPlatformTenantWhatsAppRequest(bool Enabled);
+public sealed record PlatformTenantWhatsAppResponse(Guid TenantId, bool Enabled, int UsedThisMonth, int MonthlyCap, bool Configured, string? AddOn);
+
+/// <summary>Turns the WhatsApp add-on on or off. <paramref name="AddOn"/> picks which one; Notifications when omitted.</summary>
+public sealed record SetPlatformTenantWhatsAppRequest(bool Enabled, string? AddOn = null);
 
 /// <summary>
 /// The tenant feature flag <c>whatsapp</c> (Release 3 design 6). Ecosys turns it on per tenant, because
@@ -38,7 +40,9 @@ public sealed class PlatformWhatsAppController(
             throw new BusinessRuleException("The platform workspace doesn't send WhatsApp reminders.");
         var license = await dbContext.TenantLicenses.SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken)
             ?? throw new NotFoundException("This tenant has no license yet.");
-        license.WhatsAppEnabled = request.Enabled;
+        license.WhatsAppAddOn = request.Enabled
+            ? ServiceOpsPlans.NormalizeWhatsAppAddOn(request.AddOn) ?? ServiceOpsPlans.WhatsAppNotificationsAddOn
+            : null;
         license.UpdatedAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(tenantId, tenantContext.UserId, request.Enabled ? "platform.whatsapp.enabled" : "platform.whatsapp.disabled",
@@ -48,10 +52,10 @@ public sealed class PlatformWhatsAppController(
 
     private async Task<PlatformTenantWhatsAppResponse> BuildAsync(Guid tenantId, CancellationToken cancellationToken)
     {
-        var license = await dbContext.TenantLicenses.AsNoTracking().Where(x => x.TenantId == tenantId).Select(x => new { x.WhatsAppEnabled }).SingleOrDefaultAsync(cancellationToken)
+        var license = await dbContext.TenantLicenses.AsNoTracking().Where(x => x.TenantId == tenantId).Select(x => new { x.WhatsAppAddOn }).SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("This tenant has no license yet.");
-        return new PlatformTenantWhatsAppResponse(tenantId, license.WhatsAppEnabled,
+        return new PlatformTenantWhatsAppResponse(tenantId, license.WhatsAppAddOn is not null,
             await outbox.CountThisMonthAsync(tenantId, DateTime.UtcNow, cancellationToken), options.Value.MonthlyCapPerTenant,
-            accountResolver.Resolve(tenantId) is not null);
+            accountResolver.Resolve(tenantId) is not null, license.WhatsAppAddOn);
     }
 }

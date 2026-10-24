@@ -15,7 +15,7 @@ namespace Ecosys.Tests;
 /// <summary>Release 3 step 3c: the widget catalogue, role layouts, admin hiding and personal layouts.</summary>
 public sealed class RoleDashboardTests
 {
-    private static readonly string[] AllModules = [ServiceOpsPlans.Operations, ServiceOpsPlans.Finance, ServiceOpsPlans.Projects];
+    private static readonly string[] AllModules = [.. ServiceOpsPlans.EditionModules(ServiceOpsPlans.Professional)];
 
     public static TheoryData<string> AllWidgets()
     {
@@ -173,7 +173,7 @@ public sealed class RoleDashboardTests
     [Fact]
     public async Task RoleDefault_IsFilteredByModuleAndPermission()
     {
-        var harness = await Harness.CreateAsync(modules: [ServiceOpsPlans.Operations]);
+        var harness = await Harness.CreateAsync(modules: [ServiceOpsPlans.Operations, ServiceOpsPlans.Maintenance, ServiceOpsPlans.Inventory]);
         var dispatcher = harness.Service(harness.DispatcherId, AppRoles.Dispatcher,
             permissions: [PermissionNames.CanViewWorkOrders, PermissionNames.CanAssignWorkOrders]);
         var layout = await dispatcher.GetLayoutAsync();

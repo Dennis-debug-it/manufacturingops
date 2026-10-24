@@ -13,9 +13,9 @@ namespace Ecosys.Tests;
 public sealed partial class AuthEmailSafetyTests
 {
     [Theory]
-    [InlineData("operations")]
-    [InlineData("finance")]
-    [InlineData("suite")]
+    [InlineData("essentials")]
+    [InlineData("professional")]
+    [InlineData("enterprise")]
     public async Task MinimalProvisioning_CreatesSelectedPlanIdentityAdminAndInvitation(string plan)
     {
         await using var db = CreateDbContext();
@@ -167,11 +167,11 @@ public sealed partial class AuthEmailSafetyTests
     }
 
     /// <summary>Mirrors exactly what the Create Tenant form sends, including the required licensed-users count.</summary>
-    private static UpsertPlatformTenantRequest MinimalProvisioningRequest(string plan = "suite", int? maxUsers = 10) => new(
+    private static UpsertPlatformTenantRequest MinimalProvisioningRequest(string plan = "professional", int? maxUsers = 10) => new(
         Name: null, CompanyName: "Acme Engineering Ltd", Slug: null, CompanyEmail: null, CompanyPhone: null,
         Industry: null, ContactName: null, ContactEmail: null, ContactPhone: null,
         PrimaryContactName: null, PrimaryContactEmail: null, PrimaryContactPhone: null,
         Country: "Kenya", County: null, City: null, Address: null, TaxPin: null, PlanName: null,
-        MaxUsers: maxUsers, MaxBranches: null, TrialEndsAt: null, SubscriptionEndsAt: null, StartsAt: null, ExpiresAt: null,
+        OfficeSeats: maxUsers, MaxBranches: null, TrialEndsAt: null, SubscriptionEndsAt: null, StartsAt: null, ExpiresAt: null,
         Status: null, LicenseStatus: null, AdminFullName: "John Kamau", AdminEmail: "admin@acme.test", PlanCode: plan);
 }

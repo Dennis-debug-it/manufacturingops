@@ -18,11 +18,11 @@ public sealed partial class ProjectsModuleTests
 
     [Theory]
     [InlineData("ProjectSite", "/api/project-site/123/muster", "projects")]
-    [InlineData("ProjectCommercial", "/api/projects/123/valuations", "projects,finance")]
-    [InlineData("ProjectCommercial", "/api/projects/123/wage-sheet", "projects,finance")]
-    [InlineData("PortalProjects", "/api/portal/projects/123/valuations", "projects,finance")]
-    [InlineData("Projects", "/api/projects/from-quotation/123", "projects,finance")]
-    [InlineData("Projects", "/api/projects/123/create-maintenance-contract", "projects,operations")]
+    [InlineData("ProjectCommercial", "/api/projects/123/valuations", "projects")]
+    [InlineData("ProjectCommercial", "/api/projects/123/wage-sheet", "projects")]
+    [InlineData("PortalProjects", "/api/portal/projects/123/valuations", "projects")]
+    [InlineData("Projects", "/api/projects/from-quotation/123", "projects")]
+    [InlineData("Projects", "/api/projects/123/create-maintenance-contract", "projects")]
     [InlineData("WithholdingCertificates", "/api/invoices/123/withholding-certificates", "finance")]
     public void Release2Routes_RequireTheirModules(string controller, string path, string expected)
     {
@@ -409,7 +409,7 @@ public sealed partial class ProjectsModuleTests
     {
         var harness = await Harness.CreateAsync();
         var project = await harness.CreateProjectAsync();
-        var plan = new LicensePlan { PlanCode = "suite", DisplayName = "Suite", ModulesIncluded = "Core,projects" };
+        var plan = new LicensePlan { PlanCode = ServiceOpsPlans.Professional, DisplayName = "Professional" };
         harness.Db.Tenants.Add(new Tenant { Id = harness.TenantId, Name = "Acme", CompanyName = "Acme", Slug = "acme-r2", Country = "Kenya", IsActive = true });
         harness.Db.LicensePlans.Add(plan);
         harness.Db.TenantLicenses.Add(new TenantLicense { TenantId = harness.TenantId, LicensePlanId = plan.Id, LicensePlan = plan, Status = "Active" });

@@ -1,140 +1,181 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { api } from '../../shared/api/apiClient'
+import { endpoints } from '../../shared/api/endpoints'
+import type { PlatformLicenseAddOn, PlatformLicensePlan } from '../types'
 
-interface PlatformLicensePlan {
-  id: string
-  name: string
-  code: string
-  monthlyPrice: number
-  annualPrice: number
-  modulesIncluded: string[]
-  isActive: boolean
+const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
+
+const moduleLabels: Record<string, string> = {
+  operations: 'Work orders',
+  finance: 'Quotes & invoices',
+  maintenance: 'Maintenance',
+  inventory: 'Inventory',
+  projects: 'Projects',
+  advanced: 'Advanced tools',
+  enterprise_tools: 'Branches, API & monitoring',
 }
 
-interface PlanFormState {
-  id: string | null
-  name: string
-  code: string
-  monthlyPrice: number
-  annualPrice: number
-  modulesIncluded: string
-  isActive: boolean
+function NumberField({ label, value, onChange, min = 0 }: { label: string; value: number; onChange: (value: number) => void; min?: number }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-sm font-medium text-slate-700">{label}</label>
+      <input type="number" min={min} value={value} onChange={(event) => onChange(Number(event.target.value))} className={inputClass} />
+    </div>
+  )
 }
 
-const emptyForm: PlanFormState = { id: null, name: '', code: '', monthlyPrice: 0, annualPrice: 0, modulesIncluded: '', isActive: true }
+function ActiveToggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-slate-700">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+      Available to assign
+    </label>
+  )
+}
 
-function PlanDrawer({ open, plan, onClose }: { open: boolean; plan: PlatformLicensePlan | null; onClose: () => void }) {
+type EditionForm = Pick<PlatformLicensePlan, 'officeSeatMonthlyPrice' | 'officeSeatAnnualPrice' | 'fieldSeatMonthlyPrice' | 'fieldSeatAnnualPrice' | 'minOfficeSeats' | 'isActive'>
+
+function EditionDrawer({ plan, onClose }: { plan: PlatformLicensePlan | null; onClose: () => void }) {
   const queryClient = useQueryClient()
-  const [form, setForm] = useState<PlanFormState>(emptyForm)
-
-  useEffect(() => {
-    if (!open) return
-    if (plan) {
-      setForm({ id: plan.id, name: plan.name, code: plan.code, monthlyPrice: plan.monthlyPrice, annualPrice: plan.annualPrice, modulesIncluded: plan.modulesIncluded.join(', '), isActive: plan.isActive })
-    } else {
-      setForm(emptyForm)
-    }
-  }, [open, plan])
+  const [form, setForm] = useState<EditionForm | null>(null)
+  useEffect(() => setForm(plan), [plan])
 
   const save = useMutation({
-    mutationFn: () => {
-      const payload = {
-        name: form.name,
-        code: form.code || null,
-        monthlyPrice: form.monthlyPrice,
-        annualPrice: form.annualPrice,
-        modulesIncluded: form.modulesIncluded.split(',').map((m) => m.trim()).filter(Boolean),
-        isActive: form.isActive,
-      }
-      return form.id ? api.put<PlatformLicensePlan>(`/api/platform/licensing/plans/${form.id}`, payload) : api.post<PlatformLicensePlan>('/api/platform/licensing/plans', payload)
-    },
+    mutationFn: () => api.put<PlatformLicensePlan>(`${endpoints.platformLicensing.plans}/${plan?.id}`, form),
     onSuccess: () => {
-      toast.success(form.id ? 'Plan updated' : 'Plan created')
+      toast.success('Edition updated')
       void queryClient.invalidateQueries({ queryKey: ['platform', 'licensing', 'plans'] })
       onClose()
     },
   })
+  const set = (patch: Partial<EditionForm>) => setForm((current) => (current ? { ...current, ...patch } : current))
 
   return (
-    <FormDrawer open={open} title={plan ? `Edit ${plan.name}` : 'New License Plan'} onClose={onClose}>
-      <div className="space-y-4">
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Name</label>
-          <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-        </div>
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Code</label>
-          <input value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} placeholder="Auto-generated from name if blank" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Monthly Price</label>
-            <input type="number" value={form.monthlyPrice} onChange={(event) => setForm((current) => ({ ...current, monthlyPrice: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+    <FormDrawer open={Boolean(plan)} title={plan ? `Edit ${plan.name}` : ''} onClose={onClose}>
+      {form ? (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">New prices apply to new licenses and at each tenant's next renewal. They never change a current term.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <NumberField label="Office seat / month" value={form.officeSeatMonthlyPrice} onChange={(value) => set({ officeSeatMonthlyPrice: value })} />
+            <NumberField label="Office seat / year" value={form.officeSeatAnnualPrice} onChange={(value) => set({ officeSeatAnnualPrice: value })} />
+            <NumberField label="Field seat / month" value={form.fieldSeatMonthlyPrice} onChange={(value) => set({ fieldSeatMonthlyPrice: value })} />
+            <NumberField label="Field seat / year" value={form.fieldSeatAnnualPrice} onChange={(value) => set({ fieldSeatAnnualPrice: value })} />
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Annual Price</label>
-            <input type="number" value={form.annualPrice} onChange={(event) => setForm((current) => ({ ...current, annualPrice: Number(event.target.value) }))} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-          </div>
+          <NumberField label="Minimum office seats" min={1} value={form.minOfficeSeats} onChange={(value) => set({ minOfficeSeats: value })} />
+          <ActiveToggle checked={form.isActive} onChange={(isActive) => set({ isActive })} />
+          <button type="button" disabled={save.isPending} onClick={() => save.mutate()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">
+            {save.isPending ? 'Saving…' : 'Save Changes'}
+          </button>
         </div>
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700">Modules Included (comma-separated)</label>
-          <input value={form.modulesIncluded} onChange={(event) => setForm((current) => ({ ...current, modulesIncluded: event.target.value }))} placeholder="EmailIngestion, MonitoringIntegration" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-        </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={form.isActive} onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.checked }))} className="h-4 w-4 rounded border-slate-300" />
-          Active
-        </label>
-        <button type="button" disabled={!form.name.trim() || save.isPending} onClick={() => save.mutate()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">
-          {save.isPending ? 'Saving…' : plan ? 'Save Changes' : 'Create Plan'}
-        </button>
-      </div>
+      ) : null}
     </FormDrawer>
   )
 }
 
+type AddOnForm = Pick<PlatformLicenseAddOn, 'monthlyPrice' | 'annualPrice' | 'includedMessages' | 'extraMessagePrice' | 'extraNumberPrice' | 'isActive'>
+
+function AddOnDrawer({ addOn, onClose }: { addOn: PlatformLicenseAddOn | null; onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState<AddOnForm | null>(null)
+  useEffect(() => setForm(addOn), [addOn])
+
+  const save = useMutation({
+    mutationFn: () => api.put<PlatformLicenseAddOn>(`${endpoints.platformLicensing.addOns}/${addOn?.id}`, form),
+    onSuccess: () => {
+      toast.success('Add-on updated')
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'licensing', 'add-ons'] })
+      onClose()
+    },
+  })
+  const set = (patch: Partial<AddOnForm>) => setForm((current) => (current ? { ...current, ...patch } : current))
+
+  return (
+    <FormDrawer open={Boolean(addOn)} title={addOn ? `Edit ${addOn.name}` : ''} onClose={onClose}>
+      {form ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <NumberField label="Monthly fee" value={form.monthlyPrice} onChange={(value) => set({ monthlyPrice: value })} />
+            <NumberField label="Annual fee" value={form.annualPrice} onChange={(value) => set({ annualPrice: value })} />
+            <NumberField label="Messages included / month" value={form.includedMessages} onChange={(value) => set({ includedMessages: value })} />
+            <NumberField label="Price per extra message" value={form.extraMessagePrice} onChange={(value) => set({ extraMessagePrice: value })} />
+          </div>
+          {addOn?.code === 'whatsapp_business' ? (
+            <NumberField label="Extra dedicated number / month" value={form.extraNumberPrice} onChange={(value) => set({ extraNumberPrice: value })} />
+          ) : null}
+          <ActiveToggle checked={form.isActive} onChange={(isActive) => set({ isActive })} />
+          <button type="button" disabled={save.isPending} onClick={() => save.mutate()} className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">
+            {save.isPending ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      ) : null}
+    </FormDrawer>
+  )
+}
+
+const money = (value: number) => value.toLocaleString()
+
 export function PlansSettingsPage() {
   const canManage = usePermission('platform.settings.manage')
-  const { data, isLoading, isError } = useQuery({
+  const plans = useQuery({
     queryKey: ['platform', 'licensing', 'plans'],
-    queryFn: () => api.get<PlatformLicensePlan[]>('/api/platform/licensing/plans'),
+    queryFn: () => api.get<PlatformLicensePlan[]>(endpoints.platformLicensing.plans),
     staleTime: 30_000,
   })
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const addOns = useQuery({
+    queryKey: ['platform', 'licensing', 'add-ons'],
+    queryFn: () => api.get<PlatformLicenseAddOn[]>(endpoints.platformLicensing.addOns),
+    staleTime: 30_000,
+  })
   const [editingPlan, setEditingPlan] = useState<PlatformLicensePlan | null>(null)
+  const [editingAddOn, setEditingAddOn] = useState<PlatformLicenseAddOn | null>(null)
+  const editButton = (onClick: () => void) => (canManage ? <button type="button" onClick={onClick} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Edit</button> : null)
 
-  const columns: DataTableColumn<PlatformLicensePlan>[] = [
-    { key: 'name', header: 'Plan', cell: (row) => <span className="font-medium text-slate-900">{row.name}</span> },
-    { key: 'code', header: 'Code', cell: (row) => <span className="font-mono text-xs">{row.code}</span> },
-    { key: 'monthlyPrice', header: 'Monthly', cell: (row) => row.monthlyPrice.toLocaleString() },
-    { key: 'annualPrice', header: 'Annual', cell: (row) => row.annualPrice.toLocaleString() },
-    { key: 'modulesIncluded', header: 'Modules', cell: (row) => row.modulesIncluded.join(', ') || '—' },
-    { key: 'isActive', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
-    { key: 'actions', header: '', cell: (row) => (canManage ? <button type="button" onClick={() => { setEditingPlan(row); setDrawerOpen(true) }} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Edit</button> : null) },
+  const planColumns: DataTableColumn<PlatformLicensePlan>[] = [
+    { key: 'name', header: 'Edition', cell: (row) => <span className="font-medium text-slate-900">{row.name}</span> },
+    { key: 'office', header: 'Office seat / mo', cell: (row) => money(row.officeSeatMonthlyPrice) },
+    { key: 'field', header: 'Field seat / mo', cell: (row) => money(row.fieldSeatMonthlyPrice) },
+    { key: 'min', header: 'Min office seats', cell: (row) => row.minOfficeSeats },
+    { key: 'modules', header: 'Includes', cell: (row) => row.modulesIncluded.map((module) => moduleLabels[module] ?? module).join(', ') },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={!row.isActive ? 'Inactive' : row.isPriced ? 'Active' : 'Not priced'} /> },
+    { key: 'actions', header: '', cell: (row) => editButton(() => setEditingPlan(row)) },
+  ]
+  const addOnColumns: DataTableColumn<PlatformLicenseAddOn>[] = [
+    { key: 'name', header: 'Add-on', cell: (row) => <span className="font-medium text-slate-900">{row.name}</span> },
+    { key: 'monthly', header: 'Monthly', cell: (row) => money(row.monthlyPrice) },
+    { key: 'included', header: 'Messages included', cell: (row) => row.includedMessages.toLocaleString() },
+    { key: 'extra', header: 'Extra message', cell: (row) => money(row.extraMessagePrice) },
+    { key: 'number', header: 'Extra number / mo', cell: (row) => (row.code === 'whatsapp_business' ? money(row.extraNumberPrice) : '—') },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isActive ? 'Active' : 'Inactive'} /> },
+    { key: 'actions', header: '', cell: (row) => editButton(() => setEditingAddOn(row)) },
   ]
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="License Plans"
-        subtitle="Pricing tiers and entitlement limits offered to tenant workspaces."
-        primaryAction={canManage ? <button type="button" onClick={() => { setEditingPlan(null); setDrawerOpen(true) }} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"><Plus className="h-4 w-4" />New Plan</button> : undefined}
-      />
+      <PageHeader title="Editions & Pricing" subtitle="Seat prices for each edition, and the optional WhatsApp add-ons. Which features each edition includes is fixed." />
       <DataTable
-        columns={columns}
-        data={data ?? []}
-        loading={isLoading}
-        emptyTitle={isError ? 'Plans unavailable' : 'No license plans configured'}
-        emptyDescription={isError ? 'License plans could not be loaded.' : 'Create a plan to start onboarding tenants.'}
+        columns={planColumns}
+        data={plans.data ?? []}
+        loading={plans.isLoading}
+        emptyTitle={plans.isError ? 'Editions unavailable' : 'No editions'}
+        emptyDescription={plans.isError ? 'Editions could not be loaded.' : 'The editions are created by the database migration.'}
       />
-      <PlanDrawer open={drawerOpen} plan={editingPlan} onClose={() => setDrawerOpen(false)} />
+      <h2 className="pt-2 text-sm font-semibold text-slate-900">Add-ons</h2>
+      <DataTable
+        columns={addOnColumns}
+        data={addOns.data ?? []}
+        loading={addOns.isLoading}
+        emptyTitle={addOns.isError ? 'Add-ons unavailable' : 'No add-ons'}
+        emptyDescription={addOns.isError ? 'Add-ons could not be loaded.' : 'The add-ons are created by the database migration.'}
+      />
+      <EditionDrawer plan={editingPlan} onClose={() => setEditingPlan(null)} />
+      <AddOnDrawer addOn={editingAddOn} onClose={() => setEditingAddOn(null)} />
     </div>
   )
 }

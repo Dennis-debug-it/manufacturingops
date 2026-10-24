@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildCreateTenantPayload,
+  DEFAULT_FIELD_SEATS,
   DEFAULT_LICENSED_USERS,
+  FIELD_SEATS_INVALID,
   LICENSED_USERS_INVALID,
   LICENSED_USERS_REQUIRED,
   parseLicensedUsers,
@@ -12,26 +14,35 @@ import {
 const validForm: CreateTenantForm = {
   companyName: ' Acme Services ',
   slug: 'acme',
-  planCode: 'suite',
+  planCode: 'professional',
   adminFullName: 'Jane Admin',
   adminEmail: 'jane@acme.test',
   country: 'Kenya',
   timeZoneId: 'Africa/Nairobi',
   maxUsers: String(DEFAULT_LICENSED_USERS),
+  fieldSeats: String(DEFAULT_FIELD_SEATS),
 }
 
 describe('buildCreateTenantPayload', () => {
-  it('defaults Licensed Users to 10 and sends it as maxUsers', () => {
+  it('defaults office and field seats to 10 and sends them as numbers', () => {
     expect(DEFAULT_LICENSED_USERS).toBe(10)
     const result = buildCreateTenantPayload(validForm)
     expect(result.ok).toBe(true)
     if (!result.ok) return
-    expect(result.payload.maxUsers).toBe(10)
-    expect(typeof result.payload.maxUsers).toBe('number')
+    expect(result.payload.officeSeats).toBe(10)
+    expect(result.payload.fieldSeats).toBe(10)
+    expect(typeof result.payload.officeSeats).toBe('number')
     expect(result.payload.companyName).toBe('Acme Services')
   })
 
-  it('rejects a missing licensed-user count with a clear message', () => {
+  it('allows zero field seats and rejects negative or fractional ones', () => {
+    const zero = buildCreateTenantPayload({ ...validForm, fieldSeats: '0' })
+    expect(zero.ok && zero.payload.fieldSeats).toBe(0)
+    expect(buildCreateTenantPayload({ ...validForm, fieldSeats: '-1' })).toEqual({ ok: false, error: FIELD_SEATS_INVALID })
+    expect(buildCreateTenantPayload({ ...validForm, fieldSeats: '1.5' })).toEqual({ ok: false, error: FIELD_SEATS_INVALID })
+  })
+
+  it('rejects a missing office seat count with a clear message', () => {
     expect(buildCreateTenantPayload({ ...validForm, maxUsers: '' })).toEqual({ ok: false, error: LICENSED_USERS_REQUIRED })
     expect(buildCreateTenantPayload({ ...validForm, maxUsers: '   ' })).toEqual({ ok: false, error: LICENSED_USERS_REQUIRED })
   })

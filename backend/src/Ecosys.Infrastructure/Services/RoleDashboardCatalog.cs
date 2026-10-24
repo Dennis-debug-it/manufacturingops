@@ -66,6 +66,8 @@ public static class DashboardWidgetCatalog
     public const string ActionItemsDue = "action-items.due";
 
     private static readonly string[] Ops = [ServiceOpsPlans.Operations];
+    private static readonly string[] Mnt = [ServiceOpsPlans.Maintenance];
+    private static readonly string[] Inv = [ServiceOpsPlans.Inventory];
     private static readonly string[] Fin = [ServiceOpsPlans.Finance];
     private static readonly string[] Prj = [ServiceOpsPlans.Projects];
     private static readonly string[] PrjFin = [ServiceOpsPlans.Projects, ServiceOpsPlans.Finance];
@@ -103,15 +105,15 @@ public static class DashboardWidgetCatalog
         new(TechniciansOnSite, "Technicians on site", "Technicians who have arrived on a job and not yet left.",
             Ops, Dispatch, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, WorkOrderData),
         new(MaintenancePmCompliance, "PM compliance", "Preventive maintenance done on time over the last 30 days, and plans overdue.",
-            Ops, [PermissionNames.CanViewWorkOrders, PermissionNames.CanManageSettings], DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, PmData),
+            Mnt, [PermissionNames.CanViewWorkOrders, PermissionNames.CanManageSettings], DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, PmData),
         new(ContractsExpiring, "Contracts expiring", "Contracts ending in the next 30 and 90 days.",
-            Ops, [], DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, ContractData),
+            Mnt, [], DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, ContractData),
         new(MaterialsLowStock, "Low stock", "Materials at or below their reorder level.",
-            Ops, ViewMaterials, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, MaterialData),
+            Inv, ViewMaterials, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, MaterialData),
         new(MaterialsPendingIssues, "Pending material issues", "Issues waiting for approval, and approved issues not yet handed out.",
-            Ops, [PermissionNames.CanIssueMaterials, PermissionNames.CanApproveMaterials, PermissionNames.CanManageMaterials], DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, MaterialData),
+            Inv, [PermissionNames.CanIssueMaterials, PermissionNames.CanApproveMaterials, PermissionNames.CanManageMaterials], DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, MaterialData),
         new(PurchaseOrdersOpen, "Open purchase orders", "Purchase orders not yet fully received, and those past their expected date.",
-            Ops, [PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials], DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, MaterialData),
+            Inv, [PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials], DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, MaterialData),
         new(FinanceReceivablesOverdue, "Receivables overdue", "Unpaid invoice balances past their due date.",
             Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
         new(FinanceReceivablesAgeing, "Receivables ageing", "Unpaid invoice balances by days past due.",

@@ -209,6 +209,7 @@ public sealed class PlatformTenantsController(
         if (request.PlanId.HasValue)
         {
             var selectedPlan = await LoadActivePlanAsync(request.PlanId.Value, cancellationToken);
+            SeatRules.Validate(selectedPlan, license.OfficeSeats, license.FieldSeats);
             license.LicensePlanId = selectedPlan.Id;
             license.LicensePlan = selectedPlan;
         }
@@ -280,33 +281,31 @@ public sealed class PlatformTenantsController(
     }
 
     /// <summary>
-    /// Sets the tenant's licensed seat count (TenantLicense.LicensedUsers — the value LicenseGuardService
-    /// enforces). Lowering it below current usage never deactivates anyone: existing users keep access and
-    /// new additions/reactivations are refused until usage falls under the limit.
+    /// Sets the tenant's office and field seats (the values LicenseGuardService enforces). Lowering either
+    /// below current usage never deactivates anyone: existing users keep access and new additions or
+    /// reactivations in that pool are refused until usage falls under the limit.
     /// </summary>
     [HttpPut("{tenantId:guid}/license/seats")]
     [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> UpdateSeats(Guid tenantId, [FromBody] UpdateTenantSeatsRequest request, CancellationToken cancellationToken)
     {
-        if (request.MaxUsers <= 0)
-        {
-            throw new BusinessRuleException("Licensed users must be greater than zero.");
-        }
-
         var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
         var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
-        var before = license.LicensedUsers;
-        license.LicensedUsers = request.MaxUsers;
+        SeatRules.Validate(license.LicensePlan!, request.OfficeSeats, request.FieldSeats);
+        var (officeBefore, fieldBefore) = (license.OfficeSeats, license.FieldSeats);
+        license.OfficeSeats = request.OfficeSeats;
+        license.FieldSeats = request.FieldSeats;
         TenantLifecycleState.Sync(tenant, license, DateTime.UtcNow);
         tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var used = await dbContext.Users.CountAsync(x => x.TenantId == tenant.Id && x.IsActive, cancellationToken);
+        var (officeUsed, fieldUsed) = await CountSeatsUsedAsync(tenant.Id, cancellationToken);
+        var overLimit = officeUsed > request.OfficeSeats || fieldUsed > request.FieldSeats;
         await WriteAuditAsync(
             tenant,
             "platform.tenant.license.seats.updated",
-            $"Licensed users changed from {before} to {request.MaxUsers} ({used} in use)."
-                + (used > request.MaxUsers ? " Usage exceeds the new limit; no users were deactivated, new additions are blocked until usage falls." : string.Empty),
+            $"Office seats {officeBefore} → {request.OfficeSeats} ({officeUsed} in use); field seats {fieldBefore} → {request.FieldSeats} ({fieldUsed} in use)."
+                + (overLimit ? " Usage exceeds the new limit; no users were deactivated, new additions are blocked until usage falls." : string.Empty),
             cancellationToken);
 
         return Ok(await BuildDetailResponseAsync(tenant, cancellationToken));
@@ -566,7 +565,7 @@ public sealed class PlatformTenantsController(
         // adds from both seeing the last free seat (TM-P1-08).
         await using var transaction = dbContext.Database.IsRelational()
             ? await dbContext.Database.BeginTransactionAsync(System.Data.IsolationLevel.ReadCommitted, cancellationToken) : null;
-        await licenseGuardService.EnsureCanCreateUserAsync(tenant.Id, cancellationToken);
+        await licenseGuardService.EnsureSeatsAvailableAsync(tenant.Id, [role], cancellationToken);
 
         var emailInUse = await dbContext.Users.AnyAsync(x => x.Email.ToLower() == email.ToLower(), cancellationToken);
         if (emailInUse)
@@ -884,12 +883,16 @@ public sealed class PlatformTenantsController(
         var normalizedStartsAt = EnsureUtc(request.StartsAt);
         var normalizedExpiresAt = EnsureUtc(request.ExpiresAt);
 
-        ValidatePositive(request.MaxUsers, "Licensed users");
-        if (isNewTenant && request.MaxUsers is null)
+        ValidatePositive(request.OfficeSeats, "Office seats");
+        if (isNewTenant && request.OfficeSeats is null)
         {
-            // Every tenant is provisioned with an explicit seat count; commercial plans carry no default,
-            // so omitting it used to create unlimited workspaces (TM-P1-06).
-            throw new BusinessRuleException("Licensed user limit is required. Enter how many workspace users this tenant may have.");
+            // Every tenant is provisioned with an explicit seat count; editions carry no default, so
+            // omitting it used to create unlimited workspaces (TM-P1-06).
+            throw new BusinessRuleException("Office seats are required. Enter how many office users this tenant may have.");
+        }
+        if (request.FieldSeats is < 0)
+        {
+            throw new BusinessRuleException("Field seats cannot be negative.");
         }
         ValidatePositive(request.MaxBranches, "Max branches");
         ValidateNotInPast(normalizedTrialEndsAt, todayUtc, "Trial end date");
@@ -908,7 +911,7 @@ public sealed class PlatformTenantsController(
         }
 
         LicensePlan? plan = null;
-        var requestedPlanName = NormalizeOptional(request.PlanCode) ?? NormalizeOptional(request.PlanName) ?? (isNewTenant ? "suite" : null);
+        var requestedPlanName = NormalizeOptional(request.PlanCode) ?? NormalizeOptional(request.PlanName) ?? (isNewTenant ? ServiceOpsPlans.Professional : null);
         if (!string.IsNullOrWhiteSpace(requestedPlanName))
         {
             plan = await dbContext.LicensePlans
@@ -1025,9 +1028,11 @@ public sealed class PlatformTenantsController(
         license.TrialEndsAt = trialEndsAt;
         license.ExpiresAt = normalizedExpiresAt ?? normalizedSubscriptionEndsAt ?? (isNewTenant ? trialEndsAt : license.ExpiresAt);
         // Omitted seat/branch limits keep the current licensed value; clearing a limit is not an edit side effect.
-        if (request.MaxUsers is int licensedUsers)
+        license.OfficeSeats = request.OfficeSeats ?? license.OfficeSeats;
+        license.FieldSeats = request.FieldSeats ?? (isNewTenant ? 0 : license.FieldSeats);
+        if (license.LicensePlan is { } seatPlan)
         {
-            license.LicensedUsers = licensedUsers;
+            SeatRules.Validate(seatPlan, license.OfficeSeats, license.FieldSeats);
         }
         license.MaxBranchesOverride = isNewTenant ? request.MaxBranches : request.MaxBranches ?? license.MaxBranchesOverride;
         license.CreatedAt = EnsureUtc(license.CreatedAt);
@@ -1232,6 +1237,7 @@ public sealed class PlatformTenantsController(
                 if (activation.PlanId.HasValue)
                 {
                     var selectedPlan = await LoadActivePlanAsync(activation.PlanId.Value, cancellationToken);
+                    SeatRules.Validate(selectedPlan, license.OfficeSeats, license.FieldSeats);
                     license.LicensePlanId = selectedPlan.Id;
                     license.LicensePlan = selectedPlan;
                 }
@@ -1299,6 +1305,7 @@ public sealed class PlatformTenantsController(
         var summary = await BuildSummaryResponseAsync(tenant, cancellationToken);
         var trial = BuildTrialSnapshot(tenant);
         var license = tenant.TenantLicenses.OrderByDescending(x => x.CreatedAt).FirstOrDefault();
+        var (officeSeatsUsed, fieldSeatsUsed) = await CountSeatsUsedAsync(tenant.Id, cancellationToken);
 
         return new PlatformTenantDetailResponse(
             tenant.Id,
@@ -1343,7 +1350,12 @@ public sealed class PlatformTenantsController(
         {
             SeatsUsed = summary.UserCount,
             SeatLimit = EffectiveSeatLimit(license),
-            Modules = license?.LicensePlan is { } plan ? ServiceOpsPlans.Modules(plan) : [],
+            OfficeSeats = license?.OfficeSeats,
+            FieldSeats = license?.FieldSeats,
+            OfficeSeatsUsed = officeSeatsUsed,
+            FieldSeatsUsed = fieldSeatsUsed,
+            WhatsAppAddOn = license?.WhatsAppAddOn,
+            Modules = license?.LicensePlan is { } plan ? ServiceOpsPlans.Modules(plan, license.WhatsAppAddOn) : [],
             PlanCode = license?.LicensePlan?.PlanCode,
             LicenseExpiresAt = license?.ExpiresAt,
             IsPerpetual = license?.IsPerpetual ?? false,
@@ -1351,8 +1363,18 @@ public sealed class PlatformTenantsController(
         };
     }
 
-    /// <summary>The seat limit LicenseGuardService enforces: the tenant override, else the plan's.</summary>
-    private static int? EffectiveSeatLimit(TenantLicense? license) => license?.LicensedUsers;
+    /// <summary>Active workspace users (pending invitees included) by the seat their role takes; see <see cref="SeatTypes"/>.</summary>
+    private async Task<(int Office, int Field)> CountSeatsUsedAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var roles = await dbContext.Users
+            .Where(x => x.TenantId == tenantId && x.IsActive)
+            .Select(x => x.Role)
+            .ToListAsync(cancellationToken);
+        return (roles.Count(x => SeatTypes.For(x) == SeatTypes.Office), roles.Count(x => SeatTypes.For(x) == SeatTypes.Field));
+    }
+
+    /// <summary>All paid seats (office + field) — the total the tenant may have active, Viewers aside.</summary>
+    private static int? EffectiveSeatLimit(TenantLicense? license) => license is null ? null : license.OfficeSeats + license.FieldSeats;
 
     private async Task<PlatformTenantSummaryResponse> BuildSummaryResponseAsync(Tenant tenant, CancellationToken cancellationToken)
     {
@@ -1421,7 +1443,7 @@ public sealed class PlatformTenantsController(
             tenant.CreatedAt)
         {
             SeatLimit = EffectiveSeatLimit(license),
-            Modules = license?.LicensePlan is { } plan ? ServiceOpsPlans.Modules(plan) : [],
+            Modules = license?.LicensePlan is { } plan ? ServiceOpsPlans.Modules(plan, license.WhatsAppAddOn) : [],
             LicenseExpiresAt = license?.ExpiresAt,
         };
     }
@@ -1827,7 +1849,7 @@ public sealed record UpsertPlatformTenantRequest(
     string? Address,
     string? TaxPin,
     string? PlanName,
-    int? MaxUsers,
+    int? OfficeSeats,
     int? MaxBranches,
     DateTime? TrialEndsAt,
     DateTime? SubscriptionEndsAt,
@@ -1841,7 +1863,8 @@ public sealed record UpsertPlatformTenantRequest(
     string? AdminEmail = null,
     string? AdminPhone = null,
     string? TimeZoneId = null,
-    string? PlanCode = null);
+    string? PlanCode = null,
+    int? FieldSeats = null);
 
 public sealed record UpdatePlatformTenantStatusRequest(string Status, string? Reason);
 public sealed record UpdatePlatformTenantStatusReasonRequest(string? Reason);
@@ -1876,7 +1899,7 @@ public sealed record RenewTenantLicenseRequest(
 /// <summary>Pushes an existing, still-active entitlement's expiry further out without changing anything else.</summary>
 public sealed record ExtendTenantLicenseRequest(DateTime NewExpiresAt);
 
-public sealed record UpdateTenantSeatsRequest(int MaxUsers);
+public sealed record UpdateTenantSeatsRequest(int OfficeSeats, int FieldSeats);
 
 public sealed record PlatformTenantListResponse(
     Guid TenantId,
@@ -1952,7 +1975,13 @@ public sealed record PlatformTenantDetailResponse(
     /// <summary>Effective licensed seats — what LicenseGuardService enforces. Null = unlimited.</summary>
     public int? SeatLimit { get; init; }
 
-    /// <summary>ServiceOps modules the plan entitles (operations / finance).</summary>
+    public int? OfficeSeats { get; init; }
+    public int? FieldSeats { get; init; }
+    public int OfficeSeatsUsed { get; init; }
+    public int FieldSeatsUsed { get; init; }
+    public string? WhatsAppAddOn { get; init; }
+
+    /// <summary>ServiceOps modules the edition (and WhatsApp Business add-on) entitles.</summary>
     public IReadOnlyList<string> Modules { get; init; } = [];
     public string? PlanCode { get; init; }
     public DateTime? LicenseExpiresAt { get; init; }

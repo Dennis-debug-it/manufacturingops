@@ -109,23 +109,20 @@ public sealed partial class ProjectsModuleTests
     // ── Licensing ─────────────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData("operations", "Core", "operations")]
-    [InlineData("operations", "Core,projects", "operations,projects")]
-    [InlineData("suite", "Core,Projects", "operations,finance,projects")]
-    [InlineData("finance", "projects", "finance,projects")]
-    [InlineData("legacy-custom", "Core,finance,projects", "finance,projects")]
-    [InlineData("Trial", "Core", "operations,finance")]
-    [InlineData("Trial", "Core,projects", "operations,finance,projects")]
-    public void ProjectsIsAnAddOnThatNoPlanIncludesByDefault(string code, string included, string expected)
+    [InlineData(ServiceOpsPlans.Essentials, false)]
+    [InlineData(ServiceOpsPlans.Professional, true)]
+    [InlineData(ServiceOpsPlans.Enterprise, true)]
+    public void Projects_ComesWithProfessionalAndEnterprise(string edition, bool included)
     {
-        Assert.Equal(expected.Split(','), ServiceOpsPlans.Modules(new LicensePlan { PlanCode = code, ModulesIncluded = included }));
+        Assert.Equal(included, ServiceOpsPlans.Modules(new LicensePlan { PlanCode = edition }).Contains(ServiceOpsPlans.Projects));
     }
 
     [Theory]
     [InlineData("Projects", "/api/projects", "projects")]
     [InlineData("Projects", "/api/projects/123/milestones", "projects")]
-    [InlineData("Projects", "/api/projects/123/work-orders", "projects,operations")]
-    [InlineData("Projects", "/api/projects/123/material-issues", "projects,operations")]
+    [InlineData("Projects", "/api/projects/123/work-orders", "projects")]
+    [InlineData("Projects", "/api/projects/123/material-issues", "projects")]
+    [InlineData("ProjectCommercial", "/api/projects/123/valuations", "projects")]
     [InlineData("ProjectSettings", "/api/project-settings/stages", "projects")]
     [InlineData("Consultants", "/api/consultants", "projects")]
     [InlineData("PortalProjects", "/api/portal/projects", "projects")]
@@ -136,12 +133,12 @@ public sealed partial class ProjectsModuleTests
     }
 
     [Theory]
-    [InlineData("suite", "Core", "Projects", "/api/projects", false)]
-    [InlineData("suite", "Core,projects", "Projects", "/api/projects", true)]
-    [InlineData("finance", "Core,projects", "Projects", "/api/projects", true)]
-    [InlineData("finance", "Core,projects", "Projects", "/api/projects/123/work-orders", false)]
-    [InlineData("operations", "Core,projects", "Projects", "/api/projects/123/work-orders", true)]
-    public async Task LicenseMiddleware_EnforcesTheProjectsModule(string planCode, string modules, string controller, string path, bool allowed)
+    [InlineData(ServiceOpsPlans.Essentials, "Projects", "/api/projects", false)]
+    [InlineData(ServiceOpsPlans.Essentials, "ProjectCommercial", "/api/projects/123/valuations", false)]
+    [InlineData(ServiceOpsPlans.Professional, "Projects", "/api/projects", true)]
+    [InlineData(ServiceOpsPlans.Professional, "Projects", "/api/projects/123/work-orders", true)]
+    [InlineData(ServiceOpsPlans.Enterprise, "ProjectCommercial", "/api/projects/123/valuations", true)]
+    public async Task LicenseMiddleware_EnforcesTheProjectsModule(string planCode, string controller, string path, bool allowed)
     {
         var tenantId = Guid.NewGuid();
         var http = new DefaultHttpContext();
@@ -156,7 +153,7 @@ public sealed partial class ProjectsModuleTests
         var tenantContext = new HttpTenantContext(new HttpContextAccessor { HttpContext = http });
         await using var db = new AppDbContext(InMemory(Guid.NewGuid().ToString()), tenantContext);
         db.Tenants.Add(new Tenant { Id = tenantId, Name = "Plan test", CompanyName = "Plan test", Slug = "plan-test", Country = "Kenya", IsActive = true });
-        var plan = new LicensePlan { PlanCode = planCode, DisplayName = "Plan test", ModulesIncluded = modules };
+        var plan = new LicensePlan { PlanCode = planCode, DisplayName = "Plan test" };
         db.LicensePlans.Add(plan);
         db.TenantLicenses.Add(new TenantLicense { TenantId = tenantId, LicensePlanId = plan.Id, LicensePlan = plan, Status = "Active" });
         await db.SaveChangesAsync();

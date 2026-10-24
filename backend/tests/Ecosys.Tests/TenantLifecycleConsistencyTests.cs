@@ -227,7 +227,7 @@ public sealed partial class AuthEmailSafetyTests
 
         var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(MinimalProvisioningRequest(maxUsers: null), CancellationToken.None));
 
-        Assert.StartsWith("Licensed user limit is required.", error.Message);
+        Assert.StartsWith("Office seats are required.", error.Message);
         Assert.False(await db.Tenants.AnyAsync(x => x.Slug == "acme-engineering"));
     }
 
@@ -241,20 +241,24 @@ public sealed partial class AuthEmailSafetyTests
         await SeedActiveLicenseAsync(db, tenantId, DateTime.UtcNow.AddDays(60));
         db.Users.AddRange(
             new User { TenantId = tenantId, FullName = "One", Email = "one@shrinking.test", Role = AppRoles.Admin, IsActive = true },
-            new User { TenantId = tenantId, FullName = "Two", Email = "two@shrinking.test", Role = AppRoles.Viewer, IsActive = true },
-            new User { TenantId = tenantId, FullName = "Three", Email = "three@shrinking.test", Role = AppRoles.Viewer, IsActive = true });
+            new User { TenantId = tenantId, FullName = "Two", Email = "two@shrinking.test", Role = AppRoles.Dispatcher, IsActive = true },
+            new User { TenantId = tenantId, FullName = "Three", Email = "three@shrinking.test", Role = AppRoles.Technician, IsActive = true },
+            new User { TenantId = tenantId, FullName = "Four", Email = "four@shrinking.test", Role = AppRoles.Technician, IsActive = true });
         await db.SaveChangesAsync();
         var guard = new LicenseGuardService(db);
         var controller = CreateAuditPlatformTenantsController(db, guard);
 
         var detail = Assert.IsType<PlatformTenantDetailResponse>(
-            Assert.IsType<OkObjectResult>((await controller.UpdateSeats(tenantId, new UpdateTenantSeatsRequest(2), CancellationToken.None)).Result).Value);
+            Assert.IsType<OkObjectResult>((await controller.UpdateSeats(tenantId, new UpdateTenantSeatsRequest(3, 1), CancellationToken.None)).Result).Value);
 
-        Assert.Equal(2, detail.SeatLimit);
-        Assert.Equal(3, detail.SeatsUsed);
-        Assert.Equal(3, await db.Users.CountAsync(x => x.TenantId == tenantId && x.IsActive));
-        await Assert.ThrowsAsync<LicenseException>(() => guard.EnsureCanCreateUserAsync(tenantId));
-        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.UpdateSeats(tenantId, new UpdateTenantSeatsRequest(0), CancellationToken.None));
+        Assert.Equal((3, 1), (detail.OfficeSeats, detail.FieldSeats));
+        Assert.Equal((2, 2), (detail.OfficeSeatsUsed, detail.FieldSeatsUsed));
+        Assert.Equal(4, await db.Users.CountAsync(x => x.TenantId == tenantId && x.IsActive));
+        // Office has room; field is over its new limit, so only technicians are blocked.
+        await guard.EnsureSeatsAvailableAsync(tenantId, [AppRoles.Manager]);
+        var error = await Assert.ThrowsAsync<LicenseException>(() => guard.EnsureSeatsAvailableAsync(tenantId, [AppRoles.Technician]));
+        Assert.Equal("license_field_seats_reached", error.ErrorCode);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.UpdateSeats(tenantId, new UpdateTenantSeatsRequest(0, 1), CancellationToken.None));
     }
 
     [Fact]
@@ -272,7 +276,7 @@ public sealed partial class AuthEmailSafetyTests
 
         var license = await db.TenantLicenses.SingleAsync(x => x.TenantId == created.TenantId);
         var tenant = await db.Tenants.SingleAsync(x => x.Id == created.TenantId);
-        Assert.Equal(12, license.LicensedUsers);
+        Assert.Equal(12, license.OfficeSeats);
         Assert.Equal(LicenseStatuses.Suspended, license.Status);
         Assert.Equal(TenantStatuses.Suspended, tenant.Status);
         // The platform renames its own workspace record; the company name is the tenant's (Company Profile).
@@ -287,15 +291,20 @@ public sealed partial class AuthEmailSafetyTests
         var tenantId = Guid.NewGuid();
         await SeedTenantAsync(db, tenantId, "Batch Co", "ops@batch.test");
         await SeedActiveLicenseAsync(db, tenantId, DateTime.UtcNow.AddDays(60));
-        (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).LicensedUsers = 5;
+        var license = await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId);
+        (license.OfficeSeats, license.FieldSeats) = (5, 2);
         db.Users.Add(new User { TenantId = tenantId, FullName = "Admin", Email = "admin@batch.test", Role = AppRoles.Admin, IsActive = true });
         await db.SaveChangesAsync();
         var guard = new LicenseGuardService(db);
+        string[] fourOffice = [AppRoles.Manager, AppRoles.Dispatcher, AppRoles.FinanceUser, AppRoles.MaterialsController];
 
-        await guard.EnsureCanAddUsersAsync(tenantId, 4);
-        var error = await Assert.ThrowsAsync<LicenseException>(() => guard.EnsureCanAddUsersAsync(tenantId, 5));
-        Assert.Contains("licensed user limit of 5: 5 active users requested but only 4 seats remain", error.Message);
-        await guard.EnsureCanAddUsersAsync(tenantId, 0);
+        await guard.EnsureSeatsAvailableAsync(tenantId, [.. fourOffice, AppRoles.Technician, AppRoles.Technician, AppRoles.Viewer]);
+        var office = await Assert.ThrowsAsync<LicenseException>(() => guard.EnsureSeatsAvailableAsync(tenantId, [.. fourOffice, AppRoles.Admin]));
+        Assert.Contains("would exceed the workspace's 5 office seats: 5 requested but only 4 remain", office.Message);
+        var field = await Assert.ThrowsAsync<LicenseException>(() => guard.EnsureSeatsAvailableAsync(tenantId, [AppRoles.Technician, AppRoles.Technician, AppRoles.Technician]));
+        Assert.Equal("license_field_seats_reached", field.ErrorCode);
+        await guard.EnsureSeatsAvailableAsync(tenantId, []);
+        await guard.EnsureSeatsAvailableAsync(tenantId, [AppRoles.Viewer, AppRoles.User]);
     }
 
     [Fact]
@@ -306,11 +315,11 @@ public sealed partial class AuthEmailSafetyTests
         await SeedPlatformUserAsync(db, "owner@platform.test");
         var controller = CreateAuditPlatformTenantsController(db, new LicenseGuardService(db));
         var created = Assert.IsType<PlatformTenantDetailResponse>(
-            Assert.IsType<CreatedAtActionResult>((await controller.Create(MinimalProvisioningRequest("finance", 7), CancellationToken.None)).Result).Value);
+            Assert.IsType<CreatedAtActionResult>((await controller.Create(MinimalProvisioningRequest("essentials", 7), CancellationToken.None)).Result).Value);
 
         Assert.Equal(7, created.SeatLimit);
         Assert.Equal(1, created.SeatsUsed);
-        Assert.Equal(["finance"], created.Modules);
+        Assert.Equal([ServiceOpsPlans.Operations, ServiceOpsPlans.Finance], created.Modules);
 
         var list = Assert.IsAssignableFrom<IReadOnlyCollection<PlatformTenantListResponse>>(
             Assert.IsType<OkObjectResult>((await controller.GetAll(CancellationToken.None)).Result).Value);
@@ -326,24 +335,27 @@ public sealed partial class AuthEmailSafetyTests
     }
 
     [Fact]
-    public async Task Plans_RetiredFeatures_AreNotStored_WhenAnOldClientSendsThem()
+    public async Task Plans_EditionPricesAndMinimums_AreEditable_AndModulesStayFixed()
     {
         await using var db = CreateDbContext();
+        await db.Database.EnsureCreatedAsync();
         var controller = new PlatformLicensingController(
             db,
             new FakeTenantContext(PlatformConstants.RootTenantId, Guid.NewGuid(), isAdmin: true, isSuperAdmin: true),
             new NoOpAuditLogService(),
             new NoOpLicenseGuardService(db));
 
-        var operationsPlanId = Guid.Parse("55555555-5555-5555-5555-555555555551");
-        var created = Assert.IsType<PlatformLicensePlanResponse>(Assert.IsType<OkObjectResult>((await controller.UpdatePlan(
-            operationsPlanId,
-            new UpsertPlatformLicensePlanRequest("Ops", "operations", 0, 0, null, ["EmailIngestion", "AdvancedReports", "ClientPortal"], true),
+        var professionalId = Guid.Parse("55555555-5555-5555-5555-555555555562");
+        var updated = Assert.IsType<PlatformLicensePlanResponse>(Assert.IsType<OkObjectResult>((await controller.UpdatePlan(
+            professionalId,
+            new UpdatePlatformLicensePlanRequest(2500m, 25000m, 1000m, 10000m, 4, true),
             CancellationToken.None)).Result).Value);
 
-        Assert.DoesNotContain("AdvancedReports", created.ModulesIncluded);
-        Assert.DoesNotContain("ClientPortal", created.ModulesIncluded);
-        Assert.Contains("EmailIngestion", created.ModulesIncluded);
+        Assert.True(updated.IsPriced);
+        Assert.Equal((2500m, 1000m, 4), (updated.OfficeSeatMonthlyPrice, updated.FieldSeatMonthlyPrice, updated.MinOfficeSeats));
+        Assert.Equal(ServiceOpsPlans.EditionModules(ServiceOpsPlans.Professional), updated.ModulesIncluded);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.UpdatePlan(professionalId,
+            new UpdatePlatformLicensePlanRequest(-1m, 0m, 0m, 0m, 3, true), CancellationToken.None));
     }
 
     // ------------------------------------------------------------------ security
@@ -415,7 +427,7 @@ public sealed partial class AuthEmailSafetyTests
         var tenantContext = new HttpTenantContext(new FixedHttpContextAccessor(http));
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenantContext);
         db.Tenants.Add(new Tenant { Id = tenantId, Name = "Harness", CompanyName = "Harness", Slug = $"harness-{tenantId:N}", Country = "Kenya", IsActive = tenantIsActive });
-        var plan = new LicensePlan { PlanCode = "suite", DisplayName = "Suite", IsActive = true };
+        var plan = new LicensePlan { PlanCode = ServiceOpsPlans.Professional, DisplayName = "Professional", IsActive = true };
         db.LicensePlans.Add(plan);
         db.TenantLicenses.Add(new TenantLicense
         {

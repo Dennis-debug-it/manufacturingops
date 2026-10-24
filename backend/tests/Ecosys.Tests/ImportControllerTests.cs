@@ -62,7 +62,7 @@ public sealed class ImportControllerTests
     {
         await using var dbContext = CreateDbContext();
         var fixture = await SeedFixtureAsync(dbContext);
-        (await dbContext.TenantLicenses.SingleAsync(x => x.TenantId == fixture.Tenant.Id)).LicensedUsers = 2;
+        (await dbContext.TenantLicenses.SingleAsync(x => x.TenantId == fixture.Tenant.Id)).OfficeSeats = 1;
         await dbContext.SaveChangesAsync();
         var controller = CreateController(dbContext, fixture, new RecordingCredentialDeliveryService(), new QueueTemporaryPasswordService("TempPass!234", "TempPass!567"));
 
@@ -75,7 +75,7 @@ public sealed class ImportControllerTests
                 """)),
             CancellationToken.None));
 
-        Assert.Equal("license_users_limit_reached", error.ErrorCode);
+        Assert.Equal("license_office_seats_reached", error.ErrorCode);
         Assert.Equal(1, await dbContext.Users.CountAsync(x => x.TenantId == fixture.Tenant.Id));
     }
 
@@ -85,7 +85,8 @@ public sealed class ImportControllerTests
     {
         await using var dbContext = CreateDbContext();
         var fixture = await SeedFixtureAsync(dbContext);
-        (await dbContext.TenantLicenses.SingleAsync(x => x.TenantId == fixture.Tenant.Id)).LicensedUsers = 1;
+        var license = await dbContext.TenantLicenses.SingleAsync(x => x.TenantId == fixture.Tenant.Id);
+        (license.OfficeSeats, license.FieldSeats) = (1, 0);
         await dbContext.SaveChangesAsync();
         var controller = CreateController(dbContext, fixture, new RecordingCredentialDeliveryService(), new QueueTemporaryPasswordService("TempPass!234"));
 

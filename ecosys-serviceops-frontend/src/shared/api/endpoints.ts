@@ -659,6 +659,7 @@ export const endpoints = {
   platformLicensing: {
     usage: '/api/platform/licensing/usage',
     plans: '/api/platform/licensing/plans',
+    addOns: '/api/platform/licensing/add-ons',
     subscriptions: '/api/platform/licensing/subscriptions',
   },
   platformFinance: {

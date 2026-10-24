@@ -4522,7 +4522,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("leave_types", (string)null);
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.LicensePlan", b =>
+            modelBuilder.Entity("Ecosys.Domain.Entities.LicenseAddOn", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -4532,6 +4532,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -4540,23 +4545,96 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<bool>("EmailIngestion")
-                        .HasColumnType("boolean");
+                    b.Property<decimal>("ExtraMessagePrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ExtraNumberPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("IncludedMessages")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<int?>("MaxBranches")
-                        .HasColumnType("integer");
+                    b.Property<decimal>("MonthlyPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
-                    b.Property<string>("ModulesIncluded")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("MonitoringIntegration")
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.ToTable("license_add_ons", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("55555555-5555-5555-5555-555555555571"),
+                            AnnualPrice = 15000m,
+                            Code = "whatsapp_notifications",
+                            CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "WhatsApp Notifications",
+                            ExtraMessagePrice = 3m,
+                            ExtraNumberPrice = 0m,
+                            IncludedMessages = 500,
+                            IsActive = true,
+                            MonthlyPrice = 1500m
+                        },
+                        new
+                        {
+                            Id = new Guid("55555555-5555-5555-5555-555555555572"),
+                            AnnualPrice = 45000m,
+                            Code = "whatsapp_business",
+                            CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "WhatsApp Business",
+                            ExtraMessagePrice = 3m,
+                            ExtraNumberPrice = 2500m,
+                            IncludedMessages = 1500,
+                            IsActive = true,
+                            MonthlyPrice = 4500m
+                        });
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.LicensePlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("FieldSeatAnnualPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("FieldSeatMonthlyPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<decimal>("MonthlyPrice")
+                    b.Property<int>("MinOfficeSeats")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("OfficeSeatAnnualPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("OfficeSeatMonthlyPrice")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
@@ -4578,42 +4656,42 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasData(
                         new
                         {
-                            Id = new Guid("55555555-5555-5555-5555-555555555551"),
-                            AnnualPrice = 0m,
-                            CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayName = "Ecosys ServiceOps Operations",
-                            EmailIngestion = true,
+                            Id = new Guid("55555555-5555-5555-5555-555555555561"),
+                            CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Ecosys ServiceOps Essentials",
+                            FieldSeatAnnualPrice = 0m,
+                            FieldSeatMonthlyPrice = 0m,
                             IsActive = true,
-                            ModulesIncluded = "Core,operations,EmailIngestion,MonitoringIntegration",
-                            MonitoringIntegration = true,
-                            MonthlyPrice = 0m,
-                            PlanCode = "operations"
+                            MinOfficeSeats = 2,
+                            OfficeSeatAnnualPrice = 0m,
+                            OfficeSeatMonthlyPrice = 0m,
+                            PlanCode = "essentials"
                         },
                         new
                         {
-                            Id = new Guid("55555555-5555-5555-5555-555555555552"),
-                            AnnualPrice = 0m,
-                            CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayName = "Ecosys ServiceOps Finance",
-                            EmailIngestion = false,
+                            Id = new Guid("55555555-5555-5555-5555-555555555562"),
+                            CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Ecosys ServiceOps Professional",
+                            FieldSeatAnnualPrice = 0m,
+                            FieldSeatMonthlyPrice = 0m,
                             IsActive = true,
-                            ModulesIncluded = "Core,finance",
-                            MonitoringIntegration = false,
-                            MonthlyPrice = 0m,
-                            PlanCode = "finance"
+                            MinOfficeSeats = 3,
+                            OfficeSeatAnnualPrice = 0m,
+                            OfficeSeatMonthlyPrice = 0m,
+                            PlanCode = "professional"
                         },
                         new
                         {
-                            Id = new Guid("55555555-5555-5555-5555-555555555553"),
-                            AnnualPrice = 0m,
-                            CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayName = "Ecosys ServiceOps Suite",
-                            EmailIngestion = true,
+                            Id = new Guid("55555555-5555-5555-5555-555555555563"),
+                            CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
+                            DisplayName = "Ecosys ServiceOps Enterprise",
+                            FieldSeatAnnualPrice = 0m,
+                            FieldSeatMonthlyPrice = 0m,
                             IsActive = true,
-                            ModulesIncluded = "Core,operations,finance,EmailIngestion,MonitoringIntegration",
-                            MonitoringIntegration = true,
-                            MonthlyPrice = 0m,
-                            PlanCode = "suite"
+                            MinOfficeSeats = 10,
+                            OfficeSeatAnnualPrice = 0m,
+                            OfficeSeatMonthlyPrice = 0m,
+                            PlanCode = "enterprise"
                         });
                 });
 
@@ -9681,6 +9759,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("FieldSeats")
+                        .HasColumnType("integer");
+
                     b.Property<int>("GracePeriodDays")
                         .HasColumnType("integer");
 
@@ -9691,9 +9772,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<Guid>("LicensePlanId")
                         .HasColumnType("uuid");
-
-                    b.Property<int>("LicensedUsers")
-                        .HasColumnType("integer");
 
                     b.Property<int?>("MaxBranchesOverride")
                         .HasColumnType("integer");
@@ -9707,6 +9785,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("OfficeSeats")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("OverdueWarningSentAt")
                         .HasColumnType("timestamp with time zone");
@@ -9735,8 +9816,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("WhatsAppEnabled")
-                        .HasColumnType("boolean");
+                    b.Property<string>("WhatsAppAddOn")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.HasKey("Id");
 
@@ -9747,7 +9829,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.ToTable("tenant_licenses", null, t =>
                         {
-                            t.HasCheckConstraint("CK_tenant_licenses_LicensedUsers_Positive", "\"LicensedUsers\" > 0");
+                            t.HasCheckConstraint("CK_tenant_licenses_FieldSeats_NonNegative", "\"FieldSeats\" >= 0");
+
+                            t.HasCheckConstraint("CK_tenant_licenses_OfficeSeats_Positive", "\"OfficeSeats\" > 0");
                         });
                 });
 

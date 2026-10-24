@@ -582,7 +582,7 @@ public sealed class WhatsAppNotificationTests
     private static string MessagePayload(string from, string text) =>
         $$$"""{"object":"whatsapp_business_account","entry":[{"id":"1","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","messages":[{"from":"{{{from}}}","id":"wamid.in","timestamp":"1760000000","type":"text","text":{"body":"{{{text}}}"}}]}}]}]}""";
 
-    private static readonly Guid SuitePlanId = Guid.Parse("55555555-5555-5555-5555-555555555553");
+    private static readonly Guid ProfessionalPlanId = Guid.Parse("55555555-5555-5555-5555-555555555562");
 
     private sealed class Harness
     {
@@ -616,8 +616,8 @@ public sealed class WhatsAppNotificationTests
                 if (seedTenants)
                     seed.Tenants.AddRange(TestTenant(harness.TenantId, "Acme Builders"), TestTenant(harness.OtherTenantId, "Other Co"));
                 seed.TenantLicenses.AddRange(
-                    new TenantLicense { TenantId = harness.TenantId, LicensePlanId = SuitePlanId, Status = "Active", IsPerpetual = true, WhatsAppEnabled = true },
-                    new TenantLicense { TenantId = harness.OtherTenantId, LicensePlanId = SuitePlanId, Status = "Active", IsPerpetual = true, WhatsAppEnabled = true });
+                    new TenantLicense { TenantId = harness.TenantId, LicensePlanId = ProfessionalPlanId, Status = "Active", IsPerpetual = true, WhatsAppAddOn = ServiceOpsPlans.WhatsAppNotificationsAddOn },
+                    new TenantLicense { TenantId = harness.OtherTenantId, LicensePlanId = ProfessionalPlanId, Status = "Active", IsPerpetual = true, WhatsAppAddOn = ServiceOpsPlans.WhatsAppNotificationsAddOn });
                 await seed.SaveChangesAsync();
             }
 
@@ -651,7 +651,7 @@ public sealed class WhatsAppNotificationTests
         public async Task SetFeatureAsync(Guid tenantId, bool enabled)
         {
             await using var db = NewContext();
-            (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).WhatsAppEnabled = enabled;
+            (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).WhatsAppAddOn = enabled ? ServiceOpsPlans.WhatsAppNotificationsAddOn : null;
             await db.SaveChangesAsync();
         }
 

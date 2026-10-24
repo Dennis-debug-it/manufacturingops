@@ -249,7 +249,7 @@ internal sealed partial class DemoWorkspaceService(
         tenant.TrialStartsAt = null;
         tenant.TrialEndsAt = null;
 
-        var suite = await dbContext.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite && x.IsActive, cancellationToken);
+        var edition = await dbContext.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Enterprise && x.IsActive, cancellationToken);
         var license = await dbContext.TenantLicenses.IgnoreQueryFilters().Include(x => x.LicensePlan)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
         if (license is null)
@@ -260,8 +260,8 @@ internal sealed partial class DemoWorkspaceService(
 
         // Perpetual, active and never billed: the subscription worker only looks at licenses with an expiry, the
         // trial worker only at trials, and billing only at licenses with a next billing date.
-        license.LicensePlanId = suite.Id;
-        license.LicensePlan = suite;
+        license.LicensePlanId = edition.Id;
+        license.LicensePlan = edition;
         license.Status = LicenseStatuses.Active;
         license.IsPerpetual = true;
         if (license.StartsAt == default)
@@ -275,7 +275,8 @@ internal sealed partial class DemoWorkspaceService(
         license.SuspendedAt = null;
         license.SuspensionReason = null;
         license.CancelledAt = null;
-        license.LicensedUsers = TenantLicense.DefaultLicensedUsers;
+        license.OfficeSeats = TenantLicense.DefaultOfficeSeats;
+        license.FieldSeats = TenantLicense.DefaultFieldSeats;
         license.MaxBranchesOverride = 3;
         TenantLifecycleState.Sync(tenant, license, now);
     }

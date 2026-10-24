@@ -103,7 +103,7 @@ public sealed class PortalSettingsEnforcementTests
         await using var db = CreateDbContext();
         await SaveSettingsAsync(db, new { showContracts = false, welcomeMessage = "Karibu" });
 
-        await SeedLicenseAsync(db, "Core");
+        await SeedLicenseAsync(db, ServiceOpsPlans.Essentials);
 
         var result = await CreateController(db).GetSettings(new LicenseGuardService(db), new ProjectSettingsService(db), CancellationToken.None);
         var settings = Assert.IsType<PortalSettingsResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
@@ -115,13 +115,13 @@ public sealed class PortalSettingsEnforcementTests
     }
 
     [Theory]
-    [InlineData("Core,projects", true, true)]
-    [InlineData("Core,projects", false, false)]
-    [InlineData("Core", true, false)]
-    public async Task Settings_ShowProjects_NeedsTheAddOnAndThePortalSetting(string modules, bool clientPortal, bool expected)
+    [InlineData(ServiceOpsPlans.Professional, true, true)]
+    [InlineData(ServiceOpsPlans.Professional, false, false)]
+    [InlineData(ServiceOpsPlans.Essentials, true, false)]
+    public async Task Settings_ShowProjects_NeedsTheModuleAndThePortalSetting(string edition, bool clientPortal, bool expected)
     {
         await using var db = CreateDbContext();
-        await SeedLicenseAsync(db, modules);
+        await SeedLicenseAsync(db, edition);
         await new ProjectSettingsService(db).SaveAsync(_tenantId, new ProjectSettingsModel { ClientPortal = clientPortal });
 
         var result = await CreateController(db).GetSettings(new LicenseGuardService(db), new ProjectSettingsService(db), CancellationToken.None);
@@ -129,9 +129,9 @@ public sealed class PortalSettingsEnforcementTests
         Assert.Equal(expected, Assert.IsType<PortalSettingsResponse>(Assert.IsType<OkObjectResult>(result.Result).Value).ShowProjects);
     }
 
-    private async Task SeedLicenseAsync(AppDbContext db, string modules)
+    private async Task SeedLicenseAsync(AppDbContext db, string edition)
     {
-        var plan = new LicensePlan { PlanCode = "suite", DisplayName = "Suite", ModulesIncluded = modules };
+        var plan = new LicensePlan { PlanCode = edition, DisplayName = edition };
         db.LicensePlans.Add(plan);
         db.TenantLicenses.Add(new TenantLicense { TenantId = _tenantId, LicensePlanId = plan.Id, LicensePlan = plan, Status = "Active" });
         await db.SaveChangesAsync();

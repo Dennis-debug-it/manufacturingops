@@ -66,11 +66,12 @@ internal sealed class CalendarService(AppDbContext dbContext, ILinkedRecordServi
         if (operations && viewer.Can(PermissionNames.CanViewWorkOrders))
             sources.Add(CalendarSources.WorkOrders);
         // The plan list is for the people who plan maintenance, as on the Maintenance schedules screen.
-        if (operations && (viewer.Can(PermissionNames.CanManageSettings) || viewer.Can(PermissionNames.CanAssignWorkOrders)))
+        var maintenance = viewer.HasModule(ServiceOpsPlans.Maintenance);
+        if (maintenance && (viewer.Can(PermissionNames.CanManageSettings) || viewer.Can(PermissionNames.CanAssignWorkOrders)))
             sources.Add(CalendarSources.Maintenance);
         if (viewer.HasModule(ServiceOpsPlans.Projects) && viewer.Can(PermissionNames.ProjectsView))
             sources.Add(CalendarSources.Projects);
-        if (operations)
+        if (maintenance)
             sources.Add(CalendarSources.Contracts);
         return sources;
     }

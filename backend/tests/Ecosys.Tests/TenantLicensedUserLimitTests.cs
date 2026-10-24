@@ -10,9 +10,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Ecosys.Tests;
 
 /// <summary>
-/// Licensed-user limit, end to end: the canonical field is <c>MaxUsers</c> on the tenant create/update and
-/// seat requests, stored as <see cref="TenantLicense.LicensedUsers"/> and enforced by
-/// <see cref="LicenseGuardService"/> for every path that adds or reactivates a workspace user.
+/// Seats, end to end: <c>OfficeSeats</c> and <c>FieldSeats</c> on the tenant create/update and seat
+/// requests, stored on <see cref="TenantLicense"/> and enforced by <see cref="LicenseGuardService"/> for
+/// every path that adds, reactivates or changes the role of a workspace user. Technicians take field
+/// seats, Viewers are free, every other role takes an office seat.
 /// </summary>
 public sealed partial class AuthEmailSafetyTests
 {
@@ -30,9 +31,9 @@ public sealed partial class AuthEmailSafetyTests
 
         Assert.Equal(10, created.SeatLimit);
         Assert.Equal(1, created.SeatsUsed);
-        Assert.Equal(10, (await db.TenantLicenses.SingleAsync(x => x.TenantId == created.TenantId)).LicensedUsers);
+        Assert.Equal(10, (await db.TenantLicenses.SingleAsync(x => x.TenantId == created.TenantId)).OfficeSeats);
         Assert.Equal(10, (await db.Tenants.SingleAsync(x => x.Id == created.TenantId)).MaxUsers);
-        Assert.Equal(10, (await guard.GetSnapshotAsync(created.TenantId)).MaxUsers);
+        Assert.Equal((10, 0), ((await guard.GetSnapshotAsync(created.TenantId)).OfficeSeats, (await guard.GetSnapshotAsync(created.TenantId)).FieldSeats));
     }
 
     [Fact]
@@ -45,7 +46,7 @@ public sealed partial class AuthEmailSafetyTests
 
         var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(MinimalProvisioningRequest(maxUsers: null), CancellationToken.None));
 
-        Assert.StartsWith("Licensed user limit is required.", error.Message);
+        Assert.StartsWith("Office seats are required.", error.Message);
         Assert.False(await db.Tenants.AnyAsync(x => x.CompanyName == "Acme Engineering Ltd"));
     }
 
@@ -66,9 +67,10 @@ public sealed partial class AuthEmailSafetyTests
 
         var created = Assert.IsType<PlatformTenantDetailResponse>(
             Assert.IsType<CreatedAtActionResult>((await controller.Create(MinimalProvisioningRequest(maxUsers: 10), CancellationToken.None)).Result).Value);
-        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.UpdateSeats(created.TenantId, new UpdateTenantSeatsRequest(value), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.UpdateSeats(created.TenantId, new UpdateTenantSeatsRequest(value, 0), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.UpdateSeats(created.TenantId, new UpdateTenantSeatsRequest(10, -1), CancellationToken.None));
         await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Update(created.TenantId, MinimalProvisioningRequest(maxUsers: value), CancellationToken.None));
-        Assert.Equal(10, (await db.TenantLicenses.SingleAsync(x => x.TenantId == created.TenantId)).LicensedUsers);
+        Assert.Equal(10, (await db.TenantLicenses.SingleAsync(x => x.TenantId == created.TenantId)).OfficeSeats);
     }
 
     [Fact]
@@ -109,7 +111,7 @@ public sealed partial class AuthEmailSafetyTests
     }
 
     [Fact]
-    public async Task LicensedUsers_LimitOfTen_BlocksTheEleventhUser_UntilTheLimitIsRaised()
+    public async Task OfficeSeats_LimitOfTen_BlocksTheEleventhUser_UntilTheLimitIsRaised()
     {
         await using var db = CreateDbContext();
         await SeedPlatformUserAsync(db, "owner@platform.test");
@@ -120,17 +122,43 @@ public sealed partial class AuthEmailSafetyTests
 
         var error = await Assert.ThrowsAsync<LicenseException>(() => users.Create(NewActiveUser("eleventh@seats.test"), CancellationToken.None));
 
-        Assert.Equal("license_users_limit_reached", error.ErrorCode);
+        Assert.Equal("license_office_seats_reached", error.ErrorCode);
         Assert.Equal(409, error.StatusCode);
-        Assert.StartsWith("This tenant has reached its licensed user limit of 10.", error.Message);
+        Assert.StartsWith("This workspace has used all 10 of its office seats.", error.Message);
         Assert.Equal(10, await db.Users.CountAsync(x => x.TenantId == tenantId && x.IsActive));
 
+        // Viewers are free and field seats are a separate pool, so both still go in while office is full.
+        Assert.IsType<CreatedAtActionResult>((await users.Create(NewActiveUser("viewer@seats.test") with { Role = AppRoles.Viewer }, CancellationToken.None)).Result);
+        Assert.IsType<CreatedAtActionResult>((await users.Create(NewActiveUser("tech@seats.test") with { Role = AppRoles.Technician }, CancellationToken.None)).Result);
+
         var platform = CreateAuditPlatformTenantsController(db, guard);
-        await platform.UpdateSeats(tenantId, new UpdateTenantSeatsRequest(11), CancellationToken.None);
+        await platform.UpdateSeats(tenantId, new UpdateTenantSeatsRequest(11, 2), CancellationToken.None);
 
         Assert.IsType<CreatedAtActionResult>((await users.Create(NewActiveUser("eleventh@seats.test"), CancellationToken.None)).Result);
-        Assert.Equal(11, await db.Users.CountAsync(x => x.TenantId == tenantId && x.IsActive));
+        Assert.Equal(13, await db.Users.CountAsync(x => x.TenantId == tenantId && x.IsActive));
         await Assert.ThrowsAsync<LicenseException>(() => users.Create(NewActiveUser("twelfth@seats.test"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FieldSeats_ARoleChangeIntoAFullPool_IsRejected()
+    {
+        await using var db = CreateDbContext();
+        var tenantId = Guid.NewGuid();
+        await SeedLicensedTenantAsync(db, tenantId, limit: 2, activeUsers: 2, fieldSeats: 1);
+        var technician = new User { TenantId = tenantId, FullName = "Tech", Email = $"tech-{tenantId:N}@seats.test", Role = AppRoles.Technician, IsActive = true };
+        db.Users.Add(technician);
+        await db.SaveChangesAsync();
+        var guard = new LicenseGuardService(db);
+        var users = CreateUsersController(db, tenantId, new FakeUserCredentialDeliveryService(db, credentialSendSucceeds: true), guard);
+
+        // Office is full (2 of 2): promoting the technician to dispatcher needs an office seat.
+        var error = await Assert.ThrowsAsync<LicenseException>(() => users.Update(technician.Id, ChangeRole(technician, AppRoles.Dispatcher), CancellationToken.None));
+        Assert.Equal("license_office_seats_reached", error.ErrorCode);
+        Assert.Equal(AppRoles.Technician, (await db.Users.SingleAsync(x => x.Id == technician.Id)).Role);
+
+        // Moving them to a free Viewer seat needs nothing.
+        await users.Update(technician.Id, ChangeRole(technician, AppRoles.Viewer), CancellationToken.None);
+        Assert.Equal(AppRoles.Viewer, (await db.Users.SingleAsync(x => x.Id == technician.Id)).Role);
     }
 
     [Fact]
@@ -151,7 +179,7 @@ public sealed partial class AuthEmailSafetyTests
         Assert.IsType<CreatedAtActionResult>((await users.Create(NewActiveUser("parked@seats.test") with { IsActive = false }, CancellationToken.None)).Result);
 
         var error = await Assert.ThrowsAsync<LicenseException>(() => users.UpdateStatus(departing.Id, new UpdateUserStatusRequest(true), CancellationToken.None));
-        Assert.Equal("license_users_limit_reached", error.ErrorCode);
+        Assert.Equal("license_office_seats_reached", error.ErrorCode);
         Assert.False((await db.Users.SingleAsync(x => x.Id == departing.Id)).IsActive);
     }
 
@@ -170,15 +198,15 @@ public sealed partial class AuthEmailSafetyTests
 
         await guard.EnsureCanCreateUserAsync(tenantId);
         Assert.Equal(1, (await guard.GetUsageAsync(tenantId)).ActiveUsers);
-        await Assert.ThrowsAsync<LicenseException>(() => guard.EnsureCanAddUsersAsync(tenantId, 2));
+        await Assert.ThrowsAsync<LicenseException>(() => guard.EnsureSeatsAvailableAsync(tenantId, [AppRoles.Manager, AppRoles.Manager]));
     }
 
     /// <summary>
     /// Licenses created without an explicit seat count (self-signup and first-access provisioning go through
-    /// GetOrCreateTenantLicenseAsync) start as a Suite trial with the default limit, never unlimited.
+    /// GetOrCreateTenantLicenseAsync) start as a Professional trial with the default seats, never unlimited.
     /// </summary>
     [Fact]
-    public async Task LicensedUsers_AutoProvisionedLicense_IsASuiteTrialWithTheDefaultLimit()
+    public async Task Seats_AutoProvisionedLicense_IsAProfessionalTrialWithTheDefaultSeats()
     {
         await using var db = CreateDbContext();
         await db.Database.EnsureCreatedAsync();
@@ -188,35 +216,42 @@ public sealed partial class AuthEmailSafetyTests
 
         var license = await guard.GetOrCreateTenantLicenseAsync(tenantId);
 
-        Assert.Equal(ServiceOpsPlans.Suite, license.LicensePlan!.PlanCode);
+        Assert.Equal(ServiceOpsPlans.Professional, license.LicensePlan!.PlanCode);
         Assert.Equal(LicenseStatuses.Trial, license.Status);
-        Assert.Equal(TenantLicense.DefaultLicensedUsers, license.LicensedUsers);
-        Assert.Equal(TenantLicense.DefaultLicensedUsers, (await guard.GetSnapshotAsync(tenantId)).MaxUsers);
-        Assert.False(await db.LicensePlans.AnyAsync(x => x.PlanCode == "Trial" || x.PlanCode == "Starter" || x.PlanCode == "Professional" || x.PlanCode == "Enterprise"));
+        Assert.Equal((TenantLicense.DefaultOfficeSeats, TenantLicense.DefaultFieldSeats), (license.OfficeSeats, license.FieldSeats));
+        Assert.Equal(TenantLicense.DefaultOfficeSeats, (await guard.GetSnapshotAsync(tenantId)).OfficeSeats);
+        Assert.Equal(ServiceOpsPlans.Editions, await db.LicensePlans.Select(x => x.PlanCode).OrderBy(x => x == "essentials" ? 0 : x == "professional" ? 1 : 2).ToListAsync());
     }
 
     [Fact]
-    public async Task LicensedUsers_RenewingOntoAnotherPlan_KeepsTheLimit()
+    public async Task Seats_RenewingOntoAnotherEdition_KeepsThem_AndChecksTheNewMinimum()
     {
         await using var db = CreateDbContext();
         await db.Database.EnsureCreatedAsync();
         await SeedPlatformUserAsync(db, "owner@platform.test");
         var controller = CreateAuditPlatformTenantsController(db, new LicenseGuardService(db));
         var created = Assert.IsType<PlatformTenantDetailResponse>(
-            Assert.IsType<CreatedAtActionResult>((await controller.Create(MinimalProvisioningRequest("operations", 7), CancellationToken.None)).Result).Value);
-        var suiteId = (await db.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite)).Id;
+            Assert.IsType<CreatedAtActionResult>((await controller.Create(MinimalProvisioningRequest("essentials", 7), CancellationToken.None)).Result).Value);
+        var professionalId = (await db.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Professional)).Id;
+        var enterpriseId = (await db.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Enterprise)).Id;
 
         var renewed = Assert.IsType<PlatformTenantDetailResponse>(Assert.IsType<OkObjectResult>((await controller.RenewLicense(
             created.TenantId,
-            new RenewTenantLicenseRequest(DateTime.UtcNow, DateTime.UtcNow.AddYears(1), false, "Annual", null, null, suiteId),
+            new RenewTenantLicenseRequest(DateTime.UtcNow, DateTime.UtcNow.AddYears(1), false, "Annual", null, null, professionalId),
             CancellationToken.None)).Result).Value);
 
         Assert.Equal(7, renewed.SeatLimit);
-        Assert.Equal(["operations", "finance"], renewed.Modules);
+        Assert.Equal(ServiceOpsPlans.EditionModules(ServiceOpsPlans.Professional), renewed.Modules);
+        // Enterprise needs at least 10 office seats; the tenant has 7.
+        var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.RenewLicense(
+            created.TenantId,
+            new RenewTenantLicenseRequest(DateTime.UtcNow, DateTime.UtcNow.AddYears(1), false, "Annual", null, null, enterpriseId),
+            CancellationToken.None));
+        Assert.Contains("at least 10 office seats", error.Message);
     }
 
     [Fact]
-    public async Task LicensedUsers_SubscriptionApi_SetsAnExplicitLimit_AndRejectsInvalidOnes()
+    public async Task Seats_SubscriptionApi_SetsExplicitSeats_AndRejectsInvalidOnes()
     {
         await using var db = CreateDbContext();
         await db.Database.EnsureCreatedAsync();
@@ -224,14 +259,14 @@ public sealed partial class AuthEmailSafetyTests
         var chosenTenantId = Guid.NewGuid();
         await SeedTenantAsync(db, defaultTenantId, "Default Co", "ops@default.test");
         await SeedTenantAsync(db, chosenTenantId, "Chosen Co", "ops@chosen.test");
-        var suiteId = (await db.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite)).Id;
+        var suiteId = (await db.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Professional)).Id;
         var controller = new PlatformLicensingController(
             db,
             new FakeTenantContext(PlatformConstants.RootTenantId, Guid.NewGuid(), isAdmin: true, isSuperAdmin: true),
             new NoOpAuditLogService(),
             new NoOpLicenseGuardService(db));
         UpsertPlatformSubscriptionRequest Request(Guid tenantId, int? maxUsers) =>
-            new(tenantId, suiteId, "Active", "Monthly", DateTime.UtcNow, DateTime.UtcNow.AddYears(1), null, null, maxUsers);
+            new(tenantId, suiteId, "Active", "Monthly", DateTime.UtcNow, DateTime.UtcNow.AddYears(1), null, null, maxUsers, FieldSeats: maxUsers is null ? null : 4);
 
         await Assert.ThrowsAsync<BusinessRuleException>(() => controller.CreateSubscription(Request(chosenTenantId, 0), CancellationToken.None));
         var defaulted = Assert.IsType<PlatformSubscriptionResponse>(Assert.IsType<CreatedAtActionResult>(
@@ -239,26 +274,31 @@ public sealed partial class AuthEmailSafetyTests
         var chosen = Assert.IsType<PlatformSubscriptionResponse>(Assert.IsType<CreatedAtActionResult>(
             (await controller.CreateSubscription(Request(chosenTenantId, 25), CancellationToken.None)).Result).Value);
 
-        Assert.Equal(TenantLicense.DefaultLicensedUsers, defaulted.MaxUsers);
-        Assert.Equal(25, chosen.MaxUsers);
+        Assert.Equal((TenantLicense.DefaultOfficeSeats, TenantLicense.DefaultFieldSeats), (defaulted.OfficeSeats, defaulted.FieldSeats));
+        Assert.Equal((25, 4), (chosen.OfficeSeats, chosen.FieldSeats));
         var kept = Assert.IsType<PlatformSubscriptionResponse>(Assert.IsType<OkObjectResult>(
             (await controller.UpdateSubscription(chosen.Id, Request(chosenTenantId, null), CancellationToken.None)).Result).Value);
-        Assert.Equal(25, kept.MaxUsers);
+        Assert.Equal((25, 4), (kept.OfficeSeats, kept.FieldSeats));
         await Assert.ThrowsAsync<BusinessRuleException>(() => controller.UpdateSubscription(chosen.Id, Request(chosenTenantId, -3), CancellationToken.None));
     }
 
-    private static async Task SeedLicensedTenantAsync(AppDbContext db, Guid tenantId, int limit, int activeUsers)
+    /// <summary>A tenant with <paramref name="limit"/> office seats, all but the first held by dispatchers.</summary>
+    private static async Task SeedLicensedTenantAsync(AppDbContext db, Guid tenantId, int limit, int activeUsers, int fieldSeats = 1)
     {
         await SeedTenantAsync(db, tenantId, $"Seats {tenantId:N}", $"ops-{tenantId:N}@seats.test");
         await SeedActiveLicenseAsync(db, tenantId, DateTime.UtcNow.AddDays(60));
-        (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).LicensedUsers = limit;
+        var license = await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId);
+        (license.OfficeSeats, license.FieldSeats) = (limit, fieldSeats);
         for (var i = 0; i < activeUsers; i++)
         {
-            db.Users.Add(new User { TenantId = tenantId, FullName = $"User {i}", Email = $"user{i}-{tenantId:N}@seats.test", Role = i == 0 ? AppRoles.Admin : AppRoles.User, IsActive = true });
+            db.Users.Add(new User { TenantId = tenantId, FullName = $"User {i}", Email = $"user{i}-{tenantId:N}@seats.test", Role = i == 0 ? AppRoles.Admin : AppRoles.Dispatcher, IsActive = true });
         }
         await db.SaveChangesAsync();
     }
 
     private static CreateUserRequest NewActiveUser(string email) => new(
-        "Seat Holder", email, null, null, AppRoles.User, null, null, true, "TemporaryPassword", null, [], null, false, []);
+        "Seat Holder", email, null, null, AppRoles.Dispatcher, null, null, true, "TemporaryPassword", null, [], null, false, []);
+
+    private static UpdateUserRequest ChangeRole(User user, string role) => new(
+        user.FullName, user.Email, null, null, role, null, null, true, null, [], null, false, [], user.Username);
 }

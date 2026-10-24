@@ -158,7 +158,7 @@ public sealed class DemoWorkspaceSeedTests
             .UseInMemoryDatabase($"ecosys-demo-workspace-{Guid.NewGuid():N}")
             .Options;
         var db = new AppDbContext(options);
-        db.LicensePlans.Add(new LicensePlan { PlanCode = ServiceOpsPlans.Suite, DisplayName = "Suite", IsActive = true });
+        db.LicensePlans.Add(new LicensePlan { PlanCode = ServiceOpsPlans.Enterprise, DisplayName = "Enterprise", IsActive = true });
         db.SaveChanges();
         return db;
     }

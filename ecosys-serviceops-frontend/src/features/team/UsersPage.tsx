@@ -9,6 +9,7 @@ import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
 import { useResendCredentials, useTeamUsers } from './api'
+import { countSeatsUsed } from './seats'
 import { NewUserFormDrawer, roleLabel } from './components/NewUserFormDrawer'
 import type { TeamUser } from './types'
 import { TeamTabNav } from './components/TeamTabNav'
@@ -29,10 +30,11 @@ export function UsersPage() {
   const debouncedSearch = useDebounce(search, 300)
   const [showForm, setShowForm] = useState(false)
   const { data, isLoading, isError } = useTeamUsers()
-  const { maxUsers } = useEntitlements()
-  // Same rule the backend enforces: every active account, including pending invitations, uses a seat.
-  const seatsUsed = (data ?? []).filter((user) => user.isActive).length
-  const seatsFull = maxUsers != null && seatsUsed >= maxUsers
+  const { officeSeats, fieldSeats } = useEntitlements()
+  // Same rule the backend enforces: every active account, including pending invitations, uses a seat of its role's type.
+  const seatsUsed = countSeatsUsed(data ?? [])
+  const officeFull = officeSeats != null && seatsUsed.office >= officeSeats
+  const fieldFull = fieldSeats != null && seatsUsed.field >= fieldSeats
 
   const rows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase()
@@ -57,7 +59,7 @@ export function UsersPage() {
         subtitle="Manage people, their capabilities, and where access applies."
         primaryAction={
           canManage ? (
-            <button type="button" onClick={() => setShowForm(true)} disabled={seatsFull} title={seatsFull ? 'All licensed user seats are in use' : undefined} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-60">
               <Plus className="h-4 w-4" />Invite User
             </button>
           ) : undefined
@@ -65,10 +67,12 @@ export function UsersPage() {
       />
       <TeamTabNav />
 
-      {maxUsers != null && data ? (
-        <div data-testid="licensed-seats" className={`rounded-xl border px-4 py-3 text-sm ${seatsFull ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-white text-slate-700'}`}>
-          <span className="font-semibold">Licensed users: {seatsUsed} / {maxUsers}</span>
-          {seatsFull ? <span> — all seats are in use. Deactivate a user or contact Ecosys to add seats.</span> : <span className="text-slate-500"> — active users and pending invitations use a seat; deactivated users do not.</span>}
+      {officeSeats != null && fieldSeats != null && data ? (
+        <div data-testid="licensed-seats" className={`rounded-xl border px-4 py-3 text-sm ${officeFull || fieldFull ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-white text-slate-700'}`}>
+          <span className="font-semibold">Office seats: {seatsUsed.office} / {officeSeats} · Field seats: {seatsUsed.field} / {fieldSeats}</span>
+          {officeFull || fieldFull
+            ? <span> — all {officeFull && fieldFull ? 'office and field' : officeFull ? 'office' : 'field'} seats are in use. Deactivate a user or contact Ecosys to add seats. Viewers are free.</span>
+            : <span className="text-slate-500"> — technicians take a field seat, viewers are free, everyone else takes an office seat. Deactivated users do not count.</span>}
         </div>
       ) : null}
 

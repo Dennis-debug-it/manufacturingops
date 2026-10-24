@@ -35,7 +35,7 @@ public sealed record WhatsAppTenantPolicy(bool FeatureEnabled, IReadOnlySet<stri
             .Select(x => new { x.CompanyName, x.Name, x.Country })
             .SingleOrDefaultAsync(cancellationToken);
         var enabled = await db.TenantLicenses.IgnoreQueryFilters().AsNoTracking()
-            .AnyAsync(x => x.TenantId == tenantId && x.WhatsAppEnabled, cancellationToken);
+            .AnyAsync(x => x.TenantId == tenantId && x.WhatsAppAddOn != null, cancellationToken);
         var allowedJson = await db.WhatsAppSettings.IgnoreQueryFilters().AsNoTracking()
             .Where(x => x.TenantId == tenantId)
             .Select(x => x.AllowedNotificationKeys)

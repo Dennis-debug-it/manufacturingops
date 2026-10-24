@@ -220,7 +220,7 @@ internal sealed class MvpAuthService(
             Industry = string.IsNullOrWhiteSpace(industry) ? null : industry.Trim(),
             Status = "Active",
             LicenseStatus = LicenseStatuses.Trial,
-            PlanName = ServiceOpsPlans.DisplayName(ServiceOpsPlans.Suite),
+            PlanName = ServiceOpsPlans.DisplayName(ServiceOpsPlans.Professional),
             IsActive = true
         };
 
@@ -804,9 +804,9 @@ internal sealed class MvpAuthService(
     private async Task ProvisionTenantDefaultsAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenantId, cancellationToken);
-        var suite = await dbContext.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite && x.IsActive, cancellationToken);
-        license.LicensePlanId = suite.Id;
-        license.LicensePlan = suite;
+        var trialEdition = await dbContext.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Professional && x.IsActive, cancellationToken);
+        license.LicensePlanId = trialEdition.Id;
+        license.LicensePlan = trialEdition;
         await tenantSecurityPolicyService.GetOrCreateAsync(tenantId, cancellationToken);
 
         if (!await dbContext.NotificationSettings.AnyAsync(x => x.TenantId == tenantId, cancellationToken))

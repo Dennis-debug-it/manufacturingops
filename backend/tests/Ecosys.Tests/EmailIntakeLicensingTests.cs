@@ -6,13 +6,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Tests;
 
-/// <summary>Email intake comes with the Operations module; the old separate "EmailIngestion" switch is ignored.</summary>
+/// <summary>Email intake comes with the Advanced module (Professional and Enterprise); the old separate "EmailIngestion" switch is ignored.</summary>
 public sealed class EmailIntakeLicensingTests
 {
     [Theory]
-    [InlineData(ServiceOpsPlans.Operations)]
-    [InlineData(ServiceOpsPlans.Suite)]
-    public async Task PlansWithOperations_IncludeEmailIntake_EvenWithTheOldSwitchOff(string planCode)
+    [InlineData(ServiceOpsPlans.Professional)]
+    [InlineData(ServiceOpsPlans.Enterprise)]
+    public async Task EditionsWithAdvanced_IncludeEmailIntake_EvenWithTheOldSwitchOff(string planCode)
     {
         await using var db = CreateDbContext();
         var tenantId = await SeedAsync(db, planCode);
@@ -23,14 +23,14 @@ public sealed class EmailIntakeLicensingTests
     }
 
     [Fact]
-    public async Task FinanceOnlyPlan_DoesNotIncludeEmailIntake()
+    public async Task Essentials_DoesNotIncludeEmailIntake()
     {
         await using var db = CreateDbContext();
-        var tenantId = await SeedAsync(db, ServiceOpsPlans.Finance);
+        var tenantId = await SeedAsync(db, ServiceOpsPlans.Essentials);
         var service = new LicenseGuardService(db);
 
         var error = await Assert.ThrowsAsync<LicenseException>(() => service.EnsureFeatureEnabledAsync(tenantId, LicenseFeatures.EmailIngestion));
-        Assert.Equal("license_module_operations", error.ErrorCode);
+        Assert.Equal("license_module_advanced", error.ErrorCode);
         Assert.False((await service.GetSnapshotAsync(tenantId)).EmailIngestion);
     }
 
@@ -43,8 +43,8 @@ public sealed class EmailIntakeLicensingTests
             Email = "ops@intake.test", ContactEmail = "ops@intake.test", Country = "Kenya", Status = "Active",
             LicenseStatus = LicenseStatuses.Active, IsActive = true,
         });
-        // The old switch is off on both the plan and the workspace; it must make no difference.
-        var plan = new LicensePlan { PlanCode = planCode, DisplayName = planCode, IsActive = true, EmailIngestion = false };
+        // The old switch is off on the workspace; it must make no difference.
+        var plan = new LicensePlan { PlanCode = planCode, DisplayName = planCode, IsActive = true };
         db.LicensePlans.Add(plan);
         db.TenantLicenses.Add(new TenantLicense
         {

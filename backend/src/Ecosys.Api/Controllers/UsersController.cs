@@ -74,9 +74,9 @@ public sealed class UsersController(
         ValidateRequest(request.FullName, request.CredentialDeliveryMethod);
         var transaction = await TryBeginSerializableTransactionAsync(cancellationToken);
 
-        // Only an active account consumes a licensed seat; the guard row-locks the license inside this transaction.
-        await licenseGuardService.EnsureCanAddUsersAsync(TenantId, request.IsActive ? 1 : 0, cancellationToken);
         var normalizedRole = NormalizeRole(request.Role);
+        // Only an active account consumes a seat (office or field, by role); the guard row-locks the license inside this transaction.
+        await licenseGuardService.EnsureSeatsAvailableAsync(TenantId, request.IsActive ? [normalizedRole] : [], cancellationToken);
         var deliveryMethod = NormalizeCredentialDeliveryMethod(request.CredentialDeliveryMethod);
 
         var (normalizedEmail, hasEmail) = await ResolveEmailAsync(request.Email, excludeUserId: null, cancellationToken);
@@ -204,9 +204,13 @@ public sealed class UsersController(
             throw new ForbiddenException("You cannot change your own role from this account.");
         }
 
-        if (!user.IsActive && request.IsActive)
+        // Reactivating takes a seat; a role change on an active user takes one in the new role's pool
+        // (a technician promoted to dispatcher needs an office seat).
+        var takesNewSeat = request.IsActive
+            && (!user.IsActive || SeatTypes.For(user.Role) != SeatTypes.For(normalizedRole));
+        if (takesNewSeat)
         {
-            await licenseGuardService.EnsureCanCreateUserAsync(TenantId, cancellationToken);
+            await licenseGuardService.EnsureSeatsAvailableAsync(TenantId, [normalizedRole], cancellationToken);
         }
 
         var (normalizedEmail, hasEmail) = await ResolveEmailAsync(request.Email, excludeUserId: id, cancellationToken);
@@ -313,7 +317,7 @@ public sealed class UsersController(
 
         if (!user.IsActive && request.IsActive)
         {
-            await licenseGuardService.EnsureCanCreateUserAsync(TenantId, cancellationToken);
+            await licenseGuardService.EnsureSeatsAvailableAsync(TenantId, [user.Role], cancellationToken);
         }
 
         user.IsActive = request.IsActive;

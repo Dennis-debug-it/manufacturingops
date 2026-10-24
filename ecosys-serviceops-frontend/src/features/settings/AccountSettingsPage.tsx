@@ -20,7 +20,8 @@ interface TenantLicenseSnapshot {
   isReadOnly: boolean
   isSuspended: boolean
   isGracePeriod: boolean
-  maxUsers: number | null
+  officeSeats: number
+  fieldSeats: number
   maxBranches: number | null
   emailIngestion: boolean
   monitoringIntegration: boolean
@@ -68,7 +69,8 @@ export function AccountSettingsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Plan" value={data.planName} />
         <StatCard label="Status" value={<StatusBadge status={data.status} />} tone={data.isSuspended ? 'danger' : 'default'} />
-        <StatCard label="Licensed Users" value={data.maxUsers ?? '—'} />
+        <StatCard label="Office Seats" value={data.officeSeats} />
+        <StatCard label="Field Seats" value={data.fieldSeats} />
         <StatCard label="Max Branches" value={data.maxBranches ?? 'Unlimited'} />
         <StatCard label="Started" value={formatDate(data.startsAt)} />
         <StatCard label={data.trialEndsAt ? 'Trial Ends' : 'Expires'} value={(data.trialEndsAt ?? data.expiresAt) ? formatDate((data.trialEndsAt ?? data.expiresAt) as string) : 'No expiry'} />
@@ -84,8 +86,8 @@ export function AccountSettingsPage() {
       <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900">Plan Features</h2>
         <div className="mt-3">
-          <FeatureRow label="Email Intake (with Operations)" enabled={data.emailIngestion} />
-          <FeatureRow label="Monitoring Integration" enabled={data.monitoringIntegration} />
+          <FeatureRow label="Email Intake" enabled={data.emailIngestion} />
+          <FeatureRow label="Monitoring Integration (Enterprise)" enabled={data.monitoringIntegration} />
         </div>
       </div>
 

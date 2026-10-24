@@ -219,7 +219,7 @@ async function mockPlatformOwnerWorkspace(page: Page) {
       contactName: String(request.adminFullName),
       contactEmail: String(request.adminEmail),
       contactPhone: String(request.primaryContactPhone ?? ''),
-      planName: String(request.planCode ?? 'suite'),
+      planName: String(request.planCode ?? 'professional'),
       licenseStatus: 'Trial',
       userCount: 1,
       branchCount: 0,
@@ -227,7 +227,7 @@ async function mockPlatformOwnerWorkspace(page: Page) {
       createdAt: '2026-05-16T09:15:00.000Z',
       country: String(request.country ?? 'Kenya'),
       industry: String(request.industry ?? ''),
-      maxUsers: Number(request.maxUsers ?? 10),
+      maxUsers: Number(request.officeSeats ?? 10) + Number(request.fieldSeats ?? 0),
       maxBranches: Number(request.maxBranches ?? 2),
       trialStartsAt: '2026-05-16T09:15:00.000Z',
       trialEndsAt: '2026-05-30T09:15:00.000Z',
@@ -274,11 +274,11 @@ test.describe('auth tenant onboarding', () => {
     await page.getByRole('textbox', { name: 'Tenant Slug', exact: true }).fill('northwind')
     await page.getByRole('textbox', { name: 'Primary Admin Name', exact: true }).fill('Amina Hassan')
     await page.getByRole('textbox', { name: 'Primary Admin Email', exact: true }).fill('amina@northwind.test')
-    await page.getByRole('radio', { name: 'ServiceOps Suite', exact: true }).check()
-    await page.getByRole('spinbutton', { name: 'Licensed Users', exact: true }).fill('25')
+    await page.getByRole('radio', { name: 'Professional', exact: true }).check()
+    await page.getByRole('spinbutton', { name: 'Office Seats', exact: true }).fill('25')
     const creationRequest = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/platform/tenants')
     await page.getByRole('button', { name: /create tenant/i }).last().click()
-    expect((await creationRequest).postDataJSON()).toMatchObject({ companyName: 'Northwind ServiceOps', slug: 'northwind', planCode: 'suite', maxUsers: 25, adminFullName: 'Amina Hassan', adminEmail: 'amina@northwind.test', country: 'Kenya', timeZoneId: 'Africa/Nairobi' })
+    expect((await creationRequest).postDataJSON()).toMatchObject({ companyName: 'Northwind ServiceOps', slug: 'northwind', planCode: 'professional', officeSeats: 25, fieldSeats: 10, adminFullName: 'Amina Hassan', adminEmail: 'amina@northwind.test', country: 'Kenya', timeZoneId: 'Africa/Nairobi' })
     await expect(page).toHaveURL(/\/platform\/tenants\/tenant-created-1$/)
 
   })

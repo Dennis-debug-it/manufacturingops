@@ -39,26 +39,34 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
     /// suppressed by a stale timestamp from a prior overdue period.
     /// </summary>
     public DateTime? OverdueWarningSentAt { get; set; }
-    /// <summary>Licensed users given to a new license when the caller does not choose a number.</summary>
-    public const int DefaultLicensedUsers = 10;
+    /// <summary>Seats given to a new license when the caller does not choose a number.</summary>
+    public const int DefaultOfficeSeats = 10;
+    public const int DefaultFieldSeats = 10;
 
     /// <summary>
-    /// The tenant's licensed-user (seat) limit — the single source of truth LicenseGuardService enforces.
-    /// Always explicit and greater than zero (CK_tenant_licenses_LicensedUsers_Positive); plans carry no
-    /// user limit. Active workspace users, pending invitees included, consume a seat; deactivated users
-    /// and client-portal contacts do not.
+    /// Office seats: every active workspace user (pending invitees included) whose role is not
+    /// Technician, Viewer or the legacy User role. Always greater than zero
+    /// (CK_tenant_licenses_OfficeSeats_Positive) and at least the edition's minimum. LicenseGuardService
+    /// is the single place that enforces it; see <c>SeatTypes</c> for the role mapping.
     /// </summary>
-    public int LicensedUsers { get; set; } = DefaultLicensedUsers;
+    public int OfficeSeats { get; set; } = DefaultOfficeSeats;
+
+    /// <summary>Field seats: active technicians. Zero or more (CK_tenant_licenses_FieldSeats_NonNegative).</summary>
+    public int FieldSeats { get; set; } = DefaultFieldSeats;
     public int? MaxBranchesOverride { get; set; }
     /// <summary>No longer read: email intake is included with the Operations module. Kept so existing data loads.</summary>
     public bool? EmailIngestionOverride { get; set; }
     public bool? MonitoringIntegrationOverride { get; set; }
 
     /// <summary>
-    /// The tenant feature flag <c>whatsapp</c> (Release 3 design 6): WhatsApp reminders from the shared
-    /// Ecosys number. Off by default; Ecosys turns it on per tenant because Ecosys pays Meta per message.
+    /// The optional WhatsApp add-on: null (none), <c>whatsapp_notifications</c> (reminders from the shared
+    /// Ecosys number) or <c>whatsapp_business</c> (also the tenant's own number and two-way inbox). Off by
+    /// default; Ecosys turns it on per tenant because Ecosys pays Meta per message.
     /// </summary>
-    public bool WhatsAppEnabled { get; set; }
+    public string? WhatsAppAddOn { get; set; }
+
+    /// <summary>Whether any WhatsApp add-on is on: reminders may be sent.</summary>
+    public bool WhatsAppEnabled => WhatsAppAddOn is not null;
 
     public Tenant? Tenant { get; set; }
     public LicensePlan? LicensePlan { get; set; }

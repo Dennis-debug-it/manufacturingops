@@ -542,8 +542,8 @@ public sealed class ImportController(
 
         // Bulk import is subject to the same licensed-seat rule as every other way of adding a user: the
         // whole batch's active rows must fit, checked before any row is written (TM-P1-07).
-        var incomingActiveUsers = rows.Count(row => row.IsValid && IsActiveStatus(row.RawValues["Status"]));
-        await licenseGuardService.EnsureCanAddUsersAsync(TenantId, incomingActiveUsers, cancellationToken);
+        var incomingActiveRoles = rows.Where(row => row.IsValid && IsActiveStatus(row.RawValues["Status"])).Select(row => NormalizeImportedRole(row.RawValues["Role"])).ToList();
+        await licenseGuardService.EnsureSeatsAvailableAsync(TenantId, incomingActiveRoles, cancellationToken);
 
         var branchLookup = await dbContext.Branches
             .Where(x => x.TenantId == TenantId && x.IsActive)

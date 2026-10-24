@@ -30,7 +30,7 @@ test('tenant delivery logs screen exposes safe filters and retry-ready empty sta
     const body = path === '/api/auth/me'
       ? session
       : path === '/api/tenant/license'
-        ? { planCode: 'suite', planName: 'ServiceOps Suite', modules: ['operations', 'finance'] }
+        ? { planCode: 'professional', planName: 'ServiceOps Professional', modules: ['operations', 'finance', 'maintenance', 'inventory', 'projects', 'advanced'] }
         : []
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body), headers: { 'Access-Control-Allow-Origin': '*' } })
   })

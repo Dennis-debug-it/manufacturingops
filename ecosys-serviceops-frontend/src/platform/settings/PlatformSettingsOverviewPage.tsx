@@ -7,9 +7,9 @@ import { PageHeader } from '../../shared/components/PageHeader'
 
 const items: Array<{ to: string; label: string; description: string; icon: typeof Building2 }> = [
   { to: '/platform/settings/identity', label: 'Identity', description: 'Platform name, locale, and legal details.', icon: Building2 },
-  { to: '/platform/settings/plans', label: 'Plans', description: 'License plans and entitlement limits.', icon: Layers },
+  { to: '/platform/settings/plans', label: 'Editions & Pricing', description: 'Seat prices per edition and WhatsApp add-on prices.', icon: Layers },
   { to: '/platform/settings/branding', label: 'Branding', description: 'Logo, favicon, and colour palette.', icon: Palette },
-  { to: '/platform/settings/features', label: 'Features', description: 'Module entitlements per plan.', icon: Flag },
+  { to: '/platform/settings/features', label: 'Edition Features', description: 'What each edition includes.', icon: Flag },
   { to: '/platform/settings/email-templates', label: 'Email Templates', description: 'Platform-wide transactional email defaults.', icon: Mail },
   { to: '/platform/settings/email-delivery', label: 'Email Delivery', description: 'SMTP, flags, and subject rules.', icon: Send },
   { to: '/platform/settings/crm', label: 'CRM', description: 'Pipeline and lead routing configuration.', icon: Users2 },

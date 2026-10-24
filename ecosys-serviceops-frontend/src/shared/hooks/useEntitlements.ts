@@ -8,7 +8,7 @@ export function useEntitlements() {
   const isPlatform = user?.role === 'super_admin' || user?.role === 'platform_sales'
   const query = useQuery({
     queryKey: ['tenant-license', tenant?.tenantId],
-    queryFn: () => api.get<{ planCode: string; planName: string; modules: ServiceOpsModule[]; maxUsers?: number | null }>('/api/tenant/license'),
+    queryFn: () => api.get<{ planCode: string; planName: string; modules: ServiceOpsModule[]; officeSeats?: number | null; fieldSeats?: number | null; whatsAppAddOn?: string | null }>('/api/tenant/license'),
     // A temporary password's token is refused everywhere but change-password; wait until it's replaced.
     enabled: isAuthenticated && !isPlatform && !user?.mustChangePassword,
     staleTime: 30_000,
@@ -20,8 +20,10 @@ export function useEntitlements() {
     modules,
     planName: query.data?.planName,
     planCode: query.data?.planCode,
-    /** Licensed seats the backend enforces; null/undefined = no limit. */
-    maxUsers: query.data?.maxUsers ?? null,
+    /** Office and field seats the backend enforces; null/undefined = not loaded. */
+    officeSeats: query.data?.officeSeats ?? null,
+    fieldSeats: query.data?.fieldSeats ?? null,
+    whatsAppAddOn: query.data?.whatsAppAddOn ?? null,
     hasModule: (module: ServiceOpsModule) => isPlatform || modules.includes(module),
     canAccessPath: (path: string) => isPlatform || canAccessModulePath(path, modules),
   }

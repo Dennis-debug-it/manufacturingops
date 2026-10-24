@@ -88,6 +88,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<EmailIntakeMessage> EmailIntakeMessages => Set<EmailIntakeMessage>();
     public DbSet<NumberingSetting> NumberingSettings => Set<NumberingSetting>();
     public DbSet<LicensePlan> LicensePlans => Set<LicensePlan>();
+    public DbSet<LicenseAddOn> LicenseAddOns => Set<LicenseAddOn>();
     public DbSet<TenantLicense> TenantLicenses => Set<TenantLicense>();
     public DbSet<MrrSnapshot> MrrSnapshots => Set<MrrSnapshot>();
     public DbSet<AssignmentGroup> AssignmentGroups => Set<AssignmentGroup>();
@@ -1640,44 +1641,60 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasKey(x => x.Id);
             entity.Property(x => x.PlanCode).HasMaxLength(50).IsRequired();
             entity.Property(x => x.DisplayName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.OfficeSeatMonthlyPrice).HasPrecision(18, 2);
+            entity.Property(x => x.OfficeSeatAnnualPrice).HasPrecision(18, 2);
+            entity.Property(x => x.FieldSeatMonthlyPrice).HasPrecision(18, 2);
+            entity.Property(x => x.FieldSeatAnnualPrice).HasPrecision(18, 2);
+            entity.HasIndex(x => x.PlanCode).IsUnique();
+            // The three editions. Prices start at zero ("not priced") and are set on the platform; the
+            // Operations/Finance/Suite plans were retired by the MoveToEditionsAndSeatTypes migration.
+            var seededAt = new DateTime(2026, 10, 24, 0, 0, 0, DateTimeKind.Utc);
+            entity.HasData(
+                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555561"), PlanCode = "essentials", DisplayName = "Ecosys ServiceOps Essentials", MinOfficeSeats = 2, IsActive = true, CreatedAt = seededAt },
+                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555562"), PlanCode = "professional", DisplayName = "Ecosys ServiceOps Professional", MinOfficeSeats = 3, IsActive = true, CreatedAt = seededAt },
+                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555563"), PlanCode = "enterprise", DisplayName = "Ecosys ServiceOps Enterprise", MinOfficeSeats = 10, IsActive = true, CreatedAt = seededAt });
+        });
+
+        modelBuilder.Entity<LicenseAddOn>(entity =>
+        {
+            entity.ToTable("license_add_ons");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.DisplayName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.MonthlyPrice).HasPrecision(18, 2);
             entity.Property(x => x.AnnualPrice).HasPrecision(18, 2);
-            entity.Property(x => x.ModulesIncluded).HasMaxLength(1000);
-            entity.HasIndex(x => x.PlanCode).IsUnique();
-            // Only the three ServiceOps offerings exist. The pre-ServiceOps Trial/Starter/Professional/Enterprise
-            // plans were retired by the RetireLegacyPlansAndRequireLicensedUsers migration.
+            entity.Property(x => x.ExtraMessagePrice).HasPrecision(18, 2);
+            entity.Property(x => x.ExtraNumberPrice).HasPrecision(18, 2);
+            entity.HasIndex(x => x.Code).IsUnique();
+            // Starting values in KES; the platform edits them.
+            var seededAt = new DateTime(2026, 10, 24, 0, 0, 0, DateTimeKind.Utc);
             entity.HasData(
-                new LicensePlan
+                new LicenseAddOn
                 {
-                    Id = Guid.Parse("55555555-5555-5555-5555-555555555551"), PlanCode = "operations",
-                    DisplayName = "Ecosys ServiceOps Operations", ModulesIncluded = "Core,operations,EmailIngestion,MonitoringIntegration",
-                    EmailIngestion = true, MonitoringIntegration = true,
-                    IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
+                    Id = Guid.Parse("55555555-5555-5555-5555-555555555571"), Code = "whatsapp_notifications", DisplayName = "WhatsApp Notifications",
+                    MonthlyPrice = 1500m, AnnualPrice = 15000m, IncludedMessages = 500, ExtraMessagePrice = 3m, IsActive = true, CreatedAt = seededAt
                 },
-                new LicensePlan
+                new LicenseAddOn
                 {
-                    Id = Guid.Parse("55555555-5555-5555-5555-555555555552"), PlanCode = "finance",
-                    DisplayName = "Ecosys ServiceOps Finance", ModulesIncluded = "Core,finance", IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new LicensePlan
-                {
-                    Id = Guid.Parse("55555555-5555-5555-5555-555555555553"), PlanCode = "suite",
-                    DisplayName = "Ecosys ServiceOps Suite", ModulesIncluded = "Core,operations,finance,EmailIngestion,MonitoringIntegration",
-                    EmailIngestion = true, MonitoringIntegration = true,
-                    IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
+                    Id = Guid.Parse("55555555-5555-5555-5555-555555555572"), Code = "whatsapp_business", DisplayName = "WhatsApp Business",
+                    MonthlyPrice = 4500m, AnnualPrice = 45000m, IncludedMessages = 1500, ExtraMessagePrice = 3m, ExtraNumberPrice = 2500m, IsActive = true, CreatedAt = seededAt
                 });
         });
 
         modelBuilder.Entity<TenantLicense>(entity =>
         {
             entity.ToTable("tenant_licenses", tableBuilder =>
-                tableBuilder.HasCheckConstraint("CK_tenant_licenses_LicensedUsers_Positive", "\"LicensedUsers\" > 0"));
+            {
+                tableBuilder.HasCheckConstraint("CK_tenant_licenses_OfficeSeats_Positive", "\"OfficeSeats\" > 0");
+                tableBuilder.HasCheckConstraint("CK_tenant_licenses_FieldSeats_NonNegative", "\"FieldSeats\" >= 0");
+            });
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
             entity.Property(x => x.BillingCycle).HasMaxLength(30).IsRequired();
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.Property(x => x.SuspensionReason).HasMaxLength(30);
             entity.Property(x => x.IsPerpetual).HasDefaultValue(false);
+            entity.Property(x => x.WhatsAppAddOn).HasMaxLength(50);
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.TenantLicenses)

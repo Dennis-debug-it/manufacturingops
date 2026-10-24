@@ -292,6 +292,37 @@ Dry-run the migration against a production snapshot and diff the access for each
 - Add a migration test: tenants on the old plans end up with access equal to or greater than before.
 - Update the e2e tests `serviceops-plans.spec.ts` and `platform-tenant-management.spec.ts`.
 
+### 1.8 As built
+
+Part 1 is built (migration `MoveToEditionsAndSeatTypes`). To keep it simple it differs from the sections
+above in these ways:
+
+- **Modules, not a new feature-key system.** The existing module gate stays; the module list grows, and
+  an edition is a fixed list of modules (`ServiceOpsPlans.EditionModules`):
+
+  | Module | Edition | Covers |
+  |---|---|---|
+  | `operations` | Essentials | Work orders, dispatch, technicians, sites, reports, dashboard |
+  | `finance` | Essentials | Quotations, invoices, credit notes, withholding, exchange rates |
+  | `maintenance` | Professional | PM, PM templates, assets, asset categories, systems, contracts, SLA, escalation |
+  | `inventory` | Professional | Materials, vans, purchase orders, parts, stock transfers |
+  | `projects` | Professional | Projects (every Projects route needs only this module) |
+  | `advanced` | Professional | Workflows, intake and email intake, time & attendance, CSAT, scheduled reports, expenses & payables, credit terms and control, approval matrix and approvals |
+  | `enterprise_tools` | Enterprise | API keys, webhooks, monitoring; unlimited branches (other editions: 1 branch) |
+  | `whatsapp_business` | WhatsApp Business add-on | The two-way WhatsApp inbox |
+
+- **The approval matrix is in Professional**, not Enterprise: approvals run on it, so taking it away would
+  strand documents waiting for approval.
+- **WhatsApp add-on:** one field, `TenantLicense.WhatsAppAddOn` (none / `whatsapp_notifications` /
+  `whatsapp_business`), plus the `license_add_ons` price catalogue. Turned on per tenant from the
+  platform tenant page.
+- **Prices:** edited per edition and per add-on on Platform → Settings → Editions & Pricing. Per-tenant
+  price overrides and per-tenant feature overrides are not built; the existing branch and monitoring
+  overrides still apply. An edition with no price shows "Not priced"; assigning it is not blocked.
+- **MRR** (dashboard, reports, snapshots) is seats × seat price + the add-on, via `LicensePricing`.
+- **Not in Part 1:** usage packs and WhatsApp message billing (Part 3–4), custom report templates as an
+  Enterprise feature.
+
 ## Part 2 — CRM (2–3 weeks)
 
 Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).

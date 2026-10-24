@@ -61,7 +61,7 @@ public static class TenantLifecycleState
         tenant.SubscriptionStartsAt = license.StartsAt;
         tenant.SubscriptionEndsAt = license.ExpiresAt;
         tenant.TrialEndsAt = license.TrialEndsAt ?? tenant.TrialEndsAt;
-        tenant.MaxUsers = license.LicensedUsers;
+        tenant.MaxUsers = license.OfficeSeats + license.FieldSeats;
         tenant.MaxBranches = license.MaxBranchesOverride;
         if (license.LicensePlan is not null)
         {

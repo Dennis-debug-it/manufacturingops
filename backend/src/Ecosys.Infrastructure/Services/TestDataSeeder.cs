@@ -84,13 +84,14 @@ internal sealed class TestDataSeeder(
 
         // ── 2. Tenant license ────────────────────────────────────────────────
         var trialPlan = await dbContext.LicensePlans
-            .SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite, cancellationToken);
+            .SingleAsync(x => x.PlanCode == ServiceOpsPlans.Professional, cancellationToken);
 
         dbContext.TenantLicenses.Add(new TenantLicense
         {
             TenantId      = DemoTenantId,
             LicensePlanId = trialPlan.Id,
-            LicensedUsers = 5,
+            OfficeSeats   = 5,
+            FieldSeats    = 5,
             Status        = "Trial",
             StartsAt      = now,
             TrialEndsAt   = now.AddDays(30),

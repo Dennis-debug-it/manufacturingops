@@ -77,7 +77,7 @@ public sealed class SelfSignupTests : IAsyncLifetime
             Assert.Equal(TenantStatuses.Trial, tenant.Status);
             var license = await db.TenantLicenses.Include(x => x.LicensePlan).SingleAsync(x => x.TenantId == tenant.Id);
             Assert.Equal(LicenseStatuses.Trial, license.Status);
-            Assert.Equal(ServiceOpsPlans.Suite, license.LicensePlan!.PlanCode);
+            Assert.Equal(ServiceOpsPlans.Professional, license.LicensePlan!.PlanCode);
             Assert.InRange(license.TrialEndsAt!.Value, DateTime.UtcNow.AddDays(13.9), DateTime.UtcNow.AddDays(14.1));
 
             var owner = await db.Users.SingleAsync(x => x.Email == "amina@riftcool.test");

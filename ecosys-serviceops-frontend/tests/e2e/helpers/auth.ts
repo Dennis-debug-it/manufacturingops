@@ -275,7 +275,7 @@ export async function mockAuthSession(page: Page, options: MockAuthOptions) {
   const session = buildMockSession(options)
 
   await page.route(`${E2E_API_URL}/api/tenant/license`, async (route) => {
-    await fulfillJson(route, { planCode: 'suite', planName: 'Ecosys ServiceOps Suite', modules: ['operations', 'finance'] })
+    await fulfillJson(route, { planCode: 'professional', planName: 'Ecosys ServiceOps Professional', modules: ['operations', 'finance', 'maintenance', 'inventory', 'projects', 'advanced'] })
   })
 
   await page.route(`${E2E_API_URL}/api/auth/login`, async (route) => {

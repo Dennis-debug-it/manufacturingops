@@ -89,7 +89,7 @@ export function ProjectDetailPage() {
   // Money tabs need Finance as well as Projects; site tabs follow the tenant's feature toggles.
   const showMoney = hasModule('finance') && abilities.canViewFinancials
   const atHandover = ['Handover', 'Completed', 'Closed'].includes(summary.stageCategory)
-  const canCreateContract = hasModule('operations') && canManageContracts && atHandover && !project.maintenanceContractId
+  const canCreateContract = hasModule('maintenance') && canManageContracts && atHandover && !project.maintenanceContractId
 
   const tabs: DetailTab[] = [
     { id: 'overview', label: 'Overview', content: <OverviewTab project={project} /> },

@@ -35,12 +35,14 @@ public sealed class PortalController(
         var modules = (await licenseGuardService.GetSnapshotAsync(TenantId, cancellationToken)).Modules;
         var showProjects = modules.Contains(ServiceOpsPlans.Projects, StringComparer.OrdinalIgnoreCase)
             && (await projectSettingsService.GetAsync(TenantId, cancellationToken)).ClientPortal;
+        // Contracts and the asset register come with the Maintenance module.
+        var hasMaintenance = modules.Contains(ServiceOpsPlans.Maintenance, StringComparer.OrdinalIgnoreCase);
         return Ok(new PortalSettingsResponse(
             settings.AllowRequestSubmission,
             settings.AllowQuoteResponses,
             settings.ShowInvoices,
-            settings.ShowContracts,
-            settings.ShowAssetRegister,
+            settings.ShowContracts && hasMaintenance,
+            settings.ShowAssetRegister && hasMaintenance,
             settings.WelcomeMessage,
             showProjects));
     }

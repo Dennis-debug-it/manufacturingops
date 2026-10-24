@@ -97,7 +97,7 @@ internal sealed class LinkedRecordService(AppDbContext dbContext, IProjectSettin
             case ActivityEntityTypes.Client:
                 return await dbContext.Clients.AnyAsync(x => x.TenantId == tenantId && x.Id == entityId, cancellationToken);
             case ActivityEntityTypes.Contract:
-                return viewer.HasModule(ServiceOpsPlans.Operations)
+                return viewer.HasModule(ServiceOpsPlans.Maintenance)
                     && await dbContext.Contracts.AnyAsync(x => x.TenantId == tenantId && x.Id == entityId, cancellationToken);
             case ActivityEntityTypes.WorkOrder:
                 return viewer.HasModule(ServiceOpsPlans.Operations) && viewer.Can(PermissionNames.CanViewWorkOrders)

@@ -204,7 +204,7 @@ public sealed class ActivitiesCalendarTests
         var noProjects = harness.Viewer(harness.Bob, [PermissionNames.ActivitiesView, PermissionNames.CanViewWorkOrders, PermissionNames.ProjectsView], [ServiceOpsPlans.Operations]);
         Assert.Equal([CalendarSources.ActionItems, CalendarSources.Activities, CalendarSources.WorkOrders], await SourcesFor(noProjects));
         // No permission: work orders and activities go too, and an explicit request for them changes nothing.
-        var bare = harness.Viewer(harness.Bob, [], [ServiceOpsPlans.Operations, ServiceOpsPlans.Projects]);
+        var bare = harness.Viewer(harness.Bob, [], [ServiceOpsPlans.Operations, ServiceOpsPlans.Maintenance, ServiceOpsPlans.Projects]);
         Assert.Empty(await harness.Calendar.GetItemsAsync(bare, from, to, [CalendarSources.Activities, CalendarSources.WorkOrders, CalendarSources.Projects], null));
         Assert.Equal([CalendarSources.Contracts], harness.Calendar.AvailableSources(bare));
 
@@ -427,8 +427,13 @@ public sealed class ActivitiesCalendarTests
             }
             if (seedLicense)
             {
-                var plan = new LicensePlan { PlanCode = $"test-{Guid.NewGuid():N}"[..20], DisplayName = "Test plan", ModulesIncluded = "operations,finance,projects", IsActive = true };
-                harness.Db.LicensePlans.Add(plan);
+                // Professional has every module the calendar reads; a migrated Postgres database already holds it.
+                var plan = await harness.Db.LicensePlans.SingleOrDefaultAsync(x => x.PlanCode == ServiceOpsPlans.Professional);
+                if (plan is null)
+                {
+                    plan = new LicensePlan { PlanCode = ServiceOpsPlans.Professional, DisplayName = "Professional", IsActive = true };
+                    harness.Db.LicensePlans.Add(plan);
+                }
                 harness.Db.TenantLicenses.Add(new TenantLicense { TenantId = harness.TenantId, LicensePlanId = plan.Id, Status = "Active" });
                 await harness.Db.SaveChangesAsync();
             }
@@ -455,7 +460,7 @@ public sealed class ActivitiesCalendarTests
 
         /// <summary>A viewer with activities.view and every module unless told otherwise.</summary>
         public AccessViewer Viewer(Guid userId, params string[] permissions) =>
-            Viewer(userId, permissions.Length == 0 ? Everyone : permissions, [ServiceOpsPlans.Operations, ServiceOpsPlans.Finance, ServiceOpsPlans.Projects]);
+            Viewer(userId, permissions.Length == 0 ? Everyone : permissions, [.. ServiceOpsPlans.EditionModules(ServiceOpsPlans.Professional)]);
 
         public AccessViewer Viewer(Guid userId, IReadOnlyCollection<string> permissions, IReadOnlyCollection<string> modules, Guid? tenantId = null) =>
             new(tenantId ?? TenantId, userId, false, permissions.Contains, modules);

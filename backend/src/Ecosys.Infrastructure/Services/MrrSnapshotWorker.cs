@@ -43,10 +43,7 @@ public sealed class MrrSnapshotWorker(
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var today = DateTime.UtcNow.Date;
 
-        var mrr = await db.TenantLicenses
-            .Include(x => x.LicensePlan)
-            .Where(x => x.Status == "Active" || x.Status == "Trial")
-            .SumAsync(x => (decimal?)x.LicensePlan!.MonthlyPrice, cancellationToken) ?? 0m;
+        var mrr = await LicensePricing.MonthlyRecurringRevenueAsync(db, x => x.Status == "Active" || x.Status == "Trial", cancellationToken);
         var paidTenants = await db.TenantLicenses.CountAsync(x => x.Status == "Active", cancellationToken);
         var trialTenants = await db.TenantLicenses.CountAsync(x => x.Status == "Trial", cancellationToken);
         var activeTenants = await db.Tenants.CountAsync(x => x.Id != PlatformConstants.RootTenantId && x.IsActive, cancellationToken);

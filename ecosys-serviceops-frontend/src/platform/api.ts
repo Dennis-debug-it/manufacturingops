@@ -264,7 +264,7 @@ export function useTenantModuleSettings(id: string | undefined) {
 }
 
 export interface CreateTenantPayload {
-  planCode?: 'operations' | 'finance' | 'suite'
+  planCode?: 'essentials' | 'professional' | 'enterprise'
   timeZoneId?: string
   companyName: string
   slug?: string
@@ -283,8 +283,9 @@ export interface CreateTenantPayload {
   address?: string
   taxPin?: string
   planName?: string
-  /** Licensed users (seats). Required: the API rejects a tenant without one. */
-  maxUsers: number
+  /** Office seats. Required: the API rejects a tenant without them. */
+  officeSeats: number
+  fieldSeats?: number
   maxBranches?: number | null
   trialEndsAt?: string | null
   subscriptionEndsAt?: string | null
@@ -374,11 +375,11 @@ export function useImpersonateTenant(id: string) {
   })
 }
 
-/** Sets the tenant's licensed seats (the limit the backend enforces on every way of adding users). */
+/** Sets the tenant's office and field seats (the limits the backend enforces on every way of adding users). */
 export function useUpdateTenantSeats(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (maxUsers: number) => api.put<PlatformTenantDetail>(endpoints.platform.tenantLicenseSeats(id), { maxUsers }),
+    mutationFn: (seats: { officeSeats: number; fieldSeats: number }) => api.put<PlatformTenantDetail>(endpoints.platform.tenantLicenseSeats(id), seats),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants'] })
       void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', id] })
@@ -535,8 +536,12 @@ export interface LicenseUsageSnapshot {
   billingCycle: string
   status: string
   licenseStatus: string
-  maxUsers: number | null
+  officeSeats: number
+  fieldSeats: number
+  officeSeatsUsed: number
+  fieldSeatsUsed: number
   maxBranches: number | null
+  whatsAppAddOn: string | null
   trialEndsAt: string | null
   expiresAt: string | null
   daysRemaining: number | null
