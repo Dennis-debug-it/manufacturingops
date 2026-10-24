@@ -1,6 +1,6 @@
 # Licensing Remodel Plan
 
-Status: proposed · 2026-10-24
+Status: agreed · 2026-10-24
 
 ## Summary
 
@@ -42,8 +42,9 @@ undermines time & attendance, GPS and audit data.
 
 WhatsApp is not in any edition. It is an optional add-on available on every edition (§4).
 
-The disputed boundary is inventory. It sits in Professional because stock control signals a firm that has
-outgrown Essentials. Revisit it after the first ten Essentials sales.
+Inventory and preventive maintenance/assets sit entirely in Professional. Essentials has no light version
+of either: stock control and planned maintenance are what a firm upgrades for. Revisit this after the first
+ten Essentials sales.
 
 ## 2. Seats
 
@@ -321,11 +322,9 @@ Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
 | # | Decision | Outcome |
 |---|---|---|
 | 1 | Seat prices, field seat discount, usage packs | Adjustable on the platform, with per-tenant overrides (§6). |
-| 2 | Edition boundaries | **Open** — see below. |
+| 2 | Edition boundaries | As in §1. Inventory and PM/assets stay entirely in Professional. |
 | 3 | Industry packs | Free. |
 | 4 | Minimum office seats | Essentials 2, Professional 3, Enterprise 10, adjustable. |
 | 5 | WhatsApp add-on prices | Seeded starting values (§6), adjustable, with per-tenant overrides. |
 
-Still open: which edition inventory and preventive maintenance/assets belong in. Essentials could get a
-light version of each (parts used on a job; a simple recurring job), with full stock control and the PM
-planner in Professional.
+All decisions are made. Part 1 can start.
