@@ -25,6 +25,7 @@ undermines time & attendance, GPS and audit data.
 | Clients, sites, client portal | ✓ | ✓ | ✓ |
 | Quotations, invoices, credit notes | ✓ | ✓ | ✓ |
 | Basic reports & dashboard | ✓ | ✓ | ✓ |
+| WhatsApp notifications from the shared Ecosys number (outbound only) | ✓ | ✓ | ✓ |
 | CRM — lead capture, lead → client, quotation follow-up | ✓ | ✓ | ✓ |
 | CRM — pipeline board, stages, owners, activities, forecast | | ✓ | ✓ |
 | Projects — phases, linked work orders, budget vs actual, milestone invoicing | | ✓ | ✓ |
@@ -32,7 +33,8 @@ undermines time & attendance, GPS and audit data.
 | Contracts, SLA policies, escalation rules | | ✓ | ✓ |
 | Inventory — materials, vans, purchase orders, parts, stock transfers | | ✓ | ✓ |
 | Workflows, intake rules/protocols, email intake | | ✓ | ✓ |
-| Time & attendance, CSAT, WhatsApp inbox | | ✓ | ✓ |
+| Time & attendance, CSAT | | ✓ | ✓ |
+| WhatsApp inbox on the tenant's own platform-managed number (two-way) | | ✓ | ✓ |
 | Expenses & payables, credit control, approvals, scheduled reports | | ✓ | ✓ |
 | Multiple branches | | | ✓ |
 | API keys & webhooks, monitoring integration | | | ✓ |
@@ -62,19 +64,40 @@ going over the allowance raises a warning first, then blocks only *new* sends or
 
 | Meter | Measured at | Note |
 |---|---|---|
-| WhatsApp messages (SMS when it exists) | Outbound send in `WhatsAppController` | Only meter if Ecosys pays per message. Tenant-owned API credentials are not metered. |
+| WhatsApp conversations (SMS when it exists) | The platform WhatsApp sender (see §4) | Ecosys pays Meta for every conversation, so every tenant is metered. |
 | Kip AI queries | `KipController.Query` | Kip is currently a stub, so the meter ships with Kip. |
 | Storage (GB) | `FileStorageService` upload | Photos, reports, attachments |
 | Email-intake mailboxes | Email intake settings | Count of connected mailboxes |
 
-## 4. Extras outside entitlements
+## 4. WhatsApp is run by the platform
+
+Tenants no longer connect their own Meta account. Ecosys owns the WhatsApp Business setup, holds the
+credentials, pays Meta, and bills tenants through the usage meter.
+
+- **One Meta Business account, owned by Ecosys.** Ecosys registers as a Meta Tech Provider. All access
+  tokens and webhook secrets live in platform settings and are never shown to tenants.
+- **Shared Ecosys number (all editions):** outbound notifications only — job booked, technician on the
+  way, report ready, invoice sent. Messages carry the tenant's name in an approved template. Replies to
+  this number get an auto-reply pointing the client to the tenant's contact details, because a shared
+  number cannot reliably route an inbound message to the right tenant.
+- **Dedicated number per tenant (Professional+):** Ecosys provisions a number for the tenant under its
+  own Meta account, with the tenant's display name. Inbound messages route by number to the tenant's
+  inbox, so the two-way inbox, auto-reply and intake from WhatsApp all work. An extra number is a paid
+  extra.
+- **Templates:** Ecosys owns a standard approved template set. A tenant can request a custom template;
+  the platform submits it to Meta and approves it on the tenant's behalf.
+- **Control:** the platform can pause sending for a tenant (non-payment, spam complaints, quality rating
+  drop) without touching the rest of the account.
+
+## 5. Extras outside entitlements
 
 - **Industry packs** (solar installation, HVAC, generators, electrical): checklists, report templates and
   asset categories. These build on the existing starter packs and are sold one-off or yearly. They never
   gate an API route.
+- **Extra dedicated WhatsApp numbers.**
 - **Paid onboarding and data migration.**
 
-## 5. Commercial terms
+## 6. Commercial terms
 
 - Billed monthly or annually. Annual prepay gets about 2 months free (`BillingCycles` already supports this).
 - Trial is Professional for 14 days. When it ends, the tenant picks an edition. The existing grace period
@@ -85,8 +108,9 @@ going over the allowance raises a warning first, then blocks only *new* sends or
 
 # Implementation
 
-Four parts, each shippable on its own: **Licensing core → Projects → CRM → Usage packs**.
-Rough effort for one developer: 11–16 weeks total.
+Five parts, each shippable on its own: **Licensing core → Projects → CRM → Platform WhatsApp → Usage packs**.
+Rough effort for one developer: 13–18 weeks total. Platform WhatsApp and usage packs ship together
+if any tenant is live on WhatsApp, because the platform starts paying for messages on day one.
 
 ## Part 1 — Licensing core (2–3 weeks)
 
@@ -197,7 +221,26 @@ Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
 - This is separate from the operator-side `PlatformCrm` / `PlatformLeads`. Nothing is shared except UI
   components.
 
-## Part 4 — Usage packs (~1 week)
+## Part 4 — Platform-run WhatsApp (1.5–2 weeks)
+
+- Move the Meta credentials out of `WhatsAppSetting` (`BusinessAccountId`, `AccessToken`,
+  `WebhookVerifyToken`) into platform settings, encrypted. `WhatsAppSetting` keeps only tenant
+  preferences (enabled, auto-reply text) plus the `PhoneNumberId` of the tenant's dedicated number, now
+  set by the platform.
+- Tenant `PUT /api/whatsapp/settings` stops accepting credentials. New platform endpoints and screen:
+  connect the Ecosys Meta account, provision or detach a tenant number, pause or resume a tenant, view
+  per-tenant usage and number quality rating.
+- One `PlatformWhatsAppSender` used by every send path: chooses the tenant's dedicated number, or falls
+  back to the shared number for outbound notifications; applies the usage meter; logs every send.
+- One platform webhook: route inbound messages by receiving `PhoneNumberId` to the tenant; on the shared
+  number, send the auto-reply only.
+- Template management moves to the platform, with a per-tenant request-and-approve flow.
+- Migration: tenants who already entered their own credentials keep working until the platform moves
+  their number into the Ecosys account (Meta number migration), then their stored token is deleted.
+- Tests: tenant isolation on inbound routing, metering on every send path, and no credential ever
+  returned by a tenant endpoint.
+
+## Part 5 — Usage packs (~1 week)
 
 - `tenant_usage_counters (TenantId, Meter, PeriodStart, Used)` and
   `tenant_usage_allowances (TenantId, Meter, Included, PurchasedTopUp)`.
@@ -211,7 +254,8 @@ Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
    review the per-tenant access diff.
 2. Publish the new pricing page and help guides (`features/help/guides.ts`), and email tenants about the
    change and their price lock.
-3. Turn on Part 1 in production. Ship Projects, then CRM, then usage packs, each as its own release.
+3. Turn on Part 1 in production. Ship Projects, then CRM, then platform WhatsApp with usage packs, each
+   as its own release.
 
 ## Open decisions
 
@@ -220,3 +264,4 @@ Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
 2. Confirm the edition boundaries, especially inventory in Professional.
 3. Industry packs: paid, or kept as free starter packs?
 4. The minimum office seats for each edition.
+5. WhatsApp: how many conversations each edition includes, and the price of an extra dedicated number.
