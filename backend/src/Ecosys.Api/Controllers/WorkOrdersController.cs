@@ -34,6 +34,13 @@ public sealed class WorkOrdersController(
     /// Must stay in step with the client-side <c>resolveSlaStatusKey</c> threshold.</summary>
     private const int SlaAtRiskWindowMinutes = 120;
 
+    /// <summary>
+    /// <c>view=current</c> on the list: everything still in play, plus jobs closed, cancelled or
+    /// rejected within this many days. Older finished jobs stay reachable by search, a status or
+    /// date filter, or from the client, site, asset or technician they belong to.
+    /// </summary>
+    public const int RecentlyFinishedDays = 30;
+
     private static readonly HashSet<string> EditableStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         WorkOrderStatuses.New,
@@ -65,7 +72,8 @@ public sealed class WorkOrdersController(
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
         CancellationToken cancellationToken,
-        [FromQuery] bool? followUp = null)
+        [FromQuery] bool? followUp = null,
+        [FromQuery] string? view = null)
     {
         EnsureGeneralWorkspaceAccess(PermissionNames.CanViewWorkOrders);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
@@ -138,6 +146,11 @@ public sealed class WorkOrdersController(
         if (!string.IsNullOrWhiteSpace(slaStatus))
         {
             query = ApplySlaStatusFilter(query, slaStatus, DateTime.UtcNow);
+        }
+
+        if (string.Equals(view, "current", StringComparison.OrdinalIgnoreCase))
+        {
+            query = ApplyCurrentView(query, DateTime.UtcNow);
         }
 
         var ordered = query.OrderByDescending(x => x.CreatedAt);
@@ -2234,6 +2247,15 @@ public sealed class WorkOrdersController(
             FollowUpChecklist.IsRequested(workOrder.ChecklistItems),
             workOrder.SalesOpportunityId,
             workOrder.SalesOpportunity?.Title);
+    }
+
+    /// <summary>Open work plus anything finished in the last <see cref="RecentlyFinishedDays"/> days.</summary>
+    internal static IQueryable<WorkOrder> ApplyCurrentView(IQueryable<WorkOrder> query, DateTime utcNow)
+    {
+        var finished = WorkOrderStatuses.TerminalStatuses.SelectMany(WorkOrderStatuses.RawStatusesMatching).Distinct().ToArray();
+        var cutoff = utcNow.AddDays(-RecentlyFinishedDays);
+        // ClosedAt is set when a job is closed; a cancellation or rejection is dated by its last update.
+        return query.Where(x => !finished.Contains(x.Status) || (x.ClosedAt ?? x.UpdatedAt ?? x.CreatedAt) >= cutoff);
     }
 
     private static string ResolveSlaStatus(WorkOrder workOrder)

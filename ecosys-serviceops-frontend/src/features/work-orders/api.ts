@@ -25,10 +25,16 @@ export interface WorkOrderListFilters {
   workType?: string
   technicianId?: string
   assignmentGroupId?: string
+  clientId?: string
+  siteId?: string
+  priority?: string
+  slaStatus?: string
   unassigned?: boolean
   search?: string
   fromDate?: string
   toDate?: string
+  /** `current`: open work plus jobs finished in the last 30 days (see WorkOrdersController.RecentlyFinishedDays). */
+  view?: 'current'
 }
 
 const workOrdersKey = (filters?: WorkOrderListFilters) => ['work-orders', filters ?? {}] as const
@@ -38,16 +44,9 @@ export function useWorkOrders(filters?: WorkOrderListFilters, options: { enabled
     enabled: typeof options === 'boolean' ? options : options.enabled ?? true,
     queryKey: workOrdersKey(filters),
     queryFn: () =>
-      api.get<WorkOrder[]>(endpoints.workOrders.list, {
-        status: filters?.status,
-        workType: filters?.workType,
-        technicianId: filters?.technicianId,
-        assignmentGroupId: filters?.assignmentGroupId,
-        unassigned: filters?.unassigned,
-        search: filters?.search,
-        fromDate: filters?.fromDate,
-        toDate: filters?.toDate,
-      }),
+      // Every filter goes to the server: the board, calendar and map used to drop client, site,
+      // priority and SLA because only some of them were forwarded here.
+      api.get<WorkOrder[]>(endpoints.workOrders.list, { ...filters }),
     staleTime: 30_000,
   })
 }

@@ -26,7 +26,7 @@ import { QuickActionsMenu } from './components/QuickActionsMenu'
 import { AssignTechnicianDialog } from './components/AssignTechnicianDialog'
 import { CompleteWorkOrderDialog } from './components/CompleteWorkOrderDialog'
 import { useWorkOrderListState } from './hooks/useWorkOrderListState'
-import { normalizeWorkOrders, toWorkOrderListFilters, type WorkOrderRow } from './listModel'
+import { RECENTLY_FINISHED_DAYS, normalizeWorkOrders, showsFullHistory, toWorkOrderListFilters, type WorkOrderRow } from './listModel'
 
 export type { WorkOrderRow }
 
@@ -51,6 +51,7 @@ export function WorkOrdersPage() {
     [state, debouncedSearch],
   )
   const filterSignature = JSON.stringify(filters)
+  const currentOnly = filters.view === 'current'
   useEffect(() => setPage(1), [filterSignature])
 
   // EC-P2-07: the table pages at the database; the board/calendar/map views operate over the whole
@@ -221,6 +222,28 @@ export function WorkOrdersPage() {
       ) : null}
 
       {tab === 'all' ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-sm text-slate-500" data-testid="work-order-history-scope">
+          {showsFullHistory(state) ? (
+            <>
+              <span>{state.showAll ? 'Showing all work orders, including older finished ones.' : 'Showing every matching work order, including older finished ones.'}</span>
+              {state.showAll ? (
+                <button type="button" onClick={() => update({ showAll: false })} className="font-medium text-[var(--app-primary)] underline underline-offset-2">
+                  Show current only
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <span>Showing open work orders and those closed in the last {RECENTLY_FINISHED_DAYS} days. Search, or filter by status, client, site, technician or date, to find older ones.</span>
+              <button type="button" onClick={() => update({ showAll: true })} className="font-medium text-[var(--app-primary)] underline underline-offset-2">
+                Show all
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {tab === 'all' ? (
         isError ? (
           resultsError
         ) : !isTableView && isLoading ? (
@@ -231,22 +254,26 @@ export function WorkOrdersPage() {
               columns={columns}
               data={rows}
               loading={isLoading}
-              emptyTitle={activeFilterCount > 0 || state.search ? 'No matching work orders' : 'No work orders yet'}
+              emptyTitle={activeFilterCount > 0 || state.search ? 'No matching work orders' : currentOnly ? 'No open or recent work orders' : 'No work orders yet'}
               emptyDescription={
                 activeFilterCount > 0 || state.search
                   ? 'No work orders match the current search and filters. Clear them to see the full backlog.'
-                  : 'Raise the first work order to start tracking jobs, technicians, and service reports.'
+                  : currentOnly
+                    ? `Nothing is open and nothing was closed in the last ${RECENTLY_FINISHED_DAYS} days. Older work orders are still there.`
+                    : 'Raise the first work order to start tracking jobs, technicians, and service reports.'
               }
-              emptyActionLabel={activeFilterCount > 0 || state.search ? 'Clear filters' : canCreate ? 'New Work Order' : undefined}
+              emptyActionLabel={activeFilterCount > 0 || state.search ? 'Clear filters' : currentOnly ? 'Show all' : canCreate ? 'New Work Order' : undefined}
               onEmptyAction={
                 activeFilterCount > 0 || state.search
                   ? () => {
                       clearFilters()
                       update({ search: '' })
                     }
-                  : canCreate
-                    ? () => setShowNewForm(true)
-                    : undefined
+                  : currentOnly
+                    ? () => update({ showAll: true })
+                    : canCreate
+                      ? () => setShowNewForm(true)
+                      : undefined
               }
               pagination={{
                 page,

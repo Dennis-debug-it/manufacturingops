@@ -401,6 +401,42 @@ public sealed class WorkOrderPhase3Tests
         Assert.Equal(legacyIds, response.AssignedTechnicianIds);
     }
 
+    [Fact]
+    public async Task CurrentView_ListsOpenAndRecentlyFinishedJobs_AndTheFullListKeepsHistory()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedControllerFixtureAsync(dbContext);
+        var now = DateTime.UtcNow;
+        WorkOrder Job(string number, string status, DateTime? closedAt = null, DateTime? updatedAt = null) => new()
+        {
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id, WorkOrderNumber = number, Title = number,
+            Status = status, Priority = WorkOrderPriorities.Medium, WorkType = WorkOrderTypes.CorrectiveMaintenance,
+            ClosedAt = closedAt, UpdatedAt = updatedAt, CreatedAt = now.AddDays(-200),
+        };
+        dbContext.WorkOrders.AddRange(
+            Job("OPEN-OLD", WorkOrderStatuses.Open),
+            Job("DONE-AWAITING-CLOSE", WorkOrderStatuses.Completed, updatedAt: now.AddDays(-90)),
+            Job("CLOSED-RECENT", WorkOrderStatuses.Closed, closedAt: now.AddDays(-5)),
+            Job("CLOSED-OLD", WorkOrderStatuses.Closed, closedAt: now.AddDays(-WorkOrdersController.RecentlyFinishedDays - 10)),
+            Job("CANCELLED-RECENT", WorkOrderStatuses.Cancelled, updatedAt: now.AddDays(-2)),
+            Job("CANCELLED-OLD", WorkOrderStatuses.Cancelled, updatedAt: now.AddDays(-120)));
+        await dbContext.SaveChangesAsync();
+        var controller = CreateWorkOrdersController(dbContext, fixture);
+
+        async Task<string[]> NumbersAsync(string? view, string? status = null)
+        {
+            var result = await controller.GetAll(null, null, null, status, null, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None, view: view);
+            var rows = Assert.IsAssignableFrom<IEnumerable<WorkOrderResponse>>(Assert.IsType<OkObjectResult>(result).Value);
+            return rows.Select(x => x.WorkOrderNumber).Order().ToArray();
+        }
+
+        Assert.Equal(["CANCELLED-RECENT", "CLOSED-RECENT", "DONE-AWAITING-CLOSE", "OPEN-OLD"], await NumbersAsync("current"));
+        // No view (search, related records, reports): everything, old history included.
+        Assert.Equal(6, (await NumbersAsync(null)).Length);
+        // An explicit status asks for the full history of that status.
+        Assert.Equal(["CLOSED-OLD", "CLOSED-RECENT"], await NumbersAsync(null, WorkOrderStatuses.Closed));
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

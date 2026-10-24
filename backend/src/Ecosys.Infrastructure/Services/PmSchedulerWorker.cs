@@ -102,8 +102,19 @@ public sealed class PmSchedulerWorker(
         }
     }
 
-    private async Task RunOverdueNotificationsAsync(AppDbContext db, IServiceProvider services, DateTime now, CancellationToken ct)
+    /// <summary>
+    /// The event key (outbox, subject prefix, people's notification settings) and the template it
+    /// renders. They differ: the built-in overdue template has always been registered under the
+    /// hyphenated key, which is also the key a tenant's edited copy is saved under, and rendering by
+    /// the event key threw "template not found" for every work order, so no overdue email ever went.
+    /// </summary>
+    internal const string OverdueEventKey = "work-order.overdue";
+    internal const string OverdueTemplateKey = "work-order-overdue";
+
+    /// <summary>Emails each tenant's admins about open work orders past their due date, once a day per work order.</summary>
+    internal async Task<int> RunOverdueNotificationsAsync(AppDbContext db, IServiceProvider services, DateTime now, CancellationToken ct)
     {
+        var notified = 0;
         try
         {
             var emailOutbox = services.GetService<IEmailOutboxService>();
@@ -111,7 +122,7 @@ public sealed class PmSchedulerWorker(
             var emailSubjectRule = services.GetService<IEmailSubjectRuleService>();
 
             if (emailOutbox is null || emailTemplate is null || emailSubjectRule is null)
-                return;
+                return 0;
 
             // Find open WOs that are past due date.
             // Deduplication: skip any WO that already has an "OverdueNotified" event today.
@@ -136,9 +147,14 @@ public sealed class PmSchedulerWorker(
             {
                 try
                 {
+                    var optedOut = await db.UserNotificationPreferences
+                        .Where(x => x.TenantId == wo.TenantId && x.NotificationKey == OverdueEventKey && !x.EmailEnabled)
+                        .Select(x => x.UserId)
+                        .ToListAsync(ct);
                     var admins = await db.Users
                         .Where(x => x.TenantId == wo.TenantId && x.IsActive
-                            && x.Role == AppRoles.Admin && x.Email != null)
+                            && x.Role == AppRoles.Admin && x.Email != null && x.HasEmail
+                            && !optedOut.Contains(x.Id))
                         .Select(x => new { x.Email, x.FullName })
                         .ToListAsync(ct);
 
@@ -147,7 +163,7 @@ public sealed class PmSchedulerWorker(
 
                     var template = await emailTemplate.RenderTenantTemplateAsync(
                         wo.TenantId,
-                        "work-order.overdue",
+                        OverdueTemplateKey,
                         new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
                         {
                             ["WorkOrderNumber"] = wo.WorkOrderNumber,
@@ -162,13 +178,13 @@ public sealed class PmSchedulerWorker(
                         continue;
 
                     var subject = await emailSubjectRule.BuildFinalSubjectAsync(
-                        wo.TenantId, "work-order.overdue", template.Subject, cancellationToken: ct);
+                        wo.TenantId, OverdueEventKey, template.Subject, cancellationToken: ct);
 
                     foreach (var admin in admins)
                     {
                         await emailOutbox.QueueEmailAsync(
                             new QueueEmailRequest(
-                                wo.TenantId, "work-order.overdue", "work-order-overdue",
+                                wo.TenantId, OverdueEventKey, OverdueTemplateKey,
                                 admin.Email!, admin.FullName,
                                 template.SenderNameOverride, null, null,
                                 subject, template.HtmlBody, template.TextBody, null),
@@ -185,6 +201,7 @@ public sealed class PmSchedulerWorker(
                         Message = "Overdue notification email queued.",
                         OccurredAt = now
                     });
+                    notified++;
                     logger.LogInformation("Queued overdue notification for work order {WoNumber}.", wo.WorkOrderNumber);
                 }
                 catch (Exception ex)
@@ -193,16 +210,18 @@ public sealed class PmSchedulerWorker(
                 }
             }
 
-            if (overdueWOs.Count > 0)
+            if (notified > 0)
             {
                 await db.SaveChangesAsync(ct);
-                logger.LogInformation("Overdue notification sweep complete. Notified for {Count} work orders.", overdueWOs.Count);
+                logger.LogInformation("Overdue notification sweep complete. Notified for {Count} work orders.", notified);
             }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Overdue notification sweep failed.");
         }
+
+        return notified;
     }
 
     private static bool ShouldGenerate(PreventiveMaintenancePlan plan, DateTime now)

@@ -20,6 +20,7 @@ const PARAM_KEYS: Record<keyof WorkOrderListState, string> = {
   unassignedOnly: 'unassigned',
   fromDate: 'from',
   toDate: 'to',
+  showAll: 'all',
 }
 
 const FILTER_KEYS: (keyof WorkOrderFilterValues)[] = [
@@ -55,6 +56,7 @@ export function useWorkOrderListState() {
       unassignedOnly: searchParams.get(PARAM_KEYS.unassignedOnly) === '1',
       fromDate: searchParams.get(PARAM_KEYS.fromDate) ?? '',
       toDate: searchParams.get(PARAM_KEYS.toDate) ?? '',
+      showAll: searchParams.get(PARAM_KEYS.showAll) === '1',
     }
   }, [searchParams])
 
@@ -85,7 +87,10 @@ export function useWorkOrderListState() {
   const setView = useCallback((view: ViewMode) => update({ view }), [update])
 
   const clearFilters = useCallback(() => {
-    update(Object.fromEntries(FILTER_KEYS.map((key) => [key, key === 'unassignedOnly' ? false : ''])) as Partial<WorkOrderListState>)
+    update({
+      ...(Object.fromEntries(FILTER_KEYS.map((key) => [key, key === 'unassignedOnly' ? false : ''])) as Partial<WorkOrderListState>),
+      showAll: false,
+    })
   }, [update])
 
   const activeFilterCount = FILTER_KEYS.filter((key) => key !== 'search' && Boolean(state[key])).length
