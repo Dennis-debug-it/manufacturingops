@@ -9,8 +9,9 @@ Replace module licensing (Operations / Finance / Suite) with **editions × seat 
 - **Three editions** — Essentials, Professional, Enterprise. Every edition runs the complete loop
   (win work → do it → bill it); higher editions add depth, control and scale.
 - **Two paid seat types** — Office and Field (technician), with free Viewer/Auditor and portal users.
-- **Usage packs** only where Ecosys carries a real marginal cost (messaging, AI, storage).
+- **Usage packs** only where Ecosys carries a real marginal cost (AI, storage).
 - **CRM and Projects** are built into the editions, not sold as add-ons.
+- **WhatsApp** is the one optional add-on, run and paid for by the platform.
 
 Why: module splits leave customers with half a workflow, and they create cross-module seams in the code
 (`WorkOrderBilling` needs both modules; `Portal`, `Import` and `Settings` are classified per route).
@@ -25,7 +26,6 @@ undermines time & attendance, GPS and audit data.
 | Clients, sites, client portal | ✓ | ✓ | ✓ |
 | Quotations, invoices, credit notes | ✓ | ✓ | ✓ |
 | Basic reports & dashboard | ✓ | ✓ | ✓ |
-| WhatsApp notifications from the shared Ecosys number (outbound only) | ✓ | ✓ | ✓ |
 | CRM — lead capture, lead → client, quotation follow-up | ✓ | ✓ | ✓ |
 | CRM — pipeline board, stages, owners, activities, forecast | | ✓ | ✓ |
 | Projects — phases, linked work orders, budget vs actual, milestone invoicing | | ✓ | ✓ |
@@ -34,12 +34,13 @@ undermines time & attendance, GPS and audit data.
 | Inventory — materials, vans, purchase orders, parts, stock transfers | | ✓ | ✓ |
 | Workflows, intake rules/protocols, email intake | | ✓ | ✓ |
 | Time & attendance, CSAT | | ✓ | ✓ |
-| WhatsApp inbox on the tenant's own platform-managed number (two-way) | | ✓ | ✓ |
 | Expenses & payables, credit control, approvals, scheduled reports | | ✓ | ✓ |
 | Multiple branches | | | ✓ |
 | API keys & webhooks, monitoring integration | | | ✓ |
 | Approval matrix, custom report templates, advanced roles | | | ✓ |
 | Cross-branch / cross-project profitability reporting | | | ✓ |
+
+WhatsApp is not in any edition. It is an optional add-on available on every edition (§4).
 
 The disputed boundary is inventory. It sits in Professional because stock control signals a firm that has
 outgrown Essentials. Revisit it after the first ten Essentials sales.
@@ -64,37 +65,47 @@ going over the allowance raises a warning first, then blocks only *new* sends or
 
 | Meter | Measured at | Note |
 |---|---|---|
-| WhatsApp conversations (SMS when it exists) | The platform WhatsApp sender (see §4) | Ecosys pays Meta for every conversation, so every tenant is metered. |
 | Kip AI queries | `KipController.Query` | Kip is currently a stub, so the meter ships with Kip. |
 | Storage (GB) | `FileStorageService` upload | Photos, reports, attachments |
 | Email-intake mailboxes | Email intake settings | Count of connected mailboxes |
 
-## 4. WhatsApp is run by the platform
+## 4. WhatsApp — optional add-on, run by the platform
+
+WhatsApp is the only add-on in the model. It is off by default and a tenant can turn it on with any
+edition. Tenants that don't take it pay nothing for it and see no WhatsApp screens or settings.
+
+| Add-on | What the tenant gets | Billing |
+|---|---|---|
+| **WhatsApp Notifications** | Outbound messages from the shared Ecosys number | Monthly fee + messages beyond the included bundle |
+| **WhatsApp Business** | A dedicated number, two-way inbox, auto-reply, WhatsApp intake. Includes Notifications. | Higher monthly fee + messages beyond the included bundle |
 
 Tenants no longer connect their own Meta account. Ecosys owns the WhatsApp Business setup, holds the
-credentials, pays Meta, and bills tenants through the usage meter.
+credentials and pays Meta. A tenant's add-on fee and message usage cover that cost.
 
 - **One Meta Business account, owned by Ecosys.** Ecosys registers as a Meta Tech Provider. All access
   tokens and webhook secrets live in platform settings and are never shown to tenants.
-- **Shared Ecosys number (all editions):** outbound notifications only — job booked, technician on the
+- **Shared Ecosys number (Notifications):** outbound notifications only — job booked, technician on the
   way, report ready, invoice sent. Messages carry the tenant's name in an approved template. Replies to
   this number get an auto-reply pointing the client to the tenant's contact details, because a shared
   number cannot reliably route an inbound message to the right tenant.
-- **Dedicated number per tenant (Professional+):** Ecosys provisions a number for the tenant under its
+- **Dedicated number per tenant (Business):** Ecosys provisions a number for the tenant under its
   own Meta account, with the tenant's display name. Inbound messages route by number to the tenant's
-  inbox, so the two-way inbox, auto-reply and intake from WhatsApp all work. An extra number is a paid
-  extra.
+  inbox, so the two-way inbox, auto-reply and intake from WhatsApp all work. Each extra number costs
+  more.
 - **Templates:** Ecosys owns a standard approved template set. A tenant can request a custom template;
   the platform submits it to Meta and approves it on the tenant's behalf.
 - **Control:** the platform can pause sending for a tenant (non-payment, spam complaints, quality rating
   drop) without touching the rest of the account.
+- **Metering:** messages are counted per tenant against the bundle that comes with the add-on (see Part 4).
+  Usage packs (§3) do not cover WhatsApp.
+- **Turning it off:** sending stops, the dedicated number is released after 30 days, and the
+  conversation history stays read-only.
 
 ## 5. Extras outside entitlements
 
 - **Industry packs** (solar installation, HVAC, generators, electrical): checklists, report templates and
   asset categories. These build on the existing starter packs and are sold one-off or yearly. They never
   gate an API route.
-- **Extra dedicated WhatsApp numbers.**
 - **Paid onboarding and data migration.**
 
 ## 6. Commercial terms
@@ -109,10 +120,12 @@ credentials, pays Meta, and bills tenants through the usage meter.
 # Implementation
 
 Five parts, each shippable on its own: **Licensing core → Projects → CRM → Platform WhatsApp → Usage packs**.
-Rough effort for one developer: 13–18 weeks total. Platform WhatsApp and usage packs ship together
-if any tenant is live on WhatsApp, because the platform starts paying for messages on day one.
+Rough effort for one developer: 13–18 weeks total. WhatsApp metering ships in Part 4 itself, so the
+platform never pays for messages it can't bill.
 
 ## Part 1 — Licensing core (2–3 weeks)
+
+Includes the add-on mechanism that WhatsApp needs, so Part 4 does not have to build it.
 
 ### 1.1 Feature keys replace modules
 
@@ -136,6 +149,10 @@ if any tenant is live on WhatsApp, because the platform starts paying for messag
   seats, monthly/annual for field seats, and minimum office seats.
 - `TenantLicense.LicensedUsers` becomes `OfficeSeats` + `FieldSeats`. Both have a CHECK constraint, like
   `CK_tenant_licenses_LicensedUsers_Positive`: office seats > 0, field seats ≥ 0.
+- Add-ons: `license_add_ons (Code, Name, MonthlyPrice, AnnualPrice, IncludedMessages, IsActive)` and
+  `tenant_license_add_ons (TenantLicenseId, AddOnCode, StartedAt, EndedAt, PriceOverride)`. A tenant's
+  features are its edition's features plus its active add-ons' features, minus its overrides. The
+  only add-ons at launch are `whatsapp_notifications` and `whatsapp_business`.
 - Drop `LicensePlan.ModulesIncluded`, `EmailIngestion`, `MonitoringIntegration` and `MaxBranches`.
 
 ### 1.3 Seat enforcement
@@ -207,7 +224,7 @@ Feature key: `projects` (Professional+).
 Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
 
 - **crm_basic:**
-  - `Lead` entity (source: web form / email intake / WhatsApp / manual; contact details; status; owner).
+  - `Lead` entity (source: web form / email intake / WhatsApp with the Business add-on / manual; contact details; status; owner).
   - Convert a lead to a `Client`.
   - Quotation follow-up view based on `TenantQuotation.Status` (Draft → Sent → Accepted/Rejected/Expired),
     with reminders to chase quotes.
@@ -230,12 +247,19 @@ Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
 - Tenant `PUT /api/whatsapp/settings` stops accepting credentials. New platform endpoints and screen:
   connect the Ecosys Meta account, provision or detach a tenant number, pause or resume a tenant, view
   per-tenant usage and number quality rating.
+- The WhatsApp controllers, the settings route and the screens are gated by the add-on's feature key,
+  not by edition. The tenant screen offers to turn the add-on on, and shows what it costs.
+- Message metering: a per-tenant monthly message count against the add-on's `IncludedMessages`. Messages
+  beyond the bundle are billed in arrears on the next invoice. The platform can set a hard cap for each
+  tenant.
 - One `PlatformWhatsAppSender` used by every send path: chooses the tenant's dedicated number, or falls
   back to the shared number for outbound notifications; applies the usage meter; logs every send.
 - One platform webhook: route inbound messages by receiving `PhoneNumberId` to the tenant; on the shared
   number, send the auto-reply only.
 - Template management moves to the platform, with a per-tenant request-and-approve flow.
-- Migration: tenants who already entered their own credentials keep working until the platform moves
+- Migration: tenants who have WhatsApp enabled today get the WhatsApp Business add-on, free until
+  their renewal. Tenants who don't keep WhatsApp off. Tenants who already entered their own credentials
+  keep working until the platform moves
   their number into the Ecosys account (Meta number migration), then their stored token is deleted.
 - Tests: tenant isolation on inbound routing, metering on every send path, and no credential ever
   returned by a tenant endpoint.
@@ -254,7 +278,7 @@ Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
    review the per-tenant access diff.
 2. Publish the new pricing page and help guides (`features/help/guides.ts`), and email tenants about the
    change and their price lock.
-3. Turn on Part 1 in production. Ship Projects, then CRM, then platform WhatsApp with usage packs, each
+3. Turn on Part 1 in production. Ship Projects, then CRM, then platform WhatsApp, then usage packs, each
    as its own release.
 
 ## Open decisions
@@ -264,4 +288,5 @@ Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
 2. Confirm the edition boundaries, especially inventory in Professional.
 3. Industry packs: paid, or kept as free starter packs?
 4. The minimum office seats for each edition.
-5. WhatsApp: how many conversations each edition includes, and the price of an extra dedicated number.
+5. WhatsApp add-on prices: the monthly fee for each of the two add-ons, how many messages each includes,
+   the price per message beyond that, and the price of an extra dedicated number.
