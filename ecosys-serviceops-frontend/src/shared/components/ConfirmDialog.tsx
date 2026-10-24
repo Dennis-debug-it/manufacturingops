@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { cn } from '../utils/cn'
 
@@ -58,7 +59,9 @@ export function ConfirmDialog({
 
   const canConfirm = confirmText ? typedValue === confirmText : true
 
-  return (
+  // Rendered at the body so no ancestor (a table row, or a blurred or transformed card, which makes
+  // `fixed` relative to itself) can clip or shrink the full-screen overlay.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
       <button
         type="button"
@@ -109,6 +112,7 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
