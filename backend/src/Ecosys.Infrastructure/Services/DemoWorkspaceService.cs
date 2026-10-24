@@ -162,7 +162,8 @@ internal sealed partial class DemoWorkspaceService(
             content.AddTo(dbContext);
             await dbContext.SaveChangesAsync(cancellationToken);
 
-            // SaveChanges stamps CreatedAt with "now" on insert; back-date the history in a second pass.
+            // SaveChanges stamps CreatedAt with "now" on insert; back-date the history (and set the links the
+            // first save could not) in a second pass.
             content.ApplyCreatedDates();
             await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -409,6 +410,8 @@ internal sealed partial class DemoWorkspaceService(
         private readonly DateTime _now = DateTime.UtcNow;
         private readonly Dictionary<string, long> _counters = new(StringComparer.Ordinal);
         private readonly List<(Ecosys.Domain.Common.AuditableEntity Entity, DateTime CreatedAt)> _createdDates = [];
+        // Links that would make the first save circular (a valuation and its invoice point at each other).
+        private readonly List<Action> _secondPass = [];
         private Guid _headOfficeId;
         private AppDbContext _db = null!;
 
@@ -709,7 +712,8 @@ internal sealed partial class DemoWorkspaceService(
                 RetentionPercent = 10, RetentionReleaseAtCompletionPercent = 50, DefectsLiabilityMonths = 12,
                 AdvancePaymentAmount = 3_700_000m, AdvanceRecoveryPercent = 20, SourceQuotationId = solarQuote.Id,
             });
-            solarQuote.ConvertedToProjectId = solar.Id;
+            // As "Award as project" does: the quote is marked converted and points at the project.
+            (solarQuote.Status, solarQuote.ConvertedToProjectId) = ("Converted", solar.Id);
             _createdDates.Add((solar, _now.AddDays(-62)));
 
             var solarMilestones = new[]
@@ -868,6 +872,7 @@ internal sealed partial class DemoWorkspaceService(
                 Status = ProjectValuationStatuses.Invoiced, CertifiedByConsultantId = quantitySurveyor.Id, CertificateReference = "IPC-01", CertifiedOn = Day(-14),
                 CertifiedAmount = first.AmountDue, InvoiceId = firstInvoice.Id,
             });
+            _secondPass.Add(() => firstInvoice.ProjectValuationId = firstValuation.Id);
             var second = ProjectValuationCalculator.Compute(solar, 7_200_000m, 1_500_000m, firstValuation, certifiedBefore: first.AmountDue);
             _db.ProjectValuations.Add(new ProjectValuation
             {
@@ -905,13 +910,14 @@ internal sealed partial class DemoWorkspaceService(
             _db.ProjectConsultants.Add(new ProjectConsultant { TenantId = tenantId, ProjectId = theatre.Id, ConsultantId = engineer.Id, RoleOnProject = "Mechanical engineer" });
             var final = ProjectValuationCalculator.Compute(theatre, 6_200_000m, 0m, previous: null, certifiedBefore: 0m);
             var finalInvoice = AddInvoice(hospital, "Sent", _now.Date.AddDays(-6), _now.Date.AddDays(24), [("Final valuation – theatre HVAC upgrade", 1, "lot", final.AmountDue)], projectId: theatre.Id);
-            _db.ProjectValuations.Add(new ProjectValuation
+            var finalValuation = Add(_db.ProjectValuations, new ProjectValuation
             {
                 TenantId = tenantId, ProjectId = theatre.Id, ValuationNumber = Next(DocumentTypes.ProjectValuation, "VAL"), PeriodEnd = Day(-8),
                 WorkDoneToDate = 6_200_000m, GrossValueToDate = final.GrossValueToDate, RetentionToDate = final.RetentionToDate, AdvanceRecoveredToDate = final.AdvanceRecoveredToDate,
                 PreviouslyCertified = 0m, AmountDue = final.AmountDue, Status = ProjectValuationStatuses.Invoiced, CertifiedByConsultantId = engineer.Id,
                 CertificateReference = "FC-01", CertifiedOn = Day(-7), CertifiedAmount = final.AmountDue, InvoiceId = finalInvoice.Id,
             });
+            _secondPass.Add(() => finalInvoice.ProjectValuationId = finalValuation.Id);
 
             // ── 3. Refurbishment just awarded from an accepted quote ─────────────────
             var poolQuote = AddQuote(hotel, "Pool plant room refurbishment", "Accepted", _now.Date.AddDays(-6),
@@ -925,7 +931,7 @@ internal sealed partial class DemoWorkspaceService(
                 ProjectManagerUserId = manager.Id, OriginalValue = 3_600_000m, PlannedStartDate = Day(10), PlannedEndDate = Day(55),
                 RetentionPercent = 5, DefectsLiabilityMonths = 6, SourceQuotationId = poolQuote.Id,
             });
-            poolQuote.ConvertedToProjectId = pool.Id;
+            (poolQuote.Status, poolQuote.ConvertedToProjectId) = ("Converted", pool.Id);
             foreach (var (name, weight, offset) in new[] { ("Mobilisation", 1m, 10), ("Strip-out", 1m, 18), ("Install pumps & filters", 3m, 38), ("Electrical panel", 2m, 46), ("Commissioning & handover", 1m, 55) })
             {
                 _db.ProjectMilestones.Add(new ProjectMilestone { TenantId = tenantId, ProjectId = pool.Id, Name = name, Weight = weight, PlannedDate = Day(offset) });
@@ -934,8 +940,14 @@ internal sealed partial class DemoWorkspaceService(
             _db.ProjectTasks.Add(new ProjectTask { TenantId = tenantId, ProjectId = pool.Id, Title = "Agree pool shutdown dates with the hotel", AssigneeUserId = manager.Id, DueDate = Day(3) });
         }
 
+        /// <summary>Back-dates the history and sets the links the first save could not; the caller saves again.</summary>
         public void ApplyCreatedDates()
         {
+            foreach (var link in _secondPass)
+            {
+                link();
+            }
+
             foreach (var (entity, createdAt) in _createdDates)
             {
                 entity.CreatedAt = createdAt;

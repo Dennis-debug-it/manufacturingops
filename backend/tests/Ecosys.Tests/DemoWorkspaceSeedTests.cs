@@ -177,15 +177,15 @@ public sealed class DemoWorkspaceSeedTests
         foreach (var valuation in valuations.Where(x => x.InvoiceId.HasValue))
         {
             var invoice = await db.TenantInvoices.SingleAsync(x => x.Id == valuation.InvoiceId);
-            Assert.Equal(valuation.ProjectId, invoice.ProjectId);
+            Assert.Equal((valuation.ProjectId, valuation.Id), (invoice.ProjectId, invoice.ProjectValuationId));
             Assert.Equal(valuation.AmountDue, invoice.Subtotal);
         }
 
-        // Both awarded projects trace back to an accepted quote that points at them.
+        // Both awarded projects trace back to their quote, marked converted as "Award as project" leaves it.
         foreach (var project in projects.Where(x => x.SourceQuotationId.HasValue))
         {
             var quote = await db.TenantQuotations.SingleAsync(x => x.Id == project.SourceQuotationId);
-            Assert.Equal(("Accepted", project.Id), (quote.Status, quote.ConvertedToProjectId));
+            Assert.Equal(("Converted", project.Id), (quote.Status, quote.ConvertedToProjectId));
         }
 
         // The Financials tab reads the seeded records: certified value, retention held, cash received and labour cost.
