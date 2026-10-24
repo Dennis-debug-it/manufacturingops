@@ -8,10 +8,13 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { ErrorState } from '../../shared/components/ErrorState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
+import { ProjectPicker } from '../../shared/components/ProjectPicker'
 import { usePermission } from '../../shared/hooks/usePermission'
+import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import { formatDate } from '../../shared/utils/dates'
 import { InventoryTabNav } from './components/InventoryTabNav'
 import { MaterialAutocomplete } from './components/MaterialAutocomplete'
+import { purchaseOrderChoice, purchaseOrderFiltersFor, purchaseOrderListFilterSpec, purchaseOrderStatuses, type PurchaseOrderChoice } from './listFilters'
 import {
   useCreatePurchaseOrder,
   usePurchaseOrder,
@@ -20,10 +23,10 @@ import {
   useSetPurchaseOrderStatus,
   useSuppliers,
   type PurchaseOrderListItem,
-  type PurchaseOrderStatus,
 } from './purchaseOrdersApi'
 
-const statusOptions: Array<PurchaseOrderStatus | 'All'> = ['All', 'Draft', 'Sent', 'PartiallyReceived', 'Received', 'Cancelled']
+const choices: PurchaseOrderChoice[] = ['All', 'open', 'late', ...purchaseOrderStatuses]
+const choiceLabels: Partial<Record<PurchaseOrderChoice, string>> = { open: 'Open', late: 'Past expected date', PartiallyReceived: 'Partially Received' }
 
 interface DraftLine {
   itemName: string
@@ -35,8 +38,13 @@ const emptyLine: DraftLine = { itemName: '', quantityOrdered: '1', unitCost: '0'
 
 export function PurchaseOrdersPage() {
   const canEdit = usePermission('inventory.edit')
-  const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | 'All'>('All')
-  const { data, isLoading, isError, refetch } = usePurchaseOrders(statusFilter)
+  // The filter lives in the URL, so the dashboard's "Open" and "Past expected date" open it filtered.
+  const { filters, update } = useUrlFilters(purchaseOrderListFilterSpec)
+  const choice = purchaseOrderChoice(filters)
+  const { data, isLoading, isError, refetch } = usePurchaseOrders(
+    choice === 'open' || choice === 'late' ? 'All' : choice,
+    choice === 'open' || choice === 'late' ? choice : undefined,
+  )
   const { data: suppliers } = useSuppliers()
   const createPo = useCreatePurchaseOrder()
   const [showNewPo, setShowNewPo] = useState(false)
@@ -44,9 +52,11 @@ export function PurchaseOrdersPage() {
   const [expectedAt, setExpectedAt] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([{ ...emptyLine }])
+  const [projectId, setProjectId] = useState('')
 
   const resetForm = () => {
     setSupplierId('')
+    setProjectId('')
     setExpectedAt('')
     setNotes('')
     setLines([{ ...emptyLine }])
@@ -59,7 +69,7 @@ export function PurchaseOrdersPage() {
   const submit = async () => {
     if (!supplierId) return toast.error('Select a supplier')
     if (validLines.length === 0) return toast.error('Add at least one line item')
-    await createPo.mutateAsync({ supplierId, expectedAt: expectedAt || undefined, lines: validLines, notes: notes || undefined })
+    await createPo.mutateAsync({ supplierId, expectedAt: expectedAt || undefined, lines: validLines, notes: notes || undefined, projectId: projectId || null })
     toast.success('Purchase order created')
     setShowNewPo(false)
     resetForm()
@@ -89,14 +99,14 @@ export function PurchaseOrdersPage() {
       />
       <InventoryTabNav />
       <div className="flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-3 shadow-sm">
-        {statusOptions.map((status) => (
+        {choices.map((option) => (
           <button
-            key={status}
+            key={option}
             type="button"
-            onClick={() => setStatusFilter(status)}
-            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${statusFilter === status ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+            onClick={() => update(purchaseOrderFiltersFor(option))}
+            className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-medium transition ${choice === option ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100'}`}
           >
-            {status === 'PartiallyReceived' ? 'Partially Received' : status}
+            {choiceLabels[option] ?? option}
           </button>
         ))}
       </div>
@@ -124,6 +134,7 @@ export function PurchaseOrdersPage() {
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Expected Delivery Date</label>
             <input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
+          <ProjectPicker id="po-project" value={projectId} onChange={setProjectId} />
 
           <div>
             <div className="mb-1.5 flex items-center justify-between">

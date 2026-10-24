@@ -223,75 +223,37 @@ public static class WebPushCrypto
 }
 
 /// <summary>
-/// Hands push notifications to a background sender so the request that caused them (e.g. assigning
-/// a technician) never waits on the browsers' push services. In-memory and per instance: a message
-/// still queued when the process stops is dropped, which is acceptable for a notification.
+/// Sends one message to every device the given users registered. Callers own the scope: the
+/// subscriptions are read from, and dead ones removed through, the context they pass in.
 /// </summary>
-public interface IPushNotificationQueue
+public interface IWebPushSender
 {
-    void Enqueue(Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message);
+    Task SendAsync(AppDbContext db, Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message, CancellationToken cancellationToken = default);
 }
 
-internal sealed record PushNotificationJob(Guid TenantId, IReadOnlyCollection<Guid> UserIds, PushMessage Message);
-
-internal sealed class PushNotificationQueue : IPushNotificationQueue
-{
-    private readonly Channel<PushNotificationJob> channel = Channel.CreateBounded<PushNotificationJob>(
-        new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.DropOldest });
-
-    public ChannelReader<PushNotificationJob> Reader => channel.Reader;
-
-    public void Enqueue(Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message)
-    {
-        if (userIds.Count > 0)
-        {
-            channel.Writer.TryWrite(new PushNotificationJob(tenantId, userIds, message));
-        }
-    }
-}
-
-internal sealed class PushNotificationWorker(
-    PushNotificationQueue queue,
-    IServiceScopeFactory serviceScopeFactory,
+internal sealed class WebPushSender(
     IVapidKeyProvider vapidKeyProvider,
     IHttpClientFactory httpClientFactory,
-    ILogger<PushNotificationWorker> logger) : BackgroundService
+    ILogger<WebPushSender> logger) : IWebPushSender
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public async Task SendAsync(AppDbContext db, Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message, CancellationToken cancellationToken = default)
     {
-        await foreach (var job in queue.Reader.ReadAllAsync(stoppingToken))
-        {
-            try
-            {
-                await SendAsync(job, stoppingToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogWarning(ex, "Failed to send push notification '{Tag}'.", job.Message.Tag);
-            }
-        }
-    }
-
-    private async Task SendAsync(PushNotificationJob job, CancellationToken cancellationToken)
-    {
-        using var scope = serviceScopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var subscriptions = await db.PushSubscriptions
             .IgnoreQueryFilters()
-            .Where(x => x.TenantId == job.TenantId && job.UserIds.Contains(x.UserId))
+            .Where(x => x.TenantId == tenantId && userIds.Contains(x.UserId))
             .ToListAsync(cancellationToken);
         if (subscriptions.Count == 0) return;
 
         var keys = await vapidKeyProvider.GetAsync(cancellationToken);
         var payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            title = job.Message.Title,
-            body = job.Message.Body,
-            url = job.Message.Url,
-            tag = job.Message.Tag,
+            title = message.Title,
+            body = message.Body,
+            url = message.Url,
+            tag = message.Tag,
         });
 
-        var client = httpClientFactory.CreateClient(nameof(PushNotificationWorker));
+        var client = httpClientFactory.CreateClient(nameof(WebPushSender));
         client.Timeout = TimeSpan.FromSeconds(15);
         foreach (var subscription in subscriptions)
         {
@@ -329,5 +291,58 @@ internal sealed class PushNotificationWorker(
         }
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+}
+
+/// <summary>
+/// An in-memory hand-off for pushes that need no inbox row — today only the "send me a test push"
+/// button. Every real notification goes through <see cref="INotificationDispatcher"/>, which records
+/// the push on its <c>Notification</c> row so a restart cannot lose it (see <c>NotificationPushWorker</c>).
+/// In-memory and per instance: a message still queued when the process stops is dropped.
+/// </summary>
+public interface IPushNotificationQueue
+{
+    void Enqueue(Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message);
+}
+
+internal sealed record PushNotificationJob(Guid TenantId, IReadOnlyCollection<Guid> UserIds, PushMessage Message);
+
+internal sealed class PushNotificationQueue : IPushNotificationQueue
+{
+    private readonly Channel<PushNotificationJob> channel = Channel.CreateBounded<PushNotificationJob>(
+        new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.DropOldest });
+
+    public ChannelReader<PushNotificationJob> Reader => channel.Reader;
+
+    public void Enqueue(Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message)
+    {
+        if (userIds.Count > 0)
+        {
+            channel.Writer.TryWrite(new PushNotificationJob(tenantId, userIds, message));
+        }
+    }
+}
+
+internal sealed class PushNotificationWorker(
+    PushNotificationQueue queue,
+    IServiceScopeFactory serviceScopeFactory,
+    IWebPushSender sender,
+    ILogger<PushNotificationWorker> logger) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        await foreach (var job in queue.Reader.ReadAllAsync(stoppingToken))
+        {
+            try
+            {
+                using var scope = serviceScopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                await sender.SendAsync(db, job.TenantId, job.UserIds, job.Message, stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Failed to send push notification '{Tag}'.", job.Message.Tag);
+            }
+        }
     }
 }

@@ -15,7 +15,8 @@ import {
 import { attachAuthInterceptors } from './attachInterceptors'
 import type { LoginResponse } from '../types/auth'
 
-const defaultBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5072'
+export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5072'
+const defaultBaseUrl = apiBaseUrl
 
 export const apiClient = axios.create({
   baseURL: defaultBaseUrl,

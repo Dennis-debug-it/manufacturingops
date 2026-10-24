@@ -11,6 +11,7 @@ export const portalFeatures = {
   invoices: (s) => s.showInvoices,
   contracts: (s) => s.showContracts,
   assetRegister: (s) => s.showAssetRegister,
+  projects: (s) => s.showProjects ?? false,
 } satisfies Record<string, PortalFeature>
 
 /** True only once settings have loaded and the feature is on — gated UI stays hidden rather than flashing. */

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
   Radio, MessageCircle, CreditCard, ShieldCheck, Users, Bell, Plug, LineChart,
-  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Rocket, Percent,
+  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Rocket, Percent, LayoutDashboard,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
@@ -68,10 +68,13 @@ const groups: SettingsGroup[] = [
     title: 'Access & Notifications',
     items: [
       { to: '/settings/portal', label: 'Portal', description: 'Client portal visibility controls.', icon: Users },
-      { to: '/settings/notifications', label: 'Notifications', description: 'Event notification matrix.', icon: Bell },
+      { to: '/settings/notifications', label: 'My Notifications', description: 'How you hear about each event: bell, push, email or WhatsApp.', icon: Bell },
+      { to: '/settings/whatsapp-reminders', label: 'WhatsApp Reminders', description: 'Which notifications may go on WhatsApp, usage and message log.', icon: MessageCircle },
+      { to: '/settings/workspace-notifications', label: 'Workspace Notifications', description: 'Event notification matrix.', icon: Bell },
       { to: '/settings/notification-templates', label: 'Notification Templates', description: 'Client ETA emails for job milestones.', icon: MapPin },
       { to: '/settings/security', label: 'Security', description: 'Session and authentication policy.', icon: ShieldCheck },
       { to: '/settings/executive-dashboard', label: 'Executive Dashboard Settings', description: 'Metric targets and thresholds.', icon: LineChart },
+      { to: '/settings/dashboards', label: 'Dashboards', description: 'Hide dashboard widgets for a role.', icon: LayoutDashboard },
     ],
   },
   {

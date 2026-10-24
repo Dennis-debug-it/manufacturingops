@@ -9,6 +9,11 @@ public static class ServiceOpsPlans
     public const string Operations = "operations";
     public const string Finance = "finance";
     public const string Suite = "suite";
+    /// <summary>
+    /// Add-on module, not a plan code: any plan (canonical or custom) gets Projects by listing
+    /// "projects" in <see cref="LicensePlan.ModulesIncluded"/>. No existing plan includes it.
+    /// </summary>
+    public const string Projects = "projects";
     public static bool IsCommercial(string code) => code is Operations or Finance or Suite;
     public static string DisplayName(string code) => code switch
     {
@@ -22,13 +27,15 @@ public static class ServiceOpsPlans
     {
         // Canonical offerings have fixed module boundaries. Feature flags and capacity
         // overrides continue to use the existing licensing mechanisms.
-        if (plan.PlanCode == Operations) return [Operations];
-        if (plan.PlanCode == Finance) return [Finance];
-        if (plan.PlanCode == Suite) return [Operations, Finance];
-        var explicitModules = (plan.ModulesIncluded ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(x => x.ToLowerInvariant()).Where(x => x is Operations or Finance).Distinct().ToArray();
+        var included = (plan.ModulesIncluded ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.ToLowerInvariant()).ToArray();
+        string[] addOns = included.Contains(Projects) ? [Projects] : [];
+        if (plan.PlanCode == Operations) return [Operations, .. addOns];
+        if (plan.PlanCode == Finance) return [Finance, .. addOns];
+        if (plan.PlanCode == Suite) return [Operations, Finance, .. addOns];
+        var explicitModules = included.Where(x => x is Operations or Finance).Distinct().ToArray();
         // Existing plans had no module restrictions. Preserve their paid/demo access.
-        return explicitModules.Length > 0 ? explicitModules : [Operations, Finance];
+        return [.. (explicitModules.Length > 0 ? explicitModules : [Operations, Finance]), .. addOns];
     }
 
     private static readonly HashSet<string> OperationsControllers = new(StringComparer.OrdinalIgnoreCase)
@@ -43,7 +50,12 @@ public static class ServiceOpsPlans
     private static readonly HashSet<string> FinanceControllers = new(StringComparer.OrdinalIgnoreCase)
     {
         "ApprovalMatrix", "CreditTerms", "ExchangeRates", "ExpensesPayables", "TenantCreditNote",
-        "TenantFinance", "TenantInvoice", "TenantQuotation"
+        "TenantFinance", "TenantInvoice", "TenantQuotation", "WithholdingCertificates"
+    };
+
+    private static readonly HashSet<string> ProjectsControllers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Projects", "ProjectSettings", "Consultants", "PortalProjects", "ProjectSite", "ProjectCommercial"
     };
 
     /// <summary>
@@ -54,10 +66,13 @@ public static class ServiceOpsPlans
     /// </summary>
     public static readonly IReadOnlySet<string> SharedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "AccessControl", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "ClientPortalContacts",
-        "Clients", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "PortalAuth", "PortalKnowledge",
-        "PublicWorkOrder", "PushSubscriptions", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
-        "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users"
+        "AccessControl", "ActionItems", "Activities", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "Calendar", "CalendarFeed", "ClientPortalContacts",
+        "Clients", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "Notifications", "PortalAuth", "PortalKnowledge",
+        "PublicWorkOrder", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
+        "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
+        // WhatsApp reminders (Release 3 design 6): every plan, gated by the tenant feature flag "whatsapp".
+        // The older WhatsApp (inbox) controller stays in Operations.
+        "MyWhatsApp", "WhatsAppNotifications", "ClientWhatsAppConsent", "PortalWhatsApp", "WhatsAppWebhook"
     };
 
     /// <summary>Controllers whose module requirement is decided per route inside <see cref="RequiredModules"/>.</summary>
@@ -69,6 +84,7 @@ public static class ServiceOpsPlans
     public static bool IsClassified(string controller) =>
         OperationsControllers.Contains(controller)
         || FinanceControllers.Contains(controller)
+        || ProjectsControllers.Contains(controller)
         || SharedControllers.Contains(controller)
         || RouteClassifiedControllers.Contains(controller);
 
@@ -77,11 +93,24 @@ public static class ServiceOpsPlans
         var route = path.ToLowerInvariant();
         if (controller == "Portal")
         {
+            if (route.StartsWith("/api/portal/projects")) return [Projects];
             if (route.StartsWith("/api/portal/invoices") || route.StartsWith("/api/portal/quotations")) return [Finance];
             if (!route.StartsWith("/api/portal/profile")) return [Operations];
         }
         if (controller == "WorkOrderBilling" || route.Contains("/generate-invoice") || route.Contains("/convert-to-work-order") || route.EndsWith("/from-quote"))
             return [Operations, Finance];
+        if (controller is not null && ProjectsControllers.Contains(controller))
+        {
+            // Money on a project (rates, wage sheet, budgets, valuations, invoices) lives in Finance.
+            if (controller.Equals("ProjectCommercial", StringComparison.OrdinalIgnoreCase)
+                || (controller.Equals("PortalProjects", StringComparison.OrdinalIgnoreCase) && (route.Contains("/valuations") || route.Contains("/invoices"))))
+                return [Projects, Finance];
+            if (route.Contains("/from-quotation/")) return [Projects, Finance];
+            // A project's work orders, material issues and maintenance contract live in Operations.
+            if (route.Contains("/create-maintenance-contract")) return [Projects, Operations];
+            if (route.Contains("/work-orders") || route.Contains("/material-issues")) return [Projects, Operations];
+            return [Projects];
+        }
         if (controller is not null && OperationsControllers.Contains(controller)) return [Operations];
         if (controller is not null && FinanceControllers.Contains(controller)) return [Finance];
         if (route.StartsWith("/api/settings/"))

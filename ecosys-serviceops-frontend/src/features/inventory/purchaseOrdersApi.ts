@@ -14,11 +14,15 @@ export interface PurchaseOrderListItem {
   currency: string
 }
 
-export function usePurchaseOrders(status?: PurchaseOrderStatus | 'All') {
+/** `state` is `open` (not yet fully received) or `late` (sent and past its expected date). */
+export function usePurchaseOrders(status?: PurchaseOrderStatus | 'All', state?: 'open' | 'late') {
   return useQuery({
-    queryKey: ['inventory', 'purchase-orders', status ?? 'All'],
+    queryKey: ['inventory', 'purchase-orders', status ?? 'All', state ?? ''],
     queryFn: () =>
-      api.get<PurchaseOrderListItem[]>('/api/purchase-orders', status && status !== 'All' ? { status } : undefined),
+      api.get<PurchaseOrderListItem[]>('/api/purchase-orders', {
+        ...(status && status !== 'All' ? { status } : {}),
+        ...(state ? { state } : {}),
+      }),
     staleTime: 30_000,
   })
 }
@@ -53,6 +57,7 @@ export interface CreatePurchaseOrderPayload {
   expectedAt?: string | undefined
   lines: Array<{ itemName: string; quantityOrdered: number; unitCost: number }>
   notes?: string | undefined
+  projectId?: string | null
 }
 
 export function useCreatePurchaseOrder() {

@@ -18,6 +18,10 @@ describe('canOpenPath', () => {
     expect(canOpenPath(dispatcher, '/settings/branding')).toBe(false)
     expect(canOpenPath(dispatcher, '/team/users')).toBe(false)
     expect(canOpenPath(dispatcher, '/settings/account')).toBe(true)
+    // Everyone chooses their own notifications; the workspace matrix stays with the admin.
+    expect(canOpenPath(dispatcher, '/settings/notifications')).toBe(true)
+    expect(canOpenPath(dispatcher, '/settings/workspace-notifications')).toBe(false)
+    expect(canOpenPath(dispatcher, '/notifications')).toBe(true)
   })
 
   it('opens each area to the roles whose work it is', () => {
@@ -33,5 +37,19 @@ describe('canOpenPath', () => {
 
   it('matches whole path segments only', () => {
     expect(canOpenPath(dispatcher, '/financed-thing')).toBe(true)
+  })
+
+  it('opens Projects from the capabilities the server granted, not from the role', () => {
+    const viewer = { ...user('viewer', {}), capabilities: ['projects.view'] } as AuthUser
+    const projectManager = { ...user('manager', {}), capabilities: ['projects.view', 'projects.manage', 'projects.settings'] } as AuthUser
+    const deniedManager = { ...user('manager', {}), capabilities: [] } as AuthUser
+
+    expect(canOpenPath(viewer, '/projects')).toBe(true)
+    expect(canOpenPath(viewer, '/projects/123')).toBe(true)
+    expect(canOpenPath(viewer, '/projects/settings')).toBe(false)
+    expect(canOpenPath(projectManager, '/projects/settings')).toBe(true)
+    expect(canOpenPath(deniedManager, '/projects')).toBe(false)
+    // Sessions stored before capabilities existed carry none.
+    expect(canOpenPath(user('manager', {}), '/projects')).toBe(false)
   })
 })

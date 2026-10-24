@@ -68,6 +68,7 @@ export function ReportsPage() {
         priority: '',
         slaStatus: '',
         unassignedOnly: false,
+        state: '',
         fromDate: format(periodStart, 'yyyy-MM-dd'),
         toDate: format(new Date(), 'yyyy-MM-dd'),
       }),

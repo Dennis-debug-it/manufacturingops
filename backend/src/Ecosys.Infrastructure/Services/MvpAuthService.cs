@@ -765,6 +765,10 @@ internal sealed class MvpAuthService(
         yield return new Claim(PermissionNames.FinanceViewBillableWork, permissions.CanViewBillableWork.ToString());
         yield return new Claim(PermissionNames.FinanceManageBillableWork, permissions.CanManageBillableWork.ToString());
         yield return new Claim(PermissionNames.MaterialsOverrideStock, permissions.CanOverrideMaterialStock.ToString());
+        foreach (var capability in permissions.Capabilities)
+        {
+            yield return new Claim(capability, bool.TrueString);
+        }
     }
 
     private static NumberingSetting CreateNumberingSetting(Tenant tenant, Guid? branchId, string documentType, string prefix) =>

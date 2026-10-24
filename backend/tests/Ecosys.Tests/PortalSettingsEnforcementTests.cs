@@ -103,12 +103,38 @@ public sealed class PortalSettingsEnforcementTests
         await using var db = CreateDbContext();
         await SaveSettingsAsync(db, new { showContracts = false, welcomeMessage = "Karibu" });
 
-        var result = await CreateController(db).GetSettings(CancellationToken.None);
+        await SeedLicenseAsync(db, "Core");
+
+        var result = await CreateController(db).GetSettings(new LicenseGuardService(db), new ProjectSettingsService(db), CancellationToken.None);
         var settings = Assert.IsType<PortalSettingsResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
 
         Assert.False(settings.ShowContracts);
         Assert.True(settings.ShowInvoices);
         Assert.Equal("Karibu", settings.WelcomeMessage);
+        Assert.False(settings.ShowProjects);
+    }
+
+    [Theory]
+    [InlineData("Core,projects", true, true)]
+    [InlineData("Core,projects", false, false)]
+    [InlineData("Core", true, false)]
+    public async Task Settings_ShowProjects_NeedsTheAddOnAndThePortalSetting(string modules, bool clientPortal, bool expected)
+    {
+        await using var db = CreateDbContext();
+        await SeedLicenseAsync(db, modules);
+        await new ProjectSettingsService(db).SaveAsync(_tenantId, new ProjectSettingsModel { ClientPortal = clientPortal });
+
+        var result = await CreateController(db).GetSettings(new LicenseGuardService(db), new ProjectSettingsService(db), CancellationToken.None);
+
+        Assert.Equal(expected, Assert.IsType<PortalSettingsResponse>(Assert.IsType<OkObjectResult>(result.Result).Value).ShowProjects);
+    }
+
+    private async Task SeedLicenseAsync(AppDbContext db, string modules)
+    {
+        var plan = new LicensePlan { PlanCode = "suite", DisplayName = "Suite", ModulesIncluded = modules };
+        db.LicensePlans.Add(plan);
+        db.TenantLicenses.Add(new TenantLicense { TenantId = _tenantId, LicensePlanId = plan.Id, LicensePlan = plan, Status = "Active" });
+        await db.SaveChangesAsync();
     }
 
     [Fact]

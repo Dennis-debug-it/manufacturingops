@@ -3,8 +3,8 @@ import { SettingsForm } from './components/SettingsForm'
 export function NotificationsSettingsPage() {
   return (
     <SettingsForm
-      title="Notifications"
-      subtitle="Tenant-wide event notification matrix. Per-user preferences are managed from each user's profile menu."
+      title="Workspace Notifications"
+      subtitle="Tenant-wide event notification matrix. Each person chooses their own channels under My Notifications."
       queryKey="notifications"
       fetchUrl="/api/settings/notifications"
       saveUrl="/api/settings/notifications"

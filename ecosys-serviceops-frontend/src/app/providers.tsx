@@ -6,6 +6,7 @@ import { AuthProvider } from '../shared/contexts/AuthContext'
 import { TenantProvider } from '../shared/contexts/TenantContext'
 import { normalizeError } from '../shared/api/apiError'
 import { OutboxSyncAgent } from '../features/tech/offline/hooks'
+import { LiveNotificationsProvider } from '../features/notifications/LiveNotifications'
 
 export interface ProvidersProps {
   children: ReactNode
@@ -43,9 +44,11 @@ export function Providers({ children }: ProvidersProps) {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TenantProvider>
-          <OutboxSyncAgent />
-          {children}
-          <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+          <LiveNotificationsProvider>
+            <OutboxSyncAgent />
+            {children}
+            <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+          </LiveNotificationsProvider>
         </TenantProvider>
       </AuthProvider>
     </QueryClientProvider>

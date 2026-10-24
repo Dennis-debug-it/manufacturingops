@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { AlertTriangle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
+import { ProjectPicker } from '../../../shared/components/ProjectPicker'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
 import { cn } from '../../../shared/utils/cn'
 import { applyApiFieldErrors } from '../../../shared/api/apiError'
@@ -31,6 +32,7 @@ const WORK_ORDER_FORM_FIELDS = [
   'priority',
   'dueDate',
   'description',
+  'projectId',
 ] as const satisfies readonly (keyof NewWorkOrderFormValues)[]
 
 export interface NewWorkOrderFormProps {
@@ -50,6 +52,7 @@ const emptyValues: NewWorkOrderFormValues = {
   priority: 'Medium',
   dueDate: '',
   description: '',
+  projectId: '',
 }
 
 /** Starting values for a follow-up; the office can still edit everything but the client. */
@@ -161,6 +164,7 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null, foll
         parentWorkOrderId: parentWorkOrderId ?? null,
         followUpOfWorkOrderId: followUpOf?.id ?? null,
         templateId: templateId || null,
+        projectId: values.projectId || null,
       })
       toast.success(followUpOf ? `Follow-up ${created.workOrderNumber} created` : `Work order ${created.workOrderNumber} created`)
       closeAndReset()
@@ -218,7 +222,16 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null, foll
             control={control}
             name="clientId"
             render={({ field }) => (
-              <select id="wo-client" {...field} className={fieldClass}>
+              <select
+                id="wo-client"
+                {...field}
+                onChange={(event) => {
+                  field.onChange(event)
+                  // Projects belong to one client, so a new client clears the project.
+                  setValue('projectId', '')
+                }}
+                className={fieldClass}
+              >
                 <option value="">{clientsLoading ? 'Loading clients…' : 'Select a client'}</option>
                 {clientOptions.map((client) => (
                   <option key={client.id} value={client.id}>{client.clientName}</option>
@@ -262,6 +275,14 @@ export function NewWorkOrderForm({ open, onClose, parentWorkOrderId = null, foll
             />
           </div>
         </div>
+
+        <Controller
+          control={control}
+          name="projectId"
+          render={({ field }) => (
+            <ProjectPicker id="wo-project" value={field.value ?? ''} onChange={field.onChange} clientId={clientId || null} className={fieldClass} labelClassName={labelClass} />
+          )}
+        />
 
         {repeatVisitCheck?.isRepeatVisit ? (
           <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">

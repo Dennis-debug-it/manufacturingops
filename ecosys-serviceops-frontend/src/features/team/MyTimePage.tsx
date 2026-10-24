@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { CalendarClock, Clock, Coffee, LogIn, LogOut, Navigation } from 'lucide-react'
+import { CalendarClock, Clock, Coffee, HardHat, LogIn, LogOut, Navigation } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { formatDate, formatTime } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
+import { useEntitlements } from '../../shared/hooks/useEntitlements'
+import { useMySites } from '../projects/siteApi'
 import { useApplyForLeave, useLeaveTypes, useMyLeave, useMyTimesheet } from './timeAttendance/api'
 import { savedMessage, useTechActions } from '../tech/offline/actions'
 import { useMyAttendanceView } from '../tech/offline/hooks'
@@ -33,6 +35,13 @@ function ClockCard() {
   const { data: status, isLoading, isError } = useMyAttendanceView()
   const actions = useTechActions()
   const busy = actions.busy
+  // Clocking in against a project site is optional, and only offered to someone on an open project.
+  const { hasModule } = useEntitlements()
+  const projectsOn = hasModule('projects')
+  const { data: sites } = useMySites(projectsOn)
+  const siteOptions = projectsOn ? sites ?? [] : []
+  const [siteId, setSiteId] = useState('')
+  const chosenSite = siteOptions.find((site) => site.projectId === siteId) ?? null
   const act = (done: string, action: () => Promise<{ queued: boolean }>) => {
     action().then((result) => toast.success(savedMessage(done, result))).catch(() => {
       // interceptor surfaces the error toast
@@ -62,13 +71,28 @@ function ClockCard() {
           {status.clockInAt ? (
             <div className="mt-1 text-sm text-slate-500">Since {formatTime(status.clockInAt)}</div>
           ) : null}
+          {isClockedIn && status.projectName ? (
+            <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-600"><HardHat className="h-4 w-4 shrink-0" /> {status.projectName}</div>
+          ) : null}
         </div>
         <span className={cn('h-3 w-3 rounded-full', isClockedIn ? 'bg-emerald-500' : 'bg-slate-300')} />
       </div>
 
+      {!isClockedIn && siteOptions.length > 0 ? (
+        <div className="mt-4">
+          <label htmlFor="clock-in-site" className={labelClass}>Project site <span className="font-normal text-slate-500">(optional)</span></label>
+          <select id="clock-in-site" value={siteId} onChange={(event) => setSiteId(event.target.value)} className={cn(fieldClass, 'bg-white')}>
+            <option value="">No project site</option>
+            {siteOptions.map((site) => (
+              <option key={site.projectId} value={site.projectId}>{site.projectNumber} · {site.name}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
       <div className="mt-4 flex flex-wrap gap-2">
         {!isClockedIn ? (
-          <button type="button" className={primaryBtn} disabled={busy} onClick={() => act('Clocked in', actions.clockIn)}>
+          <button type="button" className={primaryBtn} disabled={busy} onClick={() => act('Clocked in', () => actions.clockIn(chosenSite))}>
             <LogIn className="h-4 w-4" /> Clock In
           </button>
         ) : (

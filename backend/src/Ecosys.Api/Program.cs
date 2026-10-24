@@ -54,6 +54,9 @@ builder.Services.AddHttpClient();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<IServiceOpsNotifier, SignalRServiceOpsNotifier>();
+builder.Services.AddScoped<IInboxNotifier, SignalRInboxNotifier>();
+// Singleton: the per-tenant throttle that calls it lives for the whole process.
+builder.Services.AddSingleton<IDashboardNotifier, SignalRDashboardNotifier>();
 
 var allowedCorsOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
@@ -138,6 +141,19 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             });
     });
+
+    // Meta's webhook calls all come from Meta's servers, so the public 30/min would drop delivery
+    // updates; this still caps a flood from any one address (each call is signature-checked).
+    options.AddPolicy(Ecosys.Api.Controllers.WhatsAppWebhookController.WebhookRateLimitPolicy, httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            $"whatsapp-webhook:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 600,
+                Window = TimeSpan.FromSeconds(60),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
 
     options.AddPolicy("AuthEndpoints", httpContext =>
     {

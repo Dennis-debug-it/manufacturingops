@@ -27,6 +27,42 @@ public static class PermissionNames
     public const string MaterialsOverrideStock = "materials.override_stock";
     public const string AttendanceView = "attendance.view";
     public const string AttendanceManage = "attendance.manage";
+    public const string ProjectsView = "projects.view";
+    public const string ProjectsManage = "projects.manage";
+    public const string ProjectsVariationsSubmit = "projects.variations.submit";
+    public const string ProjectsVariationsApprove = "projects.variations.approve";
+    public const string ProjectsClose = "projects.close";
+    public const string ProjectsSettings = "projects.settings";
+    public const string ProjectsMusterMark = "projects.muster.mark";
+    public const string ProjectsFinancialsView = "projects.financials.view";
+    public const string ProjectsFinancialsManage = "projects.financials.manage";
+    /// <summary>See meetings and action items, and organise your own (Release 3 design 3.6).</summary>
+    public const string ActivitiesView = "activities.view";
+    /// <summary>Organise and change any meeting, not only your own.</summary>
+    public const string ActivitiesManage = "activities.manage";
+    /// <summary>The team view of the calendar (other people's items).</summary>
+    public const string CalendarTeam = "calendar.team";
+
+    /// <summary>
+    /// Capabilities with no column in the legacy role/user permission tables. Their baseline comes
+    /// from role defaults in code; permission groups and per-user overrides adjust them, and login
+    /// carries the granted ones in the token as ordinary permission claims.
+    /// </summary>
+    public static readonly string[] CapabilityOnly =
+    [
+        ProjectsView,
+        ProjectsManage,
+        ProjectsVariationsSubmit,
+        ProjectsVariationsApprove,
+        ProjectsClose,
+        ProjectsSettings,
+        ProjectsMusterMark,
+        ProjectsFinancialsView,
+        ProjectsFinancialsManage,
+        ActivitiesView,
+        ActivitiesManage,
+        CalendarTeam
+    ];
 
     public static readonly string[] All =
     [
@@ -54,6 +90,18 @@ public static class PermissionNames
         FinanceManageBillableWork,
         MaterialsOverrideStock,
         AttendanceView,
-        AttendanceManage
+        AttendanceManage,
+        ProjectsView,
+        ProjectsManage,
+        ProjectsVariationsSubmit,
+        ProjectsVariationsApprove,
+        ProjectsClose,
+        ProjectsSettings,
+        ProjectsMusterMark,
+        ProjectsFinancialsView,
+        ProjectsFinancialsManage,
+        ActivitiesView,
+        ActivitiesManage,
+        CalendarTeam
     ];
 }

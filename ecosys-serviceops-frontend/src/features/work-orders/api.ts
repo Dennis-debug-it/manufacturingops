@@ -26,6 +26,7 @@ export interface WorkOrderListFilters {
   technicianId?: string
   assignmentGroupId?: string
   unassigned?: boolean
+  state?: string
   search?: string
   fromDate?: string
   toDate?: string
@@ -98,6 +99,7 @@ export interface CreateWorkOrderPayload {
   templateId?: string | null
   parentWorkOrderId?: string | null
   followUpOfWorkOrderId?: string | null
+  projectId?: string | null
 }
 
 export interface CompleteWorkOrderPayload {

@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, BookOpen, Activity, Presentation, LifeBuoy } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, BookOpen, Activity, Presentation, LifeBuoy, FolderKanban, CalendarDays, ListChecks } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -21,6 +21,11 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Users & Access', to: '/team', roles: ['admin'], permission: 'team.view', icon: Users },
   { label: 'Knowledge', to: '/knowledge', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer', 'materials_controller'], permission: 'knowledge.view', icon: BookOpen },
   { label: 'Contracts', to: '/contracts', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'contracts.view', icon: FileText },
+  // Shown only when the tenant licenses the Projects add-on (entitlements hide it otherwise).
+  { label: 'Projects', to: '/projects', roles: ['admin', 'manager', 'dispatcher', 'finance', 'viewer'], permission: 'projects.view', icon: FolderKanban },
+  // Shared on every plan; each calendar source checks its own module on the server.
+  { label: 'My Calendar', to: '/calendar', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer', 'materials_controller'], permission: 'activities.view', icon: CalendarDays },
+  { label: 'Action Items', to: '/action-items', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer', 'materials_controller'], permission: 'activities.view', icon: ListChecks },
   { label: 'Finance', to: '/finance', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'finance.view', icon: Wallet },
   // Self-service clock in/out, leave and timesheet for office staff who also go out on jobs.
   { label: 'My Time & Leave', to: '/my-time', roles: ['manager', 'dispatcher', 'technician', 'materials_controller'], icon: CalendarClock },

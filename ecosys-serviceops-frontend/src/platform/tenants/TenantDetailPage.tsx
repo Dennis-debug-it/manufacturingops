@@ -39,6 +39,7 @@ import { SectionTitle, licenseStatusBadge, tenantStatusBadge, trialStatusBadge }
 import { NewWorkspaceUserDrawer } from './NewWorkspaceUserDrawer'
 import { LicenseTermDialog } from './LicenseTermDialog'
 import { ClientTemplatesPanel } from './ClientTemplatesPanel'
+import { TenantWhatsAppPanel } from './TenantWhatsAppPanel'
 import { parseLicensedUsers, summarizeSeats } from './licensedUsers'
 import type { PlatformTenantAuditLog } from '../types'
 import { StatusBadge } from '../../shared/components/StatusBadge'
@@ -380,6 +381,7 @@ export function TenantDetailPage() {
       content: (
         <div className="space-y-5">
           {seatsPanel}
+          {tenant.tenantId ? <TenantWhatsAppPanel tenantId={tenant.tenantId} className={panelClass} /> : null}
           <section className={panelClass}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <SectionTitle title="Workspace users" description="Accounts inside this tenant. Resend a lapsed setup link here — it is the only recovery path for an admin who has never signed in. Ecosys staff accounts live under Platform → Users." />

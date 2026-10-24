@@ -68,6 +68,8 @@ public static class LicenseFeatures
 {
     public const string EmailIngestion = "EmailIngestion";
     public const string MonitoringIntegration = "MonitoringIntegration";
+    /// <summary>The tenant feature flag <c>whatsapp</c> (<see cref="TenantLicense.WhatsAppEnabled"/>), on any plan.</summary>
+    public const string WhatsApp = "WhatsApp";
 }
 
 public sealed record LicenseUsageSnapshot(
@@ -94,6 +96,9 @@ public sealed record TenantLicenseSnapshot(
     string? WarningMessage)
 {
     public IReadOnlyList<string> Modules { get; init; } = [];
+
+    /// <summary>The tenant feature flag <c>whatsapp</c>: WhatsApp reminders from the shared Ecosys number.</summary>
+    public bool WhatsApp { get; init; }
 }
 
 public sealed record PlatformLicenseUsageSnapshot(
@@ -273,6 +278,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             // Included with Operations (checked just above).
             LicenseFeatures.EmailIngestion => true,
             LicenseFeatures.MonitoringIntegration => snapshot.MonitoringIntegration,
+            LicenseFeatures.WhatsApp => snapshot.WhatsApp,
             _ => false
         };
 
@@ -285,7 +291,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     public async Task EnsureModuleEnabledAsync(Guid tenantId, string moduleName, CancellationToken cancellationToken = default)
     {
         var normalized = moduleName.Trim().ToLowerInvariant();
-        if (normalized is not (ServiceOpsPlans.Operations or ServiceOpsPlans.Finance))
+        if (normalized is not (ServiceOpsPlans.Operations or ServiceOpsPlans.Finance or ServiceOpsPlans.Projects))
         {
             throw new BusinessRuleException("Unknown ServiceOps module.");
         }
@@ -405,7 +411,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             // Email intake comes with the Operations module; there is no separate switch for it.
             ServiceOpsPlans.Modules(plan).Contains(ServiceOpsPlans.Operations),
             tenantLicense.MonitoringIntegrationOverride ?? plan.MonitoringIntegration,
-            warning) { Modules = ServiceOpsPlans.Modules(plan) };
+            warning) { Modules = ServiceOpsPlans.Modules(plan), WhatsApp = tenantLicense.WhatsAppEnabled };
     }
 
     private static void NormalizeUtc(TenantLicense tenantLicense)

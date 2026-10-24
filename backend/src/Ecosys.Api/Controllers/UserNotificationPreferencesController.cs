@@ -10,17 +10,25 @@ namespace Ecosys.Api.Controllers;
 
 // ── Request / Response models ────────────────────────────────────────────────
 
+/// <param name="InAppEnabled">Show it in the bell.</param>
+/// <param name="Channels">The channels this key can use ("InApp", "Push", "Email", "WhatsApp"); only these are worth a toggle.</param>
 public sealed record UserNotificationPreferenceResponse(
     string NotificationKey,
     string Label,
     string Category,
     bool EmailEnabled,
-    bool InAppEnabled);
+    bool InAppEnabled,
+    bool PushEnabled,
+    bool WhatsAppEnabled,
+    IReadOnlyList<string> Channels);
 
+/// <summary>Push and WhatsApp are optional so an older client that only knows email and in-app leaves them as they are.</summary>
 public sealed record UpdateNotificationPreferenceInput(
     string NotificationKey,
     bool EmailEnabled,
-    bool InAppEnabled);
+    bool InAppEnabled,
+    bool? PushEnabled = null,
+    bool? WhatsAppEnabled = null);
 
 // ── Controller ───────────────────────────────────────────────────────────────
 
@@ -33,7 +41,7 @@ public sealed class UserNotificationPreferencesController(
 {
     /// <summary>
     /// Returns all notification types with the current user's saved preferences.
-    /// Missing rows default to enabled = true for both channels.
+    /// A missing row means the key's default channels (<see cref="NotificationDescriptor.DefaultChannels"/>).
     /// </summary>
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<UserNotificationPreferenceResponse>>> Get(
@@ -47,17 +55,26 @@ public sealed class UserNotificationPreferencesController(
             .ToListAsync(cancellationToken);
 
         var savedByKey = saved.ToDictionary(p => p.NotificationKey, StringComparer.OrdinalIgnoreCase);
+        // WhatsApp is offered only for keys this workspace allows it on, and only when it has the feature.
+        var whatsApp = await WhatsAppTenantPolicy.LoadAsync(db, tenantId, cancellationToken);
 
         var result = NotificationKeyDescriptor.List()
             .Select(descriptor =>
             {
-                var pref = savedByKey.GetValueOrDefault(descriptor.Key);
+                var channels = NotificationPreferences.Resolve(descriptor, savedByKey.GetValueOrDefault(descriptor.Key));
                 return new UserNotificationPreferenceResponse(
                     descriptor.Key,
                     descriptor.Label,
                     descriptor.Category,
-                    EmailEnabled: pref?.EmailEnabled ?? true,
-                    InAppEnabled: pref?.InAppEnabled ?? true);
+                    EmailEnabled: channels.HasFlag(NotificationChannels.Email),
+                    InAppEnabled: channels.HasFlag(NotificationChannels.InApp),
+                    PushEnabled: channels.HasFlag(NotificationChannels.Push),
+                    WhatsAppEnabled: channels.HasFlag(NotificationChannels.WhatsApp),
+                    Channels: Enum.GetValues<NotificationChannels>()
+                        .Where(c => c != NotificationChannels.None && descriptor.Channels.HasFlag(c))
+                        .Where(c => c != NotificationChannels.WhatsApp || whatsApp.Allows(descriptor.Key))
+                        .Select(c => c.ToString())
+                        .ToList());
             })
             .ToList();
 
@@ -75,6 +92,9 @@ public sealed class UserNotificationPreferencesController(
         var userId = UserId;
         var tenantId = TenantId;
 
+        if (inputs.Any(i => NotificationKeyDescriptor.Find(i.NotificationKey) is null))
+            return BadRequest(new { message = "Unknown notification type." });
+
         var keys = inputs.Select(i => i.NotificationKey).ToList();
 
         var existing = await db.UserNotificationPreferences
@@ -85,22 +105,27 @@ public sealed class UserNotificationPreferencesController(
 
         foreach (var input in inputs)
         {
-            if (existingByKey.TryGetValue(input.NotificationKey, out var pref))
+            if (!existingByKey.TryGetValue(input.NotificationKey, out var pref))
             {
-                pref.EmailEnabled = input.EmailEnabled;
-                pref.InAppEnabled = input.InAppEnabled;
-            }
-            else
-            {
-                db.UserNotificationPreferences.Add(new UserNotificationPreference
+                // A new row starts from the key's defaults, so a field the client left out keeps its default.
+                var descriptor = NotificationKeyDescriptor.Find(input.NotificationKey)!;
+                var defaults = descriptor.DefaultChannels;
+                pref = new UserNotificationPreference
                 {
                     TenantId = tenantId,
                     UserId = userId,
-                    NotificationKey = input.NotificationKey,
-                    EmailEnabled = input.EmailEnabled,
-                    InAppEnabled = input.InAppEnabled,
-                });
+                    NotificationKey = descriptor.Key,
+                    PushEnabled = defaults.HasFlag(NotificationChannels.Push),
+                    WhatsAppEnabled = defaults.HasFlag(NotificationChannels.WhatsApp),
+                };
+                db.UserNotificationPreferences.Add(pref);
+                existingByKey[input.NotificationKey] = pref;
             }
+
+            pref.EmailEnabled = input.EmailEnabled;
+            pref.InAppEnabled = input.InAppEnabled;
+            pref.PushEnabled = input.PushEnabled ?? pref.PushEnabled;
+            pref.WhatsAppEnabled = input.WhatsAppEnabled ?? pref.WhatsAppEnabled;
         }
 
         await db.SaveChangesAsync(cancellationToken);

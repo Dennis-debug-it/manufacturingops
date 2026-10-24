@@ -5,8 +5,8 @@ import { persistQueryClient, persistQueryClientSave, type PersistedClient, type 
 
 /**
  * Keeps what a technician needs in the field on the phone (their jobs, each job's details,
- * checklist and work so far, the previous visit on follow-ups, their clock status and the parts
- * list) so the app opens and shows it with no signal. Only these queries are stored, only for the
+ * checklist and work so far, the previous visit on follow-ups, their clock status, the parts
+ * list and, for site supervisors, their sites' rosters and muster days) so the app opens and shows it with no signal. Only these queries are stored, only for the
  * signed-in user, and it is wiped on sign-out.
  */
 
@@ -68,6 +68,8 @@ export function isOfflineQueryKey(key: QueryKey): boolean {
   if (scope === 'attendance') return second === 'me' || second === 'leave-types'
   // The unfiltered parts list, so parts used can still be picked offline.
   if (scope === 'picker') return second === 'materials' && third === ''
+  // A supervisor's sites, each site's roster and the muster days they opened, so the roll can be marked offline.
+  if (scope === 'projects') return second === 'my-sites' || third === 'workers' || third === 'muster'
   return false
 }
 

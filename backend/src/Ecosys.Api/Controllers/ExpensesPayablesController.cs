@@ -72,6 +72,7 @@ public sealed class ExpensesPayablesController(
             IncurredAt = DateTime.SpecifyKind(request.IncurredAt, DateTimeKind.Utc),
             Status = "Submitted",
             Description = request.Description?.Trim(),
+            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, null, cancellationToken),
         };
         dbContext.Expenses.Add(expense);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -178,6 +179,7 @@ public sealed class ExpensesPayablesController(
             DueDate = DateTime.SpecifyKind(request.DueDate, DateTimeKind.Utc),
             Status = "Open",
             Notes = request.Notes?.Trim(),
+            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, null, cancellationToken),
         };
         dbContext.SupplierBills.Add(bill);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -256,7 +258,7 @@ public sealed record ExpenseDetailResponse(
     string Currency, DateTime IncurredAt, string Status,
     string? Description, string? ReceiptUrl, string? ApprovedByName, DateTime? ApprovedAt);
 
-public sealed record CreateExpenseRequest(string Category, decimal Amount, DateTime IncurredAt, string? Description = null);
+public sealed record CreateExpenseRequest(string Category, decimal Amount, DateTime IncurredAt, string? Description = null, Guid? ProjectId = null);
 
 public sealed record ExpenseDecisionRequest(bool Approve);
 
@@ -271,6 +273,6 @@ public sealed record PayableDetailResponse(
     string Currency, DateTime DueDate, string Status, string? Notes,
     IReadOnlyList<PayablePaymentResponse> PaymentHistory);
 
-public sealed record CreatePayableRequest(Guid SupplierId, decimal Amount, DateTime DueDate, string? Notes = null);
+public sealed record CreatePayableRequest(Guid SupplierId, decimal Amount, DateTime DueDate, string? Notes = null, Guid? ProjectId = null);
 
 public sealed record RecordPayablePaymentRequest(decimal Amount, string Method, string? Reference = null);

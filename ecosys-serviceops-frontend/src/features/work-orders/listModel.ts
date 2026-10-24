@@ -126,6 +126,8 @@ export interface WorkOrderFilterValues {
   priority: string
   slaStatus: string
   unassignedOnly: boolean
+  /** `open` or `overdue`: what the dashboards count, so their links land on exactly those rows. */
+  state: string
   fromDate: string
   toDate: string
 }
@@ -154,6 +156,7 @@ export function toWorkOrderListFilters(filters: WorkOrderFilterValues): WorkOrde
     ...(filters.siteId ? { siteId: filters.siteId } : {}),
     ...(filters.slaStatus ? { slaStatus: filters.slaStatus } : {}),
     ...(filters.unassignedOnly ? { unassigned: true } : {}),
+    ...(filters.state ? { state: filters.state } : {}),
     ...(trimmedSearch ? { search: trimmedSearch } : {}),
     ...(filters.fromDate ? { fromDate: `${filters.fromDate}T00:00:00` } : {}),
     ...(filters.toDate ? { toDate: `${filters.toDate}T23:59:59` } : {}),

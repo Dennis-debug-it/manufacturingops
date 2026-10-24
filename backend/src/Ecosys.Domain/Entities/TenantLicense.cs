@@ -54,6 +54,12 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
     public bool? EmailIngestionOverride { get; set; }
     public bool? MonitoringIntegrationOverride { get; set; }
 
+    /// <summary>
+    /// The tenant feature flag <c>whatsapp</c> (Release 3 design 6): WhatsApp reminders from the shared
+    /// Ecosys number. Off by default; Ecosys turns it on per tenant because Ecosys pays Meta per message.
+    /// </summary>
+    public bool WhatsAppEnabled { get; set; }
+
     public Tenant? Tenant { get; set; }
     public LicensePlan? LicensePlan { get; set; }
 }

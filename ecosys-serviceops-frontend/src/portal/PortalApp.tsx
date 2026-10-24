@@ -17,6 +17,7 @@ import { PortalInvoiceDetailPage } from './finance/PortalInvoiceDetailPage'
 import { PortalQuotesPage } from './finance/PortalQuotesPage'
 import { PortalQuoteDetailPage } from './finance/PortalQuoteDetailPage'
 import { PortalContractsPage } from './PortalContractsPage'
+import { PortalProjectsPage, PortalProjectDetailPage } from './PortalProjectsPage'
 import { PortalReportsPage } from './PortalReportsPage'
 import { PortalProfilePage } from './PortalProfilePage'
 import { PortalKnowledgeHomePage } from './knowledge/PortalKnowledgeHomePage'
@@ -53,6 +54,8 @@ export function PortalApp() {
           <Route path="quotes" element={<PortalShellRoute><PortalQuotesPage /></PortalShellRoute>} />
           <Route path="quotes/:id" element={<PortalShellRoute><PortalQuoteDetailPage /></PortalShellRoute>} />
           <Route path="contracts" element={<PortalShellRoute><PortalFeatureGate feature={portalFeatures.contracts}><PortalContractsPage /></PortalFeatureGate></PortalShellRoute>} />
+          <Route path="projects" element={<PortalShellRoute><PortalFeatureGate feature={portalFeatures.projects}><PortalProjectsPage /></PortalFeatureGate></PortalShellRoute>} />
+          <Route path="projects/:id" element={<PortalShellRoute><PortalFeatureGate feature={portalFeatures.projects}><PortalProjectDetailPage /></PortalFeatureGate></PortalShellRoute>} />
           <Route path="knowledge" element={<PortalShellRoute><PortalKnowledgeHomePage /></PortalShellRoute>} />
           <Route path="knowledge/browse" element={<PortalShellRoute><PortalKnowledgeBrowsePage /></PortalShellRoute>} />
           <Route path="knowledge/articles/:slug" element={<PortalShellRoute><PortalKnowledgeArticlePage /></PortalShellRoute>} />

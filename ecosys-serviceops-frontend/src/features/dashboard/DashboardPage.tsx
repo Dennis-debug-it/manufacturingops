@@ -1,109 +1,84 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  Activity,
-  AlertTriangle,
-  Boxes,
-  Building2,
-  CheckCircle2,
-  FileWarning,
-  LineChart,
-  MessageCircle,
-  PackageX,
-  UserCheck,
-  UserX,
-} from 'lucide-react'
-import { endpoints } from '../../shared/api/endpoints'
-import { api } from '../../shared/api/apiClient'
+import toast from 'react-hot-toast'
+import { LayoutGrid, LineChart, MessageCircle, Plus, RotateCcw } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
+import { ErrorState } from '../../shared/components/ErrorState'
 import { Spinner } from '../../shared/components/Spinner'
-import { SectionHeader } from '../../shared/components/SectionHeader'
 import { Surface } from '../../shared/components/Surface'
-import { Crystal } from '../../shared/components/Crystal'
-import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
+import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { usePermission } from '../../shared/hooks/usePermission'
-import { formatNumber } from '../../shared/utils/format'
 import { formatRelative } from '../../shared/utils/dates'
 import { useWhatsAppConversations } from '../whatsapp/api'
 import { WHATSAPP_ENABLED } from '../../shared/config/features'
-import type { DashboardGroupMetric, DashboardSummary, DashboardTechnicianWorkload } from './types'
+import { DashboardWidgetCard } from './DashboardWidgetCard'
+import { addItem, addableWidgets, moveItem, normalizeLayout, removeItem, sameLayout, setItemSize } from './layoutModel'
+import { useDashboardLayout, useDashboardLiveUpdates, useResetDashboardLayout, useSaveDashboardLayout } from './roleDashboardApi'
+import type { DashboardLayoutItem } from './roleDashboardTypes'
 
-interface StatCardDef {
-  key: keyof DashboardSummary
-  label: string
-  to: string
-  icon: typeof Activity
-  tone?: 'default' | 'danger' | 'warning'
-  /** Shown only to people who can open the screen the card links to. */
-  permission: string
-}
+const buttonClass =
+  'inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60'
+const primaryButtonClass =
+  'inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60'
 
-const statCards: StatCardDef[] = [
-  { key: 'openWorkOrders', label: 'Open Work Orders', to: '/work-orders', icon: Activity, permission: 'work-orders.view' },
-  { key: 'overdueWorkOrders', label: 'Overdue Work Orders', to: '/work-orders?status=overdue', icon: AlertTriangle, tone: 'danger', permission: 'work-orders.view' },
-  { key: 'unassignedWorkOrders', label: 'Unassigned Work Orders', to: '/work-orders?unassigned=true', icon: UserX, tone: 'warning', permission: 'dispatch.view' },
-  { key: 'techniciansOnSite', label: 'Technicians On Site', to: '/team/technicians', icon: UserCheck, permission: 'dispatch.view' },
-  { key: 'assets', label: 'Active Assets', to: '/assets', icon: Boxes, permission: 'clients.view' },
-  { key: 'clients', label: 'Active Clients', to: '/clients', icon: Building2, permission: 'clients.view' },
-  { key: 'materialsLowStock', label: 'Low Stock Materials', to: '/inventory/alerts', icon: PackageX, tone: 'warning', permission: 'inventory.view' },
-  { key: 'contractsExpiringIn30Days', label: 'Contracts Expiring (30d)', to: '/contracts', icon: FileWarning, tone: 'warning', permission: 'contracts.view' },
-]
-
-const toneClasses: Record<NonNullable<StatCardDef['tone']>, string> = {
-  default: 'text-slate-900',
-  warning: 'text-amber-600',
-  danger: 'text-rose-600',
-}
-
+/**
+ * The role dashboard (Release 3 part 4): the caller's layout, then every widget loading on its own.
+ * "Customise" lets the user reorder, hide, add and resize widgets, or go back to their role's default.
+ */
 export function DashboardPage() {
   const { branches } = useAuth()
   // The executive view reads the reports and revenue APIs; offer it only to people they serve.
   const canViewReports = usePermission('reports.view')
   const canViewFinance = usePermission('finance.view')
-  // Each block shows only to the people whose work it is: dispatch load for those who dispatch,
-  // contract renewals for those who handle contracts, and so on.
-  const can: Record<string, boolean> = {
-    'work-orders.view': usePermission('work-orders.view'),
-    'dispatch.view': usePermission('dispatch.view'),
-    'clients.view': usePermission('clients.view'),
-    'inventory.view': usePermission('inventory.view'),
-    'contracts.view': usePermission('contracts.view'),
-  }
-  const visibleCards = statCards.filter((card) => can[card.permission])
   const [branchId, setBranchId] = useState('')
+  const layout = useDashboardLayout()
+  const save = useSaveDashboardLayout()
+  const reset = useResetDashboardLayout()
+  const [draft, setDraft] = useState<DashboardLayoutItem[] | null>(null)
+  const [confirmReset, setConfirmReset] = useState(false)
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['dashboard', 'summary', branchId],
-    queryFn: async () => api.get<DashboardSummary>(endpoints.dashboard.summary, branchId ? { branchId } : undefined),
-    staleTime: 30_000,
-  })
+  const available = useMemo(() => layout.data?.available ?? [], [layout.data])
+  const infoByKey = useMemo(() => new Map(available.map((widget) => [widget.key, widget])), [available])
+  useDashboardLiveUpdates(available)
+  const editing = draft !== null
+  const items = draft ?? layout.data?.items ?? []
+  const addable = addableWidgets(items, available)
 
-  const groupColumns: DataTableColumn<DashboardGroupMetric & { id: string }>[] = [
-    { key: 'groupName', header: 'Assignment Group', cell: (row) => row.groupName },
-    { key: 'count', header: 'Open Work Orders', cell: (row) => formatNumber(row.count) },
-  ]
-
-  const workloadColumns: DataTableColumn<DashboardTechnicianWorkload & { id: string }>[] = [
-    { key: 'technicianName', header: 'Technician', cell: (row) => row.technicianName },
-    { key: 'activeWorkOrders', header: 'Active WOs', cell: (row) => formatNumber(row.activeWorkOrders) },
-    { key: 'pendingResponses', header: 'Pending Responses', cell: (row) => formatNumber(row.pendingResponses) },
-    { key: 'onSiteCount', header: 'On Site', cell: (row) => formatNumber(row.onSiteCount) },
-  ]
-
-  if (isLoading) {
-    return <Spinner label="Loading dashboard" />
+  const startEditing = () => setDraft(normalizeLayout(layout.data?.items ?? [], available))
+  const saveDraft = async () => {
+    if (!draft) return
+    if (layout.data && sameLayout(draft, layout.data.items)) {
+      setDraft(null)
+      return
+    }
+    try {
+      await save.mutateAsync(draft)
+      setDraft(null)
+      toast.success('Dashboard saved')
+    } catch {
+      // interceptor surfaces the error toast
+    }
+  }
+  const resetToDefault = async () => {
+    setConfirmReset(false)
+    try {
+      await reset.mutateAsync()
+      setDraft(null)
+      toast.success('Dashboard reset to your role default')
+    } catch {
+      // interceptor surfaces the error toast
+    }
   }
 
-  if (isError || !data) {
+  if (layout.isLoading) return <Spinner label="Loading dashboard" />
+  if (layout.isError || !layout.data) {
     return (
-      <EmptyState
-        title="Dashboard data unavailable"
-        description="The dashboard summary could not be loaded. Try reloading the page."
-        actionLabel="Reload"
-        onAction={() => window.location.reload()}
+      <ErrorState
+        title="Dashboard unavailable"
+        description="Your dashboard layout could not be loaded."
+        onRetry={() => void layout.refetch()}
       />
     )
   }
@@ -112,14 +87,15 @@ export function DashboardPage() {
     <div className="space-y-4">
       <PageHeader
         title="Dashboard"
-        subtitle="Operational command centre for daily field service work."
+        subtitle={editing ? 'Reorder, resize, hide or add widgets, then save.' : 'Your day at a glance, kept up to date as work changes. Every figure opens the list behind it.'}
         secondaryActions={
           <div className="flex flex-wrap items-center gap-2">
-            {branches.length > 1 ? (
+            {branches.length > 1 && !editing ? (
               <select
                 value={branchId}
                 onChange={(event) => setBranchId(event.target.value)}
-                className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[var(--app-primary)]"
+                aria-label="Branch"
+                className="h-11 max-w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[var(--app-primary)]"
               >
                 <option value="">All Branches</option>
                 {branches.map((branch) => (
@@ -127,96 +103,90 @@ export function DashboardPage() {
                 ))}
               </select>
             ) : null}
-            {/* The only entry point to the executive view — its route had no inbound link at all. */}
-            {canViewReports && canViewFinance ? (
-              <Link
-                to="/dashboard/executive"
-                className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                <LineChart className="h-4 w-4" />
-                Executive View
-              </Link>
-            ) : null}
+            {editing ? (
+              <>
+                <button type="button" className={buttonClass} onClick={() => setConfirmReset(true)} disabled={reset.isPending}>
+                  <RotateCcw className="h-4 w-4" />Reset to default
+                </button>
+                <button type="button" className={buttonClass} onClick={() => setDraft(null)}>Cancel</button>
+                <button type="button" className={primaryButtonClass} onClick={() => void saveDraft()} disabled={save.isPending}>Save</button>
+              </>
+            ) : (
+              <>
+                {/* The only entry point to the executive view — its route had no inbound link at all. */}
+                {canViewReports && canViewFinance ? (
+                  <Link to="/dashboard/executive" className={buttonClass}>
+                    <LineChart className="h-4 w-4" />
+                    Executive View
+                  </Link>
+                ) : null}
+                <button type="button" className={buttonClass} onClick={startEditing}>
+                  <LayoutGrid className="h-4 w-4" />Customise
+                </button>
+              </>
+            )}
           </div>
         }
       />
 
-      <div className="relative grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div aria-hidden className="pointer-events-none absolute -inset-x-4 -inset-y-6 -z-10 overflow-hidden">
-          <Crystal variant="dashboard" className="absolute inset-0 opacity-70" />
+      {items.length === 0 ? (
+        <EmptyState
+          title="No widgets on your dashboard"
+          description={available.length > 0 ? 'Choose Customise to add widgets.' : 'No dashboard widgets are available for your role.'}
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {items.map((item, index) => (
+            <DashboardWidgetCard
+              key={item.key}
+              item={item}
+              info={infoByKey.get(item.key)}
+              branchId={branchId}
+              edit={editing ? {
+                isFirst: index === 0,
+                isLast: index === items.length - 1,
+                onMove: (direction) => setDraft((current) => moveItem(current ?? [], item.key, direction)),
+                onResize: () => setDraft((current) => setItemSize(current ?? [], item.key, item.size === 'wide' ? 'small' : 'wide')),
+                onHide: () => setDraft((current) => removeItem(current ?? [], item.key)),
+              } : undefined}
+            />
+          ))}
         </div>
-        {visibleCards.map((card) => {
-          const Icon = card.icon
-          const value = data[card.key]
-          return (
-            <Link key={card.key} to={card.to} className="block transition hover:-translate-y-0.5">
-              <Surface variant="glass" padding="sm" crystal="kpi">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium text-slate-600">{card.label}</div>
-                  <Icon className={`h-4 w-4 ${toneClasses[card.tone ?? 'default']}`} />
-                </div>
-                <div className={`mt-3 text-2xl font-semibold ${toneClasses[card.tone ?? 'default']}`}>{formatNumber(Number(value ?? 0))}</div>
-              </Surface>
-            </Link>
-          )
-        })}
-      </div>
+      )}
 
-      {can['dispatch.view'] ? <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Surface as="section" variant="glass" padding="lg" className="space-y-4">
-          <SectionHeader title="Work Orders by Group" description="Open work order load per assignment group." />
-          <DataTable
-            columns={groupColumns}
-            data={data.workOrdersByGroup.map((row) => ({ id: row.groupName, ...row }))}
-            emptyTitle="No group assignments"
-            emptyDescription="Work orders assigned to groups will appear here."
-          />
+      {editing && addable.length > 0 ? (
+        <Surface as="section" variant="solid" padding="sm">
+          <h2 className="text-sm font-semibold text-slate-800">Add a widget</h2>
+          <ul className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+            {addable.map((widget) => (
+              <li key={widget.key}>
+                <button
+                  type="button"
+                  onClick={() => setDraft((current) => addItem(current ?? [], widget))}
+                  className="flex w-full min-w-0 items-start gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left transition hover:bg-slate-50"
+                >
+                  <Plus className="mt-0.5 h-4 w-4 shrink-0 text-[var(--app-primary)]" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-slate-800">{widget.title}</span>
+                    <span className="block text-xs text-slate-500">{widget.description}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </Surface>
+      ) : null}
 
-        <Surface as="section" variant="glass" padding="lg" className="space-y-4">
-          <SectionHeader title="Technician Utilisation" description="Active load and on-site status per technician." />
-          <DataTable
-            columns={workloadColumns}
-            data={data.technicianWorkload.map((row) => ({ id: row.technicianName, ...row }))}
-            emptyTitle="No technician activity"
-            emptyDescription="Technician workload will appear here once work orders are assigned."
-          />
-        </Surface>
-      </div> : null}
+      {WHATSAPP_ENABLED && !editing ? <WhatsAppAlertsWidget /> : null}
 
-      {can['contracts.view'] ? <Surface as="section" variant="glass" padding="lg" className="space-y-4">
-        <SectionHeader title="Contract Health" description="Renewal risk and expiry pipeline across all active contracts." />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <div className="rounded-xl border border-[var(--app-border)] px-4 py-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Expiring in 90 Days</div>
-            <div className="mt-2 text-xl font-semibold text-slate-900">{formatNumber(data.contractsExpiringIn90Days)}</div>
-          </div>
-          <div className="rounded-xl border border-[var(--app-border)] px-4 py-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Expiring in 30 Days</div>
-            <div className="mt-2 text-xl font-semibold text-amber-600">{formatNumber(data.contractsExpiringIn30Days)}</div>
-          </div>
-          <div className="rounded-xl border border-[var(--app-border)] px-4 py-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Critical Renewal Risk</div>
-            <div className="mt-2 text-xl font-semibold text-rose-600">{formatNumber(data.criticalRenewalRiskContracts)}</div>
-          </div>
-          <div className="rounded-xl border border-[var(--app-border)] px-4 py-3">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Expired</div>
-            <div className="mt-2 text-xl font-semibold text-rose-600">{formatNumber(data.expiredContracts)}</div>
-          </div>
-        </div>
-      </Surface> : null}
-
-      {WHATSAPP_ENABLED ? <WhatsAppAlertsWidget /> : null}
-
-      <Surface variant="solid" padding="sm">
-        <div className="flex flex-wrap gap-4 text-sm text-slate-600">
-          <span className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald-600" />Closed: {formatNumber(data.closedWorkOrders)}</span>
-          <span>Assigned to Group: {formatNumber(data.assignedToGroup)}</span>
-          <span>Assigned to Technicians: {formatNumber(data.assignedToTechnicians)}</span>
-          <span>Awaiting Acceptance: {formatNumber(data.awaitingAcceptance)}</span>
-          <span>Renewal In Progress: {formatNumber(data.renewalInProgressContracts)}</span>
-        </div>
-      </Surface>
+      <ConfirmDialog
+        open={confirmReset}
+        title="Reset your dashboard?"
+        message="Your own arrangement is forgotten and your role's default widgets come back."
+        confirmLabel="Reset"
+        onCancel={() => setConfirmReset(false)}
+        onConfirm={() => void resetToDefault()}
+      />
     </div>
   )
 }

@@ -19,6 +19,7 @@ public sealed class TenantQuotation : AuditableEntity, ITenantEntity
     public string Currency { get; set; } = "KES";
     public Guid? ConvertedToInvoiceId { get; set; }
     public Guid? ConvertedToWorkOrderId { get; set; }
+    public Guid? ConvertedToProjectId { get; set; }
     public string? RejectionReason { get; set; }
 
     public Tenant? Tenant { get; set; }

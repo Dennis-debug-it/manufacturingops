@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, type QueryClient } from '@tanstack/react-query'
 import { api, apiClient } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { Van, VanStockLine } from '../inventory/vansApi'
@@ -49,30 +49,6 @@ export function useGuideSuggestions(workOrderId: string) {
     enabled: Boolean(workOrderId),
     staleTime: 5 * 60_000,
     retry: false,
-  })
-}
-
-export interface NotificationPreference {
-  notificationKey: string
-  label: string
-  category: string
-  emailEnabled: boolean
-  inAppEnabled: boolean
-}
-
-export function useMyNotificationPreferences() {
-  return useQuery({
-    queryKey: ['me', 'notification-preferences'],
-    queryFn: () => api.get<NotificationPreference[]>(endpoints.me.notificationPreferences),
-  })
-}
-
-export function useSaveMyNotificationPreferences() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (items: Array<Pick<NotificationPreference, 'notificationKey' | 'emailEnabled' | 'inAppEnabled'>>) =>
-      api.put(endpoints.me.notificationPreferences, items),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['me', 'notification-preferences'] }),
   })
 }
 

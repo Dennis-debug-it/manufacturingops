@@ -52,6 +52,7 @@ export function FilterPanel({ state, onChange, onClear, activeFilterCount }: Fil
   }
   if (state.slaStatus) chips.push({ key: 'slaStatus', label: `SLA: ${slaStatusLabels[state.slaStatus as SlaStatusKey]}` })
   if (state.unassignedOnly) chips.push({ key: 'unassignedOnly', label: 'Unassigned only' })
+  if (state.state) chips.push({ key: 'state', label: state.state === 'overdue' ? 'Overdue only' : 'Open only' })
   if (state.fromDate) chips.push({ key: 'fromDate', label: `From: ${state.fromDate}` })
   if (state.toDate) chips.push({ key: 'toDate', label: `To: ${state.toDate}` })
 

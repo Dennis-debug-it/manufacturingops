@@ -14,6 +14,7 @@ const labelClass = 'mb-1 block text-xs font-medium text-slate-600'
 const documentTypeLabels: Record<string, string> = {
   PurchaseOrder: 'Purchase Orders',
   Expense: 'Expenses',
+  ProjectVariation: 'Project Variations',
 }
 
 // Curated permission options (map to backend PermissionNames constants).
@@ -22,6 +23,7 @@ const permissionOptions = [
   { value: 'finance.manage', label: 'Finance — Manage' },
   { value: 'can_manage_materials', label: 'Inventory — Manage Materials' },
   { value: 'can_manage_settings', label: 'Settings — Manage' },
+  { value: 'projects.variations.approve', label: 'Projects — Approve Variations' },
 ]
 const defaultPermission = 'finance.manage_approvals'
 
