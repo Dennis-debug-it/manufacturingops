@@ -53,7 +53,8 @@ outgrown Essentials. Revisit it after the first ten Essentials sales.
 | Field | `Technician` | ~40–50% of the office rate |
 | Free | `Viewer` (incl. legacy `User`), `Auditor`; client-portal contacts | Unlimited |
 
-- Each edition has a minimum number of office seats (proposed: Essentials 2, Professional 3, Enterprise 10).
+- Each edition has a minimum number of office seats: Essentials 2, Professional 3, Enterprise 10. These
+  are the starting values and the platform can change them (§6).
 - Seats are counted as they are today: active users, pending invitees included. Deactivated users are not counted.
 - A role change re-checks seats: promoting a technician to dispatcher takes an office seat.
 - Sales staff use office seats. There is no separate CRM seat type.
@@ -104,8 +105,8 @@ credentials and pays Meta. A tenant's add-on fee and message usage cover that co
 ## 5. Extras outside entitlements
 
 - **Industry packs** (solar installation, HVAC, generators, electrical): checklists, report templates and
-  asset categories. These build on the existing starter packs and are sold one-off or yearly. They never
-  gate an API route.
+  asset categories. They are **free** and build on the existing starter packs. They never gate an API
+  route.
 - **Paid onboarding and data migration.**
 
 ## 6. Commercial terms
@@ -114,6 +115,37 @@ credentials and pays Meta. A tenant's add-on fee and message usage cover that co
 - Trial is Professional for 14 days. When it ends, the tenant picks an edition. The existing grace period
   and read-only mode cover the gap.
 - Prices are set in KES, with a USD price list. Tenants already have a `Currency`.
+
+### Every number is adjustable
+
+No price, discount, allowance or minimum is hard-coded. All of them are edited on the platform
+**Plans & pricing** screen, and each can be overridden for a single tenant (a negotiated deal) on that
+tenant's license.
+
+| Setting | Where | Can be overridden per tenant |
+|---|---|---|
+| Office seat price and field seat price (monthly, annual) for each edition | Edition | ✓ |
+| Minimum office seats for each edition | Edition | ✓ |
+| Annual prepay discount | Platform | ✓ |
+| Usage pack size and price, and the allowance included in each edition | Usage pack / edition | ✓ |
+| WhatsApp add-on monthly and annual fee, included messages, price per extra message, extra number price | Add-on | ✓ |
+
+A price change applies to new licenses and at each tenant's next renewal. It never changes a tenant's
+current term.
+
+Starting values for WhatsApp, seeded by the migration and editable afterwards. Check them against Meta's
+current rate card for Kenya before the first sale:
+
+| | Notifications | Business |
+|---|---|---|
+| Monthly fee | KES 1,500 | KES 4,500 |
+| Messages included per month | 500 | 1,500 |
+| Price per extra message | KES 3 | KES 3 |
+| Extra dedicated number | — | KES 2,500 / month |
+
+Edition seat prices and usage packs are seeded at 0 and marked **not priced**. The platform can't assign
+an edition or sell a pack until it has a price, so a tenant can never be put on something free by
+mistake.
 
 ---
 
@@ -146,11 +178,14 @@ Includes the add-on mechanism that WhatsApp needs, so Part 4 does not have to bu
 ### 1.2 Data model
 
 - `license_plans`: rows `essentials`, `professional`, `enterprise`. Prices: monthly/annual for office
-  seats, monthly/annual for field seats, and minimum office seats.
+  seats, monthly/annual for field seats, and minimum office seats. All editable on the platform.
+- Per-tenant pricing overrides on `TenantLicense`: `OfficeSeatPriceOverride`, `FieldSeatPriceOverride`,
+  `MinOfficeSeatsOverride`, `AnnualDiscountOverride` (all nullable; null means use the edition's value).
 - `TenantLicense.LicensedUsers` becomes `OfficeSeats` + `FieldSeats`. Both have a CHECK constraint, like
   `CK_tenant_licenses_LicensedUsers_Positive`: office seats > 0, field seats ≥ 0.
-- Add-ons: `license_add_ons (Code, Name, MonthlyPrice, AnnualPrice, IncludedMessages, IsActive)` and
-  `tenant_license_add_ons (TenantLicenseId, AddOnCode, StartedAt, EndedAt, PriceOverride)`. A tenant's
+- Add-ons: `license_add_ons (Code, Name, MonthlyPrice, AnnualPrice, IncludedMessages, ExtraMessagePrice,
+  ExtraNumberPrice, IsActive)` and `tenant_license_add_ons (TenantLicenseId, AddOnCode, StartedAt, EndedAt,
+  PriceOverride, IncludedMessagesOverride, ExtraMessagePriceOverride)`. A tenant's
   features are its edition's features plus its active add-ons' features, minus its overrides. The
   only add-ons at launch are `whatsapp_notifications` and `whatsapp_business`.
 - Drop `LicensePlan.ModulesIncluded`, `EmailIngestion`, `MonitoringIntegration` and `MaxBranches`.
@@ -281,12 +316,16 @@ Feature keys: `crm_basic` (all editions), `crm_pipeline` (Professional+).
 3. Turn on Part 1 in production. Ship Projects, then CRM, then platform WhatsApp, then usage packs, each
    as its own release.
 
-## Open decisions
+## Decisions
 
-1. Prices: the office seat rate and field seat discount for each edition, and the size and price of each
-   usage pack.
-2. Confirm the edition boundaries, especially inventory in Professional.
-3. Industry packs: paid, or kept as free starter packs?
-4. The minimum office seats for each edition.
-5. WhatsApp add-on prices: the monthly fee for each of the two add-ons, how many messages each includes,
-   the price per message beyond that, and the price of an extra dedicated number.
+| # | Decision | Outcome |
+|---|---|---|
+| 1 | Seat prices, field seat discount, usage packs | Adjustable on the platform, with per-tenant overrides (§6). |
+| 2 | Edition boundaries | **Open** — see below. |
+| 3 | Industry packs | Free. |
+| 4 | Minimum office seats | Essentials 2, Professional 3, Enterprise 10, adjustable. |
+| 5 | WhatsApp add-on prices | Seeded starting values (§6), adjustable, with per-tenant overrides. |
+
+Still open: which edition inventory and preventive maintenance/assets belong in. Essentials could get a
+light version of each (parts used on a job; a simple recurring job), with full stock control and the PM
+planner in Professional.
