@@ -9,15 +9,20 @@ import { StatCard } from '../../shared/components/StatCard'
 import { cn } from '../../shared/utils/cn'
 import { usePmPlans, usePmPlansDue } from './api'
 import { MaintenanceTabNav } from './components/MaintenanceTabNav'
+import { ClientFilterSelect, useMaintenanceClientFilter } from './components/ClientFilter'
 
 export function EnginePage() {
   const plansQuery = usePmPlans()
   const dueQuery = usePmPlansDue()
   const { data: plans, isLoading: plansLoading } = plansQuery
   const { data: due, isLoading: dueLoading } = dueQuery
+  const { clientId, setClientId } = useMaintenanceClientFilter()
 
-  const activePlans = useMemo(() => (plans ?? []).filter((plan) => plan.status === 'Active'), [plans])
-  const overdueCount = due?.length ?? 0
+  const activePlans = useMemo(
+    () => (plans ?? []).filter((plan) => plan.status === 'Active' && (!clientId || plan.clientId === clientId)),
+    [plans, clientId],
+  )
+  const overdueCount = useMemo(() => (due ?? []).filter((plan) => !clientId || plan.clientId === clientId).length, [due, clientId])
   const healthy = activePlans.length === 0 || overdueCount / activePlans.length < 0.15
 
   if (plansLoading || dueLoading) {
@@ -41,7 +46,11 @@ export function EnginePage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Engine Status" subtitle="Maintenance generation engine health and rules." />
+      <PageHeader
+        title="Engine Status"
+        subtitle="Maintenance generation engine health and rules."
+        secondaryActions={<ClientFilterSelect value={clientId} onChange={setClientId} />}
+      />
       <MaintenanceTabNav />
 
       <div className={cn('flex items-center gap-4 rounded-2xl border p-5 shadow-sm', healthy ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50')}>
