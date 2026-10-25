@@ -18,7 +18,9 @@ public sealed class PurchaseOrdersController(
     IDocumentNumberingService documentNumberingService,
     IAuditLogService auditLogService,
     IApprovalWorkflowService approvalWorkflowService,
-    IUserAccessService userAccessService) : TenantAwareControllerBase(tenantContext)
+    IUserAccessService userAccessService,
+    IStockLedgerService stockLedgerService,
+    IBranchAccessService branchAccessService) : TenantAwareControllerBase(tenantContext)
 {
     // ── Purchase orders ──────────────────────────────────────────────────────
 
@@ -81,16 +83,29 @@ public sealed class PurchaseOrdersController(
             ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, null, cancellationToken),
             Currency = await CurrencyConverter.ResolveAsync(dbContext, TenantId, request.Currency, cancellationToken),
         };
+        var materialIds = request.Lines.Where(x => x.MaterialItemId.HasValue).Select(x => x.MaterialItemId!.Value).Distinct().ToList();
+        var materials = await dbContext.MaterialItems
+            .Where(x => x.TenantId == TenantId && x.IsActive && materialIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
         foreach (var line in request.Lines)
         {
-            if (string.IsNullOrWhiteSpace(line.ItemName))
+            MaterialItem? material = null;
+            if (line.MaterialItemId is { } materialId && !materials.TryGetValue(materialId, out material))
+                throw new BusinessRuleException("A line refers to a part that does not exist or is inactive.");
+            // A linked line may leave the name blank; it then takes the part's own name.
+            var itemName = string.IsNullOrWhiteSpace(line.ItemName) ? material?.ItemName : line.ItemName.Trim();
+            if (string.IsNullOrWhiteSpace(itemName))
                 throw new BusinessRuleException("Line item name is required.");
             if (line.QuantityOrdered <= 0)
                 throw new BusinessRuleException("Line quantity must be greater than zero.");
+            if (line.UnitCost < 0)
+                throw new BusinessRuleException("Line unit cost cannot be negative.");
             order.Lines.Add(new PurchaseOrderLine
             {
                 TenantId = TenantId,
-                ItemName = line.ItemName.Trim(),
+                MaterialItemId = material?.Id,
+                MaterialItem = material,
+                ItemName = itemName,
                 QuantityOrdered = line.QuantityOrdered,
                 UnitCost = line.UnitCost,
                 LineTotal = Math.Round(line.QuantityOrdered * line.UnitCost, 2),
@@ -143,55 +158,121 @@ public sealed class PurchaseOrdersController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Receives a quantity against one line. A line linked to a part also books the stock into a branch
+    /// (the one chosen, else the user's default) and folds the line's cost into the part's average cost,
+    /// converted into the stock currency; the receipt, the stock movement and the PO status commit
+    /// together or not at all.
+    /// </summary>
     [HttpPost("{id:guid}/receive")]
     public async Task<IActionResult> ReceiveLine(
         Guid id, [FromBody] ReceivePurchaseOrderLineRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
-        var order = await LoadOrderAsync(id, cancellationToken);
-
-        if (order.Status is "Cancelled")
-            throw new BusinessRuleException("Cannot receive against a cancelled purchase order.");
-
-        var line = order.Lines.FirstOrDefault(x => x.Id == request.LineId)
-            ?? throw new NotFoundException("Purchase order line not found.");
         if (request.Quantity <= 0)
             throw new BusinessRuleException("Received quantity must be greater than zero.");
-        var outstanding = line.QuantityOrdered - line.QuantityReceived;
-        if (request.Quantity > outstanding)
-            throw new BusinessRuleException($"Only {outstanding:0.###} of {line.ItemName} remain outstanding.");
-
-        line.QuantityReceived += request.Quantity;
-        line.UpdatedAt = DateTime.UtcNow;
 
         var receiverName = await dbContext.Users
             .Where(x => x.Id == UserId)
             .Select(x => x.FullName)
             .FirstOrDefaultAsync(cancellationToken) ?? "Unknown";
+        var stockCurrency = await ProjectFinanceRules.StockCurrencyAsync(dbContext, TenantId, cancellationToken);
+        var converter = await CurrencyConverter.LoadAsync(dbContext, TenantId, stockCurrency, cancellationToken);
 
-        // Add via the DbSet (not the tracked parent's collection) so EF reliably marks this
-        // client-keyed entity as Added rather than Modified.
-        dbContext.PurchaseOrderReceiptEvents.Add(new PurchaseOrderReceiptEvent
+        PurchaseOrder order = null!;
+        PurchaseOrderLine line = null!;
+        // The order is read inside the stock transaction so two receipts against the same line
+        // serialise: the second sees the first's QuantityReceived and cannot over-receive.
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            TenantId = TenantId,
-            PurchaseOrderId = order.Id,
-            PurchaseOrderLineId = line.Id,
-            ItemName = line.ItemName,
-            Quantity = request.Quantity,
-            ReceivedByUserId = UserId,
-            ReceivedByName = receiverName,
-        });
+            order = await LoadOrderAsync(id, ct);
+            if (order.Status is "Cancelled")
+                throw new BusinessRuleException("Cannot receive against a cancelled purchase order.");
+            // Receiving books stock and cost, so it must not run ahead of an approval chain.
+            var pendingApproval = await approvalWorkflowService.GetActiveForDocumentAsync(
+                TenantId, ApprovalDocumentTypes.PurchaseOrder, order.Id, ct);
+            if (pendingApproval is not null)
+                throw new BusinessRuleException("This purchase order is awaiting approval and cannot be received yet.");
 
-        order.Status = order.Lines.All(x => x.QuantityReceived >= x.QuantityOrdered)
-            ? "Received"
-            : "PartiallyReceived";
-        order.UpdatedAt = DateTime.UtcNow;
+            line = order.Lines.FirstOrDefault(x => x.Id == request.LineId)
+                ?? throw new NotFoundException("Purchase order line not found.");
+            var outstanding = line.QuantityOrdered - line.QuantityReceived;
+            if (request.Quantity > outstanding)
+                throw new BusinessRuleException($"Only {outstanding:0.###} of {line.ItemName} remain outstanding.");
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+            Guid? branchId = null;
+            if (line.MaterialItemId is { } materialId)
+            {
+                var material = await dbContext.MaterialItems
+                    .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == materialId, ct)
+                    ?? throw new BusinessRuleException($"The part linked to {line.ItemName} no longer exists.");
+                branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, ct);
+                await ReceiveIntoStockAsync(material, branchId, request.Quantity,
+                    converter.Convert(line.UnitCost, order.Currency, DateTime.UtcNow), order.PoNumber, ct);
+            }
+
+            line.QuantityReceived += request.Quantity;
+            line.UpdatedAt = DateTime.UtcNow;
+
+            // Add via the DbSet (not the tracked parent's collection) so EF reliably marks this
+            // client-keyed entity as Added rather than Modified.
+            dbContext.PurchaseOrderReceiptEvents.Add(new PurchaseOrderReceiptEvent
+            {
+                TenantId = TenantId,
+                PurchaseOrderId = order.Id,
+                PurchaseOrderLineId = line.Id,
+                ItemName = line.ItemName,
+                Quantity = request.Quantity,
+                BranchId = branchId,
+                ReceivedByUserId = UserId,
+                ReceivedByName = receiverName,
+            });
+
+            order.Status = order.Lines.All(x => x.QuantityReceived >= x.QuantityOrdered)
+                ? "Received"
+                : "PartiallyReceived";
+            order.UpdatedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
+
         await auditLogService.LogAsync(TenantId, UserId, "inventory.po.received", nameof(PurchaseOrder), order.Id.ToString(), $"Received {request.Quantity:0.###} × {line.ItemName} on {order.PoNumber}", cancellationToken);
 
         return NoContent();
     }
+
+    /// <summary>
+    /// Books a receipt into stock and moves the part's cost (tenant-wide and at the branch) to the
+    /// weighted average of what was on hand and what arrived. With no exchange rate into the stock
+    /// currency the cost is left alone rather than mixing currencies.
+    /// </summary>
+    private async Task ReceiveIntoStockAsync(
+        MaterialItem material, Guid? branchId, decimal quantity, decimal? unitCost, string poNumber, CancellationToken cancellationToken)
+    {
+        var tenantOnHand = material.QuantityOnHand;
+        var branchStock = branchId is null
+            ? null
+            : await dbContext.BranchMaterialStocks.SingleOrDefaultAsync(
+                x => x.TenantId == TenantId && x.BranchId == branchId && x.MaterialId == material.Id, cancellationToken);
+        var branchOnHand = branchStock?.QuantityOnHand ?? 0;
+        var branchCost = branchStock?.UnitCost;
+
+        await stockLedgerService.RecordReceiptAsync(material, branchId, quantity, UserId, $"Received on {poNumber}", poNumber, cancellationToken: cancellationToken);
+        if (unitCost is not { } cost)
+            return;
+
+        material.UnitCost = WeightedCost(tenantOnHand, material.UnitCost, quantity, cost);
+        if (branchId is not null)
+        {
+            // The ledger created the row if this branch held none of the part before.
+            branchStock ??= dbContext.BranchMaterialStocks.Local.Single(x => x.BranchId == branchId && x.MaterialId == material.Id);
+            branchStock.UnitCost = WeightedCost(branchOnHand, branchCost, quantity, cost);
+        }
+    }
+
+    public static decimal WeightedCost(decimal onHand, decimal? currentCost, decimal received, decimal receivedCost) =>
+        currentCost is { } current && onHand > 0
+            ? Math.Round((onHand * current + received * receivedCost) / (onHand + received), 2)
+            : receivedCost;
 
     // ── Suppliers ────────────────────────────────────────────────────────────
 
@@ -301,7 +382,9 @@ public sealed class PurchaseOrdersController(
         await dbContext.PurchaseOrders
             .Include(x => x.Supplier)
             .Include(x => x.Lines)
+                .ThenInclude(x => x.MaterialItem)
             .Include(x => x.ReceiptEvents)
+                .ThenInclude(x => x.Branch)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
         ?? throw new NotFoundException("Purchase order not found.");
 
@@ -351,11 +434,11 @@ public sealed class PurchaseOrdersController(
         order.Notes,
         order.Lines
             .OrderBy(x => x.CreatedAt)
-            .Select(x => new PurchaseOrderLineResponse(x.Id, x.ItemName, x.QuantityOrdered, x.QuantityReceived, x.UnitCost, x.LineTotal))
+            .Select(x => new PurchaseOrderLineResponse(x.Id, x.ItemName, x.QuantityOrdered, x.QuantityReceived, x.UnitCost, x.LineTotal, x.MaterialItemId, x.MaterialItem?.ItemCode))
             .ToList(),
         order.ReceiptEvents
             .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new PurchaseOrderReceiptEventResponse(x.CreatedAt, x.ReceivedByName, x.ItemName, x.Quantity))
+            .Select(x => new PurchaseOrderReceiptEventResponse(x.CreatedAt, x.ReceivedByName, x.ItemName, x.Quantity, x.Branch?.Name))
             .ToList());
 
     private static SupplierListItemResponse MapSupplierListItem(Supplier supplier, int openOrders, double onTimePercent) => new(
@@ -376,9 +459,10 @@ public sealed record PurchaseOrderListItemResponse(
     DateTime OrderedAt, DateTime? ExpectedAt, decimal TotalAmount, string Currency);
 
 public sealed record PurchaseOrderLineResponse(
-    Guid Id, string ItemName, decimal QuantityOrdered, decimal QuantityReceived, decimal UnitCost, decimal LineTotal);
+    Guid Id, string ItemName, decimal QuantityOrdered, decimal QuantityReceived, decimal UnitCost, decimal LineTotal,
+    Guid? MaterialItemId = null, string? ItemCode = null);
 
-public sealed record PurchaseOrderReceiptEventResponse(DateTime ReceivedAt, string ReceivedBy, string ItemName, decimal Quantity);
+public sealed record PurchaseOrderReceiptEventResponse(DateTime ReceivedAt, string ReceivedBy, string ItemName, decimal Quantity, string? BranchName = null);
 
 public sealed record PurchaseOrderDetailResponse(
     Guid Id, string PoNumber, string SupplierName, string Status,
@@ -387,14 +471,16 @@ public sealed record PurchaseOrderDetailResponse(
     IReadOnlyList<PurchaseOrderLineResponse> Lines,
     IReadOnlyList<PurchaseOrderReceiptEventResponse> ReceivingHistory);
 
-public sealed record CreatePurchaseOrderLineRequest(string ItemName, decimal QuantityOrdered, decimal UnitCost);
+/// <param name="MaterialItemId">The stocked part this line buys; receiving it then adds stock. Omit for non-stock lines.</param>
+public sealed record CreatePurchaseOrderLineRequest(string? ItemName, decimal QuantityOrdered, decimal UnitCost, Guid? MaterialItemId = null);
 
 public sealed record CreatePurchaseOrderRequest(
     Guid SupplierId, DateTime? ExpectedAt, IReadOnlyList<CreatePurchaseOrderLineRequest> Lines, string? Notes = null, Guid? ProjectId = null, string? Currency = null);
 
 public sealed record PurchaseOrderStatusRequest(string Status);
 
-public sealed record ReceivePurchaseOrderLineRequest(Guid LineId, decimal Quantity);
+/// <param name="BranchId">Where a part-linked line's stock lands; the user's default branch when omitted.</param>
+public sealed record ReceivePurchaseOrderLineRequest(Guid LineId, decimal Quantity, Guid? BranchId = null);
 
 public sealed record SupplierListItemResponse(
     Guid Id, string SupplierName, string? ContactPerson, string? Phone, string? Email,

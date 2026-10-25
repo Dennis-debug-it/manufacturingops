@@ -3652,6 +3652,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.Lines)
                 .HasForeignKey(x => x.PurchaseOrderId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.MaterialItemId);
+            entity.HasOne(x => x.MaterialItem)
+                .WithMany()
+                .HasForeignKey(x => x.MaterialItemId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
         ApplyTenantFilter<PurchaseOrderLine>(modelBuilder);
 
@@ -3675,6 +3680,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany()
                 .HasForeignKey(x => x.PurchaseOrderLineId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Branch)
+                .WithMany()
+                .HasForeignKey(x => x.BranchId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
         ApplyTenantFilter<PurchaseOrderReceiptEvent>(modelBuilder);
 

@@ -25,6 +25,9 @@ public sealed class PurchaseOrderLine : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
     public Guid PurchaseOrderId { get; set; }
+    /// <summary>The stocked part this line buys. Receiving a linked line adds stock; a line without one
+    /// (a service, a one-off item) only records the receipt.</summary>
+    public Guid? MaterialItemId { get; set; }
     public string ItemName { get; set; } = string.Empty;
     public decimal QuantityOrdered { get; set; }
     public decimal QuantityReceived { get; set; }
@@ -33,6 +36,7 @@ public sealed class PurchaseOrderLine : AuditableEntity, ITenantEntity
 
     public Tenant? Tenant { get; set; }
     public PurchaseOrder? PurchaseOrder { get; set; }
+    public MaterialItem? MaterialItem { get; set; }
 }
 
 public sealed class PurchaseOrderReceiptEvent : AuditableEntity, ITenantEntity
@@ -42,10 +46,13 @@ public sealed class PurchaseOrderReceiptEvent : AuditableEntity, ITenantEntity
     public Guid PurchaseOrderLineId { get; set; }
     public string ItemName { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
+    /// <summary>The branch the stock was received into; null for unlinked lines or branchless workspaces.</summary>
+    public Guid? BranchId { get; set; }
     public Guid? ReceivedByUserId { get; set; }
     public string ReceivedByName { get; set; } = string.Empty;
 
     public Tenant? Tenant { get; set; }
     public PurchaseOrder? PurchaseOrder { get; set; }
     public PurchaseOrderLine? PurchaseOrderLine { get; set; }
+    public Branch? Branch { get; set; }
 }

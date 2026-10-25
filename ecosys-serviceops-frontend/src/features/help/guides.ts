@@ -451,8 +451,8 @@ const inventory: Guide = {
       title: 'Buying stock',
       steps: [
         'Add your suppliers under Suppliers with New Supplier.',
-        'Under Purchase Orders, click New Purchase Order and Create Purchase Order. Purchase orders above your approval limit go to My Approvals first.',
-        'Mark Sent once it is with the supplier; when goods arrive, Receive Remaining puts them into stock.',
+        'Under Purchase Orders, click New Purchase Order, pick each part from the list so it is linked to stock, and Create Purchase Order. Purchase orders above your approval limit go to My Approvals first.',
+        'Mark Sent once it is with the supplier. When goods arrive, click Receive on a line, enter the quantity and the branch it goes into; linked parts go into stock and their cost is averaged in. Lines marked Non-stock only record the delivery.',
       ],
     },
     {

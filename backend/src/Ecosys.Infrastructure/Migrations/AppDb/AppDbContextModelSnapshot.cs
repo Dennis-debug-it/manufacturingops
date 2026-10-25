@@ -8148,6 +8148,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<Guid?>("MaterialItemId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("PurchaseOrderId")
                         .HasColumnType("uuid");
 
@@ -8171,6 +8174,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasKey("Id");
 
+                    b.HasIndex("MaterialItemId");
+
                     b.HasIndex("PurchaseOrderId");
 
                     b.HasIndex("TenantId");
@@ -8182,6 +8187,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
@@ -8217,6 +8225,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("BranchId");
 
                     b.HasIndex("PurchaseOrderId");
 
@@ -15724,6 +15734,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
             modelBuilder.Entity("Ecosys.Domain.Entities.PurchaseOrderLine", b =>
                 {
+                    b.HasOne("Ecosys.Domain.Entities.MaterialItem", "MaterialItem")
+                        .WithMany()
+                        .HasForeignKey("MaterialItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Ecosys.Domain.Entities.PurchaseOrder", "PurchaseOrder")
                         .WithMany("Lines")
                         .HasForeignKey("PurchaseOrderId")
@@ -15736,6 +15751,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("MaterialItem");
+
                     b.Navigation("PurchaseOrder");
 
                     b.Navigation("Tenant");
@@ -15743,6 +15760,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
             modelBuilder.Entity("Ecosys.Domain.Entities.PurchaseOrderReceiptEvent", b =>
                 {
+                    b.HasOne("Ecosys.Domain.Entities.Branch", "Branch")
+                        .WithMany()
+                        .HasForeignKey("BranchId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Ecosys.Domain.Entities.PurchaseOrder", "PurchaseOrder")
                         .WithMany("ReceiptEvents")
                         .HasForeignKey("PurchaseOrderId")
@@ -15760,6 +15782,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Branch");
 
                     b.Navigation("PurchaseOrder");
 

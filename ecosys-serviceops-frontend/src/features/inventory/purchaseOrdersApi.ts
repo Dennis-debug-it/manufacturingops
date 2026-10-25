@@ -34,13 +34,16 @@ export interface PurchaseOrderLine {
   quantityReceived: number
   unitCost: number
   lineTotal: number
+  /** The stocked part this line buys; receiving it adds stock. Null for non-stock lines. */
+  materialItemId: string | null
+  itemCode: string | null
 }
 
 export interface PurchaseOrderDetail extends PurchaseOrderListItem {
   supplierId: string
   notes: string | null
   lines: PurchaseOrderLine[]
-  receivingHistory: Array<{ receivedAt: string; receivedBy: string; itemName: string; quantity: number }>
+  receivingHistory: Array<{ receivedAt: string; receivedBy: string; itemName: string; quantity: number; branchName: string | null }>
 }
 
 export function usePurchaseOrder(id: string | undefined) {
@@ -55,7 +58,7 @@ export function usePurchaseOrder(id: string | undefined) {
 export interface CreatePurchaseOrderPayload {
   supplierId: string
   expectedAt?: string | undefined
-  lines: Array<{ itemName: string; quantityOrdered: number; unitCost: number }>
+  lines: Array<{ itemName: string; quantityOrdered: number; unitCost: number; materialItemId?: string | null }>
   notes?: string | undefined
   projectId?: string | null
   /** Three-letter code; the workspace currency when omitted. */
@@ -83,9 +86,13 @@ export function useSetPurchaseOrderStatus(poId: string) {
 export function useReceivePurchaseOrderLine(poId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { lineId: string; quantity: number }) =>
+    mutationFn: (payload: { lineId: string; quantity: number; branchId?: string | null }) =>
       api.post<void>(`/api/purchase-orders/${poId}/receive`, payload),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] })
+      // A part-linked receipt changes stock levels and costs.
+      void queryClient.invalidateQueries({ queryKey: ['materials'] })
+    },
   })
 }
 
