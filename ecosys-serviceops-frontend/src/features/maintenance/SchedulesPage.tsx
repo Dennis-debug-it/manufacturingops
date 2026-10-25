@@ -11,6 +11,7 @@ import { usePmPlans } from './api'
 import { NewScheduleWizard } from './components/NewScheduleWizard'
 import type { PmPlan } from './types'
 import { MaintenanceTabNav } from './components/MaintenanceTabNav'
+import { ClientFilterSelect, useMaintenanceClientFilter } from './components/ClientFilter'
 
 function coverageBadge(plan: PmPlan) {
   if (plan.status !== 'Active') return 'Inactive'
@@ -26,14 +27,16 @@ export function SchedulesPage() {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [showWizard, setShowWizard] = useState(false)
+  const { clientId, setClientId } = useMaintenanceClientFilter()
   const { data, isLoading, isError } = usePmPlans()
 
   const rows = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase()
     return (data ?? []).filter((plan) =>
+      (!clientId || plan.clientId === clientId) &&
       [plan.assetName, plan.clientName, plan.pmTemplateName].some((value) => (value ?? '').toLowerCase().includes(query)),
     )
-  }, [data, debouncedSearch])
+  }, [data, debouncedSearch, clientId])
 
   const columns: DataTableColumn<PmPlan>[] = [
     { key: 'assetName', header: 'Asset', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/maintenance/schedules/${row.id}`}>{row.assetName ?? '—'}</Link> },
@@ -59,19 +62,20 @@ export function SchedulesPage() {
       />
       <MaintenanceTabNav />
 
-      <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+      <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm sm:flex-row sm:items-center">
+        <label className="flex flex-1 items-center gap-2 text-sm text-slate-600">
           <Search className="h-4 w-4 text-slate-400" />
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by asset, client, or template" className="h-11 w-full border-0 bg-transparent p-0 outline-none placeholder:text-slate-400" />
         </label>
+        <ClientFilterSelect value={clientId} onChange={setClientId} />
       </div>
 
       <DataTable
         columns={columns}
         data={rows}
         loading={isLoading}
-        emptyTitle={isError ? 'Schedules unavailable' : 'No PM schedules yet'}
-        emptyDescription={isError ? 'PM plans could not be loaded.' : 'Create your first preventive maintenance schedule to get started.'}
+        emptyTitle={isError ? 'Schedules unavailable' : clientId || debouncedSearch ? 'No matching schedules' : 'No PM schedules yet'}
+        emptyDescription={isError ? 'PM plans could not be loaded.' : clientId || debouncedSearch ? 'No PM schedules match the current filters.' : 'Create your first preventive maintenance schedule to get started.'}
       />
 
       <NewScheduleWizard open={showWizard} onClose={() => setShowWizard(false)} />

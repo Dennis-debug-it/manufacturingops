@@ -18,6 +18,9 @@ const tabs = [
 
 export function MaintenanceTabNav() {
   const location = useLocation()
+  // Keep the client filter when switching tabs.
+  const clientId = new URLSearchParams(location.search).get('clientId')
+  const query = clientId ? `?clientId=${encodeURIComponent(clientId)}` : ''
   const canManageSettings = usePermission('settings.manage')
   const canViewReports = usePermission('reports.view')
   const showAnalytics = canManageSettings && canViewReports
@@ -28,7 +31,7 @@ export function MaintenanceTabNav() {
         return (
           <Link
             key={tab.to}
-            to={tab.to}
+            to={`${tab.to}${query}`}
             className={cn(
               'inline-flex h-11 items-center gap-2 rounded-full border px-4 text-sm font-medium transition',
               active ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',

@@ -27,6 +27,7 @@ import { formatDate, toWorkspaceDate } from '../../shared/utils/dates'
 import { useGenerateWorkOrderNow, usePmPlans } from './api'
 import type { PmPlan } from './types'
 import { MaintenanceTabNav } from './components/MaintenanceTabNav'
+import { ClientFilterSelect, useMaintenanceClientFilter } from './components/ClientFilter'
 
 type Tone = 'grey' | 'green' | 'blue' | 'amber' | 'red'
 
@@ -63,7 +64,8 @@ export function CalendarPage() {
   const { data, isLoading, isError, refetch } = usePmPlans()
   const generateNow = useGenerateWorkOrderNow(selected?.id ?? '')
 
-  const plans = useMemo(() => data ?? [], [data])
+  const { clientId, setClientId } = useMaintenanceClientFilter()
+  const plans = useMemo(() => (data ?? []).filter((plan) => !clientId || plan.clientId === clientId), [data, clientId])
 
   const days = useMemo(() => {
     if (view === 'week') {
@@ -124,7 +126,8 @@ export function CalendarPage() {
         title="PM Calendar"
         subtitle="Preventive maintenance schedule across all active plans."
         secondaryActions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ClientFilterSelect value={clientId} onChange={setClientId} />
             {(['month', 'week'] as const).map((option) => (
               <button
                 key={option}
