@@ -135,6 +135,51 @@ public sealed class InventoryMasterDataTests
         Assert.Equal(("Van 1", 2m), (locations.Vans.Single().VanName, locations.Vans.Single().QuantityOnHand));
     }
 
+    [Theory]
+    [InlineData(2, 10, null, 18)]      // top up to twice the reorder level
+    [InlineData(2, 10, 5.0, 10)]       // two lots of 5 clear the level of 10 from 2
+    [InlineData(10, 10, 5.0, 5)]       // at the level exactly: one lot lifts it above
+    [InlineData(19.5, 10, null, 1)]
+    public void SuggestedQuantityUsesLotsOrTopsUp(double available, double reorderLevel, double? lot, double expected) =>
+        Assert.Equal((decimal)expected, PurchaseOrdersController.SuggestQuantity((decimal)available, (decimal)reorderLevel, (decimal?)lot));
+
+    [Fact]
+    public async Task ReorderSuggestionsCountWhatIsOnOrderAndDraftOnePoPerSupplier()
+    {
+        await using var db = Db();
+        await SeedUser(db);
+        var purchasing = Purchasing(db);
+        var acme = Ok(await purchasing.CreateSupplier(new("Acme", LeadTimeDays: 4), default));
+        var bolt = Ok(await purchasing.CreateSupplier(new("Bolt Co"), default));
+        var filter = new MaterialItem { TenantId = tenantId, ItemCode = "F", ItemName = "Filter", UnitOfMeasure = "each", QuantityOnHand = 2, ReorderLevel = 10, UnitCost = 8, PreferredSupplierId = acme.Id };
+        var belt = new MaterialItem { TenantId = tenantId, ItemCode = "B", ItemName = "Belt", UnitOfMeasure = "each", QuantityOnHand = 1, ReorderLevel = 4, UnitCost = 30, PreferredSupplierId = acme.Id, ReorderQuantity = 6 };
+        var seal = new MaterialItem { TenantId = tenantId, ItemCode = "S", ItemName = "Seal", UnitOfMeasure = "each", QuantityOnHand = 0, ReorderLevel = 3, UnitCost = 5 };
+        var plenty = new MaterialItem { TenantId = tenantId, ItemCode = "P", ItemName = "Plenty", UnitOfMeasure = "each", QuantityOnHand = 50, ReorderLevel = 3 };
+        db.MaterialItems.AddRange(filter, belt, seal, plenty);
+        await db.SaveChangesAsync();
+        // 3 belts already on order: 1 + 3 = 4 is still not above the level of 4.
+        Ok(await purchasing.CreatePurchaseOrder(new(bolt.Id, null, [new(null, 3, 30, belt.Id)]), default));
+
+        var suggestions = Assert.IsAssignableFrom<IReadOnlyCollection<ReorderSuggestionResponse>>(
+            Assert.IsType<OkObjectResult>((await purchasing.GetReorderSuggestions(null, default)).Result).Value).ToDictionary(x => x.ItemName);
+
+        Assert.DoesNotContain("Plenty", suggestions.Keys);
+        Assert.Equal((18m, 4), (suggestions["Filter"].SuggestedQuantity, suggestions["Filter"].LeadTimeDays));
+        Assert.Equal((3m, 6m), (suggestions["Belt"].OnOrder, suggestions["Belt"].SuggestedQuantity));
+        Assert.Null(suggestions["Seal"].PreferredSupplierId);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => purchasing.CreateFromSuggestions(new([new(seal.Id, 3)]), default));
+        var drafted = Assert.IsAssignableFrom<IReadOnlyCollection<PurchaseOrderListItemResponse>>(Assert.IsType<OkObjectResult>((await purchasing.CreateFromSuggestions(new(
+            [new(filter.Id, 18), new(belt.Id, 6), new(seal.Id, 3, bolt.Id)]), default)).Result).Value);
+
+        Assert.Equal(2, drafted.Count);
+        var acmeOrder = await db.PurchaseOrders.Include(x => x.Lines).SingleAsync(x => x.SupplierId == acme.Id);
+        Assert.Equal("Draft", acmeOrder.Status);
+        Assert.Equal(18 * 8 + 6 * 30, acmeOrder.TotalAmount);
+        Assert.All(acmeOrder.Lines, line => Assert.NotNull(line.MaterialItemId));
+        Assert.Equal(2, await db.PurchaseOrders.CountAsync(x => x.SupplierId == bolt.Id));
+    }
+
     private sealed class NoApprovals : IApprovalWorkflowService
     {
         public Task<ApprovalStartResult?> StartAsync(Guid tenantId, string documentType, Guid documentId, string documentNumber, decimal amount, string currency, Guid initiatedByUserId, CancellationToken cancellationToken = default) =>

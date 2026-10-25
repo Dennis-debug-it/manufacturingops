@@ -166,3 +166,43 @@ export function useSetSupplierStatus(id: string) {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
   })
 }
+
+export interface ReorderSuggestion {
+  materialItemId: string
+  itemCode: string
+  itemName: string
+  unitOfMeasure: string
+  quantityOnHand: number
+  reorderLevel: number
+  /** Outstanding on open purchase orders, across all branches. */
+  onOrder: number
+  suggestedQuantity: number
+  unitCost: number | null
+  preferredSupplierId: string | null
+  preferredSupplierName: string | null
+  preferredSupplierActive: boolean
+  leadTimeDays: number
+  isCritical: boolean
+  /** Stock plus what is on order already clears the reorder level. */
+  coveredByOpenOrders: boolean
+}
+
+export function useReorderSuggestions(branchId?: string) {
+  return useQuery({
+    queryKey: ['inventory', 'reorder-suggestions', branchId ?? ''],
+    queryFn: () => api.get<ReorderSuggestion[]>('/api/purchase-orders/reorder-suggestions', { branchId: branchId || undefined }),
+    staleTime: 30_000,
+  })
+}
+
+export function useCreateOrdersFromSuggestions() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { items: Array<{ materialItemId: string; quantity: number; supplierId?: string | null }>; notes?: string | null }) =>
+      api.post<PurchaseOrderListItem[]>('/api/purchase-orders/from-suggestions', payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['inventory', 'reorder-suggestions'] })
+    },
+  })
+}
