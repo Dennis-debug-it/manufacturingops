@@ -265,6 +265,7 @@ public sealed class TimeAttendanceController(
 
         var query = dbContext.LeaveRequests
             .Include(x => x.Technician)
+            .Include(x => x.User)
             .Where(x => x.TenantId == TenantId);
         if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
             query = query.Where(x => x.Status == status.Trim());
@@ -293,6 +294,7 @@ public sealed class TimeAttendanceController(
         {
             TenantId = TenantId,
             TechnicianId = technician.Id,
+            UserId = technician.UserId,
             LeaveTypeCode = request.LeaveType.Trim(),
             StartDate = request.StartDate,
             EndDate = request.EndDate,
@@ -315,6 +317,7 @@ public sealed class TimeAttendanceController(
 
         var leave = await dbContext.LeaveRequests
             .Include(x => x.Technician)
+            .Include(x => x.User)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Leave request not found.");
 
@@ -327,7 +330,7 @@ public sealed class TimeAttendanceController(
         leave.DecidedAt = DateTime.UtcNow;
         leave.UpdatedAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(TenantId, UserId, "attendance.leave.decided", nameof(LeaveRequest), leave.Id.ToString(), $"Leave {leave.Status.ToLowerInvariant()} for {leave.Technician?.FullName}", cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "attendance.leave.decided", nameof(LeaveRequest), leave.Id.ToString(), $"Leave {leave.Status.ToLowerInvariant()} for {RequesterName(leave)}", cancellationToken);
 
         return NoContent();
     }
@@ -335,6 +338,8 @@ public sealed class TimeAttendanceController(
     // ── Self-service (technician) ─────────────────────────────────────────────
     // These endpoints are available to any authenticated user and always act on the
     // caller's own linked technician profile. Approvals stay with managers (DecideLeave).
+    // Leave is the exception: anyone can request it. A technician's leave is still filed on
+    // their profile, so it counts on their timesheet.
 
     [HttpGet("leave-types")]
     public async Task<ActionResult<IReadOnlyList<LeaveTypeModel>>> ListLeaveTypes(CancellationToken cancellationToken)
@@ -343,10 +348,11 @@ public sealed class TimeAttendanceController(
     [HttpGet("leave/mine")]
     public async Task<ActionResult<IReadOnlyCollection<LeaveRequestResponse>>> ListMyLeave(CancellationToken cancellationToken)
     {
-        var technician = await ResolveCallerTechnicianAsync(cancellationToken);
+        var technicianId = (await FindCallerTechnicianAsync(cancellationToken))?.Id;
         var items = await dbContext.LeaveRequests
             .Include(x => x.Technician)
-            .Where(x => x.TenantId == TenantId && x.TechnicianId == technician.Id)
+            .Include(x => x.User)
+            .Where(x => x.TenantId == TenantId && (x.UserId == UserId || (technicianId != null && x.TechnicianId == technicianId)))
             .OrderByDescending(x => x.CreatedAt)
             .Take(200)
             .ToListAsync(cancellationToken);
@@ -357,7 +363,8 @@ public sealed class TimeAttendanceController(
     public async Task<ActionResult<LeaveRequestResponse>> CreateMyLeave(
         [FromBody] CreateMyLeaveRequest request, CancellationToken cancellationToken)
     {
-        var technician = await ResolveCallerTechnicianAsync(cancellationToken);
+        var technician = await FindCallerTechnicianAsync(cancellationToken);
+        var user = await dbContext.Users.SingleAsync(x => x.Id == UserId, cancellationToken);
 
         if (request.EndDate < request.StartDate)
             throw new BusinessRuleException("End date cannot be before start date.");
@@ -367,7 +374,8 @@ public sealed class TimeAttendanceController(
         var leave = new LeaveRequest
         {
             TenantId = TenantId,
-            TechnicianId = technician.Id,
+            TechnicianId = technician?.Id,
+            UserId = UserId,
             LeaveTypeCode = request.LeaveType.Trim(),
             StartDate = request.StartDate,
             EndDate = request.EndDate,
@@ -376,9 +384,10 @@ public sealed class TimeAttendanceController(
         };
         dbContext.LeaveRequests.Add(leave);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(TenantId, UserId, "attendance.leave.requested", nameof(LeaveRequest), leave.Id.ToString(), $"Leave self-requested by {technician.FullName} ({leave.LeaveTypeCode})", cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "attendance.leave.requested", nameof(LeaveRequest), leave.Id.ToString(), $"Leave self-requested by {technician?.FullName ?? user.FullName} ({leave.LeaveTypeCode})", cancellationToken);
 
         leave.Technician = technician;
+        leave.User = user;
         return Ok(MapLeave(leave));
     }
 
@@ -514,7 +523,7 @@ public sealed class TimeAttendanceController(
         var (worked, overtime) = ComputeHours(entries, settings.OvertimeThresholdHoursPerDay);
 
         var leaveDays = await dbContext.LeaveRequests
-            .Where(x => x.TenantId == TenantId && x.Status == "Approved" && x.StartDate <= end && x.EndDate >= start)
+            .Where(x => x.TenantId == TenantId && x.TechnicianId != null && x.Status == "Approved" && x.StartDate <= end && x.EndDate >= start)
             .ToListAsync(cancellationToken);
         var leaveDaysTaken = leaveDays.Sum(x => OverlapDays(x.StartDate, x.EndDate, start, end));
 
@@ -622,9 +631,11 @@ public sealed class TimeAttendanceController(
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == technicianId, cancellationToken)
         ?? throw new NotFoundException("Technician not found.");
 
+    private Task<Technician?> FindCallerTechnicianAsync(CancellationToken cancellationToken) =>
+        dbContext.Technicians.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.UserId == UserId, cancellationToken);
+
     private async Task<Technician> ResolveCallerTechnicianAsync(CancellationToken cancellationToken) =>
-        await dbContext.Technicians
-            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.UserId == UserId, cancellationToken)
+        await FindCallerTechnicianAsync(cancellationToken)
         ?? throw new BusinessRuleException("Your account is not linked to a technician profile. Ask an administrator to link it before using time & attendance.");
 
     private async Task<TimesheetDetailResponse> BuildTimesheetDetailAsync(
@@ -830,10 +841,12 @@ public sealed class TimeAttendanceController(
         }
     }
 
+    private static string RequesterName(LeaveRequest leave) => leave.Technician?.FullName ?? leave.User?.FullName ?? "Unknown";
+
     private static LeaveRequestResponse MapLeave(LeaveRequest leave) => new(
         leave.Id,
         leave.TechnicianId,
-        leave.Technician?.FullName ?? "Unknown",
+        RequesterName(leave),
         leave.LeaveTypeCode,
         leave.StartDate.ToString("yyyy-MM-dd"),
         leave.EndDate.ToString("yyyy-MM-dd"),
@@ -887,7 +900,7 @@ public sealed record TimesheetJobEntryResponse(
 public sealed record UpdateAttendanceEntryRequest(DateTime ClockInAt, DateTime ClockOutAt, int BreakMinutes, string? Note = null);
 
 public sealed record LeaveRequestResponse(
-    Guid Id, Guid TechnicianId, string TechnicianName, string LeaveType,
+    Guid Id, Guid? TechnicianId, string TechnicianName, string LeaveType,
     string StartDate, string EndDate, decimal TotalDays, string Status,
     string? Reason, DateTime RequestedAt);
 

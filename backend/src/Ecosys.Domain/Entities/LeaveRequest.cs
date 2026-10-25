@@ -5,7 +5,10 @@ namespace Ecosys.Domain.Entities;
 public sealed class LeaveRequest : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
-    public Guid TechnicianId { get; set; }
+    /// <summary>The requester's technician profile, when they have one; their leave then counts on their timesheet.</summary>
+    public Guid? TechnicianId { get; set; }
+    /// <summary>The requester's user account. Office staff without a technician profile have only this.</summary>
+    public Guid? UserId { get; set; }
     public string LeaveTypeCode { get; set; } = string.Empty;
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
@@ -18,5 +21,6 @@ public sealed class LeaveRequest : AuditableEntity, ITenantEntity
 
     public Tenant? Tenant { get; set; }
     public Technician? Technician { get; set; }
+    public User? User { get; set; }
     public User? DecidedByUser { get; set; }
 }

@@ -4453,7 +4453,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("character varying(30)")
                         .HasDefaultValue("Pending");
 
-                    b.Property<Guid>("TechnicianId")
+                    b.Property<Guid?>("TechnicianId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid>("TenantId")
@@ -4466,15 +4466,22 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DecidedByUserId");
 
                     b.HasIndex("TechnicianId");
 
+                    b.HasIndex("UserId");
+
                     b.HasIndex("TenantId", "Status");
 
                     b.HasIndex("TenantId", "TechnicianId");
+
+                    b.HasIndex("TenantId", "UserId");
 
                     b.ToTable("leave_requests", (string)null);
                 });
@@ -14542,8 +14549,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.Technician", "Technician")
                         .WithMany()
                         .HasForeignKey("TechnicianId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
@@ -14551,11 +14557,18 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Ecosys.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.Navigation("DecidedByUser");
 
                     b.Navigation("Technician");
 
                     b.Navigation("Tenant");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.LeaveType", b =>

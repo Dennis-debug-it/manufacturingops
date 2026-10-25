@@ -155,7 +155,9 @@ export type LeaveRequestStatus = 'Pending' | 'Approved' | 'Rejected'
 
 export interface LeaveRequestItem {
   id: string
-  technicianId: string
+  /** Null for office staff without a technician profile. */
+  technicianId: string | null
+  /** The requester: the technician, or the staff member's own name. */
   technicianName: string
   leaveType: string
   startDate: string

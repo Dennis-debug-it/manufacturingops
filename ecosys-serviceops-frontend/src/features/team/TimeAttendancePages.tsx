@@ -212,7 +212,7 @@ export function LeavePage() {
   }
 
   const columns: DataTableColumn<LeaveRequestItem>[] = [
-    { key: 'technicianName', header: 'Technician', cell: (row) => <span className="font-medium text-slate-900">{row.technicianName}</span> },
+    { key: 'technicianName', header: 'Employee', cell: (row) => <span className="font-medium text-slate-900">{row.technicianName}</span> },
     { key: 'leaveType', header: 'Type', cell: (row) => row.leaveType },
     { key: 'startDate', header: 'From', cell: (row) => formatDate(row.startDate) },
     { key: 'endDate', header: 'To', cell: (row) => formatDate(row.endDate) },

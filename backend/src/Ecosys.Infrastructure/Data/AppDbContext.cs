@@ -3560,6 +3560,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.TotalDays).HasPrecision(6, 2);
             entity.HasIndex(x => new { x.TenantId, x.Status });
             entity.HasIndex(x => new { x.TenantId, x.TechnicianId });
+            entity.HasIndex(x => new { x.TenantId, x.UserId });
             entity.HasOne(x => x.Tenant)
                 .WithMany()
                 .HasForeignKey(x => x.TenantId)
@@ -3567,6 +3568,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Technician)
                 .WithMany()
                 .HasForeignKey(x => x.TechnicianId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.DecidedByUser)
                 .WithMany()
