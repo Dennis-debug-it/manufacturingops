@@ -11,6 +11,7 @@ const tabs = [
   { to: '/inventory/purchase-orders', label: 'Purchase Orders', match: ['/inventory/purchase-orders'] },
   { to: '/inventory/suppliers', label: 'Suppliers', match: ['/inventory/suppliers'] },
   { to: '/inventory/movements', label: 'Movements', match: ['/inventory/movements'] },
+  { to: '/inventory/stock-counts', label: 'Stock Counts', match: ['/inventory/stock-counts'] },
   { to: '/inventory/locations', label: 'Locations', match: ['/inventory/locations'] },
   { to: '/inventory/vans', label: 'Vans', match: ['/inventory/vans'] },
   { to: '/inventory/alerts', label: 'Alerts', match: ['/inventory/alerts'] },

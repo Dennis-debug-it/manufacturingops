@@ -60,6 +60,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<Van> Vans => Set<Van>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
+    public DbSet<StockCount> StockCounts => Set<StockCount>();
+    public DbSet<StockCountLine> StockCountLines => Set<StockCountLine>();
     public DbSet<MaterialRequest> MaterialRequests => Set<MaterialRequest>();
     public DbSet<MaterialRequestLine> MaterialRequestLines => Set<MaterialRequestLine>();
     public DbSet<PartsRequest> PartsRequests => Set<PartsRequest>();
@@ -3231,6 +3233,38 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasMany(x => x.Lines).WithOne(x => x.PartsReturn).HasForeignKey(x => x.PartsReturnId).OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<PartsReturn>(modelBuilder);
+
+        modelBuilder.Entity<StockCount>(entity =>
+        {
+            entity.ToTable("stock_counts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CountNumber).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Category).HasMaxLength(100);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.CountNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.StartedByUser).WithMany().HasForeignKey(x => x.StartedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.PostedByUser).WithMany().HasForeignKey(x => x.PostedByUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasMany(x => x.Lines).WithOne(x => x.StockCount).HasForeignKey(x => x.StockCountId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<StockCount>(modelBuilder);
+
+        modelBuilder.Entity<StockCountLine>(entity =>
+        {
+            entity.ToTable("stock_count_lines");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ExpectedQuantity).HasPrecision(18, 2);
+            entity.Property(x => x.CountedQuantity).HasPrecision(18, 2);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 2);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.HasIndex(x => new { x.StockCountId, x.MaterialItemId }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+        });
+        ApplyTenantFilter<StockCountLine>(modelBuilder);
 
         modelBuilder.Entity<PartsReturnLine>(entity =>
         {
