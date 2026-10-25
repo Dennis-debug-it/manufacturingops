@@ -151,6 +151,17 @@ export function resolveErrorMessage(error: unknown): string {
   return normalizeError(error).message
 }
 
+/**
+ * Whether a failed query is worth retrying. Only failures that can clear up on their own are:
+ * no response (offline, timeout), 408, 429 and 5xx. Any other 4xx (not found, validation,
+ * permission, licence) gives the same answer every time, so retrying only delays its message.
+ */
+export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 3) return false
+  const status = normalizeError(error).status
+  return status == null || status === 408 || status === 429 || status >= 500
+}
+
 /** The HTTP status for any thrown value, or null when unknown. */
 export function getErrorStatus(error: unknown): number | null {
   return normalizeError(error).status

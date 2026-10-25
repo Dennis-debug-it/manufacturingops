@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { AxiosError, AxiosHeaders } from 'axios'
-import { normalizeError } from './apiError'
+import { normalizeError, shouldRetryQuery } from './apiError'
 
 /**
  * Locks in the error-classification matrix (Phase 19): a genuine transport failure, a permission
@@ -76,5 +76,20 @@ describe('normalizeError', () => {
 
   it('still shows a plain-text error body from the API', () => {
     expect(normalizeError(axiosErrorWithResponse(400, 'Asset code must be unique per tenant.')).message).toBe('Asset code must be unique per tenant.')
+  })
+})
+
+describe('shouldRetryQuery', () => {
+  it('retries failures that can clear up on their own, up to three times', () => {
+    for (const error of [axiosErrorWithNoResponse(), axiosErrorWithNoResponse('ECONNABORTED'), axiosErrorWithResponse(500, {}), axiosErrorWithResponse(503, {}), axiosErrorWithResponse(429, {}), axiosErrorWithResponse(408, {})]) {
+      expect(shouldRetryQuery(0, error)).toBe(true)
+      expect(shouldRetryQuery(3, error)).toBe(false)
+    }
+  })
+
+  it('does not retry an answer that will not change', () => {
+    for (const status of [400, 401, 403, 404, 409, 422]) {
+      expect(shouldRetryQuery(0, axiosErrorWithResponse(status, { message: 'No' }))).toBe(false)
+    }
   })
 })
