@@ -490,7 +490,9 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
         }
 
         // Branch side: issue from the source branch (validates branch stock, decrements branch + tenant total).
-        await IssueCoreAsync(material, fromBranchId, quantity, createdByUserId, reason, referenceNumber, null, null, false, cancellationToken);
+        // Typed as a van load, not an issue: the stock moved to a van, it was not used.
+        var branchSide = await IssueCoreAsync(material, fromBranchId, quantity, createdByUserId, reason, referenceNumber, null, null, false, cancellationToken);
+        branchSide.MovementType = "VanLoad";
         // Van side: receipt into the van (increments van + tenant total). Net tenant total change is zero.
         await RecordVanMovementAsync(material, vanId, "VanLoad", quantity, createdByUserId, reason, referenceNumber, null, false, cancellationToken);
     }
@@ -505,7 +507,9 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
         // Van side: issue from the van (validates van stock, decrements van + tenant total).
         await RecordVanMovementAsync(material, vanId, "VanReturn", -quantity, createdByUserId, reason, referenceNumber, null, false, cancellationToken);
         // Branch side: receipt back into the branch (increments branch + tenant total). Net tenant total change is zero.
-        await RecordReceiptAsync(material, toBranchId, quantity, createdByUserId, reason, referenceNumber, cancellationToken: cancellationToken);
+        // Typed as a van return, not a receipt: nothing was bought.
+        var branchSide = await RecordReceiptAsync(material, toBranchId, quantity, createdByUserId, reason, referenceNumber, cancellationToken: cancellationToken);
+        branchSide.MovementType = "VanReturn";
     }
 
     public async Task<StockMovement> RecordVanConsumeAsync(MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default)

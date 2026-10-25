@@ -21,9 +21,12 @@ public sealed class StockMovementsController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     IUserAccessService userAccessService,
-    IBranchAccessService branchAccessService) : TenantAwareControllerBase(tenantContext)
+    IBranchAccessService branchAccessService,
+    ITenantTimeZoneService tenantTimeZoneService) : TenantAwareControllerBase(tenantContext)
 {
     /// <param name="branchId">A branch: its own movements plus those of vans based there.</param>
+    /// <param name="from">First day included, in the workspace's time zone.</param>
+    /// <param name="to">Last day included, in the workspace's time zone.</param>
     /// <param name="type">A movement type, e.g. Receipt, Issue, Adjustment, TransferOut, VanConsume.</param>
     /// <param name="search">Matches part name or code, reference, reason or batch/serial number.</param>
     [HttpGet]
@@ -40,7 +43,10 @@ public sealed class StockMovementsController(
         CancellationToken cancellationToken)
     {
         EnsureViewAccess();
-        var query = await FilterAsync(materialId, branchId, vanId, type, from, to, search, cancellationToken);
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
+        var zone = await tenantTimeZoneService.GetTimeZoneAsync(TenantId, cancellationToken);
+        var query = StockLedgerQuery.Apply(dbContext.StockMovements.AsNoTracking().Where(x => x.TenantId == TenantId), scope, zone,
+            new StockLedgerFilter(materialId, vanId, type, from, to, search));
         var result = await query
             .OrderByDescending(x => x.CreatedAt)
             .ThenByDescending(x => x.Id)
@@ -49,69 +55,7 @@ public sealed class StockMovementsController(
         return Ok(result);
     }
 
-    /// <summary>Filters shared with the CSV export in the inventory reports.</summary>
-    internal async Task<IQueryable<StockMovement>> FilterAsync(
-        Guid? materialId, Guid? branchId, Guid? vanId, string? type, DateTime? from, DateTime? to, string? search,
-        CancellationToken cancellationToken)
-    {
-        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
-        var query = dbContext.StockMovements.AsNoTracking().Where(x => x.TenantId == TenantId);
-        query = ApplyScope(query, scope);
-
-        if (materialId.HasValue)
-            query = query.Where(x => x.MaterialId == materialId);
-        if (vanId.HasValue)
-            query = query.Where(x => x.VanId == vanId);
-        if (!string.IsNullOrWhiteSpace(type) && !string.Equals(type, "All", StringComparison.OrdinalIgnoreCase))
-        {
-            var normalized = type.Trim();
-            query = query.Where(x => x.MovementType == normalized);
-        }
-        if (from.HasValue)
-        {
-            var start = DateTime.SpecifyKind(from.Value, DateTimeKind.Utc);
-            query = query.Where(x => x.CreatedAt >= start);
-        }
-        if (to.HasValue)
-        {
-            if (from.HasValue && to < from)
-                throw new BusinessRuleException("The end date must be on or after the start date.");
-            // A date with no time means the whole of that day.
-            var end = DateTime.SpecifyKind(to.Value.TimeOfDay == TimeSpan.Zero ? to.Value.AddDays(1) : to.Value, DateTimeKind.Utc);
-            query = query.Where(x => x.CreatedAt < end);
-        }
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var term = search.Trim().ToLower();
-            query = query.Where(x =>
-                x.Material!.ItemName.ToLower().Contains(term)
-                || x.Material.ItemCode.ToLower().Contains(term)
-                || (x.ReferenceNumber != null && x.ReferenceNumber.ToLower().Contains(term))
-                || (x.Reason != null && x.Reason.ToLower().Contains(term))
-                || (x.BatchOrSerial != null && x.BatchOrSerial.ToLower().Contains(term)));
-        }
-
-        return query;
-    }
-
-    /// <summary>
-    /// Branch access covers a branch's own movements and those of the vans based there; branchless
-    /// movements (a workspace without branches) are visible whenever branches are not configured.
-    /// </summary>
-    private static IQueryable<StockMovement> ApplyScope(IQueryable<StockMovement> query, BranchQueryScope scope)
-    {
-        if (!scope.HasConfiguredBranches)
-            return query;
-        if (scope.RequestedBranchId is { } requested)
-            return query.Where(x => x.BranchId == requested || (x.VanId != null && x.Van!.HomeBranchId == requested));
-
-        var ids = scope.AccessibleBranchIds.ToList();
-        return query.Where(x =>
-            (x.BranchId != null && ids.Contains(x.BranchId.Value))
-            || (x.VanId != null && x.Van!.HomeBranchId != null && ids.Contains(x.Van.HomeBranchId.Value)));
-    }
-
-    internal static readonly System.Linq.Expressions.Expression<Func<StockMovement, StockLedgerEntryResponse>> Projection = x =>
+    public static readonly System.Linq.Expressions.Expression<Func<StockMovement, StockLedgerEntryResponse>> Projection = x =>
         new StockLedgerEntryResponse(
             x.Id,
             x.CreatedAt,
@@ -140,6 +84,75 @@ public sealed class StockMovementsController(
             PermissionNames.CanManageMaterials,
             PermissionNames.CanApproveMaterials,
             PermissionNames.CanIssueMaterials);
+}
+
+public sealed record StockLedgerFilter(Guid? MaterialId, Guid? VanId, string? Type, DateTime? From, DateTime? To, string? Search);
+
+/// <summary>The stock ledger's filters, shared by the movement feed and the inventory reports.</summary>
+public static class StockLedgerQuery
+{
+    public static IQueryable<StockMovement> Apply(IQueryable<StockMovement> query, BranchQueryScope scope, TimeZoneInfo zone, StockLedgerFilter filter)
+    {
+        query = ApplyScope(query, scope);
+        if (filter.MaterialId.HasValue)
+            query = query.Where(x => x.MaterialId == filter.MaterialId);
+        if (filter.VanId.HasValue)
+            query = query.Where(x => x.VanId == filter.VanId);
+        if (!string.IsNullOrWhiteSpace(filter.Type) && !string.Equals(filter.Type, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            var normalized = filter.Type.Trim();
+            query = query.Where(x => x.MovementType == normalized);
+        }
+
+        var (start, end) = DayRange(filter.From, filter.To, zone);
+        if (start.HasValue)
+            query = query.Where(x => x.CreatedAt >= start);
+        if (end.HasValue)
+            query = query.Where(x => x.CreatedAt < end);
+
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var term = filter.Search.Trim().ToLower();
+            query = query.Where(x =>
+                x.Material!.ItemName.ToLower().Contains(term)
+                || x.Material.ItemCode.ToLower().Contains(term)
+                || (x.ReferenceNumber != null && x.ReferenceNumber.ToLower().Contains(term))
+                || (x.Reason != null && x.Reason.ToLower().Contains(term))
+                || (x.BatchOrSerial != null && x.BatchOrSerial.ToLower().Contains(term)));
+        }
+
+        return query;
+    }
+
+    /// <summary>
+    /// Whole days in the workspace's time zone, as UTC bounds: from the start of <paramref name="from"/>
+    /// to the start of the day after <paramref name="to"/>.
+    /// </summary>
+    public static (DateTime? Start, DateTime? End) DayRange(DateTime? from, DateTime? to, TimeZoneInfo zone)
+    {
+        if (from.HasValue && to.HasValue && to.Value.Date < from.Value.Date)
+            throw new BusinessRuleException("The end date must be on or after the start date.");
+        DateTime? start = from is { } f ? TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(f.Date, DateTimeKind.Unspecified), zone) : null;
+        DateTime? end = to is { } t ? TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(t.Date.AddDays(1), DateTimeKind.Unspecified), zone) : null;
+        return (start, end);
+    }
+
+    /// <summary>
+    /// Branch access covers a branch's own movements and those of the vans based there; branchless
+    /// movements (a workspace without branches) are visible whenever branches are not configured.
+    /// </summary>
+    private static IQueryable<StockMovement> ApplyScope(IQueryable<StockMovement> query, BranchQueryScope scope)
+    {
+        if (!scope.HasConfiguredBranches)
+            return query;
+        if (scope.RequestedBranchId is { } requested)
+            return query.Where(x => x.BranchId == requested || (x.VanId != null && x.Van!.HomeBranchId == requested));
+
+        var ids = scope.AccessibleBranchIds.ToList();
+        return query.Where(x =>
+            (x.BranchId != null && ids.Contains(x.BranchId.Value))
+            || (x.VanId != null && x.Van!.HomeBranchId != null && ids.Contains(x.Van.HomeBranchId.Value)));
+    }
 }
 
 /// <param name="QuantityChange">Signed change to the location's balance; null on older adjustments of unknown direction.</param>
