@@ -22,6 +22,24 @@ function useSiteFilterOptions(clientId: string) {
   })
 }
 
+/** Client is the most-used filter, so it sits in the toolbar instead of the collapsed panel. */
+export function ClientQuickFilter({ value, onChange }: { value: string; onChange: (patch: Partial<WorkOrderListState>) => void }) {
+  const { data: clients } = useClientOptions()
+  return (
+    <select
+      aria-label="Filter work orders by client"
+      className="h-11 min-w-[12rem] rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[var(--app-primary)]"
+      value={value}
+      onChange={(event) => onChange({ clientId: event.target.value, siteId: '' })}
+    >
+      <option value="">All clients</option>
+      {[...(clients ?? [])].sort((a, b) => a.clientName.localeCompare(b.clientName)).map((client) => (
+        <option key={client.id} value={client.id}>{client.clientName}</option>
+      ))}
+    </select>
+  )
+}
+
 export interface FilterPanelProps {
   state: WorkOrderListState
   onChange: (patch: Partial<WorkOrderListState>) => void
@@ -31,7 +49,6 @@ export interface FilterPanelProps {
 
 export function FilterPanel({ state, onChange, onClear, activeFilterCount }: FilterPanelProps) {
   const [open, setOpen] = useState(false)
-  const { data: clients } = useClientOptions()
   const { data: technicians } = useTechnicianOptions()
   const { data: sites } = useSiteFilterOptions(state.clientId)
 
@@ -41,10 +58,6 @@ export function FilterPanel({ state, onChange, onClear, activeFilterCount }: Fil
   if (state.technicianId) {
     const name = technicians?.find((t) => t.id === state.technicianId)?.fullName
     chips.push({ key: 'technicianId', label: `Technician: ${name ?? '—'}` })
-  }
-  if (state.clientId) {
-    const name = clients?.find((c) => c.id === state.clientId)?.clientName
-    chips.push({ key: 'clientId', label: `Client: ${name ?? '—'}` })
   }
   if (state.siteId) {
     const name = sites?.find((s) => s.id === state.siteId)?.siteName
@@ -129,16 +142,6 @@ export function FilterPanel({ state, onChange, onClear, activeFilterCount }: Fil
               <option value="">All technicians</option>
               {(technicians ?? []).map((technician) => (
                 <option key={technician.id} value={technician.id}>{technician.fullName}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className={labelClass}>Client</label>
-            <select className={fieldClass} value={state.clientId} onChange={(event) => onChange({ clientId: event.target.value, siteId: '' })}>
-              <option value="">All clients</option>
-              {(clients ?? []).map((client) => (
-                <option key={client.id} value={client.id}>{client.clientName}</option>
               ))}
             </select>
           </div>

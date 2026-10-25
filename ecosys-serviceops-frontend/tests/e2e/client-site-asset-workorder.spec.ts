@@ -184,12 +184,13 @@ test.describe('Client -> Site -> Asset -> Work Order flow', () => {
     await expect(page.getByRole('button', { name: /new work order/i })).toBeVisible({ timeout: 15000 })
     await page.getByRole('button', { name: /new work order/i }).click()
 
-    await expect(page.getByLabel('Client')).toBeVisible()
     const modal = page.locator('[role="dialog"]')
+    // Scoped to the dialog: the list page has its own client filter.
+    await expect(modal.getByLabel('Client')).toBeVisible()
     await expect(modal.getByLabel('Site')).toHaveCount(0)
     await expect(modal.getByLabel('Asset')).toHaveCount(0)
 
-    await page.getByLabel('Client').selectOption({ value: client.id })
+    await modal.getByLabel('Client').selectOption({ value: client.id })
     await page.getByLabel('Work Type', { exact: true }).selectOption('CorrectiveMaintenance')
     await page.getByLabel(/title/i).fill(`E2E Work Order ${ts}`)
     await page.getByLabel(/description/i).fill('Created from the simplified work-order shell form.')
