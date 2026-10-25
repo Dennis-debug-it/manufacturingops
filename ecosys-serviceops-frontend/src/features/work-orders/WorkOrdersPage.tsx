@@ -17,7 +17,7 @@ import { useAssignWorkOrderById, useCompleteWorkOrderById, useStartWorkOrderById
 import { NewWorkOrderForm } from './components/NewWorkOrderForm'
 import { ReportQueueTab } from './components/ReportQueueTab'
 import { ViewSwitcher } from './components/ViewSwitcher'
-import { FilterPanel } from './components/FilterPanel'
+import { ClientQuickFilter, FilterPanel } from './components/FilterPanel'
 import { KanbanView } from './components/KanbanView'
 import { CalendarView } from './components/CalendarView'
 import { MapView } from './components/MapView'
@@ -213,12 +213,14 @@ export function WorkOrdersPage() {
               />
             </label>
           </div>
+          <ClientQuickFilter value={state.clientId} onChange={update} />
           <ViewSwitcher value={state.view} onChange={setView} />
         </div>
       ) : null}
 
       {tab === 'all' ? (
-        <FilterPanel state={state} onChange={update} onClear={clearFilters} activeFilterCount={activeFilterCount} />
+        // The client filter lives in the toolbar, so the panel's badge leaves it out.
+        <FilterPanel state={state} onChange={update} onClear={clearFilters} activeFilterCount={activeFilterCount - (state.clientId ? 1 : 0)} />
       ) : null}
 
       {tab === 'all' ? (
