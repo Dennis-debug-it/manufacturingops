@@ -48,7 +48,7 @@ public sealed class MaterialsController(
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material item was not found.");
 
-        return Ok(Map(item, scope));
+        return Ok(Map(item, scope, await SettingsAsync(cancellationToken)));
     }
 
     [HttpGet("low-stock")]
@@ -58,6 +58,28 @@ public sealed class MaterialsController(
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         var items = await LoadVisibleMaterialResponsesAsync(scope, "active", null, cancellationToken);
         return Ok(items.Where(x => x.IsLowStock).ToList());
+    }
+
+    /// <summary>Per-branch stock totals for the branches the user can see: parts held, low stock and value.</summary>
+    [HttpGet("branch-summary")]
+    public async Task<ActionResult<IReadOnlyCollection<BranchStockSummaryResponse>>> GetBranchSummary(CancellationToken cancellationToken)
+    {
+        EnsureMaterialsViewAccess();
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        var stocks = await dbContext.BranchMaterialStocks.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.Material!.IsActive)
+            .WhereAccessible(scope, x => (Guid?)x.BranchId)
+            .Select(x => new { x.BranchId, x.QuantityOnHand, x.ReorderLevel, UnitCost = x.UnitCost ?? x.Material!.UnitCost })
+            .ToListAsync(cancellationToken);
+
+        return Ok(stocks
+            .GroupBy(x => x.BranchId)
+            .Select(g => new BranchStockSummaryResponse(
+                g.Key,
+                g.Count(x => x.QuantityOnHand != 0),
+                g.Count(x => x.QuantityOnHand <= x.ReorderLevel && (x.QuantityOnHand != 0 || x.ReorderLevel > 0)),
+                Math.Round(g.Sum(x => x.QuantityOnHand * (x.UnitCost ?? 0)), 2)))
+            .ToList());
     }
 
     [HttpPost]
@@ -95,7 +117,7 @@ public sealed class MaterialsController(
         }, cancellationToken);
 
         var responseScope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
-        return CreatedAtAction(nameof(Get), new { id = item.Id }, Map(item, responseScope));
+        return CreatedAtAction(nameof(Get), new { id = item.Id }, Map(item, responseScope, await SettingsAsync(cancellationToken)));
     }
 
     [HttpPut("{id:guid}")]
@@ -159,7 +181,7 @@ public sealed class MaterialsController(
 
             await dbContext.SaveChangesAsync(ct);
         }, cancellationToken);
-        return Ok(Map(item, scope));
+        return Ok(Map(item, scope, await SettingsAsync(cancellationToken)));
     }
 
     [HttpPost("{id:guid}/replenish")]
@@ -205,7 +227,7 @@ public sealed class MaterialsController(
             $"Replenished '{item.ItemName}' by {request.Quantity} {item.UnitOfMeasure}.",
             cancellationToken);
 
-        return Ok(Map(item, await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken)));
+        return Ok(Map(item, await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken), await SettingsAsync(cancellationToken)));
     }
 
     [HttpPost("{id:guid}/adjust")]
@@ -231,7 +253,7 @@ public sealed class MaterialsController(
             await dbContext.SaveChangesAsync(ct);
         }, cancellationToken);
 
-        return Ok(Map(item, await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken)));
+        return Ok(Map(item, await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken), await SettingsAsync(cancellationToken)));
     }
 
     [HttpGet("{id:guid}/movements")]
@@ -265,7 +287,8 @@ public sealed class MaterialsController(
                 x.Reason,
                 x.ReferenceNumber,
                 x.CreatedByUserId,
-                x.CreatedAt))
+                x.CreatedAt,
+                x.QuantityChange))
             .ToListAsync(cancellationToken);
 
         return Ok(movements);
@@ -319,8 +342,14 @@ public sealed class MaterialsController(
             .OrderBy(x => x.ItemName)
             .ToListAsync(cancellationToken);
 
-        return items.Select(x => Map(x, scope)).ToList();
+        var settings = await SettingsAsync(cancellationToken);
+        return items.Select(x => Map(x, scope, settings)).ToList();
     }
+
+    private InventoryModuleSettings? settings;
+
+    private async Task<InventoryModuleSettings> SettingsAsync(CancellationToken cancellationToken) =>
+        settings ??= await InventoryModuleSettings.LoadAsync(dbContext, TenantId, cancellationToken);
 
     private static void Validate(UpsertMaterialItemRequest request)
     {
@@ -345,12 +374,13 @@ public sealed class MaterialsController(
         }
     }
 
-    private static MaterialItemResponse Map(MaterialItem item, BranchQueryScope scope)
+    private static MaterialItemResponse Map(MaterialItem item, BranchQueryScope scope, InventoryModuleSettings settings)
     {
         decimal quantityOnHand;
         decimal reorderLevel;
         decimal? unitCost;
         bool isLowStock;
+        bool isCritical;
         Guid? branchId = null;
         string? branchName = null;
 
@@ -360,6 +390,7 @@ public sealed class MaterialsController(
             reorderLevel = item.ReorderLevel;
             unitCost = item.UnitCost;
             isLowStock = quantityOnHand <= reorderLevel;
+            isCritical = settings.IsCritical(quantityOnHand, reorderLevel);
         }
         else if (scope.RequestedBranchId.HasValue)
         {
@@ -368,6 +399,7 @@ public sealed class MaterialsController(
             reorderLevel = stock?.ReorderLevel ?? item.ReorderLevel;
             unitCost = stock?.UnitCost ?? item.UnitCost;
             isLowStock = quantityOnHand <= reorderLevel;
+            isCritical = settings.IsCritical(quantityOnHand, reorderLevel);
             branchId = scope.RequestedBranchId;
             branchName = stock?.Branch?.Name;
         }
@@ -383,6 +415,7 @@ public sealed class MaterialsController(
                 reorderLevel = item.ReorderLevel;
                 unitCost = item.UnitCost;
                 isLowStock = quantityOnHand <= reorderLevel;
+                isCritical = settings.IsCritical(quantityOnHand, reorderLevel);
             }
             else
             {
@@ -390,6 +423,7 @@ public sealed class MaterialsController(
                 reorderLevel = visibleStocks.Sum(x => x.ReorderLevel);
                 unitCost = item.UnitCost;
                 isLowStock = visibleStocks.Any(x => x.QuantityOnHand <= x.ReorderLevel);
+                isCritical = visibleStocks.Any(x => settings.IsCritical(x.QuantityOnHand, x.ReorderLevel));
             }
         }
 
@@ -406,7 +440,8 @@ public sealed class MaterialsController(
             unitCost,
             item.IsActive,
             isLowStock,
-            item.CreatedAt);
+            item.CreatedAt,
+            isCritical);
     }
 
     private static decimal GetQuantity(MaterialItem item, BranchQueryScope scope)
@@ -488,7 +523,8 @@ public sealed record MaterialItemResponse(
     decimal? UnitCost,
     bool IsActive,
     bool IsLowStock,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    bool IsCriticalStock = false);
 
 public sealed record StockMovementResponse(
     Guid Id,
@@ -503,4 +539,8 @@ public sealed record StockMovementResponse(
     string? Reason,
     string? ReferenceNumber,
     Guid? CreatedByUserId,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    decimal? QuantityChange = null);
+
+/// <param name="LowStockParts">Parts at or below their reorder level here (ignoring parts never stocked here with no reorder level).</param>
+public sealed record BranchStockSummaryResponse(Guid BranchId, int PartsStocked, int LowStockParts, decimal StockValue);

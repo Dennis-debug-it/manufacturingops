@@ -9,8 +9,9 @@ import { useLowStockMaterials, useReplenishMaterial } from './api'
 import type { Material } from './types'
 import { InventoryTabNav } from './components/InventoryTabNav'
 
+// The critical cut-off is Settings → Inventory's threshold, applied by the server.
 function severity(material: Material): 'Critical' | 'Low' {
-  return material.reorderLevel > 0 && material.quantityOnHand <= material.reorderLevel * 0.5 ? 'Critical' : 'Low'
+  return material.isCriticalStock ? 'Critical' : 'Low'
 }
 
 function ReplenishForm({ material, onClose }: { material: Material; onClose: () => void }) {

@@ -78,7 +78,9 @@ public sealed class PurchaseOrdersController(
             TenantId = TenantId,
             PoNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.PurchaseOrder, cancellationToken),
             SupplierId = supplier.Id,
-            ExpectedAt = request.ExpectedAt is null ? null : DateTime.SpecifyKind(request.ExpectedAt.Value, DateTimeKind.Utc),
+            ExpectedAt = request.ExpectedAt is null
+                ? await DefaultExpectedAtAsync(supplier, cancellationToken)
+                : DateTime.SpecifyKind(request.ExpectedAt.Value, DateTimeKind.Utc),
             Notes = request.Notes?.Trim(),
             ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, null, cancellationToken),
             Currency = await CurrencyConverter.ResolveAsync(dbContext, TenantId, request.Currency, cancellationToken),
@@ -377,6 +379,13 @@ public sealed class PurchaseOrdersController(
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>With no expected date given, delivery is expected after the reorder lead time (Settings → Inventory).</summary>
+    private async Task<DateTime?> DefaultExpectedAtAsync(Supplier supplier, CancellationToken cancellationToken)
+    {
+        var leadDays = (await InventoryModuleSettings.LoadAsync(dbContext, TenantId, cancellationToken)).DefaultReorderLeadDays;
+        return leadDays > 0 ? DateTime.UtcNow.Date.AddDays(leadDays) : null;
+    }
 
     private async Task<PurchaseOrder> LoadOrderAsync(Guid id, CancellationToken cancellationToken) =>
         await dbContext.PurchaseOrders

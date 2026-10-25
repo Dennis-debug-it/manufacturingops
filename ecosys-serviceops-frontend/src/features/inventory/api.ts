@@ -1,13 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
-import type { Branch, Material, MaterialIssue, MaterialRequest, StockMovement, StockTransfer } from './types'
+import type { PagedResult } from '../../shared/types/pagination'
+import type { Branch, BranchStockSummary, Material, MaterialIssue, MaterialRequest, StockLedgerEntry, StockMovement, StockTransfer } from './types'
 
 export interface MaterialFilters {
-  lowStockOnly?: boolean
-  branchId?: string
-  search?: string
-  status?: 'active' | 'inactive' | 'all'
+  lowStockOnly?: boolean | undefined
+  branchId?: string | undefined
+  search?: string | undefined
+  status?: 'active' | 'inactive' | 'all' | undefined
 }
 
 export function useMaterials(filters?: MaterialFilters) {
@@ -30,6 +31,14 @@ export function useLowStockMaterials(branchId?: string) {
   return useQuery({
     queryKey: ['materials', 'low-stock', branchId ?? ''],
     queryFn: () => api.get<Material[]>(endpoints.materials.lowStock, { branchId }),
+    staleTime: 30_000,
+  })
+}
+
+export function useBranchStockSummary() {
+  return useQuery({
+    queryKey: ['materials', 'branch-summary'],
+    queryFn: () => api.get<BranchStockSummary[]>(endpoints.materials.branchSummary),
     staleTime: 30_000,
   })
 }
@@ -165,6 +174,39 @@ export const useIssueMaterialIssue = (id: string) => useMaterialIssueAction(endp
 export const useReturnMaterialIssue = (id: string) => useMaterialIssueAction(endpoints.materialIssues.return(id))
 export const useCancelMaterialIssue = (id: string) => useMaterialIssueAction(endpoints.materialIssues.cancel(id))
 
+// Stock ledger (every movement, tenant-wide)
+export interface StockLedgerFilters {
+  materialId?: string | undefined
+  branchId?: string | undefined
+  vanId?: string | undefined
+  type?: string | undefined
+  from?: string | undefined
+  to?: string | undefined
+  search?: string | undefined
+  page: number
+  pageSize: number
+}
+
+export function useStockLedger(filters: StockLedgerFilters) {
+  return useQuery({
+    queryKey: ['stock-ledger', filters],
+    queryFn: () =>
+      api.get<PagedResult<StockLedgerEntry>>(endpoints.stockMovements.list, {
+        materialId: filters.materialId || undefined,
+        branchId: filters.branchId || undefined,
+        vanId: filters.vanId || undefined,
+        type: filters.type || undefined,
+        from: filters.from || undefined,
+        to: filters.to || undefined,
+        search: filters.search || undefined,
+        page: filters.page,
+        pageSize: filters.pageSize,
+      }),
+    staleTime: 15_000,
+    placeholderData: keepPreviousData,
+  })
+}
+
 // Stock Transfers
 export function useStockTransfers() {
   return useQuery({
@@ -187,7 +229,12 @@ function useStockTransferAction(url: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api.post<StockTransfer>(url),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['stock-transfers'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['stock-transfers'] })
+      // Completing a transfer moves stock between branches.
+      void queryClient.invalidateQueries({ queryKey: ['materials'] })
+      void queryClient.invalidateQueries({ queryKey: ['stock-ledger'] })
+    },
   })
 }
 

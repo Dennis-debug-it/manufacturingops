@@ -189,8 +189,10 @@ export function PartDetailPage() {
 
   const movementColumns: DataTableColumn<StockMovement>[] = [
     { key: 'movementType', header: 'Type', cell: (row) => <StatusBadge status={row.movementType} /> },
-    { key: 'quantity', header: 'Qty', cell: (row) => row.quantity },
+    { key: 'quantity', header: 'Change', cell: (row) => (row.quantityChange == null ? `±${row.quantity}` : row.quantityChange > 0 ? `+${row.quantityChange}` : row.quantityChange) },
     { key: 'balanceAfter', header: 'Balance After', cell: (row) => row.balanceAfter },
+    { key: 'branchName', header: 'Branch', cell: (row) => row.branchName ?? '—' },
+    { key: 'referenceNumber', header: 'Reference', cell: (row) => row.referenceNumber ?? '—' },
     { key: 'reason', header: 'Reason', cell: (row) => row.reason ?? '—' },
     { key: 'createdAt', header: 'Date', cell: (row) => formatDateTime(row.createdAt) },
   ]

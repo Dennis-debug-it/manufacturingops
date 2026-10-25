@@ -119,6 +119,36 @@ public sealed class PreventiveMaintenanceFlowTests
         }
     }
 
+    [Theory]
+    [InlineData(null, "Closed", 3)]
+    [InlineData("{\"autoDeductOnWorkOrderComplete\":false}", "Issued", 0)]
+    public async Task CompleteAsync_ClosesIssuedMaterialRequestsWhenAutoDeductIsOn(string? settingsJson, string expectedStatus, int expectedUsed)
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var part = new MaterialItem { TenantId = fixture.TenantId, ItemCode = "BLT", ItemName = "Belt", UnitOfMeasure = "each", UnitCost = 40 };
+        var request = new MaterialRequest
+        {
+            TenantId = fixture.TenantId, WorkOrderId = fixture.WorkOrderId, RequestedByUserId = fixture.ActorUserId,
+            RequestNumber = "MR-9", Status = "Issued",
+            Lines = [new MaterialRequestLine { MaterialItemId = part.Id, QuantityRequested = 3, QuantityIssued = 3 }],
+        };
+        dbContext.MaterialItems.Add(part);
+        dbContext.MaterialRequests.Add(request);
+        if (settingsJson is not null)
+            dbContext.TenantModuleSettings.Add(new TenantModuleSetting { TenantId = fixture.TenantId, ModuleKey = "inventory", ValueJson = settingsJson });
+        await dbContext.SaveChangesAsync();
+
+        await CreateLifecycleService(dbContext).CompleteAsync(
+            fixture.TenantId, fixture.WorkOrderId, fixture.ActorUserId,
+            new WorkOrderCompletionRequest("Replaced the belt.", null), CancellationToken.None);
+
+        Assert.Equal(expectedStatus, request.Status);
+        Assert.Equal(expectedUsed, request.Lines.Single().QuantityUsed);
+        var usages = await dbContext.WorkOrderMaterialUsages.Where(x => x.WorkOrderId == fixture.WorkOrderId).ToListAsync();
+        Assert.Equal(expectedUsed, usages.Sum(x => x.QuantityUsed));
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

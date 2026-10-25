@@ -210,6 +210,7 @@ export const endpoints = {
     list: '/api/materials',
     detail: (id: string) => `/api/materials/${id}`,
     lowStock: '/api/materials/low-stock',
+    branchSummary: '/api/materials/branch-summary',
     movements: (id: string) => `/api/materials/${id}/movements`,
     create: '/api/materials',
     update: (id: string) => `/api/materials/${id}`,
@@ -245,6 +246,9 @@ export const endpoints = {
     issue: (id: string) => `/api/material-issues/${id}/issue`,
     return: (id: string) => `/api/material-issues/${id}/return`,
     cancel: (id: string) => `/api/material-issues/${id}/cancel`,
+  },
+  stockMovements: {
+    list: '/api/stock-movements',
   },
   stockTransfers: {
     list: '/api/stock-transfers',

@@ -1161,6 +1161,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasKey(x => x.Id);
             entity.Property(x => x.MovementType).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.QuantityChange).HasPrecision(18, 2);
             entity.Property(x => x.BalanceAfter).HasPrecision(18, 2);
             entity.Property(x => x.Reason).HasMaxLength(500);
             entity.Property(x => x.ReferenceNumber).HasMaxLength(100);

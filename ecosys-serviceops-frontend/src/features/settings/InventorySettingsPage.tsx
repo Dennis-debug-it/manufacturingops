@@ -16,11 +16,11 @@ export function InventorySettingsPage() {
         defaultReorderLeadDays: 7,
       }}
       fields={[
-        { key: 'lowStockThresholdPercent', label: 'Low Stock Threshold (%)', type: 'number', helperText: 'Alert when stock falls below this percentage of reorder level.' },
-        { key: 'autoDeductOnWorkOrderComplete', label: 'Auto-Deduct Parts on Work Order Completion', type: 'checkbox' },
-        { key: 'requireApprovalAboveValue', label: 'Require Approval Above Value (KES)', type: 'number' },
-        { key: 'allowNegativeStock', label: 'Allow Negative Stock Balances', type: 'checkbox' },
-        { key: 'defaultReorderLeadDays', label: 'Default Reorder Lead Time (days)', type: 'number' },
+        { key: 'lowStockThresholdPercent', label: 'Critical Stock Threshold (%)', type: 'number', helperText: 'Parts at or below their reorder level are Low; at or below this percentage of it they are Critical.' },
+        { key: 'autoDeductOnWorkOrderComplete', label: 'Auto-Deduct Parts on Work Order Completion', type: 'checkbox', helperText: 'Completing a job books its issued, still-open material requests as fully used.' },
+        { key: 'requireApprovalAboveValue', label: 'Require Approval Above Value', type: 'number', helperText: 'Material issues worth more than this (in your workspace currency) wait for approval. 0 turns this off.' },
+        { key: 'allowNegativeStock', label: 'Allow Negative Stock Balances', type: 'checkbox', helperText: 'Issues, job usage and adjustments may take a balance below zero. Transfers and van loads never can.' },
+        { key: 'defaultReorderLeadDays', label: 'Default Reorder Lead Time (days)', type: 'number', helperText: 'Expected delivery for new purchase orders and reorder suggestions when the supplier has no lead time set.' },
       ]}
     />
   )

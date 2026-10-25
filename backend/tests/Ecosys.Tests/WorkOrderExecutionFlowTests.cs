@@ -896,7 +896,8 @@ public sealed class WorkOrderExecutionFlowTests
             new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id, technicianOnly),
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new FakeUserAccessService(),
-            new FakeBranchAccessService());
+            new FakeBranchAccessService(),
+            new StockLedgerService(dbContext));
         controller.ControllerContext = CreateControllerContext(fixture.User);
         return controller;
     }

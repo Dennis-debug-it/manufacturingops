@@ -7,17 +7,20 @@ import { DetailLayout } from '../../shared/components/DetailLayout'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { SummarySection } from '../../shared/pages/ModulePage'
-import { useBranches, useMaterials, useStockTransfers } from './api'
-import type { Material } from './types'
+import { formatDateTime } from '../../shared/utils/dates'
+import { useBranches, useMaterials, useStockLedger, useStockTransfers } from './api'
+import type { Material, StockLedgerEntry } from './types'
 
 export function LocationDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: branches, isLoading, isError } = useBranches()
-  const { data: materials } = useMaterials()
+  // Asking for one branch returns each part's balance there; parts never stocked here come back at zero.
+  const { data: materials } = useMaterials({ status: 'active', branchId: id })
   const { data: transfers } = useStockTransfers()
+  const { data: movements } = useStockLedger({ branchId: id, page: 1, pageSize: 50 })
 
   const branch = useMemo(() => (branches ?? []).find((item) => item.id === id), [branches, id])
-  const stock = useMemo(() => (materials ?? []).filter((item) => item.branchId === id), [materials, id])
+  const stock = useMemo(() => (materials ?? []).filter((item) => item.quantityOnHand !== 0 || item.branchName !== null), [materials])
   const relatedTransfers = useMemo(
     () => (transfers ?? []).filter((transfer) => transfer.fromBranchId === id || transfer.toBranchId === id),
     [transfers, id],
@@ -74,6 +77,25 @@ export function LocationDetailPage() {
           id: 'stock',
           label: 'Stock',
           content: <DataTable columns={stockColumns} data={stock} emptyTitle="No stock" emptyDescription="No parts are stocked at this location." />,
+        },
+        {
+          id: 'movements',
+          label: 'Movements',
+          content: (
+            <DataTable<StockLedgerEntry>
+              columns={[
+                { key: 'createdAt', header: 'When', cell: (row) => formatDateTime(row.createdAt) },
+                { key: 'itemName', header: 'Part', cell: (row) => row.itemName ?? '—' },
+                { key: 'movementType', header: 'Type', cell: (row) => <StatusBadge status={row.movementType} /> },
+                { key: 'change', header: 'Change', cell: (row) => (row.quantityChange == null ? `±${row.quantity}` : row.quantityChange > 0 ? `+${row.quantityChange}` : row.quantityChange) },
+                { key: 'location', header: 'Where', cell: (row) => (row.vanName ? `Van · ${row.vanName}` : 'Branch') },
+                { key: 'referenceNumber', header: 'Reference', cell: (row) => row.workOrderNumber ?? row.referenceNumber ?? '—' },
+              ]}
+              data={movements?.items ?? []}
+              emptyTitle="No movements"
+              emptyDescription="The latest 50 movements at this branch and its vans appear here. All Movements on the Movements tab has the full history."
+            />
+          ),
         },
         {
           id: 'transfers',

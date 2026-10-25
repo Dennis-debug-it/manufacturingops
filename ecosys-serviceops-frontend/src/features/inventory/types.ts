@@ -11,6 +11,8 @@ export interface Material {
   unitCost: number | null
   isActive: boolean
   isLowStock: boolean
+  /** At or below Settings → Inventory's critical share of the reorder level. */
+  isCriticalStock: boolean
   createdAt: string
 }
 
@@ -28,6 +30,15 @@ export interface StockMovement {
   referenceNumber: string | null
   createdByUserId: string | null
   createdAt: string
+  /** Signed change to the balance; null on older adjustments of unknown direction. */
+  quantityChange: number | null
+}
+
+export interface BranchStockSummary {
+  branchId: string
+  partsStocked: number
+  lowStockParts: number
+  stockValue: number
 }
 
 export interface MaterialRequestLine {
@@ -129,4 +140,28 @@ export interface Branch {
   code: string
   location: string | null
   isActive: boolean
+}
+
+/** One line of the tenant-wide stock ledger (`GET /api/stock-movements`). */
+export interface StockLedgerEntry {
+  id: string
+  createdAt: string
+  movementType: string
+  materialId: string
+  itemCode: string | null
+  itemName: string | null
+  unitOfMeasure: string | null
+  quantity: number
+  /** Signed change to the location's balance; null on older adjustments of unknown direction. */
+  quantityChange: number | null
+  balanceAfter: number
+  branchId: string | null
+  branchName: string | null
+  vanId: string | null
+  vanName: string | null
+  workOrderId: string | null
+  workOrderNumber: string | null
+  referenceNumber: string | null
+  reason: string | null
+  createdByName: string | null
 }
