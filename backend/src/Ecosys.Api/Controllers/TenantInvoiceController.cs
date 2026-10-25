@@ -189,6 +189,7 @@ public sealed class TenantInvoiceController(
         if (creditTerm is { IsDepositRequired: true, DepositPercent: > 0 })
             invoice.DepositAmount = Math.Round(invoice.TotalAmount * creditTerm.DepositPercent / 100m, 2);
 
+        await ProjectFinanceRules.EnsureProjectCurrencyAsync(dbContext, TenantId, invoice.ProjectId, invoice.Currency, cancellationToken);
         dbContext.TenantInvoices.Add(invoice);
 
         // Update the client's running balance from the single source of truth (sum of open invoice
@@ -330,6 +331,13 @@ public sealed class TenantInvoiceController(
 
         if (invoice.Status != "Draft")
             throw new BusinessRuleException("Only draft invoices can be edited.");
+
+        // Invoices Projects raised (valuation, advance, retention release) keep the project's client,
+        // currency and amount; everything else on them can still be edited.
+        await ProjectFinanceRules.EnsureProjectInvoiceEditAllowedAsync(
+            dbContext, TenantId, invoice, request.ClientId,
+            string.IsNullOrWhiteSpace(request.Currency) ? FallbackCurrency : request.Currency,
+            request.Lines.Sum(x => x.Quantity * x.UnitRate), cancellationToken);
 
         invoice.ClientId = request.ClientId;
 
@@ -819,16 +827,22 @@ public sealed class TenantInvoiceController(
         if (unbilledItems.Count == 0)
             throw new BusinessRuleException("No unbilled items found on this work order.");
 
+        // A work order on a project bills to that project, in the project's currency, so the invoice
+        // shows in the project's Financials and closing checks.
+        var projectCurrency = workOrder.ProjectId is { } projectId
+            ? await dbContext.Projects.Where(x => x.TenantId == TenantId && x.Id == projectId).Select(x => x.Currency).SingleOrDefaultAsync(cancellationToken)
+            : null;
         var invoice = new TenantInvoice
         {
             TenantId = TenantId,
             ClientId = workOrder.ClientId,
+            ProjectId = projectCurrency is null ? null : workOrder.ProjectId,
             InvoiceNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.Invoice, cancellationToken),
             DocumentType = DocumentTypes.Invoice,
             Status = "Draft",
             InvoiceDate = DateTime.UtcNow,
             DueDate = DateTime.UtcNow.AddDays(30),
-            Currency = FallbackCurrency,
+            Currency = projectCurrency ?? FallbackCurrency,
             Notes = $"Invoice for work order {workOrder.WorkOrderNumber}",
         };
 

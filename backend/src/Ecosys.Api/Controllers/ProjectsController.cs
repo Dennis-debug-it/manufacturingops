@@ -225,7 +225,12 @@ public sealed class ProjectsController(
         project.ProjectManagerUserId = request.ProjectManagerUserId;
         project.BranchId = request.BranchId;
         project.OriginalValue = request.OriginalValue;
-        project.Currency = string.IsNullOrWhiteSpace(request.Currency) ? project.Currency : request.Currency.Trim().ToUpperInvariant();
+        var currency = string.IsNullOrWhiteSpace(request.Currency) ? project.Currency : request.Currency.Trim().ToUpperInvariant();
+        // Its invoices are in the project's currency; once any exist, the currency is fixed.
+        if (currency != project.Currency
+            && await dbContext.TenantInvoices.AnyAsync(x => x.TenantId == TenantId && x.ProjectId == project.Id && x.Status != "Void", cancellationToken))
+            throw new BusinessRuleException($"Project {project.ProjectNumber} already has invoices in {project.Currency}; its currency can't change.");
+        project.Currency = currency;
         project.PlannedStartDate = request.PlannedStartDate;
         project.PlannedEndDate = request.PlannedEndDate;
         project.VisibleInClientPortal = request.VisibleInClientPortal ?? project.VisibleInClientPortal;
@@ -755,6 +760,8 @@ public sealed class ProjectsController(
             throw new BusinessRuleException("The material issue belongs to a different client.");
         if (issue.ProjectId.HasValue && issue.ProjectId != id)
             throw new BusinessRuleException("The material issue is already linked to another project.");
+        await ProjectFinanceRules.EnsureCostCurrencyAsync(dbContext, TenantId, id,
+            await ProjectFinanceRules.StockCurrencyAsync(dbContext, TenantId, cancellationToken), cancellationToken);
         issue.ProjectId = id;
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "projects.material-issue.linked", nameof(Project), id.ToString(),

@@ -441,6 +441,8 @@ export interface ProjectFinancials {
   unbilledValue: number
   indicativeMarginPercent: number | null
   forecastMarginPercent: number | null
+  /** Currencies of linked costs no exchange rate converts into the project's; those costs are left out. */
+  unconvertedCurrencies?: string[]
 }
 
 export type ValuationStatus = 'Draft' | 'Submitted' | 'Certified' | 'Invoiced' | 'Void'

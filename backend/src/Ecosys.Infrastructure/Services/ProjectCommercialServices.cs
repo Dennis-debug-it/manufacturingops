@@ -105,7 +105,11 @@ public sealed record ProjectFinancials(
     decimal AdvanceOutstanding,
     decimal UnbilledValue,
     decimal? IndicativeMarginPercent,
-    decimal? ForecastMarginPercent);
+    decimal? ForecastMarginPercent)
+{
+    /// <summary>Currencies of linked costs no exchange rate converts into the project's; those costs are left out.</summary>
+    public IReadOnlyList<string> UnconvertedCurrencies { get; init; } = [];
+}
 
 public sealed record ProjectFinancialsCategory(string Category, decimal Budget, decimal Actual, string Source);
 
@@ -130,30 +134,46 @@ internal sealed class ProjectFinancialsService(AppDbContext dbContext) : IProjec
         var budget = await dbContext.ProjectBudgetLines.Where(x => x.TenantId == tenantId && x.ProjectId == id)
             .Select(x => new { x.Category, x.Amount }).ToListAsync(cancellationToken);
 
+        // Costs in another currency (stock is valued in the tenant's; bills, expenses and purchase orders carry
+        // their own) are converted into the project's at the rate effective on the cost's date.
+        var converter = await CurrencyConverter.LoadAsync(dbContext, tenantId, project.Currency, cancellationToken);
+        var unconverted = new SortedSet<string>(StringComparer.Ordinal);
+        decimal InProjectCurrency(decimal amount, string? currency, DateTime on)
+        {
+            if (converter.Convert(amount, currency, on) is { } converted)
+                return converted;
+            unconverted.Add(CurrencyConverter.Normalize(currency));
+            return 0m;
+        }
+
         // Materials: issued cost, less the value of anything returned from those issues.
+        var stockCurrency = await ProjectFinanceRules.StockCurrencyAsync(dbContext, tenantId, cancellationToken);
         var issues = await dbContext.MaterialIssues
             .Where(x => x.TenantId == tenantId && x.ProjectId == id && (x.IssueStatus == "issued" || x.IssueStatus == "returned"))
-            .Select(x => new { x.TotalIssuedCost, Returned = x.Lines.Sum(l => l.QuantityReturned * (l.UnitCost ?? 0)) })
+            .Select(x => new { x.TotalIssuedCost, Returned = x.Lines.Sum(l => l.QuantityReturned * (l.UnitCost ?? 0)), On = x.IssuedAt ?? x.CreatedAt })
             .ToListAsync(cancellationToken);
-        var materials = issues.Sum(x => x.TotalIssuedCost - x.Returned);
+        var materials = issues.Sum(x => InProjectCurrency(x.TotalIssuedCost - x.Returned, stockCurrency, x.On));
 
         var muster = await dbContext.ProjectMusterEntries.Where(x => x.TenantId == tenantId && x.ProjectId == id).ToListAsync(cancellationToken);
         var workerIds = muster.Select(x => x.ProjectWorkerId).Distinct().ToList();
         var rates = await dbContext.ProjectWorkerRates.Where(x => x.TenantId == tenantId && workerIds.Contains(x.ProjectWorkerId)).ToListAsync(cancellationToken);
         var labour = ProjectLabour.Summarize(muster, rates);
 
-        var bills = await dbContext.SupplierBills.Where(x => x.TenantId == tenantId && x.ProjectId == id).SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
-        var expenses = await dbContext.Expenses.Where(x => x.TenantId == tenantId && x.ProjectId == id && (x.Status == "Approved" || x.Status == "Reimbursed"))
-            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+        var bills = (await dbContext.SupplierBills.Where(x => x.TenantId == tenantId && x.ProjectId == id)
+            .Select(x => new { x.Amount, x.Currency, x.CreatedAt }).ToListAsync(cancellationToken))
+            .Sum(x => InProjectCurrency(x.Amount, x.Currency, x.CreatedAt));
+        var expenses = (await dbContext.Expenses.Where(x => x.TenantId == tenantId && x.ProjectId == id && (x.Status == "Approved" || x.Status == "Reimbursed"))
+            .Select(x => new { x.Amount, x.Currency, x.IncurredAt }).ToListAsync(cancellationToken))
+            .Sum(x => InProjectCurrency(x.Amount, x.Currency, x.IncurredAt));
         var costEntries = await dbContext.ProjectCostEntries.Where(x => x.TenantId == tenantId && x.ProjectId == id)
             .Select(x => new { x.Category, x.Amount }).ToListAsync(cancellationToken);
 
         // Committed: open purchase-order value for the project that hasn't been billed yet.
         var openPurchaseOrders = await dbContext.PurchaseOrders
             .Where(x => x.TenantId == tenantId && x.ProjectId == id && x.Status != "Cancelled" && x.Status != "Received")
-            .Select(x => x.Lines.Sum(l => l.QuantityOrdered * l.UnitCost))
+            .Select(x => new { Total = x.Lines.Sum(l => l.QuantityOrdered * l.UnitCost), x.Currency, x.OrderedAt })
             .ToListAsync(cancellationToken);
-        var committed = Math.Max(0m, openPurchaseOrders.Sum() - 0m);
+        var committed = Math.Max(0m, openPurchaseOrders.Sum(x => InProjectCurrency(x.Total, x.Currency, x.OrderedAt)));
 
         var invoices = await dbContext.TenantInvoices
             .Where(x => x.TenantId == tenantId && x.ProjectId == id && x.Status != "Void" && x.DocumentType == "Invoice")
@@ -200,7 +220,8 @@ internal sealed class ProjectFinancialsService(AppDbContext dbContext) : IProjec
             labour.Sum(x => x.UncostedDays),
             actual,
             committed,
-            invoices.Sum(x => x.TotalAmount - x.TaxAmount),
+            // Billed before tax, less credit notes issued against the project's invoices.
+            await ProjectFinanceRules.NetInvoicedAsync(dbContext, tenantId, id, cancellationToken),
             allocations.Where(x => x.SourceType == AllocationSourceTypes.Payment).Sum(x => x.Amount),
             allocations.Where(x => x.SourceType == AllocationSourceTypes.Withholding).Sum(x => x.Amount),
             invoices.Sum(x => x.Balance),
@@ -211,7 +232,7 @@ internal sealed class ProjectFinancialsService(AppDbContext dbContext) : IProjec
             Math.Max(0m, (project.AdvancePaymentAmount ?? 0m) - (latestCertified?.AdvanceRecoveredToDate ?? 0m)),
             Math.Max(0m, revised - certifiedToDate),
             Margin(actual),
-            Margin(actual + committed));
+            Margin(actual + committed)) { UnconvertedCurrencies = [.. unconverted] };
     }
 
     public async Task<(decimal Held, decimal CompletionDue, decimal FinalDue)> RetentionPositionAsync(Guid tenantId, Project project, CancellationToken cancellationToken = default)

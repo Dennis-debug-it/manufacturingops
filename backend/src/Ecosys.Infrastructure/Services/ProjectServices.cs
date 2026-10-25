@@ -567,13 +567,13 @@ internal sealed class ProjectService(
             blockers.Add("a valuation is still in progress");
         if (valuationStatuses.Contains(ProjectValuationStatuses.Certified))
             blockers.Add("a certified valuation hasn't been invoiced");
+        // Billing Projects counts as done but Finance has since voided.
+        blockers.AddRange(await ProjectFinanceRules.VoidedBillingAsync(dbContext, tenantId, project.Id, cancellationToken));
 
         var tolerance = (await projectSettingsService.GetAsync(tenantId, cancellationToken)).ClosureUnbilledTolerancePercent;
         if (tolerance.HasValue && project.RevisedValue > 0)
         {
-            var invoiced = await dbContext.TenantInvoices
-                .Where(x => x.TenantId == tenantId && x.ProjectId == project.Id && x.Status != "Void" && x.DocumentType == "Invoice")
-                .SumAsync(x => (decimal?)(x.TotalAmount - x.TaxAmount), cancellationToken) ?? 0m;
+            var invoiced = await ProjectFinanceRules.NetInvoicedAsync(dbContext, tenantId, project.Id, cancellationToken);
             var unbilled = project.RevisedValue - invoiced;
             if (unbilled > project.RevisedValue * tolerance.Value / 100m)
                 blockers.Add($"{project.Currency} {unbilled:N2} of the revised value is still uninvoiced");

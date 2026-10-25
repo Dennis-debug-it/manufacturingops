@@ -100,6 +100,11 @@ export function FinancialsTab({ project }: { project: ProjectDetail }) {
 
   return (
     <div className="space-y-5">
+      {financials.unconvertedCurrencies?.length ? (
+        <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Some costs are in {financials.unconvertedCurrencies.join(', ')} and are left out of these figures. Add an exchange rate to {financials.currency} in Finance → Exchange Rates to include them.
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Revised value" value={money(financials.revisedValue)} />
         <StatCard label="Actual cost" value={money(financials.actualCost)} />

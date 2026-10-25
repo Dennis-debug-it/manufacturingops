@@ -98,6 +98,10 @@ public sealed class MaterialIssuesController(
         }
 
         issue.TotalEstimatedCost = issue.Lines.Sum(x => x.QuantityRequested * (x.UnitCost ?? 0));
+        // Stock is valued in the tenant's currency; the project must be able to convert it.
+        if (issue.ProjectId.HasValue)
+            await ProjectFinanceRules.EnsureCostCurrencyAsync(dbContext, TenantId, issue.ProjectId,
+                await ProjectFinanceRules.StockCurrencyAsync(dbContext, TenantId, cancellationToken), cancellationToken);
         dbContext.MaterialIssues.Add(issue);
         await dbContext.SaveChangesAsync(cancellationToken);
 

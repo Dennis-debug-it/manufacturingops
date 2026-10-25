@@ -97,6 +97,7 @@ public sealed class PurchaseOrdersController(
         }
         order.TotalAmount = order.Lines.Sum(x => x.LineTotal);
 
+        await ProjectFinanceRules.EnsureCostCurrencyAsync(dbContext, TenantId, order.ProjectId, order.Currency, cancellationToken);
         dbContext.PurchaseOrders.Add(order);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "inventory.po.created", nameof(PurchaseOrder), order.Id.ToString(), $"Purchase order {order.PoNumber} created for {supplier.SupplierName}", cancellationToken);
