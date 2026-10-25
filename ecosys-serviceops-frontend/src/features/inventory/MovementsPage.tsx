@@ -119,13 +119,14 @@ function LedgerView() {
         ),
     },
     { key: 'reason', header: 'Reason', cell: (row) => <span className="text-slate-600">{row.reason ?? '—'}</span> },
+    { key: 'batchOrSerial', header: 'Batch / Serial', cell: (row) => (row.batchOrSerial ? <span className="font-mono text-xs">{row.batchOrSerial}</span> : '—') },
     { key: 'createdByName', header: 'By', cell: (row) => row.createdByName ?? '—' },
   ]
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-3 shadow-sm backdrop-blur-[var(--glass-blur-md)]">
-        <input aria-label="Search movements" placeholder="Part, code, reference or reason…" value={search} onChange={(event) => resetPage(setSearch)(event.target.value)} className={cn(inputClass, 'min-w-[14rem] flex-1')} />
+        <input aria-label="Search movements" placeholder="Part, code, reference, reason or serial…" value={search} onChange={(event) => resetPage(setSearch)(event.target.value)} className={cn(inputClass, 'min-w-[14rem] flex-1')} />
         <select aria-label="Movement type" value={type} onChange={(event) => resetPage(setType)(event.target.value)} className={inputClass}>
           <option value="">All types</option>
           {movementTypes.map((value) => <option key={value} value={value}>{typeLabels[value] ?? value}</option>)}

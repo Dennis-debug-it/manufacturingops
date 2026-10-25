@@ -1083,7 +1083,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.QuantityOnHand).HasPrecision(18, 2);
             entity.Property(x => x.ReorderLevel).HasPrecision(18, 2);
             entity.Property(x => x.UnitCost).HasPrecision(18, 2);
+            entity.Property(x => x.Barcode).HasMaxLength(100);
+            entity.Property(x => x.ReorderQuantity).HasPrecision(18, 2);
             entity.HasIndex(x => new { x.TenantId, x.ItemCode }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Barcode });
+            entity.HasOne(x => x.PreferredSupplier)
+                .WithMany()
+                .HasForeignKey(x => x.PreferredSupplierId)
+                .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.MaterialItems)
                 .HasForeignKey(x => x.TenantId)
@@ -1162,6 +1169,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.MovementType).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Quantity).HasPrecision(18, 2);
             entity.Property(x => x.QuantityChange).HasPrecision(18, 2);
+            entity.Property(x => x.BatchOrSerial).HasMaxLength(500);
             entity.Property(x => x.BalanceAfter).HasPrecision(18, 2);
             entity.Property(x => x.Reason).HasMaxLength(500);
             entity.Property(x => x.ReferenceNumber).HasMaxLength(100);

@@ -11,6 +11,8 @@ public sealed class Supplier : AuditableEntity, ITenantEntity
     public string? Email { get; set; }
     public string? Address { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Days this supplier usually takes to deliver; falls back to the inventory default when null.</summary>
+    public int? LeadTimeDays { get; set; }
     public bool IsActive { get; set; } = true;
 
     public Tenant? Tenant { get; set; }

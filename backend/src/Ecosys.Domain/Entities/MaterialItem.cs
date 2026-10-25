@@ -12,9 +12,16 @@ public sealed class MaterialItem : AuditableEntity, ITenantEntity
     public decimal QuantityOnHand { get; set; }
     public decimal ReorderLevel { get; set; }
     public decimal? UnitCost { get; set; }
+    /// <summary>Barcode or manufacturer part number, for scanning and lookup.</summary>
+    public string? Barcode { get; set; }
+    /// <summary>The supplier this part is normally bought from; reorder suggestions draft POs to it.</summary>
+    public Guid? PreferredSupplierId { get; set; }
+    /// <summary>The usual order size; with none, a reorder tops stock back up to twice the reorder level.</summary>
+    public decimal? ReorderQuantity { get; set; }
     public bool IsActive { get; set; } = true;
 
     public Tenant? Tenant { get; set; }
+    public Supplier? PreferredSupplier { get; set; }
     public ICollection<BranchMaterialStock> BranchStocks { get; set; } = new List<BranchMaterialStock>();
     public ICollection<VanMaterialStock> VanStocks { get; set; } = new List<VanMaterialStock>();
     public ICollection<MaterialRequestLine> MaterialRequestLines { get; set; } = new List<MaterialRequestLine>();

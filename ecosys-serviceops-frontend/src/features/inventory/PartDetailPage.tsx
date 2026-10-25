@@ -13,7 +13,8 @@ import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDateTime } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
-import { useAdjustMaterial, useDeleteMaterial, useMaterial, useMaterialMovements, useMaterials, useReplenishMaterial, useUpdateMaterial } from './api'
+import { useAdjustMaterial, useBranches, useCatalogueSuggestions, useDeleteMaterial, useMaterial, useMaterialMovements, useMaterialStockLocations, useReplenishMaterial, useUpdateMaterial } from './api'
+import { useSuppliers } from './purchaseOrdersApi'
 import type { Material, StockMovement } from './types'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
@@ -27,6 +28,11 @@ function EditPartDrawer({ open, material, onClose }: { open: boolean; material: 
   const [unitOfMeasure, setUnitOfMeasure] = useState(material.unitOfMeasure)
   const [reorderLevel, setReorderLevel] = useState(String(material.reorderLevel))
   const [unitCost, setUnitCost] = useState(material.unitCost != null ? String(material.unitCost) : '')
+  const [barcode, setBarcode] = useState(material.barcode ?? '')
+  const [preferredSupplierId, setPreferredSupplierId] = useState(material.preferredSupplierId ?? '')
+  const [reorderQuantity, setReorderQuantity] = useState(material.reorderQuantity != null ? String(material.reorderQuantity) : '')
+  const { categories, units } = useCatalogueSuggestions()
+  const { data: suppliers } = useSuppliers()
 
   useEffect(() => {
     if (open) {
@@ -36,6 +42,9 @@ function EditPartDrawer({ open, material, onClose }: { open: boolean; material: 
       setUnitOfMeasure(material.unitOfMeasure)
       setReorderLevel(String(material.reorderLevel))
       setUnitCost(material.unitCost != null ? String(material.unitCost) : '')
+      setBarcode(material.barcode ?? '')
+      setPreferredSupplierId(material.preferredSupplierId ?? '')
+      setReorderQuantity(material.reorderQuantity != null ? String(material.reorderQuantity) : '')
     }
   }, [open, material])
 
@@ -54,6 +63,9 @@ function EditPartDrawer({ open, material, onClose }: { open: boolean; material: 
         reorderLevel: Number(reorderLevel) || 0,
         unitCost: unitCost.trim() ? Number(unitCost) : null,
         branchId: material.branchId ?? null,
+        barcode: barcode.trim() || null,
+        preferredSupplierId: preferredSupplierId || null,
+        reorderQuantity: reorderQuantity.trim() ? Number(reorderQuantity) : null,
       })
       toast.success('Part updated')
       onClose()
@@ -84,7 +96,8 @@ function EditPartDrawer({ open, material, onClose }: { open: boolean; material: 
           </div>
           <div>
             <label className={labelClass} htmlFor="edit-part-uom">Unit of Measure</label>
-            <input id="edit-part-uom" value={unitOfMeasure} onChange={(event) => setUnitOfMeasure(event.target.value)} className={fieldClass} />
+            <input id="edit-part-uom" list="edit-part-unit-options" value={unitOfMeasure} onChange={(event) => setUnitOfMeasure(event.target.value)} className={fieldClass} />
+            <datalist id="edit-part-unit-options">{units.map((unit) => <option key={unit} value={unit} />)}</datalist>
           </div>
         </div>
         <div>
@@ -93,7 +106,8 @@ function EditPartDrawer({ open, material, onClose }: { open: boolean; material: 
         </div>
         <div>
           <label className={labelClass} htmlFor="edit-part-category">Category</label>
-          <input id="edit-part-category" value={category} onChange={(event) => setCategory(event.target.value)} className={fieldClass} />
+          <input id="edit-part-category" list="edit-part-category-options" value={category} onChange={(event) => setCategory(event.target.value)} className={fieldClass} />
+          <datalist id="edit-part-category-options">{categories.map((value) => <option key={value} value={value} />)}</datalist>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -104,6 +118,25 @@ function EditPartDrawer({ open, material, onClose }: { open: boolean; material: 
             <label className={labelClass} htmlFor="edit-part-cost">Unit Cost</label>
             <input id="edit-part-cost" type="number" min="0" step="0.01" value={unitCost} onChange={(event) => setUnitCost(event.target.value)} className={fieldClass} />
           </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass} htmlFor="edit-part-barcode">Barcode / MPN</label>
+            <input id="edit-part-barcode" value={barcode} onChange={(event) => setBarcode(event.target.value)} className={fieldClass} />
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="edit-part-reorder-qty">Reorder Qty</label>
+            <input id="edit-part-reorder-qty" type="number" min="0" step="0.01" placeholder="Auto" value={reorderQuantity} onChange={(event) => setReorderQuantity(event.target.value)} className={fieldClass} />
+          </div>
+        </div>
+        <div>
+          <label className={labelClass} htmlFor="edit-part-supplier">Preferred Supplier</label>
+          <select id="edit-part-supplier" value={preferredSupplierId} onChange={(event) => setPreferredSupplierId(event.target.value)} className={fieldClass}>
+            <option value="">None</option>
+            {(suppliers ?? [])
+              .filter((supplier) => supplier.status === 'Active' || supplier.id === preferredSupplierId)
+              .map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.supplierName}{supplier.status === 'Active' ? '' : ' (inactive)'}</option>)}
+          </select>
         </div>
         <p className="text-xs text-slate-500">Stock on hand is not edited here — use Replenish for receipts or Adjust for corrections so the movement ledger stays accurate.</p>
       </div>
@@ -116,7 +149,9 @@ export function PartDetailPage() {
   const navigate = useNavigate()
   const canManage = usePermission('inventory.materials.manage')
   const { data: material, isLoading, isError } = useMaterial(id)
-  const { data: siblings } = useMaterials()
+  const { data: locations, isLoading: locationsLoading, isError: locationsError } = useMaterialStockLocations(id)
+  const { data: branches } = useBranches()
+  const activeBranches = (branches ?? []).filter((branch) => branch.isActive)
   const { data: movements, isLoading: movementsLoading } = useMaterialMovements(id)
   const replenish = useReplenishMaterial(id ?? '')
   const adjust = useAdjustMaterial(id ?? '')
@@ -131,10 +166,33 @@ export function PartDetailPage() {
   const [adjustDirection, setAdjustDirection] = useState<'increase' | 'decrease'>('decrease')
   const [adjustQuantity, setAdjustQuantity] = useState('1')
   const [adjustReason, setAdjustReason] = useState('')
+  const [stockBranchId, setStockBranchId] = useState('')
+  const [batchOrSerial, setBatchOrSerial] = useState('')
 
   const stockByLocation = useMemo(
-    () => (siblings ?? []).filter((item) => item.itemCode === material?.itemCode),
-    [siblings, material],
+    () => [
+      ...(locations?.branches ?? []).map((row) => ({ id: `b-${row.branchId}`, location: row.branchName, kind: 'Branch', quantityOnHand: row.quantityOnHand, reorderLevel: row.reorderLevel as number | null, isLowStock: row.isLowStock })),
+      ...(locations?.vans ?? []).map((row) => ({ id: `v-${row.vanId}`, location: row.vanName, kind: 'Van', quantityOnHand: row.quantityOnHand, reorderLevel: null as number | null, isLowStock: false })),
+    ],
+    [locations],
+  )
+  // Where Replenish/Adjust act; blank lets the server use the user's default branch.
+  const stockAtBranch = (locations?.branches ?? []).find((row) => row.branchId === stockBranchId)
+  const branchPicker = activeBranches.length > 0 ? (
+    <div>
+      <label className={labelClass} htmlFor="stock-branch">Branch</label>
+      <select id="stock-branch" value={stockBranchId} onChange={(event) => setStockBranchId(event.target.value)} className={fieldClass}>
+        <option value="">My default branch</option>
+        {activeBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+      </select>
+      {stockBranchId ? <p className="mt-1 text-xs text-slate-500">{stockAtBranch?.quantityOnHand ?? 0} {material?.unitOfMeasure} at this branch now.</p> : null}
+    </div>
+  ) : null
+  const batchField = (
+    <div>
+      <label className={labelClass} htmlFor="stock-batch">Batch / serial numbers (optional)</label>
+      <input id="stock-batch" value={batchOrSerial} onChange={(event) => setBatchOrSerial(event.target.value)} placeholder="e.g. LOT-2291 or SN1001, SN1002" className={fieldClass} />
+    </div>
   )
 
   const submitReplenish = async () => {
@@ -144,11 +202,12 @@ export function PartDetailPage() {
       return
     }
     try {
-      await replenish.mutateAsync({ quantity: qty, reason: reason.trim() || null, branchId: material?.branchId ?? null })
+      await replenish.mutateAsync({ quantity: qty, reason: reason.trim() || null, branchId: stockBranchId || null, batchOrSerial: batchOrSerial.trim() || null })
       toast.success('Stock replenished')
       setShowReplenish(false)
       setQuantity('1')
       setReason('')
+      setBatchOrSerial('')
     } catch {
       // interceptor surfaces the error toast
     }
@@ -168,12 +227,14 @@ export function PartDetailPage() {
       await adjust.mutateAsync({
         quantityChange: adjustDirection === 'increase' ? qty : -qty,
         reason: adjustReason.trim(),
-        branchId: material?.branchId ?? null,
+        branchId: stockBranchId || null,
+        batchOrSerial: batchOrSerial.trim() || null,
       })
       toast.success('Stock adjusted')
       setShowAdjust(false)
       setAdjustQuantity('1')
       setAdjustReason('')
+      setBatchOrSerial('')
     } catch {
       // interceptor surfaces the error toast
     }
@@ -194,6 +255,7 @@ export function PartDetailPage() {
     { key: 'branchName', header: 'Branch', cell: (row) => row.branchName ?? '—' },
     { key: 'referenceNumber', header: 'Reference', cell: (row) => row.referenceNumber ?? '—' },
     { key: 'reason', header: 'Reason', cell: (row) => row.reason ?? '—' },
+    { key: 'batchOrSerial', header: 'Batch / Serial', cell: (row) => (row.batchOrSerial ? <span className="font-mono text-xs">{row.batchOrSerial}</span> : '—') },
     { key: 'createdAt', header: 'Date', cell: (row) => formatDateTime(row.createdAt) },
   ]
 
@@ -242,6 +304,9 @@ export function PartDetailPage() {
                     ['On Hand', String(material.quantityOnHand)],
                     ['Reorder Level', String(material.reorderLevel)],
                     ['Unit Cost', material.unitCost != null ? formatCurrency(material.unitCost) : '—'],
+                    ['Barcode / MPN', material.barcode ?? '—'],
+                    ['Preferred Supplier', material.preferredSupplierName ?? '—'],
+                    ['Reorder Qty', material.reorderQuantity != null ? String(material.reorderQuantity) : 'Auto (up to 2× reorder level)'],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-xl border border-slate-200 px-4 py-3">
                       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
@@ -258,14 +323,16 @@ export function PartDetailPage() {
             content: (
               <DataTable
                 columns={[
-                  { key: 'branchName', header: 'Branch', cell: (row) => row.branchName ?? 'Unassigned' },
-                  { key: 'quantityOnHand', header: 'On Hand', cell: (row) => `${row.quantityOnHand} ${row.unitOfMeasure}` },
-                  { key: 'reorderLevel', header: 'Reorder Level', cell: (row) => row.reorderLevel },
-                  { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isLowStock ? 'Low Stock' : 'OK'} /> },
+                  { key: 'location', header: 'Location', cell: (row) => row.location },
+                  { key: 'kind', header: 'Type', cell: (row) => row.kind },
+                  { key: 'quantityOnHand', header: 'On Hand', cell: (row) => `${row.quantityOnHand} ${material.unitOfMeasure}` },
+                  { key: 'reorderLevel', header: 'Reorder Level', cell: (row) => row.reorderLevel ?? '—' },
+                  { key: 'status', header: 'Status', cell: (row) => (row.kind === 'Van' ? null : <StatusBadge status={row.isLowStock ? 'Low Stock' : 'OK'} />) },
                 ]}
                 data={stockByLocation}
-                emptyTitle="No branch-level stock records"
-                emptyDescription="This part has no other branch-scoped stock records with the same item code."
+                loading={locationsLoading}
+                emptyTitle={locationsError ? 'Locations unavailable' : 'Not held anywhere'}
+                emptyDescription={locationsError ? 'Stock by location could not be loaded.' : 'This part has no branch or van stock yet.'}
               />
             ),
           },
@@ -316,6 +383,7 @@ export function PartDetailPage() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
             Current on hand: <span className="font-semibold text-slate-900">{material.quantityOnHand} {material.unitOfMeasure}</span>. Adjustments record a ledger entry — use them for stock takes, damage, or corrections.
           </div>
+          {branchPicker}
           <div>
             <label className={labelClass}>Direction</label>
             <div className="flex gap-2">
@@ -339,6 +407,7 @@ export function PartDetailPage() {
             <label className={labelClass} htmlFor="adjust-reason">Reason (required)</label>
             <input id="adjust-reason" value={adjustReason} onChange={(event) => setAdjustReason(event.target.value)} placeholder="e.g. Stock take variance, damaged items" className={fieldClass} />
           </div>
+          {batchField}
         </div>
       </FormDrawer>
 
@@ -356,6 +425,7 @@ export function PartDetailPage() {
         }
       >
         <div className="space-y-4">
+          {branchPicker}
           <div>
             <label className={labelClass} htmlFor="replenish-qty">Quantity</label>
             <input id="replenish-qty" type="number" min="0" step="0.01" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={fieldClass} />
@@ -364,6 +434,7 @@ export function PartDetailPage() {
             <label className={labelClass} htmlFor="replenish-reason">Reason / Reference</label>
             <input id="replenish-reason" value={reason} onChange={(event) => setReason(event.target.value)} className={fieldClass} />
           </div>
+          {batchField}
         </div>
       </FormDrawer>
     </>

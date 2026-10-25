@@ -212,6 +212,7 @@ export const endpoints = {
     lowStock: '/api/materials/low-stock',
     branchSummary: '/api/materials/branch-summary',
     movements: (id: string) => `/api/materials/${id}/movements`,
+    stock: (id: string) => `/api/materials/${id}/stock`,
     create: '/api/materials',
     update: (id: string) => `/api/materials/${id}`,
     replenish: (id: string) => `/api/materials/${id}/replenish`,

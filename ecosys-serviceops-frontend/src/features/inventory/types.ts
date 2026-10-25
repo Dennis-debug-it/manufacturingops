@@ -14,6 +14,16 @@ export interface Material {
   /** At or below Settings → Inventory's critical share of the reorder level. */
   isCriticalStock: boolean
   createdAt: string
+  barcode: string | null
+  preferredSupplierId: string | null
+  preferredSupplierName: string | null
+  /** Usual order size; null means reorders top up to twice the reorder level. */
+  reorderQuantity: number | null
+}
+
+export interface MaterialStockLocations {
+  branches: Array<{ branchId: string; branchName: string; quantityOnHand: number; reorderLevel: number; unitCost: number | null; isLowStock: boolean }>
+  vans: Array<{ vanId: string; vanName: string; quantityOnHand: number }>
 }
 
 export interface StockMovement {
@@ -32,6 +42,7 @@ export interface StockMovement {
   createdAt: string
   /** Signed change to the balance; null on older adjustments of unknown direction. */
   quantityChange: number | null
+  batchOrSerial: string | null
 }
 
 export interface BranchStockSummary {
@@ -164,4 +175,5 @@ export interface StockLedgerEntry {
   referenceNumber: string | null
   reason: string | null
   createdByName: string | null
+  batchOrSerial: string | null
 }

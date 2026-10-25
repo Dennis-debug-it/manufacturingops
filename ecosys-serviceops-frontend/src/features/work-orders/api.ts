@@ -474,7 +474,7 @@ export function useUploadPhoto(id: string) {
 export function useAddMaterialUsage(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { materialItemId: string; quantityUsed: number; assetId?: string | null; chargeable?: boolean; notes?: string | null }) =>
+    mutationFn: (payload: { materialItemId: string; quantityUsed: number; assetId?: string | null; chargeable?: boolean; notes?: string | null; batchOrSerial?: string | null }) =>
       api.post<WorkOrderExecutionBundle>(endpoints.workOrders.materialsUsed(id), {
         materialItemId: payload.materialItemId,
         assetId: payload.assetId ?? null,
@@ -483,6 +483,7 @@ export function useAddMaterialUsage(id: string) {
         chargeable: payload.chargeable ?? true,
         notes: payload.notes ?? null,
         usedAt: null,
+        batchOrSerial: payload.batchOrSerial ?? null,
       }),
     onSuccess: () => {
       invalidateExecution(queryClient, id)

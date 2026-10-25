@@ -4883,6 +4883,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Barcode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Category")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -4903,11 +4907,18 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid?>("PreferredSupplierId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal>("QuantityOnHand")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
                     b.Property<decimal>("ReorderLevel")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal?>("ReorderQuantity")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
@@ -4927,6 +4938,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("PreferredSupplierId");
+
+                    b.HasIndex("TenantId", "Barcode");
 
                     b.HasIndex("TenantId", "ItemCode")
                         .IsUnique();
@@ -9137,6 +9152,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<string>("BatchOrSerial")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
 
@@ -9303,6 +9322,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<int?>("LeadTimeDays")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
@@ -14713,11 +14735,18 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
             modelBuilder.Entity("Ecosys.Domain.Entities.MaterialItem", b =>
                 {
+                    b.HasOne("Ecosys.Domain.Entities.Supplier", "PreferredSupplier")
+                        .WithMany()
+                        .HasForeignKey("PreferredSupplierId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
                         .WithMany("MaterialItems")
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("PreferredSupplier");
 
                     b.Navigation("Tenant");
                 });

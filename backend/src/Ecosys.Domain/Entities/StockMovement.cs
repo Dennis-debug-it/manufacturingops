@@ -18,6 +18,8 @@ public sealed class StockMovement : AuditableEntity, ITenantEntity
     public decimal BalanceAfter { get; set; }
     public string? Reason { get; set; }
     public string? ReferenceNumber { get; set; }
+    /// <summary>Batch, lot or serial number(s) of the units that moved, where they are tracked.</summary>
+    public string? BatchOrSerial { get; set; }
     public Guid? CreatedByUserId { get; set; }
 
     public Tenant? Tenant { get; set; }

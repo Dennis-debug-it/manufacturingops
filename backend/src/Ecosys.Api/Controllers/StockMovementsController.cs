@@ -25,7 +25,7 @@ public sealed class StockMovementsController(
 {
     /// <param name="branchId">A branch: its own movements plus those of vans based there.</param>
     /// <param name="type">A movement type, e.g. Receipt, Issue, Adjustment, TransferOut, VanConsume.</param>
-    /// <param name="search">Matches part name or code, reference or reason.</param>
+    /// <param name="search">Matches part name or code, reference, reason or batch/serial number.</param>
     [HttpGet]
     public async Task<ActionResult<PagedResult<StockLedgerEntryResponse>>> List(
         [FromQuery] Guid? materialId,
@@ -87,7 +87,8 @@ public sealed class StockMovementsController(
                 x.Material!.ItemName.ToLower().Contains(term)
                 || x.Material.ItemCode.ToLower().Contains(term)
                 || (x.ReferenceNumber != null && x.ReferenceNumber.ToLower().Contains(term))
-                || (x.Reason != null && x.Reason.ToLower().Contains(term)));
+                || (x.Reason != null && x.Reason.ToLower().Contains(term))
+                || (x.BatchOrSerial != null && x.BatchOrSerial.ToLower().Contains(term)));
         }
 
         return query;
@@ -130,7 +131,8 @@ public sealed class StockMovementsController(
             x.WorkOrder != null ? x.WorkOrder.WorkOrderNumber : null,
             x.ReferenceNumber,
             x.Reason,
-            x.CreatedByUser != null ? x.CreatedByUser.FullName : null);
+            x.CreatedByUser != null ? x.CreatedByUser.FullName : null,
+            x.BatchOrSerial);
 
     private void EnsureViewAccess() =>
         userAccessService.EnsureAdminOrAnyPermission(
@@ -160,4 +162,5 @@ public sealed record StockLedgerEntryResponse(
     string? WorkOrderNumber,
     string? ReferenceNumber,
     string? Reason,
-    string? CreatedByName);
+    string? CreatedByName,
+    string? BatchOrSerial = null);

@@ -19,17 +19,19 @@ export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boo
   const { data: options, isLoading } = useMaterialOptions(debouncedSearch)
   const [materialId, setMaterialId] = useState('')
   const [quantity, setQuantity] = useState('1')
+  const [batchOrSerial, setBatchOrSerial] = useState('')
   const used = bundle?.materialUsages ?? []
   const selected = (options ?? []).find((option) => option.id === materialId)
   const qty = Number(quantity)
   const validQty = Number.isFinite(qty) && qty > 0
 
-  const log = async (materialItemId: string, quantityUsed: number, label: string, unitOfMeasure: string | null = null) => {
+  const log = async (materialItemId: string, quantityUsed: number, label: string, unitOfMeasure: string | null = null, serial: string | null = null) => {
     try {
-      const result = await actions.logMaterial(job, { materialItemId, quantityUsed, assetId: job.assetId, materialName: label, unitOfMeasure })
+      const result = await actions.logMaterial(job, { materialItemId, quantityUsed, assetId: job.assetId, materialName: label, unitOfMeasure, batchOrSerial: serial })
       toast.success(savedMessage(`Logged ${quantityUsed} × ${label}`, result))
       setMaterialId('')
       setQuantity('1')
+      setBatchOrSerial('')
       setSearch('')
     } catch {
       // interceptor surfaces the error toast (e.g. not enough stock)
@@ -90,12 +92,15 @@ export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boo
             <button
               type="button"
               disabled={!selected || !validQty || actions.busy}
-              onClick={() => selected && void log(selected.id, qty, selected.itemName, selected.unitOfMeasure)}
+              onClick={() => selected && void log(selected.id, qty, selected.itemName, selected.unitOfMeasure, batchOrSerial.trim() || null)}
               className="ml-auto inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-50"
             >
               {actions.busy ? 'Logging…' : 'Log material'}
             </button>
           </div>
+          {selected ? (
+            <input value={batchOrSerial} onChange={(event) => setBatchOrSerial(event.target.value)} placeholder="Serial / batch number (optional)" aria-label="Serial or batch number" className={inputClass} />
+          ) : null}
           {selected && validQty && qty > selected.quantityOnHand ? (
             <p className="text-xs text-amber-700">Only {selected.quantityOnHand} {selected.unitOfMeasure} in stock at your branch.</p>
           ) : null}

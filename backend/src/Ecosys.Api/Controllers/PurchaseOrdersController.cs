@@ -70,6 +70,8 @@ public sealed class PurchaseOrdersController(
         var supplier = await dbContext.Suppliers
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.SupplierId, cancellationToken)
             ?? throw new NotFoundException("Supplier not found.");
+        if (!supplier.IsActive)
+            throw new BusinessRuleException($"{supplier.SupplierName} is inactive. Reactivate the supplier before ordering from it.");
         if (request.Lines.Count == 0)
             throw new BusinessRuleException("A purchase order needs at least one line.");
 
@@ -209,8 +211,9 @@ public sealed class PurchaseOrdersController(
                     .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == materialId, ct)
                     ?? throw new BusinessRuleException($"The part linked to {line.ItemName} no longer exists.");
                 branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, ct);
-                await ReceiveIntoStockAsync(material, branchId, request.Quantity,
+                var movement = await ReceiveIntoStockAsync(material, branchId, request.Quantity,
                     converter.Convert(line.UnitCost, order.Currency, DateTime.UtcNow), order.PoNumber, ct);
+                movement.BatchOrSerial = Blank(request.BatchOrSerial);
             }
 
             line.QuantityReceived += request.Quantity;
@@ -247,7 +250,7 @@ public sealed class PurchaseOrdersController(
     /// weighted average of what was on hand and what arrived. With no exchange rate into the stock
     /// currency the cost is left alone rather than mixing currencies.
     /// </summary>
-    private async Task ReceiveIntoStockAsync(
+    private async Task<StockMovement> ReceiveIntoStockAsync(
         MaterialItem material, Guid? branchId, decimal quantity, decimal? unitCost, string poNumber, CancellationToken cancellationToken)
     {
         var tenantOnHand = material.QuantityOnHand;
@@ -258,9 +261,9 @@ public sealed class PurchaseOrdersController(
         var branchOnHand = branchStock?.QuantityOnHand ?? 0;
         var branchCost = branchStock?.UnitCost;
 
-        await stockLedgerService.RecordReceiptAsync(material, branchId, quantity, UserId, $"Received on {poNumber}", poNumber, cancellationToken: cancellationToken);
+        var movement = await stockLedgerService.RecordReceiptAsync(material, branchId, quantity, UserId, $"Received on {poNumber}", poNumber, cancellationToken: cancellationToken);
         if (unitCost is not { } cost)
-            return;
+            return movement;
 
         material.UnitCost = WeightedCost(tenantOnHand, material.UnitCost, quantity, cost);
         if (branchId is not null)
@@ -269,6 +272,8 @@ public sealed class PurchaseOrdersController(
             branchStock ??= dbContext.BranchMaterialStocks.Local.Single(x => x.BranchId == branchId && x.MaterialId == material.Id);
             branchStock.UnitCost = WeightedCost(branchOnHand, branchCost, quantity, cost);
         }
+
+        return movement;
     }
 
     public static decimal WeightedCost(decimal onHand, decimal? currentCost, decimal received, decimal receivedCost) =>
@@ -337,6 +342,12 @@ public sealed class PurchaseOrdersController(
             .OrderBy(x => x.ItemName)
             .ToList();
 
+        var preferredParts = await dbContext.MaterialItems.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.IsActive && x.PreferredSupplierId == id)
+            .OrderBy(x => x.ItemName)
+            .Select(x => new SupplierPreferredPartResponse(x.Id, x.ItemCode, x.ItemName, x.QuantityOnHand, x.ReorderLevel))
+            .ToListAsync(cancellationToken);
+
         return Ok(new SupplierDetailResponse(
             supplier.Id,
             supplier.SupplierName,
@@ -349,7 +360,9 @@ public sealed class PurchaseOrdersController(
             supplier.Address,
             supplier.Notes,
             suppliedParts,
-            orders.Take(10).Select(MapListItem).ToList()));
+            orders.Take(10).Select(MapListItem).ToList(),
+            supplier.LeadTimeDays,
+            preferredParts));
     }
 
     [HttpPost("/api/suppliers")]
@@ -358,19 +371,8 @@ public sealed class PurchaseOrdersController(
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
 
-        if (string.IsNullOrWhiteSpace(request.SupplierName))
-            throw new BusinessRuleException("Supplier name is required.");
-
-        var supplier = new Supplier
-        {
-            TenantId = TenantId,
-            SupplierName = request.SupplierName.Trim(),
-            ContactPerson = request.ContactPerson?.Trim(),
-            Phone = request.Phone?.Trim(),
-            Email = request.Email?.Trim(),
-            Address = request.Address?.Trim(),
-            Notes = request.Notes?.Trim(),
-        };
+        var supplier = new Supplier { TenantId = TenantId };
+        await ApplySupplierAsync(supplier, request, cancellationToken);
         dbContext.Suppliers.Add(supplier);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "inventory.supplier.created", nameof(Supplier), supplier.Id.ToString(), $"Supplier {supplier.SupplierName} created", cancellationToken);
@@ -378,12 +380,74 @@ public sealed class PurchaseOrdersController(
         return Ok(MapSupplierListItem(supplier, 0, 100));
     }
 
+    [HttpPut("/api/suppliers/{id:guid}")]
+    public async Task<ActionResult<SupplierListItemResponse>> UpdateSupplier(
+        Guid id, [FromBody] CreateSupplierRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
+        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Supplier not found.");
+
+        await ApplySupplierAsync(supplier, request, cancellationToken);
+        supplier.UpdatedAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "inventory.supplier.updated", nameof(Supplier), supplier.Id.ToString(), $"Supplier {supplier.SupplierName} updated", cancellationToken);
+
+        return Ok(MapSupplierListItem(supplier, 0, 100));
+    }
+
+    /// <summary>
+    /// Deactivating keeps the supplier's history and bills but stops new purchase orders to it; parts
+    /// that preferred it keep the link so reactivating restores reorder suggestions.
+    /// </summary>
+    [HttpPost("/api/suppliers/{id:guid}/status")]
+    public async Task<IActionResult> SetSupplierStatus(Guid id, [FromBody] SupplierStatusRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
+        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Supplier not found.");
+
+        if (supplier.IsActive == request.IsActive)
+            return NoContent();
+        supplier.IsActive = request.IsActive;
+        supplier.UpdatedAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, request.IsActive ? "inventory.supplier.activated" : "inventory.supplier.deactivated",
+            nameof(Supplier), supplier.Id.ToString(), $"Supplier {supplier.SupplierName} {(request.IsActive ? "reactivated" : "deactivated")}", cancellationToken);
+
+        return NoContent();
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    /// <summary>With no expected date given, delivery is expected after the reorder lead time (Settings → Inventory).</summary>
+    private async Task ApplySupplierAsync(Supplier supplier, CreateSupplierRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.SupplierName))
+            throw new BusinessRuleException("Supplier name is required.");
+        if (request.LeadTimeDays is < 0 or > 365)
+            throw new BusinessRuleException("Lead time must be between 0 and 365 days.");
+
+        var name = request.SupplierName.Trim();
+        var normalized = name.ToLower();
+        if (await dbContext.Suppliers.AnyAsync(x => x.TenantId == TenantId && x.Id != supplier.Id && x.SupplierName.ToLower() == normalized, cancellationToken))
+            throw new BusinessRuleException($"A supplier named {name} already exists.");
+
+        supplier.SupplierName = name;
+        supplier.ContactPerson = Blank(request.ContactPerson);
+        supplier.Phone = Blank(request.Phone);
+        supplier.Email = Blank(request.Email);
+        supplier.Address = Blank(request.Address);
+        supplier.Notes = Blank(request.Notes);
+        supplier.LeadTimeDays = request.LeadTimeDays;
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>With no expected date given, delivery is expected after the supplier's lead time, else the reorder lead time (Settings → Inventory).</summary>
     private async Task<DateTime?> DefaultExpectedAtAsync(Supplier supplier, CancellationToken cancellationToken)
     {
-        var leadDays = (await InventoryModuleSettings.LoadAsync(dbContext, TenantId, cancellationToken)).DefaultReorderLeadDays;
+        var leadDays = supplier.LeadTimeDays
+            ?? (await InventoryModuleSettings.LoadAsync(dbContext, TenantId, cancellationToken)).DefaultReorderLeadDays;
         return leadDays > 0 ? DateTime.UtcNow.Date.AddDays(leadDays) : null;
     }
 
@@ -458,7 +522,8 @@ public sealed class PurchaseOrdersController(
         supplier.Email,
         onTimePercent,
         openOrders,
-        supplier.IsActive ? "Active" : "Inactive");
+        supplier.IsActive ? "Active" : "Inactive",
+        supplier.LeadTimeDays);
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -489,11 +554,12 @@ public sealed record CreatePurchaseOrderRequest(
 public sealed record PurchaseOrderStatusRequest(string Status);
 
 /// <param name="BranchId">Where a part-linked line's stock lands; the user's default branch when omitted.</param>
-public sealed record ReceivePurchaseOrderLineRequest(Guid LineId, decimal Quantity, Guid? BranchId = null);
+/// <param name="BatchOrSerial">Batch, lot or serial number(s) of the delivered units, kept on the stock movement.</param>
+public sealed record ReceivePurchaseOrderLineRequest(Guid LineId, decimal Quantity, Guid? BranchId = null, string? BatchOrSerial = null);
 
 public sealed record SupplierListItemResponse(
     Guid Id, string SupplierName, string? ContactPerson, string? Phone, string? Email,
-    double OnTimeDeliveryPercent, int OpenPurchaseOrders, string Status);
+    double OnTimeDeliveryPercent, int OpenPurchaseOrders, string Status, int? LeadTimeDays = null);
 
 public sealed record SupplierPartResponse(string ItemName, decimal LastUnitCost, DateTime LastSuppliedAt);
 
@@ -502,8 +568,14 @@ public sealed record SupplierDetailResponse(
     double OnTimeDeliveryPercent, int OpenPurchaseOrders, string Status,
     string? Address, string? Notes,
     IReadOnlyList<SupplierPartResponse> SuppliedParts,
-    IReadOnlyList<PurchaseOrderListItemResponse> RecentPurchaseOrders);
+    IReadOnlyList<PurchaseOrderListItemResponse> RecentPurchaseOrders,
+    int? LeadTimeDays = null,
+    IReadOnlyList<SupplierPreferredPartResponse>? PreferredParts = null);
+
+public sealed record SupplierPreferredPartResponse(Guid Id, string ItemCode, string ItemName, decimal QuantityOnHand, decimal ReorderLevel);
+
+public sealed record SupplierStatusRequest(bool IsActive);
 
 public sealed record CreateSupplierRequest(
     string SupplierName, string? ContactPerson = null, string? Phone = null,
-    string? Email = null, string? Address = null, string? Notes = null);
+    string? Email = null, string? Address = null, string? Notes = null, int? LeadTimeDays = null);

@@ -134,7 +134,7 @@ export function PurchaseOrdersPage() {
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Supplier</label>
             <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               <option value="">Select a supplier…</option>
-              {(suppliers ?? []).map((s) => <option key={s.id} value={s.id}>{s.supplierName}</option>)}
+              {(suppliers ?? []).filter((s) => s.status === 'Active').map((s) => <option key={s.id} value={s.id}>{s.supplierName}</option>)}
             </select>
             {suppliers && suppliers.length === 0 ? <p className="mt-1 text-xs text-amber-600">No suppliers yet — add one on the Suppliers page first.</p> : null}
           </div>
@@ -339,6 +339,7 @@ function ReceiveLineDrawer({ poId, line, onClose }: { poId: string; line: Purcha
   const outstanding = line.quantityOrdered - line.quantityReceived
   const [quantity, setQuantity] = useState(String(outstanding))
   const [branchId, setBranchId] = useState('')
+  const [batchOrSerial, setBatchOrSerial] = useState('')
   const receiveLine = useReceivePurchaseOrderLine(poId)
   const stocked = Boolean(line.materialItemId)
   const { data: branches } = useBranches({ enabled: stocked })
@@ -349,7 +350,7 @@ function ReceiveLineDrawer({ poId, line, onClose }: { poId: string; line: Purcha
     if (!Number.isFinite(qty) || qty <= 0) return toast.error('Enter a quantity greater than zero')
     if (qty > outstanding) return toast.error(`Only ${outstanding} remain outstanding`)
     try {
-      await receiveLine.mutateAsync({ lineId: line.id, quantity: qty, branchId: branchId || null })
+      await receiveLine.mutateAsync({ lineId: line.id, quantity: qty, branchId: branchId || null, batchOrSerial: batchOrSerial.trim() || null })
       toast.success(stocked ? 'Receipt recorded and stock updated' : 'Receipt recorded')
       onClose()
     } catch {
@@ -384,6 +385,12 @@ function ReceiveLineDrawer({ poId, line, onClose }: { poId: string; line: Purcha
               <option value="">My default branch</option>
               {activeBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
             </select>
+          </div>
+        ) : null}
+        {stocked ? (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="po-receive-batch">Batch / serial numbers (optional)</label>
+            <input id="po-receive-batch" value={batchOrSerial} onChange={(event) => setBatchOrSerial(event.target.value)} placeholder="e.g. LOT-2291 or SN1001, SN1002" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
         ) : null}
         <p className="text-xs text-slate-500">

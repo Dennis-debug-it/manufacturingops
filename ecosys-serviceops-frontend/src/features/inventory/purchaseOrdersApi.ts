@@ -86,7 +86,7 @@ export function useSetPurchaseOrderStatus(poId: string) {
 export function useReceivePurchaseOrderLine(poId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { lineId: string; quantity: number; branchId?: string | null }) =>
+    mutationFn: (payload: { lineId: string; quantity: number; branchId?: string | null; batchOrSerial?: string | null }) =>
       api.post<void>(`/api/purchase-orders/${poId}/receive`, payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] })
@@ -105,6 +105,7 @@ export interface SupplierListItem {
   onTimeDeliveryPercent: number
   openPurchaseOrders: number
   status: 'Active' | 'Inactive'
+  leadTimeDays: number | null
 }
 
 export function useSuppliers() {
@@ -120,6 +121,7 @@ export interface SupplierDetail extends SupplierListItem {
   notes: string | null
   suppliedParts: Array<{ itemName: string; lastUnitCost: number; lastSuppliedAt: string }>
   recentPurchaseOrders: PurchaseOrderListItem[]
+  preferredParts: Array<{ id: string; itemCode: string; itemName: string; quantityOnHand: number; reorderLevel: number }> | null
 }
 
 export function useSupplier(id: string | undefined) {
@@ -137,12 +139,30 @@ export interface CreateSupplierPayload {
   phone?: string | undefined
   email?: string | undefined
   address?: string | undefined
+  notes?: string | undefined
+  leadTimeDays?: number | null
 }
 
 export function useCreateSupplier() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (payload: CreateSupplierPayload) => api.post<SupplierListItem>('/api/suppliers', payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
+  })
+}
+
+export function useUpdateSupplier(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreateSupplierPayload) => api.put<SupplierListItem>(`/api/suppliers/${id}`, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
+  })
+}
+
+export function useSetSupplierStatus(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (isActive: boolean) => api.post<void>(`/api/suppliers/${id}/status`, { isActive }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
   })
 }

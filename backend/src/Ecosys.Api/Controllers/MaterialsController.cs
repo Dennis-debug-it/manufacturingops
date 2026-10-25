@@ -43,12 +43,39 @@ public sealed class MaterialsController(
         EnsureMaterialsViewAccess();
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         var item = await dbContext.MaterialItems
+            .Include(x => x.PreferredSupplier)
             .Include(x => x.BranchStocks)
                 .ThenInclude(x => x.Branch)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material item was not found.");
 
         return Ok(Map(item, scope, await SettingsAsync(cancellationToken)));
+    }
+
+    /// <summary>Where this part is held: each visible branch's balance and each van carrying it.</summary>
+    [HttpGet("{id:guid}/stock")]
+    public async Task<ActionResult<MaterialStockLocationsResponse>> GetStockLocations(Guid id, CancellationToken cancellationToken)
+    {
+        EnsureMaterialsViewAccess();
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        if (!await dbContext.MaterialItems.AnyAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken))
+            throw new NotFoundException("Material item was not found.");
+
+        var branches = await dbContext.BranchMaterialStocks.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.MaterialId == id)
+            .WhereAccessible(scope, x => (Guid?)x.BranchId)
+            .OrderBy(x => x.Branch!.Name)
+            .Select(x => new MaterialBranchStockResponse(
+                x.BranchId, x.Branch!.Name, x.QuantityOnHand, x.ReorderLevel, x.UnitCost, x.QuantityOnHand <= x.ReorderLevel))
+            .ToListAsync(cancellationToken);
+        var vans = await dbContext.VanMaterialStocks.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.MaterialId == id && x.QuantityOnHand != 0)
+            .WhereAccessible(scope, x => x.Van!.HomeBranchId)
+            .OrderBy(x => x.Van!.Name)
+            .Select(x => new MaterialVanStockResponse(x.VanId, x.Van!.Name, x.QuantityOnHand))
+            .ToListAsync(cancellationToken);
+
+        return Ok(new MaterialStockLocationsResponse(branches, vans));
     }
 
     [HttpGet("low-stock")]
@@ -88,6 +115,7 @@ public sealed class MaterialsController(
         EnsureMaterialsManageAccess();
         Validate(request);
         await EnsureUniqueCodeAsync(request.ItemCode, null, cancellationToken);
+        await ValidateMasterDataAsync(request, null, cancellationToken);
 
         var item = new MaterialItem
         {
@@ -99,6 +127,9 @@ public sealed class MaterialsController(
             QuantityOnHand = 0,
             ReorderLevel = request.ReorderLevel,
             UnitCost = request.UnitCost,
+            Barcode = Blank(request.Barcode),
+            PreferredSupplierId = request.PreferredSupplierId,
+            ReorderQuantity = request.ReorderQuantity,
             IsActive = true
         };
 
@@ -116,6 +147,7 @@ public sealed class MaterialsController(
             await dbContext.SaveChangesAsync(ct);
         }, cancellationToken);
 
+        await dbContext.Entry(item).Reference(x => x.PreferredSupplier).LoadAsync(cancellationToken);
         var responseScope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = item.Id }, Map(item, responseScope, await SettingsAsync(cancellationToken)));
     }
@@ -126,12 +158,14 @@ public sealed class MaterialsController(
         EnsureMaterialsManageAccess();
         Validate(request);
         var item = await dbContext.MaterialItems
+            .Include(x => x.PreferredSupplier)
             .Include(x => x.BranchStocks)
                 .ThenInclude(x => x.Branch)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material item was not found.");
 
         await EnsureUniqueCodeAsync(request.ItemCode, item.Id, cancellationToken);
+        await ValidateMasterDataAsync(request, item.Id, cancellationToken);
 
         var requestedBranchId = request.BranchId;
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, requestedBranchId, cancellationToken);
@@ -149,6 +183,9 @@ public sealed class MaterialsController(
         item.UnitOfMeasure = request.UnitOfMeasure.Trim();
         item.ReorderLevel = request.ReorderLevel;
         item.UnitCost = request.UnitCost;
+        item.Barcode = Blank(request.Barcode);
+        item.PreferredSupplierId = request.PreferredSupplierId;
+        item.ReorderQuantity = request.ReorderQuantity;
 
         if (scope.RequestedBranchId.HasValue)
         {
@@ -181,6 +218,7 @@ public sealed class MaterialsController(
 
             await dbContext.SaveChangesAsync(ct);
         }, cancellationToken);
+        await dbContext.Entry(item).Reference(x => x.PreferredSupplier).LoadAsync(cancellationToken);
         return Ok(Map(item, scope, await SettingsAsync(cancellationToken)));
     }
 
@@ -195,6 +233,7 @@ public sealed class MaterialsController(
         }
 
         var item = await dbContext.MaterialItems
+            .Include(x => x.PreferredSupplier)
             .Include(x => x.BranchStocks)
                 .ThenInclude(x => x.Branch)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == id, cancellationToken)
@@ -208,7 +247,8 @@ public sealed class MaterialsController(
 
         await stockLedgerService.ExecuteAsync(async ct =>
         {
-            await stockLedgerService.RecordReceiptAsync(item, branchId, request.Quantity, UserId, request.Reason, request.ReferenceNumber, cancellationToken: ct);
+            var movement = await stockLedgerService.RecordReceiptAsync(item, branchId, request.Quantity, UserId, request.Reason, request.ReferenceNumber, cancellationToken: ct);
+            movement.BatchOrSerial = Blank(request.BatchOrSerial);
             var branchStock = item.BranchStocks.SingleOrDefault(x => x.BranchId == branchId);
             if (branchStock is not null)
             {
@@ -240,7 +280,11 @@ public sealed class MaterialsController(
             throw new BusinessRuleException("Adjustment quantity change cannot be zero.");
         }
 
+        // An adjustment changes stock with nothing else behind it, so the why is the only record.
+        var reason = Blank(request.Reason) ?? throw new BusinessRuleException("Give a reason for the adjustment.");
+
         var item = await dbContext.MaterialItems
+            .Include(x => x.PreferredSupplier)
             .Include(x => x.BranchStocks)
                 .ThenInclude(x => x.Branch)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == id, cancellationToken)
@@ -249,9 +293,19 @@ public sealed class MaterialsController(
         var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, cancellationToken);
         await stockLedgerService.ExecuteAsync(async ct =>
         {
-            await stockLedgerService.RecordAdjustmentAsync(item, branchId, request.QuantityChange, UserId, request.Reason, cancellationToken: ct);
+            var movement = await stockLedgerService.RecordAdjustmentAsync(item, branchId, request.QuantityChange, UserId, reason, cancellationToken: ct);
+            movement.BatchOrSerial = Blank(request.BatchOrSerial);
             await dbContext.SaveChangesAsync(ct);
         }, cancellationToken);
+
+        await auditLogService.LogAsync(
+            TenantId,
+            UserId,
+            "Material adjusted",
+            nameof(MaterialItem),
+            item.Id.ToString(),
+            $"Adjusted '{item.ItemName}' by {request.QuantityChange:+0.###;-0.###} {item.UnitOfMeasure}: {reason}",
+            cancellationToken);
 
         return Ok(Map(item, await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken), await SettingsAsync(cancellationToken)));
     }
@@ -288,7 +342,8 @@ public sealed class MaterialsController(
                 x.ReferenceNumber,
                 x.CreatedByUserId,
                 x.CreatedAt,
-                x.QuantityChange))
+                x.QuantityChange,
+                x.BatchOrSerial))
             .ToListAsync(cancellationToken);
 
         return Ok(movements);
@@ -314,6 +369,7 @@ public sealed class MaterialsController(
         CancellationToken cancellationToken)
     {
         var query = dbContext.MaterialItems
+            .Include(x => x.PreferredSupplier)
             .Include(x => x.BranchStocks)
                 .ThenInclude(x => x.Branch)
             .Where(x => x.TenantId == TenantId)
@@ -335,6 +391,7 @@ public sealed class MaterialsController(
                 x.ItemName.ToLower().Contains(searchLower)
                 || x.ItemCode.ToLower().Contains(searchLower)
                 || (x.Category != null && x.Category.ToLower().Contains(searchLower))
+                || (x.Barcode != null && x.Barcode.ToLower() == searchLower)
                 || x.UnitOfMeasure.ToLower().Contains(searchLower));
         }
 
@@ -360,6 +417,29 @@ public sealed class MaterialsController(
             throw new BusinessRuleException("Item code, item name, and unit of measure are required.");
         }
     }
+
+    private async Task ValidateMasterDataAsync(UpsertMaterialItemRequest request, Guid? currentId, CancellationToken cancellationToken)
+    {
+        if (request.ReorderLevel < 0)
+            throw new BusinessRuleException("Reorder level cannot be negative.");
+        if (request.ReorderQuantity is <= 0)
+            throw new BusinessRuleException("Reorder quantity must be greater than zero, or left blank.");
+        if (request.UnitCost is < 0)
+            throw new BusinessRuleException("Unit cost cannot be negative.");
+
+        if (Blank(request.Barcode) is { } barcode)
+        {
+            var normalized = barcode.ToLower();
+            if (await dbContext.MaterialItems.AnyAsync(x => x.TenantId == TenantId && x.Id != currentId && x.IsActive && x.Barcode != null && x.Barcode.ToLower() == normalized, cancellationToken))
+                throw new BusinessRuleException($"Another part already uses barcode {barcode}.");
+        }
+
+        if (request.PreferredSupplierId is { } supplierId
+            && !await dbContext.Suppliers.AnyAsync(x => x.TenantId == TenantId && x.Id == supplierId, cancellationToken))
+            throw new BusinessRuleException("Preferred supplier was not found.");
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private async Task EnsureUniqueCodeAsync(string itemCode, Guid? currentId, CancellationToken cancellationToken)
     {
@@ -441,7 +521,11 @@ public sealed class MaterialsController(
             item.IsActive,
             isLowStock,
             item.CreatedAt,
-            isCritical);
+            isCritical,
+            item.Barcode,
+            item.PreferredSupplierId,
+            item.PreferredSupplier?.SupplierName,
+            item.ReorderQuantity);
     }
 
     private static decimal GetQuantity(MaterialItem item, BranchQueryScope scope)
@@ -504,11 +588,14 @@ public sealed record UpsertMaterialItemRequest(
     decimal QuantityOnHand,
     decimal ReorderLevel,
     decimal? UnitCost,
-    Guid? BranchId);
+    Guid? BranchId,
+    string? Barcode = null,
+    Guid? PreferredSupplierId = null,
+    decimal? ReorderQuantity = null);
 
-public sealed record ReplenishMaterialRequest(Guid? BranchId, decimal Quantity, decimal? UnitCost, string? Reason, string? ReferenceNumber);
+public sealed record ReplenishMaterialRequest(Guid? BranchId, decimal Quantity, decimal? UnitCost, string? Reason, string? ReferenceNumber, string? BatchOrSerial = null);
 
-public sealed record AdjustMaterialRequest(Guid? BranchId, decimal QuantityChange, string? Reason);
+public sealed record AdjustMaterialRequest(Guid? BranchId, decimal QuantityChange, string? Reason, string? BatchOrSerial = null);
 
 public sealed record MaterialItemResponse(
     Guid Id,
@@ -524,7 +611,11 @@ public sealed record MaterialItemResponse(
     bool IsActive,
     bool IsLowStock,
     DateTime CreatedAt,
-    bool IsCriticalStock = false);
+    bool IsCriticalStock = false,
+    string? Barcode = null,
+    Guid? PreferredSupplierId = null,
+    string? PreferredSupplierName = null,
+    decimal? ReorderQuantity = null);
 
 public sealed record StockMovementResponse(
     Guid Id,
@@ -540,7 +631,14 @@ public sealed record StockMovementResponse(
     string? ReferenceNumber,
     Guid? CreatedByUserId,
     DateTime CreatedAt,
-    decimal? QuantityChange = null);
+    decimal? QuantityChange = null,
+    string? BatchOrSerial = null);
 
 /// <param name="LowStockParts">Parts at or below their reorder level here (ignoring parts never stocked here with no reorder level).</param>
+public sealed record MaterialBranchStockResponse(Guid BranchId, string BranchName, decimal QuantityOnHand, decimal ReorderLevel, decimal? UnitCost, bool IsLowStock);
+
+public sealed record MaterialVanStockResponse(Guid VanId, string VanName, decimal QuantityOnHand);
+
+public sealed record MaterialStockLocationsResponse(IReadOnlyList<MaterialBranchStockResponse> Branches, IReadOnlyList<MaterialVanStockResponse> Vans);
+
 public sealed record BranchStockSummaryResponse(Guid BranchId, int PartsStocked, int LowStockParts, decimal StockValue);

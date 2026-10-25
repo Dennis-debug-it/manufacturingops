@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { PagedResult } from '../../shared/types/pagination'
-import type { Branch, BranchStockSummary, Material, MaterialIssue, MaterialRequest, StockLedgerEntry, StockMovement, StockTransfer } from './types'
+import type { Branch, BranchStockSummary, Material, MaterialStockLocations, MaterialIssue, MaterialRequest, StockLedgerEntry, StockMovement, StockTransfer } from './types'
 
 export interface MaterialFilters {
   lowStockOnly?: boolean | undefined
@@ -35,6 +35,22 @@ export function useLowStockMaterials(branchId?: string) {
   })
 }
 
+export function useMaterialStockLocations(id: string | undefined) {
+  return useQuery({
+    queryKey: ['materials', id, 'stock-locations'],
+    queryFn: () => api.get<MaterialStockLocations>(endpoints.materials.stock(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+/** Categories and units already in use, offered as suggestions so the catalogue stays consistent. */
+export function useCatalogueSuggestions() {
+  const { data } = useMaterials({ status: 'all' })
+  const categories = [...new Set((data ?? []).map((item) => item.category?.trim()).filter((value): value is string => Boolean(value)))].sort()
+  const units = [...new Set((data ?? []).map((item) => item.unitOfMeasure.trim()).filter(Boolean))].sort()
+  return { categories, units }
+}
+
 export function useBranchStockSummary() {
   return useQuery({
     queryKey: ['materials', 'branch-summary'],
@@ -60,6 +76,9 @@ export interface UpsertMaterialPayload {
   reorderLevel: number
   unitCost?: number | null
   branchId?: string | null
+  barcode?: string | null
+  preferredSupplierId?: string | null
+  reorderQuantity?: number | null
 }
 
 export function useCreateMaterial() {
@@ -92,11 +111,12 @@ export function useDeleteMaterial() {
 export function useReplenishMaterial(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { branchId?: string | null; quantity: number; unitCost?: number | null; reason?: string | null; referenceNumber?: string | null }) =>
+    mutationFn: (payload: { branchId?: string | null; quantity: number; unitCost?: number | null; reason?: string | null; referenceNumber?: string | null; batchOrSerial?: string | null }) =>
       api.post<Material>(endpoints.materials.replenish(id), payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['materials'] })
       void queryClient.invalidateQueries({ queryKey: ['materials', id, 'movements'] })
+      void queryClient.invalidateQueries({ queryKey: ['stock-ledger'] })
     },
   })
 }
@@ -104,11 +124,12 @@ export function useReplenishMaterial(id: string) {
 export function useAdjustMaterial(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { branchId?: string | null; quantityChange: number; reason?: string | null }) =>
+    mutationFn: (payload: { branchId?: string | null; quantityChange: number; reason: string; batchOrSerial?: string | null }) =>
       api.post<Material>(endpoints.materials.adjust(id), payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['materials'] })
       void queryClient.invalidateQueries({ queryKey: ['materials', id, 'movements'] })
+      void queryClient.invalidateQueries({ queryKey: ['stock-ledger'] })
     },
   })
 }
