@@ -12,7 +12,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { formatDate } from '../../shared/utils/dates'
 import { formatPercent } from '../../shared/utils/format'
 import { usePmComplianceReport } from './api'
-import { useAssetReliability, useTechnicianProductivity } from '../reports/api'
+import { useAssetReliability } from '../reports/api'
 import { useClients } from '../clients/api'
 import { MaintenanceTabNav } from './components/MaintenanceTabNav'
 import { ClientFilterSelect, useMaintenanceClientFilter } from './components/ClientFilter'
@@ -32,12 +32,10 @@ export function CompliancePage() {
 
   const complianceQuery = usePmComplianceReport(reportParams)
   const assetReliabilityQuery = useAssetReliability(reportParams)
-  const technicianQuery = useTechnicianProductivity({ from, to })
   const { data: clients } = useClients()
 
   const { data: compliance, isLoading } = complianceQuery
   const { data: assetReliability } = assetReliabilityQuery
-  const { data: technicianProductivity } = technicianQuery
   // A failed report must never be summarised as zeroes — every tile below falls back to an em dash.
   const complianceUnavailable = complianceQuery.isError
 
@@ -83,12 +81,6 @@ export function CompliancePage() {
     { key: 'complianceRate', header: 'Avg PM Compliance', cell: (row) => formatPercent(row.complianceRate) },
   ]
 
-  const technicianColumns: DataTableColumn<{ id: string; name: string; pmJobs: number; onTimeRate: number }>[] = [
-    { key: 'name', header: 'Technician', cell: (row) => row.name },
-    { key: 'pmJobs', header: 'PM Jobs', cell: (row) => row.pmJobs },
-    { key: 'onTimeRate', header: 'On-Time Rate', cell: (row) => formatPercent(row.onTimeRate) },
-  ]
-
   const missedColumns: DataTableColumn<{ id: string; assetName: string; clientName: string; nextPmDate: string; daysOverdue: number }>[] = [
     { key: 'assetName', header: 'Asset', cell: (row) => row.assetName },
     { key: 'clientName', header: 'Client', cell: (row) => row.clientName },
@@ -104,7 +96,7 @@ export function CompliancePage() {
     <div className="space-y-4">
       <PageHeader
         title="PM Compliance"
-        subtitle="Compliance rates by client, asset type, and technician."
+        subtitle="Compliance rates by client and asset type."
         secondaryActions={
           <div className="flex flex-wrap items-center gap-2">
             <ClientFilterSelect value={clientId} onChange={setClientId} />
@@ -170,28 +162,6 @@ export function CompliancePage() {
           />
         ) : (
           <DataTable columns={categoryColumns} data={byCategory} loading={assetReliabilityQuery.isLoading} emptyTitle="No data" emptyDescription="No asset category data available." />
-        )}
-      </section>
-
-      <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-        <SectionHeader
-          title="By Technician"
-          description={clientId ? 'PM job volume and on-time rate per technician across all clients — this report cannot be filtered by client.' : 'PM job volume and on-time rate per technician.'}
-        />
-        {technicianQuery.isError ? (
-          <ErrorState
-            title="Per-technician breakdown unavailable"
-            description="The technician productivity report could not be loaded, so an empty table would be misleading."
-            onRetry={() => void technicianQuery.refetch()}
-          />
-        ) : (
-          <DataTable
-            columns={technicianColumns}
-            data={(technicianProductivity?.technicians ?? []).filter((row) => row.pmJobs > 0).map((row) => ({ id: row.technicianId ?? row.name, name: row.name, pmJobs: row.pmJobs, onTimeRate: row.onTimeRate }))}
-            loading={technicianQuery.isLoading}
-            emptyTitle="No PM jobs"
-            emptyDescription="No technicians completed PM jobs in this period."
-          />
         )}
       </section>
 
