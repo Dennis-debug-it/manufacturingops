@@ -137,6 +137,20 @@ public sealed partial class ProjectsModuleTests
         Assert.Contains("can't change", error.Message);
     }
 
+    [Fact]
+    public async Task CostCurrency_IsTheChosenCode_ElseTheWorkspaceCurrency()
+    {
+        var harness = await Harness.CreateAsync();
+        harness.Db.Tenants.Add(new Tenant { Id = harness.TenantId, Name = "Kampala Co", Slug = "kampala-co", CompanyName = "Kampala Co", Country = "Uganda", Currency = "UGX" });
+        await harness.Db.SaveChangesAsync();
+
+        Assert.Equal("UGX", await CurrencyConverter.ResolveAsync(harness.Db, harness.TenantId, null));
+        Assert.Equal("UGX", await CurrencyConverter.ResolveAsync(harness.Db, harness.TenantId, "  "));
+        Assert.Equal("USD", await CurrencyConverter.ResolveAsync(harness.Db, harness.TenantId, " usd "));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => CurrencyConverter.ResolveAsync(harness.Db, harness.TenantId, "US"));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => CurrencyConverter.ResolveAsync(harness.Db, harness.TenantId, "U$D"));
+    }
+
     /// <summary>Takes a valuation through submit and certify, raises its invoice from the project, and returns it.</summary>
     private static async Task<TenantInvoice> RaiseCertifiedValuationInvoiceAsync(Harness harness, Guid projectId, decimal amount)
     {

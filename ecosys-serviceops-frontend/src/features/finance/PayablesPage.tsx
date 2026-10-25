@@ -10,6 +10,7 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { ProjectPicker } from '../../shared/components/ProjectPicker'
 import { usePermission } from '../../shared/hooks/usePermission'
+import { getActiveCurrency } from '../../shared/utils/currency'
 import { formatDate } from '../../shared/utils/dates'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 import { useSuppliers } from '../inventory/purchaseOrdersApi'
@@ -29,11 +30,12 @@ export function PayablesPage() {
   const [dueDate, setDueDate] = useState('')
   const [notes, setNotes] = useState('')
   const [projectId, setProjectId] = useState('')
+  const [currency, setCurrency] = useState(getActiveCurrency)
 
   const submit = async () => {
     if (!supplierId) return toast.error('Select a supplier')
     if (!amount || !dueDate) return toast.error('Amount and due date are required')
-    await createPayable.mutateAsync({ supplierId, amount: Number(amount), dueDate, notes: notes || undefined, projectId: projectId || null })
+    await createPayable.mutateAsync({ supplierId, amount: Number(amount), dueDate, notes: notes || undefined, projectId: projectId || null, currency: currency.trim() || getActiveCurrency() })
     toast.success('Bill created')
     setShowNewBill(false)
     setSupplierId('')
@@ -41,6 +43,7 @@ export function PayablesPage() {
     setDueDate('')
     setNotes('')
     setProjectId('')
+    setCurrency(getActiveCurrency())
   }
 
   const columns: DataTableColumn<PayableListItem>[] = [
@@ -98,9 +101,15 @@ export function PayablesPage() {
             </select>
             {suppliers && suppliers.length === 0 ? <p className="mt-1 text-xs text-amber-600">No suppliers yet — add one on the Suppliers page first.</p> : null}
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Amount (KES)</label>
-            <input type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+          <div className="grid grid-cols-[1fr_6rem] gap-3">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Amount</label>
+              <input type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+            </div>
+            <div>
+              <label htmlFor="bill-currency" className="mb-1.5 block text-sm font-medium text-slate-700">Currency</label>
+              <input id="bill-currency" value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+            </div>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Due Date</label>

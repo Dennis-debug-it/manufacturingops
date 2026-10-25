@@ -58,6 +58,8 @@ export interface CreatePurchaseOrderPayload {
   lines: Array<{ itemName: string; quantityOrdered: number; unitCost: number }>
   notes?: string | undefined
   projectId?: string | null
+  /** Three-letter code; the workspace currency when omitted. */
+  currency?: string
 }
 
 export function useCreatePurchaseOrder() {

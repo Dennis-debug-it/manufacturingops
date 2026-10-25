@@ -53,6 +53,21 @@ public sealed class CurrencyConverter
     }
 
     public static string Normalize(string? currency) => (currency ?? string.Empty).Trim().ToUpperInvariant();
+
+    /// <summary>
+    /// The currency for a new expense, bill or purchase order: the one chosen, as a three-letter code, else
+    /// the workspace currency.
+    /// </summary>
+    public static async Task<string> ResolveAsync(AppDbContext dbContext, Guid tenantId, string? requested, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(requested))
+            return await ProjectFinanceRules.StockCurrencyAsync(dbContext, tenantId, cancellationToken);
+
+        var code = Normalize(requested);
+        return code.Length == 3 && code.All(char.IsAsciiLetterUpper)
+            ? code
+            : throw new BusinessRuleException("Currency must be a three-letter code such as KES or USD.");
+    }
 }
 
 /// <summary>

@@ -11,6 +11,7 @@ import { FormDrawer } from '../../shared/components/FormDrawer'
 import { ProjectPicker } from '../../shared/components/ProjectPicker'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
+import { getActiveCurrency } from '../../shared/utils/currency'
 import { formatDate } from '../../shared/utils/dates'
 import { InventoryTabNav } from './components/InventoryTabNav'
 import { MaterialAutocomplete } from './components/MaterialAutocomplete'
@@ -53,10 +54,12 @@ export function PurchaseOrdersPage() {
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([{ ...emptyLine }])
   const [projectId, setProjectId] = useState('')
+  const [currency, setCurrency] = useState(getActiveCurrency)
 
   const resetForm = () => {
     setSupplierId('')
     setProjectId('')
+    setCurrency(getActiveCurrency())
     setExpectedAt('')
     setNotes('')
     setLines([{ ...emptyLine }])
@@ -69,7 +72,7 @@ export function PurchaseOrdersPage() {
   const submit = async () => {
     if (!supplierId) return toast.error('Select a supplier')
     if (validLines.length === 0) return toast.error('Add at least one line item')
-    await createPo.mutateAsync({ supplierId, expectedAt: expectedAt || undefined, lines: validLines, notes: notes || undefined, projectId: projectId || null })
+    await createPo.mutateAsync({ supplierId, expectedAt: expectedAt || undefined, lines: validLines, notes: notes || undefined, projectId: projectId || null, currency: currency.trim() || getActiveCurrency() })
     toast.success('Purchase order created')
     setShowNewPo(false)
     resetForm()
@@ -135,6 +138,10 @@ export function PurchaseOrdersPage() {
             <input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
           <ProjectPicker id="po-project" value={projectId} onChange={setProjectId} />
+          <div>
+            <label htmlFor="po-currency" className="mb-1.5 block text-sm font-medium text-slate-700">Currency</label>
+            <input id="po-currency" value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} className="h-11 w-24 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+          </div>
 
           <div>
             <div className="mb-1.5 flex items-center justify-between">

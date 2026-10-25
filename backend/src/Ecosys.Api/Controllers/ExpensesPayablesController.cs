@@ -69,6 +69,7 @@ public sealed class ExpensesPayablesController(
             SubmittedByName = submittedByName,
             Category = request.Category.Trim(),
             Amount = request.Amount,
+            Currency = await CurrencyConverter.ResolveAsync(dbContext, TenantId, request.Currency, cancellationToken),
             IncurredAt = DateTime.SpecifyKind(request.IncurredAt, DateTimeKind.Utc),
             Status = "Submitted",
             Description = request.Description?.Trim(),
@@ -176,6 +177,7 @@ public sealed class ExpensesPayablesController(
             BillNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.SupplierBill, cancellationToken),
             SupplierId = supplier.Id,
             Amount = request.Amount,
+            Currency = await CurrencyConverter.ResolveAsync(dbContext, TenantId, request.Currency, cancellationToken),
             AmountPaid = 0,
             DueDate = DateTime.SpecifyKind(request.DueDate, DateTimeKind.Utc),
             Status = "Open",
@@ -260,7 +262,7 @@ public sealed record ExpenseDetailResponse(
     string Currency, DateTime IncurredAt, string Status,
     string? Description, string? ReceiptUrl, string? ApprovedByName, DateTime? ApprovedAt);
 
-public sealed record CreateExpenseRequest(string Category, decimal Amount, DateTime IncurredAt, string? Description = null, Guid? ProjectId = null);
+public sealed record CreateExpenseRequest(string Category, decimal Amount, DateTime IncurredAt, string? Description = null, Guid? ProjectId = null, string? Currency = null);
 
 public sealed record ExpenseDecisionRequest(bool Approve);
 
@@ -275,6 +277,6 @@ public sealed record PayableDetailResponse(
     string Currency, DateTime DueDate, string Status, string? Notes,
     IReadOnlyList<PayablePaymentResponse> PaymentHistory);
 
-public sealed record CreatePayableRequest(Guid SupplierId, decimal Amount, DateTime DueDate, string? Notes = null, Guid? ProjectId = null);
+public sealed record CreatePayableRequest(Guid SupplierId, decimal Amount, DateTime DueDate, string? Notes = null, Guid? ProjectId = null, string? Currency = null);
 
 public sealed record RecordPayablePaymentRequest(decimal Amount, string Method, string? Reference = null);
