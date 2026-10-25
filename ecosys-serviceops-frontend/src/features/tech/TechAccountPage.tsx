@@ -5,6 +5,7 @@ import { Spinner } from '../../shared/components/Spinner'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { cn } from '../../shared/utils/cn'
 import { JobAlertsSetting } from './JobAlerts'
+import { LocationSetting } from './LocationPrompt'
 import { NotificationPreferencesList } from '../notifications/NotificationPreferences'
 import { WhatsAppOptInCard } from '../whatsapp/WhatsAppOptInCard'
 import { staffWhatsAppApi } from '../whatsapp/remindersApi'
@@ -100,6 +101,7 @@ export function TechAccountPage() {
       <MyVan />
       <ChangePassword />
       <JobAlertsSetting />
+      <LocationSetting />
       <NotificationSettings />
     </div>
   )

@@ -556,3 +556,35 @@ async function drawSignature(locator: Locator) {
   await page.mouse.up()
 }
 
+
+test.describe('mobile technician location prompt', () => {
+  test.use({ permissions: [] })
+
+  test('explains why location is used before the phone asks, then remembers the answer', async ({ page, context }) => {
+    // Headless Chromium reports any ungranted permission as denied; a real phone says "prompt" until asked.
+    await page.addInitScript(() => {
+      const query = navigator.permissions.query.bind(navigator.permissions)
+      navigator.permissions.query = async (descriptor) => {
+        const result = await query(descriptor)
+        return descriptor.name === 'geolocation' && result.state !== 'granted' ? ({ state: 'prompt' } as PermissionStatus) : result
+      }
+    })
+    await mockTechnicianMode(page, createScenarioState())
+
+    await page.goto('/tech')
+    const card = page.getByRole('region').filter({ hasText: 'Confirm site arrivals with your location' })
+    await expect(page.getByText('Confirm site arrivals with your location')).toBeVisible()
+    await expect(page.getByText(/We don't track you in the background/)).toBeVisible()
+
+    // Stands in for the technician tapping Allow on the phone's own prompt.
+    await context.grantPermissions(['geolocation'])
+    await context.setGeolocation({ latitude: -1.2921, longitude: 36.8219 })
+    await page.getByRole('button', { name: 'Allow location' }).click()
+    await expect(page.getByText(/location is on/i)).toBeVisible()
+    await expect(card).toHaveCount(0)
+
+    await page.goto('/tech/account')
+    await expect(page.getByText('On. Arrivals and departures record where you are.')).toBeVisible()
+    await expect(page.getByText('Confirm site arrivals with your location')).toHaveCount(0)
+  })
+})
