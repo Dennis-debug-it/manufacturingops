@@ -1466,7 +1466,9 @@ public sealed partial class AuthEmailSafetyTests
             CanManageFinanceApprovals = true,
             CanViewBillableWork = true,
             CanManageBillableWork = true,
-            CanOverrideMaterialStock = true
+            CanOverrideMaterialStock = true,
+            CanViewCrm = true,
+            CanManageCrm = true
         };
         public UserPermissionsModel GetFullTenantPermissions() => GetDefaultPermissions(string.Empty, null);
         public UserPermissionsModel GetSuperAdminPermissions() => new UserPermissionsModel();

@@ -146,6 +146,8 @@ const permissionSetLookup: Partial<Record<string, keyof PermissionSet>> = {
   'inventory.transfers.manage': 'canManageMaterials',
   'inventory.materials.manage': 'canManageMaterials',
   'pm-templates.manage': 'canManageSettings',
+  'crm.view': 'canViewCrm',
+  'crm.manage': 'canManageCrm',
 }
 
 /**

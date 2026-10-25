@@ -57,7 +57,9 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
             CanViewFinance = true,
             CanViewFinanceRates = true,
             CanViewFinanceApprovals = true,
-            CanViewBillableWork = true
+            CanViewBillableWork = true,
+            CanViewCrm = true,
+            CanManageCrm = true
         },
         AppRoles.Dispatcher => new UserPermissionsModel
         {
@@ -101,15 +103,19 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
             CanViewFinanceApprovals = true,
             CanManageFinanceApprovals = true,
             CanViewBillableWork = true,
-            CanManageBillableWork = true
+            CanManageBillableWork = true,
+            CanViewCrm = true,
+            CanManageCrm = true
         },
-        // Viewer == the previous catch-all default, so legacy "User" accounts keep exactly what they had.
+        // Viewer == the previous catch-all default, so legacy "User" accounts keep exactly what they had,
+        // plus read-only access to the sales pipeline, which Viewers had before CRM got its own capability.
         _ => new UserPermissionsModel
         {
             CanViewWorkOrders = true,
             CanViewKnowledge = true,
             CanViewMaterials = true,
-            CanRequestMaterials = true
+            CanRequestMaterials = true,
+            CanViewCrm = true
         }
     };
 
@@ -317,6 +323,8 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
         entity.CanViewBillableWork = p.CanViewBillableWork;
         entity.CanManageBillableWork = p.CanManageBillableWork;
         entity.CanOverrideMaterialStock = p.CanOverrideMaterialStock;
+        entity.CanViewCrm = p.CanViewCrm;
+        entity.CanManageCrm = p.CanManageCrm;
     }
 
     private static UserPermissionsModel FromEntity(RolePermission e) => new()
@@ -343,6 +351,8 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
         CanManageFinanceApprovals = e.CanManageFinanceApprovals,
         CanViewBillableWork = e.CanViewBillableWork,
         CanManageBillableWork = e.CanManageBillableWork,
-        CanOverrideMaterialStock = e.CanOverrideMaterialStock
+        CanOverrideMaterialStock = e.CanOverrideMaterialStock,
+        CanViewCrm = e.CanViewCrm,
+        CanManageCrm = e.CanManageCrm
     };
 }

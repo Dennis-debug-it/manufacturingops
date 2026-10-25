@@ -709,7 +709,9 @@ internal sealed class MvpAuthService(
             CanManageFinanceApprovals = permissions.CanManageFinanceApprovals,
             CanViewBillableWork = permissions.CanViewBillableWork,
             CanManageBillableWork = permissions.CanManageBillableWork,
-            CanOverrideMaterialStock = permissions.CanOverrideMaterialStock
+            CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
+            CanViewCrm = permissions.CanViewCrm,
+            CanManageCrm = permissions.CanManageCrm
         };
 
     public static UserPermissionsModel FromEntity(UserPermission permission) =>
@@ -737,7 +739,9 @@ internal sealed class MvpAuthService(
             CanManageFinanceApprovals = permission.CanManageFinanceApprovals,
             CanViewBillableWork = permission.CanViewBillableWork,
             CanManageBillableWork = permission.CanManageBillableWork,
-            CanOverrideMaterialStock = permission.CanOverrideMaterialStock
+            CanOverrideMaterialStock = permission.CanOverrideMaterialStock,
+            CanViewCrm = permission.CanViewCrm,
+            CanManageCrm = permission.CanManageCrm
         };
 
     private static IEnumerable<Claim> ToClaims(UserPermissionsModel permissions)
@@ -769,6 +773,8 @@ internal sealed class MvpAuthService(
         {
             yield return new Claim(capability, bool.TrueString);
         }
+        yield return new Claim(PermissionNames.CrmView, permissions.CanViewCrm.ToString());
+        yield return new Claim(PermissionNames.CrmManage, permissions.CanManageCrm.ToString());
     }
 
     private static NumberingSetting CreateNumberingSetting(Tenant tenant, Guid? branchId, string documentType, string prefix) =>

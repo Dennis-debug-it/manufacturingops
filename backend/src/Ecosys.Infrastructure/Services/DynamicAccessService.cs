@@ -135,7 +135,8 @@ internal static class PermissionMap
         [PermissionNames.FinanceViewRates] = p.CanViewFinanceRates, [PermissionNames.FinanceManageRates] = p.CanManageFinanceRates,
         [PermissionNames.FinanceViewApprovals] = p.CanViewFinanceApprovals, [PermissionNames.FinanceManageApprovals] = p.CanManageFinanceApprovals,
         [PermissionNames.FinanceViewBillableWork] = p.CanViewBillableWork, [PermissionNames.FinanceManageBillableWork] = p.CanManageBillableWork,
-        [PermissionNames.MaterialsOverrideStock] = p.CanOverrideMaterialStock
+        [PermissionNames.MaterialsOverrideStock] = p.CanOverrideMaterialStock,
+        [PermissionNames.CrmView] = p.CanViewCrm, [PermissionNames.CrmManage] = p.CanManageCrm
     };
 
     public static UserPermissionsModel ToModel(HashSet<string> p) => new()
@@ -145,6 +146,7 @@ internal static class PermissionMap
         CanManageMaterials=p.Contains(PermissionNames.CanManageMaterials), CanApproveMaterials=p.Contains(PermissionNames.CanApproveMaterials), CanIssueMaterials=p.Contains(PermissionNames.CanIssueMaterials), CanManageAssets=p.Contains(PermissionNames.CanManageAssets),
         CanManageSettings=p.Contains(PermissionNames.CanManageSettings), CanViewReports=p.Contains(PermissionNames.CanViewReports), CanViewFinance=p.Contains(PermissionNames.FinanceView), CanManageFinance=p.Contains(PermissionNames.FinanceManage),
         CanViewFinanceRates=p.Contains(PermissionNames.FinanceViewRates), CanManageFinanceRates=p.Contains(PermissionNames.FinanceManageRates), CanViewFinanceApprovals=p.Contains(PermissionNames.FinanceViewApprovals), CanManageFinanceApprovals=p.Contains(PermissionNames.FinanceManageApprovals),
-        CanViewBillableWork=p.Contains(PermissionNames.FinanceViewBillableWork), CanManageBillableWork=p.Contains(PermissionNames.FinanceManageBillableWork), CanOverrideMaterialStock=p.Contains(PermissionNames.MaterialsOverrideStock)
+        CanViewBillableWork=p.Contains(PermissionNames.FinanceViewBillableWork), CanManageBillableWork=p.Contains(PermissionNames.FinanceManageBillableWork), CanOverrideMaterialStock=p.Contains(PermissionNames.MaterialsOverrideStock),
+        CanViewCrm=p.Contains(PermissionNames.CrmView), CanManageCrm=p.Contains(PermissionNames.CrmManage)
     };
 }

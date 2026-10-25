@@ -859,6 +859,8 @@ public sealed class UsersController(
         entity.CanViewBillableWork = permissions.CanViewBillableWork;
         entity.CanManageBillableWork = permissions.CanManageBillableWork;
         entity.CanOverrideMaterialStock = permissions.CanOverrideMaterialStock;
+        entity.CanViewCrm = permissions.CanViewCrm;
+        entity.CanManageCrm = permissions.CanManageCrm;
     }
 
     private UserResponse Map(
@@ -894,7 +896,9 @@ public sealed class UsersController(
                 CanManageFinanceApprovals = user.Permission.CanManageFinanceApprovals,
                 CanViewBillableWork = user.Permission.CanViewBillableWork,
                 CanManageBillableWork = user.Permission.CanManageBillableWork,
-                CanOverrideMaterialStock = user.Permission.CanOverrideMaterialStock
+                CanOverrideMaterialStock = user.Permission.CanOverrideMaterialStock,
+                CanViewCrm = user.Permission.CanViewCrm,
+                CanManageCrm = user.Permission.CanManageCrm
             };
 
         return new UserResponse(
@@ -1036,7 +1040,9 @@ public sealed record PermissionRequest(
     bool CanManageFinanceApprovals,
     bool CanViewBillableWork,
     bool CanManageBillableWork,
-    bool CanOverrideMaterialStock)
+    bool CanOverrideMaterialStock,
+    bool CanViewCrm = false,
+    bool CanManageCrm = false)
 {
     public UserPermissionsModel ToModel() =>
         new()
@@ -1063,7 +1069,9 @@ public sealed record PermissionRequest(
             CanManageFinanceApprovals = CanManageFinanceApprovals,
             CanViewBillableWork = CanViewBillableWork,
             CanManageBillableWork = CanManageBillableWork,
-            CanOverrideMaterialStock = CanOverrideMaterialStock
+            CanOverrideMaterialStock = CanOverrideMaterialStock,
+            CanViewCrm = CanViewCrm,
+            CanManageCrm = CanManageCrm
         };
 }
 

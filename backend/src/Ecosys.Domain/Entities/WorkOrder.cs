@@ -67,6 +67,8 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public Guid? WorkOrderTemplateId { get; set; }
     public string? PlannedMaterialsJson { get; set; }
     public Guid? QuoteId { get; set; }
+    /// <summary>The CRM deal this job was won through, when it came from sales.</summary>
+    public Guid? SalesOpportunityId { get; set; }
     public Guid? ParentWorkOrderId { get; set; }
     /// <summary>
     /// The finished job this one follows up on (a return visit). Unlike <see cref="ParentWorkOrderId"/>
@@ -123,6 +125,7 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public PmTemplate? PmTemplate { get; set; }
     public WorkOrderTemplate? WorkOrderTemplate { get; set; }
     public TenantQuotation? Quote { get; set; }
+    public SalesOpportunity? SalesOpportunity { get; set; }
     public WorkOrder? ParentWorkOrder { get; set; }
     public ICollection<WorkOrder> ChildWorkOrders { get; set; } = new List<WorkOrder>();
     public WorkOrder? FollowUpOfWorkOrder { get; set; }

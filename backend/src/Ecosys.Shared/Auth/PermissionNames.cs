@@ -63,6 +63,8 @@ public static class PermissionNames
         ActivitiesManage,
         CalendarTeam
     ];
+    public const string CrmView = "crm.view";
+    public const string CrmManage = "crm.manage";
 
     public static readonly string[] All =
     [
@@ -102,6 +104,8 @@ public static class PermissionNames
         ProjectsFinancialsManage,
         ActivitiesView,
         ActivitiesManage,
-        CalendarTeam
+        CalendarTeam,
+        CrmView,
+        CrmManage
     ];
 }

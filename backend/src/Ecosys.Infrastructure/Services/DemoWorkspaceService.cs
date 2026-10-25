@@ -86,7 +86,7 @@ internal sealed partial class DemoWorkspaceService(
     private static readonly DemoWorkspaceLogin[] Logins =
     [
         new("admin", "Amina Otieno", AppRoles.Admin, "Everything: settings, finance, users, reports."),
-        new("manager", "Brian Mwangi", AppRoles.Manager, "Operations oversight, projects, approvals and reports."),
+        new("manager", "Brian Mwangi", AppRoles.Manager, "Operations oversight, projects, approvals, reports and the sales pipeline."),
         new("dispatcher", "Grace Njeri", AppRoles.Dispatcher, "Job intake, scheduling and technician dispatch."),
         new("technician", "Kevin Ochieng", AppRoles.Technician, "The field view: assigned jobs, check-in, completion, and the solar project's muster roll."),
     ];
@@ -559,7 +559,7 @@ internal sealed partial class DemoWorkspaceService(
                 started: _now.AddDays(-9), completed: _now.AddDays(-9).AddHours(3), workDone: "Oil and filters changed, coolant topped up, battery tested at 12.7V. Load test passed at 80%.", isPm: true);
             AddJob(hospital, hospitalMain, ahu, peter, "Replace AHU belts – Theatre 2", "Medium", WorkOrderStatuses.ClientAccepted, due: d.AddDays(-14), created: _now.AddDays(-18), contract: hospitalContract,
                 started: _now.AddDays(-15), completed: _now.AddDays(-15).AddHours(2), workDone: "Replaced two worn V-belts and re-tensioned. Airflow verified.");
-            AddJob(hospital, hospitalMain, null, faith, "Install emergency lighting in corridor B", "Medium", WorkOrderStatuses.Closed, due: d.AddDays(-25), created: _now.AddDays(-30),
+            var lightingJob = AddJob(hospital, hospitalMain, null, faith, "Install emergency lighting in corridor B", "Medium", WorkOrderStatuses.Closed, due: d.AddDays(-25), created: _now.AddDays(-30),
                 started: _now.AddDays(-27), completed: _now.AddDays(-26), closed: _now.AddDays(-24), workDone: "Installed 12 LED emergency fittings; 3-hour discharge test passed.");
             AddJob(hospital, hospitalClinic, null, faith, "Faulty sockets in consultation room 4", "Low", WorkOrderStatuses.Closed, due: d.AddDays(-35), created: _now.AddDays(-40),
                 started: _now.AddDays(-38), completed: _now.AddDays(-38).AddHours(1), closed: _now.AddDays(-36), workDone: "Replaced 4 damaged sockets and tested all circuits.");
@@ -582,13 +582,13 @@ internal sealed partial class DemoWorkspaceService(
                 started: _now.AddDays(-31), completed: _now.AddDays(-31).AddHours(5), closed: _now.AddDays(-29), workDone: "Condenser coils cleaned, refrigerant pressures within spec.", branch: mombasa, isPm: true);
 
             // Quotations — the hospital sees these in the portal; drafts are kept to other clients
-            AddQuote(hospital, "Upgrade theatre AHU controls", "Sent", d.AddDays(-2), [("BMS controller and sensors", 1, "set", 385_000m), ("Installation and commissioning", 3, "day", 45_000m)]);
-            AddQuote(hospital, "Generator ATS replacement", "Sent", d.AddDays(-5), [("Automatic transfer switch 800A", 1, "unit", 520_000m), ("Labour", 2, "day", 38_000m)]);
-            AddQuote(hospital, "Emergency lighting – corridor B", "Accepted", d.AddDays(-32), [("LED emergency fittings", 12, "unit", 8_500m), ("Installation", 1, "lot", 36_000m)]);
+            var ahuQuote = AddQuote(hospital, "Upgrade theatre AHU controls", "Sent", d.AddDays(-2), [("BMS controller and sensors", 1, "set", 385_000m), ("Installation and commissioning", 3, "day", 45_000m)]);
+            var atsQuote = AddQuote(hospital, "Generator ATS replacement", "Sent", d.AddDays(-5), [("Automatic transfer switch 800A", 1, "unit", 520_000m), ("Labour", 2, "day", 38_000m)]);
+            var lightingQuote = AddQuote(hospital, "Emergency lighting – corridor B", "Accepted", d.AddDays(-32), [("LED emergency fittings", 12, "unit", 8_500m), ("Installation", 1, "lot", 36_000m)]);
             AddQuote(hospital, "Replace clinic chiller compressor", "Rejected", d.AddDays(-20), [("Compressor", 1, "unit", 740_000m), ("Labour", 4, "day", 42_000m)],
                 rejectionReason: "Deferred to next financial year's capital budget.");
             AddQuote(mall, "Escalator handrail replacement", "Draft", d, [("Handrail kit", 2, "set", 210_000m)]);
-            AddQuote(hotel, "Pool pump VFD retrofit", "Sent", d.AddDays(-1), [("Variable frequency drive 15kW", 2, "unit", 1_450m), ("Commissioning", 1, "lot", 600m)], currency: "USD");
+            var vfdQuote = AddQuote(hotel, "Pool pump VFD retrofit", "Sent", d.AddDays(-1), [("Variable frequency drive 15kW", 2, "unit", 1_450m), ("Commissioning", 1, "lot", 600m)], currency: "USD");
 
             // Invoices and payments — paid, part-paid, open, overdue, and one in USD
             AddInvoice(hospital, "Paid", d.AddDays(-40), d.AddDays(-10), [("Emergency lighting installation", 1, "lot", 138_000m)], paid: 160_080m, method: "BankTransfer");
@@ -599,6 +599,61 @@ internal sealed partial class DemoWorkspaceService(
             AddInvoice(hotel, "Sent", d.AddDays(-10), d.AddDays(20), [("Chiller quarterly service", 1, "visit", 850m)], currency: "USD");
 
             AddProjects(admin, users["manager"], users["technician"], kevin, faith, bank, bankHq, hospital, hospitalMain, hotel, hotelSite, nairobi, mombasa);
+            // Sales CRM — the pipeline at every stage, tied into the jobs and quotes above. The won lighting
+            // deal is the whole story in one place: deal → accepted quote → closed job → paid invoice.
+            var manager = users["manager"];
+            db.ExchangeRates.Add(new ExchangeRate { TenantId = tenantId, BaseCurrency = "USD", QuoteCurrency = "KES", Rate = 129.40m, EffectiveFrom = d.AddDays(-7), UpdatedByUserId = admin.Id, UpdatedByName = admin.FullName });
+
+            var lightingDeal = AddDeal("Emergency lighting – corridor B", "Won", manager, value: 138_000m, closeIn: -33, created: -45, client: hospital, site: hospitalMain,
+                serviceType: "NewInstallation", source: "Existing client",
+                activities: [("SiteVisit", "Walked corridor B with the facilities team; 12 fittings needed.", -42, null), ("Note", "Quote accepted by Dr. Achieng.", -32, null)]);
+            lightingQuote.SalesOpportunityId = lightingDeal.Id;
+            lightingJob.SalesOpportunityId = lightingDeal.Id;
+
+            var ahuDeal = AddDeal("Theatre AHU controls upgrade", "Proposal", manager, value: 520_000m, closeIn: 14, created: -10, client: hospital, site: hospitalMain,
+                serviceType: "NewInstallation", source: "Existing client",
+                activities: [("Meeting", "Presented the BMS upgrade to the theatre manager; wants the night-setback feature.", -3, null), ("FollowUp", "Call Dr. Achieng about the revised quote.", -1, 1)]);
+            ahuQuote.SalesOpportunityId = ahuDeal.Id;
+            var atsDeal = AddDeal("Generator ATS replacement", "Negotiation", admin, value: 600_000m, closeIn: 7, created: -12, client: hospital, site: hospitalMain,
+                serviceType: "CorrectiveMaintenance", source: "Existing client",
+                activities: [("Call", "Client asked for 10% off if we start before month end.", -2, null)]);
+            atsQuote.SalesOpportunityId = atsDeal.Id;
+            var vfdDeal = AddDeal("Pool pump VFD retrofit", "Proposal", manager, value: 3_500m, currency: "USD", closeIn: 21, created: -6, client: hotel, site: hotelSite,
+                serviceType: "NewInstallation", source: "Existing client",
+                activities: [("Email", "Sent the energy-saving estimate (about 30% on pump power).", -1, null)]);
+            vfdQuote.SalesOpportunityId = vfdDeal.Id;
+
+            // Won two days ago and not handed over yet, so the deal page shows "Create Work Order".
+            AddDeal("Annual fire safety service contract", "Won", admin, value: 420_000m, closeIn: -2, created: -25, client: mall, site: mallSite,
+                serviceType: "PreventiveMaintenance", source: "Existing client",
+                activities: [("Meeting", "Agreed quarterly inspections of all fire panels and extinguishers.", -4, null)]);
+            AddDeal("Kilimani Heights – lift maintenance contract", "Qualified", manager, value: 960_000m, closeIn: 30, created: -8,
+                company: "Kilimani Heights Apartments", contact: "Ruth Kamau", phone: "+254 722 300 100", location: "Kilimani, Nairobi",
+                serviceType: "PreventiveMaintenance", source: "Referral",
+                activities: [("SiteVisit", "Two passenger lifts, 14 floors. Current contractor's response times are the complaint.", -5, null), ("FollowUp", "Send proposal with 4-hour response SLA.", -1, 2)]);
+            AddDeal("Rift Valley Flower Farm – cold room service", "Lead", admin, value: 240_000m, closeIn: 45, created: -3,
+                company: "Rift Valley Flower Farm", contact: "Daniel Kiprop", phone: "+254 722 300 200", location: "Naivasha",
+                serviceType: "CorrectiveMaintenance", source: "Website",
+                activities: [("FollowUp", "Call back to book a site survey.", -3, -1)]);
+            AddDeal("Branch CCTV upgrade", "Lost", admin, value: 780_000m, closeIn: -15, created: -50, client: bank, site: bankHq,
+                serviceType: "NewInstallation", source: "Existing client", lostReason: "Went with their incumbent security vendor.",
+                activities: [("Note", "Lost on price; the incumbent bundled CCTV with guarding.", -15, null)]);
+
+            // RFPs and RFQs — one being prepared (with its deal), one just in, one awaiting award, one declined.
+            var pumpDeal = AddDeal("Athi River pump station generators", "Proposal", manager, value: 1_850_000m, closeIn: 3, created: -5,
+                company: "Athi Water Services", contact: "Procurement Office", location: "Athi River", serviceType: "PreventiveMaintenance", source: "Tender",
+                activities: [("Note", "Opened from RFQ AWS/RFQ/2026/031.", -4, null)]);
+            AddTender("RFQ", "AWS/RFQ/2026/031", "Servicing of pump station standby generators (12 months)", "Preparing", manager,
+                issuer: "Athi Water Services", contact: "Procurement Office", received: -6, clarification: 1, deadline: 3, value: 1_850_000m,
+                method: "Supplier portal", bidBond: 50_000m, opportunity: pumpDeal);
+            AddTender("RFP", "LVU/RFP/2026/007", "Campus-wide HVAC maintenance – 3 years", "Received", admin,
+                issuer: "Lakeview University", contact: "Estates Department", received: -1, clarification: 6, deadline: 18, value: 7_200_000m,
+                method: "Sealed envelope to the procurement office");
+            AddTender("RFQ", "SVB/PRC/2026/112", "Data centre UPS battery replacement", "Submitted", manager,
+                client: bank, received: -12, deadline: -4, value: 1_250_000m, submitted: 1_180_000m, method: "Email");
+            AddTender("RFQ", "PRH/RFQ/2026/019", "Medical gas pipeline extension", "NoBid", admin,
+                issuer: "Port Reitz Hospital", received: -9, deadline: 2, value: 3_400_000m,
+                outcome: "Needs a specialist medical-gas installer certification we don't hold.");
 
             // Client portal contact for the hospital (no mailbox — the platform issues the sign-in link)
             db.ClientPortalUsers.Add(new ClientPortalUser
@@ -1158,6 +1213,92 @@ internal sealed partial class DemoWorkspaceService(
 
             quote.TotalAmount = quote.Subtotal + quote.TaxAmount;
             return quote;
+        }
+
+        private SalesOpportunity AddDeal(string title, string stage, User owner, decimal value, int closeIn, int created,
+            Client? client = null, Site? site = null, string? company = null, string? contact = null, string? phone = null, string? location = null,
+            string? serviceType = null, string? source = null, string currency = "KES", string? lostReason = null,
+            (string Type, string Summary, int DaysAgo, int? DueInDays)[]? activities = null)
+        {
+            var createdAt = _now.AddDays(created);
+            var deal = Add(_db.SalesOpportunities, new SalesOpportunity
+            {
+                TenantId = tenantId,
+                Title = title,
+                Stage = stage,
+                ClientId = client?.Id,
+                SiteId = site?.Id,
+                CompanyName = company,
+                ContactName = contact ?? client?.ContactPerson,
+                ContactPhone = phone ?? client?.Phone,
+                Location = location,
+                Source = source,
+                ServiceType = serviceType,
+                EstimatedValue = value,
+                Currency = currency,
+                Probability = stage switch { "Lead" => 10, "Qualified" => 25, "SiteSurvey" => 40, "Proposal" => 60, "Negotiation" => 80, "Won" => 100, _ => 0 },
+                ExpectedCloseDate = _now.Date.AddDays(closeIn),
+                OwnerUserId = owner.Id,
+                OwnerName = owner.FullName,
+                WonAt = stage == "Won" ? _now.AddDays(closeIn) : null,
+                LostAt = stage == "Lost" ? _now.AddDays(closeIn) : null,
+                LostReason = lostReason,
+            });
+            _createdDates.Add((deal, createdAt));
+
+            foreach (var activity in activities ?? [])
+            {
+                var occurred = activity.DaysAgo < 0 ? _now.AddDays(activity.DaysAgo) : _now;
+                var row = Add(_db.SalesActivities, new SalesActivity
+                {
+                    TenantId = tenantId,
+                    OpportunityId = deal.Id,
+                    Type = activity.Type,
+                    Summary = activity.Summary,
+                    OccurredAt = occurred,
+                    DueAt = activity.DueInDays is { } due ? _now.Date.AddDays(due).AddHours(10) : null,
+                    LoggedByUserId = owner.Id,
+                    LoggedByName = owner.FullName,
+                });
+                _createdDates.Add((row, occurred));
+                deal.LastActivityAt = deal.LastActivityAt is { } last && last > occurred ? last : occurred;
+            }
+
+            return deal;
+        }
+
+        private void AddTender(string type, string reference, string title, string status, User owner,
+            int received, int deadline, decimal value, Client? client = null, string? issuer = null, string? contact = null,
+            int? clarification = null, string? method = null, decimal? bidBond = null, decimal? submitted = null,
+            string? outcome = null, SalesOpportunity? opportunity = null)
+        {
+            var tender = Add(_db.SalesTenders, new SalesTender
+            {
+                TenantId = tenantId,
+                Type = type,
+                Reference = reference,
+                Title = title,
+                Status = status,
+                ClientId = client?.Id,
+                IssuerName = issuer,
+                ContactName = contact ?? client?.ContactPerson,
+                ReceivedAt = _now.Date.AddDays(received),
+                ClarificationDeadline = clarification is { } c ? _now.Date.AddDays(c).AddHours(17) : null,
+                SubmissionDeadline = _now.Date.AddDays(deadline).AddHours(12),
+                SubmissionMethod = method,
+                BidBondRequired = bidBond is not null,
+                BidBondAmount = bidBond,
+                EstimatedValue = value,
+                Currency = "KES",
+                SubmittedValue = submitted,
+                SubmittedAt = submitted is null ? null : _now.Date.AddDays(deadline - 1),
+                DecidedAt = outcome is null ? null : _now.Date.AddDays(received + 2),
+                OutcomeNotes = outcome,
+                OwnerUserId = owner.Id,
+                OwnerName = owner.FullName,
+                OpportunityId = opportunity?.Id,
+            });
+            _createdDates.Add((tender, _now.Date.AddDays(received)));
         }
 
         private TenantInvoice AddInvoice(Client client, string status, DateTime date, DateTime due, (string Description, decimal Quantity, string Unit, decimal Rate)[] lines,

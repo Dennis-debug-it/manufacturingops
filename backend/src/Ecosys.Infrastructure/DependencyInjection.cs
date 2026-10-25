@@ -170,6 +170,8 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<ScheduledReportWorker>();
         services.AddSingleInstanceHostedService<ApprovalReminderWorker>();
         services.AddSingleInstanceHostedService<ProjectReminderWorker>();
+        services.AddScoped<ISalesReminderService, SalesReminderService>();
+        services.AddSingleInstanceHostedService<SalesReminderWorker>();
         services.AddSingleInstanceHostedService<AttendanceAutoClockOutWorker>();
         services.AddSingleInstanceHostedService<EscalationRuleWorker>();
         services.AddSingleInstanceHostedService<SubscriptionLifecycleWorker>();

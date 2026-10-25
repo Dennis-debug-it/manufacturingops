@@ -316,7 +316,9 @@ public sealed class ImportControllerTests
                 CanManageFinanceApprovals = true,
                 CanViewBillableWork = true,
                 CanManageBillableWork = true,
-                CanOverrideMaterialStock = true
+                CanOverrideMaterialStock = true,
+                CanViewCrm = true,
+                CanManageCrm = true
             };
 
         public UserPermissionsModel GetSuperAdminPermissions() =>

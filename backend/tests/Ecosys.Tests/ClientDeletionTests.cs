@@ -89,6 +89,27 @@ public sealed class ClientDeletionTests
     }
 
     [Fact]
+    public async Task DeletePermanent_BlockedBySalesDealsAndRfqs()
+    {
+        var databaseName = $"ecosys-client-delete-{Guid.NewGuid():N}";
+        var tenantId = Guid.NewGuid();
+        var clientId = await SeedClientAsync(databaseName, tenantId, seed: (db, client) =>
+        {
+            db.SalesOpportunities.Add(new SalesOpportunity { TenantId = tenantId, ClientId = client.Id, Title = "Chiller upgrade", Stage = "Proposal" });
+            db.SalesTenders.Add(new SalesTender { TenantId = tenantId, ClientId = client.Id, Title = "UPS batteries", Type = "RFQ", SubmissionDeadline = DateTime.UtcNow.AddDays(5) });
+        });
+
+        var tenantContext = new FakeTenantContext(tenantId, Guid.NewGuid());
+        await using var dbContext = CreateDbContext(databaseName, tenantContext);
+        var controller = new ClientsController(dbContext, tenantContext, new AllowAllUserAccessService(), new NoOpAuditLogService());
+
+        var exception = await Assert.ThrowsAsync<ConflictException>(
+            () => controller.DeletePermanent(clientId, CancellationToken.None));
+
+        Assert.Contains("2 sales records", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task DeletePermanent_AllowedWhenOnlyCascadingSitesExist()
     {
         var databaseName = $"ecosys-client-delete-{Guid.NewGuid():N}";

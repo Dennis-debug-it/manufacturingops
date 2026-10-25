@@ -32,6 +32,8 @@ public sealed class Phase2GovernanceTests
                 "activity.updated",
                 "auth.password-reset.requested",
                 "auth.signup.verify-email",
+                "crm.follow-up.due",
+                "crm.tender.deadline",
                 "csat.survey",
                 "email-intake.email-intake-received",
                 "email-intake.email-intake-reply-added",

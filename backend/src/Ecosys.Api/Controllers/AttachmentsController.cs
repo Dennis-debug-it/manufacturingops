@@ -25,7 +25,8 @@ public sealed class AttachmentsController(
         "Client",
         "Contract",
         "Project",
-        "ProjectDiaryEntry"
+        "ProjectDiaryEntry",
+        "SalesTender"
     };
 
     private static readonly HashSet<string> AllowedMimeTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -226,6 +227,7 @@ public sealed class AttachmentsController(
             "Contract" => await dbContext.Contracts.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
             "Project" => await dbContext.Projects.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
             "ProjectDiaryEntry" => await dbContext.ProjectDiaryEntries.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
+            "SalesTender" => await dbContext.SalesTenders.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
             _ => false
         };
 

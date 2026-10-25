@@ -130,6 +130,23 @@ export interface WorkOrderFilterValues {
   state: string
   fromDate: string
   toDate: string
+  /** Include finished jobs older than the recent window. */
+  showAll: boolean
+}
+
+/** Days a closed, cancelled or rejected job stays on the default list (matches the API). */
+export const RECENTLY_FINISHED_DAYS = 30
+
+/**
+ * The list shows open work and recently finished jobs by default. Anything that is looking for a
+ * particular job, or the work of a particular client, site or technician, sees the full history:
+ * a search, a status, a related record, a date range, or asking for everything.
+ */
+export function showsFullHistory(filters: WorkOrderFilterValues): boolean {
+  return Boolean(
+    filters.showAll || filters.search.trim() || filters.status || filters.clientId || filters.siteId
+      || filters.technicianId || filters.fromDate || filters.toDate,
+  )
 }
 
 /**
@@ -160,5 +177,6 @@ export function toWorkOrderListFilters(filters: WorkOrderFilterValues): WorkOrde
     ...(trimmedSearch ? { search: trimmedSearch } : {}),
     ...(filters.fromDate ? { fromDate: `${filters.fromDate}T00:00:00` } : {}),
     ...(filters.toDate ? { toDate: `${filters.toDate}T23:59:59` } : {}),
+    ...(showsFullHistory(filters) ? {} : { view: 'current' as const }),
   }
 }

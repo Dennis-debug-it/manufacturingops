@@ -129,6 +129,16 @@ public static class ServiceOpsPlans
         "MyWhatsApp", "WhatsAppNotifications", "ClientWhatsAppConsent", "PortalWhatsApp", "WhatsAppWebhook"
     };
 
+    /// <summary>
+    /// The sales CRM (pipeline, RFPs/RFQs). Its point is the whole chain from an RFQ to a quote (Finance)
+    /// to the job (Operations) to the invoice, so it needs both modules. Every edition includes both, so
+    /// the CRM is on every edition (docs/design/LICENSING_REMODEL_PLAN.md).
+    /// </summary>
+    public static readonly IReadOnlySet<string> CrmControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "SalesCrm", "SalesTenders"
+    };
+
     /// <summary>Controllers whose module requirement is decided per route inside <see cref="RequiredModules"/>.</summary>
     public static readonly IReadOnlySet<string> RouteClassifiedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -138,6 +148,7 @@ public static class ServiceOpsPlans
     public static bool IsClassified(string controller) =>
         ModuleControllers.Any(x => x.Controllers.Contains(controller))
         || SharedControllers.Contains(controller)
+        || CrmControllers.Contains(controller)
         || RouteClassifiedControllers.Contains(controller);
 
     public static IReadOnlyList<string> RequiredModules(string? controller, string path)
@@ -151,6 +162,8 @@ public static class ServiceOpsPlans
             if (!route.StartsWith("/api/portal/profile")) return [Operations];
         }
         if (controller == "WorkOrderBilling" || route.Contains("/generate-invoice") || route.Contains("/convert-to-work-order") || route.EndsWith("/from-quote"))
+            return [Operations, Finance];
+        if ((controller is not null && CrmControllers.Contains(controller)) || route.EndsWith("/from-opportunity"))
             return [Operations, Finance];
         // Every Projects route needs only Projects: the editions that include it include everything its
         // tabs touch (finance, inventory, maintenance contracts).

@@ -20,6 +20,7 @@ const MANAGEMENT_PERMISSIONS: (keyof PermissionSet)[] = [
   'canViewBillableWork',
   'canManageBillableWork',
   'canOverrideMaterialStock',
+  'canManageCrm',
 ]
 
 /**

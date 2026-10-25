@@ -35,6 +35,14 @@ describe('canOpenPath', () => {
     expect(canOpenPath(stores, '/dashboard/executive')).toBe(false)
   })
 
+  it('opens the sales pipeline to whoever holds the CRM capability, whatever their role', () => {
+    expect(canOpenPath(user('finance', { canViewCrm: true }), '/crm')).toBe(true)
+    expect(canOpenPath(user('dispatcher', { canViewCrm: true }), '/crm/tenders/abc')).toBe(true)
+    expect(canOpenPath(user('manager', { canViewCrm: false }), '/crm/opportunities/abc')).toBe(false)
+    expect(canOpenPath(dispatcher, '/crm')).toBe(false)
+    expect(canOpenPath(stores, '/crm')).toBe(false)
+  })
+
   it('matches whole path segments only', () => {
     expect(canOpenPath(dispatcher, '/financed-thing')).toBe(true)
   })

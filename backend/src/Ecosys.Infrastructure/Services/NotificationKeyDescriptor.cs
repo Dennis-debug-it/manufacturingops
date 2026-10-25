@@ -66,6 +66,8 @@ public static class NotificationKeyDescriptor
         Inbox("action-item.due", "Action item due tomorrow", "Calendar & Activities", whatsApp: true),
         EmailOnly("invoice.sent",         "Invoice sent to client",            "Finance"),
         EmailOnly("quotation.sent",       "Quotation sent to client",          "Finance"),
+        EmailOnly(SalesReminderKeys.FollowUpDue,     "Follow-up due on my deal",          "Sales CRM"),
+        EmailOnly(SalesReminderKeys.TenderDeadline,  "RFP/RFQ submission deadline near",  "Sales CRM"),
         EmailOnly("users.invited",        "User invited / account setup",      "Account"),
         EmailOnly("auth.password-reset.requested", "Password reset requested", "Account"),
         EmailOnly("user.password-reset.admin",     "Admin password reset",     "Account"),

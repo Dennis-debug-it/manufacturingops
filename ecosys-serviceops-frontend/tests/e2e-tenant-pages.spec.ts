@@ -22,6 +22,9 @@ const tenantPages = [
   { name: 'assets', path: '/assets', heading: /asset register/i },
   { name: 'work orders', path: '/work-orders', heading: /work orders/i },
   { name: 'materials', path: '/materials', heading: /materials and stock/i },
+  // Sign-up creates a Suite trial, which includes the sales CRM.
+  { name: 'sales pipeline', path: '/crm', heading: /sales pipeline/i },
+  { name: 'rfps and rfqs', path: '/crm/tenders', heading: /rfps & rfqs/i },
 ] as const
 
 let tenantCredentials: Credentials

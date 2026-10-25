@@ -39,6 +39,7 @@ for (const code of ['essentials', 'professional', 'enterprise'] as const) {
     // Every edition runs the whole work order to invoice loop.
     await expect(nav.getByRole('link', { name: 'Work Orders', exact: true })).toHaveCount(1)
     await expect(nav.getByRole('link', { name: 'Finance', exact: true })).toHaveCount(1)
+    await expect(nav.getByRole('link', { name: 'Sales', exact: true })).toHaveCount(1)
     await expect(page.getByRole('link', { name: /Payments M-Pesa/ })).toHaveCount(1)
     await expect(page.getByRole('link', { name: /PM Templates Preventive/ })).toHaveCount(code === 'essentials' ? 0 : 1)
     if (code === 'essentials') {
@@ -54,4 +55,7 @@ test('cross-module workflow paths require both modules and shared settings stay 
   expect(canAccessModulePath('/finance/billable-work', ['operations', 'finance'])).toBe(true)
   expect(canAccessModulePath('/settings/numbering', ['operations'])).toBe(true)
   expect(canAccessModulePath('/clients', ['finance'])).toBe(true)
+  expect(canAccessModulePath('/crm/tenders', ['operations'])).toBe(false)
+  expect(canAccessModulePath('/crm', ['finance'])).toBe(false)
+  expect(canAccessModulePath('/crm', ['operations', 'finance'])).toBe(true)
 })

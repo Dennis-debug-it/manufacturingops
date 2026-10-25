@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { BookOpen, CalendarDays, ClipboardList, MoreHorizontal, UserCircle2, Watch, X } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useAuth } from '../hooks/useAuth'
+import { hasPermission } from '../hooks/usePermission'
 import { tenantNavItems, type NavItem } from './navigation'
 import { useEntitlements } from '../hooks/useEntitlements'
 
@@ -72,7 +73,7 @@ export function BottomNav() {
 
   const allItems = (user?.role === 'technician'
     ? technicianNav
-    : tenantNavItems.filter((item) => item.roles.includes(user?.role ?? 'viewer')))
+    : tenantNavItems.filter((item) => item.roles.includes(user?.role ?? 'viewer') && hasPermission(user, item.permission ?? 'dashboard.view')))
       .filter((item) => canAccessPath(item.to))
 
   if (allItems.length === 0) {

@@ -192,6 +192,9 @@ export interface WorkOrder {
   followUps?: WorkOrderLink[]
   /** The technician answered "Follow-up required" with yes on the checklist. */
   followUpRequested?: boolean
+  /** The CRM deal this job was won through. */
+  salesOpportunityId?: string | null
+  salesOpportunityTitle?: string | null
 }
 
 export interface WorkOrderLink {

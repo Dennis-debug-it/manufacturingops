@@ -25,6 +25,8 @@ export interface PermissionSetFields {
   canViewBillableWork: boolean
   canManageBillableWork: boolean
   canOverrideMaterialStock: boolean
+  canViewCrm: boolean
+  canManageCrm: boolean
 }
 
 export interface TeamUser {

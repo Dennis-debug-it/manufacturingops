@@ -608,7 +608,8 @@ public sealed class ClientsController(
     // Work orders, assets, systems, contracts, invoices, payments, credit notes and quotations
     // all hold a Restrict foreign key to Client, so a permanent delete is only possible for a
     // client that never accumulated operational history. Sites, portal users and preferential
-    // rates cascade and do not block.
+    // rates cascade and do not block. Sales deals and RFPs/RFQs only null their link, but losing
+    // it would leave a nameless deal in the pipeline, so they count as history too.
     private async Task<ClientDeletionBlockers> GetDeletionBlockersAsync(Client client, CancellationToken cancellationToken)
     {
         return new ClientDeletionBlockers(
@@ -620,7 +621,9 @@ public sealed class ClientsController(
             await dbContext.TenantPayments.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
             await dbContext.CreditNotes.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
             await dbContext.TenantQuotations.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
-            await dbContext.Sites.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken));
+            await dbContext.Sites.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
+            await dbContext.SalesOpportunities.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken)
+                + await dbContext.SalesTenders.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken));
     }
 }
 
@@ -633,7 +636,8 @@ sealed record ClientDeletionBlockers(
     int PaymentCount,
     int CreditNoteCount,
     int QuotationCount,
-    int SiteCount)
+    int SiteCount,
+    int SalesRecordCount = 0)
 {
     public bool CanDelete =>
         WorkOrderCount == 0
@@ -643,7 +647,8 @@ sealed record ClientDeletionBlockers(
         && InvoiceCount == 0
         && PaymentCount == 0
         && CreditNoteCount == 0
-        && QuotationCount == 0;
+        && QuotationCount == 0
+        && SalesRecordCount == 0;
 
     public string? BlockingReason
     {
@@ -663,6 +668,7 @@ sealed record ClientDeletionBlockers(
             Add(parts, PaymentCount, "payment");
             Add(parts, CreditNoteCount, "credit note");
             Add(parts, QuotationCount, "quotation");
+            Add(parts, SalesRecordCount, "sales record");
 
             return $"This client has {string.Join(", ", parts)} on record and cannot be permanently deleted. Archive it instead to retain the history.";
         }

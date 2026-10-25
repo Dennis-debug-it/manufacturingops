@@ -34,6 +34,13 @@ public sealed class WorkOrdersController(
     /// Must stay in step with the client-side <c>resolveSlaStatusKey</c> threshold.</summary>
     private const int SlaAtRiskWindowMinutes = 120;
 
+    /// <summary>
+    /// <c>view=current</c> on the list: everything still in play, plus jobs closed, cancelled or
+    /// rejected within this many days. Older finished jobs stay reachable by search, a status or
+    /// date filter, or from the client, site, asset or technician they belong to.
+    /// </summary>
+    public const int RecentlyFinishedDays = 30;
+
     private static readonly HashSet<string> EditableStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         WorkOrderStatuses.New,
@@ -66,7 +73,8 @@ public sealed class WorkOrdersController(
         [FromQuery] int? pageSize,
         CancellationToken cancellationToken,
         [FromQuery] bool? followUp = null,
-        [FromQuery] string? state = null)
+        [FromQuery] string? state = null,
+        [FromQuery] string? view = null)
     {
         EnsureGeneralWorkspaceAccess(PermissionNames.CanViewWorkOrders);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
@@ -145,6 +153,11 @@ public sealed class WorkOrdersController(
         {
             // open | overdue: what the dashboards count, so their figures link to exactly these rows.
             query = WorkOrderListStates.Apply(query, state, DateTime.UtcNow);
+        }
+
+        if (string.Equals(view, "current", StringComparison.OrdinalIgnoreCase))
+        {
+            query = ApplyCurrentView(query, DateTime.UtcNow);
         }
 
         var ordered = query.OrderByDescending(x => x.CreatedAt);
@@ -1389,6 +1402,7 @@ public sealed class WorkOrdersController(
             Status = WorkOrderStatuses.New,
             WorkType = WorkOrderTypes.CorrectiveMaintenance,
             QuoteId = quote.Id,
+            SalesOpportunityId = quote.SalesOpportunityId,
             IsBillable = true,
             NotifyClient = true,
             TrackingToken = TrackingTokenGenerator.Generate()
@@ -1437,6 +1451,110 @@ public sealed class WorkOrdersController(
             nameof(WorkOrder),
             workOrder.Id.ToString(),
             $"Created work order '{workOrder.WorkOrderNumber}' from quotation '{quote.QuoteNumber}'.",
+            cancellationToken);
+
+        var persisted = await QueryWorkOrders(await branchAccessService.GetQueryScopeAsync(TenantId, workOrder.BranchId, cancellationToken))
+            .SingleAsync(x => x.Id == workOrder.Id, cancellationToken);
+        return CreatedAtAction(nameof(Get), new { id = workOrder.Id }, Map(persisted));
+    }
+
+    /// <summary>
+    /// The CRM hand-off: turns a won sales opportunity into a work order. The deal must already be
+    /// linked to a client (the CRM's convert-to-client step does that for a prospect). A deal can
+    /// produce several jobs, so this may be called more than once; each one keeps the back-link.
+    /// </summary>
+    [HttpPost("from-opportunity")]
+    public async Task<ActionResult<WorkOrderResponse>> CreateFromOpportunity([FromBody] CreateWorkOrderFromOpportunityRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanCreateWorkOrders);
+        await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
+
+        var opportunity = await dbContext.SalesOpportunities
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.OpportunityId, cancellationToken)
+            ?? throw new NotFoundException("Opportunity was not found.");
+
+        if (!string.Equals(opportunity.Stage, SalesStages.Won, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BusinessRuleException("Only won opportunities can be converted to a work order.");
+        }
+
+        if (!opportunity.ClientId.HasValue)
+        {
+            throw new BusinessRuleException("Create or link the client for this opportunity first.");
+        }
+
+        var siteId = request.SiteId ?? opportunity.SiteId;
+        if (siteId.HasValue)
+        {
+            var siteBelongs = await dbContext.Sites.AnyAsync(x => x.TenantId == TenantId && x.Id == siteId.Value && x.ClientId == opportunity.ClientId.Value, cancellationToken);
+            if (!siteBelongs)
+            {
+                throw new BusinessRuleException("The selected site does not belong to this client.");
+            }
+        }
+
+        var title = string.IsNullOrWhiteSpace(request.Title) ? opportunity.Title : request.Title.Trim();
+        var normalizedWorkType = WorkOrderTypes.Normalize(request.WorkType, opportunity.ServiceType ?? WorkOrderTypes.CorrectiveMaintenance);
+        var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, null, cancellationToken);
+        var workOrder = new WorkOrder
+        {
+            TenantId = TenantId,
+            BranchId = branchId,
+            ClientId = opportunity.ClientId.Value,
+            SiteId = siteId,
+            WorkOrderNumber = await documentNumberingService.GenerateAsync(TenantId, branchId, DocumentTypes.WorkOrder, cancellationToken),
+            Title = title.Length > 200 ? title[..200] : title,
+            Description = string.IsNullOrWhiteSpace(request.Description) ? opportunity.Description : request.Description.Trim(),
+            Priority = WorkOrderPriorities.Normalize(request.Priority),
+            Status = WorkOrderStatuses.New,
+            WorkType = normalizedWorkType,
+            IsPreventiveMaintenance = WorkOrderTypes.IsPreventiveMaintenanceType(normalizedWorkType),
+            DueDate = DateTimeNormalizationHelper.NormalizeNullableToUtc(request.DueDate),
+            SalesOpportunityId = opportunity.Id,
+            IsBillable = true,
+            NotifyClient = true,
+            ClientContactEmail = opportunity.ContactEmail,
+            TrackingToken = TrackingTokenGenerator.Generate()
+        };
+
+        if (contractOperationalService is not null)
+        {
+            await contractOperationalService.ApplyOperationalSnapshotAsync(workOrder, cancellationToken);
+        }
+        else
+        {
+            await slaService.ApplyDefinitionAsync(workOrder, cancellationToken);
+        }
+
+        await workflowService.EnsureDefaultWorkflowAsync(TenantId, cancellationToken);
+        var activeWorkflow = await workflowService.GetActiveWorkflowAsync(TenantId, cancellationToken);
+        var initialWorkflowStatus = activeWorkflow?.Statuses.FirstOrDefault(x => x.IsInitial);
+        if (initialWorkflowStatus is not null)
+        {
+            workOrder.WorkflowStatusId = initialWorkflowStatus.Id;
+        }
+
+        dbContext.WorkOrders.Add(workOrder);
+        dbContext.SalesActivities.Add(new SalesActivity
+        {
+            TenantId = TenantId,
+            OpportunityId = opportunity.Id,
+            Type = SalesActivityTypes.System,
+            Summary = $"Work order {workOrder.WorkOrderNumber} created.",
+            OccurredAt = DateTime.UtcNow,
+            LoggedByUserId = UserId,
+        });
+        opportunity.LastActivityAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await workOrderLifecycleService.RecordCreatedAsync(TenantId, workOrder.Id, UserId, workOrder.WorkOrderNumber, cancellationToken);
+        await auditLogService.LogAsync(
+            TenantId,
+            UserId,
+            "Work order created from sales opportunity",
+            nameof(WorkOrder),
+            workOrder.Id.ToString(),
+            $"Created work order '{workOrder.WorkOrderNumber}' from sales opportunity '{opportunity.Title}'.",
             cancellationToken);
 
         var persisted = await QueryWorkOrders(await branchAccessService.GetQueryScopeAsync(TenantId, workOrder.BranchId, cancellationToken))
@@ -1796,6 +1914,7 @@ public sealed class WorkOrdersController(
             .Include(x => x.PmTemplate)
             .Include(x => x.ChecklistItems)
             .Include(x => x.Quote)
+            .Include(x => x.SalesOpportunity)
             .Include(x => x.ChildWorkOrders)
             .Include(x => x.FollowUpOfWorkOrder)
             .Include(x => x.FollowUpWorkOrders)
@@ -2133,7 +2252,18 @@ public sealed class WorkOrdersController(
                 .OrderBy(x => x.CreatedAt)
                 .Select(x => new WorkOrderLinkResponse(x.Id, x.WorkOrderNumber, WorkOrderStatuses.Normalize(x.Status), x.CreatedAt))
                 .ToList(),
-            FollowUpChecklist.IsRequested(workOrder.ChecklistItems));
+            FollowUpChecklist.IsRequested(workOrder.ChecklistItems),
+            workOrder.SalesOpportunityId,
+            workOrder.SalesOpportunity?.Title);
+    }
+
+    /// <summary>Open work plus anything finished in the last <see cref="RecentlyFinishedDays"/> days.</summary>
+    internal static IQueryable<WorkOrder> ApplyCurrentView(IQueryable<WorkOrder> query, DateTime utcNow)
+    {
+        var finished = WorkOrderStatuses.TerminalStatuses.SelectMany(WorkOrderStatuses.RawStatusesMatching).Distinct().ToArray();
+        var cutoff = utcNow.AddDays(-RecentlyFinishedDays);
+        // ClosedAt is set when a job is closed; a cancellation or rejection is dated by its last update.
+        return query.Where(x => !finished.Contains(x.Status) || (x.ClosedAt ?? x.UpdatedAt ?? x.CreatedAt) >= cutoff);
     }
 
     private static string ResolveSlaStatus(WorkOrder workOrder)
@@ -2568,7 +2698,9 @@ public sealed record WorkOrderResponse(
     Guid? FollowUpOfWorkOrderId = null,
     string? FollowUpOfWorkOrderNumber = null,
     IReadOnlyCollection<WorkOrderLinkResponse>? FollowUps = null,
-    bool FollowUpRequested = false);
+    bool FollowUpRequested = false,
+    Guid? SalesOpportunityId = null,
+    string? SalesOpportunityTitle = null);
 
 /// <summary>A linked job, as shown on the job it is linked to.</summary>
 public sealed record WorkOrderLinkResponse(Guid Id, string WorkOrderNumber, string Status, DateTime CreatedAt);
@@ -2576,6 +2708,15 @@ public sealed record WorkOrderLinkResponse(Guid Id, string WorkOrderNumber, stri
 public sealed record PlannedMaterialResponse(Guid MaterialId, string MaterialName, decimal Quantity);
 public sealed record HoldWorkOrderRequest(string? Reason, string? HoldType);
 public sealed record CreateWorkOrderFromQuoteRequest(Guid QuoteId);
+
+public sealed record CreateWorkOrderFromOpportunityRequest(
+    Guid OpportunityId,
+    [StringLength(200)] string? Title,
+    [StringLength(4000)] string? Description,
+    [StringLength(40)] string? Priority,
+    [StringLength(50)] string? WorkType,
+    DateTime? DueDate,
+    Guid? SiteId);
 
 public sealed record WorkOrderSlaStatusResponse(
     Guid WorkOrderId,

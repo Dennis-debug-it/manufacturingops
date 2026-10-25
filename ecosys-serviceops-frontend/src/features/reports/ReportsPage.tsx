@@ -69,6 +69,8 @@ export function ReportsPage() {
         slaStatus: '',
         unassignedOnly: false,
         state: '',
+        // A report covers every job in the period, finished long ago or not.
+        showAll: true,
         fromDate: format(periodStart, 'yyyy-MM-dd'),
         toDate: format(new Date(), 'yyyy-MM-dd'),
       }),

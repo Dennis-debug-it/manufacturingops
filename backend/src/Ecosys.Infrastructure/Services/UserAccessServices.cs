@@ -35,6 +35,8 @@ public sealed record UserPermissionsModel
     public bool CanOverrideMaterialStock { get; init; }
     /// <summary>Granted <see cref="PermissionNames.CapabilityOnly"/> capabilities.</summary>
     public IReadOnlyList<string> Capabilities { get; init; } = [];
+    public bool CanViewCrm { get; init; }
+    public bool CanManageCrm { get; init; }
 }
 
 public interface IUserPermissionTemplateService
@@ -171,7 +173,9 @@ internal sealed class UserPermissionTemplateService : IUserPermissionTemplateSer
             CanViewBillableWork = true,
             CanManageBillableWork = true,
             CanOverrideMaterialStock = true,
-            Capabilities = PermissionNames.CapabilityOnly
+            Capabilities = PermissionNames.CapabilityOnly,
+            CanViewCrm = true,
+            CanManageCrm = true
         };
 
     public UserPermissionsModel GetSuperAdminPermissions() => new();

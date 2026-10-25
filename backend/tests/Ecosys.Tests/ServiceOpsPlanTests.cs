@@ -77,6 +77,11 @@ public sealed class ServiceOpsPlanTests
     [InlineData("enterprise", "Settings", "/api/settings/monitoring-webhooks", true)]
     // The two-way WhatsApp inbox needs the WhatsApp Business add-on, whatever the edition.
     [InlineData("enterprise", "WhatsApp", "/api/whatsapp/conversations", false)]
+    // The sales CRM needs Operations and Finance, which every edition includes.
+    [InlineData("essentials", "SalesCrm", "/api/crm/opportunities", true)]
+    [InlineData("essentials", "SalesTenders", "/api/crm/tenders", true)]
+    [InlineData("professional", "SalesCrm", "/api/crm/summary", true)]
+    [InlineData("essentials", "WorkOrders", "/api/workorders/from-opportunity", true)]
     public async Task ActualLicenseMiddleware_EnforcesEditionForMatchedApiIncludingAliases(string planCode, string controller, string path, bool allowed)
     {
         var tenantId = Guid.NewGuid();
