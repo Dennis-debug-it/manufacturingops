@@ -7,6 +7,7 @@ import { EmptyState } from '../../shared/components/EmptyState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { formatDate, formatTime } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
+import { getErrorStatus } from '../../shared/api/apiError'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
 import { useMySites } from '../projects/siteApi'
 import { useApplyForLeave, useLeaveTypes, useMyLeave, useMyTimesheet } from './timeAttendance/api'
@@ -268,6 +269,31 @@ function WhereTimeWent({ jobLinkPrefix }: { jobLinkPrefix: string }) {
 
 /** The technician's own clock, hours (with time by job) and leave. */
 export function MyTimePage({ jobLinkPrefix = '/tech/jobs/' }: { jobLinkPrefix?: string }) {
+  const { data: status, error, isLoading } = useMyAttendanceView()
+  // The server refuses time & attendance outright (a 4xx, not a dropped connection) for an account
+  // with no technician profile. Hours and leave would be refused the same way, so don't offer them.
+  const errorStatus = error ? getErrorStatus(error) : null
+  const notLinked = !status && errorStatus !== null && errorStatus >= 400 && errorStatus < 500
+  // Wait for that answer before the hours and leave sections ask for theirs.
+  if (isLoading && !status) {
+    return (
+      <div className="space-y-4 pb-24">
+        <PageHeader title="My Time & Leave" subtitle="Clock in, check your hours, and apply for leave." />
+        <Spinner label="Loading your clock status" />
+      </div>
+    )
+  }
+  if (notLinked) {
+    return (
+      <div className="space-y-4 pb-24">
+        <PageHeader title="My Time & Leave" subtitle="Clock in, check your hours, and apply for leave." />
+        <EmptyState
+          title="Time & leave isn't set up for your account"
+          description="Clocking in, timesheets and leave requests are for technicians. Ask an administrator to link your account to a technician profile if you need them."
+        />
+      </div>
+    )
+  }
   return (
     <div className="space-y-4 pb-24">
       <PageHeader title="My Time & Leave" subtitle="Clock in, check your hours, and apply for leave." />
