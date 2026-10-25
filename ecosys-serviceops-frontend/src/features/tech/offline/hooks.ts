@@ -6,7 +6,8 @@ import type { WorkOrder } from '../../work-orders/types'
 import { useMyAttendanceStatus } from '../../team/timeAttendance/api'
 import { useTechJob, useTechJobs } from '../api'
 import { getOutboxSnapshot, loadOutbox, subscribeOutbox, syncOutbox } from './outbox'
-import { applyToAttendance, applyToBundle, applyToJob } from './overlay'
+import { useMusterSheet } from '../../projects/siteApi'
+import { applyToAttendance, applyToBundle, applyToJob, applyToMusterSheet, musterEntriesFor } from './overlay'
 
 export function useOutbox() {
   return useSyncExternalStore(subscribeOutbox, getOutboxSnapshot, getOutboxSnapshot)
@@ -23,6 +24,8 @@ export function refreshAfterSync(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ['work-orders'] })
   void queryClient.invalidateQueries({ queryKey: ['attendance'] })
   void queryClient.invalidateQueries({ queryKey: ['picker', 'materials'] })
+  // Site work (muster roll) lives under the projects queries.
+  void queryClient.invalidateQueries({ queryKey: ['projects'] })
 }
 
 export function useTechJobsView() {
@@ -52,6 +55,23 @@ export function useMyAttendanceView() {
   const pending = usePendingActions()
   const data = useMemo(() => (query.data ? applyToAttendance(query.data, pending) : undefined), [query.data, pending])
   return { ...query, data }
+}
+
+/** A site's day sheet with the supervisor's queued (not yet synced) marks applied. */
+export function useMusterSheetView(projectId: string, date: string) {
+  const query = useMusterSheet(projectId, date)
+  const pending = usePendingActions()
+  const data = useMemo(() => (query.data ? applyToMusterSheet(query.data, projectId, date, pending) : undefined), [query.data, projectId, date, pending])
+  return { ...query, data }
+}
+
+/** Muster saves for this site and day still on the phone: those waiting to sync and those the server refused. */
+export function useMusterOutbox(projectId: string, date: string) {
+  const { entries } = useOutbox()
+  return useMemo(() => {
+    const mine = musterEntriesFor(entries, projectId, date)
+    return { pending: mine.filter((entry) => entry.status === 'pending'), failed: mine.filter((entry) => entry.status === 'failed') }
+  }, [entries, projectId, date])
 }
 
 export function useJobHasQueuedActions(job: Pick<WorkOrder, 'id'> | undefined) {

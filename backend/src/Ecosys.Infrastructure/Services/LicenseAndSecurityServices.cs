@@ -68,11 +68,88 @@ public static class LicenseFeatures
 {
     public const string EmailIngestion = "EmailIngestion";
     public const string MonitoringIntegration = "MonitoringIntegration";
+    /// <summary>Any WhatsApp add-on (<see cref="TenantLicense.WhatsAppAddOn"/>), on any edition.</summary>
+    public const string WhatsApp = "WhatsApp";
+}
+
+/// <summary>
+/// What a license is worth per month: office seats and field seats at the edition's prices, plus the
+/// WhatsApp add-on. An annual license counts its annual price spread over twelve months; a price left at
+/// zero for the annual cycle falls back to the monthly price.
+/// </summary>
+public static class LicensePricing
+{
+    public static decimal MonthlyValue(TenantLicense license, IReadOnlyCollection<LicenseAddOn> addOns)
+    {
+        var plan = license.LicensePlan ?? throw new InvalidOperationException("Tenant license plan was not loaded.");
+        var annual = string.Equals(license.BillingCycle, BillingCycles.Annual, StringComparison.OrdinalIgnoreCase);
+        decimal PerMonth(decimal monthly, decimal yearly) => annual && yearly > 0 ? yearly / 12m : monthly;
+
+        var value = license.OfficeSeats * PerMonth(plan.OfficeSeatMonthlyPrice, plan.OfficeSeatAnnualPrice)
+            + license.FieldSeats * PerMonth(plan.FieldSeatMonthlyPrice, plan.FieldSeatAnnualPrice);
+        if (addOns.FirstOrDefault(x => x.Code == license.WhatsAppAddOn) is { } addOn)
+        {
+            value += PerMonth(addOn.MonthlyPrice, addOn.AnnualPrice);
+        }
+
+        return decimal.Round(value, 2);
+    }
+
+    public static async Task<decimal> MonthlyRecurringRevenueAsync(
+        AppDbContext dbContext,
+        System.Linq.Expressions.Expression<Func<TenantLicense, bool>> filter,
+        CancellationToken cancellationToken)
+    {
+        var addOns = await dbContext.LicenseAddOns.AsNoTracking().ToListAsync(cancellationToken);
+        var licenses = await dbContext.TenantLicenses.AsNoTracking().Include(x => x.LicensePlan)
+            .Where(x => x.TenantId != PlatformConstants.RootTenantId)
+            .Where(filter)
+            .ToListAsync(cancellationToken);
+        return licenses.Sum(x => MonthlyValue(x, addOns));
+    }
+}
+
+/// <summary>The seat counts a license may hold on an edition.</summary>
+public static class SeatRules
+{
+    public static void Validate(LicensePlan plan, int officeSeats, int fieldSeats)
+    {
+        var minimum = Math.Max(1, plan.MinOfficeSeats);
+        if (officeSeats < minimum)
+        {
+            throw new BusinessRuleException($"{plan.DisplayName} needs at least {minimum} office seat{(minimum == 1 ? "" : "s")}.");
+        }
+
+        if (fieldSeats < 0)
+        {
+            throw new BusinessRuleException("Field seats cannot be negative.");
+        }
+    }
+}
+
+/// <summary>
+/// Which seat a workspace role takes. Technicians take a field seat; Viewers (and the legacy User role)
+/// are free; every other workspace role takes an office seat. Client-portal contacts are not users.
+/// </summary>
+public static class SeatTypes
+{
+    public const string Office = "Office";
+    public const string Field = "Field";
+    public const string Free = "Free";
+
+    public static string For(string? role) =>
+        string.Equals(role, AppRoles.Technician, StringComparison.OrdinalIgnoreCase) ? Field
+        : string.Equals(role, AppRoles.Viewer, StringComparison.OrdinalIgnoreCase) || string.Equals(role, AppRoles.User, StringComparison.OrdinalIgnoreCase) ? Free
+        : Office;
 }
 
 public sealed record LicenseUsageSnapshot(
     int ActiveUsers,
-    int ActiveBranches);
+    int ActiveBranches)
+{
+    public int OfficeSeatsUsed { get; init; }
+    public int FieldSeatsUsed { get; init; }
+}
 
 public sealed record TenantLicenseSnapshot(
     Guid TenantId,
@@ -87,13 +164,20 @@ public sealed record TenantLicenseSnapshot(
     bool IsReadOnly,
     bool IsSuspended,
     bool IsGracePeriod,
-    int MaxUsers,
+    int OfficeSeats,
+    int FieldSeats,
     int? MaxBranches,
     bool EmailIngestion,
     bool MonitoringIntegration,
     string? WarningMessage)
 {
     public IReadOnlyList<string> Modules { get; init; } = [];
+
+    /// <summary>The WhatsApp add-on code, or null when the tenant has none.</summary>
+    public string? WhatsAppAddOn { get; init; }
+
+    /// <summary>Any WhatsApp add-on is on: reminders from the shared Ecosys number may be sent.</summary>
+    public bool WhatsApp => WhatsAppAddOn is not null;
 }
 
 public sealed record PlatformLicenseUsageSnapshot(
@@ -103,7 +187,10 @@ public sealed record PlatformLicenseUsageSnapshot(
     string Status,
     int ActiveUsers,
     int ActiveBranches,
-    int MaxUsers,
+    int OfficeSeats,
+    int FieldSeats,
+    int OfficeSeatsUsed,
+    int FieldSeatsUsed,
     int? MaxBranches,
     bool IsReadOnly,
     bool IsSuspended,
@@ -112,7 +199,8 @@ public sealed record PlatformLicenseUsageSnapshot(
     string PlanName,
     IReadOnlyList<string> Modules,
     DateTime StartsAt,
-    DateTime? TrialEndsAt);
+    DateTime? TrialEndsAt,
+    string? WhatsAppAddOn);
 
 public interface ILicenseGuardService
 {
@@ -123,13 +211,15 @@ public interface ILicenseGuardService
     Task EnsureCanCreateUserAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// The single licensed-seat rule for every path that adds or reactivates workspace users (tenant
-    /// create/reactivate, platform add-user, CSV import). Active users — including invitees who have not
-    /// signed in yet — consume a seat; deactivated users and client-portal contacts do not. When called
-    /// inside a transaction it row-locks the tenant's license so concurrent callers are serialised.
+    /// The single seat rule for every path that adds, reactivates or changes the role of workspace users
+    /// (tenant create/reactivate/role change, platform add-user, CSV import). <paramref name="roles"/> are
+    /// the roles of the users about to take a seat; each checks the office or field pool its role uses
+    /// (<see cref="SeatTypes"/>). Active users — including invitees who have not signed in yet — consume a
+    /// seat; deactivated users, Viewers and client-portal contacts do not. When called inside a
+    /// transaction it row-locks the tenant's license so concurrent callers are serialised.
     /// </summary>
-    Task EnsureCanAddUsersAsync(Guid tenantId, int count, CancellationToken cancellationToken = default) =>
-        count <= 0 ? Task.CompletedTask : EnsureCanCreateUserAsync(tenantId, cancellationToken);
+    Task EnsureSeatsAvailableAsync(Guid tenantId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default) =>
+        roles.Count == 0 ? Task.CompletedTask : EnsureCanCreateUserAsync(tenantId, cancellationToken);
     Task EnsureCanCreateBranchAsync(Guid tenantId, CancellationToken cancellationToken = default);
     Task EnsureFeatureEnabledAsync(Guid tenantId, string featureName, CancellationToken cancellationToken = default);
     Task EnsureModuleEnabledAsync(Guid tenantId, string moduleName, CancellationToken cancellationToken = default) =>
@@ -157,8 +247,9 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     {
         var activeUsers = await dbContext.Users.CountAsync(x => x.TenantId == tenantId && x.IsActive, cancellationToken);
         var activeBranches = await dbContext.Branches.CountAsync(x => x.TenantId == tenantId && x.IsActive, cancellationToken);
+        var (officeUsed, fieldUsed) = await CountSeatsUsedAsync(tenantId, cancellationToken);
 
-        return new LicenseUsageSnapshot(activeUsers, activeBranches);
+        return new LicenseUsageSnapshot(activeUsers, activeBranches) { OfficeSeatsUsed = officeUsed, FieldSeatsUsed = fieldUsed };
     }
 
     public async Task<IReadOnlyCollection<PlatformLicenseUsageSnapshot>> GetPlatformUsageAsync(CancellationToken cancellationToken = default)
@@ -182,7 +273,10 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
                 snapshot.Status,
                 usage.ActiveUsers,
                 usage.ActiveBranches,
-                snapshot.MaxUsers,
+                snapshot.OfficeSeats,
+                snapshot.FieldSeats,
+                usage.OfficeSeatsUsed,
+                usage.FieldSeatsUsed,
                 snapshot.MaxBranches,
                 snapshot.IsReadOnly,
                 snapshot.IsSuspended,
@@ -191,7 +285,8 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
                 snapshot.PlanName,
                 snapshot.Modules,
                 snapshot.StartsAt,
-                snapshot.TrialEndsAt));
+                snapshot.TrialEndsAt,
+                snapshot.WhatsAppAddOn));
         }
 
         return snapshots;
@@ -212,11 +307,13 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     }
 
     public Task EnsureCanCreateUserAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
-        EnsureCanAddUsersAsync(tenantId, 1, cancellationToken);
+        EnsureSeatsAvailableAsync(tenantId, [AppRoles.Admin], cancellationToken);
 
-    public async Task EnsureCanAddUsersAsync(Guid tenantId, int count, CancellationToken cancellationToken = default)
+    public async Task EnsureSeatsAvailableAsync(Guid tenantId, IReadOnlyCollection<string> roles, CancellationToken cancellationToken = default)
     {
-        if (count <= 0)
+        var officeRequested = roles.Count(x => SeatTypes.For(x) == SeatTypes.Office);
+        var fieldRequested = roles.Count(x => SeatTypes.For(x) == SeatTypes.Field);
+        if (officeRequested == 0 && fieldRequested == 0)
         {
             return;
         }
@@ -225,23 +322,39 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
         await LockLicenseRowAsync(tenantId, cancellationToken);
 
         var snapshot = await GetSnapshotAsync(tenantId, cancellationToken);
-        var used = await CountSeatsUsedAsync(tenantId, cancellationToken);
-        var limit = snapshot.MaxUsers;
-        if (used + count > limit)
-        {
-            var remaining = Math.Max(0, limit - used);
-            throw new LicenseException(
-                count == 1
-                    ? $"This tenant has reached its licensed user limit of {limit}. {used} seats are in use; deactivate a user or contact Ecosys to add seats."
-                    : $"This would exceed the tenant's licensed user limit of {limit}: {count} active users requested but only {remaining} seat{(remaining == 1 ? "" : "s")} remain. Deactivate users or contact Ecosys to add seats.",
-                "license_users_limit_reached",
-                409);
-        }
+        var (officeUsed, fieldUsed) = await CountSeatsUsedAsync(tenantId, cancellationToken);
+        EnsurePool("office", officeRequested, officeUsed, snapshot.OfficeSeats, "license_office_seats_reached");
+        EnsurePool("field", fieldRequested, fieldUsed, snapshot.FieldSeats, "license_field_seats_reached");
     }
 
-    /// <summary>Seats in use: every active workspace user of the tenant (pending invitees included).</summary>
-    public Task<int> CountSeatsUsedAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
-        dbContext.Users.CountAsync(x => x.TenantId == tenantId && x.IsActive, cancellationToken);
+    private static void EnsurePool(string pool, int requested, int used, int limit, string code)
+    {
+        if (requested == 0 || used + requested <= limit)
+        {
+            return;
+        }
+
+        var remaining = Math.Max(0, limit - used);
+        throw new LicenseException(
+            requested == 1
+                ? $"This workspace has used all {limit} of its {pool} seats. Deactivate a user or contact Ecosys to add {pool} seats."
+                : $"This would exceed the workspace's {limit} {pool} seats: {requested} requested but only {remaining} remain. Deactivate users or contact Ecosys to add {pool} seats.",
+            code,
+            409);
+    }
+
+    /// <summary>Seats in use: active workspace users (pending invitees included), by seat type.</summary>
+    public async Task<(int Office, int Field)> CountSeatsUsedAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        var byRole = await dbContext.Users
+            .Where(x => x.TenantId == tenantId && x.IsActive)
+            .GroupBy(x => x.Role)
+            .Select(g => new { Role = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        return (
+            byRole.Where(x => SeatTypes.For(x.Role) == SeatTypes.Office).Sum(x => x.Count),
+            byRole.Where(x => SeatTypes.For(x.Role) == SeatTypes.Field).Sum(x => x.Count));
+    }
 
     /// <summary>
     /// Serialises seat checks for one tenant. Only meaningful inside a caller-owned transaction on a
@@ -266,13 +379,14 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     public async Task EnsureFeatureEnabledAsync(Guid tenantId, string featureName, CancellationToken cancellationToken = default)
     {
         var snapshot = await GetSnapshotAsync(tenantId, cancellationToken);
-        if (featureName is LicenseFeatures.EmailIngestion or LicenseFeatures.MonitoringIntegration)
-            ServiceOpsPlans.EnsureModules(snapshot.Modules, [ServiceOpsPlans.Operations]);
+        if (featureName is LicenseFeatures.EmailIngestion)
+            ServiceOpsPlans.EnsureModules(snapshot.Modules, [ServiceOpsPlans.Advanced]);
         var enabled = featureName switch
         {
-            // Included with Operations (checked just above).
+            // Included with the Advanced module (checked just above).
             LicenseFeatures.EmailIngestion => true,
             LicenseFeatures.MonitoringIntegration => snapshot.MonitoringIntegration,
+            LicenseFeatures.WhatsApp => snapshot.WhatsApp,
             _ => false
         };
 
@@ -285,7 +399,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     public async Task EnsureModuleEnabledAsync(Guid tenantId, string moduleName, CancellationToken cancellationToken = default)
     {
         var normalized = moduleName.Trim().ToLowerInvariant();
-        if (normalized is not (ServiceOpsPlans.Operations or ServiceOpsPlans.Finance))
+        if (!ServiceOpsPlans.EditionModules(ServiceOpsPlans.Enterprise).Contains(normalized) && normalized != ServiceOpsPlans.WhatsAppBusiness)
         {
             throw new BusinessRuleException("Unknown ServiceOps module.");
         }
@@ -306,16 +420,17 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             return existing;
         }
 
-        // A new workspace starts as a trial of the full Suite with the default licensed-user count. "Trial" is
-        // a license status, not a plan; callers that know the real plan/seat count overwrite both.
-        var trialPlan = await dbContext.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite, cancellationToken);
+        // A new workspace starts as a trial of Professional with the default seats. "Trial" is a license
+        // status, not an edition; callers that know the real edition/seats overwrite both.
+        var trialPlan = await dbContext.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Professional, cancellationToken);
         var now = DateTime.UtcNow;
         var trialEndsAt = now.AddDays(14);
         var tenantLicense = new TenantLicense
         {
             TenantId = tenantId,
             LicensePlanId = trialPlan.Id,
-            LicensedUsers = TenantLicense.DefaultLicensedUsers,
+            OfficeSeats = TenantLicense.DefaultOfficeSeats,
+            FieldSeats = TenantLicense.DefaultFieldSeats,
             Status = LicenseStatuses.Trial,
             StartsAt = now,
             TrialEndsAt = trialEndsAt,
@@ -360,6 +475,8 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     {
         NormalizeUtc(tenantLicense);
         var plan = tenantLicense.LicensePlan ?? throw new InvalidOperationException("Tenant license plan was not loaded.");
+        var modules = ServiceOpsPlans.Modules(plan, tenantLicense.WhatsAppAddOn);
+        var isEnterprise = modules.Contains(ServiceOpsPlans.EnterpriseModule);
         var now = DateTime.UtcNow;
         var effectiveExpiry = tenantLicense.ExpiresAt ?? tenantLicense.TrialEndsAt;
         var graceEndsAt = effectiveExpiry?.AddDays(tenantLicense.GracePeriodDays);
@@ -400,12 +517,14 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             isReadOnly,
             isSuspended,
             isGrace,
-            tenantLicense.LicensedUsers,
-            tenantLicense.MaxBranchesOverride ?? plan.MaxBranches,
-            // Email intake comes with the Operations module; there is no separate switch for it.
-            ServiceOpsPlans.Modules(plan).Contains(ServiceOpsPlans.Operations),
-            tenantLicense.MonitoringIntegrationOverride ?? plan.MonitoringIntegration,
-            warning) { Modules = ServiceOpsPlans.Modules(plan) };
+            tenantLicense.OfficeSeats,
+            tenantLicense.FieldSeats,
+            // Enterprise has unlimited branches; every other edition has one unless the platform overrides it.
+            tenantLicense.MaxBranchesOverride ?? (isEnterprise ? null : 1),
+            // Email intake comes with the Advanced module; there is no separate switch for it.
+            modules.Contains(ServiceOpsPlans.Advanced),
+            tenantLicense.MonitoringIntegrationOverride ?? isEnterprise,
+            warning) { Modules = modules, WhatsAppAddOn = tenantLicense.WhatsAppAddOn };
     }
 
     private static void NormalizeUtc(TenantLicense tenantLicense)

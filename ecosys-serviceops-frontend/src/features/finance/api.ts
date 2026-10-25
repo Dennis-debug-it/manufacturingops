@@ -20,10 +20,13 @@ export function useFinanceDashboard(options?: { enabled?: boolean }) {
 }
 
 // Invoices
-export function useInvoices(params?: { status?: string; documentType?: string; clientId?: string; search?: string }) {
+export function useInvoices(params?: { status?: string; documentType?: string; clientId?: string; search?: string; age?: string; currency?: string }) {
   return useQuery({
     queryKey: ['invoices', params ?? {}],
-    queryFn: () => api.get<InvoiceListItem[]>(endpoints.invoices.list, { status: params?.status, documentType: params?.documentType, clientId: params?.clientId, search: params?.search }),
+    queryFn: () =>
+      api.get<InvoiceListItem[]>(endpoints.invoices.list, {
+        status: params?.status, documentType: params?.documentType, clientId: params?.clientId, search: params?.search, age: params?.age, currency: params?.currency,
+      }),
     staleTime: 30_000,
   })
 }
@@ -42,6 +45,7 @@ export interface CreateInvoicePayload {
   dueDate: string
   notes?: string | null
   currency?: string
+  projectId?: string | null
   lines: Array<{ description: string; itemType: string; quantity: number; unit: string; unitRate: number; taxRate: number }>
 }
 

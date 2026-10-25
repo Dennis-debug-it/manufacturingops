@@ -43,6 +43,9 @@ export interface CreateExpensePayload {
   amount: number
   incurredAt: string
   description?: string | undefined
+  projectId?: string | null
+  /** Three-letter code; the workspace currency when omitted. */
+  currency?: string
 }
 
 export function useCreateExpense() {
@@ -102,6 +105,9 @@ export interface CreatePayablePayload {
   amount: number
   dueDate: string
   notes?: string | undefined
+  projectId?: string | null
+  /** Three-letter code; the workspace currency when omitted. */
+  currency?: string
 }
 
 export function useCreatePayable() {

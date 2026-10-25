@@ -7,6 +7,7 @@ public sealed class MaterialIssue : AuditableEntity, ITenantEntity
     public Guid TenantId { get; set; }
     public Guid? BranchId { get; set; }
     public Guid? WorkOrderId { get; set; }
+    public Guid? ProjectId { get; set; }
     public Guid? AssetId { get; set; }
     public Guid? ClientId { get; set; }
     public Guid? SiteId { get; set; }
@@ -29,6 +30,7 @@ public sealed class MaterialIssue : AuditableEntity, ITenantEntity
     public Tenant? Tenant { get; set; }
     public Branch? Branch { get; set; }
     public WorkOrder? WorkOrder { get; set; }
+    public Project? Project { get; set; }
     public Asset? Asset { get; set; }
     public Client? Client { get; set; }
     public Site? Site { get; set; }

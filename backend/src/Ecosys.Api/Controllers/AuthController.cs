@@ -86,7 +86,7 @@ public sealed class AuthController(
     private static LoginResponse ToLoginResponse(LoginResult result, string timeZoneId) =>
         new(
             result.Token,
-            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId)), result.Username, result.HasEmail),
+            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId)), result.Username, result.HasEmail, result.Permissions.Capabilities),
             new LoginTenantDto(
                 result.TenantId,
                 result.CompanyName,
@@ -249,7 +249,8 @@ public sealed class AuthController(
                     user.MustChangePassword,
                     MapPermissions(permissions, true),
                     user.Username,
-                    user.HasEmail),
+                    user.HasEmail,
+                    permissions.Capabilities),
                 new AuthenticatedTenantDto(
                     user.TenantId,
                     user.Tenant?.CompanyName ?? "Platform",
@@ -288,7 +289,8 @@ public sealed class AuthController(
                 user.MustChangePassword,
                 MapPermissions(permissions, isPlatformUser),
                 user.Username,
-                user.HasEmail),
+                user.HasEmail,
+                permissions.Capabilities),
             new AuthenticatedTenantDto(
                 user.TenantId,
                 user.Tenant?.CompanyName ?? string.Empty,
@@ -392,7 +394,8 @@ public sealed record LoginUserDto(
     bool MustChangePassword,
     PermissionResponse Permissions,
     string? Username = null,
-    bool HasEmail = true);
+    bool HasEmail = true,
+    IReadOnlyList<string>? Capabilities = null);
 
 public sealed record LoginTenantDto(
     Guid TenantId,
@@ -455,7 +458,8 @@ public sealed record AuthenticatedUserDto(
     bool MustChangePassword,
     PermissionResponse Permissions,
     string? Username = null,
-    bool HasEmail = true);
+    bool HasEmail = true,
+    IReadOnlyList<string>? Capabilities = null);
 
 public sealed record AuthenticatedTenantDto(
     Guid TenantId,

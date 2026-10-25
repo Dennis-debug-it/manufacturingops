@@ -27,6 +27,7 @@ import {
   useTerminateContract,
 } from './api'
 import type { ContractLifecycleEvent } from './types'
+import { RecordActivitiesPanel } from '../activities/RecordActivitiesPanel'
 
 interface PreferentialRate {
   id: string
@@ -309,6 +310,11 @@ export function ContractDetailPage() {
                 )}
               </div>
             ),
+          },
+          {
+            id: 'activities',
+            label: 'Meetings & actions',
+            content: <RecordActivitiesPanel entityType="Contract" entityId={contract.id} clientId={contract.clientId} />,
           },
           {
             id: 'pnl',

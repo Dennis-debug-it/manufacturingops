@@ -40,7 +40,7 @@ internal sealed class EscalationRuleService(
     AppDbContext dbContext,
     IEmailOutboxService emailOutboxService,
     ILogger<EscalationRuleService> logger,
-    IPushNotificationQueue? pushNotificationQueue = null) : IEscalationRuleService
+    INotificationDispatcher? notificationDispatcher = null) : IEscalationRuleService
 {
     private static readonly string[] ClosedStatuses = WorkOrderStatuses.ClosedStatuses;
 
@@ -269,7 +269,7 @@ internal sealed class EscalationRuleService(
                 IsLead = true,
                 AssignedAt = DateTime.UtcNow,
             });
-            AssignmentPushNotifications.Enqueue(pushNotificationQueue, workOrder, [technician]);
+            await AssignmentNotifications.NotifyAsync(notificationDispatcher, workOrder, [technician], cancellationToken);
         }
 
         var recipient = await dbContext.Users

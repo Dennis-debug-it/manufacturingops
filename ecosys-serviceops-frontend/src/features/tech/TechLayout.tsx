@@ -1,19 +1,23 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, CalendarClock, ClipboardList, LogOut, UserRound } from 'lucide-react'
+import { BookOpen, CalendarClock, ClipboardList, HardHat, LogOut, UserRound } from 'lucide-react'
 import { Logo } from '../../shared/components/Logo'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useEntitlements } from '../../shared/hooks/useEntitlements'
+import { usePermission } from '../../shared/hooks/usePermission'
 import { isDemoTenant } from '../../shared/demoWorkspace'
 import { cn } from '../../shared/utils/cn'
 import { usePendingActions } from './offline/hooks'
 import { OfflineStatus } from './offline/OfflineStatus'
 import { startOfflinePersistence } from './offline/persist'
+import { NotificationBell } from '../notifications/NotificationBell'
 import { JobAlertsPrompt } from './JobAlerts'
 import { disablePush, resyncPush } from './push'
 
 const SECTIONS = [
   { to: '/tech', label: 'Jobs', icon: ClipboardList, match: (path: string) => path === '/tech' || path.startsWith('/tech/jobs') },
+  { to: '/tech/site', label: 'Site', icon: HardHat, match: (path: string) => path.startsWith('/tech/site') },
   { to: '/tech/time', label: 'Time & Leave', icon: CalendarClock, match: (path: string) => path.startsWith('/tech/time') },
   { to: '/tech/guides', label: 'Guides', icon: BookOpen, match: (path: string) => path.startsWith('/tech/guides') },
   { to: '/tech/account', label: 'Me', icon: UserRound, match: (path: string) => path.startsWith('/tech/account') },
@@ -27,6 +31,10 @@ export function TechLayout() {
   const queryClient = useQueryClient()
   const pending = usePendingActions()
   const userId = user?.userId
+  // The muster roll is for site supervisors on tenants with the Projects module.
+  const { hasModule } = useEntitlements()
+  const canMarkMuster = usePermission('projects.muster.mark')
+  const sections = SECTIONS.filter((section) => section.to !== '/tech/site' || (canMarkMuster && hasModule('projects')))
 
   // Keep this technician's jobs on the phone so the app works without a signal.
   useEffect(() => (userId ? startOfflinePersistence(queryClient, userId) : undefined), [queryClient, userId])
@@ -54,14 +62,15 @@ export function TechLayout() {
           </Link>
           <div className="flex items-center gap-2">
             <OfflineStatus />
+            <NotificationBell viewAllPath="/tech/notifications" preferencesPath="/tech/account" />
             <span className="hidden truncate text-xs text-slate-500 sm:block">{user?.fullName}</span>
             <button type="button" onClick={() => void signOut()} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
               <LogOut className="h-3.5 w-3.5" />Sign out
             </button>
           </div>
         </div>
-        <nav aria-label="Technician sections" className="mx-auto grid max-w-xl grid-cols-4 gap-1 px-2 pb-2">
-          {SECTIONS.map(({ to, label, icon: Icon, match }) => {
+        <nav aria-label="Technician sections" className={cn('mx-auto grid max-w-xl gap-1 px-2 pb-2', sections.length > 4 ? 'grid-cols-5' : 'grid-cols-4')}>
+          {sections.map(({ to, label, icon: Icon, match }) => {
             const active = match(pathname)
             return (
               <Link

@@ -22,7 +22,7 @@ async function session(page: Page, role = 'admin', modules = ['operations', 'fin
     const path = new URL(route.request().url()).pathname
     if (!path.startsWith('/api/')) { await route.continue(); return }
     const body = path === '/api/auth/me' ? data
-      : path === '/api/tenant/license' ? { modules, planCode: modules.length === 2 ? 'suite' : modules[0], planName: 'ServiceOps ' + (modules.length === 2 ? 'Suite' : modules[0] === 'finance' ? 'Finance' : 'Operations') }
+      : path === '/api/tenant/license' ? { modules, planCode: 'essentials', planName: 'ServiceOps Essentials' }
       : path === '/api/tenant/profile' ? { serviceOpsEmail: 'acme@serviceops.ecosysdigital.co.ke' }
       : path === '/api/platform/tenants' || path.endsWith('/branches') || path.endsWith('/notifications') ? [] : {}
     await route.fulfill(respond(body))
@@ -39,8 +39,9 @@ test('tenant creation asks only essential fields and sends stable plan code', as
   await page.getByLabel('Company Name', { exact: true }).fill('Acme Engineering Limited')
   await expect(page.getByLabel('Tenant Slug', { exact: true })).toHaveValue('acme')
   await expect(page.getByText('acme@serviceops.ecosysdigital.co.ke', { exact: true })).toBeVisible()
-  await page.getByRole('radio', { name: 'ServiceOps Finance', exact: true }).check()
-  await page.getByLabel('Licensed Users', { exact: true }).fill('15')
+  await page.getByRole('radio', { name: 'Essentials', exact: true }).check()
+  await page.getByLabel('Office Seats', { exact: true }).fill('15')
+  await page.getByLabel('Field Seats', { exact: true }).fill('4')
   await page.getByLabel('Primary Admin Name', { exact: true }).fill('John Kamau')
   await page.getByLabel('Primary Admin Email', { exact: true }).fill('john@acme.test')
   await expect(page.getByLabel('Timezone', { exact: true })).toHaveValue('Africa/Nairobi')
@@ -52,7 +53,7 @@ test('tenant creation asks only essential fields and sends stable plan code', as
   await expect(page.getByText('SMTP', { exact: true })).toHaveCount(0)
   const request = page.waitForRequest((req) => req.method() === 'POST' && new URL(req.url()).pathname === '/api/platform/tenants')
   await page.getByRole('button', { name: 'Create tenant', exact: true }).last().click()
-  expect((await request).postDataJSON()).toEqual({ companyName: 'Acme Engineering Limited', slug: 'acme', planCode: 'finance', maxUsers: 15, adminFullName: 'John Kamau', adminEmail: 'john@acme.test', country: 'Nigeria', timeZoneId: 'Africa/Nairobi' })
+  expect((await request).postDataJSON()).toEqual({ companyName: 'Acme Engineering Limited', slug: 'acme', planCode: 'essentials', officeSeats: 15, fieldSeats: 4, adminFullName: 'John Kamau', adminEmail: 'john@acme.test', country: 'Nigeria', timeZoneId: 'Africa/Nairobi' })
 })
 
 for (const modules of [['operations'], ['finance'], ['operations', 'finance']]) {

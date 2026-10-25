@@ -39,14 +39,21 @@ import { SectionTitle, licenseStatusBadge, tenantStatusBadge, trialStatusBadge }
 import { NewWorkspaceUserDrawer } from './NewWorkspaceUserDrawer'
 import { LicenseTermDialog } from './LicenseTermDialog'
 import { ClientTemplatesPanel } from './ClientTemplatesPanel'
+import { TenantWhatsAppPanel } from './TenantWhatsAppPanel'
 import { parseLicensedUsers, summarizeSeats } from './licensedUsers'
 import type { PlatformTenantAuditLog } from '../types'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import type { PlatformTenantNumbering, PlatformTenantUser } from '../api'
 
 const moduleLabels: Record<string, string> = {
-  operations: 'Operations',
-  finance: 'Finance',
+  operations: 'Work orders',
+  finance: 'Quotes & invoices',
+  maintenance: 'Maintenance',
+  inventory: 'Inventory',
+  projects: 'Projects',
+  advanced: 'Advanced tools',
+  enterprise_tools: 'Branches, API & monitoring',
+  whatsapp_business: 'WhatsApp inbox',
 }
 
 const primaryButton = 'inline-flex h-11 items-center gap-1.5 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:cursor-not-allowed disabled:opacity-50'
@@ -56,9 +63,14 @@ const dangerButton = 'inline-flex h-11 items-center rounded-lg border border-ros
 const panelClass = 'rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm'
 const inputClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 
-/** Seats are shown as "used / limit"; a null limit means the tenant predates required seat limits. */
+/** Seats are shown as "used / limit"; a null limit means the tenant has no license yet. */
 function formatSeats(used: number, limit: number | null | undefined) {
   return limit != null ? `${used} / ${limit}` : `${used} / —`
+}
+
+function parseFieldSeats(input: string): number | null {
+  const value = Number(input.trim() || '0')
+  return Number.isInteger(value) && value >= 0 ? value : null
 }
 
 const invitationLabels: Record<string, { label: string; className: string }> = {
@@ -104,6 +116,7 @@ export function TenantDetailPage() {
   const [extendLicenseTarget, setExtendLicenseTarget] = useState('')
   const [showSeatsDialog, setShowSeatsDialog] = useState(false)
   const [seatsInput, setSeatsInput] = useState('')
+  const [fieldSeatsInput, setFieldSeatsInput] = useState('')
   const [showImpersonate, setShowImpersonate] = useState(false)
   const [impersonateReason, setImpersonateReason] = useState('')
   const [testRecipient, setTestRecipient] = useState('')
@@ -118,10 +131,9 @@ export function TenantDetailPage() {
     return <EmptyState title="Tenant unavailable" description="This tenant could not be loaded." {...(id ? { actionLabel: 'Retry', onAction: () => { void refetchTenant() } } : {})} />
   }
 
-  const seatsUsed = tenant.seatsUsed ?? tenant.userCount
   const seatLimit = tenant.seatLimit ?? tenant.maxUsers
-  const seats = summarizeSeats(seatsUsed, seatLimit)
-  const seatsFull = seats.isFull
+  const officeSeats = summarizeSeats(tenant.officeSeatsUsed ?? 0, tenant.officeSeats)
+  const fieldSeats = summarizeSeats(tenant.fieldSeatsUsed ?? 0, tenant.fieldSeats)
   const modules = tenant.modules ?? []
   const isTrial = tenant.status === 'Trial'
   const isSuspended = tenant.status === 'Suspended'
@@ -207,12 +219,14 @@ export function TenantDetailPage() {
   }
 
   const openSeatsDialog = () => {
-    setSeatsInput(seatLimit != null ? String(seatLimit) : String(Math.max(seatsUsed, 1)))
+    setSeatsInput(String(tenant.officeSeats ?? Math.max(officeSeats.current, 1)))
+    setFieldSeatsInput(String(tenant.fieldSeats ?? fieldSeats.current))
     setShowSeatsDialog(true)
   }
 
   const seatsParse = parseLicensedUsers(seatsInput)
-  const seatsValid = seatsParse.ok
+  const parsedFieldSeats = parseFieldSeats(fieldSeatsInput)
+  const seatsValid = seatsParse.ok && parsedFieldSeats != null
   const parsedSeats = seatsParse.ok ? seatsParse.value : 0
 
   const tenantUserColumns: DataTableColumn<PlatformTenantUser>[] = [
@@ -306,38 +320,36 @@ export function TenantDetailPage() {
     },
   ]
 
+  const seatPool = (label: string, testId: string, pool: ReturnType<typeof summarizeSeats>) => (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" data-testid={testId}>
+      <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</dt>
+      <dd className={`mt-1 text-2xl font-semibold ${pool.isFull ? 'text-amber-700' : 'text-slate-900'}`}>{formatSeats(pool.current, pool.licensed)}</dd>
+      <dd className="text-xs text-slate-500">{pool.remaining != null ? `${pool.remaining} remaining` : 'No license yet'}</dd>
+    </div>
+  )
+
   const seatsPanel = (
     <section className={panelClass} data-testid="tenant-seats">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SectionTitle
-          title="Licensed users"
-          description="Active workspace users, including invitees who have not signed in yet, use a seat. Deactivated users and client-portal contacts do not."
+          title="Seats"
+          description="Technicians take a field seat; viewers are free; every other active user, including invitees who have not signed in yet, takes an office seat. Deactivated users and client-portal contacts take none."
         />
         <button type="button" className={secondaryButton} onClick={openSeatsDialog}>
           <Users className="h-4 w-4" />
-          Edit licensed users
+          Edit seats
         </button>
       </div>
-      <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" data-testid="tenant-seats-licensed">
-          <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Licensed Users</dt>
-          <dd className="mt-1 text-2xl font-semibold text-slate-900">{seats.licensed ?? '—'}</dd>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" data-testid="tenant-seats-current">
-          <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Current Users</dt>
-          <dd className="mt-1 text-2xl font-semibold text-slate-900">{seats.current}</dd>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3" data-testid="tenant-seats-remaining">
-          <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">Remaining Seats</dt>
-          <dd className={`mt-1 text-2xl font-semibold ${seats.isFull ? 'text-amber-700' : 'text-slate-900'}`}>{seats.remaining ?? '—'}</dd>
-        </div>
+      <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {seatPool('Office seats', 'tenant-seats-office', officeSeats)}
+        {seatPool('Field seats', 'tenant-seats-field', fieldSeats)}
       </dl>
       {seatLimit == null ? (
-        <p className="mt-2 text-sm text-amber-700">This tenant has no license yet. Set licensed users to create one.</p>
-      ) : seats.isOverLimit ? (
-        <p className="mt-2 text-sm text-amber-700">{seats.current} active users exceed the licensed limit of {seats.licensed}. Nobody was deactivated; new users and reactivations are blocked until usage falls below the limit or it is raised.</p>
-      ) : seatsFull ? (
-        <p className="mt-2 text-sm text-amber-700">This tenant has reached its licensed user limit of {seats.licensed}. New users and reactivations are blocked until a seat is freed or the limit is raised.</p>
+        <p className="mt-2 text-sm text-amber-700">This tenant has no license yet. Set its seats to create one.</p>
+      ) : officeSeats.isOverLimit || fieldSeats.isOverLimit ? (
+        <p className="mt-2 text-sm text-amber-700">Active users exceed the seats in the {officeSeats.isOverLimit ? 'office' : 'field'} pool. Nobody was deactivated; new users and reactivations in that pool are blocked until usage falls or seats are added.</p>
+      ) : officeSeats.isFull || fieldSeats.isFull ? (
+        <p className="mt-2 text-sm text-amber-700">All {officeSeats.isFull && fieldSeats.isFull ? 'office and field' : officeSeats.isFull ? 'office' : 'field'} seats are in use. New users in that pool are blocked until a seat is freed or added. Viewers can still be added.</p>
       ) : null}
     </section>
   )
@@ -349,7 +361,7 @@ export function TenantDetailPage() {
       content: (
         <div className="space-y-5">
           <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <MiniStat label="Licensed users" value={formatSeats(seatsUsed, seatLimit)} />
+            <MiniStat label="Office / field seats used" value={`${formatSeats(officeSeats.current, officeSeats.licensed)} · ${formatSeats(fieldSeats.current, fieldSeats.licensed)}`} />
             <MiniStat label="Sites" value={tenant.branchCount} />
             <MiniStat label="Work orders" value={tenant.workOrderCount} />
             <MiniStat label="Active now" value={tenant.activeUsersNow} />
@@ -360,7 +372,7 @@ export function TenantDetailPage() {
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               <InfoCard label="Status" value={tenantStatusBadge(tenant.status)} />
               <InfoCard label="License" value={licenseStatusBadge(tenant.licenseStatus)} />
-              <InfoCard label="Plan" value={tenant.planName ?? 'No plan'} />
+              <InfoCard label="Edition" value={tenant.planName ?? 'No edition'} />
               <InfoCard label="Modules" value={modules.length ? modules.map((m) => moduleLabels[m] ?? m).join(' + ') : 'None'} />
               <InfoCard label="License expires" value={tenant.isPerpetual ? 'Never (perpetual)' : licenseExpiresAt ? formatDate(licenseExpiresAt) : 'Not set'} />
               <InfoCard label="Workspace slug" value={tenant.slug} mono />
@@ -380,14 +392,13 @@ export function TenantDetailPage() {
       content: (
         <div className="space-y-5">
           {seatsPanel}
+          {tenant.tenantId ? <TenantWhatsAppPanel tenantId={tenant.tenantId} className={panelClass} /> : null}
           <section className={panelClass}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <SectionTitle title="Workspace users" description="Accounts inside this tenant. Resend a lapsed setup link here — it is the only recovery path for an admin who has never signed in. Ecosys staff accounts live under Platform → Users." />
               <button
                 type="button"
                 onClick={() => setShowAddWorkspaceUser(true)}
-                disabled={seatsFull}
-                title={seatsFull ? `This tenant has reached its licensed user limit of ${seats.licensed}` : undefined}
                 className={primaryButton}
               >
                 <UserPlus className="h-4 w-4" />
@@ -413,9 +424,9 @@ export function TenantDetailPage() {
       content: (
         <div className="space-y-5">
           <section className={panelClass}>
-            <SectionTitle title="Licensed modules" description="What this tenant's plan entitles. The backend blocks every API of a module that is not licensed; change the plan from Subscription → Renew." />
+            <SectionTitle title="Licensed modules" description="What this tenant's edition (and WhatsApp Business add-on) includes. The backend blocks every API of a module that is not licensed; change the edition from Subscription → Renew." />
             <div className="mt-4 flex flex-wrap gap-2">
-              {['operations', 'finance'].map((module) => (
+              {Object.keys(moduleLabels).map((module) => (
                 <span
                   key={module}
                   className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium ${modules.includes(module) ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-400 line-through'}`}
@@ -424,7 +435,7 @@ export function TenantDetailPage() {
                 </span>
               ))}
             </div>
-            <p className="mt-3 text-sm text-slate-600">Plan: {tenant.planName ?? 'No plan'}</p>
+            <p className="mt-3 text-sm text-slate-600">Edition: {tenant.planName ?? 'No edition'}</p>
           </section>
           <section className={panelClass}>
             <SectionTitle title="Module preferences" description="Settings this tenant has saved inside its own workspace (dashboard targets, inventory, payments, portal, integrations). These are tenant-owned and do not grant access." />
@@ -461,8 +472,9 @@ export function TenantDetailPage() {
                 <InfoCard label="Trial" value={trialStatusBadge(tenant.trialStatus)} />
               )}
               <InfoCard label="License expires" value={tenant.isPerpetual ? 'Never (perpetual)' : licenseExpiresAt ? formatDate(licenseExpiresAt) : 'Not set'} />
-              <InfoCard label="Licensed users" value={formatSeats(seatsUsed, seatLimit)} />
-              <InfoCard label="Plan" value={tenant.planName ?? 'No plan'} />
+              <InfoCard label="Office seats" value={formatSeats(officeSeats.current, officeSeats.licensed)} />
+              <InfoCard label="Field seats" value={formatSeats(fieldSeats.current, fieldSeats.licensed)} />
+              <InfoCard label="Edition" value={tenant.planName ?? 'No edition'} />
             </div>
           </section>
           <div className="flex flex-wrap gap-2" data-testid="tenant-lifecycle-actions">
@@ -491,7 +503,7 @@ export function TenantDetailPage() {
               </button>
             ) : null}
             {isTrial && !tenant.trialExtensionUsed ? <button type="button" className={secondaryButton} onClick={() => setShowExtendTrial(true)}>Extend trial</button> : null}
-            <button type="button" className={secondaryButton} onClick={openSeatsDialog}>Edit licensed users</button>
+            <button type="button" className={secondaryButton} onClick={openSeatsDialog}>Edit seats</button>
             {isActive || isTrial ? <button type="button" className={warningButton} onClick={() => setShowSuspend(true)}>Suspend</button> : null}
           </div>
         </div>
@@ -784,27 +796,38 @@ export function TenantDetailPage() {
 
       <ConfirmDialog
         open={showSeatsDialog}
-        title="Licensed users"
-        message={`How many workspace users may ${tenant.name} have? ${seatsUsed} seat${seatsUsed === 1 ? ' is' : 's are'} in use. Lowering the limit below usage never deactivates anyone; it only blocks new users until usage falls.`}
+        title="Seats"
+        message={`How many office and field users may ${tenant.name} have? ${officeSeats.current} office and ${fieldSeats.current} field seats are in use. Lowering a pool below usage never deactivates anyone; it only blocks new users in that pool until usage falls.`}
         confirmLabel="Save"
         confirmDisabled={!seatsValid || updateSeats.isPending}
         onCancel={() => setShowSeatsDialog(false)}
         onConfirm={() => {
           if (!seatsValid) return
-          void updateSeats.mutateAsync(parsedSeats)
-            .then(() => toast.success('Licensed users updated'))
+          void updateSeats.mutateAsync({ officeSeats: parsedSeats, fieldSeats: parsedFieldSeats ?? 0 })
+            .then(() => toast.success('Seats updated'))
             .then(() => setShowSeatsDialog(false))
             .catch(() => undefined)
         }}
       >
         <div className="mt-4">
-          <label htmlFor="tenant-seats-input" className="mb-1.5 block text-sm font-medium text-slate-700">Licensed users</label>
-          <input id="tenant-seats-input" type="number" min={1} step={1} value={seatsInput} onChange={(event) => setSeatsInput(event.target.value)} className={inputClass} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="tenant-seats-input" className="mb-1.5 block text-sm font-medium text-slate-700">Office seats</label>
+              <input id="tenant-seats-input" type="number" min={1} step={1} value={seatsInput} onChange={(event) => setSeatsInput(event.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label htmlFor="tenant-field-seats-input" className="mb-1.5 block text-sm font-medium text-slate-700">Field seats</label>
+              <input id="tenant-field-seats-input" type="number" min={0} step={1} value={fieldSeatsInput} onChange={(event) => setFieldSeatsInput(event.target.value)} className={inputClass} />
+            </div>
+          </div>
           {!seatsParse.ok ? (
             <p className="mt-2 text-sm text-rose-700">{seatsParse.error}</p>
-          ) : parsedSeats < seatsUsed ? (
-            <p className="mt-2 text-sm text-amber-700">This is below the {seatsUsed} users already active. Nobody is deactivated; new additions stay blocked until usage is under {parsedSeats}.</p>
+          ) : parsedFieldSeats == null ? (
+            <p className="mt-2 text-sm text-rose-700">Field seats must be a whole number of 0 or more.</p>
+          ) : parsedSeats < officeSeats.current || parsedFieldSeats < fieldSeats.current ? (
+            <p className="mt-2 text-sm text-amber-700">This is below the users already active. Nobody is deactivated; new additions in that pool stay blocked until usage falls.</p>
           ) : null}
+          <p className="mt-2 text-xs text-slate-500">The edition's minimum number of office seats applies.</p>
         </div>
       </ConfirmDialog>
 

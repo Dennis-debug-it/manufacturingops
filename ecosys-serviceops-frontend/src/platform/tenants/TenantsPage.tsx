@@ -14,7 +14,7 @@ import { Field } from '../common'
 import { useCreateTenant, useLead, useTenants } from '../api'
 import { licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
 import type { PlatformTenantListItem } from '../types'
-import { buildCreateTenantPayload, DEFAULT_LICENSED_USERS, type CreateTenantForm } from './licensedUsers'
+import { buildCreateTenantPayload, DEFAULT_FIELD_SEATS, DEFAULT_LICENSED_USERS, editionLabel, type CreateTenantForm } from './licensedUsers'
 
 const statusOptions = ['All', 'Active', 'Trial', 'Suspended', 'Inactive'] as const
 const trialOptions = ['All', 'TrialActive', 'TrialExpiringSoon', 'TrialExpired', 'TrialExtended', 'PaidActive'] as const
@@ -35,8 +35,8 @@ function suggestSlug(companyName: string) {
 }
 
 const emptyForm: CreateTenantForm = {
-  companyName: '', slug: '', planCode: 'suite', adminFullName: '', adminEmail: '',
-  country: 'Kenya', timeZoneId: 'Africa/Nairobi', maxUsers: String(DEFAULT_LICENSED_USERS),
+  companyName: '', slug: '', planCode: 'professional', adminFullName: '', adminEmail: '',
+  country: 'Kenya', timeZoneId: 'Africa/Nairobi', maxUsers: String(DEFAULT_LICENSED_USERS), fieldSeats: String(DEFAULT_FIELD_SEATS),
 }
 
 export function TenantsPage() {
@@ -114,7 +114,7 @@ export function TenantsPage() {
       cell: (row) => (
         <div>
           {row.planName ?? 'No plan'}
-          <div className="text-xs text-slate-500">{(row.modules ?? []).map((m) => (m === 'operations' ? 'Operations' : m === 'finance' ? 'Finance' : m)).join(' + ') || '—'}</div>
+          <div className="text-xs text-slate-500">{row.seatLimit != null ? `${row.seatLimit} paid seats` : '—'}</div>
         </div>
       ),
     },
@@ -286,20 +286,25 @@ export function TenantsPage() {
             <p className="mt-1 text-xs text-emerald-800">Automatically provisioned. The server confirms the final address.</p>
           </div>
           <fieldset>
-            <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Plan</legend>
+            <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Edition</legend>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {(['operations', 'finance', 'suite'] as const).map((code) => (
+              {(['essentials', 'professional', 'enterprise'] as const).map((code) => (
                 <label key={code} className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 text-sm ${createForm.planCode === code ? 'border-slate-900 bg-slate-50 font-semibold text-slate-900' : 'border-slate-200 text-slate-600'}`}>
                   <input type="radio" name="plan" value={code} checked={createForm.planCode === code} onChange={() => setCreateForm((current) => ({ ...current, planCode: code }))} />
-                  ServiceOps {code === 'suite' ? 'Suite' : code === 'finance' ? 'Finance' : 'Operations'}
+                  {editionLabel(code)}
                 </label>
               ))}
             </div>
           </fieldset>
-          <Field label="Licensed Users">
-            <input required data-testid="create-tenant-licensed-users" aria-describedby="create-tenant-licensed-users-help" type="number" min={1} step={1} inputMode="numeric" value={createForm.maxUsers} onChange={(event) => setCreateForm((current) => ({ ...current, maxUsers: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900 md:w-48" />
-          </Field>
-          <p id="create-tenant-licensed-users-help" className="-mt-3 text-xs text-slate-500">Maximum number of licensed user accounts allowed for this tenant. Active workspace users (including pending invitations) count against it; client-portal contacts do not. It can be changed later from the tenant's Users tab.</p>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Field label="Office Seats">
+              <input required data-testid="create-tenant-licensed-users" aria-describedby="create-tenant-licensed-users-help" type="number" min={1} step={1} inputMode="numeric" value={createForm.maxUsers} onChange={(event) => setCreateForm((current) => ({ ...current, maxUsers: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+            </Field>
+            <Field label="Field Seats">
+              <input data-testid="create-tenant-field-seats" aria-describedby="create-tenant-licensed-users-help" type="number" min={0} step={1} inputMode="numeric" value={createForm.fieldSeats} onChange={(event) => setCreateForm((current) => ({ ...current, fieldSeats: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />
+            </Field>
+          </div>
+          <p id="create-tenant-licensed-users-help" className="-mt-3 text-xs text-slate-500">Technicians take a field seat; viewers are free; every other active user (including pending invitations) takes an office seat. Client-portal contacts never count. Each edition has a minimum number of office seats. Seats can be changed later from the tenant's Users tab.</p>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Field label="Primary Admin Name">
               <input required autoComplete="name" value={createForm.adminFullName} onChange={(event) => setCreateForm((current) => ({ ...current, adminFullName: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" />

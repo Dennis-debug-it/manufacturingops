@@ -30,6 +30,9 @@ public static class DocumentTypes
     public const string SupplierBill = "SupplierBill";
     public const string ServiceReport = "ServiceReport";
     public const string PartsReturn = "PartsReturn";
+    public const string Project = "Project";
+    public const string ProjectVariation = "ProjectVariation";
+    public const string ProjectValuation = "ProjectValuation";
 
     public static string Normalize(string documentType)
     {
@@ -59,6 +62,9 @@ public static class DocumentTypes
             var x when x == SupplierBill.ToLowerInvariant() => SupplierBill,
             var x when x == ServiceReport.ToLowerInvariant() => ServiceReport,
             var x when x == PartsReturn.ToLowerInvariant() => PartsReturn,
+            var x when x == Project.ToLowerInvariant() => Project,
+            var x when x == ProjectVariation.ToLowerInvariant() => ProjectVariation,
+            var x when x == ProjectValuation.ToLowerInvariant() => ProjectValuation,
             _ => throw new Ecosys.Shared.Errors.BusinessRuleException("Unsupported document type.")
         };
     }
@@ -444,6 +450,9 @@ internal sealed class DocumentNumberingService(AppDbContext dbContext) : IDocume
             DocumentTypes.SupplierBill => "BILL",
             DocumentTypes.ServiceReport => "SR",
             DocumentTypes.PartsReturn => "RTN",
+            DocumentTypes.Project => "PRJ",
+            DocumentTypes.ProjectVariation => "VO",
+            DocumentTypes.ProjectValuation => "VAL",
             _ => "DOC"
         };
 }

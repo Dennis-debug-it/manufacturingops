@@ -31,7 +31,8 @@ internal sealed class DynamicAccessService(AppDbContext dbContext, IRolePermissi
         var scopes = await dbContext.AccessScopes.AsNoTracking().Where(x => x.TenantId == tenantId && (x.UserId == userId || (x.PermissionGroupId.HasValue && memberships.Contains(x.PermissionGroupId.Value)))).ToListAsync(cancellationToken);
         var thresholds = await dbContext.PermissionThresholds.AsNoTracking().Where(x => x.TenantId == tenantId && (x.UserId == userId || (x.PermissionGroupId.HasValue && memberships.Contains(x.PermissionGroupId.Value)))).ToListAsync(cancellationToken);
         var roleBaseline = await rolePermissionService.ResolveAsync(tenantId, user.Role, cancellationToken);
-        var roleGrants = PermissionMap.FromModel(roleBaseline).Where(x => x.Value).Select(x => x.Key).ToArray();
+        var roleGrants = PermissionMap.FromModel(roleBaseline).Where(x => x.Value).Select(x => x.Key)
+            .Concat(CapabilityRoleDefaults.For(user.Role)).ToArray();
         var all = PermissionNames.All.Concat(groupGrants).Concat(roleGrants).Concat(overrides.Select(x => x.Capability)).Distinct(StringComparer.OrdinalIgnoreCase);
 
         return all.Select(capability =>
@@ -52,7 +53,70 @@ internal sealed class DynamicAccessService(AppDbContext dbContext, IRolePermissi
     {
         var effective = await GetEffectiveAccessAsync(tenantId, userId, cancellationToken);
         var grants = effective.Where(x => x.Allowed).Select(x => x.Capability).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return PermissionMap.ToModel(grants);
+        return PermissionMap.ToModel(grants) with
+        {
+            Capabilities = PermissionNames.CapabilityOnly.Where(grants.Contains).ToArray()
+        };
+    }
+}
+
+/// <summary>
+/// Role baseline for <see cref="PermissionNames.CapabilityOnly"/> capabilities. These have no
+/// role-matrix column, so the defaults live here; a tenant adjusts them per user or per group
+/// through Access Control (grants and explicit denies). Admin is granted everything elsewhere.
+/// </summary>
+internal static class CapabilityRoleDefaults
+{
+    private static readonly string[] ProjectViewers = [PermissionNames.ProjectsView];
+
+    private static readonly string[] ProjectManagers =
+    [
+        PermissionNames.ProjectsView,
+        PermissionNames.ProjectsManage,
+        PermissionNames.ProjectsVariationsSubmit,
+        PermissionNames.ProjectsVariationsApprove,
+        PermissionNames.ProjectsClose,
+        PermissionNames.ProjectsMusterMark,
+        PermissionNames.ProjectsFinancialsView,
+        PermissionNames.ProjectsFinancialsManage
+    ];
+
+    private static readonly string[] ProjectFinance =
+    [
+        PermissionNames.ProjectsView,
+        PermissionNames.ProjectsFinancialsView,
+        PermissionNames.ProjectsFinancialsManage
+    ];
+
+    // Field staff mark the muster roll only on projects where they are a Supervisor or Project
+    // Manager member; the capability alone opens nothing else.
+    private static readonly string[] FieldSupervisors = [PermissionNames.ProjectsMusterMark];
+
+    public static IReadOnlyList<string> For(string? role) => [.. ProjectDefaults(role), .. ActivityDefaults(role)];
+
+    private static IReadOnlyList<string> ProjectDefaults(string? role)
+    {
+        if (string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)) return ProjectManagers;
+        if (string.Equals(role, AppRoles.FinanceUser, StringComparison.OrdinalIgnoreCase)) return ProjectFinance;
+        if (string.Equals(role, AppRoles.Dispatcher, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, AppRoles.Viewer, StringComparison.OrdinalIgnoreCase)) return ProjectViewers;
+        if (string.Equals(role, AppRoles.Technician, StringComparison.OrdinalIgnoreCase)) return FieldSupervisors;
+        return [];
+    }
+
+    /// <summary>
+    /// Every staff role sees meetings and action items and can organise its own; managers organise any
+    /// meeting; managers and dispatchers get the calendar's team view.
+    /// </summary>
+    private static IReadOnlyList<string> ActivityDefaults(string? role)
+    {
+        if (string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase))
+            return [PermissionNames.ActivitiesView, PermissionNames.ActivitiesManage, PermissionNames.CalendarTeam];
+        if (string.Equals(role, AppRoles.Dispatcher, StringComparison.OrdinalIgnoreCase))
+            return [PermissionNames.ActivitiesView, PermissionNames.CalendarTeam];
+        if (AppRoles.TenantRoles.Contains(role ?? "", StringComparer.OrdinalIgnoreCase))
+            return [PermissionNames.ActivitiesView];
+        return [];
     }
 }
 

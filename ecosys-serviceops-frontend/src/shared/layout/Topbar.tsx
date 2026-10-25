@@ -6,6 +6,7 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { cn } from '../utils/cn'
 import { Logo } from '../components/Logo'
 import { isDemoTenant } from '../demoWorkspace'
+import { NotificationBell } from '../../features/notifications/NotificationBell'
 
 /** Shown under the user's name when they have no job title. */
 const roleNames: Partial<Record<AppRole, string>> = {
@@ -41,6 +42,7 @@ export function Topbar() {
             Offline — changes can’t be saved
           </span>
         ) : null}
+        <NotificationBell viewAllPath="/notifications" preferencesPath="/settings/notifications" />
         <Link to="/me" title="My account" className="flex items-center gap-2 rounded-lg px-2 py-1 text-right transition hover:bg-[var(--app-primary-soft)]">
           <UserCircle2 className="h-5 w-5 text-slate-500 sm:hidden" aria-label="My account" />
           <span className="hidden sm:block">

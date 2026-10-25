@@ -3,9 +3,10 @@ import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 
 /**
- * Push notifications for new job assignments. The browser asks for permission only when the
- * technician taps "Turn on" (browsers block prompts that aren't started by a tap). The subscription
- * is sent to the API, which pushes to it when the technician is assigned a job (WebPush.cs).
+ * Push notifications on this device: new job assignments, and anything else the user has set to
+ * Push. The browser asks for permission only when the user taps "Turn on" (browsers block prompts
+ * that aren't started by a tap). The subscription is sent to the API, whose push worker sends to it
+ * (WebPush.cs, NotificationInboxWorkers.cs).
  *
  * iOS only supports push for the app added to the home screen, not in Safari itself.
  */

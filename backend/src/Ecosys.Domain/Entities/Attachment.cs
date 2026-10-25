@@ -13,6 +13,8 @@ public sealed class Attachment : AuditableEntity, ITenantEntity
     public string StoragePath { get; set; } = string.Empty;
     public string PublicUrl { get; set; } = string.Empty;
     public Guid UploadedByUserId { get; set; }
+    /// <summary>Shown to the client in the portal. Only project documents use this; default is internal.</summary>
+    public bool SharedWithClient { get; set; }
 
     public Tenant? Tenant { get; set; }
     public User? UploadedByUser { get; set; }

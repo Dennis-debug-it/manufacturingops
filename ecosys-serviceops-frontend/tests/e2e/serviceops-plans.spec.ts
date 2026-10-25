@@ -2,8 +2,14 @@ import { expect, test, type Page } from '@playwright/test'
 import { canAccessModulePath } from '../../src/shared/utils/entitlements'
 import { E2E_API_URL } from './helpers/test-data'
 
-async function openWorkspace(page: Page, code: 'operations' | 'finance' | 'suite') {
-  const modules = code === 'suite' ? ['operations', 'finance'] : [code]
+const editionModules = {
+  essentials: ['operations', 'finance'],
+  professional: ['operations', 'finance', 'maintenance', 'inventory', 'projects', 'advanced'],
+  enterprise: ['operations', 'finance', 'maintenance', 'inventory', 'projects', 'advanced', 'enterprise_tools'],
+} as const
+
+async function openWorkspace(page: Page, code: keyof typeof editionModules) {
+  const modules = editionModules[code]
   const session = {
     token: 'test-session',
     user: { userId: 'plan-admin', fullName: 'Plan Admin', email: 'admin@example.test', role: 'admin', mustChangePassword: false, permissions: {}, hasAllBranchAccess: true },
@@ -24,19 +30,19 @@ async function openWorkspace(page: Page, code: 'operations' | 'finance' | 'suite
   await expect(page.locator('aside')).toContainText('Plan Tenant')
 }
 
-for (const code of ['operations', 'finance', 'suite'] as const) {
-  test(`${code} navigation and settings reflect licensed modules`, async ({ page }) => {
+for (const code of ['essentials', 'professional', 'enterprise'] as const) {
+  test(`${code} navigation and settings reflect the edition`, async ({ page }) => {
     await openWorkspace(page, code)
     const nav = page.locator('aside nav')
     await expect(nav.getByRole('link', { name: 'Clients', exact: true })).toBeVisible()
     await expect(nav.getByRole('link', { name: 'Users & Access' })).toBeVisible()
-    await expect(nav.getByRole('link', { name: 'Work Orders', exact: true })).toHaveCount(code === 'finance' ? 0 : 1)
-    await expect(nav.getByRole('link', { name: 'Finance', exact: true })).toHaveCount(code === 'operations' ? 0 : 1)
-    await expect(page.getByRole('link', { name: /Payments M-Pesa/ })).toHaveCount(code === 'operations' ? 0 : 1)
-    await expect(page.getByRole('link', { name: /PM Templates Preventive/ })).toHaveCount(code === 'finance' ? 0 : 1)
-    const blocked = code === 'operations' ? '/finance' : code === 'finance' ? '/work-orders' : null
-    if (blocked) {
-      await page.goto(blocked)
+    // Every edition runs the whole work order to invoice loop.
+    await expect(nav.getByRole('link', { name: 'Work Orders', exact: true })).toHaveCount(1)
+    await expect(nav.getByRole('link', { name: 'Finance', exact: true })).toHaveCount(1)
+    await expect(page.getByRole('link', { name: /Payments M-Pesa/ })).toHaveCount(1)
+    await expect(page.getByRole('link', { name: /PM Templates Preventive/ })).toHaveCount(code === 'essentials' ? 0 : 1)
+    if (code === 'essentials') {
+      await page.goto('/maintenance/schedules')
       await expect(page.getByText('This feature is unavailable on your ServiceOps plan.')).toBeVisible()
     }
   })

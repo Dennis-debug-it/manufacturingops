@@ -8,6 +8,8 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { ErrorState } from '../../shared/components/ErrorState'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
+import { ProjectPicker } from '../../shared/components/ProjectPicker'
+import { getActiveCurrency } from '../../shared/utils/currency'
 import { formatDate } from '../../shared/utils/dates'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 import { useCreateExpense, useDecideExpense, useExpense, useExpenses, type ExpenseListItem, type ExpenseStatus } from './expensesPayablesApi'
@@ -23,14 +25,18 @@ export function ExpensesPage() {
   const [amount, setAmount] = useState('')
   const [incurredAt, setIncurredAt] = useState('')
   const [description, setDescription] = useState('')
+  const [projectId, setProjectId] = useState('')
+  const [currency, setCurrency] = useState(getActiveCurrency)
 
   const submit = async () => {
-    await createExpense.mutateAsync({ category, amount: Number(amount), incurredAt, description: description || undefined })
+    await createExpense.mutateAsync({ category, amount: Number(amount), incurredAt, description: description || undefined, projectId: projectId || null, currency: currency.trim() || getActiveCurrency() })
     toast.success('Expense claim submitted')
     setShowNewExpense(false)
     setAmount('')
     setIncurredAt('')
     setDescription('')
+    setProjectId('')
+    setCurrency(getActiveCurrency())
   }
 
   const columns: DataTableColumn<ExpenseListItem>[] = [
@@ -88,9 +94,15 @@ export function ExpensesPage() {
               <option>Other</option>
             </select>
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Amount (KES)</label>
-            <input type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+          <div className="grid grid-cols-[1fr_6rem] gap-3">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">Amount</label>
+              <input type="number" min={0} value={amount} onChange={(event) => setAmount(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+            </div>
+            <div>
+              <label htmlFor="expense-currency" className="mb-1.5 block text-sm font-medium text-slate-700">Currency</label>
+              <input id="expense-currency" value={currency} maxLength={3} onChange={(event) => setCurrency(event.target.value.toUpperCase())} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+            </div>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Date Incurred</label>
@@ -100,6 +112,7 @@ export function ExpensesPage() {
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Description</label>
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
           </div>
+          <ProjectPicker id="expense-project" value={projectId} onChange={setProjectId} />
           <button
             type="button"
             disabled={!amount || !incurredAt || createExpense.isPending}

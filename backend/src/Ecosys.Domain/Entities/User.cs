@@ -40,6 +40,14 @@ public sealed class User : AuditableEntity, ITenantEntity
     public DateTime? LockedOutUntil { get; set; }
     public DateTime? LastFailedLoginAt { get; set; }
 
+    // WhatsApp reminders (Release 3 design 4.4). Messages go only while opted in on a confirmed number.
+    /// <summary>E.164, with the leading +.</summary>
+    public string? WhatsAppNumber { get; set; }
+    public DateTime? WhatsAppVerifiedAt { get; set; }
+    /// <summary>Set when the user opts in; cleared when they opt out.</summary>
+    public DateTime? WhatsAppOptedInAt { get; set; }
+    public DateTime? WhatsAppOptedOutAt { get; set; }
+
     public Tenant? Tenant { get; set; }
     public Branch? DefaultBranch { get; set; }
     public UserPermission? Permission { get; set; }

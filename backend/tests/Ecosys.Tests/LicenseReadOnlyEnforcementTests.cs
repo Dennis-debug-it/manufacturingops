@@ -185,9 +185,8 @@ public sealed class LicenseReadOnlyEnforcementTests
 
         var plan = new LicensePlan
         {
-            PlanCode = "Suite",
-            DisplayName = "Suite",
-            MaxBranches = 10,
+            PlanCode = ServiceOpsPlans.Enterprise,
+            DisplayName = "Enterprise",
             IsActive = true
         };
         dbContext.LicensePlans.Add(plan);

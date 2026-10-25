@@ -1,17 +1,19 @@
 import type { CreateTenantPayload } from '../api'
 
 /**
- * Licensed users (seats) for a tenant. The canonical API field is `maxUsers` on the tenant create/update
- * and `/license/seats` requests; the backend stores it as TenantLicense.MaxUsersOverride and reports the
- * effective value as `seatLimit`. Active workspace users (pending invitees included) consume a seat;
- * deactivated users and client-portal contacts do not.
+ * Seats for a tenant: `officeSeats` and `fieldSeats` on the tenant create/update and `/license/seats`
+ * requests, stored on TenantLicense and reported back with `seatLimit` (their total). Technicians take a
+ * field seat, Viewers are free, every other active workspace user (pending invitees included) takes an
+ * office seat; deactivated users and client-portal contacts take none.
  */
 
-/** Starting value for Licensed Users; the ServiceOps plans carry no seat default of their own. */
+/** Starting value for office seats; editions carry only a minimum of their own. */
 export const DEFAULT_LICENSED_USERS = 10
+export const DEFAULT_FIELD_SEATS = 10
 
-export const LICENSED_USERS_REQUIRED = 'Licensed user limit is required.'
-export const LICENSED_USERS_INVALID = 'Licensed users must be a whole number of at least 1.'
+export const LICENSED_USERS_REQUIRED = 'Office seats are required.'
+export const LICENSED_USERS_INVALID = 'Office seats must be a whole number of at least 1.'
+export const FIELD_SEATS_INVALID = 'Field seats must be a whole number of 0 or more.'
 
 export type ParsedLicensedUsers = { ok: true; value: number } | { ok: false; error: string }
 
@@ -44,16 +46,24 @@ export function summarizeSeats(current: number, licensed: number | null | undefi
   }
 }
 
+export type Edition = 'essentials' | 'professional' | 'enterprise'
+
+export function editionLabel(code: string | null | undefined): string {
+  return code === 'essentials' ? 'Essentials' : code === 'professional' ? 'Professional' : code === 'enterprise' ? 'Enterprise' : (code ?? '—')
+}
+
 export type CreateTenantForm = {
   companyName: string
   slug: string
-  planCode: 'operations' | 'finance' | 'suite'
+  planCode: Edition
   adminFullName: string
   adminEmail: string
   country: string
   timeZoneId: string
-  /** Licensed Users as typed; sent as `maxUsers`. */
+  /** Office seats as typed; sent as `officeSeats`. */
   maxUsers: string
+  /** Field (technician) seats as typed; sent as `fieldSeats`. */
+  fieldSeats: string
 }
 
 export type CreateTenantPayloadResult = { ok: true; payload: CreateTenantPayload } | { ok: false; error: string }
@@ -71,6 +81,8 @@ export function buildCreateTenantPayload(form: CreateTenantForm): CreateTenantPa
   }
   const seats = parseLicensedUsers(form.maxUsers)
   if (!seats.ok) return seats
+  const fieldSeats = Number(form.fieldSeats.trim() || '0')
+  if (!Number.isInteger(fieldSeats) || fieldSeats < 0) return { ok: false, error: FIELD_SEATS_INVALID }
 
   return {
     ok: true,
@@ -78,7 +90,8 @@ export function buildCreateTenantPayload(form: CreateTenantForm): CreateTenantPa
       companyName: form.companyName.trim(),
       slug: form.slug.trim(),
       planCode: form.planCode,
-      maxUsers: seats.value,
+      officeSeats: seats.value,
+      fieldSeats,
       adminFullName: form.adminFullName.trim(),
       adminEmail: form.adminEmail.trim(),
       country: form.country.trim(),

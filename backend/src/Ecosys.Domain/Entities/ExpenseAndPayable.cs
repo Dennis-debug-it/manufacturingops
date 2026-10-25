@@ -16,6 +16,7 @@ public sealed class Expense : AuditableEntity, ITenantEntity
     public string Status { get; set; } = "Submitted"; // Draft | Submitted | Approved | Rejected | Reimbursed
     public string? Description { get; set; }
     public string? ReceiptUrl { get; set; }
+    public Guid? ProjectId { get; set; }
     public Guid? ApprovedByUserId { get; set; }
     public string? ApprovedByName { get; set; }
     public DateTime? ApprovedAt { get; set; }
@@ -29,6 +30,7 @@ public sealed class SupplierBill : AuditableEntity, ITenantEntity
     public Guid TenantId { get; set; }
     public string BillNumber { get; set; } = string.Empty;
     public Guid SupplierId { get; set; }
+    public Guid? ProjectId { get; set; }
     public decimal Amount { get; set; }
     public decimal AmountPaid { get; set; }
     public string Currency { get; set; } = "KES";

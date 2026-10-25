@@ -33,6 +33,8 @@ public sealed class BackgroundWorkLeaseTests
             "ScheduledReportWorker",
             "ApprovalReminderWorker",
             "EscalationRuleWorker",
+            "ProjectReminderWorker",
+            "ActivityReminderWorker",
         ];
 
         var keys = workers.Select(PostgresAdvisoryLockLease.KeyFor).ToList();

@@ -47,7 +47,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<WhatsAppConversation> WhatsAppConversations => Set<WhatsAppConversation>();
     public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
     public DbSet<WhatsAppTemplate> WhatsAppTemplates => Set<WhatsAppTemplate>();
+    public DbSet<WhatsAppOutboxMessage> WhatsAppOutboxMessages => Set<WhatsAppOutboxMessage>();
+    public DbSet<WhatsAppOptOut> WhatsAppOptOuts => Set<WhatsAppOptOut>();
+    public DbSet<WhatsAppVerificationCode> WhatsAppVerificationCodes => Set<WhatsAppVerificationCode>();
     public DbSet<TenantModuleSetting> TenantModuleSettings => Set<TenantModuleSetting>();
+    public DbSet<UserDashboardLayout> UserDashboardLayouts => Set<UserDashboardLayout>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<WorkOrderTemplate> WorkOrderTemplates => Set<WorkOrderTemplate>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
@@ -78,11 +82,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<TenantNotificationRecipient> TenantNotificationRecipients => Set<TenantNotificationRecipient>();
     public DbSet<UserNotificationPreference> UserNotificationPreferences => Set<UserNotificationPreference>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<EmailIntakeSetting> EmailIntakeSettings => Set<EmailIntakeSetting>();
     public DbSet<EmailIntakeMessage> EmailIntakeMessages => Set<EmailIntakeMessage>();
     public DbSet<NumberingSetting> NumberingSettings => Set<NumberingSetting>();
     public DbSet<LicensePlan> LicensePlans => Set<LicensePlan>();
+    public DbSet<LicenseAddOn> LicenseAddOns => Set<LicenseAddOn>();
     public DbSet<TenantLicense> TenantLicenses => Set<TenantLicense>();
     public DbSet<MrrSnapshot> MrrSnapshots => Set<MrrSnapshot>();
     public DbSet<AssignmentGroup> AssignmentGroups => Set<AssignmentGroup>();
@@ -181,6 +187,32 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<TenantQuotationLine> TenantQuotationLines => Set<TenantQuotationLine>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
+    public DbSet<ProjectType> ProjectTypes => Set<ProjectType>();
+    public DbSet<ProjectStage> ProjectStages => Set<ProjectStage>();
+    public DbSet<ProjectTemplate> ProjectTemplates => Set<ProjectTemplate>();
+    public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
+    public DbSet<Consultant> Consultants => Set<Consultant>();
+    public DbSet<ProjectConsultant> ProjectConsultants => Set<ProjectConsultant>();
+    public DbSet<ProjectMilestone> ProjectMilestones => Set<ProjectMilestone>();
+    public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
+    public DbSet<ProjectVariation> ProjectVariations => Set<ProjectVariation>();
+    public DbSet<ProjectWorker> ProjectWorkers => Set<ProjectWorker>();
+    public DbSet<ProjectWorkerRate> ProjectWorkerRates => Set<ProjectWorkerRate>();
+    public DbSet<ProjectMusterEntry> ProjectMusterEntries => Set<ProjectMusterEntry>();
+    public DbSet<ProjectDiaryEntry> ProjectDiaryEntries => Set<ProjectDiaryEntry>();
+    public DbSet<ProjectBudgetLine> ProjectBudgetLines => Set<ProjectBudgetLine>();
+    public DbSet<ProjectCostEntry> ProjectCostEntries => Set<ProjectCostEntry>();
+    public DbSet<ProjectValuation> ProjectValuations => Set<ProjectValuation>();
+    public DbSet<ProjectRetentionRelease> ProjectRetentionReleases => Set<ProjectRetentionRelease>();
+    public DbSet<ProjectReminderLog> ProjectReminderLogs => Set<ProjectReminderLog>();
+    public DbSet<Activity> Activities => Set<Activity>();
+    public DbSet<ActivityAttendee> ActivityAttendees => Set<ActivityAttendee>();
+    public DbSet<ActivityMinutesAddendum> ActivityMinutesAddenda => Set<ActivityMinutesAddendum>();
+    public DbSet<ActionItem> ActionItems => Set<ActionItem>();
+    public DbSet<ActivityReminderLog> ActivityReminderLogs => Set<ActivityReminderLog>();
+    public DbSet<CalendarFeedToken> CalendarFeedTokens => Set<CalendarFeedToken>();
+    public DbSet<WithholdingCertificate> WithholdingCertificates => Set<WithholdingCertificate>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -282,6 +314,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.PasswordHash).HasMaxLength(2000).IsRequired();
             entity.Property(x => x.Role).HasMaxLength(50).IsRequired();
             entity.Property(x => x.Phone).HasMaxLength(50);
+            entity.Property(x => x.WhatsAppNumber).HasMaxLength(20);
             entity.Property(x => x.JobTitle).HasMaxLength(150);
             entity.Property(x => x.Department).HasMaxLength(150);
             entity.Property(x => x.InviteTokenHash).HasMaxLength(512);
@@ -466,6 +499,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         modelBuilder.Entity<ClientPortalUser>(entity =>
         {
             entity.Property(x => x.AccessLinkNonce).HasMaxLength(64);
+            entity.Property(x => x.WhatsAppNumber).HasMaxLength(20);
+            entity.Property(x => x.WhatsAppConsentMethod).HasMaxLength(20);
             entity.ToTable("client_portal_users");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
@@ -785,6 +820,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.WorkOrders)
                 .HasForeignKey(x => x.ContractId)
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
             entity.HasOne(x => x.RateCard)
                 .WithMany(x => x.WorkOrders)
                 .HasForeignKey(x => x.RateCardId)
@@ -1491,6 +1531,28 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("notifications", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_notifications_severity", "\"Severity\" IN ('Info', 'Warning', 'Critical')"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Key).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(InboxNotifications.TitleMaxLength).IsRequired();
+            entity.Property(x => x.Body).HasMaxLength(InboxNotifications.BodyMaxLength).IsRequired();
+            entity.Property(x => x.Url).HasMaxLength(InboxNotifications.UrlMaxLength);
+            entity.Property(x => x.EntityType).HasMaxLength(80);
+            entity.Property(x => x.Severity).HasMaxLength(20).IsRequired();
+            // The bell: a user's live rows, newest first.
+            entity.HasIndex(x => new { x.TenantId, x.UserId, x.ArchivedAt, x.CreatedAt })
+                .IsDescending(false, false, false, true);
+            // The push worker and housekeeping.
+            entity.HasIndex(x => x.PushPendingSince).HasFilter("\"PushPendingSince\" IS NOT NULL");
+            entity.HasIndex(x => x.CreatedAt);
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<Notification>(modelBuilder);
+
         modelBuilder.Entity<IdempotencyRecord>(entity =>
         {
             entity.ToTable("idempotency_records");
@@ -1579,44 +1641,60 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasKey(x => x.Id);
             entity.Property(x => x.PlanCode).HasMaxLength(50).IsRequired();
             entity.Property(x => x.DisplayName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.OfficeSeatMonthlyPrice).HasPrecision(18, 2);
+            entity.Property(x => x.OfficeSeatAnnualPrice).HasPrecision(18, 2);
+            entity.Property(x => x.FieldSeatMonthlyPrice).HasPrecision(18, 2);
+            entity.Property(x => x.FieldSeatAnnualPrice).HasPrecision(18, 2);
+            entity.HasIndex(x => x.PlanCode).IsUnique();
+            // The three editions. Prices start at zero ("not priced") and are set on the platform; the
+            // Operations/Finance/Suite plans were retired by the MoveToEditionsAndSeatTypes migration.
+            var seededAt = new DateTime(2026, 10, 24, 0, 0, 0, DateTimeKind.Utc);
+            entity.HasData(
+                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555561"), PlanCode = "essentials", DisplayName = "Ecosys ServiceOps Essentials", MinOfficeSeats = 2, IsActive = true, CreatedAt = seededAt },
+                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555562"), PlanCode = "professional", DisplayName = "Ecosys ServiceOps Professional", MinOfficeSeats = 3, IsActive = true, CreatedAt = seededAt },
+                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555563"), PlanCode = "enterprise", DisplayName = "Ecosys ServiceOps Enterprise", MinOfficeSeats = 10, IsActive = true, CreatedAt = seededAt });
+        });
+
+        modelBuilder.Entity<LicenseAddOn>(entity =>
+        {
+            entity.ToTable("license_add_ons");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.DisplayName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.MonthlyPrice).HasPrecision(18, 2);
             entity.Property(x => x.AnnualPrice).HasPrecision(18, 2);
-            entity.Property(x => x.ModulesIncluded).HasMaxLength(1000);
-            entity.HasIndex(x => x.PlanCode).IsUnique();
-            // Only the three ServiceOps offerings exist. The pre-ServiceOps Trial/Starter/Professional/Enterprise
-            // plans were retired by the RetireLegacyPlansAndRequireLicensedUsers migration.
+            entity.Property(x => x.ExtraMessagePrice).HasPrecision(18, 2);
+            entity.Property(x => x.ExtraNumberPrice).HasPrecision(18, 2);
+            entity.HasIndex(x => x.Code).IsUnique();
+            // Starting values in KES; the platform edits them.
+            var seededAt = new DateTime(2026, 10, 24, 0, 0, 0, DateTimeKind.Utc);
             entity.HasData(
-                new LicensePlan
+                new LicenseAddOn
                 {
-                    Id = Guid.Parse("55555555-5555-5555-5555-555555555551"), PlanCode = "operations",
-                    DisplayName = "Ecosys ServiceOps Operations", ModulesIncluded = "Core,operations,EmailIngestion,MonitoringIntegration",
-                    EmailIngestion = true, MonitoringIntegration = true,
-                    IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
+                    Id = Guid.Parse("55555555-5555-5555-5555-555555555571"), Code = "whatsapp_notifications", DisplayName = "WhatsApp Notifications",
+                    MonthlyPrice = 1500m, AnnualPrice = 15000m, IncludedMessages = 500, ExtraMessagePrice = 3m, IsActive = true, CreatedAt = seededAt
                 },
-                new LicensePlan
+                new LicenseAddOn
                 {
-                    Id = Guid.Parse("55555555-5555-5555-5555-555555555552"), PlanCode = "finance",
-                    DisplayName = "Ecosys ServiceOps Finance", ModulesIncluded = "Core,finance", IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new LicensePlan
-                {
-                    Id = Guid.Parse("55555555-5555-5555-5555-555555555553"), PlanCode = "suite",
-                    DisplayName = "Ecosys ServiceOps Suite", ModulesIncluded = "Core,operations,finance,EmailIngestion,MonitoringIntegration",
-                    EmailIngestion = true, MonitoringIntegration = true,
-                    IsActive = true, CreatedAt = new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc)
+                    Id = Guid.Parse("55555555-5555-5555-5555-555555555572"), Code = "whatsapp_business", DisplayName = "WhatsApp Business",
+                    MonthlyPrice = 4500m, AnnualPrice = 45000m, IncludedMessages = 1500, ExtraMessagePrice = 3m, ExtraNumberPrice = 2500m, IsActive = true, CreatedAt = seededAt
                 });
         });
 
         modelBuilder.Entity<TenantLicense>(entity =>
         {
             entity.ToTable("tenant_licenses", tableBuilder =>
-                tableBuilder.HasCheckConstraint("CK_tenant_licenses_LicensedUsers_Positive", "\"LicensedUsers\" > 0"));
+            {
+                tableBuilder.HasCheckConstraint("CK_tenant_licenses_OfficeSeats_Positive", "\"OfficeSeats\" > 0");
+                tableBuilder.HasCheckConstraint("CK_tenant_licenses_FieldSeats_NonNegative", "\"FieldSeats\" >= 0");
+            });
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
             entity.Property(x => x.BillingCycle).HasMaxLength(30).IsRequired();
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.Property(x => x.SuspensionReason).HasMaxLength(30);
             entity.Property(x => x.IsPerpetual).HasDefaultValue(false);
+            entity.Property(x => x.WhatsAppAddOn).HasMaxLength(50);
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.TenantLicenses)
@@ -2548,6 +2626,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Tenant).WithMany(x => x.MaterialIssues).HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Branch).WithMany(x => x.MaterialIssues).HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.WorkOrder).WithMany(x => x.MaterialIssues).HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
             entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.Site).WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.SetNull);
@@ -3584,6 +3664,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.AccessToken).HasMaxLength(500);
             entity.Property(x => x.WebhookVerifyToken).HasMaxLength(200);
             entity.Property(x => x.AutoReplyMessage).HasMaxLength(1000);
+            entity.Property(x => x.AllowedNotificationKeys).HasMaxLength(4000);
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -3629,6 +3710,56 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         });
         ApplyTenantFilter<WhatsAppTemplate>(modelBuilder);
 
+        // WhatsApp reminders (Release 3 design 4.4).
+        modelBuilder.Entity<WhatsAppOutboxMessage>(entity =>
+        {
+            entity.ToTable("whatsapp_outbox_messages", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_whatsapp_outbox_messages_status",
+                    "\"Status\" IN ('Pending', 'Sending', 'Sent', 'Delivered', 'Read', 'Failed', 'Skipped')"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.NotificationKey).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.TemplateName).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Language).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ParametersJson).HasMaxLength(4000);
+            entity.Property(x => x.ToPhone).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.RecipientName).HasMaxLength(200);
+            entity.Property(x => x.EntityType).HasMaxLength(80);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ProviderMessageId).HasMaxLength(128);
+            entity.Property(x => x.ErrorMessage).HasMaxLength(1000);
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(200);
+            // The worker's queue.
+            entity.HasIndex(x => new { x.Status, x.NextAttemptAt });
+            // The tenant's log and monthly count.
+            entity.HasIndex(x => new { x.TenantId, x.CreatedAt });
+            entity.HasIndex(x => x.ProviderMessageId).IsUnique().HasFilter("\"ProviderMessageId\" IS NOT NULL");
+            entity.HasIndex(x => x.IdempotencyKey).IsUnique().HasFilter("\"IdempotencyKey\" IS NOT NULL");
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<WhatsAppOutboxMessage>(modelBuilder);
+
+        // Platform-wide by design: no tenant, no tenant filter.
+        modelBuilder.Entity<WhatsAppOptOut>(entity =>
+        {
+            entity.ToTable("whatsapp_opt_outs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Keyword).HasMaxLength(40);
+            entity.HasIndex(x => x.PhoneNumber).IsUnique();
+        });
+
+        modelBuilder.Entity<WhatsAppVerificationCode>(entity =>
+        {
+            entity.ToTable("whatsapp_verification_codes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.CodeHash).HasMaxLength(128).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.UserId, x.CreatedAt });
+            entity.HasIndex(x => new { x.TenantId, x.ClientPortalUserId, x.CreatedAt });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<WhatsAppVerificationCode>(modelBuilder);
+
         modelBuilder.Entity<TenantModuleSetting>(entity =>
         {
             entity.ToTable("tenant_module_settings");
@@ -3639,6 +3770,477 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<TenantModuleSetting>(modelBuilder);
+
+        modelBuilder.Entity<UserDashboardLayout>(entity =>
+        {
+            entity.ToTable("user_dashboard_layouts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.LayoutJson).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.UserId }).IsUnique();
+            entity.HasIndex(x => x.UserId);
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<UserDashboardLayout>(modelBuilder);
+
+        ConfigureProjects(modelBuilder);
+    }
+
+    private void ConfigureProjects(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<ProjectType>(entity =>
+        {
+            entity.ToTable("project_types");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.DefaultTemplate).WithMany().HasForeignKey(x => x.DefaultTemplateId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<ProjectType>(modelBuilder);
+
+        modelBuilder.Entity<ProjectStage>(entity =>
+        {
+            entity.ToTable("project_stages", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_project_stages_category",
+                    "\"Category\" IN ('Planning', 'Active', 'OnHold', 'Handover', 'Completed', 'Closed', 'Cancelled')"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Category).HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ProjectStage>(modelBuilder);
+
+        modelBuilder.Entity<ProjectTemplate>(entity =>
+        {
+            entity.ToTable("project_templates");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.ItemsJson).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ProjectTemplate>(modelBuilder);
+
+        modelBuilder.Entity<Project>(entity =>
+        {
+            entity.ToTable("projects");
+            entity.HasKey(x => x.Id);
+            entity.Ignore(x => x.RevisedValue);
+            entity.Ignore(x => x.EffectiveProgressPercent);
+            entity.Property(x => x.ProjectNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired().HasDefaultValue("KES");
+            entity.Property(x => x.OriginalValue).HasPrecision(18, 2);
+            entity.Property(x => x.ApprovedAdditions).HasPrecision(18, 2);
+            entity.Property(x => x.ApprovedOmissions).HasPrecision(18, 2);
+            entity.Property(x => x.ValueVersion).IsConcurrencyToken();
+            entity.Property(x => x.ProgressPercent).HasPrecision(5, 2);
+            entity.Property(x => x.ProgressOverridePercent).HasPrecision(5, 2);
+            entity.Property(x => x.ProgressOverrideReason).HasMaxLength(1000);
+            entity.Property(x => x.ClosureNotes).HasMaxLength(2000);
+            entity.Property(x => x.VisibleInClientPortal).HasDefaultValue(true);
+            entity.Property(x => x.RetentionPercent).HasPrecision(5, 2);
+            entity.Property(x => x.RetentionCapAmount).HasPrecision(18, 2);
+            entity.Property(x => x.RetentionReleaseAtCompletionPercent).HasPrecision(5, 2).HasDefaultValue(50m);
+            entity.Property(x => x.AdvancePaymentAmount).HasPrecision(18, 2);
+            entity.Property(x => x.AdvanceRecoveryPercent).HasPrecision(5, 2);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.ClientId });
+            entity.HasIndex(x => new { x.TenantId, x.StageId });
+            entity.HasIndex(x => new { x.TenantId, x.ProjectManagerUserId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Site).WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.ProjectType).WithMany().HasForeignKey(x => x.ProjectTypeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Stage).WithMany().HasForeignKey(x => x.StageId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ProjectManagerUser).WithMany().HasForeignKey(x => x.ProjectManagerUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<Project>(modelBuilder);
+
+        modelBuilder.Entity<ProjectMember>(entity =>
+        {
+            entity.ToTable("project_members", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_project_members_person", "\"UserId\" IS NOT NULL OR \"TechnicianId\" IS NOT NULL"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Role).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Trade).HasMaxLength(100);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
+            entity.HasIndex(x => new { x.TenantId, x.UserId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany(x => x.Members).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Technician).WithMany().HasForeignKey(x => x.TechnicianId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ProjectMember>(modelBuilder);
+
+        modelBuilder.Entity<Consultant>(entity =>
+        {
+            entity.ToTable("consultants");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FirmName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Discipline).HasMaxLength(100);
+            entity.Property(x => x.ContactPerson).HasMaxLength(200);
+            entity.Property(x => x.Phone).HasMaxLength(50);
+            entity.Property(x => x.Email).HasMaxLength(256);
+            entity.Property(x => x.PhysicalAddress).HasMaxLength(500);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.FirmName }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<Consultant>(modelBuilder);
+
+        modelBuilder.Entity<ProjectConsultant>(entity =>
+        {
+            entity.ToTable("project_consultants");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RoleOnProject).HasMaxLength(100);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.ConsultantId }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.ConsultantId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany(x => x.Consultants).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Consultant).WithMany().HasForeignKey(x => x.ConsultantId).OnDelete(DeleteBehavior.Restrict);
+        });
+        ApplyTenantFilter<ProjectConsultant>(modelBuilder);
+
+        modelBuilder.Entity<ProjectMilestone>(entity =>
+        {
+            entity.ToTable("project_milestones", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_project_milestones_weight", "\"Weight\" >= 0"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Weight).HasPrecision(9, 2);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany(x => x.Milestones).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ProjectMilestone>(modelBuilder);
+
+        modelBuilder.Entity<ProjectTask>(entity =>
+        {
+            entity.ToTable("project_tasks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.Priority).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
+            entity.HasIndex(x => new { x.TenantId, x.AssigneeUserId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany(x => x.Tasks).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Milestone).WithMany().HasForeignKey(x => x.MilestoneId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.AssigneeUser).WithMany().HasForeignKey(x => x.AssigneeUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<ProjectTask>(modelBuilder);
+
+        modelBuilder.Entity<ProjectVariation>(entity =>
+        {
+            entity.ToTable("project_variations", tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint("CK_project_variations_amount", "\"Amount\" > 0");
+                tableBuilder.HasCheckConstraint("CK_project_variations_kind", "\"Kind\" IN ('Addition', 'Omission')");
+            });
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.VariationNumber).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.ClientReference).HasMaxLength(100);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.DecisionNote).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.VariationNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany(x => x.Variations).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ProjectVariation>(modelBuilder);
+
+        modelBuilder.Entity<ProjectWorker>(entity =>
+        {
+            entity.ToTable("project_workers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Phone).HasMaxLength(50);
+            entity.Property(x => x.Trade).HasMaxLength(100);
+            entity.Property(x => x.EngagementType).HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Technician).WithMany().HasForeignKey(x => x.TechnicianId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<ProjectWorker>(modelBuilder);
+
+        modelBuilder.Entity<ProjectWorkerRate>(entity =>
+        {
+            entity.ToTable("project_worker_rates", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_project_worker_rates_rate", "\"DailyRate\" >= 0"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DailyRate).HasPrecision(18, 2);
+            entity.Property(x => x.Note).HasMaxLength(500);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectWorkerId, x.EffectiveFrom }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Worker).WithMany(x => x.Rates).HasForeignKey(x => x.ProjectWorkerId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ProjectWorkerRate>(modelBuilder);
+
+        modelBuilder.Entity<ProjectMusterEntry>(entity =>
+        {
+            entity.ToTable("project_muster_entries", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_project_muster_entries_status", "\"Status\" IN ('Present', 'HalfDay', 'Absent')"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.DayFraction).HasPrecision(3, 2);
+            entity.Property(x => x.Note).HasMaxLength(500);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectWorkerId, x.WorkDate }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.WorkDate });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Worker).WithMany().HasForeignKey(x => x.ProjectWorkerId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ProjectMusterEntry>(modelBuilder);
+
+        modelBuilder.Entity<ProjectDiaryEntry>(entity =>
+        {
+            entity.ToTable("project_diary_entries");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.WorkCompleted).HasMaxLength(4000);
+            entity.Property(x => x.IssuesAndDelays).HasMaxLength(4000);
+            entity.Property(x => x.InstructionsReceived).HasMaxLength(4000);
+            entity.Property(x => x.Weather).HasMaxLength(100);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.EntryDate });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.AuthorUser).WithMany().HasForeignKey(x => x.AuthorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        ApplyTenantFilter<ProjectDiaryEntry>(modelBuilder);
+
+        modelBuilder.Entity<ProjectBudgetLine>(entity =>
+        {
+            entity.ToTable("project_budget_lines");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Category).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ProjectBudgetLine>(modelBuilder);
+
+        modelBuilder.Entity<ProjectCostEntry>(entity =>
+        {
+            entity.ToTable("project_cost_entries");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Category).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ProjectCostEntry>(modelBuilder);
+
+        modelBuilder.Entity<ProjectValuation>(entity =>
+        {
+            entity.ToTable("project_valuations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ValuationNumber).HasMaxLength(50).IsRequired();
+            foreach (var amount in new[] { nameof(ProjectValuation.WorkDoneToDate), nameof(ProjectValuation.MaterialsOnSite), nameof(ProjectValuation.GrossValueToDate),
+                         nameof(ProjectValuation.RetentionToDate), nameof(ProjectValuation.AdvanceRecoveredToDate), nameof(ProjectValuation.PreviouslyCertified),
+                         nameof(ProjectValuation.AmountDue), nameof(ProjectValuation.CertifiedAmount) })
+                entity.Property(amount).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.CertificateReference).HasMaxLength(100);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.ValuationNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.CertifiedByConsultant).WithMany().HasForeignKey(x => x.CertifiedByConsultantId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<ProjectValuation>(modelBuilder);
+
+        modelBuilder.Entity<ProjectRetentionRelease>(entity =>
+        {
+            entity.ToTable("project_retention_releases", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_project_retention_releases_amount", "\"Amount\" > 0"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Stage).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.Stage }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<ProjectRetentionRelease>(modelBuilder);
+
+        modelBuilder.Entity<ProjectReminderLog>(entity =>
+        {
+            entity.ToTable("project_reminder_logs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.NotificationKey).HasMaxLength(80).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.EntityId, x.NotificationKey, x.ForDate }).IsUnique();
+        });
+        ApplyTenantFilter<ProjectReminderLog>(modelBuilder);
+
+        // ── Activities, action items and the calendar feed (Release 3 step 3b) ──
+
+        modelBuilder.Entity<Activity>(entity =>
+        {
+            entity.ToTable("activities", tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint("CK_activities_type", "\"Type\" IN ('Meeting', 'SiteVisit', 'Inspection', 'Call')");
+                tableBuilder.HasCheckConstraint("CK_activities_status", "\"Status\" IN ('Scheduled', 'Held', 'Cancelled')");
+                tableBuilder.HasCheckConstraint("CK_activities_times", "\"EndsAt\" >= \"StartsAt\"");
+            });
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Type).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Location).HasMaxLength(500);
+            entity.Property(x => x.EntityType).HasMaxLength(30);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Agenda).HasMaxLength(4000);
+            entity.Property(x => x.Minutes).HasMaxLength(20000);
+            entity.Property(x => x.CancellationReason).HasMaxLength(500);
+            // The calendar (by time), the linked record's page, and the reminder worker.
+            entity.HasIndex(x => new { x.TenantId, x.StartsAt });
+            entity.HasIndex(x => new { x.TenantId, x.OrganizerUserId, x.StartsAt });
+            entity.HasIndex(x => new { x.TenantId, x.EntityType, x.EntityId });
+            entity.HasIndex(x => new { x.Status, x.StartsAt });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.OrganizerUser).WithMany().HasForeignKey(x => x.OrganizerUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        ApplyTenantFilter<Activity>(modelBuilder);
+
+        modelBuilder.Entity<ActivityAttendee>(entity =>
+        {
+            entity.ToTable("activity_attendees", tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint("CK_activity_attendees_response", "\"Response\" IN ('Pending', 'Accepted', 'Declined')");
+                // Exactly one kind of attendee.
+                tableBuilder.HasCheckConstraint("CK_activity_attendees_one_kind",
+                    "(CASE WHEN \"UserId\" IS NULL THEN 0 ELSE 1 END) + (CASE WHEN \"ConsultantId\" IS NULL THEN 0 ELSE 1 END)"
+                    + " + (CASE WHEN \"ClientContactId\" IS NULL THEN 0 ELSE 1 END)"
+                    + " + (CASE WHEN \"ExternalEmail\" IS NULL AND \"ExternalName\" IS NULL THEN 0 ELSE 1 END) = 1");
+            });
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ExternalName).HasMaxLength(200);
+            entity.Property(x => x.ExternalEmail).HasMaxLength(256);
+            entity.Property(x => x.Response).HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.ActivityId });
+            // "Activities I attend" for the calendar and the reminder worker.
+            entity.HasIndex(x => new { x.TenantId, x.UserId });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Activity).WithMany(x => x.Attendees).HasForeignKey(x => x.ActivityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Consultant).WithMany().HasForeignKey(x => x.ConsultantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ClientContact).WithMany().HasForeignKey(x => x.ClientContactId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ActivityAttendee>(modelBuilder);
+
+        modelBuilder.Entity<ActivityMinutesAddendum>(entity =>
+        {
+            entity.ToTable("activity_minutes_addenda");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Text).HasMaxLength(4000).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.ActivityId });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Activity).WithMany(x => x.Addenda).HasForeignKey(x => x.ActivityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.AuthorUser).WithMany().HasForeignKey(x => x.AuthorUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+        ApplyTenantFilter<ActivityMinutesAddendum>(modelBuilder);
+
+        modelBuilder.Entity<ActionItem>(entity =>
+        {
+            entity.ToTable("action_items", tableBuilder =>
+                tableBuilder.HasCheckConstraint("CK_action_items_status", "\"Status\" IN ('Open', 'Done', 'Cancelled')"));
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.AssigneeExternalName).HasMaxLength(200);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.EntityType).HasMaxLength(30);
+            entity.HasIndex(x => new { x.TenantId, x.AssigneeUserId, x.Status });
+            entity.HasIndex(x => new { x.TenantId, x.EntityType, x.EntityId });
+            entity.HasIndex(x => new { x.TenantId, x.ActivityId });
+            entity.HasIndex(x => new { x.Status, x.DueDate });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Activity).WithMany().HasForeignKey(x => x.ActivityId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.AssigneeUser).WithMany().HasForeignKey(x => x.AssigneeUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<ActionItem>(modelBuilder);
+
+        modelBuilder.Entity<ActivityReminderLog>(entity =>
+        {
+            entity.ToTable("activity_reminder_logs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.NotificationKey).HasMaxLength(80).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.EntityId, x.NotificationKey, x.ForTime }).IsUnique();
+            entity.HasIndex(x => x.CreatedAt);
+        });
+        ApplyTenantFilter<ActivityReminderLog>(modelBuilder);
+
+        modelBuilder.Entity<CalendarFeedToken>(entity =>
+        {
+            entity.ToTable("calendar_feed_tokens");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TokenHash).HasMaxLength(64).IsRequired();
+            // The anonymous feed looks a token up by its hash alone.
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.UserId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<CalendarFeedToken>(modelBuilder);
+
+        modelBuilder.Entity<WithholdingCertificate>(entity =>
+        {
+            entity.ToTable("withholding_certificates", tableBuilder =>
+            {
+                tableBuilder.HasCheckConstraint("CK_withholding_certificates_amount", "\"Amount\" > 0");
+                tableBuilder.HasCheckConstraint("CK_withholding_certificates_tax_type", "\"TaxType\" IN ('VAT', 'IncomeTax')");
+            });
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TaxType).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.RatePercent).HasPrecision(5, 2);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.CertificateNumber).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.InvoiceId });
+            entity.HasIndex(x => new { x.TenantId, x.ClientId, x.CertificateNumber });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
+        });
+        ApplyTenantFilter<WithholdingCertificate>(modelBuilder);
+
+        // Project links on existing records: an optional foreign key and a (tenant, project) index each.
+        ConfigureProjectLink<AttendanceEntry>(modelBuilder, x => x.ProjectId);
+        ConfigureProjectLink<Expense>(modelBuilder, x => x.ProjectId);
+        ConfigureProjectLink<SupplierBill>(modelBuilder, x => x.ProjectId);
+        ConfigureProjectLink<PurchaseOrder>(modelBuilder, x => x.ProjectId);
+        ConfigureProjectLink<TenantInvoice>(modelBuilder, x => x.ProjectId);
+        ConfigureProjectLink<Contract>(modelBuilder, x => x.SourceProjectId);
+        ConfigureProjectLink<TenantQuotation>(modelBuilder, x => x.ConvertedToProjectId);
+        modelBuilder.Entity<TenantInvoice>().HasOne<ProjectValuation>().WithMany().HasForeignKey(x => x.ProjectValuationId).OnDelete(DeleteBehavior.SetNull);
+    }
+
+    private static void ConfigureProjectLink<TEntity>(ModelBuilder modelBuilder, Expression<Func<TEntity, Guid?>> projectId)
+        where TEntity : class, ITenantEntity
+    {
+        modelBuilder.Entity<TEntity>(entity =>
+        {
+            var member = ((MemberExpression)projectId.Body).Member.Name;
+            entity.HasOne<Project>().WithMany().HasForeignKey(member).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(nameof(ITenantEntity.TenantId), member);
+        });
     }
 
     private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder)

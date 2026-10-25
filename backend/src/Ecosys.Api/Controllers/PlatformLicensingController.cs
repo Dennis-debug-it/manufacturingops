@@ -25,75 +25,37 @@ public sealed class PlatformLicensingController(
         return Ok(snapshots);
     }
 
+    /// <summary>The three editions with their prices. Which modules each includes is fixed in code.</summary>
     [HttpGet("plans")]
     public async Task<ActionResult<IReadOnlyCollection<PlatformLicensePlanResponse>>> GetPlans(CancellationToken cancellationToken)
     {
-        var plans = await dbContext.LicensePlans
-            .OrderBy(x => x.DisplayName)
-            .ToListAsync(cancellationToken);
-
-        return Ok(plans.Select(MapPlan).ToList());
+        var plans = await dbContext.LicensePlans.ToListAsync(cancellationToken);
+        return Ok(plans.OrderBy(x => ServiceOpsPlans.Editions.ToList().IndexOf(x.PlanCode)).Select(MapPlan).ToList());
     }
 
-    [HttpPost("plans")]
-    public async Task<ActionResult<PlatformLicensePlanResponse>> CreatePlan([FromBody] UpsertPlatformLicensePlanRequest request, CancellationToken cancellationToken)
+    /// <summary>Changes an edition's prices, minimum office seats or availability. New prices apply to new licenses and renewals.</summary>
+    [HttpPut("plans/{id:guid}")]
+    public async Task<ActionResult<PlatformLicensePlanResponse>> UpdatePlan(Guid id, [FromBody] UpdatePlatformLicensePlanRequest request, CancellationToken cancellationToken)
     {
-        ValidatePlanRequest(request);
-
-        var normalizedCode = request.Code?.Trim().ToLowerInvariant() ?? string.Empty;
-        if (!ServiceOpsPlans.IsCommercial(normalizedCode))
-            throw new BusinessRuleException("Select ServiceOps Operations, Finance, or Suite.");
-
-        var exists = await dbContext.LicensePlans.AnyAsync(x => x.PlanCode.ToLower() == normalizedCode.ToLower(), cancellationToken);
-        if (exists)
+        if (new[] { request.OfficeSeatMonthlyPrice, request.OfficeSeatAnnualPrice, request.FieldSeatMonthlyPrice, request.FieldSeatAnnualPrice }.Any(x => x < 0))
         {
-            throw new BusinessRuleException("Plan code already exists.");
+            throw new BusinessRuleException("Prices cannot be negative.");
         }
 
-        var plan = new LicensePlan
+        if (request.MinOfficeSeats < 1)
         {
-            PlanCode = normalizedCode,
-            DisplayName = ServiceOpsPlans.DisplayName(normalizedCode),
-            MonthlyPrice = request.MonthlyPrice,
-            AnnualPrice = request.AnnualPrice,
-            MaxBranches = request.MaxBranches,
-            ModulesIncluded = NormalizePlanModules(normalizedCode, request.ModulesIncluded),
-            IsActive = request.IsActive,
-            EmailIngestion = HasModule(request.ModulesIncluded, "EmailIngestion"),
-            MonitoringIntegration = HasModule(request.ModulesIncluded, "MonitoringIntegration")
-        };
-
-        dbContext.LicensePlans.Add(plan);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        await auditLogService.LogAsync(
-            PlatformConstants.RootTenantId,
-            tenantContext.GetRequiredUserId(),
-            "platform.license.plan.created",
-            nameof(LicensePlan),
-            plan.Id.ToString(),
-            $"License plan '{plan.DisplayName}' created.",
-            cancellationToken: cancellationToken);
-
-        return CreatedAtAction(nameof(GetPlans), new { id = plan.Id }, MapPlan(plan));
-    }
-
-    [HttpPut("plans/{id:guid}")]
-    public async Task<ActionResult<PlatformLicensePlanResponse>> UpdatePlan(Guid id, [FromBody] UpsertPlatformLicensePlanRequest request, CancellationToken cancellationToken)
-    {
-        ValidatePlanRequest(request);
+            throw new BusinessRuleException("Minimum office seats must be at least 1.");
+        }
 
         var plan = await dbContext.LicensePlans.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new NotFoundException("License plan was not found.");
+            ?? throw new NotFoundException("Edition was not found.");
 
-        plan.DisplayName = ServiceOpsPlans.IsCommercial(plan.PlanCode) ? ServiceOpsPlans.DisplayName(plan.PlanCode) : request.Name.Trim();
-        plan.MonthlyPrice = request.MonthlyPrice;
-        plan.AnnualPrice = request.AnnualPrice;
-        plan.MaxBranches = request.MaxBranches;
-        plan.ModulesIncluded = NormalizePlanModules(plan.PlanCode, request.ModulesIncluded);
-        plan.IsActive = ServiceOpsPlans.IsCommercial(plan.PlanCode) && request.IsActive;
-        plan.EmailIngestion = HasModule(request.ModulesIncluded, "EmailIngestion");
-        plan.MonitoringIntegration = HasModule(request.ModulesIncluded, "MonitoringIntegration");
+        plan.OfficeSeatMonthlyPrice = request.OfficeSeatMonthlyPrice;
+        plan.OfficeSeatAnnualPrice = request.OfficeSeatAnnualPrice;
+        plan.FieldSeatMonthlyPrice = request.FieldSeatMonthlyPrice;
+        plan.FieldSeatAnnualPrice = request.FieldSeatAnnualPrice;
+        plan.MinOfficeSeats = request.MinOfficeSeats;
+        plan.IsActive = request.IsActive;
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -103,10 +65,50 @@ public sealed class PlatformLicensingController(
             "platform.license.plan.updated",
             nameof(LicensePlan),
             plan.Id.ToString(),
-            $"License plan '{plan.DisplayName}' updated.",
+            $"Edition '{plan.DisplayName}' updated.",
             cancellationToken: cancellationToken);
 
         return Ok(MapPlan(plan));
+    }
+
+    [HttpGet("add-ons")]
+    public async Task<ActionResult<IReadOnlyCollection<PlatformLicenseAddOnResponse>>> GetAddOns(CancellationToken cancellationToken)
+    {
+        var addOns = await dbContext.LicenseAddOns.OrderBy(x => x.MonthlyPrice).ToListAsync(cancellationToken);
+        return Ok(addOns.Select(MapAddOn).ToList());
+    }
+
+    /// <summary>Changes an add-on's prices and included messages. New prices apply to new licenses and renewals.</summary>
+    [HttpPut("add-ons/{id:guid}")]
+    public async Task<ActionResult<PlatformLicenseAddOnResponse>> UpdateAddOn(Guid id, [FromBody] UpdatePlatformLicenseAddOnRequest request, CancellationToken cancellationToken)
+    {
+        if (new[] { request.MonthlyPrice, request.AnnualPrice, request.ExtraMessagePrice, request.ExtraNumberPrice }.Any(x => x < 0) || request.IncludedMessages < 0)
+        {
+            throw new BusinessRuleException("Prices and included messages cannot be negative.");
+        }
+
+        var addOn = await dbContext.LicenseAddOns.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Add-on was not found.");
+
+        addOn.MonthlyPrice = request.MonthlyPrice;
+        addOn.AnnualPrice = request.AnnualPrice;
+        addOn.IncludedMessages = request.IncludedMessages;
+        addOn.ExtraMessagePrice = request.ExtraMessagePrice;
+        addOn.ExtraNumberPrice = request.ExtraNumberPrice;
+        addOn.IsActive = request.IsActive;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        await auditLogService.LogAsync(
+            PlatformConstants.RootTenantId,
+            tenantContext.GetRequiredUserId(),
+            "platform.license.addon.updated",
+            nameof(LicenseAddOn),
+            addOn.Id.ToString(),
+            $"Add-on '{addOn.DisplayName}' updated.",
+            cancellationToken: cancellationToken);
+
+        return Ok(MapAddOn(addOn));
     }
 
     [HttpGet("subscriptions")]
@@ -144,8 +146,8 @@ public sealed class PlatformLicensingController(
 
         var plan = await dbContext.LicensePlans.SingleOrDefaultAsync(x => x.Id == request.PlanId, cancellationToken)
             ?? throw new NotFoundException("License plan was not found.");
-        if (!plan.IsActive || !ServiceOpsPlans.IsCommercial(plan.PlanCode))
-            throw new BusinessRuleException("Only active commercial ServiceOps plans can be assigned.");
+        if (!plan.IsActive || !ServiceOpsPlans.IsEdition(plan.PlanCode))
+            throw new BusinessRuleException("Only an active edition can be assigned.");
 
         var existing = await dbContext.TenantLicenses.SingleOrDefaultAsync(x => x.TenantId == request.TenantId, cancellationToken);
         if (existing is not null)
@@ -159,7 +161,9 @@ public sealed class PlatformLicensingController(
         {
             TenantId = request.TenantId,
             LicensePlanId = request.PlanId,
-            LicensedUsers = request.MaxUsers ?? TenantLicense.DefaultLicensedUsers,
+            OfficeSeats = request.OfficeSeats ?? Math.Max(plan.MinOfficeSeats, TenantLicense.DefaultOfficeSeats),
+            FieldSeats = request.FieldSeats ?? TenantLicense.DefaultFieldSeats,
+            WhatsAppAddOn = ServiceOpsPlans.NormalizeWhatsAppAddOn(request.WhatsAppAddOn),
             Status = NormalizeSubscriptionStatus(request.Status),
             BillingCycle = NormalizeBillingCycle(request.BillingCycle),
             StartsAt = request.StartsAt,
@@ -170,6 +174,7 @@ public sealed class PlatformLicensingController(
             Tenant = tenant
         };
 
+        SeatRules.Validate(plan, subscription.OfficeSeats, subscription.FieldSeats);
         if (subscription.Status == LicenseStatuses.Suspended)
         {
             TenantLifecycleState.Suspend(subscription, LicenseSuspensionReasons.Manual, DateTime.UtcNow);
@@ -206,8 +211,8 @@ public sealed class PlatformLicensingController(
             ?? throw new NotFoundException("Tenant was not found.");
         if (request.TenantId == PlatformConstants.RootTenantId)
             throw new BusinessRuleException("The platform root tenant cannot receive a commercial ServiceOps subscription.");
-        if (!plan.IsActive || !ServiceOpsPlans.IsCommercial(plan.PlanCode))
-            throw new BusinessRuleException("Only active commercial ServiceOps plans can be assigned.");
+        if (!plan.IsActive || !ServiceOpsPlans.IsEdition(plan.PlanCode))
+            throw new BusinessRuleException("Only an active edition can be assigned.");
 
         if (request.TenantId != subscription.TenantId)
         {
@@ -227,10 +232,10 @@ public sealed class PlatformLicensingController(
         subscription.ExpiresAt = request.EndsAt;
         subscription.TrialEndsAt = request.TrialEndsAt;
         subscription.NextBillingDate = request.NextBillingDate;
-        if (request.MaxUsers is int licensedUsers)
-        {
-            subscription.LicensedUsers = licensedUsers;
-        }
+        subscription.OfficeSeats = request.OfficeSeats ?? subscription.OfficeSeats;
+        subscription.FieldSeats = request.FieldSeats ?? subscription.FieldSeats;
+        // The WhatsApp add-on is turned on and off through PlatformWhatsAppController, not here.
+        SeatRules.Validate(plan, subscription.OfficeSeats, subscription.FieldSeats);
         TenantLifecycleState.Sync(tenant, subscription, DateTime.UtcNow);
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -315,11 +320,18 @@ public sealed class PlatformLicensingController(
             plan.Id,
             plan.DisplayName,
             plan.PlanCode,
-            plan.MonthlyPrice,
-            plan.AnnualPrice,
-            plan.MaxBranches,
-            SplitModules(plan.ModulesIncluded),
+            plan.OfficeSeatMonthlyPrice,
+            plan.OfficeSeatAnnualPrice,
+            plan.FieldSeatMonthlyPrice,
+            plan.FieldSeatAnnualPrice,
+            plan.MinOfficeSeats,
+            ServiceOpsPlans.EditionModules(plan.PlanCode),
+            plan.IsPriced,
             plan.IsActive);
+
+    private static PlatformLicenseAddOnResponse MapAddOn(LicenseAddOn addOn) =>
+        new(addOn.Id, addOn.Code, addOn.DisplayName, addOn.MonthlyPrice, addOn.AnnualPrice, addOn.IncludedMessages,
+            addOn.ExtraMessagePrice, addOn.ExtraNumberPrice, addOn.IsActive);
 
     private static PlatformSubscriptionResponse MapSubscription(TenantLicense subscription) =>
         new(
@@ -334,20 +346,9 @@ public sealed class PlatformLicensingController(
             subscription.ExpiresAt,
             subscription.TrialEndsAt,
             subscription.NextBillingDate,
-            subscription.LicensedUsers);
-
-    private static void ValidatePlanRequest(UpsertPlatformLicensePlanRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Name))
-        {
-            throw new BusinessRuleException("Plan name is required.");
-        }
-
-        if (request.MonthlyPrice < 0 || request.AnnualPrice < 0)
-        {
-            throw new BusinessRuleException("Plan prices cannot be negative.");
-        }
-    }
+            subscription.OfficeSeats,
+            subscription.FieldSeats,
+            subscription.WhatsAppAddOn);
 
     private static void ValidateSubscriptionDates(UpsertPlatformSubscriptionRequest request)
     {
@@ -356,9 +357,9 @@ public sealed class PlatformLicensingController(
             throw new BusinessRuleException("License expiry must be after the license start date.");
         }
 
-        if (request.MaxUsers is <= 0)
+        if (request.OfficeSeats is <= 0)
         {
-            throw new BusinessRuleException("Licensed users must be greater than zero.");
+            throw new BusinessRuleException("Office seats must be greater than zero.");
         }
 
         if (request.NextBillingDate.HasValue && request.NextBillingDate.Value < request.StartsAt)
@@ -382,61 +383,46 @@ public sealed class PlatformLicensingController(
     }
 
     private static string NormalizeBillingCycle(string? billingCycle) => BillingCycles.Normalize(billingCycle);
-
-    /// <summary>Plan features that were retired (never enforced); dropped if an old client still sends them.</summary>
-    private static readonly HashSet<string> RetiredModules = new(StringComparer.OrdinalIgnoreCase) { "AdvancedReports", "ClientPortal" };
-
-    private static string NormalizeModules(IReadOnlyCollection<string>? modulesIncluded)
-    {
-        if (modulesIncluded is null || modulesIncluded.Count == 0)
-        {
-            return "Core";
-        }
-
-        return string.Join(',', modulesIncluded
-            .Where(x => !string.IsNullOrWhiteSpace(x) && !RetiredModules.Contains(x.Trim()))
-            .Select(x => x.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase));
-    }
-
-    private static string NormalizePlanModules(string code, IReadOnlyCollection<string>? modules)
-    {
-        if (!ServiceOpsPlans.IsCommercial(code)) return NormalizeModules(modules);
-        var flags = (modules ?? []).Where(x => !string.Equals(x, "operations", StringComparison.OrdinalIgnoreCase) && !string.Equals(x, "finance", StringComparison.OrdinalIgnoreCase));
-        return NormalizeModules(flags.Concat(ServiceOpsPlans.Modules(new LicensePlan { PlanCode = code })).Prepend("Core").ToArray());
-    }
-
-    private static IReadOnlyCollection<string> SplitModules(string? modulesIncluded)
-    {
-        if (string.IsNullOrWhiteSpace(modulesIncluded))
-        {
-            return [];
-        }
-
-        return modulesIncluded.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-    }
-
-    private static bool HasModule(IReadOnlyCollection<string>? modulesIncluded, string moduleName) =>
-        modulesIncluded?.Any(x => x.Equals(moduleName, StringComparison.OrdinalIgnoreCase)) == true;
 }
 
-public sealed record UpsertPlatformLicensePlanRequest(
-    string Name,
-    string? Code,
-    decimal MonthlyPrice,
-    decimal AnnualPrice,
-    int? MaxBranches,
-    IReadOnlyCollection<string>? ModulesIncluded,
+public sealed record UpdatePlatformLicensePlanRequest(
+    decimal OfficeSeatMonthlyPrice,
+    decimal OfficeSeatAnnualPrice,
+    decimal FieldSeatMonthlyPrice,
+    decimal FieldSeatAnnualPrice,
+    int MinOfficeSeats,
     bool IsActive);
 
 public sealed record PlatformLicensePlanResponse(
     Guid Id,
     string Name,
     string Code,
+    decimal OfficeSeatMonthlyPrice,
+    decimal OfficeSeatAnnualPrice,
+    decimal FieldSeatMonthlyPrice,
+    decimal FieldSeatAnnualPrice,
+    int MinOfficeSeats,
+    IReadOnlyCollection<string> ModulesIncluded,
+    bool IsPriced,
+    bool IsActive);
+
+public sealed record UpdatePlatformLicenseAddOnRequest(
     decimal MonthlyPrice,
     decimal AnnualPrice,
-    int? MaxBranches,
-    IReadOnlyCollection<string> ModulesIncluded,
+    int IncludedMessages,
+    decimal ExtraMessagePrice,
+    decimal ExtraNumberPrice,
+    bool IsActive);
+
+public sealed record PlatformLicenseAddOnResponse(
+    Guid Id,
+    string Code,
+    string Name,
+    decimal MonthlyPrice,
+    decimal AnnualPrice,
+    int IncludedMessages,
+    decimal ExtraMessagePrice,
+    decimal ExtraNumberPrice,
     bool IsActive);
 
 public sealed record UpsertPlatformSubscriptionRequest(
@@ -448,7 +434,9 @@ public sealed record UpsertPlatformSubscriptionRequest(
     DateTime? EndsAt,
     DateTime? TrialEndsAt,
     DateTime? NextBillingDate,
-    int? MaxUsers = null);
+    int? OfficeSeats = null,
+    int? FieldSeats = null,
+    string? WhatsAppAddOn = null);
 
 public sealed record PlatformSubscriptionResponse(
     Guid Id,
@@ -462,4 +450,6 @@ public sealed record PlatformSubscriptionResponse(
     DateTime? EndsAt,
     DateTime? TrialEndsAt,
     DateTime? NextBillingDate,
-    int MaxUsers);
+    int OfficeSeats,
+    int FieldSeats,
+    string? WhatsAppAddOn);

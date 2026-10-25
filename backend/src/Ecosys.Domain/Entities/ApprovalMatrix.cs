@@ -11,8 +11,9 @@ public static class ApprovalDocumentTypes
 {
     public const string PurchaseOrder = "PurchaseOrder";
     public const string Expense = "Expense";
+    public const string ProjectVariation = "ProjectVariation";
 
-    public static readonly string[] All = [PurchaseOrder, Expense];
+    public static readonly string[] All = [PurchaseOrder, Expense, ProjectVariation];
 
     public static bool IsSupported(string? value) =>
         value is not null && All.Contains(value, StringComparer.OrdinalIgnoreCase);

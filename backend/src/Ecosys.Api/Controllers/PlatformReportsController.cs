@@ -1,4 +1,5 @@
 using Ecosys.Infrastructure.Data;
+using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -35,14 +36,7 @@ public sealed class PlatformReportsController(AppDbContext dbContext) : Controll
         var totalRevenue = await dbContext.PlatformPayments.Where(x => x.Status == "Paid").SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
         var outstandingBalance = await dbContext.PlatformInvoices.Where(x => x.Status != "Paid" && x.Status != "Void").SumAsync(x => (decimal?)x.Balance, cancellationToken) ?? 0m;
 
-        var mrr = await dbContext.TenantLicenses
-            .Include(x => x.LicensePlan)
-            .Where(x => x.Status == "Active" || x.Status == "Trial")
-            .SumAsync(x => (decimal?)((x.BillingCycle == "Annual"
-                ? x.LicensePlan!.AnnualPrice / 12m
-                : x.BillingCycle == "Quarterly"
-                    ? x.LicensePlan!.MonthlyPrice * 3m / 3m
-                    : x.LicensePlan!.MonthlyPrice)), cancellationToken) ?? 0m;
+        var mrr = await LicensePricing.MonthlyRecurringRevenueAsync(dbContext, x => x.Status == "Active" || x.Status == "Trial", cancellationToken);
 
         return Ok(new PlatformReportsSummaryResponse(
             totalTenants,

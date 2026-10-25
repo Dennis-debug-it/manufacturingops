@@ -1,37 +1,23 @@
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { PageHeader } from '../shared/components/PageHeader'
 import { Spinner } from '../shared/components/Spinner'
 import { EmptyState } from '../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../shared/components/DataTable'
-import { FormDrawer } from '../shared/components/FormDrawer'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
 import { formatDate, formatDateTime } from '../shared/utils/dates'
 import { api } from '../shared/api/apiClient'
 import { endpoints } from '../shared/api/endpoints'
 import { useLicensePlans, useLicensingUsage, useSubscriptions } from './api'
-import { Field, licenseStatusBadge, trialStatusBadge } from './common'
-import type { PlatformLicensePlan, PlatformSubscription } from './types'
+import { licenseStatusBadge, trialStatusBadge } from './common'
+import type { PlatformSubscription } from './types'
 import type { LicenseUsageSnapshot } from './api'
-
-const emptyPlan = {
-  id: null as string | null,
-  name: '',
-  code: '',
-  monthlyPrice: 0,
-  annualPrice: 0,
-  maxBranches: null as number | null,
-  modulesIncluded: '',
-  isActive: true,
-}
 
 export function LicensingPage() {
   const usage = useLicensingUsage()
   const plans = useLicensePlans()
   const subscriptions = useSubscriptions()
-  const [showPlan, setShowPlan] = useState(false)
-  const [editingPlan, setEditingPlan] = useState<typeof emptyPlan>(emptyPlan)
   const [actionTarget, setActionTarget] = useState<PlatformSubscription | null>(null)
   const [action, setAction] = useState<'activate' | 'suspend' | 'cancel'>('activate')
 
@@ -42,7 +28,8 @@ export function LicensingPage() {
   const subscriptionColumns: DataTableColumn<PlatformSubscription>[] = [
     { key: 'tenant', header: 'Tenant', cell: (row) => row.tenantName ?? row.tenantId },
     { key: 'plan', header: 'Plan', cell: (row) => row.planName ?? row.planId },
-    { key: 'maxUsers', header: 'Licensed users', cell: (row) => row.maxUsers },
+    { key: 'seats', header: 'Office / field seats', cell: (row) => `${row.officeSeats} / ${row.fieldSeats}` },
+    { key: 'whatsApp', header: 'WhatsApp', cell: (row) => (row.whatsAppAddOn === 'whatsapp_business' ? 'Business' : row.whatsAppAddOn === 'whatsapp_notifications' ? 'Notifications' : '—') },
     { key: 'status', header: 'Status', cell: (row) => licenseStatusBadge(row.status) },
     { key: 'billingCycle', header: 'Billing', cell: (row) => row.billingCycle },
     { key: 'startsAt', header: 'Start', cell: (row) => formatDateTime(row.startsAt) },
@@ -61,52 +48,6 @@ export function LicensingPage() {
       ),
     },
   ]
-
-  const planColumns: DataTableColumn<PlatformLicensePlan>[] = [
-    { key: 'name', header: 'Plan', cell: (row) => row.name },
-    { key: 'code', header: 'Code', cell: (row) => <span className="font-mono text-xs">{row.code}</span> },
-    { key: 'monthly', header: 'Monthly', cell: (row) => row.monthlyPrice.toLocaleString() },
-    { key: 'annual', header: 'Annual', cell: (row) => row.annualPrice.toLocaleString() },
-    { key: 'modules', header: 'Modules', cell: (row) => row.modulesIncluded.join(', ') || '—' },
-    { key: 'active', header: 'Status', cell: (row) => <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700">{row.isActive ? 'Active' : 'Inactive'}</span> },
-    {
-      key: 'actions',
-      header: 'Actions',
-      cell: (row) => (
-        <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => setEditingPlan({ ...row, modulesIncluded: row.modulesIncluded.join(', ') })}>
-          Edit
-        </button>
-      ),
-    },
-  ]
-
-  const savePlan = async () => {
-    if (!editingPlan.name.trim()) {
-      toast.error('Plan name is required.')
-      return
-    }
-    try {
-      const payload = {
-        name: editingPlan.name.trim(),
-        code: editingPlan.code.trim() || null,
-        monthlyPrice: editingPlan.monthlyPrice,
-        annualPrice: editingPlan.annualPrice,
-        maxBranches: editingPlan.maxBranches,
-        modulesIncluded: editingPlan.modulesIncluded.split(',').map((item) => item.trim()).filter(Boolean),
-        isActive: editingPlan.isActive,
-      }
-      if (editingPlan.id) {
-        await api.put(endpoints.platformLicensing.plans + `/${editingPlan.id}`, payload)
-      } else {
-        await api.post(endpoints.platformLicensing.plans, payload)
-      }
-      toast.success('License plan saved')
-      setShowPlan(false)
-      setEditingPlan(emptyPlan)
-    } catch {
-      // handled by interceptor
-    }
-  }
 
   const runAction = async () => {
     if (!actionTarget) return
@@ -130,12 +71,12 @@ export function LicensingPage() {
       <PageHeader
         title="Licensing"
         subtitle="Trial, paid, suspended, and deactivated tenant license lifecycle."
-        primaryAction={<button type="button" className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800" onClick={() => { setShowPlan(true); setEditingPlan(emptyPlan) }}><Plus className="h-4 w-4" />New plan</button>}
+        primaryAction={<Link to="/platform/settings/plans" className="inline-flex h-11 items-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800">Editions & pricing</Link>}
       />
 
       <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <Kpi label="Usage snapshots" value={usageRows.length} />
-        <Kpi label="Plans" value={plansRows.length} />
+        <Kpi label="Editions" value={plansRows.length} />
         <Kpi label="Subscriptions" value={rows.length} />
         <Kpi label="Trial expiring soon" value={rows.filter((row) => row.trialEndsAt && row.status !== 'Cancelled').length} />
       </section>
@@ -167,29 +108,8 @@ export function LicensingPage() {
             <DataTable<PlatformSubscription> columns={subscriptionColumns} data={rows} emptyTitle="No subscriptions" emptyDescription="Subscription records will appear here." />
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <SectionTitle title="License plans" description="Plan pricing and entitlements." />
-            <DataTable<PlatformLicensePlan> columns={planColumns} data={plansRows} emptyTitle="No plans" emptyDescription="Create a license plan to start onboarding tenants." />
-          </section>
         </div>
       ) : null}
-
-      <FormDrawer
-        open={showPlan || editingPlan.id !== null || editingPlan.name !== ''}
-        title={editingPlan.id ? `Edit ${editingPlan.name}` : 'New license plan'}
-        onClose={() => { setShowPlan(false); setEditingPlan(emptyPlan) }}
-        footer={<div className="flex justify-end gap-2"><button type="button" className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => { setShowPlan(false); setEditingPlan(emptyPlan) }}>Cancel</button><button type="button" className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-800" onClick={() => void savePlan()}>Save</button></div>}
-      >
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Field label="Name"><input value={editingPlan.name} onChange={(event) => setEditingPlan((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Code"><input value={editingPlan.code} onChange={(event) => setEditingPlan((current) => ({ ...current, code: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Monthly price"><input type="number" value={editingPlan.monthlyPrice} onChange={(event) => setEditingPlan((current) => ({ ...current, monthlyPrice: Number(event.target.value) || 0 }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Annual price"><input type="number" value={editingPlan.annualPrice} onChange={(event) => setEditingPlan((current) => ({ ...current, annualPrice: Number(event.target.value) || 0 }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Max branches"><input type="number" value={editingPlan.maxBranches ?? ''} onChange={(event) => setEditingPlan((current) => ({ ...current, maxBranches: event.target.value ? Number(event.target.value) : null }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Modules included"><input value={editingPlan.modulesIncluded} onChange={(event) => setEditingPlan((current) => ({ ...current, modulesIncluded: event.target.value }))} className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-900" /></Field>
-          <Field label="Active"><input type="checkbox" checked={editingPlan.isActive} onChange={(event) => setEditingPlan((current) => ({ ...current, isActive: event.target.checked }))} className="h-4 w-4 rounded border-slate-300" /></Field>
-        </div>
-      </FormDrawer>
 
       <ConfirmDialog
         open={actionTarget !== null}

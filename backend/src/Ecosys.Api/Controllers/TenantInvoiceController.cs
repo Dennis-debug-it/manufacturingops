@@ -37,6 +37,11 @@ public sealed class TenantInvoiceController(
 
     // ── List ─────────────────────────────────────────────────────────────────
 
+    /// <param name="age">
+    /// Receivables only: <c>overdue</c>, <c>current</c> (not yet due) or an ageing bucket (<c>1-30</c>,
+    /// <c>31-60</c>, <c>61-90</c>, <c>90-plus</c> days past due, against the tenant's today), exactly as
+    /// the finance dashboard widgets count them (<see cref="ReceivableAges"/>).
+    /// </param>
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<TenantInvoiceListItem>>> ListInvoices(
         [FromQuery] string? status,
@@ -45,6 +50,9 @@ public sealed class TenantInvoiceController(
         [FromQuery] DateTime? dateFrom,
         [FromQuery] DateTime? dateTo,
         [FromQuery] string? search,
+        [FromQuery] string? age,
+        [FromQuery] string? currency,
+        [FromServices] ITenantTimeZoneService tenantTimeZoneService,
         CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceView);
@@ -62,6 +70,13 @@ public sealed class TenantInvoiceController(
         }
         if (clientId.HasValue)
             query = query.Where(x => x.ClientId == clientId.Value);
+        if (!string.IsNullOrWhiteSpace(age))
+        {
+            var zone = await tenantTimeZoneService.GetTimeZoneAsync(TenantId, cancellationToken);
+            query = ReceivableAges.Apply(query, age, TenantDay.StartUtc(zone, DateTime.UtcNow));
+        }
+        if (!string.IsNullOrWhiteSpace(currency))
+            query = query.Where(x => x.Currency == currency.Trim().ToUpper());
         if (dateFrom.HasValue)
             query = query.Where(x => x.InvoiceDate >= dateFrom.Value);
         if (dateTo.HasValue)
@@ -128,6 +143,7 @@ public sealed class TenantInvoiceController(
         {
             TenantId = TenantId,
             ClientId = request.ClientId,
+            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, request.ClientId, cancellationToken),
             CreditTermId = creditTerm?.Id,
             InvoiceNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.Invoice, cancellationToken),
             DocumentType = DocumentTypes.Invoice,
@@ -173,6 +189,7 @@ public sealed class TenantInvoiceController(
         if (creditTerm is { IsDepositRequired: true, DepositPercent: > 0 })
             invoice.DepositAmount = Math.Round(invoice.TotalAmount * creditTerm.DepositPercent / 100m, 2);
 
+        await ProjectFinanceRules.EnsureProjectCurrencyAsync(dbContext, TenantId, invoice.ProjectId, invoice.Currency, cancellationToken);
         dbContext.TenantInvoices.Add(invoice);
 
         // Update the client's running balance from the single source of truth (sum of open invoice
@@ -315,6 +332,13 @@ public sealed class TenantInvoiceController(
         if (invoice.Status != "Draft")
             throw new BusinessRuleException("Only draft invoices can be edited.");
 
+        // Invoices Projects raised (valuation, advance, retention release) keep the project's client,
+        // currency and amount; everything else on them can still be edited.
+        await ProjectFinanceRules.EnsureProjectInvoiceEditAllowedAsync(
+            dbContext, TenantId, invoice, request.ClientId,
+            string.IsNullOrWhiteSpace(request.Currency) ? FallbackCurrency : request.Currency,
+            request.Lines.Sum(x => x.Quantity * x.UnitRate), cancellationToken);
+
         invoice.ClientId = request.ClientId;
 
         // Resolve credit term for update
@@ -395,6 +419,14 @@ public sealed class TenantInvoiceController(
             throw;
         }
         await auditLogService.LogAsync(TenantId, UserId, "finance.invoice.sent", nameof(TenantInvoice), invoice.Id.ToString(), $"Sent invoice {invoice.InvoiceNumber}; delivery queued.", cancellationToken);
+        // A WhatsApp note to the client's opted-in contacts (Release 3 design 4.2). Never fails the send.
+        if (HttpContext?.RequestServices.GetService(typeof(IClientWhatsAppNotifier)) is IClientWhatsAppNotifier whatsApp)
+            await whatsApp.NotifyClientAsync(TenantId, invoice.ClientId, ClientWhatsAppKeys.InvoiceIssued, new Dictionary<string, string?>
+            {
+                ["InvoiceNumber"] = invoice.InvoiceNumber,
+                ["TotalAmount"] = $"{invoice.Currency} {invoice.TotalAmount:N2}",
+                ["DueDate"] = invoice.DueDate.ToString("yyyy-MM-dd"),
+            }, nameof(TenantInvoice), invoice.Id, onceScope: invoice.Id.ToString("N"), cancellationToken: cancellationToken);
         return Ok(MapDetail(invoice));
     }
 
@@ -795,16 +827,22 @@ public sealed class TenantInvoiceController(
         if (unbilledItems.Count == 0)
             throw new BusinessRuleException("No unbilled items found on this work order.");
 
+        // A work order on a project bills to that project, in the project's currency, so the invoice
+        // shows in the project's Financials and closing checks.
+        var projectCurrency = workOrder.ProjectId is { } projectId
+            ? await dbContext.Projects.Where(x => x.TenantId == TenantId && x.Id == projectId).Select(x => x.Currency).SingleOrDefaultAsync(cancellationToken)
+            : null;
         var invoice = new TenantInvoice
         {
             TenantId = TenantId,
             ClientId = workOrder.ClientId,
+            ProjectId = projectCurrency is null ? null : workOrder.ProjectId,
             InvoiceNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.Invoice, cancellationToken),
             DocumentType = DocumentTypes.Invoice,
             Status = "Draft",
             InvoiceDate = DateTime.UtcNow,
             DueDate = DateTime.UtcNow.AddDays(30),
-            Currency = FallbackCurrency,
+            Currency = projectCurrency ?? FallbackCurrency,
             Notes = $"Invoice for work order {workOrder.WorkOrderNumber}",
         };
 

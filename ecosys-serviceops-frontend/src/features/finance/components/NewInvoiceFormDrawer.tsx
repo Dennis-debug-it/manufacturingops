@@ -3,6 +3,7 @@ import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { Trash2 } from 'lucide-react'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
+import { ProjectPicker } from '../../../shared/components/ProjectPicker'
 import { formatCurrency } from '../../../shared/utils/format'
 import { getActiveCurrency } from '../../../shared/utils/currency'
 import { useClients } from '../../clients/api'
@@ -26,6 +27,7 @@ export function NewInvoiceFormDrawer({ open, onClose }: { open: boolean; onClose
   const { taxRate: tenantTaxRate } = useDefaultTaxRate()
 
   const [clientId, setClientId] = useState('')
+  const [projectId, setProjectId] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
   const [dueDate, setDueDate] = useState('')
   const [currency, setCurrency] = useState(getActiveCurrency)
@@ -36,6 +38,7 @@ export function NewInvoiceFormDrawer({ open, onClose }: { open: boolean; onClose
 
   const close = () => {
     setClientId('')
+    setProjectId('')
     setCurrency(getActiveCurrency())
     setLines([emptyLine()])
     onClose()
@@ -56,6 +59,7 @@ export function NewInvoiceFormDrawer({ open, onClose }: { open: boolean; onClose
         invoiceDate: new Date(invoiceDate).toISOString(),
         dueDate: new Date(dueDate).toISOString(),
         currency: currency.trim().toUpperCase() || getActiveCurrency(),
+        projectId: projectId || null,
         lines: lines.filter((line) => line.description.trim()).map((line) => ({
           description: line.description.trim(),
           itemType: 'Service',
@@ -90,11 +94,21 @@ export function NewInvoiceFormDrawer({ open, onClose }: { open: boolean; onClose
       <div className="space-y-4">
         <div>
           <label className={labelClass} htmlFor="invoice-client">Client</label>
-          <select id="invoice-client" value={clientId} onChange={(event) => setClientId(event.target.value)} className={fieldClass}>
+          <select
+            id="invoice-client"
+            value={clientId}
+            onChange={(event) => {
+              setClientId(event.target.value)
+              // Projects belong to one client, so a new client clears the project.
+              setProjectId('')
+            }}
+            className={fieldClass}
+          >
             <option value="">Select a client</option>
             {(clients ?? []).map((client) => (<option key={client.id} value={client.id}>{client.clientName}</option>))}
           </select>
         </div>
+        <ProjectPicker id="invoice-project" value={projectId} onChange={setProjectId} clientId={clientId || null} className={fieldClass} labelClassName={labelClass} />
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className={labelClass} htmlFor="invoice-date">Invoice Date</label>

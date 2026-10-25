@@ -66,17 +66,23 @@ export interface PlatformTenantListItem {
   trialDaysRemaining: number | null
   trialStatus: TrialStatus | string
   createdAt: string
-  /** Licensed users (what the backend enforces). Always set once the tenant has a license. */
+  /** Office + field seats (what the backend enforces). Always set once the tenant has a license. */
   seatLimit?: number | null
-  /** ServiceOps modules the plan entitles: 'operations' | 'finance'. */
+  /** ServiceOps modules the edition (and WhatsApp Business add-on) entitles. */
   modules?: string[]
   licenseExpiresAt?: string | null
   primaryAdminEmail?: string | null
 }
 
 export interface PlatformTenantDetail extends PlatformTenantListItem {
-  /** Active workspace users, pending invitees included — the count seats are enforced against. */
+  /** Active workspace users, pending invitees included. */
   seatsUsed?: number
+  officeSeats?: number | null
+  fieldSeats?: number | null
+  officeSeatsUsed?: number
+  fieldSeatsUsed?: number
+  /** 'whatsapp_notifications' | 'whatsapp_business', or null when the tenant has no WhatsApp add-on. */
+  whatsAppAddOn?: string | null
   planCode?: string | null
   isPerpetual?: boolean
   /** 'Manual' (operator) or 'NonPayment' (subscription lapsed) while suspended. */
@@ -155,14 +161,31 @@ export interface PlatformUser {
   } | null
 }
 
+/** An edition. Its modules are fixed; the platform edits its prices and minimum office seats. */
 export interface PlatformLicensePlan {
   id: string
   name: string
   code: string
+  officeSeatMonthlyPrice: number
+  officeSeatAnnualPrice: number
+  fieldSeatMonthlyPrice: number
+  fieldSeatAnnualPrice: number
+  minOfficeSeats: number
+  modulesIncluded: string[]
+  /** False while every office seat price is zero. */
+  isPriced: boolean
+  isActive: boolean
+}
+
+export interface PlatformLicenseAddOn {
+  id: string
+  code: string
+  name: string
   monthlyPrice: number
   annualPrice: number
-  maxBranches: number | null
-  modulesIncluded: string[]
+  includedMessages: number
+  extraMessagePrice: number
+  extraNumberPrice: number
   isActive: boolean
 }
 
@@ -178,8 +201,9 @@ export interface PlatformSubscription {
   endsAt: string | null
   trialEndsAt: string | null
   nextBillingDate: string | null
-  /** Licensed users on this license (always set, greater than zero). */
-  maxUsers: number
+  officeSeats: number
+  fieldSeats: number
+  whatsAppAddOn: string | null
 }
 
 export interface PlatformFinanceDashboard {

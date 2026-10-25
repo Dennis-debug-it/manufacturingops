@@ -19,6 +19,8 @@ const adminOnly = (_: Can, user: AuthUser) => user.role === 'admin'
  */
 const rules: RouteRule[] = [
   { prefix: '/settings/account', allow: everyone },
+  // Each person's own notification choices (the workspace-wide matrix stays admin-only).
+  { prefix: '/settings/notifications', allow: everyone },
   { prefix: '/settings/audit-logs', allow: (can) => can('reports.view') },
   { prefix: '/settings', allow: adminOnly },
   { prefix: '/onboarding', allow: adminOnly },
@@ -36,7 +38,12 @@ const rules: RouteRule[] = [
   { prefix: '/sites', allow: (can) => can('clients.view') },
   { prefix: '/assets', allow: (can) => can('clients.view') },
   { prefix: '/contracts', allow: (can) => can('contracts.view') },
+  { prefix: '/projects/settings', allow: (can) => can('projects.settings') },
+  { prefix: '/projects', allow: (can) => can('projects.view') },
   { prefix: '/whatsapp', allow: (can) => can('whatsapp.view') },
+  { prefix: '/calendar', allow: (can) => can('activities.view') },
+  { prefix: '/activities', allow: (can) => can('activities.view') },
+  { prefix: '/action-items', allow: (can) => can('activities.view') },
   { prefix: '/knowledge', allow: (can) => can('knowledge.view') },
 ]
 

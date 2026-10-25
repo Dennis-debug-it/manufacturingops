@@ -61,8 +61,8 @@ public sealed class WorkOrderPhase3Tests
         fixture.TechnicianOne.UserId = userOne;
         fixture.TechnicianTwo.UserId = userTwo;
         await dbContext.SaveChangesAsync();
-        var pushQueue = new RecordingPushQueue();
-        var service = CreateAssignmentWorkflowService(dbContext, pushQueue);
+        var dispatcher = new RecordingDispatcher();
+        var service = CreateAssignmentWorkflowService(dbContext, dispatcher);
 
         await service.ApplyAssignmentsAsync(
             fixture.Tenant.Id, fixture.WorkOrder.Id, fixture.Actor.Id,
@@ -79,14 +79,19 @@ public sealed class WorkOrderPhase3Tests
             true, CancellationToken.None);
 
         Assert.Collection(
-            pushQueue.Sent,
+            dispatcher.Sent,
             first => Assert.Equal([userOne], first.UserIds),
             second => Assert.Equal([userTwo], second.UserIds));
-        Assert.All(pushQueue.Sent, sent =>
+        Assert.All(dispatcher.Sent, sent =>
         {
             Assert.Equal(fixture.Tenant.Id, sent.TenantId);
-            Assert.Equal($"/tech/jobs/{fixture.WorkOrder.Id}", sent.Message.Url);
-            Assert.Contains(fixture.WorkOrder.WorkOrderNumber, sent.Message.Title);
+            Assert.Equal("work-order.assigned", sent.Key);
+            Assert.Equal($"/tech/jobs/{fixture.WorkOrder.Id}", sent.Url);
+            Assert.Contains(fixture.WorkOrder.WorkOrderNumber, sent.Title);
+            // The email goes to the technician record separately, so the dispatcher sends only bell and push.
+            // Not email (the workflow emails the technician record); WhatsApp only reaches an opted-in user.
+            Assert.Equal(NotificationChannels.InApp | NotificationChannels.Push | NotificationChannels.WhatsApp, sent.Channels);
+            Assert.Equal(fixture.WorkOrder.WorkOrderNumber, sent.TemplateValues["WorkOrderNumber"]);
         });
     }
 
@@ -539,7 +544,7 @@ public sealed class WorkOrderPhase3Tests
             IsActive = true
         };
 
-    private static WorkOrderAssignmentWorkflowService CreateAssignmentWorkflowService(AppDbContext dbContext, IPushNotificationQueue? pushQueue = null) =>
+    private static WorkOrderAssignmentWorkflowService CreateAssignmentWorkflowService(AppDbContext dbContext, INotificationDispatcher? dispatcher = null) =>
         new(
             dbContext,
             new AuditLogService(dbContext, new HttpContextAccessor()),
@@ -548,14 +553,18 @@ public sealed class WorkOrderPhase3Tests
             new NoOpEmailSubjectRuleService(),
             new NoOpSlaService(),
             new NoOpEtaNotificationService(),
-            pushQueue ?? new RecordingPushQueue(),
+            dispatcher ?? new RecordingDispatcher(),
             NullLogger<WorkOrderAssignmentWorkflowService>.Instance);
 
-    private sealed class RecordingPushQueue : IPushNotificationQueue
+    private sealed class RecordingDispatcher : INotificationDispatcher
     {
-        public List<(Guid TenantId, IReadOnlyCollection<Guid> UserIds, PushMessage Message)> Sent { get; } = [];
+        public List<NotificationRequest> Sent { get; } = [];
 
-        public void Enqueue(Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message) => Sent.Add((tenantId, userIds, message));
+        public Task NotifyAsync(NotificationRequest request, CancellationToken cancellationToken = default)
+        {
+            Sent.Add(request);
+            return Task.CompletedTask;
+        }
     }
 
     private static WorkOrdersController CreateWorkOrdersController(AppDbContext dbContext, ControllerFixture fixture, IWorkOrderAssignmentWorkflowService? assignmentWorkflowService = null)

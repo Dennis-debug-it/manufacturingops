@@ -1,17 +1,37 @@
-export type ServiceOpsModule = 'operations' | 'finance'
+/**
+ * ServiceOps modules. An edition is a fixed list of them (the backend's ServiceOpsPlans.EditionModules):
+ * Essentials = operations + finance; Professional adds maintenance, inventory, projects and advanced;
+ * Enterprise adds enterprise_tools. The WhatsApp Business add-on adds whatsapp_business on any edition.
+ */
+export type ServiceOpsModule =
+  | 'operations'
+  | 'finance'
+  | 'maintenance'
+  | 'inventory'
+  | 'projects'
+  | 'advanced'
+  | 'enterprise_tools'
+  | 'whatsapp_business'
 
-const operationsPaths = ['/dashboard', '/work-orders', '/dispatch', '/maintenance', '/inventory', '/assets', '/sites', '/systems', '/contracts', '/reports', '/whatsapp', '/team/technicians', '/team/skills', '/team/groups', '/team/time-attendance', '/settings/pm-templates', '/settings/asset-categories', '/settings/inventory', '/settings/time-attendance', '/settings/email-intake', '/settings/monitoring-intake', '/settings/monitoring', '/settings/notification-templates', '/settings/whatsapp', '/settings/workflows', '/settings/escalation-rules', '/settings/wo-templates', '/settings/sla-policies', '/settings/executive-dashboard']
-const financePaths = ['/finance', '/approvals', '/settings/payments', '/settings/credit-control', '/settings/approval-matrices', '/settings/approval-matrix']
+// Checked in order, so a more specific prefix (/finance/expenses) wins over a broader one (/finance).
+const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
+  ['projects', ['/projects']],
+  ['maintenance', ['/maintenance', '/assets', '/systems', '/contracts', '/settings/pm-templates', '/settings/asset-categories', '/settings/escalation-rules', '/settings/sla-policies']],
+  ['inventory', ['/inventory', '/settings/inventory']],
+  ['advanced', ['/approvals', '/finance/expenses', '/finance/payables', '/finance/credit-control', '/finance/invoice-approvals', '/team/time-attendance', '/settings/time-attendance', '/settings/email-intake', '/settings/workflows', '/settings/credit-control', '/settings/approval-matrices', '/settings/approval-matrix']],
+  ['enterprise_tools', ['/settings/integrations', '/settings/monitoring-intake', '/settings/monitoring']],
+  ['whatsapp_business', ['/whatsapp', '/settings/whatsapp']],
+  ['operations', ['/dashboard', '/work-orders', '/dispatch', '/sites', '/reports', '/team/technicians', '/team/skills', '/team/groups', '/settings/notification-templates', '/settings/wo-templates', '/settings/executive-dashboard']],
+  ['finance', ['/finance', '/settings/payments']],
+]
 
 export function requiredModulesForPath(path: string): ServiceOpsModule[] {
   const matches = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`)
   if (matches('/finance/billable-work')) return ['operations', 'finance']
-  if (operationsPaths.some(matches)) return ['operations']
-  if (financePaths.some(matches)) return ['finance']
-  return []
+  const match = modulePaths.find(([, prefixes]) => prefixes.some(matches))
+  return match ? [match[0]] : []
 }
 
 export function canAccessModulePath(path: string, modules: readonly string[]): boolean {
   return requiredModulesForPath(path).every((module) => modules.includes(module))
 }
-

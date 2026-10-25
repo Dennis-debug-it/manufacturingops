@@ -22,9 +22,13 @@ public sealed class PurchaseOrdersController(
 {
     // ── Purchase orders ──────────────────────────────────────────────────────
 
+    /// <param name="state"><c>open</c> (not yet fully received) or <c>late</c> (sent and past its expected date), as the dashboard counts them.</param>
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<PurchaseOrderListItemResponse>>> ListPurchaseOrders(
-        [FromQuery] string? status, CancellationToken cancellationToken)
+        [FromQuery] string? status,
+        [FromQuery] string? state,
+        [FromServices] ITenantTimeZoneService tenantTimeZoneService,
+        CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials);
 
@@ -33,6 +37,11 @@ public sealed class PurchaseOrdersController(
             .Where(x => x.TenantId == TenantId);
         if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
             query = query.Where(x => x.Status == status.Trim());
+        if (!string.IsNullOrWhiteSpace(state))
+        {
+            var zone = await tenantTimeZoneService.GetTimeZoneAsync(TenantId, cancellationToken);
+            query = PurchaseOrderListStates.Apply(query, state, TenantDay.StartUtc(zone, DateTime.UtcNow));
+        }
 
         var orders = await query
             .OrderByDescending(x => x.OrderedAt)
@@ -69,6 +78,8 @@ public sealed class PurchaseOrdersController(
             SupplierId = supplier.Id,
             ExpectedAt = request.ExpectedAt is null ? null : DateTime.SpecifyKind(request.ExpectedAt.Value, DateTimeKind.Utc),
             Notes = request.Notes?.Trim(),
+            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, null, cancellationToken),
+            Currency = await CurrencyConverter.ResolveAsync(dbContext, TenantId, request.Currency, cancellationToken),
         };
         foreach (var line in request.Lines)
         {
@@ -87,6 +98,7 @@ public sealed class PurchaseOrdersController(
         }
         order.TotalAmount = order.Lines.Sum(x => x.LineTotal);
 
+        await ProjectFinanceRules.EnsureCostCurrencyAsync(dbContext, TenantId, order.ProjectId, order.Currency, cancellationToken);
         dbContext.PurchaseOrders.Add(order);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "inventory.po.created", nameof(PurchaseOrder), order.Id.ToString(), $"Purchase order {order.PoNumber} created for {supplier.SupplierName}", cancellationToken);
@@ -378,7 +390,7 @@ public sealed record PurchaseOrderDetailResponse(
 public sealed record CreatePurchaseOrderLineRequest(string ItemName, decimal QuantityOrdered, decimal UnitCost);
 
 public sealed record CreatePurchaseOrderRequest(
-    Guid SupplierId, DateTime? ExpectedAt, IReadOnlyList<CreatePurchaseOrderLineRequest> Lines, string? Notes = null);
+    Guid SupplierId, DateTime? ExpectedAt, IReadOnlyList<CreatePurchaseOrderLineRequest> Lines, string? Notes = null, Guid? ProjectId = null, string? Currency = null);
 
 public sealed record PurchaseOrderStatusRequest(string Status);
 

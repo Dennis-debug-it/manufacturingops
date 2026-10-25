@@ -12,6 +12,7 @@ import { usePendingApprovals, useDecideApproval, type ApprovalRequest } from './
 const documentTypeLabels: Record<string, string> = {
   PurchaseOrder: 'Purchase Order',
   Expense: 'Expense',
+  ProjectVariation: 'Project Variation',
 }
 
 function ApprovalCard({ request }: { request: ApprovalRequest }) {

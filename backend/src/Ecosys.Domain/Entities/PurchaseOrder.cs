@@ -7,6 +7,7 @@ public sealed class PurchaseOrder : AuditableEntity, ITenantEntity
     public Guid TenantId { get; set; }
     public string PoNumber { get; set; } = string.Empty;
     public Guid SupplierId { get; set; }
+    public Guid? ProjectId { get; set; }
     public string Status { get; set; } = "Draft"; // Draft | Sent | PartiallyReceived | Received | Cancelled
     public DateTime OrderedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ExpectedAt { get; set; }

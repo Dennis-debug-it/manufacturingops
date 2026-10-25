@@ -1,4 +1,5 @@
 using Ecosys.Infrastructure.Data;
+using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,7 +31,7 @@ public sealed class PlatformDashboardController(AppDbContext dbContext) : Contro
         var overdueInvoices = await dbContext.PlatformInvoices.CountAsync(x => x.Status == "Overdue" || (x.DueDate.HasValue && x.DueDate.Value.Date < now.Date && x.Status != "Paid" && x.Status != "Void"), cancellationToken);
         var totalRevenue = await dbContext.PlatformPayments.Where(x => x.Status == "Paid").SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
         var outstandingBalance = await dbContext.PlatformInvoices.Where(x => x.Status != "Paid" && x.Status != "Void").SumAsync(x => (decimal?)x.Balance, cancellationToken) ?? 0m;
-        var mrr = await dbContext.TenantLicenses.Include(x => x.LicensePlan).Where(x => x.Status == "Active" || x.Status == "Trial").SumAsync(x => (decimal?)x.LicensePlan!.MonthlyPrice, cancellationToken) ?? 0m;
+        var mrr = await LicensePricing.MonthlyRecurringRevenueAsync(dbContext, x => x.Status == "Active" || x.Status == "Trial", cancellationToken);
 
         // Conversion metrics (4b).
         var totalLeads = await dbContext.PlatformLeads.CountAsync(cancellationToken);

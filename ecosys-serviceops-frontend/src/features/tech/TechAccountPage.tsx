@@ -5,7 +5,10 @@ import { Spinner } from '../../shared/components/Spinner'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { cn } from '../../shared/utils/cn'
 import { JobAlertsSetting } from './JobAlerts'
-import { useChangeMyPassword, useMyNotificationPreferences, useMyTechnician, useMyVan, useSaveMyNotificationPreferences } from './api'
+import { NotificationPreferencesList } from '../notifications/NotificationPreferences'
+import { WhatsAppOptInCard } from '../whatsapp/WhatsAppOptInCard'
+import { staffWhatsAppApi } from '../whatsapp/remindersApi'
+import { useChangeMyPassword, useMyTechnician, useMyVan } from './api'
 
 const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 const cardClass = 'space-y-3 rounded-xl border border-slate-200 bg-white p-4'
@@ -47,49 +50,11 @@ function ChangePassword() {
 }
 
 function NotificationSettings() {
-  const { data, isLoading, isError } = useMyNotificationPreferences()
-  const save = useSaveMyNotificationPreferences()
-
-  const toggle = async (key: string, field: 'emailEnabled' | 'inAppEnabled') => {
-    const pref = data?.find((item) => item.notificationKey === key)
-    if (!pref) return
-    try {
-      await save.mutateAsync([{ notificationKey: key, emailEnabled: pref.emailEnabled, inAppEnabled: pref.inAppEnabled, [field]: !pref[field] }])
-    } catch {
-      // interceptor surfaces the error toast
-    }
-  }
-
   return (
-    <section className={cardClass}>
-      <h2 className="text-sm font-semibold text-slate-900">Notifications</h2>
-      {isLoading ? <Spinner label="Loading notification settings" /> : null}
-      {isError ? <p className="text-sm text-rose-700">Notification settings could not be loaded.</p> : null}
-      {data && data.length > 0 ? (
-        <ul className="divide-y divide-slate-100">
-          {data.map((pref) => (
-            <li key={pref.notificationKey} className="flex items-center justify-between gap-3 py-2">
-              <span className="min-w-0 text-sm text-slate-800">{pref.label}</span>
-              <span className="flex shrink-0 gap-1">
-                {(['emailEnabled', 'inAppEnabled'] as const).map((field) => (
-                  <button
-                    key={field}
-                    type="button"
-                    role="switch"
-                    aria-checked={pref[field]}
-                    aria-label={`${pref.label}: ${field === 'emailEnabled' ? 'email' : 'in app'}`}
-                    disabled={save.isPending}
-                    onClick={() => void toggle(pref.notificationKey, field)}
-                    className={cn('h-8 rounded-md px-2.5 text-xs font-medium ring-1 ring-inset disabled:opacity-60', pref[field] ? 'bg-[var(--app-primary)] text-white ring-transparent' : 'bg-white text-slate-500 ring-slate-300')}
-                  >
-                    {field === 'emailEnabled' ? 'Email' : 'App'}
-                  </button>
-                ))}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+    <section className="space-y-2">
+      <h2 className="px-1 text-sm font-semibold text-slate-900">Notifications</h2>
+      <WhatsAppOptInCard source={staffWhatsAppApi} audience="staff" />
+      <NotificationPreferencesList />
     </section>
   )
 }

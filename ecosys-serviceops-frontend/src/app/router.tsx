@@ -17,6 +17,9 @@ import { TechJobsPage } from '../features/tech/TechJobsPage'
 import { TechJobPage } from '../features/tech/TechJobPage'
 import { TechGuidePage, TechGuidesPage } from '../features/tech/TechGuides'
 import { TechAccountPage } from '../features/tech/TechAccountPage'
+import { TechSitePage } from '../features/tech/TechSitePage'
+import { NotificationsPage, TechNotificationsPage } from '../features/notifications/NotificationsPage'
+import { MyNotificationSettingsPage } from '../features/notifications/NotificationPreferences'
 import { MyTimePage } from '../features/team/MyTimePage'
 import { AppShell } from '../shared/layout/AppShell'
 import { createModulePage, type ModulePageConfig } from '../shared/pages/ModulePage'
@@ -71,6 +74,14 @@ import { GroupsPage as TeamGroupsPageReal } from '../features/team/GroupsPage'
 import { LiveAttendancePage, TimesheetsPage, TimesheetDetailPage, LeavePage, TimeAttendanceReportsPage } from '../features/team/TimeAttendancePages'
 import { ContractsPage as ContractsPageReal } from '../features/contracts/ContractsPage'
 import { ContractDetailPage as ContractDetailPageReal } from '../features/contracts/ContractDetailPage'
+import { ProjectsPage } from '../features/projects/ProjectsPage'
+import { ProjectDetailPage } from '../features/projects/ProjectDetailPage'
+import { ConsultantsPage } from '../features/projects/ConsultantsPage'
+import { ProjectSettingsPage } from '../features/projects/ProjectSettingsPage'
+import { CalendarPage as MyCalendarPage } from '../features/activities/CalendarPage'
+import { CalendarFeedPage } from '../features/activities/CalendarFeedPage'
+import { ActivityDetailPage } from '../features/activities/ActivityDetailPage'
+import { ActionItemsPage } from '../features/activities/ActionItemsPage'
 import { InvoicesPage } from '../features/finance/InvoicesPage'
 import { DocumentsPage } from '../features/finance/DocumentsPage'
 import { InvoiceDetailPage } from '../features/finance/InvoiceDetailPage'
@@ -119,10 +130,12 @@ import { SettingsOverviewPage as SettingsOverviewPageReal } from '../features/se
 import { TimeAttendanceSettingsPage as SettingsTimeAttendancePageReal } from '../features/settings/TimeAttendanceSettingsPage'
 import { InventorySettingsPage as SettingsInventoryPageReal } from '../features/settings/InventorySettingsPage'
 import { WhatsAppSettingsPage as SettingsWhatsAppPageReal } from '../features/settings/WhatsAppSettingsPage'
+import { WhatsAppRemindersSettingsPage } from '../features/settings/WhatsAppRemindersSettingsPage'
 import { PaymentsSettingsPage as SettingsPaymentsPageReal } from '../features/settings/PaymentsSettingsPage'
 import { PortalSettingsPage as SettingsPortalPageReal } from '../features/settings/PortalSettingsPage'
 import { IntegrationsSettingsPage as SettingsIntegrationsPageReal } from '../features/settings/IntegrationsSettingsPage'
 import { ExecutiveDashboardSettingsPage as SettingsExecutiveDashboardPageReal } from '../features/settings/ExecutiveDashboardSettingsPage'
+import { SettingsDashboardsPage } from '../features/settings/SettingsDashboardsPage'
 import { ApprovalMatrixSettingsPage } from '../features/settings/ApprovalMatrixSettingsPage'
 import { NotificationTemplatesPage } from '../features/settings/NotificationTemplatesPage'
 import { SlaPoliciesPage } from '../features/settings/SlaPoliciesPage'
@@ -344,6 +357,14 @@ export function AppRouter() {
       ['/help/:guideId', HelpPage],
       ['/contracts', ContractsPage],
       ['/contracts/:id', ContractDetailPage],
+      ['/projects', ProjectsPage],
+      ['/projects/consultants', ConsultantsPage],
+      ['/projects/settings', ProjectSettingsPage],
+      ['/projects/:id', ProjectDetailPage],
+      ['/calendar', MyCalendarPage],
+      ['/calendar/feed', CalendarFeedPage],
+      ['/activities/:id', ActivityDetailPage],
+      ['/action-items', ActionItemsPage],
       ['/finance', FinanceOverviewPage],
       ['/finance/documents', DocumentsPage],
       ['/finance/quotes', FinanceQuotesPage],
@@ -386,13 +407,16 @@ export function AppRouter() {
       ['/settings/email-intake', SettingsEmailIntakePage],
       ['/settings/monitoring', SettingsMonitoringIntakePage],
       ['/settings/whatsapp', SettingsWhatsAppPage],
+      ['/settings/whatsapp-reminders', WhatsAppRemindersSettingsPage],
       ['/settings/payments', SettingsPaymentsPage],
       ['/settings/credit-control', SettingsCreditControlPage],
       ['/settings/portal', SettingsPortalPage],
-      ['/settings/notifications', SettingsNotificationsPage],
+      ['/settings/notifications', MyNotificationSettingsPage],
+      ['/settings/workspace-notifications', SettingsNotificationsPage],
       ['/settings/integrations', SettingsIntegrationsPage],
       ['/settings/security', SettingsSecurityPage],
       ['/settings/executive-dashboard', SettingsExecutiveDashboardPage],
+      ['/settings/dashboards', SettingsDashboardsPage],
       ['/settings/account', SettingsAccountPage],
       ['/settings/audit-logs', SettingsAuditLogsPage],
       ['/settings/approval-matrix', ApprovalMatrixSettingsPage],
@@ -406,6 +430,7 @@ export function AppRouter() {
       ['/approvals', MyApprovalsPage],
       ['/my-time', MyTimePage],
       ['/me', TechAccountPage],
+      ['/notifications', NotificationsPage],
       ['/onboarding', OnboardingPage],
       ['/dispatch/map', LiveMapPage],
       ['/dispatch/route/:technicianId', DailyRouteView],
@@ -447,14 +472,17 @@ export function AppRouter() {
           <Route path="jobs/:id" element={<TechJobPage />} />
           <Route path="jobs/:id/:section" element={<TechJobPage />} />
           <Route path="time" element={<MyTimePage />} />
+          <Route path="site" element={<TechSitePage />} />
           <Route path="guides" element={<TechGuidesPage />} />
           <Route path="guides/:id" element={<TechGuidePage />} />
           <Route path="help" element={<TechHelpPage />} />
           <Route path="account" element={<TechAccountPage />} />
+          <Route path="notifications" element={<TechNotificationsPage />} />
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={tenantRoles}><TenantShellRoute /></ProtectedRoute>}>
-          {tenantRouteComponents.filter(([path]) => WHATSAPP_ENABLED || !path.includes('whatsapp')).map(([path, Component]) => (
+          {/* WHATSAPP_ENABLED hides the inbound chat inbox and its old account page; WhatsApp reminders (shared number) are always routed. */}
+          {tenantRouteComponents.filter(([path]) => WHATSAPP_ENABLED || !(path.startsWith('/whatsapp') || path === '/settings/whatsapp')).map(([path, Component]) => (
             <Route key={path} path={path} element={<Component />} />
           ))}
         </Route>

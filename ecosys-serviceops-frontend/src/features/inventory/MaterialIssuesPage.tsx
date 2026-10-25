@@ -6,7 +6,9 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
+import { ProjectPicker } from '../../shared/components/ProjectPicker'
 import { usePermission } from '../../shared/hooks/usePermission'
+import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import { formatDateTime } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
 import {
@@ -21,6 +23,7 @@ import {
 } from './api'
 import type { MaterialIssue } from './types'
 import { InventoryTabNav } from './components/InventoryTabNav'
+import { filterMaterialIssues, materialIssueListFilterSpec, materialIssueStatusLabels } from './listFilters'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -154,11 +157,14 @@ function NewIssueDrawer({ open, onClose }: { open: boolean; onClose: () => void 
   const { data: materials } = useMaterials({ status: 'all' })
   const { data: workOrders } = useWorkOrders()
   const [workOrderId, setWorkOrderId] = useState('')
+  const [projectId, setProjectId] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([{ materialItemId: '', quantity: '1' }])
+  const workOrderClientId = (workOrders ?? []).find((wo) => wo.id === workOrderId)?.clientId ?? null
 
   const close = () => {
     setWorkOrderId('')
+    setProjectId('')
     setNotes('')
     setLines([{ materialItemId: '', quantity: '1' }])
     onClose()
@@ -175,6 +181,7 @@ function NewIssueDrawer({ open, onClose }: { open: boolean; onClose: () => void 
     try {
       const created = await createIssue.mutateAsync({
         workOrderId: workOrderId || null,
+        projectId: projectId || null,
         notes: notes.trim() || null,
         lines: payloadLines,
       })
@@ -202,13 +209,23 @@ function NewIssueDrawer({ open, onClose }: { open: boolean; onClose: () => void 
       <div className="space-y-4">
         <div>
           <label className={labelClass} htmlFor="issue-wo">Work Order (optional)</label>
-          <select id="issue-wo" value={workOrderId} onChange={(event) => setWorkOrderId(event.target.value)} className={fieldClass}>
+          <select
+            id="issue-wo"
+            value={workOrderId}
+            onChange={(event) => {
+              setWorkOrderId(event.target.value)
+              // The project list follows the work order's client, so a new work order clears it.
+              setProjectId('')
+            }}
+            className={fieldClass}
+          >
             <option value="">Not linked to a work order</option>
             {(workOrders ?? []).map((wo) => (
               <option key={wo.id} value={wo.id}>{wo.workOrderNumber} — {wo.title}</option>
             ))}
           </select>
         </div>
+        <ProjectPicker id="issue-project" value={projectId} onChange={setProjectId} clientId={workOrderClientId} className={fieldClass} labelClassName={labelClass} />
         <div>
           <span className={labelClass}>Lines</span>
           <div className="space-y-2">
@@ -259,6 +276,9 @@ export function MaterialIssuesPage() {
   const canRequest = usePermission('materials.request')
   const canIssue = usePermission('inventory.requests.issue')
   const { data, isLoading, isError } = useMaterialIssues()
+  // The status filter lives in the URL, so the dashboard's pending figures open it filtered.
+  const { filters, update } = useUrlFilters(materialIssueListFilterSpec)
+  const rows = filterMaterialIssues(data ?? [], filters.status)
   const [showForm, setShowForm] = useState(false)
   const [returningId, setReturningId] = useState<string | null>(null)
 
@@ -300,7 +320,22 @@ export function MaterialIssuesPage() {
       />
       <InventoryTabNav />
 
-      <DataTable columns={columns} data={data ?? []} loading={isLoading} emptyTitle={isError ? 'Issues unavailable' : 'No material issues yet'} emptyDescription={isError ? 'Material issues could not be loaded.' : 'Create an issue slip to draw stock for a job.'} />
+      <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-3 shadow-sm backdrop-blur-[var(--glass-blur-md)]">
+        <select aria-label="Status" value={filters.status} onChange={(event) => update({ status: event.target.value })} className="h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[var(--app-primary)]">
+          <option value="">All statuses</option>
+          {Object.entries(materialIssueStatusLabels).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
+          ))}
+        </select>
+      </div>
+
+      <DataTable
+        columns={columns}
+        data={rows}
+        loading={isLoading}
+        emptyTitle={isError ? 'Issues unavailable' : filters.status ? 'No issues with this status' : 'No material issues yet'}
+        emptyDescription={isError ? 'Material issues could not be loaded.' : filters.status ? 'Choose another status to see more.' : 'Create an issue slip to draw stock for a job.'}
+      />
 
       <NewIssueDrawer open={showForm} onClose={() => setShowForm(false)} />
       {returning ? <ReturnDrawer issue={returning} onClose={() => setReturningId(null)} /> : null}

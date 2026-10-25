@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 
 namespace Ecosys.Infrastructure;
@@ -24,6 +25,8 @@ public static class DependencyInjection
 
         services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.SectionName));
         services.Configure<WebPushOptions>(configuration.GetSection(WebPushOptions.SectionName));
+        services.Configure<WhatsAppOptions>(configuration.GetSection(WhatsAppOptions.SectionName));
+        services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IFileStorageService, LocalFileStorageService>();
 
         services.AddHttpContextAccessor();
@@ -35,7 +38,16 @@ public static class DependencyInjection
 
         services.AddSingleton<IRuntimeMetrics, RuntimeMetrics>();
 
-        services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
+        // Dashboard data versions (Release 3 part 4): every save bumps the areas it touches, so cached
+        // widgets recompute and open dashboards hear about it. The Api replaces the no-op notifier.
+        services.TryAddSingleton<IDashboardNotifier, NullDashboardNotifier>();
+        services.AddSingleton<IDashboardDataVersions, DashboardDataVersions>();
+        services.AddSingleton<IDashboardChangeBroadcaster, DashboardChangeBroadcaster>();
+        services.AddSingleton<DashboardChangeInterceptor>();
+
+        services.AddDbContext<AppDbContext>((serviceProvider, options) => options
+            .UseNpgsql(connectionString)
+            .AddInterceptors(serviceProvider.GetRequiredService<DashboardChangeInterceptor>()));
         services.AddHealthChecks()
             .AddDbContextCheck<AppDbContext>("postgres", tags: ["ready"]);
 
@@ -91,6 +103,43 @@ public static class DependencyInjection
         services.AddScoped<IContractPricingService, ContractPricingService>();
         services.AddScoped<IContractLifecycleService, ContractLifecycleService>();
         services.AddScoped<IContractOperationalService, ContractOperationalService>();
+        services.AddScoped<IProjectSettingsService, ProjectSettingsService>();
+        services.AddScoped<IProjectSetupService, ProjectSetupService>();
+        services.AddScoped<IProjectAccessService, ProjectAccessService>();
+        services.AddScoped<IProjectService, ProjectService>();
+        services.AddScoped<IProjectNotificationService, ProjectNotificationService>();
+        // One way to notify (Release 3 design 2.1). The Api replaces the no-op live notifier with
+        // SignalR. Further channels register as INotificationChannel (WhatsApp, below).
+        services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
+        services.TryAddSingleton<IInboxNotifier, NullInboxNotifier>();
+        services.AddScoped<INotificationPushProcessor, NotificationPushProcessor>();
+        services.AddScoped<INotificationHousekeeping, NotificationHousekeeping>();
+        // WhatsApp reminders from the shared Ecosys number (Release 3 design 4).
+        services.AddScoped<INotificationChannel, WhatsAppNotificationChannel>();
+        services.AddSingleton<IWhatsAppAccountResolver, SharedWhatsAppAccountResolver>();
+        services.AddHttpClient(MetaWhatsAppSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
+        services.AddScoped<IWhatsAppSender, MetaWhatsAppSender>();
+        services.AddScoped<IWhatsAppOutbox, WhatsAppOutbox>();
+        services.AddScoped<IWhatsAppOutboxProcessor, WhatsAppOutboxProcessor>();
+        services.AddScoped<IWhatsAppVerificationService, WhatsAppVerificationService>();
+        services.AddScoped<IWhatsAppWebhookProcessor, WhatsAppWebhookProcessor>();
+        services.AddScoped<IClientWhatsAppNotifier, ClientWhatsAppNotifier>();
+        services.AddScoped<IProjectFinancialsService, ProjectFinancialsService>();
+        // Role dashboards (Release 3 design part 4).
+        services.AddScoped<ITenantModuleResolver, LicenseTenantModuleResolver>();
+        services.AddScoped<IDashboardSettingsService, DashboardSettingsService>();
+        services.AddScoped<RoleDashboardQueries>();
+        services.AddScoped<IRoleDashboardService, RoleDashboardService>();
+        services.AddScoped<IProjectInvoiceService, ProjectInvoiceService>();
+        services.AddScoped<IProjectReminderRunner, ProjectReminderRunner>();
+        // Calendar & Activities (Release 3 step 3b).
+        services.AddScoped<IAccessViewerFactory, AccessViewerFactory>();
+        services.AddScoped<ILinkedRecordService, LinkedRecordService>();
+        services.AddScoped<ActivityNotifier>();
+        services.AddScoped<IActivityService, ActivityService>();
+        services.AddScoped<ICalendarService, CalendarService>();
+        services.AddScoped<ICalendarFeedService, CalendarFeedService>();
+        services.AddScoped<IActivityReminderRunner, ActivityReminderRunner>();
         services.AddSingleton<IPdfRenderer, QuestPdfRenderer>();
         services.AddScoped<IScheduledReportService, ScheduledReportService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
@@ -103,9 +152,11 @@ public static class DependencyInjection
         services.AddSingleton<IBackgroundWorkLease>(serviceProvider => new PostgresAdvisoryLockLease(
             connectionString,
             serviceProvider.GetRequiredService<ILogger<PostgresAdvisoryLockLease>>()));
-        // Push notifications: the queue is in-memory, so its sender runs on every instance (not leased).
+        // Push notifications. Inbox pushes are rows, sent by the leased NotificationPushWorker below;
+        // the in-memory queue (test pushes only) is per instance, so its sender runs everywhere.
         services.AddHttpClient();
         services.AddSingleton<IVapidKeyProvider, VapidKeyProvider>();
+        services.AddSingleton<IWebPushSender, WebPushSender>();
         services.AddSingleton<PushNotificationQueue>();
         services.AddSingleton<IPushNotificationQueue>(sp => sp.GetRequiredService<PushNotificationQueue>());
         services.AddHostedService<PushNotificationWorker>();
@@ -118,9 +169,14 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<ContractReminderWorker>();
         services.AddSingleInstanceHostedService<ScheduledReportWorker>();
         services.AddSingleInstanceHostedService<ApprovalReminderWorker>();
+        services.AddSingleInstanceHostedService<ProjectReminderWorker>();
         services.AddSingleInstanceHostedService<AttendanceAutoClockOutWorker>();
         services.AddSingleInstanceHostedService<EscalationRuleWorker>();
         services.AddSingleInstanceHostedService<SubscriptionLifecycleWorker>();
+        services.AddSingleInstanceHostedService<NotificationPushWorker>();
+        services.AddSingleInstanceHostedService<NotificationHousekeepingWorker>();
+        services.AddSingleInstanceHostedService<ActivityReminderWorker>();
+        services.AddSingleInstanceHostedService<WhatsAppOutboxWorker>();
 
         return services;
     }

@@ -35,11 +35,11 @@ public sealed partial class AuthEmailSafetyTests
                 await setup.Database.MigrateAsync();
                 await SeedPlatformUserAsync(setup, "owner@platform.test");
                 await SeedTenantAsync(setup, tenantId, "Race Co", "ops@race.test");
-                var suite = await setup.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Suite);
+                var suite = await setup.LicensePlans.SingleAsync(x => x.PlanCode == ServiceOpsPlans.Professional);
                 setup.TenantLicenses.Add(new TenantLicense
                 {
                     TenantId = tenantId, LicensePlanId = suite.Id, Status = LicenseStatuses.Active,
-                    StartsAt = DateTime.UtcNow.AddMonths(-1), ExpiresAt = DateTime.UtcNow.AddYears(1), LicensedUsers = 2,
+                    StartsAt = DateTime.UtcNow.AddMonths(-1), ExpiresAt = DateTime.UtcNow.AddYears(1), OfficeSeats = 2,
                 });
                 setup.Users.Add(new User { TenantId = tenantId, FullName = "Admin", Email = "admin@race.test", Role = AppRoles.Admin, IsActive = true });
                 await setup.SaveChangesAsync();
@@ -54,11 +54,11 @@ public sealed partial class AuthEmailSafetyTests
                 {
                     await controller.CreateWorkspaceUser(
                         tenantId,
-                        new CreatePlatformTenantUserRequest($"Racer {index}", $"racer{index}@race.test", null, "Viewer", null),
+                        new CreatePlatformTenantUserRequest($"Racer {index}", $"racer{index}@race.test", null, "Dispatcher", null),
                         CancellationToken.None);
                     return "created";
                 }
-                catch (LicenseException ex) when (ex.ErrorCode == "license_users_limit_reached")
+                catch (LicenseException ex) when (ex.ErrorCode == "license_office_seats_reached")
                 {
                     return "rejected";
                 }

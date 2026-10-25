@@ -37,7 +37,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
     IEmailSubjectRuleService emailSubjectRuleService,
     ISlaService slaService,
     IEtaNotificationService etaNotificationService,
-    IPushNotificationQueue pushNotificationQueue,
+    INotificationDispatcher notificationDispatcher,
     ILogger<WorkOrderAssignmentWorkflowService> logger) : IWorkOrderAssignmentWorkflowService
 {
     public async Task ApplyAssignmentsAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, WorkOrderAssignmentUpdateRequest request, bool isReassignment, CancellationToken cancellationToken = default)
@@ -166,7 +166,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         if (newlyAssignedTechnicians.Count > 0)
         {
             await TryQueueAssignmentEmailsAsync(tenantId, workOrder, newlyAssignedTechnicians, cancellationToken);
-            AssignmentPushNotifications.Enqueue(pushNotificationQueue, workOrder, newlyAssignedTechnicians);
+            await AssignmentNotifications.NotifyAsync(notificationDispatcher, workOrder, newlyAssignedTechnicians, cancellationToken);
         }
     }
 
@@ -180,9 +180,16 @@ internal sealed class WorkOrderAssignmentWorkflowService(
 
             var dueDate = workOrder.DueDate?.ToString("yyyy-MM-dd") ?? "Not set";
 
+            // A technician with a login can turn this email off; one without has no preferences.
+            var userIds = technicians.Where(x => x.UserId.HasValue).Select(x => x.UserId!.Value).ToList();
+            var emailOff = await dbContext.UserNotificationPreferences
+                .Where(x => x.TenantId == tenantId && userIds.Contains(x.UserId) && x.NotificationKey == AssignmentNotifications.Key && !x.EmailEnabled)
+                .Select(x => x.UserId)
+                .ToListAsync(cancellationToken);
+
             foreach (var technician in technicians)
             {
-                if (string.IsNullOrWhiteSpace(technician.Email))
+                if (string.IsNullOrWhiteSpace(technician.Email) || (technician.UserId is { } userId && emailOff.Contains(userId)))
                     continue;
 
                 var template = await emailTemplateService.RenderTenantTemplateAsync(
@@ -593,21 +600,39 @@ internal sealed class WorkOrderAssignmentWorkflowService(
     }
 }
 
-/// <summary>The "new job assigned" push sent to a technician's devices (only for newly added technicians).</summary>
-internal static class AssignmentPushNotifications
+/// <summary>
+/// The "new job assigned" bell entry and push for a technician's login (only for newly added
+/// technicians), through the dispatcher so the technician's preferences apply. The email is sent
+/// separately, to the technician record's own address.
+/// </summary>
+internal static class AssignmentNotifications
 {
-    public static void Enqueue(IPushNotificationQueue? queue, WorkOrder workOrder, IEnumerable<Technician> technicians)
+    public const string Key = "work-order.assigned";
+
+    public static Task NotifyAsync(INotificationDispatcher? dispatcher, WorkOrder workOrder, IEnumerable<Technician> technicians, CancellationToken cancellationToken)
     {
-        if (queue is null) return;
+        if (dispatcher is null) return Task.CompletedTask;
 
         var userIds = technicians.Where(x => x.UserId.HasValue).Select(x => x.UserId!.Value).Distinct().ToList();
-        if (userIds.Count == 0) return;
+        if (userIds.Count == 0) return Task.CompletedTask;
 
         var title = string.IsNullOrWhiteSpace(workOrder.Title) ? "New job" : workOrder.Title.Trim();
-        queue.Enqueue(workOrder.TenantId, userIds, new PushMessage(
+        return dispatcher.NotifyAsync(new NotificationRequest(
+            workOrder.TenantId,
+            Key,
+            userIds,
             Title: $"New job assigned: {workOrder.WorkOrderNumber}",
             Body: $"{title} · {workOrder.Priority} priority",
             Url: $"/tech/jobs/{workOrder.Id}",
-            Tag: $"assigned-{workOrder.Id}"));
+            EntityType: "WorkOrder",
+            EntityId: workOrder.Id,
+            TemplateValues: new Dictionary<string, string?>
+            {
+                ["WorkOrderNumber"] = workOrder.WorkOrderNumber,
+                ["WorkOrderTitle"] = title,
+                ["Priority"] = workOrder.Priority,
+            },
+            // The email goes to the technician record from the workflow service; WhatsApp only to an opted-in user.
+            Channels: NotificationChannels.InApp | NotificationChannels.Push | NotificationChannels.WhatsApp), cancellationToken);
     }
 }

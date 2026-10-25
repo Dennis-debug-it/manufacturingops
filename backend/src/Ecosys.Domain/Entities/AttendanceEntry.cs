@@ -15,6 +15,8 @@ public sealed class AttendanceEntry : AuditableEntity, ITenantEntity
     public string Status { get; set; } = "ClockedIn"; // ClockedIn | OnBreak | Travelling | ClockedOut
     public string? LastLocation { get; set; }
     public Guid? CurrentWorkOrderId { get; set; }
+    /// <summary>The project the technician clocked in on site for, if any.</summary>
+    public Guid? ProjectId { get; set; }
     public string? Note { get; set; }
 
     public Tenant? Tenant { get; set; }

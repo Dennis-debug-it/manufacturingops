@@ -14,39 +14,70 @@ namespace Ecosys.Tests;
 public sealed class ServiceOpsPlanTests
 {
     [Theory]
-    [InlineData("operations", "operations")]
-    [InlineData("finance", "finance")]
-    [InlineData("suite", "operations,finance")]
-    [InlineData("Trial", "operations,finance")]
-    [InlineData("Professional", "operations,finance")]
-    public void PlanIdentifiersDetermineModules_RegardlessOfDisplayNames(string code, string expected)
+    [InlineData("essentials", "operations,finance")]
+    [InlineData("professional", "operations,finance,maintenance,inventory,projects,advanced")]
+    [InlineData("enterprise", "operations,finance,maintenance,inventory,projects,advanced,enterprise_tools")]
+    [InlineData("suite", "")]
+    public void EditionCodesDetermineModules_RegardlessOfDisplayNames(string code, string expected)
     {
-        var modules = ServiceOpsPlans.Modules(new LicensePlan { PlanCode = code, DisplayName = "Misleading display name", ModulesIncluded = "Core" });
-        Assert.Equal(expected.Split(','), modules);
+        var modules = ServiceOpsPlans.Modules(new LicensePlan { PlanCode = code, DisplayName = "Misleading display name" });
+        Assert.Equal(expected.Split(',', StringSplitOptions.RemoveEmptyEntries), modules);
     }
 
     [Theory]
-    [InlineData("operations", "TenantInvoice", "/api/invoices", false)]
-    [InlineData("operations", "TenantInvoice", "/api/payments", false)]
-    [InlineData("operations", "TenantInvoice", "/api/clients/123/credit-balance", false)]
-    [InlineData("finance", "WorkOrders", "/api/workorders", false)]
-    [InlineData("finance", "Sites", "/api/clients/123/sites", false)]
-    [InlineData("operations", "WorkOrders", "/api/workorders", true)]
-    [InlineData("finance", "TenantInvoice", "/api/invoices", true)]
-    [InlineData("suite", "TenantInvoice", "/api/invoices", true)]
-    [InlineData("suite", "WorkOrders", "/api/workorders", true)]
-    [InlineData("finance", "TenantQuotation", "/api/quotations/123/convert-to-work-order", false)]
-    [InlineData("suite", "TenantQuotation", "/api/quotations/123/convert-to-work-order", true)]
-    [InlineData("operations", "WorkOrders", "/api/workorders/from-quote", false)]
-    [InlineData("suite", "WorkOrders", "/api/workorders/from-quote", true)]
-    [InlineData("operations", "TenantInvoice", "/api/work-orders/123/generate-invoice", false)]
-    [InlineData("finance", "TenantInvoice", "/api/work-orders/123/generate-invoice", false)]
-    [InlineData("suite", "TenantInvoice", "/api/work-orders/123/generate-invoice", true)]
-    [InlineData("operations", "Clients", "/api/clients", true)]
-    [InlineData("finance", "Clients", "/api/clients", true)]
-    [InlineData("finance", "Settings", "/api/settings/email-intake", false)]
-    [InlineData("operations", "Integrations", "/api/settings/payments", false)]
-    public async Task ActualLicenseMiddleware_EnforcesPlanForMatchedApiIncludingAliases(string planCode, string controller, string path, bool allowed)
+    [InlineData(null, false)]
+    [InlineData(ServiceOpsPlans.WhatsAppNotificationsAddOn, false)]
+    [InlineData(ServiceOpsPlans.WhatsAppBusinessAddOn, true)]
+    public void WhatsAppBusinessAddOn_AddsTheInbox_OnAnyEdition(string? addOn, bool hasInbox)
+    {
+        var modules = ServiceOpsPlans.Modules(new LicensePlan { PlanCode = ServiceOpsPlans.Essentials }, addOn);
+        Assert.Equal(hasInbox, modules.Contains(ServiceOpsPlans.WhatsAppBusiness));
+    }
+
+    [Theory]
+    [InlineData("Technician", SeatTypes.Field)]
+    [InlineData("technician", SeatTypes.Field)]
+    [InlineData("Viewer", SeatTypes.Free)]
+    [InlineData("User", SeatTypes.Free)]
+    [InlineData("Admin", SeatTypes.Office)]
+    [InlineData("Dispatcher", SeatTypes.Office)]
+    [InlineData("finance", SeatTypes.Office)]
+    [InlineData("MaterialsController", SeatTypes.Office)]
+    public void RolesTakeTheRightSeat(string role, string seat) => Assert.Equal(seat, SeatTypes.For(role));
+
+    [Theory]
+    // Essentials: the whole work-order-to-invoice loop.
+    [InlineData("essentials", "WorkOrders", "/api/workorders", true)]
+    [InlineData("essentials", "TenantInvoice", "/api/invoices", true)]
+    [InlineData("essentials", "TenantQuotation", "/api/quotations/123/convert-to-work-order", true)]
+    [InlineData("essentials", "TenantInvoice", "/api/work-orders/123/generate-invoice", true)]
+    [InlineData("essentials", "Clients", "/api/clients", true)]
+    // Professional adds maintenance, inventory, projects and the advanced tools.
+    [InlineData("essentials", "PreventiveMaintenance", "/api/preventive-maintenance", false)]
+    [InlineData("essentials", "Assets", "/api/assets", false)]
+    [InlineData("essentials", "Contracts", "/api/contracts", false)]
+    [InlineData("essentials", "Materials", "/api/materials", false)]
+    [InlineData("essentials", "PurchaseOrders", "/api/purchase-orders", false)]
+    [InlineData("essentials", "Projects", "/api/projects", false)]
+    [InlineData("essentials", "ExpensesPayables", "/api/expenses", false)]
+    [InlineData("essentials", "ApprovalMatrix", "/api/approvals/pending", false)]
+    [InlineData("essentials", "Settings", "/api/settings/email-intake", false)]
+    [InlineData("essentials", "AdvancedSettings", "/api/settings/inventory", false)]
+    [InlineData("essentials", "Portal", "/api/portal/assets", false)]
+    [InlineData("professional", "PreventiveMaintenance", "/api/preventive-maintenance", true)]
+    [InlineData("professional", "Materials", "/api/materials", true)]
+    [InlineData("professional", "ExpensesPayables", "/api/expenses", true)]
+    [InlineData("professional", "ApprovalMatrix", "/api/approvals/pending", true)]
+    [InlineData("professional", "Settings", "/api/settings/email-intake", true)]
+    [InlineData("professional", "Portal", "/api/portal/assets", true)]
+    // Enterprise adds API keys, webhooks and monitoring.
+    [InlineData("professional", "Integrations", "/api/settings/api-keys", false)]
+    [InlineData("professional", "Settings", "/api/settings/monitoring-webhooks", false)]
+    [InlineData("enterprise", "Integrations", "/api/settings/api-keys", true)]
+    [InlineData("enterprise", "Settings", "/api/settings/monitoring-webhooks", true)]
+    // The two-way WhatsApp inbox needs the WhatsApp Business add-on, whatever the edition.
+    [InlineData("enterprise", "WhatsApp", "/api/whatsapp/conversations", false)]
+    public async Task ActualLicenseMiddleware_EnforcesEditionForMatchedApiIncludingAliases(string planCode, string controller, string path, bool allowed)
     {
         var tenantId = Guid.NewGuid();
         var http = new DefaultHttpContext();
@@ -61,7 +92,7 @@ public sealed class ServiceOpsPlanTests
         var tenantContext = new HttpTenantContext(new HttpContextAccessor { HttpContext = http });
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options, tenantContext);
         db.Tenants.Add(new Tenant { Id = tenantId, Name = "Plan test", CompanyName = "Plan test", Slug = "plan-test", Country = "Kenya", IsActive = true });
-        var plan = new LicensePlan { PlanCode = planCode, DisplayName = "Plan test", ModulesIncluded = "Core" };
+        var plan = new LicensePlan { PlanCode = planCode, DisplayName = "Plan test" };
         db.LicensePlans.Add(plan);
         db.TenantLicenses.Add(new TenantLicense { TenantId = tenantId, LicensePlanId = plan.Id, LicensePlan = plan, Status = "Active" });
         await db.SaveChangesAsync();
@@ -79,9 +110,36 @@ public sealed class ServiceOpsPlanTests
         Assert.Equal(allowed, reachedEndpoint);
     }
 
-    [Fact]
-    public void ExplicitCustomPlanModules_ArePreserved()
+    [Theory]
+    [InlineData("essentials", 1)]
+    [InlineData("professional", 1)]
+    [InlineData("enterprise", null)]
+    public async Task OnlyEnterprise_HasUnlimitedBranches(string planCode, int? expected)
     {
-        Assert.Equal(["finance"], ServiceOpsPlans.Modules(new LicensePlan { PlanCode = "legacy-custom", ModulesIncluded = "Core,finance,AdvancedReports" }));
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var tenantId = Guid.NewGuid();
+        var plan = new LicensePlan { PlanCode = planCode, DisplayName = planCode };
+        db.LicensePlans.Add(plan);
+        db.TenantLicenses.Add(new TenantLicense { TenantId = tenantId, LicensePlan = plan, Status = "Active" });
+        await db.SaveChangesAsync();
+
+        var snapshot = await new LicenseGuardService(db).GetSnapshotAsync(tenantId);
+
+        Assert.Equal(expected, snapshot.MaxBranches);
+        Assert.Equal(planCode == "enterprise", snapshot.MonitoringIntegration);
+    }
+
+    [Fact]
+    public void MonthlyValue_IsSeatsTimesPricesPlusTheAddOn()
+    {
+        var plan = new LicensePlan { PlanCode = "professional", OfficeSeatMonthlyPrice = 2000m, OfficeSeatAnnualPrice = 20000m, FieldSeatMonthlyPrice = 800m };
+        var addOn = new LicenseAddOn { Code = ServiceOpsPlans.WhatsAppNotificationsAddOn, MonthlyPrice = 1500m, AnnualPrice = 12000m };
+        var license = new TenantLicense { LicensePlan = plan, OfficeSeats = 3, FieldSeats = 5, WhatsAppAddOn = addOn.Code, BillingCycle = BillingCycles.Monthly };
+
+        Assert.Equal(3 * 2000m + 5 * 800m + 1500m, LicensePricing.MonthlyValue(license, [addOn]));
+
+        // Annual: the annual price over twelve months; a zero annual price (field seats here) falls back to monthly.
+        license.BillingCycle = BillingCycles.Annual;
+        Assert.Equal(decimal.Round(3 * 20000m / 12m + 5 * 800m + 12000m / 12m, 2), LicensePricing.MonthlyValue(license, [addOn]));
     }
 }

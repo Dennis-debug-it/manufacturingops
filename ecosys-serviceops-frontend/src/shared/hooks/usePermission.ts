@@ -173,6 +173,26 @@ const executeActions = new Set([
   'parts-returns.create',
 ])
 
+/**
+ * Action strings that are backend capabilities with no `PermissionSet` field. The server sends the
+ * granted ones in `AuthUser.capabilities` (role defaults adjusted by Access Control), so they are
+ * checked there rather than against the static role map.
+ */
+const capabilityActions = new Set([
+  'projects.view',
+  'projects.manage',
+  'projects.variations.submit',
+  'projects.variations.approve',
+  'projects.close',
+  'projects.settings',
+  'projects.muster.mark',
+  'projects.financials.view',
+  'projects.financials.manage',
+  'activities.view',
+  'activities.manage',
+  'calendar.team',
+])
+
 /** The same check as usePermission, for code that isn't a component (e.g. route access rules). */
 export function hasPermission(user: AuthUser | null | undefined, action: string): boolean {
   if (!user) {
@@ -186,6 +206,10 @@ export function hasPermission(user: AuthUser | null | undefined, action: string)
   const permissionSetKey = permissionSetLookup[action]
   if (permissionSetKey) {
     return Boolean(user.permissions[permissionSetKey])
+  }
+
+  if (capabilityActions.has(action)) {
+    return user.capabilities?.includes(action) ?? false
   }
 
   if (executeActions.has(action)) {
