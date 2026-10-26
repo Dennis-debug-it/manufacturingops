@@ -1,8 +1,8 @@
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '../../../shared/utils/cn'
 
-const tabs = [
-  { to: '/inventory/stock', label: 'Stock', match: ['/inventory', '/inventory/stock'] },
+const tabs: Array<{ to: string; label: string; match: string[]; exact?: string[] }> = [
+  { to: '/inventory/stock', label: 'Stock', match: ['/inventory/stock'], exact: ['/inventory'] },
   { to: '/inventory/parts', label: 'Parts', match: ['/inventory/parts'] },
   { to: '/inventory/issues', label: 'Issues', match: ['/inventory/issues'] },
   { to: '/inventory/restock-requests', label: 'Restock Requests', match: ['/inventory/restock-requests'] },
@@ -23,7 +23,10 @@ export function InventoryTabNav() {
   return (
     <div className="flex flex-wrap gap-2">
       {tabs.map((tab) => {
-        const active = tab.match.some((prefix) => location.pathname === prefix || location.pathname.startsWith(`${prefix}/`))
+        // '/inventory' itself is the Stock page; as a prefix it would light Stock up on every tab.
+        const active =
+          (tab.exact ?? []).includes(location.pathname) ||
+          tab.match.some((prefix) => location.pathname === prefix || location.pathname.startsWith(`${prefix}/`))
         return (
           <Link
             key={tab.to}
