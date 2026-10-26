@@ -12,9 +12,14 @@ public sealed class StockMovement : AuditableEntity, ITenantEntity
     public Guid? MaterialRequestId { get; set; }
     public string MovementType { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
+    /// <summary>The signed change to the location's balance (Quantity is always positive). Null on
+    /// older adjustments whose direction could not be recovered.</summary>
+    public decimal? QuantityChange { get; set; }
     public decimal BalanceAfter { get; set; }
     public string? Reason { get; set; }
     public string? ReferenceNumber { get; set; }
+    /// <summary>Batch, lot or serial number(s) of the units that moved, where they are tracked.</summary>
+    public string? BatchOrSerial { get; set; }
     public Guid? CreatedByUserId { get; set; }
 
     public Tenant? Tenant { get; set; }

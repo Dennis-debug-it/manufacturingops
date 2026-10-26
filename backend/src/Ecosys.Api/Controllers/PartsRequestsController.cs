@@ -17,7 +17,8 @@ public sealed class PartsRequestsController(
     ITenantContext tenantContext,
     IAuditLogService auditLogService,
     IUserAccessService userAccessService,
-    IBranchAccessService branchAccessService) : TenantAwareControllerBase(tenantContext)
+    IBranchAccessService branchAccessService,
+    IStockLedgerService stockLedgerService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet("/api/workorders/{workOrderId:guid}/parts-requests")]
     public async Task<ActionResult<IReadOnlyCollection<PartsRequestResponse>>> GetForWorkOrder(Guid workOrderId, CancellationToken cancellationToken)
@@ -242,25 +243,62 @@ public sealed class PartsRequestsController(
         return Ok(Map(persisted));
     }
 
+    /// <summary>
+    /// Sends the approved parts out of stores: each catalogue item leaves the request's branch stock
+    /// and is booked on the work order as used, so it shows in the job's parts and can come back
+    /// through a parts return. Free-text items (no catalogue part) move no stock.
+    /// </summary>
     [HttpPatch("{id:guid}/dispatch")]
     public async Task<ActionResult<PartsRequestResponse>> Dispatch(Guid id, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanIssueMaterials);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
 
-        var partsRequest = await dbContext.PartsRequests
-            .Where(x => x.TenantId == TenantId && x.Id == id)
-            .WhereAccessible(scope, x => x.BranchId)
-            .SingleOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException("Parts request was not found.");
-
-        if (partsRequest.Status != "Approved")
+        PartsRequest partsRequest = null!;
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            throw new BusinessRuleException("Only approved parts requests can be dispatched.");
-        }
+            partsRequest = await dbContext.PartsRequests
+                .Include(x => x.Items)
+                    .ThenInclude(x => x.InventoryItem)
+                .Include(x => x.WorkOrder)
+                .Where(x => x.TenantId == TenantId && x.Id == id)
+                .WhereAccessible(scope, x => x.BranchId)
+                .SingleOrDefaultAsync(ct)
+                ?? throw new NotFoundException("Parts request was not found.");
 
-        partsRequest.Status = "Dispatched";
-        await dbContext.SaveChangesAsync(cancellationToken);
+            if (partsRequest.Status != "Approved")
+            {
+                throw new BusinessRuleException("Only approved parts requests can be dispatched.");
+            }
+
+            var workOrderNumber = partsRequest.WorkOrder?.WorkOrderNumber;
+            foreach (var item in partsRequest.Items)
+            {
+                var quantity = item.QuantityApproved ?? item.QuantityRequested;
+                if (item.InventoryItem is not { } material || quantity <= 0)
+                    continue;
+
+                await stockLedgerService.RecordIssueAsync(
+                    material, partsRequest.BranchId, quantity, UserId,
+                    $"Parts request dispatched for work order {workOrderNumber}", workOrderNumber,
+                    partsRequest.WorkOrderId, cancellationToken: ct);
+                dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
+                {
+                    TenantId = TenantId,
+                    WorkOrderId = partsRequest.WorkOrderId,
+                    MaterialItemId = material.Id,
+                    AssetId = partsRequest.WorkOrder?.AssetId,
+                    QuantityUsed = quantity,
+                    UnitCost = material.UnitCost,
+                    Chargeable = true,
+                    UsedByUserId = partsRequest.TechnicianId,
+                    Notes = "Parts request dispatch",
+                });
+            }
+
+            partsRequest.Status = "Dispatched";
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         await auditLogService.LogAsync(
             TenantId,

@@ -160,7 +160,7 @@ public sealed partial class WorkOrderExecutionController(
 
         await stockLedgerService.ExecuteAsync(async ct =>
         {
-            await stockLedgerService.RecordIssueAsync(
+            var movement = await stockLedgerService.RecordIssueAsync(
                 material,
                 workOrder.BranchId,
                 request.QuantityUsed,
@@ -171,6 +171,7 @@ public sealed partial class WorkOrderExecutionController(
                 null,
                 false,
                 ct);
+            movement.BatchOrSerial = string.IsNullOrWhiteSpace(request.BatchOrSerial) ? null : request.BatchOrSerial.Trim();
 
             dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
             {
@@ -1425,7 +1426,8 @@ public sealed partial class WorkOrderExecutionController(
 public sealed record SaveWorkOrderExecutionNotesRequest(string? Findings, string? WorkDone, string? ProgressComment);
 public sealed record PauseWorkOrderRequest(string? HoldReason, string? Note);
 public sealed record MarkInTransitRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? InTransitAt, string? Notes);
-public sealed record AddWorkOrderMaterialUsageRequest(Guid MaterialItemId, Guid? AssetId, decimal QuantityUsed, decimal? UnitCost, bool Chargeable, string? Notes, DateTime? UsedAt);
+/// <param name="BatchOrSerial">Serial or batch number(s) of the units fitted, kept on the stock movement for traceability.</param>
+public sealed record AddWorkOrderMaterialUsageRequest(Guid MaterialItemId, Guid? AssetId, decimal QuantityUsed, decimal? UnitCost, bool Chargeable, string? Notes, DateTime? UsedAt, string? BatchOrSerial = null);
 public sealed record UpdateWorkOrderPhotoRequest(string? Caption, string? Category, bool IncludeInReport);
 public sealed record CaptureWorkOrderSignatureRequest(string SignatureType, string SignerName, string? SignerRole, string SignatureDataUrl, string? Comment);
 

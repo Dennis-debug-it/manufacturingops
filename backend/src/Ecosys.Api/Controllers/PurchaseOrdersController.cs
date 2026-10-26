@@ -18,7 +18,9 @@ public sealed class PurchaseOrdersController(
     IDocumentNumberingService documentNumberingService,
     IAuditLogService auditLogService,
     IApprovalWorkflowService approvalWorkflowService,
-    IUserAccessService userAccessService) : TenantAwareControllerBase(tenantContext)
+    IUserAccessService userAccessService,
+    IStockLedgerService stockLedgerService,
+    IBranchAccessService branchAccessService) : TenantAwareControllerBase(tenantContext)
 {
     // ── Purchase orders ──────────────────────────────────────────────────────
 
@@ -64,10 +66,154 @@ public sealed class PurchaseOrdersController(
         [FromBody] CreatePurchaseOrderRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
+        return Ok(MapDetail(await CreateOrderAsync(request, cancellationToken)));
+    }
 
+    /// <summary>
+    /// Low-stock parts with what to order: on hand, on order (open PO lines linked to the part,
+    /// across branches), and a suggested quantity — the part's reorder quantity in as many lots as
+    /// lift stock above the reorder level, else enough to reach twice the reorder level.
+    /// </summary>
+    [HttpGet("reorder-suggestions")]
+    public async Task<ActionResult<IReadOnlyCollection<ReorderSuggestionResponse>>> GetReorderSuggestions(
+        [FromQuery] Guid? branchId, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrAnyPermission(PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials);
+        var settings = await InventoryModuleSettings.LoadAsync(dbContext, TenantId, cancellationToken);
+        if (branchId is { } requested)
+            await branchAccessService.EnsureCanAccessBranchAsync(TenantId, requested, cancellationToken);
+
+        var parts = await dbContext.MaterialItems.AsNoTracking()
+            .Include(x => x.PreferredSupplier)
+            .Where(x => x.TenantId == TenantId && x.IsActive)
+            .ToListAsync(cancellationToken);
+        var branchStock = branchId is null
+            ? []
+            : await dbContext.BranchMaterialStocks.AsNoTracking()
+                .Where(x => x.TenantId == TenantId && x.BranchId == branchId)
+                .ToDictionaryAsync(x => x.MaterialId, cancellationToken);
+        var onOrder = await dbContext.PurchaseOrderLines.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.MaterialItemId != null
+                && x.PurchaseOrder!.Status != "Received" && x.PurchaseOrder.Status != "Cancelled"
+                && x.QuantityOrdered > x.QuantityReceived)
+            .GroupBy(x => x.MaterialItemId!.Value)
+            .Select(g => new { MaterialId = g.Key, Quantity = g.Sum(x => x.QuantityOrdered - x.QuantityReceived) })
+            .ToDictionaryAsync(x => x.MaterialId, x => x.Quantity, cancellationToken);
+
+        var suggestions = new List<ReorderSuggestionResponse>();
+        foreach (var part in parts)
+        {
+            var stock = branchStock.GetValueOrDefault(part.Id);
+            var onHand = branchId is null ? part.QuantityOnHand : stock?.QuantityOnHand ?? 0;
+            var reorderLevel = branchId is null ? part.ReorderLevel : stock?.ReorderLevel ?? part.ReorderLevel;
+            if (reorderLevel <= 0 || onHand > reorderLevel)
+                continue;
+
+            var ordered = onOrder.GetValueOrDefault(part.Id);
+            var covered = onHand + ordered > reorderLevel;
+            suggestions.Add(new ReorderSuggestionResponse(
+                part.Id,
+                part.ItemCode,
+                part.ItemName,
+                part.UnitOfMeasure,
+                onHand,
+                reorderLevel,
+                ordered,
+                covered ? 0 : SuggestQuantity(onHand + ordered, reorderLevel, part.ReorderQuantity),
+                stock?.UnitCost ?? part.UnitCost,
+                part.PreferredSupplierId,
+                part.PreferredSupplier?.SupplierName,
+                part.PreferredSupplier?.IsActive ?? false,
+                part.PreferredSupplier?.LeadTimeDays ?? settings.DefaultReorderLeadDays,
+                settings.IsCritical(onHand, reorderLevel),
+                covered));
+        }
+
+        return Ok(suggestions
+            .OrderBy(x => x.CoveredByOpenOrders)
+            .ThenByDescending(x => x.IsCritical)
+            .ThenBy(x => x.ItemName)
+            .ToList());
+    }
+
+    public static decimal SuggestQuantity(decimal available, decimal reorderLevel, decimal? reorderQuantity)
+    {
+        if (reorderQuantity is { } lot && lot > 0)
+        {
+            // Whole lots, enough to clear the reorder level.
+            var lots = Math.Floor((reorderLevel - available) / lot) + 1;
+            return lots * lot;
+        }
+
+        return Math.Max(Math.Ceiling(reorderLevel * 2 - available), 1);
+    }
+
+    /// <summary>
+    /// Drafts purchase orders from chosen reorder suggestions: one Draft PO per supplier (the one
+    /// picked, else the part's preferred supplier), lines linked to the parts at their current cost.
+    /// Everything is checked before any order is created.
+    /// </summary>
+    [HttpPost("from-suggestions")]
+    public async Task<ActionResult<IReadOnlyCollection<PurchaseOrderListItemResponse>>> CreateFromSuggestions(
+        [FromBody] CreateOrdersFromSuggestionsRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
+        if (request.Items.Count == 0)
+            throw new BusinessRuleException("Choose at least one part to reorder.");
+        if (request.Items.Select(x => x.MaterialItemId).Distinct().Count() != request.Items.Count)
+            throw new BusinessRuleException("Each part can only appear once.");
+
+        var ids = request.Items.Select(x => x.MaterialItemId).ToList();
+        var parts = await dbContext.MaterialItems
+            .Where(x => x.TenantId == TenantId && x.IsActive && ids.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        var groups = new Dictionary<Guid, List<CreatePurchaseOrderLineRequest>>();
+        var unassigned = new List<string>();
+        foreach (var item in request.Items)
+        {
+            var part = parts.GetValueOrDefault(item.MaterialItemId)
+                ?? throw new BusinessRuleException("A chosen part does not exist or is inactive.");
+            if (item.Quantity <= 0)
+                throw new BusinessRuleException($"Enter a quantity for {part.ItemName}.");
+            if ((item.SupplierId ?? part.PreferredSupplierId) is not { } supplierId)
+            {
+                unassigned.Add(part.ItemName);
+                continue;
+            }
+            if (!groups.TryGetValue(supplierId, out var lines))
+                groups[supplierId] = lines = [];
+            lines.Add(new CreatePurchaseOrderLineRequest(null, item.Quantity, part.UnitCost ?? 0, part.Id));
+        }
+        if (unassigned.Count > 0)
+            throw new BusinessRuleException($"Choose a supplier for {string.Join(", ", unassigned)}.");
+
+        var supplierIds = groups.Keys.ToList();
+        var suppliers = await dbContext.Suppliers.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && supplierIds.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+        if (suppliers.Count != supplierIds.Count)
+            throw new BusinessRuleException("A chosen supplier was not found.");
+        if (suppliers.FirstOrDefault(x => !x.IsActive) is { } inactive)
+            throw new BusinessRuleException($"{inactive.SupplierName} is inactive. Pick another supplier for its parts.");
+
+        var created = new List<PurchaseOrderListItemResponse>();
+        foreach (var (supplierId, lines) in groups)
+        {
+            var order = await CreateOrderAsync(new CreatePurchaseOrderRequest(
+                supplierId, null, lines, string.IsNullOrWhiteSpace(request.Notes) ? "Reorder from low-stock alerts" : request.Notes.Trim()), cancellationToken);
+            created.Add(MapListItem(order));
+        }
+
+        return Ok(created);
+    }
+
+    private async Task<PurchaseOrder> CreateOrderAsync(CreatePurchaseOrderRequest request, CancellationToken cancellationToken)
+    {
         var supplier = await dbContext.Suppliers
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.SupplierId, cancellationToken)
             ?? throw new NotFoundException("Supplier not found.");
+        if (!supplier.IsActive)
+            throw new BusinessRuleException($"{supplier.SupplierName} is inactive. Reactivate the supplier before ordering from it.");
         if (request.Lines.Count == 0)
             throw new BusinessRuleException("A purchase order needs at least one line.");
 
@@ -76,21 +222,36 @@ public sealed class PurchaseOrdersController(
             TenantId = TenantId,
             PoNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.PurchaseOrder, cancellationToken),
             SupplierId = supplier.Id,
-            ExpectedAt = request.ExpectedAt is null ? null : DateTime.SpecifyKind(request.ExpectedAt.Value, DateTimeKind.Utc),
+            ExpectedAt = request.ExpectedAt is null
+                ? await DefaultExpectedAtAsync(supplier, cancellationToken)
+                : DateTime.SpecifyKind(request.ExpectedAt.Value, DateTimeKind.Utc),
             Notes = request.Notes?.Trim(),
             ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, null, cancellationToken),
             Currency = await CurrencyConverter.ResolveAsync(dbContext, TenantId, request.Currency, cancellationToken),
         };
+        var materialIds = request.Lines.Where(x => x.MaterialItemId.HasValue).Select(x => x.MaterialItemId!.Value).Distinct().ToList();
+        var materials = await dbContext.MaterialItems
+            .Where(x => x.TenantId == TenantId && x.IsActive && materialIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
         foreach (var line in request.Lines)
         {
-            if (string.IsNullOrWhiteSpace(line.ItemName))
+            MaterialItem? material = null;
+            if (line.MaterialItemId is { } materialId && !materials.TryGetValue(materialId, out material))
+                throw new BusinessRuleException("A line refers to a part that does not exist or is inactive.");
+            // A linked line may leave the name blank; it then takes the part's own name.
+            var itemName = string.IsNullOrWhiteSpace(line.ItemName) ? material?.ItemName : line.ItemName.Trim();
+            if (string.IsNullOrWhiteSpace(itemName))
                 throw new BusinessRuleException("Line item name is required.");
             if (line.QuantityOrdered <= 0)
                 throw new BusinessRuleException("Line quantity must be greater than zero.");
+            if (line.UnitCost < 0)
+                throw new BusinessRuleException("Line unit cost cannot be negative.");
             order.Lines.Add(new PurchaseOrderLine
             {
                 TenantId = TenantId,
-                ItemName = line.ItemName.Trim(),
+                MaterialItemId = material?.Id,
+                MaterialItem = material,
+                ItemName = itemName,
                 QuantityOrdered = line.QuantityOrdered,
                 UnitCost = line.UnitCost,
                 LineTotal = Math.Round(line.QuantityOrdered * line.UnitCost, 2),
@@ -110,7 +271,7 @@ public sealed class PurchaseOrdersController(
             order.TotalAmount, order.Currency, UserId, cancellationToken);
 
         order.Supplier = supplier;
-        return Ok(MapDetail(order));
+        return order;
     }
 
     [HttpPost("{id:guid}/status")]
@@ -143,55 +304,124 @@ public sealed class PurchaseOrdersController(
         return NoContent();
     }
 
+    /// <summary>
+    /// Receives a quantity against one line. A line linked to a part also books the stock into a branch
+    /// (the one chosen, else the user's default) and folds the line's cost into the part's average cost,
+    /// converted into the stock currency; the receipt, the stock movement and the PO status commit
+    /// together or not at all.
+    /// </summary>
     [HttpPost("{id:guid}/receive")]
     public async Task<IActionResult> ReceiveLine(
         Guid id, [FromBody] ReceivePurchaseOrderLineRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
-        var order = await LoadOrderAsync(id, cancellationToken);
-
-        if (order.Status is "Cancelled")
-            throw new BusinessRuleException("Cannot receive against a cancelled purchase order.");
-
-        var line = order.Lines.FirstOrDefault(x => x.Id == request.LineId)
-            ?? throw new NotFoundException("Purchase order line not found.");
         if (request.Quantity <= 0)
             throw new BusinessRuleException("Received quantity must be greater than zero.");
-        var outstanding = line.QuantityOrdered - line.QuantityReceived;
-        if (request.Quantity > outstanding)
-            throw new BusinessRuleException($"Only {outstanding:0.###} of {line.ItemName} remain outstanding.");
-
-        line.QuantityReceived += request.Quantity;
-        line.UpdatedAt = DateTime.UtcNow;
 
         var receiverName = await dbContext.Users
             .Where(x => x.Id == UserId)
             .Select(x => x.FullName)
             .FirstOrDefaultAsync(cancellationToken) ?? "Unknown";
+        var stockCurrency = await ProjectFinanceRules.StockCurrencyAsync(dbContext, TenantId, cancellationToken);
+        var converter = await CurrencyConverter.LoadAsync(dbContext, TenantId, stockCurrency, cancellationToken);
 
-        // Add via the DbSet (not the tracked parent's collection) so EF reliably marks this
-        // client-keyed entity as Added rather than Modified.
-        dbContext.PurchaseOrderReceiptEvents.Add(new PurchaseOrderReceiptEvent
+        PurchaseOrder order = null!;
+        PurchaseOrderLine line = null!;
+        // The order is read inside the stock transaction so two receipts against the same line
+        // serialise: the second sees the first's QuantityReceived and cannot over-receive.
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            TenantId = TenantId,
-            PurchaseOrderId = order.Id,
-            PurchaseOrderLineId = line.Id,
-            ItemName = line.ItemName,
-            Quantity = request.Quantity,
-            ReceivedByUserId = UserId,
-            ReceivedByName = receiverName,
-        });
+            order = await LoadOrderAsync(id, ct);
+            if (order.Status is "Cancelled")
+                throw new BusinessRuleException("Cannot receive against a cancelled purchase order.");
+            // Receiving books stock and cost, so it must not run ahead of an approval chain.
+            var pendingApproval = await approvalWorkflowService.GetActiveForDocumentAsync(
+                TenantId, ApprovalDocumentTypes.PurchaseOrder, order.Id, ct);
+            if (pendingApproval is not null)
+                throw new BusinessRuleException("This purchase order is awaiting approval and cannot be received yet.");
 
-        order.Status = order.Lines.All(x => x.QuantityReceived >= x.QuantityOrdered)
-            ? "Received"
-            : "PartiallyReceived";
-        order.UpdatedAt = DateTime.UtcNow;
+            line = order.Lines.FirstOrDefault(x => x.Id == request.LineId)
+                ?? throw new NotFoundException("Purchase order line not found.");
+            var outstanding = line.QuantityOrdered - line.QuantityReceived;
+            if (request.Quantity > outstanding)
+                throw new BusinessRuleException($"Only {outstanding:0.###} of {line.ItemName} remain outstanding.");
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+            Guid? branchId = null;
+            if (line.MaterialItemId is { } materialId)
+            {
+                var material = await dbContext.MaterialItems
+                    .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == materialId, ct)
+                    ?? throw new BusinessRuleException($"The part linked to {line.ItemName} no longer exists.");
+                branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, ct);
+                var movement = await ReceiveIntoStockAsync(material, branchId, request.Quantity,
+                    converter.Convert(line.UnitCost, order.Currency, DateTime.UtcNow), order.PoNumber, ct);
+                movement.BatchOrSerial = Blank(request.BatchOrSerial);
+            }
+
+            line.QuantityReceived += request.Quantity;
+            line.UpdatedAt = DateTime.UtcNow;
+
+            // Add via the DbSet (not the tracked parent's collection) so EF reliably marks this
+            // client-keyed entity as Added rather than Modified.
+            dbContext.PurchaseOrderReceiptEvents.Add(new PurchaseOrderReceiptEvent
+            {
+                TenantId = TenantId,
+                PurchaseOrderId = order.Id,
+                PurchaseOrderLineId = line.Id,
+                ItemName = line.ItemName,
+                Quantity = request.Quantity,
+                BranchId = branchId,
+                ReceivedByUserId = UserId,
+                ReceivedByName = receiverName,
+            });
+
+            order.Status = order.Lines.All(x => x.QuantityReceived >= x.QuantityOrdered)
+                ? "Received"
+                : "PartiallyReceived";
+            order.UpdatedAt = DateTime.UtcNow;
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
+
         await auditLogService.LogAsync(TenantId, UserId, "inventory.po.received", nameof(PurchaseOrder), order.Id.ToString(), $"Received {request.Quantity:0.###} × {line.ItemName} on {order.PoNumber}", cancellationToken);
 
         return NoContent();
     }
+
+    /// <summary>
+    /// Books a receipt into stock and moves the part's cost (tenant-wide and at the branch) to the
+    /// weighted average of what was on hand and what arrived. With no exchange rate into the stock
+    /// currency the cost is left alone rather than mixing currencies.
+    /// </summary>
+    private async Task<StockMovement> ReceiveIntoStockAsync(
+        MaterialItem material, Guid? branchId, decimal quantity, decimal? unitCost, string poNumber, CancellationToken cancellationToken)
+    {
+        var tenantOnHand = material.QuantityOnHand;
+        var branchStock = branchId is null
+            ? null
+            : await dbContext.BranchMaterialStocks.SingleOrDefaultAsync(
+                x => x.TenantId == TenantId && x.BranchId == branchId && x.MaterialId == material.Id, cancellationToken);
+        var branchOnHand = branchStock?.QuantityOnHand ?? 0;
+        var branchCost = branchStock?.UnitCost;
+
+        var movement = await stockLedgerService.RecordReceiptAsync(material, branchId, quantity, UserId, $"Received on {poNumber}", poNumber, cancellationToken: cancellationToken);
+        if (unitCost is not { } cost)
+            return movement;
+
+        material.UnitCost = WeightedCost(tenantOnHand, material.UnitCost, quantity, cost);
+        if (branchId is not null)
+        {
+            // The ledger created the row if this branch held none of the part before.
+            branchStock ??= dbContext.BranchMaterialStocks.Local.Single(x => x.BranchId == branchId && x.MaterialId == material.Id);
+            branchStock.UnitCost = WeightedCost(branchOnHand, branchCost, quantity, cost);
+        }
+
+        return movement;
+    }
+
+    public static decimal WeightedCost(decimal onHand, decimal? currentCost, decimal received, decimal receivedCost) =>
+        currentCost is { } current && onHand > 0
+            ? Math.Round((onHand * current + received * receivedCost) / (onHand + received), 2)
+            : receivedCost;
 
     // ── Suppliers ────────────────────────────────────────────────────────────
 
@@ -254,6 +484,12 @@ public sealed class PurchaseOrdersController(
             .OrderBy(x => x.ItemName)
             .ToList();
 
+        var preferredParts = await dbContext.MaterialItems.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.IsActive && x.PreferredSupplierId == id)
+            .OrderBy(x => x.ItemName)
+            .Select(x => new SupplierPreferredPartResponse(x.Id, x.ItemCode, x.ItemName, x.QuantityOnHand, x.ReorderLevel))
+            .ToListAsync(cancellationToken);
+
         return Ok(new SupplierDetailResponse(
             supplier.Id,
             supplier.SupplierName,
@@ -266,7 +502,9 @@ public sealed class PurchaseOrdersController(
             supplier.Address,
             supplier.Notes,
             suppliedParts,
-            orders.Take(10).Select(MapListItem).ToList()));
+            orders.Take(10).Select(MapListItem).ToList(),
+            supplier.LeadTimeDays,
+            preferredParts));
     }
 
     [HttpPost("/api/suppliers")]
@@ -275,19 +513,8 @@ public sealed class PurchaseOrdersController(
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
 
-        if (string.IsNullOrWhiteSpace(request.SupplierName))
-            throw new BusinessRuleException("Supplier name is required.");
-
-        var supplier = new Supplier
-        {
-            TenantId = TenantId,
-            SupplierName = request.SupplierName.Trim(),
-            ContactPerson = request.ContactPerson?.Trim(),
-            Phone = request.Phone?.Trim(),
-            Email = request.Email?.Trim(),
-            Address = request.Address?.Trim(),
-            Notes = request.Notes?.Trim(),
-        };
+        var supplier = new Supplier { TenantId = TenantId };
+        await ApplySupplierAsync(supplier, request, cancellationToken);
         dbContext.Suppliers.Add(supplier);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "inventory.supplier.created", nameof(Supplier), supplier.Id.ToString(), $"Supplier {supplier.SupplierName} created", cancellationToken);
@@ -295,13 +522,84 @@ public sealed class PurchaseOrdersController(
         return Ok(MapSupplierListItem(supplier, 0, 100));
     }
 
+    [HttpPut("/api/suppliers/{id:guid}")]
+    public async Task<ActionResult<SupplierListItemResponse>> UpdateSupplier(
+        Guid id, [FromBody] CreateSupplierRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
+        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Supplier not found.");
+
+        await ApplySupplierAsync(supplier, request, cancellationToken);
+        supplier.UpdatedAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "inventory.supplier.updated", nameof(Supplier), supplier.Id.ToString(), $"Supplier {supplier.SupplierName} updated", cancellationToken);
+
+        return Ok(MapSupplierListItem(supplier, 0, 100));
+    }
+
+    /// <summary>
+    /// Deactivating keeps the supplier's history and bills but stops new purchase orders to it; parts
+    /// that preferred it keep the link so reactivating restores reorder suggestions.
+    /// </summary>
+    [HttpPost("/api/suppliers/{id:guid}/status")]
+    public async Task<IActionResult> SetSupplierStatus(Guid id, [FromBody] SupplierStatusRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
+        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Supplier not found.");
+
+        if (supplier.IsActive == request.IsActive)
+            return NoContent();
+        supplier.IsActive = request.IsActive;
+        supplier.UpdatedAt = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, request.IsActive ? "inventory.supplier.activated" : "inventory.supplier.deactivated",
+            nameof(Supplier), supplier.Id.ToString(), $"Supplier {supplier.SupplierName} {(request.IsActive ? "reactivated" : "deactivated")}", cancellationToken);
+
+        return NoContent();
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    private async Task ApplySupplierAsync(Supplier supplier, CreateSupplierRequest request, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.SupplierName))
+            throw new BusinessRuleException("Supplier name is required.");
+        if (request.LeadTimeDays is < 0 or > 365)
+            throw new BusinessRuleException("Lead time must be between 0 and 365 days.");
+
+        var name = request.SupplierName.Trim();
+        var normalized = name.ToLower();
+        if (await dbContext.Suppliers.AnyAsync(x => x.TenantId == TenantId && x.Id != supplier.Id && x.SupplierName.ToLower() == normalized, cancellationToken))
+            throw new BusinessRuleException($"A supplier named {name} already exists.");
+
+        supplier.SupplierName = name;
+        supplier.ContactPerson = Blank(request.ContactPerson);
+        supplier.Phone = Blank(request.Phone);
+        supplier.Email = Blank(request.Email);
+        supplier.Address = Blank(request.Address);
+        supplier.Notes = Blank(request.Notes);
+        supplier.LeadTimeDays = request.LeadTimeDays;
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>With no expected date given, delivery is expected after the supplier's lead time, else the reorder lead time (Settings → Inventory).</summary>
+    private async Task<DateTime?> DefaultExpectedAtAsync(Supplier supplier, CancellationToken cancellationToken)
+    {
+        var leadDays = supplier.LeadTimeDays
+            ?? (await InventoryModuleSettings.LoadAsync(dbContext, TenantId, cancellationToken)).DefaultReorderLeadDays;
+        return leadDays > 0 ? DateTime.UtcNow.Date.AddDays(leadDays) : null;
+    }
 
     private async Task<PurchaseOrder> LoadOrderAsync(Guid id, CancellationToken cancellationToken) =>
         await dbContext.PurchaseOrders
             .Include(x => x.Supplier)
             .Include(x => x.Lines)
+                .ThenInclude(x => x.MaterialItem)
             .Include(x => x.ReceiptEvents)
+                .ThenInclude(x => x.Branch)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
         ?? throw new NotFoundException("Purchase order not found.");
 
@@ -351,11 +649,11 @@ public sealed class PurchaseOrdersController(
         order.Notes,
         order.Lines
             .OrderBy(x => x.CreatedAt)
-            .Select(x => new PurchaseOrderLineResponse(x.Id, x.ItemName, x.QuantityOrdered, x.QuantityReceived, x.UnitCost, x.LineTotal))
+            .Select(x => new PurchaseOrderLineResponse(x.Id, x.ItemName, x.QuantityOrdered, x.QuantityReceived, x.UnitCost, x.LineTotal, x.MaterialItemId, x.MaterialItem?.ItemCode))
             .ToList(),
         order.ReceiptEvents
             .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new PurchaseOrderReceiptEventResponse(x.CreatedAt, x.ReceivedByName, x.ItemName, x.Quantity))
+            .Select(x => new PurchaseOrderReceiptEventResponse(x.CreatedAt, x.ReceivedByName, x.ItemName, x.Quantity, x.Branch?.Name))
             .ToList());
 
     private static SupplierListItemResponse MapSupplierListItem(Supplier supplier, int openOrders, double onTimePercent) => new(
@@ -366,7 +664,8 @@ public sealed class PurchaseOrdersController(
         supplier.Email,
         onTimePercent,
         openOrders,
-        supplier.IsActive ? "Active" : "Inactive");
+        supplier.IsActive ? "Active" : "Inactive",
+        supplier.LeadTimeDays);
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -376,9 +675,10 @@ public sealed record PurchaseOrderListItemResponse(
     DateTime OrderedAt, DateTime? ExpectedAt, decimal TotalAmount, string Currency);
 
 public sealed record PurchaseOrderLineResponse(
-    Guid Id, string ItemName, decimal QuantityOrdered, decimal QuantityReceived, decimal UnitCost, decimal LineTotal);
+    Guid Id, string ItemName, decimal QuantityOrdered, decimal QuantityReceived, decimal UnitCost, decimal LineTotal,
+    Guid? MaterialItemId = null, string? ItemCode = null);
 
-public sealed record PurchaseOrderReceiptEventResponse(DateTime ReceivedAt, string ReceivedBy, string ItemName, decimal Quantity);
+public sealed record PurchaseOrderReceiptEventResponse(DateTime ReceivedAt, string ReceivedBy, string ItemName, decimal Quantity, string? BranchName = null);
 
 public sealed record PurchaseOrderDetailResponse(
     Guid Id, string PoNumber, string SupplierName, string Status,
@@ -387,18 +687,33 @@ public sealed record PurchaseOrderDetailResponse(
     IReadOnlyList<PurchaseOrderLineResponse> Lines,
     IReadOnlyList<PurchaseOrderReceiptEventResponse> ReceivingHistory);
 
-public sealed record CreatePurchaseOrderLineRequest(string ItemName, decimal QuantityOrdered, decimal UnitCost);
+/// <param name="MaterialItemId">The stocked part this line buys; receiving it then adds stock. Omit for non-stock lines.</param>
+public sealed record CreatePurchaseOrderLineRequest(string? ItemName, decimal QuantityOrdered, decimal UnitCost, Guid? MaterialItemId = null);
 
 public sealed record CreatePurchaseOrderRequest(
     Guid SupplierId, DateTime? ExpectedAt, IReadOnlyList<CreatePurchaseOrderLineRequest> Lines, string? Notes = null, Guid? ProjectId = null, string? Currency = null);
 
 public sealed record PurchaseOrderStatusRequest(string Status);
 
-public sealed record ReceivePurchaseOrderLineRequest(Guid LineId, decimal Quantity);
+/// <param name="OnOrder">Outstanding on open purchase orders for this part, across all branches.</param>
+/// <param name="CoveredByOpenOrders">Stock plus what is on order already clears the reorder level, so nothing is suggested.</param>
+public sealed record ReorderSuggestionResponse(
+    Guid MaterialItemId, string ItemCode, string ItemName, string UnitOfMeasure,
+    decimal QuantityOnHand, decimal ReorderLevel, decimal OnOrder, decimal SuggestedQuantity, decimal? UnitCost,
+    Guid? PreferredSupplierId, string? PreferredSupplierName, bool PreferredSupplierActive, int LeadTimeDays,
+    bool IsCritical, bool CoveredByOpenOrders);
+
+public sealed record ReorderItemRequest(Guid MaterialItemId, decimal Quantity, Guid? SupplierId = null);
+
+public sealed record CreateOrdersFromSuggestionsRequest(IReadOnlyList<ReorderItemRequest> Items, string? Notes = null);
+
+/// <param name="BranchId">Where a part-linked line's stock lands; the user's default branch when omitted.</param>
+/// <param name="BatchOrSerial">Batch, lot or serial number(s) of the delivered units, kept on the stock movement.</param>
+public sealed record ReceivePurchaseOrderLineRequest(Guid LineId, decimal Quantity, Guid? BranchId = null, string? BatchOrSerial = null);
 
 public sealed record SupplierListItemResponse(
     Guid Id, string SupplierName, string? ContactPerson, string? Phone, string? Email,
-    double OnTimeDeliveryPercent, int OpenPurchaseOrders, string Status);
+    double OnTimeDeliveryPercent, int OpenPurchaseOrders, string Status, int? LeadTimeDays = null);
 
 public sealed record SupplierPartResponse(string ItemName, decimal LastUnitCost, DateTime LastSuppliedAt);
 
@@ -407,8 +722,14 @@ public sealed record SupplierDetailResponse(
     double OnTimeDeliveryPercent, int OpenPurchaseOrders, string Status,
     string? Address, string? Notes,
     IReadOnlyList<SupplierPartResponse> SuppliedParts,
-    IReadOnlyList<PurchaseOrderListItemResponse> RecentPurchaseOrders);
+    IReadOnlyList<PurchaseOrderListItemResponse> RecentPurchaseOrders,
+    int? LeadTimeDays = null,
+    IReadOnlyList<SupplierPreferredPartResponse>? PreferredParts = null);
+
+public sealed record SupplierPreferredPartResponse(Guid Id, string ItemCode, string ItemName, decimal QuantityOnHand, decimal ReorderLevel);
+
+public sealed record SupplierStatusRequest(bool IsActive);
 
 public sealed record CreateSupplierRequest(
     string SupplierName, string? ContactPerson = null, string? Phone = null,
-    string? Email = null, string? Address = null, string? Notes = null);
+    string? Email = null, string? Address = null, string? Notes = null, int? LeadTimeDays = null);

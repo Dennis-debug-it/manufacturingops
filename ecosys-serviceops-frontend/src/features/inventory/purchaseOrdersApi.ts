@@ -34,13 +34,16 @@ export interface PurchaseOrderLine {
   quantityReceived: number
   unitCost: number
   lineTotal: number
+  /** The stocked part this line buys; receiving it adds stock. Null for non-stock lines. */
+  materialItemId: string | null
+  itemCode: string | null
 }
 
 export interface PurchaseOrderDetail extends PurchaseOrderListItem {
   supplierId: string
   notes: string | null
   lines: PurchaseOrderLine[]
-  receivingHistory: Array<{ receivedAt: string; receivedBy: string; itemName: string; quantity: number }>
+  receivingHistory: Array<{ receivedAt: string; receivedBy: string; itemName: string; quantity: number; branchName: string | null }>
 }
 
 export function usePurchaseOrder(id: string | undefined) {
@@ -55,7 +58,7 @@ export function usePurchaseOrder(id: string | undefined) {
 export interface CreatePurchaseOrderPayload {
   supplierId: string
   expectedAt?: string | undefined
-  lines: Array<{ itemName: string; quantityOrdered: number; unitCost: number }>
+  lines: Array<{ itemName: string; quantityOrdered: number; unitCost: number; materialItemId?: string | null }>
   notes?: string | undefined
   projectId?: string | null
   /** Three-letter code; the workspace currency when omitted. */
@@ -83,9 +86,13 @@ export function useSetPurchaseOrderStatus(poId: string) {
 export function useReceivePurchaseOrderLine(poId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { lineId: string; quantity: number }) =>
+    mutationFn: (payload: { lineId: string; quantity: number; branchId?: string | null; batchOrSerial?: string | null }) =>
       api.post<void>(`/api/purchase-orders/${poId}/receive`, payload),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] })
+      // A part-linked receipt changes stock levels and costs.
+      void queryClient.invalidateQueries({ queryKey: ['materials'] })
+    },
   })
 }
 
@@ -98,6 +105,7 @@ export interface SupplierListItem {
   onTimeDeliveryPercent: number
   openPurchaseOrders: number
   status: 'Active' | 'Inactive'
+  leadTimeDays: number | null
 }
 
 export function useSuppliers() {
@@ -113,6 +121,7 @@ export interface SupplierDetail extends SupplierListItem {
   notes: string | null
   suppliedParts: Array<{ itemName: string; lastUnitCost: number; lastSuppliedAt: string }>
   recentPurchaseOrders: PurchaseOrderListItem[]
+  preferredParts: Array<{ id: string; itemCode: string; itemName: string; quantityOnHand: number; reorderLevel: number }> | null
 }
 
 export function useSupplier(id: string | undefined) {
@@ -130,6 +139,8 @@ export interface CreateSupplierPayload {
   phone?: string | undefined
   email?: string | undefined
   address?: string | undefined
+  notes?: string | undefined
+  leadTimeDays?: number | null
 }
 
 export function useCreateSupplier() {
@@ -137,5 +148,61 @@ export function useCreateSupplier() {
   return useMutation({
     mutationFn: (payload: CreateSupplierPayload) => api.post<SupplierListItem>('/api/suppliers', payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
+  })
+}
+
+export function useUpdateSupplier(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreateSupplierPayload) => api.put<SupplierListItem>(`/api/suppliers/${id}`, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
+  })
+}
+
+export function useSetSupplierStatus(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (isActive: boolean) => api.post<void>(`/api/suppliers/${id}/status`, { isActive }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'suppliers'] }),
+  })
+}
+
+export interface ReorderSuggestion {
+  materialItemId: string
+  itemCode: string
+  itemName: string
+  unitOfMeasure: string
+  quantityOnHand: number
+  reorderLevel: number
+  /** Outstanding on open purchase orders, across all branches. */
+  onOrder: number
+  suggestedQuantity: number
+  unitCost: number | null
+  preferredSupplierId: string | null
+  preferredSupplierName: string | null
+  preferredSupplierActive: boolean
+  leadTimeDays: number
+  isCritical: boolean
+  /** Stock plus what is on order already clears the reorder level. */
+  coveredByOpenOrders: boolean
+}
+
+export function useReorderSuggestions(branchId?: string) {
+  return useQuery({
+    queryKey: ['inventory', 'reorder-suggestions', branchId ?? ''],
+    queryFn: () => api.get<ReorderSuggestion[]>('/api/purchase-orders/reorder-suggestions', { branchId: branchId || undefined }),
+    staleTime: 30_000,
+  })
+}
+
+export function useCreateOrdersFromSuggestions() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { items: Array<{ materialItemId: string; quantity: number; supplierId?: string | null }>; notes?: string | null }) =>
+      api.post<PurchaseOrderListItem[]>('/api/purchase-orders/from-suggestions', payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] })
+      void queryClient.invalidateQueries({ queryKey: ['inventory', 'reorder-suggestions'] })
+    },
   })
 }

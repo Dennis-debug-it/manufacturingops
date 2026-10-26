@@ -13,6 +13,7 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import { getActiveCurrency } from '../../shared/utils/currency'
 import { formatDate } from '../../shared/utils/dates'
+import { useBranches } from './api'
 import { InventoryTabNav } from './components/InventoryTabNav'
 import { MaterialAutocomplete } from './components/MaterialAutocomplete'
 import { purchaseOrderChoice, purchaseOrderFiltersFor, purchaseOrderListFilterSpec, purchaseOrderStatuses, type PurchaseOrderChoice } from './listFilters'
@@ -23,6 +24,7 @@ import {
   useReceivePurchaseOrderLine,
   useSetPurchaseOrderStatus,
   useSuppliers,
+  type PurchaseOrderLine,
   type PurchaseOrderListItem,
 } from './purchaseOrdersApi'
 
@@ -31,11 +33,14 @@ const choiceLabels: Partial<Record<PurchaseOrderChoice, string>> = { open: 'Open
 
 interface DraftLine {
   itemName: string
+  /** Set when a catalogue part is picked; typing over the name unlinks it. */
+  materialItemId: string | null
+  itemCode: string | null
   quantityOrdered: string
   unitCost: string
 }
 
-const emptyLine: DraftLine = { itemName: '', quantityOrdered: '1', unitCost: '0' }
+const emptyLine: DraftLine = { itemName: '', materialItemId: null, itemCode: null, quantityOrdered: '1', unitCost: '0' }
 
 export function PurchaseOrdersPage() {
   const canEdit = usePermission('inventory.edit')
@@ -67,7 +72,7 @@ export function PurchaseOrdersPage() {
 
   const validLines = lines
     .filter((l) => l.itemName.trim() && Number(l.quantityOrdered) > 0)
-    .map((l) => ({ itemName: l.itemName.trim(), quantityOrdered: Number(l.quantityOrdered), unitCost: Number(l.unitCost) || 0 }))
+    .map((l) => ({ itemName: l.itemName.trim(), materialItemId: l.materialItemId, quantityOrdered: Number(l.quantityOrdered), unitCost: Number(l.unitCost) || 0 }))
 
   const submit = async () => {
     if (!supplierId) return toast.error('Select a supplier')
@@ -129,7 +134,7 @@ export function PurchaseOrdersPage() {
             <label className="mb-1.5 block text-sm font-medium text-slate-700">Supplier</label>
             <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
               <option value="">Select a supplier…</option>
-              {(suppliers ?? []).map((s) => <option key={s.id} value={s.id}>{s.supplierName}</option>)}
+              {(suppliers ?? []).filter((s) => s.status === 'Active').map((s) => <option key={s.id} value={s.id}>{s.supplierName}</option>)}
             </select>
             {suppliers && suppliers.length === 0 ? <p className="mt-1 text-xs text-amber-600">No suppliers yet — add one on the Suppliers page first.</p> : null}
           </div>
@@ -155,7 +160,7 @@ export function PurchaseOrdersPage() {
                   <div key={index} className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
                     <MaterialAutocomplete
                       value={line.itemName}
-                      onChange={(next) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, itemName: next } : l)))}
+                      onChange={(next) => setLines((prev) => prev.map((l, i) => (i === index ? { ...l, itemName: next, materialItemId: null, itemCode: null } : l)))}
                       onSelectMaterial={(material) =>
                         setLines((prev) =>
                           prev.map((l, i) =>
@@ -163,6 +168,8 @@ export function PurchaseOrdersPage() {
                               ? {
                                   ...l,
                                   itemName: material.itemName,
+                                  materialItemId: material.id,
+                                  itemCode: material.itemCode,
                                   // Auto-fill the unit cost when it hasn't been set yet.
                                   unitCost: !l.unitCost || Number(l.unitCost) === 0 ? String(material.unitCost ?? l.unitCost) : l.unitCost,
                                 }
@@ -173,6 +180,11 @@ export function PurchaseOrdersPage() {
                       aria-label="Item description"
                       placeholder="Search or type an item description…"
                     />
+                    {line.itemName.trim() ? (
+                      <p className={`mt-1 text-xs ${line.materialItemId ? 'text-emerald-700' : 'text-slate-500'}`}>
+                        {line.materialItemId ? `Stocked part ${line.itemCode ?? ''} — receiving adds it to stock.` : 'Not a stocked part — receiving records the delivery only. Pick a part from the list to stock it.'}
+                      </p>
+                    ) : null}
                     <div className="mt-2 flex items-end gap-3">
                       <label className="flex flex-col gap-1">
                         <span className="text-xs font-medium text-slate-500">Qty</span>
@@ -218,13 +230,8 @@ export function PurchaseOrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const canEdit = usePermission('inventory.edit')
   const { data, isLoading, isError, refetch } = usePurchaseOrder(id)
-  const receiveLine = useReceivePurchaseOrderLine(id ?? '')
   const setStatus = useSetPurchaseOrderStatus(id ?? '')
-
-  const receive = async (lineId: string, quantity: number) => {
-    await receiveLine.mutateAsync({ lineId, quantity })
-    toast.success('Receipt recorded')
-  }
+  const [receiving, setReceiving] = useState<PurchaseOrderLine | null>(null)
 
   const changeStatus = async (status: 'Sent' | 'Cancelled') => {
     await setStatus.mutateAsync(status)
@@ -278,7 +285,12 @@ export function PurchaseOrderDetailPage() {
               <tbody className="divide-y divide-slate-100">
                 {data.lines.map((line) => (
                   <tr key={line.id}>
-                    <td className="px-4 py-3 text-slate-700">{line.itemName}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      {line.materialItemId ? (
+                        <Link className="underline decoration-slate-300 underline-offset-4" to={`/inventory/parts/${line.materialItemId}`}>{line.itemName}</Link>
+                      ) : line.itemName}
+                      <span className="mt-0.5 block text-xs text-slate-500">{line.materialItemId ? <span className="font-mono">{line.itemCode}</span> : 'Non-stock'}</span>
+                    </td>
                     <td className="px-4 py-3 text-slate-700">{line.quantityOrdered}</td>
                     <td className="px-4 py-3 text-slate-700">{line.quantityReceived}</td>
                     <td className="px-4 py-3 text-slate-700">{line.unitCost.toLocaleString()}</td>
@@ -287,11 +299,11 @@ export function PurchaseOrderDetailPage() {
                       {canEdit && data.status !== 'Cancelled' ? (
                         <button
                           type="button"
-                          disabled={receiveLine.isPending || line.quantityReceived >= line.quantityOrdered}
-                          onClick={() => void receive(line.id, line.quantityOrdered - line.quantityReceived)}
+                          disabled={line.quantityReceived >= line.quantityOrdered}
+                          onClick={() => setReceiving(line)}
                           className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                         >
-                          Receive Remaining
+                          Receive
                         </button>
                       ) : null}
                     </td>
@@ -308,7 +320,7 @@ export function PurchaseOrderDetailPage() {
               <ul className="mt-4 space-y-3">
                 {data.receivingHistory.map((entry, index) => (
                   <li key={index} className="flex items-center justify-between border-b border-slate-100 pb-3 text-sm last:border-0 last:pb-0">
-                    <span className="text-slate-700">{entry.itemName} × {entry.quantity} — <span className="text-slate-500">{entry.receivedBy}</span></span>
+                    <span className="text-slate-700">{entry.itemName} × {entry.quantity}{entry.branchName ? ` into ${entry.branchName}` : ''} — <span className="text-slate-500">{entry.receivedBy}</span></span>
                     <span className="text-slate-500">{formatDate(entry.receivedAt)}</span>
                   </li>
                 ))}
@@ -317,6 +329,76 @@ export function PurchaseOrderDetailPage() {
           </div>
         </>
       )}
+      {receiving && id ? <ReceiveLineDrawer poId={id} line={receiving} onClose={() => setReceiving(null)} /> : null}
     </div>
+  )
+}
+
+/** Receive part or all of a line's outstanding quantity; a part-linked line also picks the branch it lands in. */
+function ReceiveLineDrawer({ poId, line, onClose }: { poId: string; line: PurchaseOrderLine; onClose: () => void }) {
+  const outstanding = line.quantityOrdered - line.quantityReceived
+  const [quantity, setQuantity] = useState(String(outstanding))
+  const [branchId, setBranchId] = useState('')
+  const [batchOrSerial, setBatchOrSerial] = useState('')
+  const receiveLine = useReceivePurchaseOrderLine(poId)
+  const stocked = Boolean(line.materialItemId)
+  const { data: branches } = useBranches({ enabled: stocked })
+  const activeBranches = (branches ?? []).filter((branch) => branch.isActive)
+
+  const submit = async () => {
+    const qty = Number(quantity)
+    if (!Number.isFinite(qty) || qty <= 0) return toast.error('Enter a quantity greater than zero')
+    if (qty > outstanding) return toast.error(`Only ${outstanding} remain outstanding`)
+    try {
+      await receiveLine.mutateAsync({ lineId: line.id, quantity: qty, branchId: branchId || null, batchOrSerial: batchOrSerial.trim() || null })
+      toast.success(stocked ? 'Receipt recorded and stock updated' : 'Receipt recorded')
+      onClose()
+    } catch {
+      // interceptor surfaces the error toast
+    }
+  }
+
+  return (
+    <FormDrawer
+      open
+      title={`Receive ${line.itemName}`}
+      onClose={onClose}
+      footer={
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
+          <button type="button" onClick={() => void submit()} disabled={receiveLine.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
+            {receiveLine.isPending ? 'Saving…' : 'Receive'}
+          </button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="po-receive-qty">Quantity received</label>
+          <input id="po-receive-qty" type="number" min="0" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+          <p className="mt-2 text-xs text-slate-500">{line.quantityReceived} of {line.quantityOrdered} received so far · {outstanding} outstanding</p>
+        </div>
+        {stocked && activeBranches.length > 0 ? (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="po-receive-branch">Receive into</label>
+            <select id="po-receive-branch" value={branchId} onChange={(event) => setBranchId(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
+              <option value="">My default branch</option>
+              {activeBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
+            </select>
+          </div>
+        ) : null}
+        {stocked ? (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="po-receive-batch">Batch / serial numbers (optional)</label>
+            <input id="po-receive-batch" value={batchOrSerial} onChange={(event) => setBatchOrSerial(event.target.value)} placeholder="e.g. LOT-2291 or SN1001, SN1002" className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+          </div>
+        ) : null}
+        <p className="text-xs text-slate-500">
+          {stocked
+            ? 'Stock goes up by this quantity and the part’s cost moves to the average of what was on hand and this delivery.'
+            : 'This line is not linked to a stocked part, so only the delivery is recorded.'}
+        </p>
+      </div>
+    </FormDrawer>
   )
 }

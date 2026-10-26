@@ -1,13 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
-import type { Branch, Material, MaterialIssue, MaterialRequest, StockMovement, StockTransfer } from './types'
+import type { PagedResult } from '../../shared/types/pagination'
+import type { Branch, BranchStockSummary, Material, MaterialStockLocations, MaterialIssue, MaterialRequest, StockLedgerEntry, StockMovement, StockTransfer } from './types'
 
 export interface MaterialFilters {
-  lowStockOnly?: boolean
-  branchId?: string
-  search?: string
-  status?: 'active' | 'inactive' | 'all'
+  lowStockOnly?: boolean | undefined
+  branchId?: string | undefined
+  search?: string | undefined
+  status?: 'active' | 'inactive' | 'all' | undefined
 }
 
 export function useMaterials(filters?: MaterialFilters) {
@@ -34,6 +35,30 @@ export function useLowStockMaterials(branchId?: string) {
   })
 }
 
+export function useMaterialStockLocations(id: string | undefined) {
+  return useQuery({
+    queryKey: ['materials', id, 'stock-locations'],
+    queryFn: () => api.get<MaterialStockLocations>(endpoints.materials.stock(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+/** Categories and units already in use, offered as suggestions so the catalogue stays consistent. */
+export function useCatalogueSuggestions() {
+  const { data } = useMaterials({ status: 'all' })
+  const categories = [...new Set((data ?? []).map((item) => item.category?.trim()).filter((value): value is string => Boolean(value)))].sort()
+  const units = [...new Set((data ?? []).map((item) => item.unitOfMeasure.trim()).filter(Boolean))].sort()
+  return { categories, units }
+}
+
+export function useBranchStockSummary() {
+  return useQuery({
+    queryKey: ['materials', 'branch-summary'],
+    queryFn: () => api.get<BranchStockSummary[]>(endpoints.materials.branchSummary),
+    staleTime: 30_000,
+  })
+}
+
 export function useMaterialMovements(id: string | undefined, branchId?: string) {
   return useQuery({
     queryKey: ['materials', id, 'movements', branchId ?? ''],
@@ -51,6 +76,9 @@ export interface UpsertMaterialPayload {
   reorderLevel: number
   unitCost?: number | null
   branchId?: string | null
+  barcode?: string | null
+  preferredSupplierId?: string | null
+  reorderQuantity?: number | null
 }
 
 export function useCreateMaterial() {
@@ -83,11 +111,12 @@ export function useDeleteMaterial() {
 export function useReplenishMaterial(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { branchId?: string | null; quantity: number; unitCost?: number | null; reason?: string | null; referenceNumber?: string | null }) =>
+    mutationFn: (payload: { branchId?: string | null; quantity: number; unitCost?: number | null; reason?: string | null; referenceNumber?: string | null; batchOrSerial?: string | null }) =>
       api.post<Material>(endpoints.materials.replenish(id), payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['materials'] })
       void queryClient.invalidateQueries({ queryKey: ['materials', id, 'movements'] })
+      void queryClient.invalidateQueries({ queryKey: ['stock-ledger'] })
     },
   })
 }
@@ -95,11 +124,12 @@ export function useReplenishMaterial(id: string) {
 export function useAdjustMaterial(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { branchId?: string | null; quantityChange: number; reason?: string | null }) =>
+    mutationFn: (payload: { branchId?: string | null; quantityChange: number; reason: string; batchOrSerial?: string | null }) =>
       api.post<Material>(endpoints.materials.adjust(id), payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['materials'] })
       void queryClient.invalidateQueries({ queryKey: ['materials', id, 'movements'] })
+      void queryClient.invalidateQueries({ queryKey: ['stock-ledger'] })
     },
   })
 }
@@ -165,6 +195,39 @@ export const useIssueMaterialIssue = (id: string) => useMaterialIssueAction(endp
 export const useReturnMaterialIssue = (id: string) => useMaterialIssueAction(endpoints.materialIssues.return(id))
 export const useCancelMaterialIssue = (id: string) => useMaterialIssueAction(endpoints.materialIssues.cancel(id))
 
+// Stock ledger (every movement, tenant-wide)
+export interface StockLedgerFilters {
+  materialId?: string | undefined
+  branchId?: string | undefined
+  vanId?: string | undefined
+  type?: string | undefined
+  from?: string | undefined
+  to?: string | undefined
+  search?: string | undefined
+  page: number
+  pageSize: number
+}
+
+export function useStockLedger(filters: StockLedgerFilters) {
+  return useQuery({
+    queryKey: ['stock-ledger', filters],
+    queryFn: () =>
+      api.get<PagedResult<StockLedgerEntry>>(endpoints.stockMovements.list, {
+        materialId: filters.materialId || undefined,
+        branchId: filters.branchId || undefined,
+        vanId: filters.vanId || undefined,
+        type: filters.type || undefined,
+        from: filters.from || undefined,
+        to: filters.to || undefined,
+        search: filters.search || undefined,
+        page: filters.page,
+        pageSize: filters.pageSize,
+      }),
+    staleTime: 15_000,
+    placeholderData: keepPreviousData,
+  })
+}
+
 // Stock Transfers
 export function useStockTransfers() {
   return useQuery({
@@ -187,7 +250,12 @@ function useStockTransferAction(url: string) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api.post<StockTransfer>(url),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['stock-transfers'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['stock-transfers'] })
+      // Completing a transfer moves stock between branches.
+      void queryClient.invalidateQueries({ queryKey: ['materials'] })
+      void queryClient.invalidateQueries({ queryKey: ['stock-ledger'] })
+    },
   })
 }
 

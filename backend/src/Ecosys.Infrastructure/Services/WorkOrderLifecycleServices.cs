@@ -562,6 +562,51 @@ internal sealed class WorkOrderLifecycleService(
         }
     }
 
+    /// <summary>
+    /// Settings → Inventory "Auto-Deduct Parts on Work Order Completion": material requests on the job
+    /// that were issued but never closed are booked as fully used, so the job's parts cost is complete.
+    /// The stock already left at issue, so no movement is written; anything unused comes back through
+    /// a parts return like any other part used on the job.
+    /// </summary>
+    private async Task CloseIssuedMaterialRequestsAsync(Guid tenantId, WorkOrder workOrder, Guid actorUserId, CancellationToken cancellationToken)
+    {
+        if (!(await InventoryModuleSettings.LoadAsync(dbContext, tenantId, cancellationToken)).AutoDeductOnWorkOrderComplete)
+            return;
+
+        var requests = await dbContext.MaterialRequests
+            .Include(x => x.Lines)
+                .ThenInclude(x => x.MaterialItem)
+            .Where(x => x.TenantId == tenantId && x.WorkOrderId == workOrder.Id && x.Status == "Issued")
+            .ToListAsync(cancellationToken);
+        foreach (var request in requests)
+        {
+            foreach (var line in request.Lines.Where(x => x.QuantityIssued > 0))
+            {
+                line.QuantityUsed = line.QuantityIssued;
+                line.QuantityReturned = 0;
+                dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
+                {
+                    Id = line.Id, TenantId = tenantId, WorkOrderId = workOrder.Id,
+                    MaterialItemId = line.MaterialItemId, QuantityUsed = line.QuantityIssued,
+                    UnitCost = line.MaterialItem?.UnitCost, Chargeable = true, UsedByUserId = actorUserId,
+                    Notes = $"Material request {request.RequestNumber} (closed on completion)"
+                });
+            }
+
+            request.Status = "Closed";
+            dbContext.WorkOrderEvents.Add(new WorkOrderEvent
+            {
+                TenantId = tenantId,
+                WorkOrderId = workOrder.Id,
+                ActorUserId = actorUserId,
+                EventType = "MaterialRequestClosed",
+                Status = WorkOrderStatuses.Completed,
+                Message = $"Material request {request.RequestNumber} closed on completion with all issued parts used.",
+                OccurredAt = OccurredAt.UtcNow
+            });
+        }
+    }
+
     public async Task<WorkOrder> CompleteAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderCompletionRequest request, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(request.WorkDoneNotes))
@@ -628,6 +673,8 @@ internal sealed class WorkOrderLifecycleService(
                 await UpdatePmAssetAndPlanAsync(tenantId, workOrder, checklistSnapshot, cancellationToken);
             }
         }
+
+        await CloseIssuedMaterialRequestsAsync(tenantId, workOrder, actorUserId, cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await slaService.RefreshWorkOrderAsync(workOrder.Id, DateTime.UtcNow, cancellationToken);

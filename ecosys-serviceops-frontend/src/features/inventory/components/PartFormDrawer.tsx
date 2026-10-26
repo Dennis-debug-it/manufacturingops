@@ -2,7 +2,8 @@ import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { applyApiFieldErrors } from '../../../shared/api/apiError'
-import { useCreateMaterial } from '../api'
+import { useCatalogueSuggestions, useCreateMaterial } from '../api'
+import { useSuppliers } from '../purchaseOrdersApi'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -16,6 +17,9 @@ interface FormValues {
   quantityOnHand: string
   reorderLevel: string
   unitCost: string
+  barcode: string
+  preferredSupplierId: string
+  reorderQuantity: string
 }
 
 /**
@@ -30,13 +34,18 @@ const FORM_FIELDS = [
   'quantityOnHand',
   'reorderLevel',
   'unitCost',
+  'barcode',
+  'preferredSupplierId',
+  'reorderQuantity',
 ] as const satisfies readonly (keyof FormValues)[]
 
 export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { register, handleSubmit, reset, setError, formState: { errors, isSubmitting } } = useForm<FormValues>({
-    defaultValues: { itemCode: '', itemName: '', category: '', unitOfMeasure: 'unit', quantityOnHand: '0', reorderLevel: '0', unitCost: '' },
+    defaultValues: { itemCode: '', itemName: '', category: '', unitOfMeasure: 'unit', quantityOnHand: '0', reorderLevel: '0', unitCost: '', barcode: '', preferredSupplierId: '', reorderQuantity: '' },
   })
   const createMaterial = useCreateMaterial()
+  const { categories, units } = useCatalogueSuggestions()
+  const { data: suppliers } = useSuppliers()
 
   const close = () => { reset(); onClose() }
 
@@ -54,6 +63,9 @@ export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () =
         quantityOnHand: Number(values.quantityOnHand) || 0,
         reorderLevel: Number(values.reorderLevel) || 0,
         unitCost: values.unitCost ? Number(values.unitCost) : null,
+        barcode: values.barcode.trim() || null,
+        preferredSupplierId: values.preferredSupplierId || null,
+        reorderQuantity: values.reorderQuantity ? Number(values.reorderQuantity) : null,
       })
       toast.success(`Part "${created.itemName}" created`)
       close()
@@ -88,7 +100,8 @@ export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () =
           </div>
           <div>
             <label className={labelClass} htmlFor="part-uom">Unit of Measure</label>
-            <input id="part-uom" {...register('unitOfMeasure')} className={fieldClass} />
+            <input id="part-uom" list="part-unit-options" {...register('unitOfMeasure')} className={fieldClass} />
+            <datalist id="part-unit-options">{units.map((unit) => <option key={unit} value={unit} />)}</datalist>
             {errors.unitOfMeasure?.message ? <p className={errorClass}>{errors.unitOfMeasure.message}</p> : null}
           </div>
         </div>
@@ -99,7 +112,8 @@ export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () =
         </div>
         <div>
           <label className={labelClass} htmlFor="part-category">Category</label>
-          <input id="part-category" {...register('category')} className={fieldClass} />
+          <input id="part-category" list="part-category-options" {...register('category')} className={fieldClass} />
+          <datalist id="part-category-options">{categories.map((category) => <option key={category} value={category} />)}</datalist>
           {errors.category?.message ? <p className={errorClass}>{errors.category.message}</p> : null}
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -118,6 +132,27 @@ export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () =
             <input id="part-cost" type="number" step="0.01" {...register('unitCost')} className={fieldClass} />
             {errors.unitCost?.message ? <p className={errorClass}>{errors.unitCost.message}</p> : null}
           </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={labelClass} htmlFor="part-barcode">Barcode / MPN</label>
+            <input id="part-barcode" {...register('barcode')} className={fieldClass} />
+            {errors.barcode?.message ? <p className={errorClass}>{errors.barcode.message}</p> : null}
+          </div>
+          <div>
+            <label className={labelClass} htmlFor="part-reorder-qty">Reorder Qty</label>
+            <input id="part-reorder-qty" type="number" min="0" step="0.01" placeholder="Auto" {...register('reorderQuantity')} className={fieldClass} />
+            {errors.reorderQuantity?.message ? <p className={errorClass}>{errors.reorderQuantity.message}</p> : null}
+          </div>
+        </div>
+        <div>
+          <label className={labelClass} htmlFor="part-supplier">Preferred Supplier</label>
+          <select id="part-supplier" {...register('preferredSupplierId')} className={fieldClass}>
+            <option value="">None</option>
+            {(suppliers ?? []).filter((supplier) => supplier.status === 'Active').map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.supplierName}</option>)}
+          </select>
+          {errors.preferredSupplierId?.message ? <p className={errorClass}>{errors.preferredSupplierId.message}</p> : null}
+          <p className="mt-1 text-xs text-slate-500">Reorder suggestions draft purchase orders to this supplier.</p>
         </div>
       </form>
     </FormDrawer>

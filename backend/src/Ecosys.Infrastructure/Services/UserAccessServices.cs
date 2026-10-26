@@ -403,17 +403,46 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
     public Task<StockMovement> RecordReceiptAsync(MaterialItem material, Guid? branchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber, Guid? workOrderId = null, Guid? materialRequestId = null, CancellationToken cancellationToken = default) =>
         RecordAsync(material, branchId, "Receipt", quantity, createdByUserId, reason, referenceNumber, workOrderId, materialRequestId, false, cancellationToken);
 
-    public Task<StockMovement> RecordAdjustmentAsync(MaterialItem material, Guid? branchId, decimal quantityChange, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, Guid? materialRequestId = null, CancellationToken cancellationToken = default)
+    public async Task<StockMovement> RecordAdjustmentAsync(MaterialItem material, Guid? branchId, decimal quantityChange, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, Guid? materialRequestId = null, CancellationToken cancellationToken = default)
     {
         if (quantityChange == 0)
         {
             throw new BusinessRuleException("Adjustment quantity change cannot be zero.");
         }
 
-        return RecordAsync(material, branchId, "Adjustment", quantityChange, createdByUserId, reason, referenceNumber, workOrderId, materialRequestId, false, cancellationToken);
+        var allowNegativeStock = await TenantAllowsNegativeStockAsync(material.TenantId, cancellationToken);
+        return await RecordAsync(material, branchId, "Adjustment", quantityChange, createdByUserId, reason, referenceNumber, workOrderId, materialRequestId, allowNegativeStock, cancellationToken);
     }
 
+    /// <summary>
+    /// Stock leaving for use — a job, an issue, a request. The tenant's "Allow Negative Stock" setting
+    /// (Settings → Inventory) lets the balance go below zero here, as does a caller passing
+    /// <paramref name="allowNegativeStock"/>.
+    /// </summary>
     public async Task<StockMovement> RecordIssueAsync(MaterialItem material, Guid? branchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, Guid? materialRequestId = null, bool allowNegativeStock = false, CancellationToken cancellationToken = default)
+    {
+        allowNegativeStock = allowNegativeStock || await TenantAllowsNegativeStockAsync(material.TenantId, cancellationToken);
+        return await IssueCoreAsync(material, branchId, quantity, createdByUserId, reason, referenceNumber, workOrderId, materialRequestId, allowNegativeStock, cancellationToken);
+    }
+
+    private readonly Dictionary<Guid, bool> negativeStockByTenant = [];
+
+    private async Task<bool> TenantAllowsNegativeStockAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (!negativeStockByTenant.TryGetValue(tenantId, out var allowed))
+        {
+            allowed = (await InventoryModuleSettings.LoadAsync(dbContext, tenantId, cancellationToken)).AllowNegativeStock;
+            negativeStockByTenant[tenantId] = allowed;
+        }
+
+        return allowed;
+    }
+
+    /// <summary>
+    /// The issue itself. Moves between locations (transfers, van loads) call this strictly: shipping
+    /// stock a location does not hold would conjure it at the other end.
+    /// </summary>
+    private async Task<StockMovement> IssueCoreAsync(MaterialItem material, Guid? branchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber, Guid? workOrderId, Guid? materialRequestId, bool allowNegativeStock, CancellationToken cancellationToken)
     {
         if (quantity <= 0)
         {
@@ -441,7 +470,7 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
 
     public async Task<StockMovement> RecordTransferOutAsync(MaterialItem material, Guid fromBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default)
     {
-        var movement = await RecordIssueAsync(material, fromBranchId, quantity, createdByUserId, reason, referenceNumber, allowNegativeStock: false, cancellationToken: cancellationToken);
+        var movement = await IssueCoreAsync(material, fromBranchId, quantity, createdByUserId, reason, referenceNumber, null, null, false, cancellationToken);
         movement.MovementType = "TransferOut";
         return movement;
     }
@@ -461,7 +490,9 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
         }
 
         // Branch side: issue from the source branch (validates branch stock, decrements branch + tenant total).
-        await RecordIssueAsync(material, fromBranchId, quantity, createdByUserId, reason, referenceNumber, allowNegativeStock: false, cancellationToken: cancellationToken);
+        // Typed as a van load, not an issue: the stock moved to a van, it was not used.
+        var branchSide = await IssueCoreAsync(material, fromBranchId, quantity, createdByUserId, reason, referenceNumber, null, null, false, cancellationToken);
+        branchSide.MovementType = "VanLoad";
         // Van side: receipt into the van (increments van + tenant total). Net tenant total change is zero.
         await RecordVanMovementAsync(material, vanId, "VanLoad", quantity, createdByUserId, reason, referenceNumber, null, false, cancellationToken);
     }
@@ -476,10 +507,12 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
         // Van side: issue from the van (validates van stock, decrements van + tenant total).
         await RecordVanMovementAsync(material, vanId, "VanReturn", -quantity, createdByUserId, reason, referenceNumber, null, false, cancellationToken);
         // Branch side: receipt back into the branch (increments branch + tenant total). Net tenant total change is zero.
-        await RecordReceiptAsync(material, toBranchId, quantity, createdByUserId, reason, referenceNumber, cancellationToken: cancellationToken);
+        // Typed as a van return, not a receipt: nothing was bought.
+        var branchSide = await RecordReceiptAsync(material, toBranchId, quantity, createdByUserId, reason, referenceNumber, cancellationToken: cancellationToken);
+        branchSide.MovementType = "VanReturn";
     }
 
-    public Task<StockMovement> RecordVanConsumeAsync(MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default)
+    public async Task<StockMovement> RecordVanConsumeAsync(MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default)
     {
         if (quantity <= 0)
         {
@@ -487,7 +520,8 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
         }
 
         // Stock leaves the system entirely: decrement van balance and tenant total.
-        return RecordVanMovementAsync(material, vanId, "VanConsume", -quantity, createdByUserId, reason, referenceNumber, workOrderId, false, cancellationToken);
+        var allowNegativeStock = await TenantAllowsNegativeStockAsync(material.TenantId, cancellationToken);
+        return await RecordVanMovementAsync(material, vanId, "VanConsume", -quantity, createdByUserId, reason, referenceNumber, workOrderId, allowNegativeStock, cancellationToken);
     }
 
     private async Task<StockMovement> RecordVanMovementAsync(
@@ -534,6 +568,7 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
             WorkOrderId = workOrderId,
             MovementType = movementType,
             Quantity = Math.Abs(quantityDelta),
+            QuantityChange = quantityDelta,
             BalanceAfter = stock.QuantityOnHand,
             Reason = reason?.Trim(),
             ReferenceNumber = referenceNumber?.Trim(),
@@ -634,6 +669,7 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
             MaterialRequestId = materialRequestId,
             MovementType = movementType,
             Quantity = Math.Abs(quantityDelta),
+            QuantityChange = quantityDelta,
             BalanceAfter = branchId.HasValue ? balanceAfter : material.QuantityOnHand,
             Reason = reason?.Trim(),
             ReferenceNumber = referenceNumber?.Trim(),

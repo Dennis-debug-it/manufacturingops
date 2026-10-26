@@ -106,7 +106,9 @@ public sealed class MaterialIssuesController(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var approvalRule = await FindApplicableApprovalRuleAsync(issue.TotalEstimatedCost, cancellationToken);
-        if (approvalRule is not null)
+        // Settings → Inventory "Require Approval Above Value" applies on top of any finance approval rule.
+        var approvalLimit = (await InventoryModuleSettings.LoadAsync(dbContext, TenantId, cancellationToken)).RequireApprovalAboveValue;
+        if (approvalRule is not null || (approvalLimit > 0 && issue.TotalEstimatedCost > approvalLimit))
         {
             issue.IssueStatus = "pending_approval";
             await dbContext.SaveChangesAsync(cancellationToken);

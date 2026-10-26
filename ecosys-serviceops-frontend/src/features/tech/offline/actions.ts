@@ -77,11 +77,11 @@ export function useTechActions() {
         onJob(job, 'signature', `${signature.signatureType === 'Client' ? 'Client' : 'Your'} signature`, {
           method: 'POST', url: endpoints.workOrders.signatures(job.id), body: signature,
         }),
-      logMaterial: (job: Job, usage: { materialItemId: string; quantityUsed: number; assetId?: string | null; materialName: string; unitOfMeasure: string | null }) =>
+      logMaterial: (job: Job, usage: { materialItemId: string; quantityUsed: number; assetId?: string | null; materialName: string; unitOfMeasure: string | null; batchOrSerial?: string | null }) =>
         onJob(job, 'material', `Used ${usage.quantityUsed} × ${usage.materialName}`, {
           method: 'POST',
           url: endpoints.workOrders.materialsUsed(job.id),
-          body: { materialItemId: usage.materialItemId, assetId: usage.assetId ?? null, quantityUsed: usage.quantityUsed, unitCost: null, chargeable: true, notes: null, usedAt: null },
+          body: { materialItemId: usage.materialItemId, assetId: usage.assetId ?? null, quantityUsed: usage.quantityUsed, unitCost: null, chargeable: true, notes: null, usedAt: null, batchOrSerial: usage.batchOrSerial ?? null },
           meta: { materialName: usage.materialName, unitOfMeasure: usage.unitOfMeasure },
         }),
       /** Optionally against a project site the technician is on (shown on their clock while it syncs). */
