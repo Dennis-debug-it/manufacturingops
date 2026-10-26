@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Boxes, Clock, FileText, Receipt, Wrench } from 'lucide-react'
+import { AlertTriangle, Boxes, Clock, FileText, Receipt, ShieldCheck, Wrench } from 'lucide-react'
 import { PageHeader } from '../shared/components/PageHeader'
 import { Spinner } from '../shared/components/Spinner'
 import { StatCard } from '../shared/components/StatCard'
@@ -31,6 +31,9 @@ export function PortalDashboardPage() {
         <Link to="/portal/requests"><StatCard label="Overdue Requests" value={data.overdueWorkOrders} tone={data.overdueWorkOrders > 0 ? 'danger' : 'default'} icon={<AlertTriangle className="h-4 w-4 text-slate-400" />} /></Link>
         {settings?.showAssetRegister ? (
           <Link to="/portal/assets"><StatCard label="Assets" value={data.assetCount} icon={<Boxes className="h-4 w-4 text-slate-400" />} /></Link>
+        ) : null}
+        {settings?.showAssetRegister ? (
+          <Link to="/portal/assets?warranty=covered"><StatCard label="Under Warranty" value={data.assetsUnderWarranty} icon={<ShieldCheck className="h-4 w-4 text-slate-400" />} /></Link>
         ) : null}
         <Link to="/portal/maintenance"><StatCard label="PM Due (30d)" value={data.upcomingPmCount} tone={data.upcomingPmCount > 0 ? 'warning' : 'default'} icon={<Clock className="h-4 w-4 text-slate-400" />} /></Link>
         {settings?.showInvoices ? (

@@ -48,7 +48,8 @@ public sealed class PortalController(
     }
 
     [HttpGet("dashboard/summary")]
-    public async Task<ActionResult<PortalDashboardSummaryResponse>> GetDashboardSummary(CancellationToken cancellationToken)
+    public async Task<ActionResult<PortalDashboardSummaryResponse>> GetDashboardSummary(
+        [FromServices] ITenantTimeZoneService tenantTimeZoneService, CancellationToken cancellationToken)
     {
         var settings = await LoadSettingsAsync(cancellationToken);
         var now = DateTime.UtcNow;
@@ -56,6 +57,12 @@ public sealed class PortalController(
         var overdueWorkOrders = await OpenWorkOrders().CountAsync(x => x.DueDate.HasValue && x.DueDate < now, cancellationToken);
         var assetCount = settings.ShowAssetRegister
             ? await dbContext.Assets.CountAsync(x => x.TenantId == TenantId && x.ClientId == ClientId, cancellationToken)
+            : 0;
+        // Expiry dates are stored as UTC midnights; compare the workspace's calendar date the same way.
+        var today = DateTime.SpecifyKind(await tenantTimeZoneService.TenantTodayAsync(TenantId, cancellationToken), DateTimeKind.Utc);
+        var underWarranty = settings.ShowAssetRegister
+            ? await dbContext.Assets.CountAsync(x => x.TenantId == TenantId && x.ClientId == ClientId
+                && x.WarrantyExpiryDate.HasValue && x.WarrantyExpiryDate.Value >= today, cancellationToken)
             : 0;
         var upcomingPm = await dbContext.PreventiveMaintenancePlans
             .Include(x => x.Asset)
@@ -77,7 +84,8 @@ public sealed class PortalController(
             upcomingPm,
             outstandingBalances.OrderBy(x => x.Currency).ToList(),
             pendingQuotations,
-            await GetTenantCurrencyAsync(cancellationToken)));
+            await GetTenantCurrencyAsync(cancellationToken),
+            underWarranty));
     }
 
     // ── Reports ──────────────────────────────────────────────────────────────
@@ -243,10 +251,13 @@ public sealed class PortalController(
 
     // ── Assets ───────────────────────────────────────────────────────────────
 
+    /// <summary>The client's assets, each with its warranty standing worked out on the workspace's date.</summary>
     [HttpGet("assets")]
-    public async Task<ActionResult<IReadOnlyCollection<PortalAssetListItem>>> ListAssets(CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyCollection<PortalAssetListItem>>> ListAssets(
+        [FromServices] ITenantTimeZoneService tenantTimeZoneService, CancellationToken cancellationToken)
     {
         await EnsureEnabledAsync(x => x.ShowAssetRegister, "The asset register is", cancellationToken);
+        var today = await tenantTimeZoneService.TenantTodayAsync(TenantId, cancellationToken);
         var assets = await dbContext.Assets
             .Include(x => x.Site)
             .Where(x => x.TenantId == TenantId && x.ClientId == ClientId)
@@ -263,7 +274,9 @@ public sealed class PortalController(
             x.Model,
             x.Status,
             x.WarrantyExpiryDate,
-            x.NextPmDate)).ToList());
+            x.NextPmDate,
+            PortalWarranty.Status(x.WarrantyExpiryDate, today),
+            PortalWarranty.DaysLeft(x.WarrantyExpiryDate, today))).ToList());
     }
 
     // ── Maintenance ──────────────────────────────────────────────────────────
@@ -510,7 +523,7 @@ public sealed class PortalController(
 public sealed record PortalSettingsResponse(bool AllowRequestSubmission, bool AllowQuoteResponses, bool ShowInvoices, bool ShowContracts, bool ShowAssetRegister, string? WelcomeMessage, bool ShowProjects = false);
 
 public sealed record PortalCurrencyAmount(string Currency, decimal Amount);
-public sealed record PortalDashboardSummaryResponse(int OpenWorkOrders, int OverdueWorkOrders, int AssetCount, int UpcomingPmCount, IReadOnlyCollection<PortalCurrencyAmount> OutstandingBalances, int PendingQuotations, string Currency);
+public sealed record PortalDashboardSummaryResponse(int OpenWorkOrders, int OverdueWorkOrders, int AssetCount, int UpcomingPmCount, IReadOnlyCollection<PortalCurrencyAmount> OutstandingBalances, int PendingQuotations, string Currency, int AssetsUnderWarranty = 0);
 
 public sealed record PortalInvoiceCurrencyTotals(string Currency, decimal Invoiced, decimal Paid, decimal Outstanding);
 public sealed record PortalReportSummaryResponse(int TotalRequests, int OpenRequests, int CompletedRequests, int ClosedRequests, int CancelledRequests, int OverdueRequests, string Currency, IReadOnlyCollection<PortalInvoiceCurrencyTotals> InvoiceTotals);
@@ -520,7 +533,28 @@ public sealed record PortalWorkOrderDetailResponse(Guid Id, string WorkOrderNumb
 public sealed record PortalCreateWorkOrderRequest(string Title, string? Description, string? Priority, Guid? SiteId, Guid? AssetId);
 public sealed record PortalWorkOrderNoteResponse(Guid Id, string Content, string? CreatedByUserName, DateTime CreatedAt);
 
-public sealed record PortalAssetListItem(Guid Id, string AssetName, string AssetCode, string? AssetType, string? SiteName, string? Manufacturer, string? Model, string Status, DateTime? WarrantyExpiryDate, DateTime? NextPmDate);
+/// <param name="WarrantyStatus">Under Warranty, Expiring Soon (within <see cref="PortalWarranty.ExpiringSoonDays"/> days), Out of Warranty, or null when no warranty is recorded.</param>
+/// <param name="WarrantyDaysLeft">Days of cover left including today; null when out of warranty or unknown.</param>
+public sealed record PortalAssetListItem(Guid Id, string AssetName, string AssetCode, string? AssetType, string? SiteName, string? Manufacturer, string? Model, string Status, DateTime? WarrantyExpiryDate, DateTime? NextPmDate,
+    string? WarrantyStatus = null, int? WarrantyDaysLeft = null);
+
+/// <summary>An asset's warranty standing as the client portal shows it. Cover runs to the end of the expiry date.</summary>
+public static class PortalWarranty
+{
+    public const int ExpiringSoonDays = 60;
+
+    public static string? Status(DateTime? expiry, DateTime today) =>
+        DaysLeft(expiry, today) switch
+        {
+            null when expiry is null => null,
+            null => "Out of Warranty",
+            <= ExpiringSoonDays => "Expiring Soon",
+            _ => "Under Warranty",
+        };
+
+    public static int? DaysLeft(DateTime? expiry, DateTime today) =>
+        expiry is { } date && date.Date >= today.Date ? (date.Date - today.Date).Days + 1 : null;
+}
 
 public sealed record PortalMaintenancePlanItem(Guid Id, string AssetName, string Frequency, string Status, DateTime? LastPmDate, DateTime? NextPmDate);
 

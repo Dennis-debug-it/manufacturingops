@@ -94,7 +94,7 @@ public sealed class PortalSettingsEnforcementTests
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.ListInvoices(CancellationToken.None));
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetInvoice(Guid.NewGuid(), CancellationToken.None));
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.ListContracts(CancellationToken.None));
-        await Assert.ThrowsAsync<ForbiddenException>(() => controller.ListAssets(CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.ListAssets(new UtcZone(), CancellationToken.None));
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public sealed class PortalSettingsEnforcementTests
         await db.SaveChangesAsync();
         var controller = CreateController(db);
 
-        var dashboard = Assert.IsType<PortalDashboardSummaryResponse>(Assert.IsType<OkObjectResult>((await controller.GetDashboardSummary(CancellationToken.None)).Result).Value);
+        var dashboard = Assert.IsType<PortalDashboardSummaryResponse>(Assert.IsType<OkObjectResult>((await controller.GetDashboardSummary(new UtcZone(), CancellationToken.None)).Result).Value);
         var balance = Assert.Single(dashboard.OutstandingBalances);
         Assert.Equal(new PortalCurrencyAmount("KES", 1100), balance);
         Assert.Equal("EUR", dashboard.Currency);
@@ -189,7 +189,7 @@ public sealed class PortalSettingsEnforcementTests
         await SaveSettingsAsync(db, new { showInvoices = false });
         var controller = CreateController(db);
 
-        var dashboard = Assert.IsType<PortalDashboardSummaryResponse>(Assert.IsType<OkObjectResult>((await controller.GetDashboardSummary(CancellationToken.None)).Result).Value);
+        var dashboard = Assert.IsType<PortalDashboardSummaryResponse>(Assert.IsType<OkObjectResult>((await controller.GetDashboardSummary(new UtcZone(), CancellationToken.None)).Result).Value);
         var report = Assert.IsType<PortalReportSummaryResponse>(Assert.IsType<OkObjectResult>((await controller.GetReportSummary(CancellationToken.None)).Result).Value);
 
         Assert.Empty(dashboard.OutstandingBalances);
@@ -250,6 +250,18 @@ public sealed class PortalSettingsEnforcementTests
         DueDate = dueDate,
     };
 
+    private sealed class UtcZone : ITenantTimeZoneService
+    {
+        public Task<string> GetPlatformTimeZoneIdAsync(CancellationToken cancellationToken = default) => Task.FromResult("UTC");
+        public Task<string> GetTimeZoneIdAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult("UTC");
+        public Task<TimeZoneInfo> GetTimeZoneAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult(TimeZoneInfo.Utc);
+        public Task<DateTime> ToTenantTimeAsync(DateTime utcValue, Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult(utcValue);
+        public Task<DateTime> TenantTodayAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult(DateTime.UtcNow.Date);
+        public Task<DateTime> TenantDayEndUtcAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.FromResult(DateTime.UtcNow.Date.AddDays(1));
+        public Task<string> FormatForTenantAsync(DateTime utcValue, Guid tenantId, string format = "dd MMM yyyy 'at' HH:mm", CancellationToken cancellationToken = default) => Task.FromResult(utcValue.ToString(format));
+        public string? NormalizeTimeZoneId(string? timeZoneId) => timeZoneId;
+        public void Invalidate(Guid? tenantId = null) { }
+    }
     private sealed class FakePortalContext(Guid tenantId, Guid clientId) : IPortalContext
     {
         public Guid? TenantId => tenantId;
