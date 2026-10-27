@@ -61,6 +61,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
     public DbSet<StockTransfer> StockTransfers => Set<StockTransfer>();
     public DbSet<StockCount> StockCounts => Set<StockCount>();
+    public DbSet<Tool> Tools => Set<Tool>();
+    public DbSet<ToolAssignment> ToolAssignments => Set<ToolAssignment>();
+    public DbSet<ToolCalibration> ToolCalibrations => Set<ToolCalibration>();
     public DbSet<StockCountLine> StockCountLines => Set<StockCountLine>();
     public DbSet<MaterialRequest> MaterialRequests => Set<MaterialRequest>();
     public DbSet<MaterialRequestLine> MaterialRequestLines => Set<MaterialRequestLine>();
@@ -3265,6 +3268,61 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
         });
         ApplyTenantFilter<StockCountLine>(modelBuilder);
+
+        modelBuilder.Entity<Tool>(entity =>
+        {
+            entity.ToTable("tools");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ToolCode).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Category).HasMaxLength(100);
+            entity.Property(x => x.SerialNumber).HasMaxLength(100);
+            entity.Property(x => x.Manufacturer).HasMaxLength(100);
+            entity.Property(x => x.Model).HasMaxLength(100);
+            entity.Property(x => x.PurchaseCost).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Condition).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.ToolCode }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.HomeBranch).WithMany().HasForeignKey(x => x.HomeBranchId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.CurrentAssignment).WithMany().HasForeignKey(x => x.CurrentAssignmentId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasMany(x => x.Assignments).WithOne(x => x.Tool).HasForeignKey(x => x.ToolId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasMany(x => x.Calibrations).WithOne(x => x.Tool).HasForeignKey(x => x.ToolId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<Tool>(modelBuilder);
+
+        modelBuilder.Entity<ToolAssignment>(entity =>
+        {
+            entity.ToTable("tool_assignments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ConditionOut).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ConditionIn).HasMaxLength(30);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.ReturnNotes).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.TechnicianId, x.ReturnedAt });
+            entity.HasIndex(x => x.ToolId);
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Technician).WithMany().HasForeignKey(x => x.TechnicianId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.CheckedOutByUser).WithMany().HasForeignKey(x => x.CheckedOutByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReturnedByUser).WithMany().HasForeignKey(x => x.ReturnedByUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<ToolAssignment>(modelBuilder);
+
+        modelBuilder.Entity<ToolCalibration>(entity =>
+        {
+            entity.ToTable("tool_calibrations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CertificateNumber).HasMaxLength(100);
+            entity.Property(x => x.PerformedBy).HasMaxLength(200);
+            entity.Property(x => x.Result).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasIndex(x => x.ToolId);
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<ToolCalibration>(modelBuilder);
 
         modelBuilder.Entity<PartsReturnLine>(entity =>
         {

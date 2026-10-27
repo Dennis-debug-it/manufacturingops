@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Truck } from 'lucide-react'
+import { Truck, Wrench } from 'lucide-react'
 import { Spinner } from '../../shared/components/Spinner'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { cn } from '../../shared/utils/cn'
@@ -9,6 +9,8 @@ import { LocationSetting } from './LocationPrompt'
 import { NotificationPreferencesList } from '../notifications/NotificationPreferences'
 import { WhatsAppOptInCard } from '../whatsapp/WhatsAppOptInCard'
 import { staffWhatsAppApi } from '../whatsapp/remindersApi'
+import { formatDate } from '../../shared/utils/dates'
+import { useAcknowledgeTool, useMyTools } from '../inventory/toolsApi'
 import { useChangeMyPassword, useMyTechnician, useMyVan } from './api'
 
 const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
@@ -85,6 +87,54 @@ function MyVan() {
   )
 }
 
+/** Tools checked out to this technician; each new one is confirmed with "I have it". */
+function MyTools() {
+  const { data: me } = useMyTechnician()
+  const { data, isLoading } = useMyTools(Boolean(me?.technicianId))
+  const acknowledge = useAcknowledgeTool()
+  if (!me?.technicianId) return null
+  if (isLoading) return <Spinner label="Loading your tools" />
+  const tools = data ?? []
+
+  return (
+    <section className={cardClass}>
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Wrench className="h-4 w-4 text-slate-500" />My tools</h2>
+      {tools.length === 0 ? <p className="text-sm text-slate-500">No tools are checked out to you.</p> : (
+        <ul className="divide-y divide-slate-100 text-sm">
+          {tools.map((tool) => (
+            <li key={tool.id} className="space-y-1 py-2">
+              <div className="flex items-start justify-between gap-3">
+                <span className="text-slate-900">{tool.name} <span className="font-mono text-xs text-slate-500">{tool.toolCode}</span></span>
+                {tool.awaitingAcknowledgement ? (
+                  <button
+                    type="button"
+                    disabled={acknowledge.isPending}
+                    onClick={async () => {
+                      try {
+                        await acknowledge.mutateAsync(tool.id)
+                        toast.success(`Confirmed: you have ${tool.name}`)
+                      } catch {
+                        // interceptor surfaces the error toast
+                      }
+                    }}
+                    className="shrink-0 rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-60"
+                  >
+                    I have it
+                  </button>
+                ) : <span className="shrink-0 text-xs text-emerald-700">Confirmed</span>}
+              </div>
+              <p className={cn('text-xs', tool.returnOverdue ? 'font-medium text-red-600' : 'text-slate-500')}>
+                {tool.expectedReturnAt ? `${tool.returnOverdue ? 'Overdue — was due back' : 'Due back'} ${formatDate(tool.expectedReturnAt)}` : `Since ${formatDate(tool.checkedOutAt!)}`}
+                {tool.calibrationState === 'Overdue' ? ' · calibration overdue, return it to stores' : tool.calibrationState === 'DueSoon' ? ` · calibration due ${formatDate(tool.nextCalibrationDue!)}` : ''}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 export function TechAccountPage() {
   const { user, tenant } = useAuth()
   return (
@@ -99,6 +149,7 @@ export function TechAccountPage() {
         </dl>
       </section>
       <MyVan />
+      <MyTools />
       <ChangePassword />
       <JobAlertsSetting />
       <LocationSetting />

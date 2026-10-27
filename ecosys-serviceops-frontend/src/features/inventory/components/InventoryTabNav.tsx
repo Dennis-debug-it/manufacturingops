@@ -14,6 +14,7 @@ const tabs: Array<{ to: string; label: string; match: string[]; exact?: string[]
   { to: '/inventory/stock-counts', label: 'Stock Counts', match: ['/inventory/stock-counts'] },
   { to: '/inventory/locations', label: 'Locations', match: ['/inventory/locations'] },
   { to: '/inventory/vans', label: 'Vans', match: ['/inventory/vans'] },
+  { to: '/inventory/tools', label: 'Tools', match: ['/inventory/tools'] },
   { to: '/inventory/alerts', label: 'Alerts', match: ['/inventory/alerts'] },
   { to: '/inventory/reports', label: 'Reports', match: ['/inventory/reports'] },
 ]

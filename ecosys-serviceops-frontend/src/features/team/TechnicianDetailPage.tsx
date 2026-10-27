@@ -7,12 +7,15 @@ import { Spinner } from '../../shared/components/Spinner'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { SummarySection } from '../../shared/pages/ModulePage'
 import { formatDate } from '../../shared/utils/dates'
+import { usePermission } from '../../shared/hooks/usePermission'
+import { TechnicianToolsSection } from '../inventory/ToolsPage'
 import { useTeamManagementOverview, useTechnician } from './api'
 
 export function TechnicianDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: technician, isLoading, isError } = useTechnician(id)
   const { data: overview } = useTeamManagementOverview()
+  const canSeeTools = usePermission('materials.view')
 
   const profile = useMemo(() => overview?.profiles.find((item) => item.technicianId === id), [overview, id])
 
@@ -69,6 +72,8 @@ export function TechnicianDetailPage() {
           ))}
         </div>
       </SummarySection>
+
+      {canSeeTools && id ? <TechnicianToolsSection technicianId={id} /> : null}
 
       {profile ? (
         <>
