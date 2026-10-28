@@ -41,6 +41,8 @@ export interface PortalDashboardSummary {
   pendingQuotations: number
   /** The tenant's default currency, used to render a zero balance. */
   currency: string
+  /** Assets whose warranty has not yet expired (including those expiring soon). */
+  assetsUnderWarranty: number
 }
 
 export function usePortalDashboardSummary() {
@@ -147,6 +149,10 @@ export interface PortalAssetListItem {
   status: string
   warrantyExpiryDate: string | null
   nextPmDate: string | null
+  /** Worked out by the server on the workspace's date; null when no warranty is recorded. */
+  warrantyStatus: 'Under Warranty' | 'Expiring Soon' | 'Out of Warranty' | null
+  /** Days of cover left including today; null when out of warranty or unknown. */
+  warrantyDaysLeft: number | null
 }
 
 export function usePortalAssets(enabled = true) {

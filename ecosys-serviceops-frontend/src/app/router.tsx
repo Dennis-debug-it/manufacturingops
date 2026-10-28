@@ -61,6 +61,7 @@ import { PartsReturnsPage } from '../features/inventory/PartsReturnsPage'
 import { MaterialIssuesPage } from '../features/inventory/MaterialIssuesPage'
 import { VansPage } from '../features/inventory/VansPage'
 import { StockCountDetailPage, StockCountsPage } from '../features/inventory/StockCountsPage'
+import { ToolDetailPage, ToolsPage } from '../features/inventory/ToolsPage'
 import { VanDetailPage } from '../features/inventory/VanDetailPage'
 import { AlertsPage as InventoryAlertsPageReal } from '../features/inventory/AlertsPage'
 import { ReportsPage as InventoryReportsPageReal } from '../features/inventory/ReportsPage'
@@ -343,6 +344,8 @@ export function AppRouter() {
       ['/inventory/alerts', InventoryAlertsPage],
       ['/inventory/stock-counts', StockCountsPage],
       ['/inventory/stock-counts/:id', StockCountDetailPage],
+      ['/inventory/tools', ToolsPage],
+      ['/inventory/tools/:id', ToolDetailPage],
       ['/inventory/reports', InventoryReportsPage],
       ['/team', TeamUsersPage],
       ['/team/users', TeamUsersPage],

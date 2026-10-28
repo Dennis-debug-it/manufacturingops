@@ -423,7 +423,7 @@ const maintenance: Guide = {
 const inventory: Guide = {
   id: 'inventory',
   title: 'Inventory',
-  summary: 'Parts, stock levels, issuing to jobs, van stock, stock counts, purchasing, suppliers and reports.',
+  summary: 'Parts, stock levels, issuing to jobs, van stock, tools, stock counts, purchasing, suppliers and reports.',
   icon: Package,
   path: '/inventory',
   pathLabel: 'Inventory',
@@ -475,6 +475,16 @@ const inventory: Guide = {
     {
       title: 'Vans',
       text: 'Under Vans, click New Van for each vehicle, then Load stock onto it. Parts used on jobs are recorded with Consume and unused stock goes back with Return.',
+    },
+    {
+      title: 'Tools and test equipment',
+      steps: [
+        'Under Tools, click New Tool and give it an asset tag, name and value. If it needs calibration or inspection, set how often and when it is next due.',
+        'On a tool, Check Out hands it to a technician (with an expected return date). They see it under Me → My tools and tap I have it to confirm.',
+        'Check In takes it back with its condition; a damaged tool can go straight to repair. Mark Lost needs a reason and records who last had it.',
+        'Record Calibration keeps the certificate on file and moves the due date on. A tool past its calibration date cannot be checked out without an override, and a failed calibration sends it to repair.',
+        'The cards at the top of Tools show overdue calibrations, tools overdue back and tools not yet confirmed; a technician’s profile lists the tools they hold.',
+      ],
     },
     {
       title: 'Reports',

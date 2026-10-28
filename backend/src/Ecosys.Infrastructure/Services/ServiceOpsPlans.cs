@@ -79,7 +79,7 @@ public static class ServiceOpsPlans
     private static readonly HashSet<string> InventoryControllers = new(StringComparer.OrdinalIgnoreCase)
     {
         "MaterialIssues", "MaterialRequests", "Materials", "PartsRequests", "PartsReturns", "PurchaseOrders",
-        "StockCounts", "StockMovements", "StockTransfers", "Vans", "InventoryReports"
+        "StockCounts", "StockMovements", "StockTransfers", "Vans", "InventoryReports", "Tools"
     };
     private static readonly HashSet<string> AdvancedControllers = new(StringComparer.OrdinalIgnoreCase)
     {
