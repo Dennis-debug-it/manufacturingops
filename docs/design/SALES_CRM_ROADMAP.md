@@ -41,39 +41,46 @@ Sizes are rough, for one developer: **S** ≈ 1 day, **M** ≈ 2–4 days, **L**
 - [x] **Settings › Sales:** deal visibility, default owner, renewal deals on or off.
 - [x] **4.1 Deal visibility (own vs all)**, applied to every CRM endpoint, including reports and follow-ups.
 
-### Phase 2: Contacts and companies (next)
-- [ ] **2.1 Prospects as clients** (decision 1): add `Client.IsProspect`, hidden from operational lists
-  (work orders, dispatch, invoicing) and shown in Sales and the client register under a filter. A deal's
-  "prospect" text fields become a prospect client. Winning a deal, or creating its first quote or work
-  order, clears the flag. Existing prospect deals are moved over by a migration that matches on company name.
-- [ ] **2.2 Contact people** with a role (decision-maker, procurement, technical), several per deal and per client.
-- [ ] **2.3 Duplicate checks and merge** on normalised email, phone and company name.
-- [ ] **2.4 CSV import and export** for deals and contacts, with a preview before importing.
-- [ ] **2.5 Assignment rules** (round-robin, or by service type or region). These slot into the owner order (decision 2) above the workspace default.
+### Phase 2: Contacts and companies (done)
+- [x] **2.1 Prospects as clients** (decision 1): `Client.IsProspect`, hidden from operational lists and
+  shown in Sales and under a "Prospects" filter in the client register. A deal's prospect details are kept
+  as a prospect client; winning the deal, or its first quote or work order, makes it a client. Existing
+  prospect deals were moved over by a migration matching on company name.
+- [x] **2.2 Contact people** with a role, several per client and per deal.
+- [x] **2.3 Duplicate checks and merge** on normalised email, phone and company name.
+- [x] **2.4 CSV import and export** for deals and contacts, with a preview before importing.
+- [x] **2.5 Assignment rules** (one person, or several in turn; by source, service type or location),
+  slotted into the owner order above the workspace default.
 
-### Phase 3: Pipeline insight
-- [ ] **3.1 Stage history:** each stage change saved with its date, rebuilding past changes from creation, won and lost dates.
-- [ ] **3.2 Stalled-deal alerts:** an idle limit per stage, with a badge and a reminder.
-- [ ] **3.3 Conversion and time-in-stage reports** (needs 3.1).
-- [ ] **3.4 Sales targets** per owner per month or quarter, with reports against target.
-- [ ] **3.5 Weekly report email.**
+### Phase 3: Pipeline insight (done)
+- [x] **3.1 Stage history:** every stage change saved with its date; past changes rebuilt from the activity log.
+- [x] **3.2 Stalled-deal alerts:** a workspace idle limit (14 days by default), a badge, a list filter and a reminder.
+- [x] **3.3 Conversion and time-in-stage report** per pipeline.
+- [x] **3.4 Sales targets** per owner per month, with results against target in Reports.
+- [x] **3.5 Weekly summary email** on Monday mornings (team figures for managers).
 
-### Phase 4: Access and configuration
+### Phase 4: Access and configuration (done)
 - [x] 4.1 Deal visibility (done above).
-- [ ] **4.2 Pipelines and stages** (decision 4). Design:
-  - `SalesPipeline` (name, order, optional `Module`, active) and `SalesPipelineStage` (name, order,
-    default probability, kind `Open | Won | Lost`). Every pipeline has exactly one Won and one Lost
-    stage, so reports, renewals and the hand-off keep working.
-  - Each workspace is seeded with one pipeline holding today's seven stages. Existing deals map
-    across, so nothing changes for current users.
-  - Deals get `PipelineId` + `StageId`. The `Stage` text stays as the stage name, so existing code keeps working while it is moved over.
-  - A pipeline tied to a module ("Maintenance contracts" → Maintenance, "Installations" → Operations,
-    "Spares" → Inventory) only shows when the workspace's plan has that module, so selling modules
-    separately decides which pipelines appear. Renewal deals go to the Maintenance pipeline if one
-    exists, technician leads to the pipeline for the work's type.
-  - The board, reports and forecast gain a pipeline switch. Win rate and forecast are per pipeline, with an "All pipelines" total.
-- [ ] **4.3 Custom fields** (per-workspace field definitions on forms, filters and exports).
-- [ ] **4.4 Stage rules:** fields required before a deal can move on; discount approvals reuse the finance approval matrix.
+- [x] **4.2 Pipelines and stages** (decision 4):
+  - `SalesPipeline` (name, order, optional `Module`, default, active) with `SalesPipelineStage` (key,
+    name, order, probability). A stage's key never changes, so renaming is free; every pipeline ends in
+    Won and Lost, so reports, renewals and the hand-off keep working.
+  - Each workspace gets a "Sales" pipeline with the original seven stages on first use; existing deals
+    were mapped across by migration.
+  - A pipeline tied to a module only shows when the plan has that module. Renewal deals go to a
+    Maintenance pipeline where there is one; technician leads and imports go to the default pipeline
+    (imports can name another).
+  - The board, list, summary, reports and export take a pipeline; deals move between pipelines from the
+    edit form. Settings › Sales has the pipeline editor.
+- [x] **4.3 Custom fields:** text, number, date, dropdown and yes/no fields, for every pipeline or one.
+  On the deal form and page, as a list filter, and as columns in the export and import.
+- [x] **4.4 Stage rules:** each stage (Won included) can require built-in details (value, close date,
+  contact, type of work, site, scope, a quotation) or custom fields. A stage's rules apply to every
+  later stage, so skipping ahead skips nothing; Lost has none. Only moves people make are checked, never
+  a client accepting a quote or a contract renewing. The deal page marks stages it cannot enter yet.
+  - Quotes have no discount line, so the approval half is **quote approval before sending**: the
+    approval matrix (Settings › Approvals) has a Quotations type; a quote in a band is held until approved
+    at its current total, and changing the total afterwards asks again.
 
 ### Phase 5: Communication and lead capture
 - [ ] **5.1 WhatsApp and email on deals:** send from the deal; incoming messages matched by contact (needs 2.2).

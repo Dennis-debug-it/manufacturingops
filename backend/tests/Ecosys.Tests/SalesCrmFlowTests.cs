@@ -414,6 +414,61 @@ public sealed class SalesCrmFlowTests
     }
 
     [Fact]
+    public async Task QuotationsInAnApprovalBand_AreApprovedBeforeSending()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        dbContext.Clients.Add(new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" });
+        dbContext.ApprovalMatrices.Add(new ApprovalMatrix
+        {
+            TenantId = tenant.Id, DocumentType = ApprovalDocumentTypes.Quotation,
+            Levels = [new ApprovalLevel { TenantId = tenant.Id, LevelOrder = 1, Name = "Sales manager", MinAmount = 500_000m, RequiredPermission = PermissionNames.CrmManage }],
+        });
+        await dbContext.SaveChangesAsync();
+        var clientId = (await dbContext.Clients.SingleAsync()).Id;
+        var tenantContext = new FakeTenantContext(tenant.Id, actor.Id, actor.Email);
+        var approvals = new ApprovalWorkflowService(dbContext, tenantContext, new AuditLogService(dbContext, new HttpContextAccessor()));
+        var quotes = new TenantQuotationController(
+            dbContext, tenantContext, new NoOpDocumentNumberingService(), null!,
+            new AuditLogService(dbContext, new HttpContextAccessor()), new NoOpUserAccessService(), null!, null!, null!, null!, null!, approvals)
+        {
+            ControllerContext = CreateControllerContext(actor)
+        };
+
+        async Task<Guid> DraftQuote(string title, decimal total)
+        {
+            var created = await crm.CreateOpportunity(Deal(title, total, "KES") with { ClientId = clientId, CompanyName = null }, CancellationToken.None);
+            var id = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+            await crm.ConvertToQuotation(id, CancellationToken.None);
+            var quote = await dbContext.TenantQuotations.SingleAsync(x => x.SalesOpportunityId == id);
+            quote.TotalAmount = total;
+            await dbContext.SaveChangesAsync();
+            return quote.Id;
+        }
+        TenantQuotationDetailResponse Sent(ActionResult<TenantQuotationDetailResponse> result) => Ok(result);
+
+        // Below every band: goes straight out.
+        Assert.Equal("Sent", Sent(await quotes.SendQuotation(await DraftQuote("Pump service", 80_000m), CancellationToken.None)).Status);
+
+        // In a band: held for approval, and cannot be sent while it waits.
+        var big = await DraftQuote("Chiller replacement", 900_000m);
+        var held = Sent(await quotes.SendQuotation(big, CancellationToken.None));
+        Assert.Equal(("Draft", "Pending"), (held.Status, held.ApprovalStatus));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => quotes.SendQuotation(big, CancellationToken.None));
+
+        // Approved at this total: it goes out. Changed after approval: asked again.
+        var request = await approvals.GetActiveForDocumentAsync(tenant.Id, ApprovalDocumentTypes.Quotation, big);
+        await approvals.DecideAsync(tenant.Id, request!.Id, approve: true, "Margin fine");
+        Assert.Equal(("Approved", 900_000m), (Ok(await quotes.GetQuotation(big, CancellationToken.None)).ApprovalStatus, Ok(await quotes.GetQuotation(big, CancellationToken.None)).ApprovedAmount));
+        (await dbContext.TenantQuotations.SingleAsync(x => x.Id == big)).TotalAmount = 950_000m;
+        await dbContext.SaveChangesAsync();
+        Assert.Equal("Pending", Sent(await quotes.SendQuotation(big, CancellationToken.None)).ApprovalStatus);
+        await approvals.DecideAsync(tenant.Id, (await approvals.GetActiveForDocumentAsync(tenant.Id, ApprovalDocumentTypes.Quotation, big))!.Id, approve: true, null);
+        Assert.Equal("Sent", Sent(await quotes.SendQuotation(big, CancellationToken.None)).Status);
+    }
+
+    [Fact]
     public async Task QuotesAwaitingAnswer_ShowOtherQuotesOnlyToFinance()
     {
         await using var dbContext = CreateDbContext();

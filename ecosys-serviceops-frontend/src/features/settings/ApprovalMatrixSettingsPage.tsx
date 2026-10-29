@@ -15,6 +15,7 @@ const documentTypeLabels: Record<string, string> = {
   PurchaseOrder: 'Purchase Orders',
   Expense: 'Expenses',
   ProjectVariation: 'Project Variations',
+  Quotation: 'Quotations (before sending)',
 }
 
 // Curated permission options (map to backend PermissionNames constants).

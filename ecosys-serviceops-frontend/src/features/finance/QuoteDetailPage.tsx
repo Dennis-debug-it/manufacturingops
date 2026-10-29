@@ -99,7 +99,7 @@ export function QuoteDetailPage() {
             {canManage ? (
             <>
               {quote.status === 'Draft' ? (
-                <button type="button" onClick={() => run('Quote sent', () => sendQuote.mutateAsync(undefined))} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Send</button>
+                <button type="button" onClick={() => void sendQuote.mutateAsync(undefined).then((result) => toast.success(result.approvalStatus === 'Pending' && result.status === 'Draft' ? 'Sent for approval. You can send it to the client once it is approved.' : 'Quote sent')).catch(() => undefined)} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Send</button>
               ) : null}
               {quote.status === 'Sent' ? (
                 <>
@@ -174,6 +174,18 @@ export function QuoteDetailPage() {
       />
 
       <FinanceWorkspaceNav />
+
+      {quote.status === 'Draft' && quote.approvalStatus ? (
+        <div className={`rounded-xl border px-4 py-3 text-sm ${quote.approvalStatus === 'Rejected' ? 'border-rose-200 bg-rose-50 text-rose-900' : quote.approvalStatus === 'Pending' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>
+          {quote.approvalStatus === 'Pending' ? 'Waiting for approval before it can be sent to the client.' : null}
+          {quote.approvalStatus === 'Rejected' ? 'Approval was declined. Revise the quote and send it again to ask for approval.' : null}
+          {quote.approvalStatus === 'Approved'
+            ? quote.approvedAmount != null && quote.approvedAmount !== quote.totalAmount
+              ? `Approved at ${formatCurrency(quote.approvedAmount, quote.currency)}; the total has changed since, so sending asks for approval again.`
+              : 'Approved. Ready to send to the client.'
+            : null}
+        </div>
+      ) : null}
 
       <SummarySection title="Quote Overview" description="Client, validity, and totals.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
