@@ -199,10 +199,10 @@ export function useSetSalesExchangeRate() {
 
 // RFPs & RFQs
 
-export function useTenders(params?: { type?: string | undefined; status?: string | undefined; search?: string | undefined; ownerUserId?: string | undefined }) {
+export function useTenders(params?: { type?: string | undefined; status?: string | undefined; search?: string | undefined; ownerUserId?: string | undefined; clientId?: string | undefined }) {
   return useQuery({
     queryKey: [...crmKey, 'tenders', params ?? {}],
-    queryFn: () => api.get<SalesTenderListItem[]>(endpoints.crm.tenders, { type: params?.type, status: params?.status, search: params?.search, ownerUserId: params?.ownerUserId }),
+    queryFn: () => api.get<SalesTenderListItem[]>(endpoints.crm.tenders, { type: params?.type, status: params?.status, search: params?.search, ownerUserId: params?.ownerUserId, clientId: params?.clientId }),
     staleTime: 30_000,
   })
 }

@@ -19,11 +19,13 @@ import { AssetFormDrawer } from './components/AssetFormDrawer'
 import { ClientPortalContactsTab } from './components/ClientPortalContactsTab'
 import type { ClientSiteSummary } from './types'
 import { RecordActivitiesPanel } from '../activities/RecordActivitiesPanel'
+import { ClientSalesTab } from '../crm/components/ClientSalesTab'
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const canEdit = usePermission('clients.edit')
-  const { hasModule } = useEntitlements()
+  const { hasModule, canAccessPath } = useEntitlements()
+  const canViewSales = usePermission('crm.view') && canAccessPath('/crm')
   const hasOperations = hasModule('operations')
   const { data, isLoading, isError } = useClientSummary(id)
   const { data: workOrders } = useWorkOrders(undefined, hasOperations)
@@ -178,6 +180,11 @@ export function ClientDetailPage() {
             ),
           },
           {
+            id: 'sales',
+            label: 'Sales',
+            content: <ClientSalesTab clientId={id} />,
+          },
+          {
             id: 'activities',
             label: 'Meetings & actions',
             content: <RecordActivitiesPanel entityType="Client" entityId={id} clientId={id} />,
@@ -187,7 +194,9 @@ export function ClientDetailPage() {
             label: 'Documents',
             content: <EmptyState title="No documents" description="Client documents and attachments will appear here." />,
           },
-        ].filter((tab) => hasOperations || !['sites', 'assets', 'work-orders', 'contracts'].includes(tab.id))}
+        ]
+          .filter((tab) => hasOperations || !['sites', 'assets', 'work-orders', 'contracts'].includes(tab.id))
+          .filter((tab) => canViewSales || tab.id !== 'sales')}
       />
 
       <SiteFormDrawer open={showSiteForm} clientId={id} onClose={() => setShowSiteForm(false)} />

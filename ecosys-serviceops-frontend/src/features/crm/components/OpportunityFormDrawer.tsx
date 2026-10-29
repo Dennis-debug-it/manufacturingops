@@ -32,11 +32,12 @@ interface FormState {
   ownerUserId: string
 }
 
-function toForm(opportunity: SalesOpportunityDetail | null | undefined, currentUserId: string): FormState {
+function toForm(opportunity: SalesOpportunityDetail | null | undefined, currentUserId: string, defaultClientId?: string): FormState {
+  const clientId = opportunity ? (opportunity.clientId ?? '') : (defaultClientId ?? '')
   return {
     title: opportunity?.title ?? '',
-    partyMode: opportunity?.clientId ? 'client' : 'prospect',
-    clientId: opportunity?.clientId ?? '',
+    partyMode: clientId ? 'client' : 'prospect',
+    clientId,
     siteId: opportunity?.siteId ?? '',
     companyName: opportunity?.companyName ?? '',
     contactName: opportunity?.contactName ?? '',
@@ -55,12 +56,12 @@ function toForm(opportunity: SalesOpportunityDetail | null | undefined, currentU
 
 const orNull = (value: string) => (value.trim() ? value.trim() : null)
 
-export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: boolean; onClose: () => void; opportunity?: SalesOpportunityDetail | null }) {
+export function OpportunityFormDrawer({ open, onClose, opportunity, defaultClientId }: { open: boolean; onClose: () => void; opportunity?: SalesOpportunityDetail | null; defaultClientId?: string }) {
   const navigate = useNavigate()
   const isEdit = Boolean(opportunity)
   const { user } = useAuth()
   const currentUserId = user?.userId ?? ''
-  const [form, setForm] = useState<FormState>(() => toForm(opportunity, currentUserId))
+  const [form, setForm] = useState<FormState>(() => toForm(opportunity, currentUserId, defaultClientId))
   const { data: clients } = useClients()
   const { data: sites } = useSites(form.partyMode === 'client' && form.clientId ? form.clientId : undefined)
   const create = useCreateOpportunity()
@@ -68,8 +69,8 @@ export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: bo
   const saving = create.isPending || update.isPending
 
   useEffect(() => {
-    if (open) setForm(toForm(opportunity, currentUserId))
-  }, [open, opportunity, currentUserId])
+    if (open) setForm(toForm(opportunity, currentUserId, defaultClientId))
+  }, [open, opportunity, currentUserId, defaultClientId])
 
   const set = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }))
 
