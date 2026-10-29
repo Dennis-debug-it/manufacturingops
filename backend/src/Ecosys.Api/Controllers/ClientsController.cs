@@ -81,6 +81,27 @@ public sealed class ClientsController(
         return Ok(clients.Select(client => Map(client, counts)).ToList());
     }
 
+    /// <summary>Clients and prospects that look like the company being entered, so it is not entered twice.</summary>
+    [HttpGet("possible-duplicates")]
+    public async Task<ActionResult<IReadOnlyList<PossibleDuplicateClient>>> PossibleDuplicates(
+        [FromQuery] string? name, [FromQuery] string? email, [FromQuery] string? phone, [FromQuery] Guid? excludeId, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureTenantOperationalAccess();
+        return Ok(await ClientMatching.FindAsync(dbContext, TenantId, name, email, phone, excludeId, cancellationToken));
+    }
+
+    /// <summary>Folds a prospect entered twice into the real record. See <see cref="ClientMatching.MergeProspectAsync"/>.</summary>
+    [HttpPost("{id:guid}/merge-into/{targetId:guid}")]
+    public async Task<IActionResult> MergeInto(Guid id, Guid targetId, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
+        var sourceName = await dbContext.Clients.Where(x => x.TenantId == TenantId && x.Id == id).Select(x => x.ClientName).FirstOrDefaultAsync(cancellationToken);
+        await ClientMatching.MergeProspectAsync(dbContext, TenantId, id, targetId, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "Client merged", nameof(Client), targetId.ToString(), $"Prospect '{sourceName}' merged into this client.", cancellationToken);
+        return NoContent();
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ClientResponse>> Get(Guid id, CancellationToken cancellationToken)
     {

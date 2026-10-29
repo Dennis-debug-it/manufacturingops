@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { PossibleDuplicates } from './PossibleDuplicates'
 import { zodResolver } from '@hookform/resolvers/zod'
 import toast from 'react-hot-toast'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
@@ -42,7 +43,7 @@ export interface ClientFormDrawerProps {
 
 export function ClientFormDrawer({ open, onClose, onCreated, client }: ClientFormDrawerProps) {
   const isEdit = Boolean(client)
-  const { register, handleSubmit, reset, setError, formState: { errors, isSubmitting } } = useForm<ClientFormValues>({
+  const { register, handleSubmit, reset, setError, watch, formState: { errors, isSubmitting } } = useForm<ClientFormValues>({
     resolver: zodResolver(clientSchema),
     defaultValues: emptyValues,
   })
@@ -139,6 +140,7 @@ export function ClientFormDrawer({ open, onClose, onCreated, client }: ClientFor
           <label className={labelClass} htmlFor="client-name">Client Name</label>
           <input id="client-name" {...register('clientName')} className={fieldClass} />
           {errors.clientName ? <p className={errorClass}>{errors.clientName.message}</p> : null}
+          {!isEdit ? <div className="mt-2"><PossibleDuplicates name={watch('clientName')} email={watch('email')} phone={watch('phone')} /></div> : null}
         </div>
         <div>
           <label className={labelClass} htmlFor="client-type">Client Type</label>

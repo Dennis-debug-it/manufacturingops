@@ -682,7 +682,7 @@ public sealed class SalesCrmFlowTests
         Assert.False(existing.ClientIsProspect);
 
         // A prospect shared with another deal is not renamed under it: the renamed deal gets its own.
-        await crm.UpdateOpportunity(second.Id, Deal("Solar phase 2", 1_000m, "KES") with { CompanyName = "Baraka Logistics Ltd" }, CancellationToken.None);
+        await crm.UpdateOpportunity(second.Id, Deal("Solar phase 2", 1_000m, "KES") with { CompanyName = "Baraka Freight" }, CancellationToken.None);
         Assert.Equal(3, await dbContext.Clients.CountAsync());
         // Renaming it again renames that prospect in place, leaving nothing behind.
         await crm.UpdateOpportunity(second.Id, Deal("Solar phase 2", 1_000m, "KES") with { CompanyName = "Baraka Group" }, CancellationToken.None);
@@ -728,6 +728,48 @@ public sealed class SalesCrmFlowTests
 
         var afterRemove = Ok<SalesOpportunityDetailResponse>(await crm.RemoveContact(first.Id, contact.Id, CancellationToken.None));
         Assert.Equal("Peter Kamau", Assert.Single(afterRemove.Contacts!).FullName);
+    }
+
+    [Theory]
+    [InlineData("Baraka Logistics Ltd.", "baraka logistics")]
+    [InlineData("The Kilele Hotel (Kenya) Limited", "kilele hotel")]
+    [InlineData("  ACME   Co ", "acme")]
+    public void CompanyNames_CompareWithoutCaseOrLegalSuffixes(string name, string key) =>
+        Assert.Equal(key, ClientMatching.NameKey(name));
+
+    [Fact]
+    public async Task PossibleDuplicates_AreFound_AndAProspectMergesIntoTheRealClient()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var real = new Client { TenantId = tenant.Id, ClientName = "Baraka Logistics Limited", Email = "accounts@baraka.co.ke", Phone = "+254 700 000 200", IsActive = true };
+        var other = new Client { TenantId = tenant.Id, ClientName = "Nyali Mall", IsActive = true };
+        dbContext.AddRange(real, other);
+        await dbContext.SaveChangesAsync();
+
+        Assert.Equal(real.Id, Assert.Single(await ClientMatching.FindAsync(dbContext, tenant.Id, "baraka logistics", null, null, null, CancellationToken.None)).Id);
+        Assert.Equal("Same email domain (baraka.co.ke)", Assert.Single(await ClientMatching.FindAsync(dbContext, tenant.Id, "BLL", "wanjiru@baraka.co.ke", null, null, CancellationToken.None)).Reason);
+        Assert.Equal(real.Id, Assert.Single(await ClientMatching.FindAsync(dbContext, tenant.Id, null, null, "0700000200", null, CancellationToken.None)).Id);
+        Assert.Empty(await ClientMatching.FindAsync(dbContext, tenant.Id, "Someone", "x@gmail.com", null, null, CancellationToken.None));
+
+        // A prospect entered under another name, with a deal and a contact, folds into the real client.
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        var deal = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+            (await crm.CreateOpportunity(Deal("Fleet depot solar", 1_000m, "KES") with { CompanyName = "BLL Group", ContactName = "Wanjiru Otieno" }, CancellationToken.None)).Result).Value);
+        var prospectId = deal.ClientId!.Value;
+        dbContext.ClientContacts.Add(new ClientContact { TenantId = tenant.Id, ClientId = real.Id, FullName = "wanjiru otieno", Phone = "0700" });
+        await dbContext.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => ClientMatching.MergeProspectAsync(dbContext, tenant.Id, real.Id, other.Id, CancellationToken.None));
+        await ClientMatching.MergeProspectAsync(dbContext, tenant.Id, prospectId, real.Id, CancellationToken.None);
+        await dbContext.SaveChangesAsync();
+
+        Assert.False(await dbContext.Clients.AnyAsync(x => x.Id == prospectId));
+        var merged = Ok<SalesOpportunityDetailResponse>(await crm.GetOpportunity(deal.Id, CancellationToken.None));
+        Assert.Equal(real.Id, merged.ClientId);
+        // The same person already at the client is reused, not duplicated.
+        Assert.Equal("wanjiru otieno", Assert.Single(merged.Contacts!).FullName);
+        Assert.Single(await dbContext.ClientContacts.Where(x => x.ClientId == real.Id).ToListAsync());
     }
 
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>

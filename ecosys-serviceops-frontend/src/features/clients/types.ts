@@ -50,6 +50,13 @@ export interface ClientContact {
 
 export type UpsertClientContactPayload = Omit<ClientContact, 'id' | 'clientId'>
 
+export interface PossibleDuplicateClient {
+  id: string
+  clientName: string
+  isProspect: boolean
+  reason: string
+}
+
 export interface ClientSiteSummary {
   siteId: string
   siteCode: string

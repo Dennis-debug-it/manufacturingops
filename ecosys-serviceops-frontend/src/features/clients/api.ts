@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { PagedResult } from '../../shared/types/pagination'
-import type { Asset, Client, ClientContact, ClientSummary, SiteDetail, UpsertClientContactPayload } from './types'
+import type { Asset, Client, ClientContact, ClientSummary, PossibleDuplicateClient, SiteDetail, UpsertClientContactPayload } from './types'
 
 export interface ClientListFilters {
   search?: string
@@ -399,6 +399,28 @@ export function useDeleteClientContact(clientId: string) {
     mutationFn: (contactId: string) => api.delete<void>(endpoints.clients.contact(clientId, contactId)),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['clients', clientId, 'contacts'] })
+      void queryClient.invalidateQueries({ queryKey: ['crm'] })
+    },
+  })
+}
+
+/** Clients and prospects that look like the company being typed (name, email domain or phone). */
+export function usePossibleDuplicates(params: { name?: string | undefined; email?: string | undefined; phone?: string | undefined; excludeId?: string | undefined }, enabled = true) {
+  const hasInput = Boolean(params.name?.trim() || params.email?.includes('@') || (params.phone?.replace(/\D/g, '').length ?? 0) >= 9)
+  return useQuery({
+    queryKey: ['clients', 'possible-duplicates', params],
+    queryFn: () => api.get<PossibleDuplicateClient[]>(endpoints.clients.possibleDuplicates, params),
+    enabled: enabled && hasInput,
+    staleTime: 30_000,
+  })
+}
+
+export function useMergeClient(sourceId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (targetId: string) => api.post<void>(endpoints.clients.mergeInto(sourceId, targetId)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['clients'] })
       void queryClient.invalidateQueries({ queryKey: ['crm'] })
     },
   })

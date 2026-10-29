@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { getActiveCurrency } from '../../../shared/utils/currency'
 import { useClients, useSites } from '../../clients/api'
+import { PossibleDuplicates } from '../../clients/components/PossibleDuplicates'
 import { workTypeOptions } from '../../work-orders/schemas'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import { useCreateOpportunity, useUpdateOpportunity } from '../api'
@@ -206,6 +207,16 @@ export function OpportunityFormDrawer({ open, onClose, opportunity, defaultClien
             <input id="opp-phone" value={form.contactPhone} onChange={(event) => set({ contactPhone: event.target.value })} className={fieldClass} />
           </div>
         </div>
+        {form.partyMode === 'prospect' ? (
+          <PossibleDuplicates
+            name={form.companyName || form.contactName}
+            email={form.contactEmail}
+            phone={form.contactPhone}
+            excludeId={opportunity?.clientIsProspect ? (opportunity.clientId ?? undefined) : undefined}
+            // A real client is picked outright; a prospect is joined by taking its exact name.
+            onUse={(match) => (match.isProspect ? set({ companyName: match.clientName }) : set({ partyMode: 'client', clientId: match.id, siteId: '' }))}
+          />
+        ) : null}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>

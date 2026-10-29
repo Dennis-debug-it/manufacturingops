@@ -21,6 +21,7 @@ import type { ClientSiteSummary } from './types'
 import { RecordActivitiesPanel } from '../activities/RecordActivitiesPanel'
 import { ClientSalesTab } from '../crm/components/ClientSalesTab'
 import { ClientContactsPanel } from './components/ClientContactsPanel'
+import { MergeProspectDialog } from './components/MergeProspectDialog'
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -33,6 +34,7 @@ export function ClientDetailPage() {
   const { data: contracts } = useContracts(id ? { clientId: id } : undefined, hasOperations)
   const [showSiteForm, setShowSiteForm] = useState(false)
   const [showAssetForm, setShowAssetForm] = useState(false)
+  const [showMerge, setShowMerge] = useState(false)
 
   const clientWorkOrders = useMemo(
     () => (workOrders ?? []).filter((wo) => wo.clientId === id),
@@ -63,7 +65,16 @@ export function ClientDetailPage() {
       title={client.clientName}
       subtitle={client.isProspect ? 'Prospect: not a customer yet' : (client.clientType ?? 'Client')}
       breadcrumbs={[{ label: 'Clients', to: '/clients' }, { label: client.clientName }]}
-      secondaryActions={<StatusBadge status={client.isActive ? client.activeStatus : 'Inactive'} />}
+      secondaryActions={
+        <div className="flex items-center gap-2">
+          {client.isProspect && canEdit ? (
+            <button type="button" onClick={() => setShowMerge(true)} className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              Merge into…
+            </button>
+          ) : null}
+          <StatusBadge status={client.isActive ? client.activeStatus : 'Inactive'} />
+        </div>
+      }
     />
   )
 
@@ -207,6 +218,7 @@ export function ClientDetailPage() {
 
       <SiteFormDrawer open={showSiteForm} clientId={id} onClose={() => setShowSiteForm(false)} />
       <AssetFormDrawer open={showAssetForm} onClose={() => setShowAssetForm(false)} defaultClientId={id} />
+      {client.isProspect ? <MergeProspectDialog prospect={client} open={showMerge} onClose={() => setShowMerge(false)} /> : null}
     </>
   )
 }

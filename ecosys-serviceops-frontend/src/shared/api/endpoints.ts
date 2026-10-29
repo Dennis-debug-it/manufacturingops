@@ -141,6 +141,8 @@ export const endpoints = {
     validateDeletion: (id: string) => `/api/clients/${id}/validate-deletion`,
     deletePermanent: (id: string) => `/api/clients/${id}/permanent`,
     contacts: (id: string) => `/api/clients/${id}/contacts`,
+    possibleDuplicates: '/api/clients/possible-duplicates',
+    mergeInto: (id: string, targetId: string) => `/api/clients/${id}/merge-into/${targetId}`,
     contact: (id: string, contactId: string) => `/api/clients/${id}/contacts/${contactId}`,
   },
   sites: {

@@ -213,9 +213,6 @@ internal static class SalesVisibility
 /// </summary>
 internal static class ProspectClients
 {
-    /// <summary>Lower-cased, trimmed, single-spaced: how company names are compared.</summary>
-    public static string NormalizeName(string name) => string.Join(' ', name.Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries));
-
     /// <summary>
     /// Gives a deal with no client a client record. <paramref name="previousClientId"/> is the client the
     /// deal had before this edit: a prospect only this deal uses is kept and renamed with it, so editing
@@ -239,12 +236,14 @@ internal static class ProspectClients
         }
         if (client is null)
         {
-            var normalized = NormalizeName(name);
+            // Same company ignoring case, punctuation and legal suffixes ("Baraka Ltd" = "baraka").
+            var key = ClientMatching.NameKey(name);
+            var firstWord = key.Split(' ')[0];
             var candidates = await dbContext.Clients
-                .Where(x => x.TenantId == opportunity.TenantId && x.ClientName.ToLower().Contains(normalized.Split(' ')[0]))
+                .Where(x => x.TenantId == opportunity.TenantId && x.IsActive && x.ClientName.ToLower().Contains(firstWord))
                 .ToListAsync(cancellationToken);
             client = candidates
-                .Where(x => NormalizeName(x.ClientName) == normalized)
+                .Where(x => ClientMatching.NameKey(x.ClientName) == key)
                 .OrderBy(x => x.IsProspect)
                 .FirstOrDefault();
         }
