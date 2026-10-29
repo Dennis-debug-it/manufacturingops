@@ -1,4 +1,5 @@
 using Ecosys.Domain.Entities;
+using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
@@ -173,6 +174,65 @@ public sealed class SalesReminderTests
     }
 
     [Fact]
+    public async Task ContractInItsNoticePeriod_GetsARenewalDeal_ThatFollowsTheContract()
+    {
+        await using var db = CreateDbContext();
+        var fixture = await SeedAsync(db);
+        var client = new Client { TenantId = fixture.Tenant.Id, ClientName = "Kilele Hotel" };
+        db.Clients.Add(client);
+        Contract AddContract(string number, int endsInDays, int noticeDays = 60, ContractStatus status = ContractStatus.ExpiringSoon)
+        {
+            var contract = new Contract
+            {
+                TenantId = fixture.Tenant.Id, ClientId = client.Id, ContractNumber = number, Name = $"Chiller AMC {number}", Status = status,
+                StartDate = Now.AddYears(-1), EndDate = Now.Date.AddDays(endsInDays), RenewalNoticeDays = noticeDays,
+                ContractValue = 1_200_000m, Currency = "KES", RenewalOwnerUserId = fixture.Owner.Id,
+            };
+            db.Contracts.Add(contract);
+            return contract;
+        }
+        var due = AddContract("CT-1", endsInDays: 45);
+        AddContract("CT-2", endsInDays: 90);
+        AddContract("CT-3", endsInDays: 30, status: ContractStatus.Draft);
+        var lapsing = AddContract("CT-4", endsInDays: 10);
+        await db.SaveChangesAsync();
+        var push = new RecordingPushQueue();
+
+        var first = await CreateService(db, push).RunAsync(Now);
+        Assert.Equal(2, first.RenewalDealsOpened);
+        var deal = await db.SalesOpportunities.SingleAsync(x => x.RenewalOfContractId == due.Id);
+        Assert.Equal(("Renewal: Chiller AMC CT-1", fixture.Owner.Id, 1_200_000m, 60), (deal.Title, deal.OwnerUserId, deal.EstimatedValue, deal.Probability));
+        // The owner hears about it in the same run, through the follow-up it opens with.
+        Assert.Contains(push.Sent, x => x.Message.Url == $"/crm/opportunities/{deal.Id}");
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddHours(1))).RenewalDealsOpened);
+
+        due.Status = ContractStatus.Renewed;
+        lapsing.Status = ContractStatus.Expired;
+        await db.SaveChangesAsync();
+        Assert.Equal(2, (await CreateService(db, push).RunAsync(Now.AddDays(1))).RenewalDealsClosed);
+        Assert.Equal("Won", (await db.SalesOpportunities.SingleAsync(x => x.RenewalOfContractId == due.Id)).Stage);
+        var lost = await db.SalesOpportunities.SingleAsync(x => x.RenewalOfContractId == lapsing.Id);
+        Assert.Equal("Lost", lost.Stage);
+        Assert.Contains("expired without renewal", lost.LostReason);
+    }
+
+    [Fact]
+    public async Task RenewalDeals_CanBeTurnedOff()
+    {
+        await using var db = CreateDbContext();
+        var fixture = await SeedAsync(db);
+        db.TenantSalesSettings.Add(new TenantSalesSettings { TenantId = fixture.Tenant.Id, CreateRenewalDeals = false });
+        db.Contracts.Add(new Contract
+        {
+            TenantId = fixture.Tenant.Id, ClientId = Guid.NewGuid(), ContractNumber = "CT-9", Name = "Lift AMC", Status = ContractStatus.ExpiringSoon,
+            StartDate = Now.AddYears(-1), EndDate = Now.Date.AddDays(20), RenewalNoticeDays = 30,
+        });
+        await db.SaveChangesAsync();
+
+        Assert.Equal(0, (await CreateService(db, new RecordingPushQueue()).RunAsync(Now)).RenewalDealsOpened);
+    }
+
+    [Fact]
     public async Task OwnerWithoutAMailbox_GetsThePushOnly()
     {
         await using var db = CreateDbContext();
@@ -246,6 +306,7 @@ public sealed class SalesReminderTests
             new EmailOutboxService(db, new EmailDeliveryLogService(db)),
             push,
             Options.Create(new PublicAppOptions { PublicUrl = "https://app.test/" }),
+            new SalesOwnerResolver(db, new RolePermissionService(db)),
             NullLogger<SalesReminderService>.Instance);
 
     private sealed class RecordingPushQueue : IPushNotificationQueue

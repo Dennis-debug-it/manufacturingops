@@ -166,6 +166,19 @@ export function OpportunityDetailPage() {
           This deal is won. Create a work order to hand it over to operations{opportunity.clientId ? '' : ' — the client record is created for you'}.
         </div>
       ) : null}
+      {opportunity.renewalOfContractId ? (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          Renewal of contract{' '}
+          <Link to={`/contracts/${opportunity.renewalOfContractId}`} className="font-medium underline underline-offset-4">{opportunity.renewalContractNumber ?? 'contract'}</Link>.
+          {' '}Renewing the contract wins this deal; letting it lapse marks it lost.
+        </div>
+      ) : null}
+      {opportunity.sourceWorkOrderId ? (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          Flagged by a technician on work order{' '}
+          <Link to={`/work-orders/${opportunity.sourceWorkOrderId}`} className="font-medium underline underline-offset-4">{opportunity.sourceWorkOrderNumber ?? 'work order'}</Link>.
+        </div>
+      ) : null}
       {opportunity.stage === 'Lost' && opportunity.lostReason ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">Lost: {opportunity.lostReason}</div>
       ) : null}

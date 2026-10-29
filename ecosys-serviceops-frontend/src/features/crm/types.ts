@@ -14,7 +14,7 @@ export const stageLabels: Record<SalesStage, string> = {
   Lost: 'Lost',
 }
 
-export const sourceOptions = ['Referral', 'Website', 'Walk-in', 'Cold call', 'Tender', 'Existing client', 'Other'] as const
+export const sourceOptions = ['Referral', 'Website', 'Walk-in', 'Cold call', 'Tender', 'Existing client', 'Contract renewal', 'Technician', 'Other'] as const
 
 export const activityTypeOptions = [
   { value: 'Call', label: 'Call' },
@@ -123,6 +123,12 @@ export interface SalesOpportunityDetail {
   tenders: Array<{ id: string; type: TenderType; reference: string | null; title: string; status: TenderStatus; submissionDeadline: string }>
   convertedValue: number | null
   reportingCurrency: string
+  /** Set on a renewal deal: the contract it renews. */
+  renewalOfContractId?: string | null
+  renewalContractNumber?: string | null
+  /** Set on a lead a technician flagged from a job. */
+  sourceWorkOrderId?: string | null
+  sourceWorkOrderNumber?: string | null
 }
 
 /** Every value is in `reportingCurrency`; deals in a currency with no rate are listed in `unconvertedCurrencies` instead. */

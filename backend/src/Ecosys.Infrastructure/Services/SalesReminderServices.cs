@@ -1,4 +1,5 @@
 using Ecosys.Domain.Entities;
+using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Shared.Contracts.Integration;
 using Ecosys.Shared.Options;
@@ -22,11 +23,11 @@ public static class SalesReminderKeys
     public const string QuoteAwaitingAnswer = "crm.quote.awaiting-answer";
 }
 
-public sealed record SalesReminderRunResult(int FollowUpReminders, int TenderReminders, int QuoteReminders = 0);
+public sealed record SalesReminderRunResult(int FollowUpReminders, int TenderReminders, int QuoteReminders = 0, int RenewalDealsOpened = 0, int RenewalDealsClosed = 0);
 
 public interface ISalesReminderService
 {
-    /// <summary>Sends every sales reminder that is due at <paramref name="utcNow"/>. Safe to run repeatedly.</summary>
+    /// <summary>Opens and closes renewal deals, then sends every sales reminder due at <paramref name="utcNow"/>. Safe to run repeatedly.</summary>
     Task<SalesReminderRunResult> RunAsync(DateTime utcNow, CancellationToken cancellationToken = default);
 }
 
@@ -39,6 +40,11 @@ public interface ISalesReminderService
 /// <item>A sent quotation the client has not answered: once it has waited three days, and again two
 /// days before it expires. It goes to the owner of the deal it was raised from, else whoever sent it.</item>
 /// </list>
+/// Before reminding, it keeps renewal deals in step with contracts: a contract that enters its
+/// renewal notice period gets a renewal deal (unless the workspace turned that off in Sales
+/// settings), owned by the best available person (<see cref="ISalesOwnerResolver"/>) and with a
+/// follow-up due straight away, so the owner hears about it in this same run. Renewing the contract
+/// wins the deal; letting it expire, or terminating or cancelling it, loses it.
 /// Each person's notification settings are honoured per channel. Only workspaces whose plan includes
 /// the sales CRM (Suite) are reminded, and the reminder state is saved per item so a restart, a second
 /// instance or an hourly re-run never sends the same reminder twice.
@@ -52,6 +58,7 @@ internal sealed class SalesReminderService(
     IEmailOutboxService emailOutboxService,
     IPushNotificationQueue pushNotificationQueue,
     IOptions<PublicAppOptions> publicAppOptions,
+    ISalesOwnerResolver salesOwnerResolver,
     ILogger<SalesReminderService> logger) : ISalesReminderService
 {
     public static readonly TimeSpan FollowUpRepeatInterval = TimeSpan.FromHours(24);
@@ -66,12 +73,20 @@ internal sealed class SalesReminderService(
 
     private readonly Dictionary<Guid, bool> _crmEnabledByTenant = [];
 
+    public const string RenewalSource = "Contract renewal";
+    /// <summary>Most service contracts are renewed, so a renewal deal starts well ahead of a cold lead.</summary>
+    public const int RenewalProbability = 60;
+
+    private static readonly ContractStatus[] RenewableStatuses = [ContractStatus.Active, ContractStatus.ExpiringSoon, ContractStatus.RenewalInProgress];
+    private static readonly ContractStatus[] LapsedStatuses = [ContractStatus.Expired, ContractStatus.Terminated, ContractStatus.Cancelled];
+
     public async Task<SalesReminderRunResult> RunAsync(DateTime utcNow, CancellationToken cancellationToken = default)
     {
+        var (opened, closed) = await SyncRenewalDealsAsync(utcNow, cancellationToken);
         var followUps = await RemindFollowUpsAsync(utcNow, cancellationToken);
         var tenders = await RemindTenderDeadlinesAsync(utcNow, cancellationToken);
         var quotes = await RemindUnansweredQuotesAsync(utcNow, cancellationToken);
-        return new SalesReminderRunResult(followUps, tenders, quotes);
+        return new SalesReminderRunResult(followUps, tenders, quotes, opened, closed);
     }
 
     private async Task<int> RemindFollowUpsAsync(DateTime now, CancellationToken cancellationToken)
@@ -132,6 +147,123 @@ internal sealed class SalesReminderService(
         if (due.Count > 0)
             await dbContext.SaveChangesAsync(cancellationToken);
         return sent;
+    }
+
+    private async Task<(int Opened, int Closed)> SyncRenewalDealsAsync(DateTime now, CancellationToken cancellationToken)
+    {
+        var today = now.Date;
+        // Notice periods differ per contract, so the window is narrowed to a year here and checked exactly below.
+        var due = (await dbContext.Contracts
+            .IgnoreQueryFilters()
+            .Include(x => x.Client)
+            .Where(x => !x.IsArchived && RenewableStatuses.Contains(x.Status) && x.RenewalNoticeDays > 0
+                && x.EndDate >= today && x.EndDate <= today.AddDays(366)
+                && !dbContext.SalesOpportunities.IgnoreQueryFilters().Any(o => o.TenantId == x.TenantId && o.RenewalOfContractId == x.Id))
+            .OrderBy(x => x.EndDate)
+            .Take(500)
+            .ToListAsync(cancellationToken))
+            .Where(x => x.EndDate.Date <= today.AddDays(x.RenewalNoticeDays))
+            .ToList();
+
+        var opened = 0;
+        var settingsByTenant = new Dictionary<Guid, bool>();
+        foreach (var contract in due)
+        {
+            if (!settingsByTenant.TryGetValue(contract.TenantId, out var enabled))
+            {
+                enabled = await dbContext.TenantSalesSettings.IgnoreQueryFilters().AsNoTracking()
+                    .Where(x => x.TenantId == contract.TenantId)
+                    .Select(x => (bool?)x.CreateRenewalDeals)
+                    .FirstOrDefaultAsync(cancellationToken) ?? true;
+                settingsByTenant[contract.TenantId] = enabled;
+            }
+            if (!enabled || !await CrmEnabledAsync(contract.TenantId, cancellationToken))
+                continue;
+
+            var owner = await salesOwnerResolver.ResolveAsync(
+                contract.TenantId, [contract.RenewalOwnerUserId, contract.AccountManagerUserId], contract.ClientId, cancellationToken);
+            var client = contract.Client?.ClientName ?? "the client";
+            var deal = new SalesOpportunity
+            {
+                TenantId = contract.TenantId,
+                Title = $"Renewal: {contract.Name}",
+                Stage = "Qualified",
+                ClientId = contract.ClientId,
+                Source = RenewalSource,
+                Description = $"Contract {contract.ContractNumber} ends on {contract.EndDate:d MMM yyyy}.",
+                EstimatedValue = contract.ContractValue ?? 0,
+                Currency = string.IsNullOrWhiteSpace(contract.Currency) ? "KES" : contract.Currency,
+                Probability = RenewalProbability,
+                ExpectedCloseDate = DateTime.SpecifyKind(contract.EndDate.Date, DateTimeKind.Utc),
+                OwnerUserId = owner?.Id,
+                OwnerName = owner?.FullName,
+                RenewalOfContractId = contract.Id,
+                LastActivityAt = now,
+            };
+            dbContext.SalesOpportunities.Add(deal);
+            dbContext.SalesActivities.Add(new SalesActivity
+            {
+                TenantId = deal.TenantId, OpportunityId = deal.Id, Type = "System", OccurredAt = now,
+                Summary = $"Renewal deal opened: contract {contract.ContractNumber} ends on {contract.EndDate:d MMM yyyy}.",
+            });
+            dbContext.SalesActivities.Add(new SalesActivity
+            {
+                TenantId = deal.TenantId, OpportunityId = deal.Id, Type = "FollowUp", OccurredAt = now, DueAt = now,
+                Summary = $"Talk to {client} about renewing {contract.Name}.",
+            });
+            opened++;
+        }
+        if (opened > 0)
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+        // Contracts that have since been renewed or have lapsed settle their open renewal deals.
+        var settled = await dbContext.SalesOpportunities
+            .IgnoreQueryFilters()
+            .Where(x => x.RenewalOfContractId != null && x.Stage != "Won" && x.Stage != "Lost")
+            .Join(dbContext.Contracts.IgnoreQueryFilters(), deal => deal.RenewalOfContractId, contract => contract.Id, (deal, contract) => new { deal, contract })
+            .Where(x => x.contract.TenantId == x.deal.TenantId
+                && (x.contract.Status == ContractStatus.Renewed || LapsedStatuses.Contains(x.contract.Status)))
+            .Take(200)
+            .ToListAsync(cancellationToken);
+        foreach (var item in settled)
+        {
+            var deal = item.deal;
+            var contract = item.contract;
+            string summary;
+            if (contract.Status == ContractStatus.Renewed)
+            {
+                var renewedValue = contract.RenewedToContractId is null ? null : await dbContext.Contracts.IgnoreQueryFilters()
+                    .Where(x => x.Id == contract.RenewedToContractId)
+                    .Select(x => new { x.ContractValue, x.Currency })
+                    .FirstOrDefaultAsync(cancellationToken);
+                deal.Stage = "Won";
+                deal.Probability = 100;
+                deal.WonAt = now;
+                if (renewedValue?.ContractValue is > 0)
+                {
+                    deal.EstimatedValue = renewedValue.ContractValue.Value;
+                    deal.Currency = renewedValue.Currency;
+                }
+                summary = $"Contract {contract.ContractNumber} was renewed. Deal marked Won.";
+            }
+            else
+            {
+                deal.Stage = "Lost";
+                deal.Probability = 0;
+                deal.LostAt = now;
+                deal.LostReason = $"Contract {contract.ContractNumber} {contract.Status.ToString().ToLowerInvariant()} without renewal.";
+                summary = deal.LostReason + " Deal marked Lost.";
+            }
+            deal.LastActivityAt = now;
+            dbContext.SalesActivities.Add(new SalesActivity
+            {
+                TenantId = deal.TenantId, OpportunityId = deal.Id, Type = "System", OccurredAt = now, Summary = summary,
+            });
+        }
+        if (settled.Count > 0)
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+        return (opened, settled.Count);
     }
 
     private async Task<int> RemindTenderDeadlinesAsync(DateTime now, CancellationToken cancellationToken)
@@ -356,6 +488,8 @@ public sealed class SalesReminderWorker(
             {
                 using var scope = serviceScopeFactory.CreateScope();
                 var result = await scope.ServiceProvider.GetRequiredService<ISalesReminderService>().RunAsync(DateTime.UtcNow, stoppingToken);
+                if (result.RenewalDealsOpened + result.RenewalDealsClosed > 0)
+                    logger.LogInformation("Renewal deals: {Opened} opened, {Closed} settled from their contracts.", result.RenewalDealsOpened, result.RenewalDealsClosed);
                 if (result.FollowUpReminders + result.TenderReminders + result.QuoteReminders > 0)
                     logger.LogInformation("Sales reminders sent: {FollowUps} follow-up(s), {Tenders} RFP/RFQ deadline(s), {Quotes} unanswered quote(s).", result.FollowUpReminders, result.TenderReminders, result.QuoteReminders);
             }

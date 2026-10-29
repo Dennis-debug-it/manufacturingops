@@ -765,6 +765,14 @@ public sealed class SalesCrmController(
             .ToListAsync(cancellationToken);
 
         var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
+        var renewalContractNumber = opportunity.RenewalOfContractId is null ? null : await dbContext.Contracts.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.Id == opportunity.RenewalOfContractId)
+            .Select(x => x.ContractNumber)
+            .FirstOrDefaultAsync(cancellationToken);
+        var sourceWorkOrderNumber = opportunity.SourceWorkOrderId is null ? null : await dbContext.WorkOrders.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.Id == opportunity.SourceWorkOrderId)
+            .Select(x => x.WorkOrderNumber)
+            .FirstOrDefaultAsync(cancellationToken);
 
         return new SalesOpportunityDetailResponse(
             opportunity.Id, opportunity.Title, opportunity.Stage,
@@ -780,7 +788,9 @@ public sealed class SalesCrmController(
             quotations,
             tenders,
             converter.Convert(opportunity.EstimatedValue, opportunity.Currency),
-            converter.ReportingCurrency);
+            converter.ReportingCurrency,
+            opportunity.RenewalOfContractId, renewalContractNumber,
+            opportunity.SourceWorkOrderId, sourceWorkOrderNumber);
     }
 
     private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt, SalesCurrencyConverter converter) =>
@@ -887,7 +897,11 @@ public sealed record SalesOpportunityDetailResponse(
     IReadOnlyCollection<SalesLinkedQuotation> Quotations,
     IReadOnlyCollection<SalesLinkedTender> Tenders,
     decimal? ConvertedValue,
-    string ReportingCurrency);
+    string ReportingCurrency,
+    Guid? RenewalOfContractId = null,
+    string? RenewalContractNumber = null,
+    Guid? SourceWorkOrderId = null,
+    string? SourceWorkOrderNumber = null);
 
 public sealed record SalesActivityResponse(
     Guid Id, Guid OpportunityId, string Type, string Summary,
