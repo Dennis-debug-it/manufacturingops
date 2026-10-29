@@ -21,7 +21,7 @@ const visibilityOptions: Array<{ value: DealVisibility; title: string; descripti
   },
 ]
 
-type FormState = Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals'>
+type FormState = Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals' | 'stalledAfterDays'>
 
 export function SalesSettingsPage() {
   const { data, isLoading } = useSalesSettings()
@@ -29,7 +29,7 @@ export function SalesSettingsPage() {
   const [form, setForm] = useState<FormState | null>(null)
 
   useEffect(() => {
-    if (data) setForm({ defaultOwnerUserId: data.defaultOwnerUserId, dealVisibility: data.dealVisibility, createRenewalDeals: data.createRenewalDeals })
+    if (data) setForm({ defaultOwnerUserId: data.defaultOwnerUserId, dealVisibility: data.dealVisibility, createRenewalDeals: data.createRenewalDeals, stalledAfterDays: data.stalledAfterDays })
   }, [data])
 
   if (isLoading || !form) return <Spinner label="Loading sales settings" />
@@ -97,6 +97,24 @@ export function SalesSettingsPage() {
             <span className="mt-0.5 block text-slate-500">Created when the contract enters its renewal notice period. Renewing the contract wins the deal; letting it lapse marks it lost.</span>
           </span>
         </label>
+      </section>
+
+      <section className="space-y-3 rounded-[var(--radius-card)] border border-slate-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-slate-900">Stalled deals</h2>
+        <label className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
+          Flag an open deal when nothing has been logged on it for
+          <input
+            type="number"
+            min={0}
+            max={365}
+            value={form.stalledAfterDays}
+            onChange={(event) => setForm({ ...form, stalledAfterDays: Math.max(0, Math.min(365, Number(event.target.value) || 0)) })}
+            className="h-9 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-[var(--app-primary)]"
+            aria-label="Stalled after days"
+          />
+          days.
+        </label>
+        <p className="text-xs text-slate-500">The deal is marked on the pipeline and its owner is told once; logging anything on it starts the clock again. 0 turns this off.</p>
       </section>
 
       <div className="flex justify-end">

@@ -21,9 +21,12 @@ public static class SalesReminderKeys
 
     /// <summary>Notification and email-template key for a sent quotation the client has not answered.</summary>
     public const string QuoteAwaitingAnswer = "crm.quote.awaiting-answer";
+
+    /// <summary>Notification and email-template key for an open deal nobody has touched for the workspace's stall period.</summary>
+    public const string DealStalled = "crm.deal.stalled";
 }
 
-public sealed record SalesReminderRunResult(int FollowUpReminders, int TenderReminders, int QuoteReminders = 0, int RenewalDealsOpened = 0, int RenewalDealsClosed = 0);
+public sealed record SalesReminderRunResult(int FollowUpReminders, int TenderReminders, int QuoteReminders = 0, int RenewalDealsOpened = 0, int RenewalDealsClosed = 0, int StalledReminders = 0);
 
 public interface ISalesReminderService
 {
@@ -39,6 +42,8 @@ public interface ISalesReminderService
 /// <item>An RFP/RFQ not yet submitted, three days and again one day before its submission deadline.</item>
 /// <item>A sent quotation the client has not answered: once it has waited three days, and again two
 /// days before it expires. It goes to the owner of the deal it was raised from, else whoever sent it.</item>
+/// <item>An open deal with nothing logged for the workspace's stall period (Sales settings), once per
+/// quiet spell: any activity on the deal starts the clock again.</item>
 /// </list>
 /// Before reminding, it keeps renewal deals in step with contracts: a contract that enters its
 /// renewal notice period gets a renewal deal (unless the workspace turned that off in Sales
@@ -67,6 +72,7 @@ internal sealed class SalesReminderService(
     public static readonly TimeSpan TenderFinalWarning = TimeSpan.FromDays(1);
     public static readonly TimeSpan QuoteChaseAfter = TimeSpan.FromDays(3);
     public static readonly TimeSpan QuoteExpiryWarning = TimeSpan.FromDays(2);
+    public const int DefaultStalledAfterDays = 14;
 
     private static readonly string[] TenderStatusesAwaitingSubmission = ["Received", "Reviewing", "Preparing"];
     private static readonly string[] ClosedDealStages = ["Won", "Lost"];
@@ -86,7 +92,8 @@ internal sealed class SalesReminderService(
         var followUps = await RemindFollowUpsAsync(utcNow, cancellationToken);
         var tenders = await RemindTenderDeadlinesAsync(utcNow, cancellationToken);
         var quotes = await RemindUnansweredQuotesAsync(utcNow, cancellationToken);
-        return new SalesReminderRunResult(followUps, tenders, quotes, opened, closed);
+        var stalled = await RemindStalledDealsAsync(utcNow, cancellationToken);
+        return new SalesReminderRunResult(followUps, tenders, quotes, opened, closed, stalled);
     }
 
     private async Task<int> RemindFollowUpsAsync(DateTime now, CancellationToken cancellationToken)
@@ -331,6 +338,66 @@ internal sealed class SalesReminderService(
         return sent;
     }
 
+    private async Task<int> RemindStalledDealsAsync(DateTime now, CancellationToken cancellationToken)
+    {
+        var thresholds = await dbContext.TenantSalesSettings.IgnoreQueryFilters().AsNoTracking()
+            .ToDictionaryAsync(x => x.TenantId, x => x.StalledAfterDays, cancellationToken);
+        var shortest = thresholds.Values.Where(x => x > 0).DefaultIfEmpty(DefaultStalledAfterDays).Min();
+        shortest = Math.Min(shortest, DefaultStalledAfterDays);
+        var quietSince = now.AddDays(-shortest);
+
+        var candidates = await dbContext.SalesOpportunities
+            .IgnoreQueryFilters()
+            .Include(x => x.Client)
+            .Where(x => !ClosedDealStages.Contains(x.Stage) && x.OwnerUserId != null
+                && (x.LastActivityAt ?? x.CreatedAt) <= quietSince
+                && (x.StallReminderSentAt == null || x.StallReminderSentAt < (x.LastActivityAt ?? x.CreatedAt)))
+            .OrderBy(x => x.LastActivityAt ?? x.CreatedAt)
+            .Take(500)
+            .ToListAsync(cancellationToken);
+
+        var sent = 0;
+        foreach (var deal in candidates)
+        {
+            var threshold = thresholds.TryGetValue(deal.TenantId, out var days) ? days : DefaultStalledAfterDays;
+            var lastTouched = deal.LastActivityAt ?? deal.CreatedAt;
+            if (threshold <= 0 || lastTouched > now.AddDays(-threshold))
+                continue;
+            if (!await CrmEnabledAsync(deal.TenantId, cancellationToken))
+                continue;
+
+            deal.StallReminderSentAt = now;
+            var owner = await LoadRecipientAsync(deal.TenantId, deal.OwnerUserId!.Value, cancellationToken);
+            if (owner is null)
+                continue;
+
+            var idleDays = (int)(now - lastTouched).TotalDays;
+            var url = $"/crm/opportunities/{deal.Id}";
+            var customer = deal.Client?.ClientName ?? deal.CompanyName ?? deal.ContactName ?? "—";
+            await DeliverAsync(owner, SalesReminderKeys.DealStalled,
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["OwnerName"] = owner.FullName,
+                    ["OpportunityTitle"] = deal.Title,
+                    ["CustomerName"] = customer,
+                    ["Stage"] = deal.Stage,
+                    ["IdleDays"] = idleDays.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["OpportunityUrl"] = AbsoluteUrl(url),
+                },
+                new PushMessage(
+                    Title: $"Gone quiet: {deal.Title}",
+                    Body: $"{customer} · nothing logged for {idleDays} days",
+                    Url: url,
+                    Tag: $"crm-stalled-{deal.Id}"),
+                cancellationToken);
+            sent++;
+        }
+
+        if (candidates.Count > 0)
+            await dbContext.SaveChangesAsync(cancellationToken);
+        return sent;
+    }
+
     private async Task<int> RemindUnansweredQuotesAsync(DateTime now, CancellationToken cancellationToken)
     {
         var chaseSentBefore = now - QuoteChaseAfter;
@@ -491,8 +558,8 @@ public sealed class SalesReminderWorker(
                 var result = await scope.ServiceProvider.GetRequiredService<ISalesReminderService>().RunAsync(DateTime.UtcNow, stoppingToken);
                 if (result.RenewalDealsOpened + result.RenewalDealsClosed > 0)
                     logger.LogInformation("Renewal deals: {Opened} opened, {Closed} settled from their contracts.", result.RenewalDealsOpened, result.RenewalDealsClosed);
-                if (result.FollowUpReminders + result.TenderReminders + result.QuoteReminders > 0)
-                    logger.LogInformation("Sales reminders sent: {FollowUps} follow-up(s), {Tenders} RFP/RFQ deadline(s), {Quotes} unanswered quote(s).", result.FollowUpReminders, result.TenderReminders, result.QuoteReminders);
+                if (result.FollowUpReminders + result.TenderReminders + result.QuoteReminders + result.StalledReminders > 0)
+                    logger.LogInformation("Sales reminders sent: {FollowUps} follow-up(s), {Tenders} RFP/RFQ deadline(s), {Quotes} unanswered quote(s), {Stalled} stalled deal(s).", result.FollowUpReminders, result.TenderReminders, result.QuoteReminders, result.StalledReminders);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {

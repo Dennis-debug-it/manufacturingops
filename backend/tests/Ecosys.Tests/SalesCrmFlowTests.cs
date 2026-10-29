@@ -876,6 +876,33 @@ public sealed class SalesCrmFlowTests
             new UpsertSalesAssignmentRuleRequest("Broken", true, null, null, null, "Fixed", [ben.Id]), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task EveryStageMove_IsRecorded_WhateverMovedIt()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        var id = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+            (await crm.CreateOpportunity(Deal("Chiller", 1_000m, "KES"), CancellationToken.None)).Result).Value).Id;
+        await crm.ChangeStage(id, new ChangeSalesStageRequest(SalesStages.Proposal, null), CancellationToken.None);
+        await crm.ConvertToQuotation(id, CancellationToken.None); // already at Proposal: no move
+        await crm.ChangeStage(id, new ChangeSalesStageRequest(SalesStages.Won, null), CancellationToken.None);
+
+        var history = await dbContext.SalesStageChanges.Where(x => x.OpportunityId == id).OrderBy(x => x.ChangedAt).ToListAsync();
+        Assert.Equal(["-:Lead", "Lead:Proposal", "Proposal:Won"], history.Select(x => $"{x.FromStage ?? "-"}:{x.ToStage}").ToArray());
+        var deal = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == id);
+        Assert.Equal(history.Last().ChangedAt, deal.StageChangedAt);
+
+        // Listing shows how long a deal has been idle and whether it has stalled.
+        deal.Stage = SalesStages.Negotiation;
+        deal.LastActivityAt = DateTime.UtcNow.AddDays(-20);
+        await dbContext.SaveChangesAsync();
+        var item = Assert.Single(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None)));
+        Assert.True(item.IsStalled);
+        Assert.Equal(20, item.DaysIdle);
+        Assert.Equal(1, Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None)).StalledDeals);
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 

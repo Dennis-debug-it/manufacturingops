@@ -196,6 +196,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<TenantSalesSettings> TenantSalesSettings => Set<TenantSalesSettings>();
     public DbSet<ClientContact> ClientContacts => Set<ClientContact>();
     public DbSet<SalesAssignmentRule> SalesAssignmentRules => Set<SalesAssignmentRule>();
+    public DbSet<SalesStageChange> SalesStageChanges => Set<SalesStageChange>();
     public DbSet<SalesOpportunityContact> SalesOpportunityContacts => Set<SalesOpportunityContact>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
@@ -228,6 +229,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        RecordSalesStageChanges();
         ApplyAuditFields();
         NormalizeUtcFields();
         return base.SaveChangesAsync(cancellationToken);
@@ -235,6 +237,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public override int SaveChanges()
     {
+        RecordSalesStageChanges();
         ApplyAuditFields();
         NormalizeUtcFields();
         return base.SaveChanges();
@@ -3565,6 +3568,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         });
         ApplyTenantFilter<SalesAssignmentRule>(modelBuilder);
 
+        modelBuilder.Entity<SalesStageChange>(entity =>
+        {
+            entity.ToTable("sales_stage_changes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FromStage).HasMaxLength(40);
+            entity.Property(x => x.ToStage).HasMaxLength(40).IsRequired();
+            entity.HasOne(x => x.Opportunity).WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.TenantId, x.ChangedAt });
+            entity.HasIndex(x => new { x.OpportunityId, x.ChangedAt });
+        });
+        ApplyTenantFilter<SalesStageChange>(modelBuilder);
+
         modelBuilder.Entity<SalesActivity>(entity =>
         {
             entity.ToTable("sales_activities");
@@ -4509,6 +4524,47 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         where TEntity : class
     {
         modelBuilder.Entity<TEntity>().HasQueryFilter(filter);
+    }
+
+    /// <summary>
+    /// Writes a <see cref="SalesStageChange"/> for every deal created or moved to another stage in this
+    /// save, so the history is complete whichever code path moved it.
+    /// </summary>
+    private void RecordSalesStageChanges()
+    {
+        var utcNow = DateTime.UtcNow;
+        var changes = new List<SalesStageChange>();
+        foreach (var entry in ChangeTracker.Entries<SalesOpportunity>())
+        {
+            string? from;
+            if (entry.State == EntityState.Added)
+                from = null;
+            else if (entry.State == EntityState.Modified && entry.Property(x => x.Stage).IsModified
+                && !string.Equals(entry.Property(x => x.Stage).OriginalValue, entry.Entity.Stage, StringComparison.Ordinal))
+                from = entry.Property(x => x.Stage).OriginalValue;
+            else
+                continue;
+
+            // A deal recorded as won or lost on a past date (an import) keeps that date.
+            var at = entry.Entity.Stage switch
+            {
+                "Won" when entry.Entity.WonAt < utcNow => entry.Entity.WonAt!.Value,
+                "Lost" when entry.Entity.LostAt < utcNow => entry.Entity.LostAt!.Value,
+                _ => utcNow,
+            };
+            entry.Entity.StageChangedAt = at;
+            changes.Add(new SalesStageChange
+            {
+                TenantId = entry.Entity.TenantId,
+                OpportunityId = entry.Entity.Id,
+                FromStage = from,
+                ToStage = entry.Entity.Stage,
+                ChangedAt = at,
+                ChangedByUserId = tenantContext?.UserId,
+            });
+        }
+        if (changes.Count > 0)
+            SalesStageChanges.AddRange(changes);
     }
 
     private void ApplyAuditFields()

@@ -68,13 +68,7 @@ public sealed partial class SalesCrmController(
             .Include(x => x.Client)
             .Where(x => x.TenantId == TenantId);
 
-        if (!string.IsNullOrWhiteSpace(stage))
-        {
-            if (string.Equals(stage, "Open", StringComparison.OrdinalIgnoreCase))
-                query = query.Where(x => x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost);
-            else
-                query = query.Where(x => x.Stage == SalesStages.Normalize(stage));
-        }
+        query = await ApplyStageFilterAsync(query, stage, cancellationToken);
         if (ownerUserId.HasValue)
             query = query.Where(x => x.OwnerUserId == ownerUserId.Value);
         var scope = await OwnerScopeAsync(cancellationToken);
@@ -107,7 +101,8 @@ public sealed partial class SalesCrmController(
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(rows.Select(x => MapListItem(x.Opportunity, x.WorkOrderCount, x.NextFollowUpAt, converter)).ToList());
+        var stalledAfter = await SalesStalls.ThresholdDaysAsync(dbContext, TenantId, cancellationToken);
+        return Ok(rows.Select(x => MapListItem(x.Opportunity, x.WorkOrderCount, x.NextFollowUpAt, converter, stalledAfter)).ToList());
     }
 
     [HttpGet("summary")]
@@ -140,6 +135,12 @@ public sealed partial class SalesCrmController(
             .CountAsync(x => x.TenantId == TenantId && x.DueAt != null && x.CompletedAt == null && x.DueAt < now
                 && x.Opportunity != null && x.Opportunity.Stage != SalesStages.Won && x.Opportunity.Stage != SalesStages.Lost
                 && (scope == null || x.Opportunity.OwnerUserId == scope), cancellationToken);
+
+        var stalledAfter = await SalesStalls.ThresholdDaysAsync(dbContext, TenantId, cancellationToken);
+        var stalledDeals = stalledAfter <= 0 ? 0 : await dbContext.SalesOpportunities.AsNoTracking()
+            .CountAsync(x => x.TenantId == TenantId && x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost
+                && (scope == null || x.OwnerUserId == scope)
+                && (x.LastActivityAt ?? x.CreatedAt) <= now.AddDays(-stalledAfter), cancellationToken);
 
         var weekAhead = now.AddDays(7);
         var openTenders = await dbContext.SalesTenders
@@ -177,7 +178,9 @@ public sealed partial class SalesCrmController(
             OpenTenders: openTenders.Count,
             TendersDueThisWeek: openTenders.Count(x => x >= now && x <= weekAhead),
             Stages: stages,
-            UnconvertedCurrencies: unconverted));
+            UnconvertedCurrencies: unconverted,
+            StalledDeals: stalledDeals,
+            StalledAfterDays: stalledAfter));
     }
 
     // ── Owners & currency ────────────────────────────────────────────────────
@@ -220,6 +223,9 @@ public sealed partial class SalesCrmController(
         settings.DefaultOwnerUserId = request.DefaultOwnerUserId;
         settings.DealVisibility = SalesVisibility.Normalize(request.DealVisibility);
         settings.CreateRenewalDeals = request.CreateRenewalDeals;
+        if (request.StalledAfterDays is < 0 or > 365)
+            throw new BusinessRuleException("Stalled after must be between 0 (off) and 365 days.");
+        settings.StalledAfterDays = request.StalledAfterDays ?? settings.StalledAfterDays;
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "crm.settings.updated", nameof(TenantSalesSettings), settings.Id.ToString(),
             $"Sales settings updated: deal visibility {settings.DealVisibility}" + (previousVisibility != settings.DealVisibility ? $" (was {previousVisibility})" : "") + $", renewal deals {(settings.CreateRenewalDeals ? "on" : "off")}.",
@@ -232,7 +238,7 @@ public sealed partial class SalesCrmController(
         var settings = await dbContext.TenantSalesSettings.AsNoTracking().SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken)
             ?? new TenantSalesSettings { TenantId = TenantId };
         var ownerName = settings.DefaultOwnerUserId is null ? null : await ResolveUserNameAsync(settings.DefaultOwnerUserId.Value, cancellationToken);
-        return new SalesSettingsResponse(settings.DefaultOwnerUserId, ownerName, SalesVisibility.Normalize(settings.DealVisibility), settings.CreateRenewalDeals);
+        return new SalesSettingsResponse(settings.DefaultOwnerUserId, ownerName, SalesVisibility.Normalize(settings.DealVisibility), settings.CreateRenewalDeals, settings.StalledAfterDays);
     }
 
     [HttpGet("currency")]
@@ -731,6 +737,25 @@ public sealed partial class SalesCrmController(
         await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
     }
 
+    /// <summary>A stage name, "Open" (not won or lost), or "Stalled" (open and quiet for the stall period).</summary>
+    private async Task<IQueryable<SalesOpportunity>> ApplyStageFilterAsync(IQueryable<SalesOpportunity> query, string? stage, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(stage))
+            return query;
+        if (string.Equals(stage, "Open", StringComparison.OrdinalIgnoreCase))
+            return query.Where(x => x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost);
+        if (string.Equals(stage, "Stalled", StringComparison.OrdinalIgnoreCase))
+        {
+            var days = await SalesStalls.ThresholdDaysAsync(dbContext, TenantId, cancellationToken);
+            var quietSince = DateTime.UtcNow.AddDays(-Math.Max(days, 0));
+            return days <= 0
+                ? query.Where(x => false)
+                : query.Where(x => x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost && (x.LastActivityAt ?? x.CreatedAt) <= quietSince);
+        }
+        var normalized = SalesStages.Normalize(stage);
+        return query.Where(x => x.Stage == normalized);
+    }
+
     private async Task<SalesOpportunity> LoadAsync(Guid id, CancellationToken cancellationToken)
     {
         var opportunity = await dbContext.SalesOpportunities
@@ -881,11 +906,15 @@ public sealed partial class SalesCrmController(
             contacts.Select(ClientContacts.Map).ToList());
     }
 
-    private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt, SalesCurrencyConverter converter) =>
-        new(x.Id, x.Title, x.Stage, x.ClientId, x.Client?.ClientName, x.CompanyName, x.ContactName,
+    private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt, SalesCurrencyConverter converter, int stalledAfterDays)
+    {
+        var idleDays = SalesStalls.IdleDays(x, DateTime.UtcNow);
+        return new(x.Id, x.Title, x.Stage, x.ClientId, x.Client?.ClientName, x.CompanyName, x.ContactName,
             x.EstimatedValue, x.Currency, x.Probability, x.ExpectedCloseDate, x.OwnerUserId, x.OwnerName,
             x.ServiceType, workOrderCount, nextFollowUpAt, x.LastActivityAt, x.CreatedAt,
-            converter.Convert(x.EstimatedValue, x.Currency), x.Client?.IsProspect ?? false);
+            converter.Convert(x.EstimatedValue, x.Currency), x.Client?.IsProspect ?? false,
+            idleDays, SalesStalls.IsStalled(x.Stage, idleDays, stalledAfterDays), x.StageChangedAt);
+    }
 
     private static SalesActivityResponse MapActivity(SalesActivity x) =>
         new(x.Id, x.OpportunityId, x.Type, x.Summary, x.OccurredAt, x.DueAt, x.CompletedAt, x.LoggedByName);
@@ -970,7 +999,8 @@ public sealed record SalesOpportunityListItem(
     decimal EstimatedValue, string Currency, int Probability, DateTime? ExpectedCloseDate,
     Guid? OwnerUserId, string? OwnerName, string? ServiceType,
     int WorkOrderCount, DateTime? NextFollowUpAt, DateTime? LastActivityAt, DateTime CreatedAt,
-    decimal? ConvertedValue, bool ClientIsProspect = false);
+    decimal? ConvertedValue, bool ClientIsProspect = false,
+    int DaysIdle = 0, bool IsStalled = false, DateTime? StageChangedAt = null);
 
 public sealed record SalesOpportunityDetailResponse(
     Guid Id, string Title, string Stage,
@@ -1037,11 +1067,13 @@ public sealed record SalesPipelineSummary(
     decimal? WinRate, int OverdueFollowUps,
     int OpenTenders, int TendersDueThisWeek,
     IReadOnlyCollection<SalesStageSummary> Stages,
-    IReadOnlyCollection<SalesUnconvertedCurrency> UnconvertedCurrencies);
+    IReadOnlyCollection<SalesUnconvertedCurrency> UnconvertedCurrencies,
+    int StalledDeals = 0,
+    int StalledAfterDays = 0);
 
-public sealed record SalesSettingsResponse(Guid? DefaultOwnerUserId, string? DefaultOwnerName, string DealVisibility, bool CreateRenewalDeals);
+public sealed record SalesSettingsResponse(Guid? DefaultOwnerUserId, string? DefaultOwnerName, string DealVisibility, bool CreateRenewalDeals, int StalledAfterDays = 14);
 
-public sealed record UpdateSalesSettingsRequest(Guid? DefaultOwnerUserId, [StringLength(20)] string? DealVisibility, bool CreateRenewalDeals = true);
+public sealed record UpdateSalesSettingsRequest(Guid? DefaultOwnerUserId, [StringLength(20)] string? DealVisibility, bool CreateRenewalDeals = true, int? StalledAfterDays = null);
 
 public sealed record SalesOwnerOption(Guid Id, string FullName, string Role);
 

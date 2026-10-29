@@ -284,3 +284,25 @@ internal static class ProspectClients
         return true;
     }
 }
+
+/// <summary>
+/// A deal has stalled when it is still open and nothing has happened on it (no activity, stage change
+/// or follow-up logged) for the workspace's "stalled after" number of days, as in Pipedrive's
+/// "rotting" deals.
+/// </summary>
+internal static class SalesStalls
+{
+    public const int DefaultDays = 14;
+
+    public static async Task<int> ThresholdDaysAsync(AppDbContext dbContext, Guid tenantId, CancellationToken cancellationToken) =>
+        await dbContext.TenantSalesSettings.AsNoTracking()
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => (int?)x.StalledAfterDays)
+            .FirstOrDefaultAsync(cancellationToken) ?? DefaultDays;
+
+    public static int IdleDays(SalesOpportunity deal, DateTime now) =>
+        Math.Max(0, (int)(now - (deal.LastActivityAt ?? deal.CreatedAt)).TotalDays);
+
+    public static bool IsStalled(string stage, int idleDays, int thresholdDays) =>
+        thresholdDays > 0 && !SalesStages.IsClosed(stage) && idleDays >= thresholdDays;
+}

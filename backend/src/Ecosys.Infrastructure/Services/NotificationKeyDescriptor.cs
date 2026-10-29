@@ -67,6 +67,7 @@ public static class NotificationKeyDescriptor
         EmailOnly("invoice.sent",         "Invoice sent to client",            "Finance"),
         EmailOnly("quotation.sent",       "Quotation sent to client",          "Finance"),
         EmailOnly(SalesReminderKeys.FollowUpDue,     "Follow-up due on my deal",          "Sales CRM"),
+        EmailOnly(SalesReminderKeys.DealStalled,      "My deal has gone quiet",             "Sales CRM"),
         EmailOnly(SalesReminderKeys.QuoteAwaitingAnswer, "Quote waiting for the client's answer", "Sales CRM"),
         EmailOnly(SalesReminderKeys.TenderDeadline,  "RFP/RFQ submission deadline near",  "Sales CRM"),
         EmailOnly("users.invited",        "User invited / account setup",      "Account"),

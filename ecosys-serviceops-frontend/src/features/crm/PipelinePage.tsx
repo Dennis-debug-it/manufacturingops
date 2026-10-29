@@ -112,6 +112,15 @@ export function PipelinePage() {
         </div>
       ) : null}
 
+      {summary && (summary.stalledDeals ?? 0) > 0 ? (
+        <button type="button" onClick={() => { setView('list'); setStageFilter('Stalled') }} className="flex w-full items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-sm text-amber-900 transition hover:bg-amber-100">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            {summary.stalledDeals} open deal{summary.stalledDeals === 1 ? ' has' : 's have'} gone quiet: nothing logged for {summary.stalledAfterDays}+ days.
+          </span>
+        </button>
+      ) : null}
+
       {summary && summary.openTenders > 0 ? (
         <Link to="/crm/tenders" className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 transition hover:bg-slate-50">
           <FileText className="h-4 w-4 text-[var(--app-primary)]" />
@@ -131,6 +140,7 @@ export function PipelinePage() {
           <select value={stageFilter} onChange={(event) => setStageFilter(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" aria-label="Filter by stage">
             <option value="">All stages</option>
             <option value="Open">Open deals</option>
+            <option value="Stalled">Stalled deals</option>
             {SALES_STAGES.map((stage) => (
               <option key={stage} value={stage}>{stageLabels[stage]}</option>
             ))}
@@ -253,6 +263,11 @@ function OpportunityCard({ item, canManage, reportingCurrency, moving, onMove }:
     <article className={cn('rounded-xl border border-slate-200 bg-white p-3 shadow-sm', moving && 'opacity-60')}>
       <Link to={`/crm/opportunities/${item.id}`} className="block text-sm font-medium text-slate-900 hover:underline">{item.title}</Link>
       <div className="mt-0.5 truncate text-xs text-slate-500">{opportunityParty(item)}</div>
+      {item.isStalled ? (
+        <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800" title="Nothing logged on this deal for a while">
+          Quiet {item.daysIdle} days
+        </div>
+      ) : null}
       <div className="mt-2 flex items-start justify-between text-sm">
         <span className="font-semibold text-slate-900"><DealValue item={item} reportingCurrency={reportingCurrency} /></span>
         <span className="text-xs text-slate-500">{item.probability}%</span>

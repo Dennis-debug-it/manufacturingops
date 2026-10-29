@@ -8748,6 +8748,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<DateTime?>("StageChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("StallReminderSentAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
@@ -8810,6 +8816,42 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsUnique();
 
                     b.ToTable("sales_opportunity_contacts", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesStageChange", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ChangedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FromStage")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("OpportunityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ToStage")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OpportunityId", "ChangedAt");
+
+                    b.HasIndex("TenantId", "ChangedAt");
+
+                    b.ToTable("sales_stage_changes", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesTender", b =>
@@ -10855,6 +10897,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<Guid?>("DefaultOwnerUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("StalledAfterDays")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -16467,6 +16512,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired();
 
                     b.Navigation("Contact");
+
+                    b.Navigation("Opportunity");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesStageChange", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.SalesOpportunity", "Opportunity")
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Opportunity");
                 });

@@ -50,6 +50,12 @@ export interface SalesOpportunityListItem {
   convertedValue: number | null
   /** The deal's client is a prospect, not a customer yet. */
   clientIsProspect?: boolean
+  /** Whole days since anything was logged on the deal. */
+  daysIdle?: number
+  /** Open and idle for the workspace's stall period (Sales settings). */
+  isStalled?: boolean
+  /** When the deal entered its current stage. */
+  stageChangedAt?: string | null
 }
 
 export interface SalesActivity {
@@ -152,6 +158,9 @@ export interface SalesPipelineSummary {
   tendersDueThisWeek: number
   stages: Array<{ stage: SalesStage; count: number; value: number }>
   unconvertedCurrencies: Array<{ currency: string; count: number; value: number }>
+  /** Open deals with nothing logged for `stalledAfterDays` (0 = stall alerts off). */
+  stalledDeals?: number
+  stalledAfterDays?: number
 }
 
 /** `key` is 'overdue', 'later', 'none' or the month as yyyy-MM. */
@@ -217,6 +226,8 @@ export interface SalesSettings {
   defaultOwnerName: string | null
   dealVisibility: DealVisibility
   createRenewalDeals: boolean
+  /** An open deal with nothing logged for this many days is stalled; 0 turns it off. */
+  stalledAfterDays: number
 }
 
 export interface SalesAssignmentRule {

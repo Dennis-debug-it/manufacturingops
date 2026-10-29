@@ -40,6 +40,10 @@ public sealed class SalesOpportunity : AuditableEntity, ITenantEntity
     public DateTime? WonAt { get; set; }
     public DateTime? LostAt { get; set; }
     public DateTime? LastActivityAt { get; set; }
+    /// <summary>When the deal entered its current stage (maintained with the stage history).</summary>
+    public DateTime? StageChangedAt { get; set; }
+    /// <summary>When the owner was told the deal had gone quiet; cleared in effect by any newer activity.</summary>
+    public DateTime? StallReminderSentAt { get; set; }
     /// <summary>Set on a renewal deal: the contract it renews. Renewing that contract wins the deal; letting it lapse loses it.</summary>
     public Guid? RenewalOfContractId { get; set; }
     /// <summary>Set on a lead a technician flagged from a job: the work order it was raised on.</summary>
@@ -140,6 +144,8 @@ public sealed class TenantSalesSettings : AuditableEntity, ITenantEntity
     public string DealVisibility { get; set; } = "All";
     /// <summary>Open a renewal deal when a contract enters its renewal notice window.</summary>
     public bool CreateRenewalDeals { get; set; } = true;
+    /// <summary>An open deal with no activity for this many days is stalled (0 turns it off).</summary>
+    public int StalledAfterDays { get; set; } = 14;
 }
 
 /// <summary>
@@ -163,4 +169,23 @@ public sealed class SalesAssignmentRule : AuditableEntity, ITenantEntity
     public string OwnerUserIds { get; set; } = string.Empty;
     /// <summary>Index of the owner the round-robin gave the last lead to.</summary>
     public int LastAssignedIndex { get; set; } = -1;
+}
+
+/// <summary>
+/// One move of a deal from one stage to another, written automatically whenever a deal is created or
+/// its stage changes (see <c>AppDbContext</c>), whatever moved it: a person, a won tender, an accepted
+/// quote or a renewed contract. The base for conversion and time-in-stage reports.
+/// </summary>
+public sealed class SalesStageChange : ITenantEntity
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid TenantId { get; set; }
+    public Guid OpportunityId { get; set; }
+    /// <summary>Null when the deal was created.</summary>
+    public string? FromStage { get; set; }
+    public string ToStage { get; set; } = string.Empty;
+    public DateTime ChangedAt { get; set; } = DateTime.UtcNow;
+    public Guid? ChangedByUserId { get; set; }
+
+    public SalesOpportunity? Opportunity { get; set; }
 }

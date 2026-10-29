@@ -233,6 +233,35 @@ public sealed class SalesReminderTests
     }
 
     [Fact]
+    public async Task QuietDeal_IsFlaggedOncePerQuietSpell()
+    {
+        await using var db = CreateDbContext();
+        var fixture = await SeedAsync(db);
+        fixture.Deal.LastActivityAt = Now.AddDays(-15);
+        var fresh = new SalesOpportunity { TenantId = fixture.Tenant.Id, Title = "Fresh deal", Stage = "Lead", CompanyName = "X", OwnerUserId = fixture.Owner.Id, LastActivityAt = Now.AddDays(-2) };
+        db.SalesOpportunities.Add(fresh);
+        await db.SaveChangesAsync();
+        var push = new RecordingPushQueue();
+
+        Assert.Equal(1, (await CreateService(db, push).RunAsync(Now)).StalledReminders);
+        Assert.Contains("Gone quiet", Assert.Single(push.Sent).Message.Title);
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddDays(1))).StalledReminders);
+
+        // Someone logs a call; if it goes quiet again for the full period, the owner hears again.
+        fixture.Deal.LastActivityAt = Now.AddDays(2);
+        fresh.LastActivityAt = Now.AddDays(10);
+        await db.SaveChangesAsync();
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddDays(10))).StalledReminders);
+        Assert.Equal(1, (await CreateService(db, push).RunAsync(Now.AddDays(17))).StalledReminders);
+
+        // Turned off in Sales settings: nothing.
+        db.TenantSalesSettings.Add(new TenantSalesSettings { TenantId = fixture.Tenant.Id, StalledAfterDays = 0 });
+        fixture.Deal.LastActivityAt = Now.AddDays(18);
+        await db.SaveChangesAsync();
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddDays(60))).StalledReminders);
+    }
+
+    [Fact]
     public async Task OwnerWithoutAMailbox_GetsThePushOnly()
     {
         await using var db = CreateDbContext();

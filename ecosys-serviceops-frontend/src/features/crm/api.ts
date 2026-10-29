@@ -194,7 +194,7 @@ export function useSalesSettings() {
 export function useUpdateSalesSettings() {
   const invalidate = useInvalidateCrm()
   return useMutation({
-    mutationFn: (payload: Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals'>) => api.put<SalesSettings>(endpoints.crm.settings, payload),
+    mutationFn: (payload: Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals' | 'stalledAfterDays'>) => api.put<SalesSettings>(endpoints.crm.settings, payload),
     onSuccess: invalidate,
   })
 }

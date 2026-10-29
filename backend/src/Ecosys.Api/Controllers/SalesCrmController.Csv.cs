@@ -30,10 +30,7 @@ public sealed partial class SalesCrmController
         var query = dbContext.SalesOpportunities.AsNoTracking().Include(x => x.Client)
             .Where(x => x.TenantId == TenantId && (scope == null || x.OwnerUserId == scope));
         if (ownerUserId.HasValue) query = query.Where(x => x.OwnerUserId == ownerUserId);
-        if (!string.IsNullOrWhiteSpace(stage))
-            query = string.Equals(stage, "Open", StringComparison.OrdinalIgnoreCase)
-                ? query.Where(x => x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost)
-                : query.Where(x => x.Stage == SalesStages.Normalize(stage));
+        query = await ApplyStageFilterAsync(query, stage, cancellationToken);
         var deals = await query.OrderBy(x => x.CreatedAt).ToListAsync(cancellationToken);
 
         return CsvFile("deals.csv",
