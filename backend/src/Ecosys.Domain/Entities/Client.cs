@@ -20,6 +20,11 @@ public sealed class Client : AuditableEntity, ITenantEntity
     public DateTime? ActiveEndDate { get; set; }
     public string? Notes { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>
+    /// A company sales is talking to that is not a customer yet. Prospects are left out of client
+    /// pickers and operational lists; winning a deal or raising a work order makes them a client.
+    /// </summary>
+    public bool IsProspect { get; set; }
 
     // ── Credit terms ──────────────────────────────────────────────────────────
     public Guid? DefaultCreditTermId { get; set; }

@@ -7,12 +7,14 @@ import type { Asset, Client, ClientSummary, SiteDetail } from './types'
 export interface ClientListFilters {
   search?: string
   status?: 'active' | 'inactive' | 'all'
+  /** Prospects are left out unless asked for: 'prospects' lists only them, 'all' lists both. */
+  kind?: 'clients' | 'prospects' | 'all'
 }
 
 export function useClients(filters?: ClientListFilters) {
   return useQuery({
     queryKey: ['clients', filters ?? {}],
-    queryFn: () => api.get<Client[]>(endpoints.clients.list, { search: filters?.search, status: filters?.status }),
+    queryFn: () => api.get<Client[]>(endpoints.clients.list, { search: filters?.search, status: filters?.status, kind: filters?.kind }),
     staleTime: 30_000,
   })
 }
@@ -21,7 +23,7 @@ export function useClients(filters?: ClientListFilters) {
 export function useClientsPaged(filters: ClientListFilters, page: number, pageSize: number) {
   return useQuery({
     queryKey: ['clients', 'paged', filters, page, pageSize],
-    queryFn: () => api.get<PagedResult<Client>>(endpoints.clients.list, { search: filters.search, status: filters.status, page, pageSize }),
+    queryFn: () => api.get<PagedResult<Client>>(endpoints.clients.list, { search: filters.search, status: filters.status, kind: filters.kind, page, pageSize }),
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   })

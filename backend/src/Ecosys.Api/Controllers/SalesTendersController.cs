@@ -296,6 +296,7 @@ public sealed class SalesTendersController(
             opportunity.Probability = SalesStages.DefaultProbability(SalesStages.Won);
             opportunity.WonAt = DateTime.UtcNow;
             if (tender.SubmittedValue.HasValue) opportunity.EstimatedValue = tender.SubmittedValue.Value;
+            await ProspectClients.PromoteAsync(dbContext, TenantId, opportunity.ClientId, cancellationToken);
         }
         else if (status is SalesTenderStatuses.Lost or SalesTenderStatuses.NoBid or SalesTenderStatuses.Cancelled
             && !SalesStages.IsClosed(opportunity.Stage))

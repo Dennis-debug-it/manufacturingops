@@ -41,18 +41,17 @@ public sealed class SalesCrmFlowTests
         await Assert.ThrowsAsync<BusinessRuleException>(() => wo.CreateFromOpportunity(
             new CreateWorkOrderFromOpportunityRequest(opportunity.Id, null, null, null, null, null, null), CancellationToken.None));
 
+        // Entered with only a company name, the deal already has a client record: a prospect,
+        // kept out of client pickers until the deal is won.
+        var prospect = await dbContext.Clients.SingleAsync(x => x.Id == opportunity.ClientId);
+        Assert.True(prospect.IsProspect);
+        Assert.Equal("Baraka Logistics", prospect.ClientName);
+        Assert.Equal("Wanjiru Otieno", prospect.ContactPerson);
+
         await crm.ChangeStage(opportunity.Id, new ChangeSalesStageRequest(SalesStages.Won, null), CancellationToken.None);
-
-        // Won but still a prospect: the client has to exist first.
-        await Assert.ThrowsAsync<BusinessRuleException>(() => wo.CreateFromOpportunity(
-            new CreateWorkOrderFromOpportunityRequest(opportunity.Id, null, null, null, null, null, null), CancellationToken.None));
-
-        var converted = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<OkObjectResult>(
-            (await crm.ConvertToClient(opportunity.Id, CancellationToken.None)).Result).Value);
-        Assert.NotNull(converted.ClientId);
-        var client = await dbContext.Clients.SingleAsync(x => x.Id == converted.ClientId);
-        Assert.Equal("Baraka Logistics", client.ClientName);
-        Assert.Equal("Wanjiru Otieno", client.ContactPerson);
+        var client = await dbContext.Clients.SingleAsync(x => x.Id == opportunity.ClientId);
+        Assert.False(client.IsProspect);
+        Assert.Single(await dbContext.Clients.ToListAsync());
 
         var result = await wo.CreateFromOpportunity(
             new CreateWorkOrderFromOpportunityRequest(opportunity.Id, null, null, WorkOrderPriorities.High, null, null, null),
@@ -661,6 +660,45 @@ public sealed class SalesCrmFlowTests
         await connection.OpenAsync();
         await using var command = new NpgsqlCommand(sql, connection);
         await command.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public async Task ProspectDeals_ShareOneProspectClient_HiddenFromClientPickers()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        dbContext.Clients.Add(new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel", IsActive = true });
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        async Task<SalesOpportunityDetailResponse> Create(string title, string company) =>
+            Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+                (await crm.CreateOpportunity(Deal(title, 1_000m, "KES") with { CompanyName = company }, CancellationToken.None)).Result).Value);
+
+        var first = await Create("Solar", "Baraka Logistics");
+        var second = await Create("Solar phase 2", "  baraka   LOGISTICS ");
+        var existing = await Create("Chiller", "kilele hotel");
+        Assert.Equal(first.ClientId, second.ClientId);
+        Assert.True(first.ClientIsProspect);
+        Assert.False(existing.ClientIsProspect);
+
+        // A prospect shared with another deal is not renamed under it: the renamed deal gets its own.
+        await crm.UpdateOpportunity(second.Id, Deal("Solar phase 2", 1_000m, "KES") with { CompanyName = "Baraka Logistics Ltd" }, CancellationToken.None);
+        Assert.Equal(3, await dbContext.Clients.CountAsync());
+        // Renaming it again renames that prospect in place, leaving nothing behind.
+        await crm.UpdateOpportunity(second.Id, Deal("Solar phase 2", 1_000m, "KES") with { CompanyName = "Baraka Group" }, CancellationToken.None);
+        Assert.Equal(3, await dbContext.Clients.CountAsync());
+
+        var clients = new ClientsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService(), new AuditLogService(dbContext, new HttpContextAccessor()));
+        IReadOnlyCollection<ClientResponse> List(string? kind) =>
+            Assert.IsAssignableFrom<IReadOnlyCollection<ClientResponse>>(Assert.IsType<OkObjectResult>(clients.GetAll(null, "all", null, null, CancellationToken.None, kind).Result).Value);
+        Assert.Equal(["Kilele Hotel"], List(null).Select(x => x.ClientName).ToArray());
+        Assert.All(List("prospects"), x => Assert.True(x.IsProspect));
+        Assert.Equal(2, List("prospects").Count);
+        Assert.Equal(3, List("all").Count);
+
+        // Making it a client (from the deal) promotes the prospect in place.
+        await crm.ConvertToClient(first.Id, CancellationToken.None);
+        Assert.Equal(2, List(null).Count);
     }
 
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>

@@ -546,6 +546,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("clients");
             entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.TenantId, x.IsProspect });
             entity.Property(x => x.ClientName).HasMaxLength(200).IsRequired();
             entity.Property(x => x.ClientType).HasMaxLength(100);
             entity.Property(x => x.Email).HasMaxLength(256);

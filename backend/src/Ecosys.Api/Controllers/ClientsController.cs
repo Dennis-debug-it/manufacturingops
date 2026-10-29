@@ -27,7 +27,8 @@ public sealed class ClientsController(
         [FromQuery] string? status,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] string? kind = null)
     {
         var normalizedStatus = NormalizeStatusFilter(status);
         var normalizedSearch = NormalizeSearch(search);
@@ -35,6 +36,14 @@ public sealed class ClientsController(
         var query = dbContext.Clients
             .Include(x => x.SlaDefinition)
             .Where(x => x.TenantId == TenantId);
+
+        // Prospects (companies sales is still talking to) stay out of every client picker unless asked for.
+        query = (kind ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "prospects" => query.Where(x => x.IsProspect),
+            "all" => query,
+            _ => query.Where(x => !x.IsProspect),
+        };
 
         if (normalizedStatus == "active")
         {
@@ -518,7 +527,8 @@ public sealed class ClientsController(
             GetCount(counts?.SiteCounts ?? EmptyCounts, client.Id),
             GetCount(counts?.SystemCounts ?? EmptyCounts, client.Id),
             GetCount(counts?.AssetCounts ?? EmptyCounts, client.Id),
-            GetCount(counts?.OpenWorkOrderCounts ?? EmptyCounts, client.Id));
+            GetCount(counts?.OpenWorkOrderCounts ?? EmptyCounts, client.Id),
+            client.IsProspect);
 
     private static readonly IReadOnlyDictionary<Guid, int> EmptyCounts = new Dictionary<Guid, int>();
 
@@ -720,7 +730,8 @@ public sealed record ClientResponse(
     int SiteCount,
     int SystemCount,
     int AssetCount,
-    int OpenWorkOrderCount);
+    int OpenWorkOrderCount,
+    bool IsProspect = false);
 
 public sealed record ClientSummaryResponse(
     ClientResponse Client,

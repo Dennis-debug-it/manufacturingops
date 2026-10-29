@@ -1475,6 +1475,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsProspect")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Location")
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)");
@@ -1508,6 +1511,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("TenantId", "ClientName")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "IsProspect");
 
                     b.ToTable("clients", (string)null);
                 });

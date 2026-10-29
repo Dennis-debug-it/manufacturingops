@@ -132,8 +132,8 @@ export function OpportunityDetailPage() {
               {opportunity.stage !== 'Lost' && hasModule('finance') && canQuote ? (
                 <button type="button" disabled={convertToQuotation.isPending} onClick={() => void createQuote()} className={outlineButton}>Create Quote</button>
               ) : null}
-              {!opportunity.clientId ? (
-                <button type="button" disabled={convertToClient.isPending} onClick={() => convertToClient.mutateAsync().then(() => toast.success('Client created')).catch(() => undefined)} className={outlineButton}>Create Client</button>
+              {!opportunity.clientId || opportunity.clientIsProspect ? (
+                <button type="button" disabled={convertToClient.isPending} onClick={() => convertToClient.mutateAsync().then(() => toast.success(`${opportunityParty(opportunity)} is now a client`)).catch(() => undefined)} className={outlineButton}>Make Client</button>
               ) : null}
               <button type="button" onClick={() => setShowEdit(true)} className={outlineButton}>Edit</button>
               <button type="button" onClick={() => setShowDelete(true)} className={outlineButton}>Delete</button>
@@ -186,7 +186,7 @@ export function OpportunityDetailPage() {
       <SummarySection title="Deal Overview" description="Customer, value and expected close.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            ['Customer', opportunity.clientId ? <Link key="c" to={`/clients/${opportunity.clientId}`} className="underline decoration-slate-300 underline-offset-4">{opportunity.clientName}</Link> : `${opportunityParty(opportunity)} (prospect)`],
+            ['Customer', opportunity.clientId ? <span key="c"><Link to={`/clients/${opportunity.clientId}`} className="underline decoration-slate-300 underline-offset-4">{opportunity.clientName}</Link>{opportunity.clientIsProspect ? ' (prospect)' : ''}</span> : `${opportunityParty(opportunity)} (prospect)`],
             ['Site', opportunity.siteName ?? '—'],
             ['Contact', [opportunity.contactName, opportunity.contactPhone, opportunity.contactEmail].filter(Boolean).join(' · ') || '—'],
             ['Location', opportunity.location ?? '—'],

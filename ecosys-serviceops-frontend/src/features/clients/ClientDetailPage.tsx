@@ -60,7 +60,7 @@ export function ClientDetailPage() {
   const header = (
     <PageHeader
       title={client.clientName}
-      subtitle={client.clientType ?? 'Client'}
+      subtitle={client.isProspect ? 'Prospect: not a customer yet' : (client.clientType ?? 'Client')}
       breadcrumbs={[{ label: 'Clients', to: '/clients' }, { label: client.clientName }]}
       secondaryActions={<StatusBadge status={client.isActive ? client.activeStatus : 'Inactive'} />}
     />

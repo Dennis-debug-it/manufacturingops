@@ -1476,6 +1476,8 @@ public sealed class WorkOrdersController(
         {
             throw new BusinessRuleException("Create or link the client for this opportunity first.");
         }
+        // Work for a prospect makes them a client (saved with the work order below).
+        await ProspectClients.PromoteAsync(dbContext, TenantId, opportunity.ClientId, cancellationToken);
 
         var siteId = request.SiteId ?? opportunity.SiteId;
         if (siteId.HasValue)

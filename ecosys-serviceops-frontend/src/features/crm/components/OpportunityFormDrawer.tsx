@@ -36,7 +36,8 @@ function toForm(opportunity: SalesOpportunityDetail | null | undefined, currentU
   const clientId = opportunity ? (opportunity.clientId ?? '') : (defaultClientId ?? '')
   return {
     title: opportunity?.title ?? '',
-    partyMode: clientId ? 'client' : 'prospect',
+    // A prospect's details are edited as text; its client record follows (see ProspectClients on the server).
+    partyMode: clientId && !opportunity?.clientIsProspect ? 'client' : 'prospect',
     clientId,
     siteId: opportunity?.siteId ?? '',
     companyName: opportunity?.companyName ?? '',

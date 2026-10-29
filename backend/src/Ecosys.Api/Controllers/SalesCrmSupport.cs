@@ -142,6 +142,7 @@ internal static class SalesQuotationSync
                 opportunity.EstimatedValue = quote.TotalAmount;
                 opportunity.Currency = quote.Currency;
                 summary += " Deal marked Won.";
+                await ProspectClients.PromoteAsync(dbContext, opportunity.TenantId, opportunity.ClientId, cancellationToken);
             }
         }
         else
@@ -201,5 +202,84 @@ internal static class SalesVisibility
             .Select(x => x.DealVisibility)
             .FirstOrDefaultAsync(cancellationToken);
         return Normalize(visibility) == Own ? tenantContext.GetRequiredUserId() : null;
+    }
+}
+
+/// <summary>
+/// Prospects are client records flagged <see cref="Client.IsProspect"/>, so a company has one record
+/// from first contact on: a deal entered with only a company or contact name is linked to a prospect
+/// client (an existing client or prospect of the same name, else a new one), and the prospect becomes
+/// a client once a deal with them is won, a work order is raised for them, or someone converts it.
+/// </summary>
+internal static class ProspectClients
+{
+    /// <summary>Lower-cased, trimmed, single-spaced: how company names are compared.</summary>
+    public static string NormalizeName(string name) => string.Join(' ', name.Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+
+    /// <summary>
+    /// Gives a deal with no client a client record. <paramref name="previousClientId"/> is the client the
+    /// deal had before this edit: a prospect only this deal uses is kept and renamed with it, so editing
+    /// a prospect deal never leaves a stray prospect behind; one shared with other deals is left as is.
+    /// </summary>
+    public static async Task LinkAsync(AppDbContext dbContext, SalesOpportunity opportunity, Guid? previousClientId, CancellationToken cancellationToken)
+    {
+        if (opportunity.ClientId.HasValue)
+            return;
+        var name = !string.IsNullOrWhiteSpace(opportunity.CompanyName) ? opportunity.CompanyName.Trim() : opportunity.ContactName?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        Client? client = null;
+        if (previousClientId.HasValue
+            && !await dbContext.SalesOpportunities.AnyAsync(x => x.TenantId == opportunity.TenantId && x.ClientId == previousClientId && x.Id != opportunity.Id, cancellationToken))
+        {
+            client = await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == opportunity.TenantId && x.Id == previousClientId && x.IsProspect, cancellationToken);
+            if (client is not null)
+                client.ClientName = name;
+        }
+        if (client is null)
+        {
+            var normalized = NormalizeName(name);
+            var candidates = await dbContext.Clients
+                .Where(x => x.TenantId == opportunity.TenantId && x.ClientName.ToLower().Contains(normalized.Split(' ')[0]))
+                .ToListAsync(cancellationToken);
+            client = candidates
+                .Where(x => NormalizeName(x.ClientName) == normalized)
+                .OrderBy(x => x.IsProspect)
+                .FirstOrDefault();
+        }
+        if (client is null)
+        {
+            client = new Client
+            {
+                TenantId = opportunity.TenantId,
+                ClientName = name,
+                IsProspect = true,
+                IsActive = true,
+                Notes = $"Prospect from sales opportunity '{opportunity.Title}'.",
+            };
+            dbContext.Clients.Add(client);
+        }
+        if (client.IsProspect)
+        {
+            client.ContactPerson = opportunity.ContactName ?? client.ContactPerson;
+            client.Email = opportunity.ContactEmail ?? client.Email;
+            client.Phone = opportunity.ContactPhone ?? client.Phone;
+            client.ContactPhone = opportunity.ContactPhone ?? client.ContactPhone;
+            client.Location = opportunity.Location ?? client.Location;
+        }
+        opportunity.ClientId = client.Id;
+    }
+
+    /// <summary>Makes a prospect a client. Returns true when it was a prospect. Changes are added to the context.</summary>
+    public static async Task<bool> PromoteAsync(AppDbContext dbContext, Guid tenantId, Guid? clientId, CancellationToken cancellationToken)
+    {
+        if (!clientId.HasValue)
+            return false;
+        var client = await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == clientId && x.IsProspect, cancellationToken);
+        if (client is null)
+            return false;
+        client.IsProspect = false;
+        return true;
     }
 }

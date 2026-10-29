@@ -93,7 +93,7 @@ public sealed class DashboardController(
 
         var clientCount = await dbContext.Clients
             .AsNoTracking()
-            .CountAsync(x => x.TenantId == tenantId && x.IsActive, cancellationToken);
+            .CountAsync(x => x.TenantId == tenantId && x.IsActive && !x.IsProspect, cancellationToken);
 
         var today = DateTime.UtcNow.Date;
         var contracts = dbContext.Contracts

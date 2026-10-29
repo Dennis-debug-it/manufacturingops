@@ -46,6 +46,8 @@ export interface SalesOpportunityListItem {
   createdAt: string
   /** `estimatedValue` in the reporting currency; null when the deal's currency has no rate. */
   convertedValue: number | null
+  /** The deal's client is a prospect, not a customer yet. */
+  clientIsProspect?: boolean
 }
 
 export interface SalesActivity {
@@ -129,6 +131,7 @@ export interface SalesOpportunityDetail {
   /** Set on a lead a technician flagged from a job. */
   sourceWorkOrderId?: string | null
   sourceWorkOrderNumber?: string | null
+  clientIsProspect?: boolean
 }
 
 /** Every value is in `reportingCurrency`; deals in a currency with no rate are listed in `unconvertedCurrencies` instead. */

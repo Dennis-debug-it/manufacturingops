@@ -304,6 +304,7 @@ public sealed class SalesCrmController(
 
         var opportunity = new SalesOpportunity { TenantId = TenantId, Stage = SalesStages.Lead };
         await ApplyAsync(opportunity, request, cancellationToken);
+        await ProspectClients.LinkAsync(dbContext, opportunity, null, cancellationToken);
         if (!request.OwnerUserId.HasValue)
         {
             opportunity.OwnerUserId = UserId;
@@ -330,8 +331,10 @@ public sealed class SalesCrmController(
         var opportunity = await LoadAsync(id, cancellationToken);
         var previousOwnerId = opportunity.OwnerUserId;
         var previousOwnerName = opportunity.OwnerName ?? "nobody";
+        var previousClientId = opportunity.ClientId;
 
         await ApplyAsync(opportunity, request, cancellationToken);
+        await ProspectClients.LinkAsync(dbContext, opportunity, previousClientId, cancellationToken);
         if (opportunity.OwnerUserId != previousOwnerId)
             await AddSystemActivityAsync(opportunity, $"Owner changed from {previousOwnerName} to {opportunity.OwnerName}.", cancellationToken);
         if (request.Probability.HasValue)
@@ -365,6 +368,8 @@ public sealed class SalesCrmController(
         var note = stage == SalesStages.Lost
             ? $"Stage changed from {previous} to Lost: {opportunity.LostReason}"
             : $"Stage changed from {previous} to {stage}.";
+        if (stage == SalesStages.Won && await ProspectClients.PromoteAsync(dbContext, TenantId, opportunity.ClientId, cancellationToken))
+            note += " The prospect is now a client.";
         await AddSystemActivityAsync(opportunity, note, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "crm.opportunity.stage_changed", nameof(SalesOpportunity), opportunity.Id.ToString(), note, cancellationToken);
@@ -542,7 +547,15 @@ public sealed class SalesCrmController(
         var opportunity = await LoadAsync(id, cancellationToken);
 
         if (opportunity.ClientId.HasValue)
+        {
+            if (await ProspectClients.PromoteAsync(dbContext, TenantId, opportunity.ClientId, cancellationToken))
+            {
+                await AddSystemActivityAsync(opportunity, "The prospect is now a client.", cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await auditLogService.LogAsync(TenantId, UserId, "Client created", nameof(Client), opportunity.ClientId.Value.ToString(), $"Prospect from sales opportunity '{opportunity.Title}' made a client.", cancellationToken);
+            }
             return Ok(await LoadDetailAsync(id, cancellationToken));
+        }
 
         var name = opportunity.CompanyName?.Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -790,14 +803,15 @@ public sealed class SalesCrmController(
             converter.Convert(opportunity.EstimatedValue, opportunity.Currency),
             converter.ReportingCurrency,
             opportunity.RenewalOfContractId, renewalContractNumber,
-            opportunity.SourceWorkOrderId, sourceWorkOrderNumber);
+            opportunity.SourceWorkOrderId, sourceWorkOrderNumber,
+            opportunity.Client?.IsProspect ?? false);
     }
 
     private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt, SalesCurrencyConverter converter) =>
         new(x.Id, x.Title, x.Stage, x.ClientId, x.Client?.ClientName, x.CompanyName, x.ContactName,
             x.EstimatedValue, x.Currency, x.Probability, x.ExpectedCloseDate, x.OwnerUserId, x.OwnerName,
             x.ServiceType, workOrderCount, nextFollowUpAt, x.LastActivityAt, x.CreatedAt,
-            converter.Convert(x.EstimatedValue, x.Currency));
+            converter.Convert(x.EstimatedValue, x.Currency), x.Client?.IsProspect ?? false);
 
     private static SalesActivityResponse MapActivity(SalesActivity x) =>
         new(x.Id, x.OpportunityId, x.Type, x.Summary, x.OccurredAt, x.DueAt, x.CompletedAt, x.LoggedByName);
@@ -882,7 +896,7 @@ public sealed record SalesOpportunityListItem(
     decimal EstimatedValue, string Currency, int Probability, DateTime? ExpectedCloseDate,
     Guid? OwnerUserId, string? OwnerName, string? ServiceType,
     int WorkOrderCount, DateTime? NextFollowUpAt, DateTime? LastActivityAt, DateTime CreatedAt,
-    decimal? ConvertedValue);
+    decimal? ConvertedValue, bool ClientIsProspect = false);
 
 public sealed record SalesOpportunityDetailResponse(
     Guid Id, string Title, string Stage,
@@ -901,7 +915,8 @@ public sealed record SalesOpportunityDetailResponse(
     Guid? RenewalOfContractId = null,
     string? RenewalContractNumber = null,
     Guid? SourceWorkOrderId = null,
-    string? SourceWorkOrderNumber = null);
+    string? SourceWorkOrderNumber = null,
+    bool ClientIsProspect = false);
 
 public sealed record SalesActivityResponse(
     Guid Id, Guid OpportunityId, string Type, string Summary,

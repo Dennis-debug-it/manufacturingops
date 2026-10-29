@@ -402,7 +402,7 @@ internal sealed partial class EmailIntakeService(
         if (portalContact.HasValue) return (portalContact, null);
 
         var client = await dbContext.Clients.IgnoreQueryFilters().AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.IsActive && x.Email != null && x.Email.ToLower() == address)
+            .Where(x => x.TenantId == tenantId && x.IsActive && !x.IsProspect && x.Email != null && x.Email.ToLower() == address)
             .Select(x => (Guid?)x.Id)
             .FirstOrDefaultAsync(cancellationToken);
         if (client.HasValue) return (client, null);
@@ -418,7 +418,7 @@ internal sealed partial class EmailIntakeService(
         if (string.IsNullOrWhiteSpace(domain) || FreeMailDomains.Contains(domain)) return (null, null);
         var suffix = "@" + domain;
         var byDomain = await dbContext.Clients.IgnoreQueryFilters().AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.IsActive && x.Email != null && x.Email.ToLower().EndsWith(suffix))
+            .Where(x => x.TenantId == tenantId && x.IsActive && !x.IsProspect && x.Email != null && x.Email.ToLower().EndsWith(suffix))
             .Select(x => x.Id)
             .Union(dbContext.ClientPortalUsers.IgnoreQueryFilters()
                 .Where(x => x.TenantId == tenantId && x.IsActive && x.Email.ToLower().EndsWith(suffix))

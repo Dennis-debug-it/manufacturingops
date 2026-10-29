@@ -22,7 +22,7 @@ export function ClientsPage() {
   const [showForm, setShowForm] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [editClient, setEditClient] = useState<Client | null>(null)
-  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active')
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all' | 'prospects'>('active')
   const [toggleClient, setToggleClient] = useState<Client | null>(null)
   const [archiveClient, setArchiveClient] = useState<Client | null>(null)
   const [deleteClient, setDeleteClient] = useState<Client | null>(null)
@@ -30,7 +30,7 @@ export function ClientsPage() {
   const [pageSize, setPageSize] = useState(50)
   // Reset to the first page whenever the search term changes.
   useEffect(() => setPage(1), [debouncedSearch])
-  const { data, isLoading, isError } = useClientsPaged({ search: debouncedSearch, status: statusFilter }, page, pageSize)
+  const { data, isLoading, isError } = useClientsPaged(statusFilter === 'prospects' ? { search: debouncedSearch, status: 'all', kind: 'prospects' } : { search: debouncedSearch, status: statusFilter }, page, pageSize)
   const toggleActive = useToggleClientActive()
   const { data: deletionCheck } = useValidateClientDeletion(deleteClient?.id ?? '')
   const deletePermanent = useDeleteClientPermanent(deleteClient?.id ?? '')
@@ -173,6 +173,18 @@ export function ClientsPage() {
           }`}
         >
           All
+        </button>
+        <button
+          type="button"
+          onClick={() => { setStatusFilter('prospects'); setPage(1) }}
+          title="Companies sales is talking to that are not customers yet"
+          className={`inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-medium transition ${
+            statusFilter === 'prospects'
+              ? 'bg-[var(--app-primary)] text-white'
+              : 'border border-[var(--app-border)] bg-white text-slate-700 hover:bg-[var(--app-primary-soft)]'
+          }`}
+        >
+          Prospects
         </button>
       </div>
 

@@ -21,6 +21,8 @@ export interface Client {
   systemCount: number
   assetCount: number
   openWorkOrderCount: number
+  /** A company sales is still talking to; kept out of client pickers until a deal is won or work is raised. */
+  isProspect?: boolean
 }
 
 export interface ClientSiteSummary {
