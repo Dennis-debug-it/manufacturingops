@@ -404,6 +404,42 @@ public sealed class SalesCrmController(
         return Ok(rows);
     }
 
+    /// <summary>
+    /// Quotations sent and still waiting for the client's answer, longest-waiting first: the sales
+    /// chase list. Quotes raised from a deal are listed for anyone who can see the pipeline; other
+    /// quotes are finance documents, so they are listed only for people who can see finance.
+    /// <paramref name="ownerUserId"/> narrows it to the deal owner, or whoever sent a quote with no deal.
+    /// </summary>
+    [HttpGet("quotes-awaiting-answer")]
+    public async Task<ActionResult<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>> ListQuotesAwaitingAnswer(
+        [FromQuery] Guid? ownerUserId, CancellationToken cancellationToken)
+    {
+        EnsureCanView();
+        var includeUnlinked = tenantContext.IsAdmin || tenantContext.HasPermission(PermissionNames.FinanceView);
+
+        var query = dbContext.TenantQuotations
+            .AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.Status == "Sent" && (includeUnlinked || x.SalesOpportunityId != null));
+        if (ownerUserId.HasValue)
+            query = query.Where(x => x.SalesOpportunity != null
+                ? x.SalesOpportunity.OwnerUserId == ownerUserId.Value
+                : x.SentByUserId == ownerUserId.Value);
+
+        var rows = await query
+            .OrderBy(x => x.SentAt ?? x.QuoteDate)
+            .Take(500)
+            .Select(x => new SalesQuoteAwaitingAnswer(
+                x.Id, x.QuoteNumber, x.Subject, x.Client != null ? x.Client.ClientName : null,
+                x.TotalAmount, x.Currency, x.SentAt ?? x.QuoteDate, x.ValidUntil,
+                x.SalesOpportunityId, x.SalesOpportunity != null ? x.SalesOpportunity.Title : null,
+                x.SalesOpportunity != null ? x.SalesOpportunity.OwnerUserId : x.SentByUserId,
+                x.SalesOpportunity != null
+                    ? x.SalesOpportunity.OwnerName
+                    : dbContext.Users.Where(u => u.Id == x.SentByUserId).Select(u => u.FullName).FirstOrDefault()))
+            .ToListAsync(cancellationToken);
+        return Ok(rows);
+    }
+
     [HttpPost("activities/{activityId:guid}/complete")]
     public async Task<ActionResult<SalesActivityResponse>> CompleteActivity(Guid activityId, CancellationToken cancellationToken)
     {
@@ -781,6 +817,12 @@ public sealed record SalesFollowUpItem(
     Guid Id, string Type, string Summary, DateTime DueAt, string? LoggedByName,
     Guid OpportunityId, string OpportunityTitle, string OpportunityStage, string? PartyName,
     Guid? OwnerUserId, string? OwnerName);
+
+/// <summary>A sent quotation still waiting for the client. <see cref="SentAt"/> falls back to the quote date for quotes sent before it was recorded.</summary>
+public sealed record SalesQuoteAwaitingAnswer(
+    Guid Id, string QuoteNumber, string? Subject, string? ClientName,
+    decimal TotalAmount, string Currency, DateTime SentAt, DateTime ValidUntil,
+    Guid? OpportunityId, string? OpportunityTitle, Guid? OwnerUserId, string? OwnerName);
 
 public sealed record SalesLinkedWorkOrder(Guid Id, string WorkOrderNumber, string Title, string Status, DateTime CreatedAt);
 

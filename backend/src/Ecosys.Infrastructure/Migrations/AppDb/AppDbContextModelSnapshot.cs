@@ -10512,6 +10512,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ChaseReminderStage")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid");
 
@@ -10549,6 +10552,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("character varying(500)");
 
                     b.Property<Guid?>("SalesOpportunityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("SentAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SentByUserId")
                         .HasColumnType("uuid");
 
                     b.Property<Guid?>("SiteId")

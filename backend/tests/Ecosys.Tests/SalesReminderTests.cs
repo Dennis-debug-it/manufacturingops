@@ -132,6 +132,47 @@ public sealed class SalesReminderTests
     }
 
     [Fact]
+    public async Task UnansweredQuote_IsChasedAfterThreeDays_AndAgainBeforeItExpires()
+    {
+        await using var db = CreateDbContext();
+        var fixture = await SeedAsync(db);
+        var client = new Client { TenantId = fixture.Tenant.Id, ClientName = "Kilele Hotel" };
+        var sender = new User { TenantId = fixture.Tenant.Id, FullName = "Finance Clerk", Email = "clerk@acme.test", HasEmail = true, PasswordHash = "hash", Role = AppRoles.Finance, IsActive = true };
+        db.AddRange(client, sender);
+        TenantQuotation Quote(string number, double sentDaysAgo, double validForDays, Guid? dealId = null, string status = "Sent")
+        {
+            var quote = new TenantQuotation
+            {
+                TenantId = fixture.Tenant.Id, ClientId = client.Id, QuoteNumber = number, Status = status, TotalAmount = 250_000m, Currency = "KES",
+                QuoteDate = Now.AddDays(-sentDaysAgo), SentAt = Now.AddDays(-sentDaysAgo), ValidUntil = Now.AddDays(validForDays),
+                SalesOpportunityId = dealId, SentByUserId = sender.Id,
+            };
+            db.TenantQuotations.Add(quote);
+            return quote;
+        }
+        Quote("QT-1", sentDaysAgo: 4, validForDays: 20, dealId: fixture.Deal.Id);
+        Quote("QT-2", sentDaysAgo: 1, validForDays: 20);
+        Quote("QT-3", sentDaysAgo: 4, validForDays: 20, status: "Accepted");
+        await db.SaveChangesAsync();
+        var push = new RecordingPushQueue();
+
+        // Only the deal's quote has waited long enough; it goes to the deal owner, not the sender.
+        Assert.Equal(1, (await CreateService(db, push).RunAsync(Now)).QuoteReminders);
+        var first = Assert.Single(push.Sent);
+        Assert.Equal([fixture.Owner.Id], first.UserIds);
+        Assert.Contains("QT-1", first.Message.Title);
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddHours(1))).QuoteReminders);
+
+        // Two days before expiry each gets its final nudge; the quote with no deal goes to its sender.
+        Assert.Equal(2, (await CreateService(db, push).RunAsync(Now.AddDays(18.5))).QuoteReminders);
+        Assert.Contains(push.Sent, x => x.Message.Title.Contains("QT-2") && x.Message.Title.Contains("expires") && x.UserIds.Contains(sender.Id));
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddDays(19))).QuoteReminders);
+
+        var email = await db.EmailOutboxMessages.FirstAsync(x => x.EventKey == SalesReminderKeys.QuoteAwaitingAnswer);
+        Assert.Contains("Kilele Hotel", email.HtmlBody);
+    }
+
+    [Fact]
     public async Task OwnerWithoutAMailbox_GetsThePushOnly()
     {
         await using var db = CreateDbContext();

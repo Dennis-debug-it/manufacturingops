@@ -510,6 +510,7 @@ export const endpoints = {
     activities: (id: string) => `/api/crm/opportunities/${id}/activities`,
     completeActivity: (activityId: string) => `/api/crm/activities/${activityId}/complete`,
     followUps: '/api/crm/follow-ups',
+    quotesAwaitingAnswer: '/api/crm/quotes-awaiting-answer',
     reports: '/api/crm/reports',
     convertToClient: (id: string) => `/api/crm/opportunities/${id}/convert-to-client`,
     convertToQuotation: (id: string) => `/api/crm/opportunities/${id}/convert-to-quotation`,

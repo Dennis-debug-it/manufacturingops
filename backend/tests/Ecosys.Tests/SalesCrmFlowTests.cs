@@ -412,6 +412,34 @@ public sealed class SalesCrmFlowTests
         Assert.Contains(await dbContext.SalesActivities.Where(x => x.OpportunityId == declined.Deal).ToListAsync(), x => x.Summary.Contains("Over budget"));
     }
 
+    [Fact]
+    public async Task QuotesAwaitingAnswer_ShowOtherQuotesOnlyToFinance()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        var client = new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" };
+        dbContext.Clients.Add(client);
+        var created = await crm.CreateOpportunity(Deal("Chiller service", 50_000m, "KES"), CancellationToken.None);
+        var dealId = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+        TenantQuotation Quote(string number, Guid? deal, string status = "Sent", int sentDaysAgo = 1) => new()
+        {
+            TenantId = tenant.Id, ClientId = client.Id, QuoteNumber = number, Status = status, TotalAmount = 1_000m,
+            QuoteDate = DateTime.UtcNow.AddDays(-sentDaysAgo), SentAt = DateTime.UtcNow.AddDays(-sentDaysAgo), ValidUntil = DateTime.UtcNow.AddDays(30),
+            SalesOpportunityId = deal, SentByUserId = actor.Id,
+        };
+        dbContext.TenantQuotations.AddRange(Quote("QT-DEAL", dealId), Quote("QT-OTHER", null, sentDaysAgo: 5), Quote("QT-DRAFT", dealId, "Draft"));
+        await dbContext.SaveChangesAsync();
+
+        var all = Ok<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>(await crm.ListQuotesAwaitingAnswer(null, CancellationToken.None));
+        Assert.Equal(["QT-OTHER", "QT-DEAL"], all.Select(x => x.QuoteNumber).ToArray());
+        Assert.Equal("Chiller service", all.Last().OpportunityTitle);
+        Assert.Equal("Sales Admin", all.First().OwnerName);
+
+        var salesOnly = CreateCrmController(dbContext, tenant.Id, actor, new ScopedTenantContext(tenant.Id, actor.Id, AppRoles.Viewer, PermissionNames.CrmView));
+        Assert.Equal("QT-DEAL", Assert.Single(Ok<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>(await salesOnly.ListQuotesAwaitingAnswer(null, CancellationToken.None))).QuoteNumber);
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 

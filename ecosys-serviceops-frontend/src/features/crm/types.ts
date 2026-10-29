@@ -74,6 +74,22 @@ export interface SalesFollowUpItem {
   ownerName: string | null
 }
 
+/** A sent quotation still waiting for the client; `sentAt` falls back to the quote date for older quotes. */
+export interface SalesQuoteAwaitingAnswer {
+  id: string
+  quoteNumber: string
+  subject: string | null
+  clientName: string | null
+  totalAmount: number
+  currency: string
+  sentAt: string
+  validUntil: string
+  opportunityId: string | null
+  opportunityTitle: string | null
+  ownerUserId: string | null
+  ownerName: string | null
+}
+
 export interface SalesOpportunityDetail {
   id: string
   title: string

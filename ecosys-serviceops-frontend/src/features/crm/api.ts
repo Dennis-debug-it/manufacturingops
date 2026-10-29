@@ -6,6 +6,7 @@ import type {
   SalesActivity,
   SalesCurrencySettings,
   SalesFollowUpItem,
+  SalesQuoteAwaitingAnswer,
   SalesOwnerOption,
   SalesTenderDetail,
   SalesTenderListItem,
@@ -101,6 +102,14 @@ export function useFollowUps(params?: { ownerUserId?: string | undefined }) {
   return useQuery({
     queryKey: [...crmKey, 'follow-ups', params ?? {}],
     queryFn: () => api.get<SalesFollowUpItem[]>(endpoints.crm.followUps, { ownerUserId: params?.ownerUserId }),
+    staleTime: 30_000,
+  })
+}
+
+export function useQuotesAwaitingAnswer(params?: { ownerUserId?: string | undefined }) {
+  return useQuery({
+    queryKey: [...crmKey, 'quotes-awaiting-answer', params ?? {}],
+    queryFn: () => api.get<SalesQuoteAwaitingAnswer[]>(endpoints.crm.quotesAwaitingAnswer, { ownerUserId: params?.ownerUserId }),
     staleTime: 30_000,
   })
 }

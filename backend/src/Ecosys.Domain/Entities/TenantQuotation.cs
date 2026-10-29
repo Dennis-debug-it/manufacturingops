@@ -22,6 +22,11 @@ public sealed class TenantQuotation : AuditableEntity, ITenantEntity
     public Guid? ConvertedToProjectId { get; set; }
     public string? RejectionReason { get; set; }
     public Guid? SalesOpportunityId { get; set; }
+    /// <summary>When the quotation was sent to the client, and by whom; the sales chase list counts from here.</summary>
+    public DateTime? SentAt { get; set; }
+    public Guid? SentByUserId { get; set; }
+    /// <summary>Chase reminders already sent while it waits for an answer: 1 once it has waited a few days, 2 as it nears expiry.</summary>
+    public int ChaseReminderStage { get; set; }
 
     public Tenant? Tenant { get; set; }
     public Client? Client { get; set; }

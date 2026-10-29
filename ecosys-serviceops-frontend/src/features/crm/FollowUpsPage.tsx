@@ -7,10 +7,11 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
-import { useCompleteActivity, useFollowUps } from './api'
+import { formatCurrency } from '../../shared/utils/format'
+import { useCompleteActivity, useFollowUps, useQuotesAwaitingAnswer } from './api'
 import { CrmNav } from './components/CrmNav'
 import { OwnerSelect } from './components/OwnerSelect'
-import { activityTypeOptions, daysUntilDeadline, stageLabels, type SalesFollowUpItem } from './types'
+import { activityTypeOptions, daysUntilDeadline, stageLabels, type SalesFollowUpItem, type SalesQuoteAwaitingAnswer } from './types'
 
 type Bucket = 'overdue' | 'today' | 'week' | 'later'
 
@@ -36,6 +37,7 @@ export function FollowUpsPage() {
   const [ownerFilter, setOwnerFilter] = useState('')
   const { data, isLoading, isError } = useFollowUps({ ownerUserId: ownerFilter || undefined })
   const completeActivity = useCompleteActivity()
+  const { data: quotes } = useQuotesAwaitingAnswer({ ownerUserId: ownerFilter || undefined })
 
   const grouped = useMemo(() => {
     const groups: Record<Bucket, SalesFollowUpItem[]> = { overdue: [], today: [], week: [], later: [] }
@@ -50,10 +52,11 @@ export function FollowUpsPage() {
 
       <CrmNav />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Overdue" value={data ? grouped.overdue.length : '—'} tone={grouped.overdue.length > 0 ? 'warning' : 'default'} />
         <StatCard label="Due today" value={data ? grouped.today.length : '—'} />
         <StatCard label="Next 7 days" value={data ? grouped.week.length : '—'} />
+        <StatCard label="Quotes awaiting an answer" value={quotes ? quotes.length : '—'} />
       </div>
 
       <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-4 shadow-sm backdrop-blur-[var(--glass-blur-md)] sm:flex-row sm:items-center">
@@ -70,6 +73,8 @@ export function FollowUpsPage() {
           </button>
         ) : null}
       </div>
+
+      {quotes && quotes.length > 0 ? <QuotesAwaitingAnswer quotes={quotes} /> : null}
 
       {isLoading ? <div className="py-10 text-center text-sm text-slate-400">Loading…</div> : null}
       {isError ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">Follow-ups could not be loaded.</div> : null}
@@ -133,5 +138,66 @@ export function FollowUpsPage() {
           })
         : null}
     </div>
+  )
+}
+
+/** Days between two instants, rounded down; negative once `to` is in the past. */
+function wholeDaysBetween(from: Date, to: Date) {
+  return Math.floor((to.getTime() - from.getTime()) / 86_400_000)
+}
+
+/**
+ * Quotes sent and not yet answered: chase them before they expire. The quote itself is a finance
+ * document, so its number only links through for people who can open finance.
+ */
+function QuotesAwaitingAnswer({ quotes }: { quotes: SalesQuoteAwaitingAnswer[] }) {
+  const canOpenQuotes = usePermission('finance.view')
+  const now = new Date()
+  return (
+    <section className="rounded-[var(--radius-card)] border border-slate-200 bg-white">
+      <header className="border-b border-slate-200 px-4 py-2.5">
+        <h2 className="text-sm font-semibold text-slate-900">
+          Quotes awaiting an answer <span className="font-normal text-slate-500">({quotes.length})</span>
+        </h2>
+      </header>
+      <ul className="divide-y divide-slate-100">
+        {quotes.map((quote) => {
+          const waiting = Math.max(0, wholeDaysBetween(new Date(quote.sentAt), now))
+          const expiresIn = daysUntilDeadline(quote.validUntil, now)
+          return (
+            <li key={quote.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <div className="text-sm text-slate-800">
+                  {canOpenQuotes ? (
+                    <Link to={`/finance/quotes/${quote.id}`} className="mr-2 font-mono text-slate-900 underline decoration-slate-300 underline-offset-4">{quote.quoteNumber}</Link>
+                  ) : (
+                    <span className="mr-2 font-mono text-slate-900">{quote.quoteNumber}</span>
+                  )}
+                  {quote.subject ?? quote.clientName ?? ''}
+                </div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {quote.opportunityId ? (
+                    <Link to={`/crm/opportunities/${quote.opportunityId}`} className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-4">{quote.opportunityTitle}</Link>
+                  ) : (
+                    <span>No deal</span>
+                  )}
+                  {quote.clientName ? ` · ${quote.clientName}` : ''}
+                  {quote.ownerName ? ` · ${quote.opportunityId ? 'Owner' : 'Sent by'}: ${quote.ownerName}` : ''}
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-col items-start gap-0.5 text-xs sm:items-end">
+                <span className="font-semibold text-slate-900">{formatCurrency(quote.totalAmount, quote.currency)}</span>
+                <span className={cn(waiting >= 3 ? 'font-medium text-amber-700' : 'text-slate-500')}>
+                  Sent {waiting === 0 ? 'today' : `${waiting} day${waiting === 1 ? '' : 's'} ago`}
+                </span>
+                <span className={cn(expiresIn <= 2 ? 'font-medium text-rose-700' : 'text-slate-500')}>
+                  {expiresIn < 0 ? `Expired ${formatDate(quote.validUntil)}` : expiresIn === 0 ? 'Expires today' : `Expires in ${expiresIn} day${expiresIn === 1 ? '' : 's'}`}
+                </span>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

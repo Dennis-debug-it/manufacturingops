@@ -17,9 +17,12 @@ public static class SalesReminderKeys
 
     /// <summary>Notification and email-template key for an RFP/RFQ whose submission deadline is near.</summary>
     public const string TenderDeadline = "crm.tender.deadline";
+
+    /// <summary>Notification and email-template key for a sent quotation the client has not answered.</summary>
+    public const string QuoteAwaitingAnswer = "crm.quote.awaiting-answer";
 }
 
-public sealed record SalesReminderRunResult(int FollowUpReminders, int TenderReminders);
+public sealed record SalesReminderRunResult(int FollowUpReminders, int TenderReminders, int QuoteReminders = 0);
 
 public interface ISalesReminderService
 {
@@ -33,6 +36,8 @@ public interface ISalesReminderService
 /// <item>A follow-up logged on a deal, once its due time arrives, then once a day while it is still
 /// open, three reminders at most. Marking it done, or closing the deal, stops them.</item>
 /// <item>An RFP/RFQ not yet submitted, three days and again one day before its submission deadline.</item>
+/// <item>A sent quotation the client has not answered: once it has waited three days, and again two
+/// days before it expires. It goes to the owner of the deal it was raised from, else whoever sent it.</item>
 /// </list>
 /// Each person's notification settings are honoured per channel. Only workspaces whose plan includes
 /// the sales CRM (Suite) are reminded, and the reminder state is saved per item so a restart, a second
@@ -53,6 +58,8 @@ internal sealed class SalesReminderService(
     public const int MaxFollowUpReminders = 3;
     public static readonly TimeSpan TenderFirstWarning = TimeSpan.FromDays(3);
     public static readonly TimeSpan TenderFinalWarning = TimeSpan.FromDays(1);
+    public static readonly TimeSpan QuoteChaseAfter = TimeSpan.FromDays(3);
+    public static readonly TimeSpan QuoteExpiryWarning = TimeSpan.FromDays(2);
 
     private static readonly string[] TenderStatusesAwaitingSubmission = ["Received", "Reviewing", "Preparing"];
     private static readonly string[] ClosedDealStages = ["Won", "Lost"];
@@ -63,7 +70,8 @@ internal sealed class SalesReminderService(
     {
         var followUps = await RemindFollowUpsAsync(utcNow, cancellationToken);
         var tenders = await RemindTenderDeadlinesAsync(utcNow, cancellationToken);
-        return new SalesReminderRunResult(followUps, tenders);
+        var quotes = await RemindUnansweredQuotesAsync(utcNow, cancellationToken);
+        return new SalesReminderRunResult(followUps, tenders, quotes);
     }
 
     private async Task<int> RemindFollowUpsAsync(DateTime now, CancellationToken cancellationToken)
@@ -190,6 +198,70 @@ internal sealed class SalesReminderService(
         return sent;
     }
 
+    private async Task<int> RemindUnansweredQuotesAsync(DateTime now, CancellationToken cancellationToken)
+    {
+        var chaseSentBefore = now - QuoteChaseAfter;
+        var expiryWarningFrom = now + QuoteExpiryWarning;
+        var candidates = await dbContext.TenantQuotations
+            .IgnoreQueryFilters()
+            .Include(x => x.Client)
+            .Include(x => x.SalesOpportunity)
+            .Where(x => x.Status == "Sent" && x.ChaseReminderStage < 2 && x.ValidUntil > now
+                && ((x.SentAt ?? x.QuoteDate) <= chaseSentBefore || x.ValidUntil <= expiryWarningFrom))
+            .OrderBy(x => x.ValidUntil)
+            .Take(500)
+            .ToListAsync(cancellationToken);
+
+        var sent = 0;
+        foreach (var quote in candidates)
+        {
+            // One reminder per window: a quote already close to expiry gets only the final one.
+            var stage = quote.ValidUntil <= expiryWarningFrom ? 2 : 1;
+            if (quote.ChaseReminderStage >= stage)
+                continue;
+            if (!await CrmEnabledAsync(quote.TenantId, cancellationToken))
+                continue;
+
+            quote.ChaseReminderStage = stage;
+            var ownerId = quote.SalesOpportunity?.OwnerUserId ?? quote.SentByUserId;
+            var owner = ownerId is null ? null : await LoadRecipientAsync(quote.TenantId, ownerId.Value, cancellationToken);
+            if (owner is null)
+                continue;
+
+            const string url = "/crm/follow-ups";
+            var waitingDays = Math.Max(0, (int)(now - (quote.SentAt ?? quote.QuoteDate)).TotalDays);
+            var client = quote.Client?.ClientName ?? "—";
+            var amount = $"{quote.Currency} {quote.TotalAmount:N2}";
+            var expiresIn = DescribeDueIn(quote.ValidUntil - now);
+            var validUntil = await tenantTimeZoneService.FormatForTenantAsync(quote.ValidUntil, quote.TenantId, cancellationToken: cancellationToken);
+
+            await DeliverAsync(owner, SalesReminderKeys.QuoteAwaitingAnswer,
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["OwnerName"] = owner.FullName,
+                    ["QuoteNumber"] = quote.QuoteNumber,
+                    ["ClientName"] = client,
+                    ["Amount"] = amount,
+                    ["WaitingDays"] = waitingDays.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["ExpiresIn"] = expiresIn,
+                    ["ValidUntil"] = validUntil,
+                    ["OpportunityTitle"] = quote.SalesOpportunity?.Title ?? "—",
+                    ["FollowUpsUrl"] = AbsoluteUrl(url),
+                },
+                new PushMessage(
+                    Title: stage == 2 ? $"Quote {quote.QuoteNumber} expires {expiresIn}" : $"No answer yet on quote {quote.QuoteNumber}",
+                    Body: $"{client} · {amount} · sent {waitingDays} day{(waitingDays == 1 ? "" : "s")} ago",
+                    Url: url,
+                    Tag: $"crm-quote-{quote.Id}"),
+                cancellationToken);
+            sent++;
+        }
+
+        if (candidates.Count > 0)
+            await dbContext.SaveChangesAsync(cancellationToken);
+        return sent;
+    }
+
     /// <summary>"in 3 days", "tomorrow", "in 5 hours" — close enough for a nudge; the email carries the exact time.</summary>
     internal static string DescribeDueIn(TimeSpan remaining)
     {
@@ -284,8 +356,8 @@ public sealed class SalesReminderWorker(
             {
                 using var scope = serviceScopeFactory.CreateScope();
                 var result = await scope.ServiceProvider.GetRequiredService<ISalesReminderService>().RunAsync(DateTime.UtcNow, stoppingToken);
-                if (result.FollowUpReminders + result.TenderReminders > 0)
-                    logger.LogInformation("Sales reminders sent: {FollowUps} follow-up(s), {Tenders} RFP/RFQ deadline(s).", result.FollowUpReminders, result.TenderReminders);
+                if (result.FollowUpReminders + result.TenderReminders + result.QuoteReminders > 0)
+                    logger.LogInformation("Sales reminders sent: {FollowUps} follow-up(s), {Tenders} RFP/RFQ deadline(s), {Quotes} unanswered quote(s).", result.FollowUpReminders, result.TenderReminders, result.QuoteReminders);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {

@@ -148,6 +148,9 @@ public sealed class TenantQuotationController(
         var quote = await LoadQuoteAsync(id, cancellationToken);
         if (quote.Status != "Draft") throw new BusinessRuleException("Only Draft quotations can be sent.");
         quote.Status = "Sent";
+        quote.SentAt = DateTime.UtcNow;
+        quote.SentByUserId = UserId;
+        quote.ChaseReminderStage = 0;
         await dbContext.SaveChangesAsync(cancellationToken);
         await TryQueueQuotationSentEmailAsync(quote, cancellationToken);
         return Ok(MapDetail(quote));
