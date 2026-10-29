@@ -903,6 +903,67 @@ public sealed class SalesCrmFlowTests
         Assert.Equal(1, Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None)).StalledDeals);
     }
 
+    [Fact]
+    public void StageFunnel_CountsConversionAndTimeInStage_FromHistory()
+    {
+        var day = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        SalesReportsController.StageMove Move(Guid deal, string stage, int onDay) => new(deal, stage, day.AddDays(onDay));
+        var (a, b, c) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var moves = new[]
+        {
+            // A: Lead 4 days, Proposal 6 days, won.
+            Move(a, "Lead", 0), Move(a, "Proposal", 4), Move(a, "Won", 10),
+            // B: Lead 2 days, Proposal, lost.
+            Move(b, "Lead", 0), Move(b, "Proposal", 2), Move(b, "Lost", 3),
+            // C: Lead, still there.
+            Move(c, "Lead", 5),
+        };
+
+        var funnel = SalesReportsController.BuildStageFunnel(moves, day, day.AddDays(30), day.AddDays(15));
+        var lead = funnel.Single(x => x.Stage == "Lead");
+        Assert.Equal((3, 2, 1), (lead.Entered, lead.MovedOn, lead.Won));
+        Assert.Equal(66.7m, lead.MovedOnRate);
+        Assert.Equal(3m, lead.AverageDaysInStage);
+        Assert.Equal((1, 10m), (lead.NowInStage, lead.AverageDaysNowInStage!.Value));
+        var proposal = funnel.Single(x => x.Stage == "Proposal");
+        Assert.Equal((2, 1, 1), (proposal.Entered, proposal.MovedOn, proposal.Won));
+        Assert.Equal(3.5m, proposal.AverageDaysInStage);
+        Assert.Equal(0, funnel.Single(x => x.Stage == "Negotiation").Entered);
+    }
+
+    [Fact]
+    public async Task Targets_ProRataIntoTheReport_ForTeamAndOwners()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var rep = new User { TenantId = tenant.Id, FullName = "Rep One", Email = "rep1@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+        dbContext.Users.Add(rep);
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        var october = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var november = october.AddMonths(1);
+
+        var saved = Ok<SalesTargetsResponse>(await crm.SetTargets(new SetSalesTargetsRequest(2026,
+        [
+            new SalesTargetRow(null, october, 3_100_000m),
+            new SalesTargetRow(admin.Id, october, 1_000_000m),
+            new SalesTargetRow(rep.Id, october, 620_000m),
+            new SalesTargetRow(rep.Id, november, 0m),
+        ]), CancellationToken.None));
+        Assert.Equal(3, saved.Targets.Count);
+        Assert.True(saved.CanEdit);
+
+        // The first ten days of October: a third of a 31-day month... of each target.
+        var reports = new SalesReportsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService());
+        var report = Ok<SalesReport>(await reports.Get(october, october.AddDays(9), null, CancellationToken.None));
+        Assert.Equal(1_000_000m, report.TargetValue);
+        Assert.Equal(200_000m, report.Owners.Single(x => x.OwnerUserId == rep.Id).TargetValue);
+
+        // Only managers and admins set targets.
+        var plainRep = CreateCrmController(dbContext, tenant.Id, rep, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.Manager, PermissionNames.CrmView, PermissionNames.CrmManage));
+        await Assert.ThrowsAsync<ForbiddenException>(() => plainRep.SetTargets(new SetSalesTargetsRequest(2026, []), CancellationToken.None));
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 

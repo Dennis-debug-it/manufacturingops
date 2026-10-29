@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { format, startOfMonth, startOfYear, subDays } from 'date-fns'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Target } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatCard } from '../../shared/components/StatCard'
@@ -10,6 +10,8 @@ import { cn } from '../../shared/utils/cn'
 import { useSalesReport } from './api'
 import { CrmNav } from './components/CrmNav'
 import { OwnerSelect } from './components/OwnerSelect'
+import { TargetsDrawer } from './components/TargetsDrawer'
+import { stageLabels } from './types'
 import type { SalesForecastBucket, SalesOwnerPerformance, SalesSourcePerformance } from './types'
 
 const selectClass = 'h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
@@ -68,6 +70,7 @@ export function SalesReportsPage() {
     { key: 'won', header: 'Won', cell: (row) => (row.wonCount ? `${row.wonCount} · ${money(row.wonValue)}` : '—') },
     { key: 'lost', header: 'Lost', cell: (row) => row.lostCount || '—' },
     { key: 'winRate', header: 'Win rate', cell: (row) => rate(row.winRate) },
+    { key: 'target', header: 'Target', cell: (row) => (row.targetValue ? <TargetProgress won={row.wonValue} target={row.targetValue} money={money} /> : '—') },
     { key: 'open', header: 'Open pipeline', cell: (row) => (row.openCount ? `${row.openCount} · ${money(row.openValue)}` : '—') },
     { key: 'weighted', header: 'Weighted', cell: (row) => (row.openCount ? money(row.weightedValue) : '—') },
   ]
@@ -80,12 +83,21 @@ export function SalesReportsPage() {
     { key: 'winRate', header: 'Win rate', cell: (row) => rate(row.winRate) },
   ]
 
+  const [showTargets, setShowTargets] = useState(false)
   const forecastMax = Math.max(1, ...(report?.forecast ?? []).map((bucket) => bucket.value))
   const reasonMax = Math.max(1, ...(report?.lostReasons ?? []).map((reason) => reason.count))
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Sales Reports" subtitle="What you won and lost, why, who is winning, and what is due to close." />
+      <PageHeader
+        title="Sales Reports"
+        subtitle="What you won and lost, why, who is winning, and what is due to close."
+        primaryAction={
+          <button type="button" onClick={() => setShowTargets(true)} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+            <Target className="h-4 w-4" />Targets
+          </button>
+        }
+      />
 
       <CrmNav />
 
@@ -135,6 +147,16 @@ export function SalesReportsPage() {
             <StatCard label="New deals" value={report.newDeals} />
           </div>
 
+          {report.targetValue ? (
+            <section className="rounded-[var(--radius-card)] border border-slate-200 bg-white p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-900">Won against target</h2>
+                <span className="text-sm text-slate-600">{money(report.wonValue)} of {money(report.targetValue)}</span>
+              </div>
+              <div className="mt-2"><TargetProgress won={report.wonValue} target={report.targetValue} money={money} wide /></div>
+            </section>
+          ) : null}
+
           <section className="rounded-[var(--radius-card)] border border-slate-200 bg-white p-4">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
               <h2 className="text-sm font-semibold text-slate-900">Forecast by expected close month</h2>
@@ -158,6 +180,38 @@ export function SalesReportsPage() {
             </ul>
             <p className="mt-3 text-xs text-slate-500">Light bar: full value. Dark bar: weighted by each deal's probability.</p>
           </section>
+
+          {report.funnel && report.funnel.some((row) => row.entered > 0 || row.nowInStage > 0) ? (
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold text-slate-900">Stage by stage</h2>
+              <div className="overflow-x-auto rounded-[var(--radius-card)] border border-slate-200 bg-white">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-slate-50 text-xs text-slate-500">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Stage</th>
+                      <th className="px-3 py-2 text-right font-medium" title="Deals that reached this stage in the period">Entered</th>
+                      <th className="px-3 py-2 text-right font-medium" title="Of those, how many went on to a later stage or were won">Moved on</th>
+                      <th className="px-3 py-2 text-right font-medium" title="Of those, how many were won">Won</th>
+                      <th className="px-3 py-2 text-right font-medium" title="Average time a deal spends here before its next move">Days in stage</th>
+                      <th className="px-3 py-2 text-right font-medium">There now</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {report.funnel.map((row) => (
+                      <tr key={row.stage}>
+                        <td className="px-3 py-2 font-medium text-slate-800">{stageLabels[row.stage] ?? row.stage}</td>
+                        <td className="px-3 py-2 text-right">{row.entered || '—'}</td>
+                        <td className="px-3 py-2 text-right">{row.entered ? `${row.movedOn} · ${rate(row.movedOnRate)}` : '—'}</td>
+                        <td className="px-3 py-2 text-right">{row.entered ? `${row.won} · ${rate(row.winRateFromHere)}` : '—'}</td>
+                        <td className="px-3 py-2 text-right">{row.averageDaysInStage ?? '—'}</td>
+                        <td className="px-3 py-2 text-right">{row.nowInStage ? `${row.nowInStage} · avg ${row.averageDaysNowInStage} days` : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
 
           <section className="space-y-2">
             <h2 className="text-sm font-semibold text-slate-900">By owner</h2>
@@ -221,6 +275,20 @@ export function SalesReportsPage() {
           </div>
         </>
       ) : null}
+      <TargetsDrawer open={showTargets} onClose={() => setShowTargets(false)} />
+    </div>
+  )
+}
+
+/** "62% · KES 620,000 of 1,000,000" with a bar; full once the target is met. */
+function TargetProgress({ won, target, money, wide = false }: { won: number; target: number; money: (value: number) => string; wide?: boolean }) {
+  const percent = Math.round((won / target) * 100)
+  return (
+    <div className={cn('flex items-center gap-2', wide ? 'w-full' : 'min-w-36')}>
+      <div className={cn('h-2 overflow-hidden rounded-full bg-slate-100', wide ? 'flex-1' : 'w-16')}>
+        <div className={cn('h-2 rounded-full', percent >= 100 ? 'bg-emerald-500' : 'bg-[var(--app-primary)]')} style={{ width: `${Math.min(100, percent)}%` }} />
+      </div>
+      <span className="whitespace-nowrap text-xs text-slate-600">{percent}%{wide ? '' : ` of ${money(target)}`}</span>
     </div>
   )
 }

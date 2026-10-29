@@ -189,3 +189,16 @@ public sealed class SalesStageChange : ITenantEntity
 
     public SalesOpportunity? Opportunity { get; set; }
 }
+
+/// <summary>
+/// A monthly sales target, in the reporting currency: for one person, or for the whole team when
+/// <see cref="OwnerUserId"/> is null. Reports compare won value with it, pro rata for part months.
+/// </summary>
+public sealed class SalesTarget : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid? OwnerUserId { get; set; }
+    /// <summary>The first day of the month the target is for.</summary>
+    public DateTime Month { get; set; }
+    public decimal Amount { get; set; }
+}

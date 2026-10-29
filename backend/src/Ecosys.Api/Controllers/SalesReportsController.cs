@@ -117,6 +117,35 @@ public sealed class SalesReportsController(
         var tendersWon = Decided(SalesTenderStatuses.Won);
         var tendersLost = Decided(SalesTenderStatuses.Lost);
 
+        var changeQuery = dbContext.SalesStageChanges.AsNoTracking().Where(x => x.TenantId == TenantId);
+        if (ownerUserId.HasValue)
+            changeQuery = changeQuery.Where(x => x.Opportunity!.OwnerUserId == ownerUserId.Value);
+        var changes = await changeQuery
+            .Select(x => new StageMove(x.OpportunityId, x.ToStage, x.ChangedAt))
+            .ToListAsync(cancellationToken);
+        var funnel = BuildStageFunnel(changes, start, end, now);
+
+        var targetRows = await dbContext.SalesTargets.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.Month < end && x.Month >= start.AddMonths(-1))
+            .Select(x => new SalesTargetRow(x.OwnerUserId, x.Month, x.Amount))
+            .ToListAsync(cancellationToken);
+        var ownerTargets = targetRows.Where(x => x.OwnerUserId.HasValue)
+            .GroupBy(x => x.OwnerUserId!.Value)
+            .ToDictionary(g => g.Key, g => ProRata(g, start, end));
+        // The team's target is its own figure where one is set, else what its people's add up to.
+        var teamRows = targetRows.Where(x => x.OwnerUserId is null).ToList();
+        decimal? target = ownerUserId.HasValue
+            ? ownerTargets.GetValueOrDefault(ownerUserId.Value)
+            : teamRows.Count > 0 ? ProRata(teamRows, start, end) : ownerTargets.Count > 0 ? ownerTargets.Values.Sum() : null;
+        owners = owners.Select(x => x with { TargetValue = x.OwnerUserId.HasValue && ownerTargets.TryGetValue(x.OwnerUserId.Value, out var t) ? t : null }).ToList();
+        // Someone with a target and nothing won or open still belongs in the table: that is the point of the target.
+        var missing = ownerTargets.Keys.Where(id => owners.All(x => x.OwnerUserId != id) && (!ownerUserId.HasValue || id == ownerUserId)).ToList();
+        if (missing.Count > 0)
+        {
+            var names = await dbContext.Users.AsNoTracking().Where(x => x.TenantId == TenantId && missing.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
+            owners.AddRange(missing.Select(id => new SalesOwnerPerformance(id, names.GetValueOrDefault(id), 0, 0, 0, 0, 0, 0, null, ownerTargets[id])));
+        }
+
         return Ok(new SalesReport(
             converter.ReportingCurrency, start, end.AddDays(-1),
             created.Count,
@@ -132,7 +161,69 @@ public sealed class SalesReportsController(
                 Decided(SalesTenderStatuses.NoBid), Decided(SalesTenderStatuses.Cancelled),
                 WinRate(tendersWon, tendersLost)),
             deals.Count(x => x.Value is null
-                && (x.WonInPeriodAt.HasValue || x.LostInPeriod || !SalesStages.IsClosed(x.Stage) || (x.CreatedAt >= start && x.CreatedAt < end)))));
+                && (x.WonInPeriodAt.HasValue || x.LostInPeriod || !SalesStages.IsClosed(x.Stage) || (x.CreatedAt >= start && x.CreatedAt < end))),
+            funnel,
+            target is null or 0 ? null : Math.Round(target.Value, 2)));
+    }
+
+    /// <summary>Monthly targets counted for the part of each month inside the period.</summary>
+    public static decimal ProRata(IEnumerable<SalesTargetRow> rows, DateTime start, DateTime end)
+    {
+        decimal total = 0;
+        foreach (var row in rows)
+        {
+            var monthStart = new DateTime(row.Month.Year, row.Month.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+            var monthEnd = monthStart.AddMonths(1);
+            var overlap = (Min(monthEnd, end) - Max(monthStart, start)).TotalDays;
+            if (overlap > 0)
+                total += row.Amount * (decimal)overlap / (decimal)(monthEnd - monthStart).TotalDays;
+        }
+        return Math.Round(total, 2);
+
+        static DateTime Min(DateTime a, DateTime b) => a < b ? a : b;
+        static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
+    }
+
+    public sealed record StageMove(Guid DealId, string ToStage, DateTime At);
+
+    /// <summary>
+    /// For each open stage: deals that entered it in the period, how many then moved further on (a
+    /// later stage or won) and how many were won, how long a deal spends there before its next move,
+    /// and what sits in it now. Built from the stage history, so it reflects how deals actually
+    /// moved, including stages skipped or returned to.
+    /// </summary>
+    public static List<SalesStageFunnelRow> BuildStageFunnel(IReadOnlyCollection<StageMove> changes, DateTime start, DateTime end, DateTime now)
+    {
+        var byDeal = changes.GroupBy(x => x.DealId).ToDictionary(g => g.Key, g => g.OrderBy(x => x.At).ToList());
+        var rows = new List<SalesStageFunnelRow>();
+        foreach (var stage in SalesStages.All.Where(x => !SalesStages.IsClosed(x)))
+        {
+            var rank = SalesStages.Rank(stage);
+            int entered = 0, movedOn = 0, won = 0;
+            var daysInStage = new List<double>();
+            foreach (var moves in byDeal.Values)
+            {
+                for (var i = 0; i < moves.Count; i++)
+                {
+                    if (moves[i].ToStage != stage) continue;
+                    if (i + 1 < moves.Count) daysInStage.Add((moves[i + 1].At - moves[i].At).TotalDays);
+                    if (moves[i].At < start || moves[i].At >= end) continue;
+                    entered++;
+                    var later = moves.Skip(i + 1).ToList();
+                    if (later.Any(x => x.ToStage == SalesStages.Won || (x.ToStage != SalesStages.Lost && SalesStages.Rank(x.ToStage) > rank))) movedOn++;
+                    if (later.Any(x => x.ToStage == SalesStages.Won)) won++;
+                }
+            }
+            var current = byDeal.Values.Where(moves => moves[^1].ToStage == stage).Select(moves => (now - moves[^1].At).TotalDays).ToList();
+            rows.Add(new SalesStageFunnelRow(
+                stage, entered, movedOn, won,
+                entered == 0 ? null : Math.Round(movedOn * 100m / entered, 1),
+                entered == 0 ? null : Math.Round(won * 100m / entered, 1),
+                daysInStage.Count == 0 ? null : Math.Round((decimal)daysInStage.Average(), 1),
+                current.Count,
+                current.Count == 0 ? null : Math.Round((decimal)current.Average(), 1)));
+        }
+        return rows;
     }
 
     /// <summary>
@@ -189,7 +280,18 @@ public sealed record SalesReport(
     IReadOnlyCollection<SalesSourcePerformance> Sources,
     IReadOnlyCollection<SalesLostReason> LostReasons,
     SalesTenderOutcomes Tenders,
-    int UnconvertedDeals);
+    int UnconvertedDeals,
+    IReadOnlyCollection<SalesStageFunnelRow>? Funnel = null,
+    decimal? TargetValue = null);
+
+/// <summary>
+/// One stage of the funnel. <see cref="Entered"/>, <see cref="MovedOn"/> and <see cref="Won"/> count deals that
+/// entered the stage in the period; <see cref="AverageDaysInStage"/> is over every visit that has ended;
+/// <see cref="NowInStage"/> and <see cref="AverageDaysNowInStage"/> describe today.
+/// </summary>
+public sealed record SalesStageFunnelRow(
+    string Stage, int Entered, int MovedOn, int Won, decimal? MovedOnRate, decimal? WinRateFromHere,
+    decimal? AverageDaysInStage, int NowInStage, decimal? AverageDaysNowInStage);
 
 /// <summary><see cref="Key"/> is "overdue", "later", "none" or the month as yyyy-MM (then <see cref="Month"/> is set).</summary>
 public sealed record SalesForecastBucket(string Key, DateTime? Month, int Count, decimal Value, decimal WeightedValue);
@@ -197,7 +299,8 @@ public sealed record SalesForecastBucket(string Key, DateTime? Month, int Count,
 public sealed record SalesOwnerPerformance(
     Guid? OwnerUserId, string? OwnerName,
     int OpenCount, decimal OpenValue, decimal WeightedValue,
-    int WonCount, decimal WonValue, int LostCount, decimal? WinRate);
+    int WonCount, decimal WonValue, int LostCount, decimal? WinRate,
+    decimal? TargetValue = null);
 
 public sealed record SalesSourcePerformance(string? Source, int NewDeals, int WonCount, decimal WonValue, int LostCount, decimal? WinRate);
 

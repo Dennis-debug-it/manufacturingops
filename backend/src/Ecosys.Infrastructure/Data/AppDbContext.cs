@@ -197,6 +197,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<ClientContact> ClientContacts => Set<ClientContact>();
     public DbSet<SalesAssignmentRule> SalesAssignmentRules => Set<SalesAssignmentRule>();
     public DbSet<SalesStageChange> SalesStageChanges => Set<SalesStageChange>();
+    public DbSet<SalesTarget> SalesTargets => Set<SalesTarget>();
     public DbSet<SalesOpportunityContact> SalesOpportunityContacts => Set<SalesOpportunityContact>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
@@ -3579,6 +3580,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.OpportunityId, x.ChangedAt });
         });
         ApplyTenantFilter<SalesStageChange>(modelBuilder);
+
+        modelBuilder.Entity<SalesTarget>(entity =>
+        {
+            entity.ToTable("sales_targets");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
+            entity.HasIndex(x => new { x.TenantId, x.Month, x.OwnerUserId }).IsUnique();
+        });
+        ApplyTenantFilter<SalesTarget>(modelBuilder);
 
         modelBuilder.Entity<SalesActivity>(entity =>
         {

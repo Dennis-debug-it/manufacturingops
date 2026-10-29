@@ -8854,6 +8854,38 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("sales_stage_changes", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesTarget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("Month")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Month", "OwnerUserId")
+                        .IsUnique();
+
+                    b.ToTable("sales_targets", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesTender", b =>
                 {
                     b.Property<Guid>("Id")

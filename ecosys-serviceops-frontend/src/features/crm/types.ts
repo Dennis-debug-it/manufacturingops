@@ -182,6 +182,36 @@ export interface SalesOwnerPerformance {
   wonValue: number
   lostCount: number
   winRate: number | null
+  /** Target for the period (pro rata for part months); null when none is set. */
+  targetValue?: number | null
+}
+
+export interface SalesStageFunnelRow {
+  stage: SalesStage
+  entered: number
+  movedOn: number
+  won: number
+  movedOnRate: number | null
+  winRateFromHere: number | null
+  averageDaysInStage: number | null
+  nowInStage: number
+  averageDaysNowInStage: number | null
+}
+
+export interface SalesTargetRow {
+  /** Null for the team's own target. */
+  ownerUserId: string | null
+  /** First day of the month. */
+  month: string
+  amount: number
+}
+
+export interface SalesTargets {
+  year: number
+  reportingCurrency: string
+  owners: SalesOwnerOption[]
+  targets: SalesTargetRow[]
+  canEdit: boolean
 }
 
 export interface SalesSourcePerformance {
@@ -216,6 +246,9 @@ export interface SalesReport {
   tenders: { submitted: number; won: number; lost: number; noBid: number; cancelled: number; winRate: number | null }
   /** Deals in the report with no exchange rate: counted, but left out of every value. */
   unconvertedDeals: number
+  funnel?: SalesStageFunnelRow[]
+  /** Target for the period; null when none is set. */
+  targetValue?: number | null
 }
 
 export type DealVisibility = 'All' | 'Own'

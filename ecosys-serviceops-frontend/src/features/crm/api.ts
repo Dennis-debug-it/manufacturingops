@@ -16,6 +16,8 @@ import type {
   SalesOpportunityListItem,
   SalesPipelineSummary,
   SalesReport,
+  SalesTargets,
+  SalesTargetRow,
   SalesAssignmentRule,
   UpsertAssignmentRulePayload,
   SalesSettings,
@@ -216,6 +218,18 @@ export function useDeleteAssignmentRule() {
   const invalidate = useInvalidateCrm()
   return useMutation({
     mutationFn: (id: string) => api.delete<SalesAssignmentRule[]>(endpoints.crm.assignmentRule(id)),
+    onSuccess: invalidate,
+  })
+}
+
+export function useSalesTargets(year: number, enabled = true) {
+  return useQuery({ queryKey: [...crmKey, 'targets', year], queryFn: () => api.get<SalesTargets>(endpoints.crm.targets, { year }), enabled })
+}
+
+export function useSaveSalesTargets() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (payload: { year: number; targets: SalesTargetRow[] }) => api.put<SalesTargets>(endpoints.crm.targets, payload),
     onSuccess: invalidate,
   })
 }
