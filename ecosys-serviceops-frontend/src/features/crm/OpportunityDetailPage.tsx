@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Lock } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
@@ -30,6 +30,7 @@ import { DealPeople } from './components/DealPeople'
 import { ConvertToWorkOrderDrawer } from './components/ConvertToWorkOrderDrawer'
 import { OpportunityFormDrawer } from './components/OpportunityFormDrawer'
 import { OwnerSelect } from './components/OwnerSelect'
+import { formatDealFieldValue } from './components/DealFieldInput'
 import { activityTypeOptions, openStagesOf, opportunityParty, pipelineFor, stageName, tenderStatusLabels, type SalesStage } from './types'
 
 const outlineButton = 'inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60'
@@ -73,6 +74,13 @@ export function OpportunityDetailPage() {
   const nameOf = (stage: SalesStage) => stageName(stage, pipelines, opportunity.pipelineId)
 
   const moveTo = async (stage: SalesStage, reason?: string) => {
+    // Stage rules (Settings › Sales): say what is missing and open the form to fill it in.
+    const missing = opportunity.stageBlockers?.[stage]
+    if (missing?.length) {
+      toast.error(`Before moving to ${nameOf(stage)}, fill in: ${missing.join(', ')}`)
+      if (!missing.every((item) => item === 'A quotation')) setShowEdit(true)
+      return false
+    }
     try {
       await changeStage.mutateAsync({ id, stage, lostReason: reason ?? null })
       toast.success(stage === 'Won' ? 'Deal won 🎉 — create the work order when you are ready' : `Moved to ${nameOf(stage)}`)
@@ -156,11 +164,13 @@ export function OpportunityDetailPage() {
               type="button"
               disabled={changeStage.isPending}
               onClick={() => void moveTo(stage.key)}
+              title={opportunity.stageBlockers?.[stage.key] ? `Needs: ${opportunity.stageBlockers[stage.key]?.join(', ')}` : undefined}
               className={cn(
-                'h-9 rounded-full border px-4 text-sm font-medium transition',
+                'inline-flex h-9 items-center gap-1.5 rounded-full border px-4 text-sm font-medium transition',
                 stage.key === opportunity.stage ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
               )}
             >
+              {stage.key !== opportunity.stage && opportunity.stageBlockers?.[stage.key] ? <Lock className="h-3 w-3" aria-label="Has requirements" /> : null}
               {stage.name}
             </button>
           ))}
@@ -224,6 +234,7 @@ export function OpportunityDetailPage() {
             ) : (opportunity.ownerName ?? '—')],
             ['Created', formatDate(opportunity.createdAt)],
             ['Won', opportunity.wonAt ? formatDate(opportunity.wonAt) : '—'],
+            ...(opportunity.customFields ?? []).map((field) => [field.label, formatDealFieldValue(field.fieldType, field.value)]),
           ].map(([label, value]) => (
             <div key={label as string} className="rounded-xl border border-slate-200 px-4 py-3">
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>

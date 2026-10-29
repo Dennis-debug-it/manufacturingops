@@ -7,6 +7,7 @@ import { useSalesSettings, useUpdateSalesSettings } from '../crm/api'
 import { OwnerSelect } from '../crm/components/OwnerSelect'
 import { AssignmentRulesSection } from './components/AssignmentRulesSection'
 import { PipelinesSection } from './components/PipelinesSection'
+import { DealFieldsSection } from './components/DealFieldsSection'
 import type { DealVisibility, SalesSettings } from '../crm/types'
 
 const visibilityOptions: Array<{ value: DealVisibility; title: string; description: string }> = [
@@ -136,6 +137,8 @@ export function SalesSettingsPage() {
       </div>
 
       <PipelinesSection />
+
+      <DealFieldsSection />
 
       <AssignmentRulesSection />
     </div>

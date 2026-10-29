@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { daysUntilDeadline, openStagesOf, opportunityParty, pipelineFor, stageName, type SalesPipeline } from './types'
+import { daysUntilDeadline, fieldAppliesTo, openStagesOf, opportunityParty, pipelineFor, stageName, type DealField, type SalesPipeline } from './types'
 
 describe('daysUntilDeadline', () => {
   const now = new Date(2026, 9, 20, 15, 30)
@@ -45,5 +45,17 @@ describe('pipeline stages', () => {
   it('lists only open stages, or the built-in ones while pipelines load', () => {
     expect(openStagesOf(amc).map((s) => s.key)).toEqual(['Scoping'])
     expect(openStagesOf(undefined).map((s) => s.key)).toEqual(['Lead', 'Qualified', 'SiteSurvey', 'Proposal', 'Negotiation'])
+  })
+})
+
+describe('fieldAppliesTo', () => {
+  const field = (patch: Partial<DealField>): DealField =>
+    ({ id: 'f', key: 'roof', label: 'Roof', fieldType: 'Text', options: [], helpText: null, pipelineId: null, isActive: true, sortOrder: 0, valueCount: 0, ...patch })
+
+  it('shows a field in every pipeline unless it is tied to one or switched off', () => {
+    expect(fieldAppliesTo(field({}), 'any')).toBe(true)
+    expect(fieldAppliesTo(field({ pipelineId: 'amc' }), 'amc')).toBe(true)
+    expect(fieldAppliesTo(field({ pipelineId: 'amc' }), 'sales')).toBe(false)
+    expect(fieldAppliesTo(field({ isActive: false }), 'sales')).toBe(false)
   })
 })

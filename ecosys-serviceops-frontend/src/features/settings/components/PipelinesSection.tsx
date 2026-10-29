@@ -2,8 +2,8 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react'
 import { ConfirmDialog } from '../../../shared/components/ConfirmDialog'
-import { useDeletePipeline, usePipelines, useSavePipeline } from '../../crm/api'
-import type { SalesPipeline, UpsertPipelinePayload } from '../../crm/types'
+import { useDealFields, useDeletePipeline, usePipelines, useSavePipeline } from '../../crm/api'
+import type { SalesPipeline, StageRequirement, UpsertPipelinePayload } from '../../crm/types'
 
 const fieldClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 
@@ -17,8 +17,8 @@ const moduleOptions = [
   { value: 'enterprise_tools', label: 'Enterprise tools' },
 ] as const
 
-type EditStage = { key: string | null; name: string; probability: string; dealCount: number }
-type Editing = Omit<UpsertPipelinePayload, 'stages'> & { id?: string; stages: EditStage[] }
+type EditStage = { key: string | null; name: string; probability: string; dealCount: number; requiredFields: string[] }
+type Editing = Omit<UpsertPipelinePayload, 'stages' | 'wonRequiredFields'> & { id?: string; stages: EditStage[]; wonRequiredFields: string[] }
 
 const newPipeline = (): Editing => ({
   name: '',
@@ -26,10 +26,11 @@ const newPipeline = (): Editing => ({
   isActive: true,
   isDefault: false,
   stages: [
-    { key: null, name: 'Lead', probability: '10', dealCount: 0 },
-    { key: null, name: 'Proposal', probability: '50', dealCount: 0 },
-    { key: null, name: 'Negotiation', probability: '75', dealCount: 0 },
+    { key: null, name: 'Lead', probability: '10', dealCount: 0, requiredFields: [] },
+    { key: null, name: 'Proposal', probability: '50', dealCount: 0, requiredFields: [] },
+    { key: null, name: 'Negotiation', probability: '75', dealCount: 0, requiredFields: [] },
   ],
+  wonRequiredFields: [],
 })
 
 const toEditing = (pipeline: SalesPipeline): Editing => ({
@@ -38,7 +39,8 @@ const toEditing = (pipeline: SalesPipeline): Editing => ({
   module: pipeline.module,
   isActive: pipeline.isActive,
   isDefault: pipeline.isDefault,
-  stages: pipeline.stages.filter((s) => !s.isClosed).map((s) => ({ key: s.key, name: s.name, probability: String(s.probability), dealCount: s.dealCount })),
+  stages: pipeline.stages.filter((s) => !s.isClosed).map((s) => ({ key: s.key, name: s.name, probability: String(s.probability), dealCount: s.dealCount, requiredFields: s.requiredFields ?? [] })),
+  wonRequiredFields: pipeline.stages.find((s) => s.key === 'Won')?.requiredFields ?? [],
 })
 
 const dealTotal = (pipeline: SalesPipeline) => pipeline.stages.reduce((sum, s) => sum + s.dealCount, 0)
@@ -51,6 +53,8 @@ export function PipelinesSection() {
   const { data: pipelines } = usePipelines()
   const save = useSavePipeline()
   const remove = useDeletePipeline()
+  const { data: dealFields } = useDealFields()
+  const requirements = dealFields?.requirements ?? []
   const [editing, setEditing] = useState<Editing | null>(null)
   const [deleting, setDeleting] = useState<SalesPipeline | null>(null)
 
@@ -74,7 +78,7 @@ export function PipelinesSection() {
     const payload: UpsertPipelinePayload = {
       ...rest,
       name: rest.name.trim(),
-      stages: stages.map((s) => ({ key: s.key, name: s.name.trim(), probability: Math.min(100, Math.max(0, Number(s.probability) || 0)) })),
+      stages: stages.map((s) => ({ key: s.key, name: s.name.trim(), probability: Math.min(100, Math.max(0, Number(s.probability) || 0)), requiredFields: s.requiredFields })),
     }
     try {
       await save.mutateAsync({ id, payload })
@@ -127,30 +131,40 @@ export function PipelinesSection() {
             </div>
             <ol className="space-y-2">
               {editing.stages.map((stage, index) => (
-                <li key={stage.key ?? `new-${index}`} className="grid grid-cols-[1fr_6rem_5.5rem] items-center gap-2">
-                  <input aria-label={`Stage ${index + 1} name`} value={stage.name} onChange={(event) => setStage(index, { name: event.target.value })} className={fieldClass} />
-                  <input aria-label={`Stage ${index + 1} win chance`} type="number" min="0" max="100" value={stage.probability} onChange={(event) => setStage(index, { probability: event.target.value })} className={fieldClass} />
-                  <div className="flex items-center">
-                    <button type="button" aria-label="Move stage up" disabled={index === 0} onClick={() => moveStage(index, -1)} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ArrowUp className="h-4 w-4" /></button>
-                    <button type="button" aria-label="Move stage down" disabled={index === editing.stages.length - 1} onClick={() => moveStage(index, 1)} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ArrowDown className="h-4 w-4" /></button>
-                    <button
-                      type="button"
-                      aria-label="Remove stage"
-                      disabled={stage.dealCount > 0}
-                      title={stage.dealCount > 0 ? `${stage.dealCount} deal${stage.dealCount === 1 ? ' is' : 's are'} here; move ${stage.dealCount === 1 ? 'it' : 'them'} first` : undefined}
-                      onClick={() => setEditing({ ...editing, stages: editing.stages.filter((_, i) => i !== index) })}
-                      className="rounded p-1 text-rose-500 hover:bg-rose-50 disabled:opacity-30"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+                <li key={stage.key ?? `new-${index}`} className="space-y-1">
+                  <div className="grid grid-cols-[1fr_6rem_5.5rem] items-center gap-2">
+                    <input aria-label={`Stage ${index + 1} name`} value={stage.name} onChange={(event) => setStage(index, { name: event.target.value })} className={fieldClass} />
+                    <input aria-label={`Stage ${index + 1} win chance`} type="number" min="0" max="100" value={stage.probability} onChange={(event) => setStage(index, { probability: event.target.value })} className={fieldClass} />
+                    <div className="flex items-center">
+                      <button type="button" aria-label="Move stage up" disabled={index === 0} onClick={() => moveStage(index, -1)} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ArrowUp className="h-4 w-4" /></button>
+                      <button type="button" aria-label="Move stage down" disabled={index === editing.stages.length - 1} onClick={() => moveStage(index, 1)} className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ArrowDown className="h-4 w-4" /></button>
+                      <button
+                        type="button"
+                        aria-label="Remove stage"
+                        disabled={stage.dealCount > 0}
+                        title={stage.dealCount > 0 ? `${stage.dealCount} deal${stage.dealCount === 1 ? ' is' : 's are'} here; move ${stage.dealCount === 1 ? 'it' : 'them'} first` : undefined}
+                        onClick={() => setEditing({ ...editing, stages: editing.stages.filter((_, i) => i !== index) })}
+                        className="rounded p-1 text-rose-500 hover:bg-rose-50 disabled:opacity-30"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
+                  <RequirementPicker stageName={stage.name || `stage ${index + 1}`} options={requirements} value={stage.requiredFields} onChange={(requiredFields) => setStage(index, { requiredFields })} />
                 </li>
               ))}
             </ol>
-            <button type="button" onClick={() => setEditing({ ...editing, stages: [...editing.stages, { key: null, name: '', probability: '50', dealCount: 0 }] })} className="mt-2 inline-flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50">
+            <button type="button" onClick={() => setEditing({ ...editing, stages: [...editing.stages, { key: null, name: '', probability: '50', dealCount: 0, requiredFields: [] }] })} className="mt-2 inline-flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 text-sm font-medium text-slate-600 hover:bg-slate-50">
               <Plus className="h-4 w-4" />Add stage
             </button>
-            <p className="mt-2 text-xs text-slate-500">Then Won (100%) and Lost (0%). A stage that still has deals cannot be removed.</p>
+            <div className="mt-3 space-y-1 rounded-lg bg-slate-50 px-3 py-2">
+              <div className="text-sm font-medium text-slate-700">Won <span className="font-normal text-slate-500">(100%)</span></div>
+              <RequirementPicker stageName="Won" options={requirements} value={editing.wonRequiredFields} onChange={(wonRequiredFields) => setEditing({ ...editing, wonRequiredFields })} />
+              <div className="text-sm font-medium text-slate-700">Lost <span className="font-normal text-slate-500">(0%, always open to move to, with a reason)</span></div>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              What a stage needs also applies to every stage after it, so skipping ahead does not skip the check. A stage that still has deals cannot be removed.
+            </p>
           </div>
 
           <div className="flex gap-2">
@@ -202,5 +216,29 @@ export function PipelinesSection() {
         }}
       />
     </section>
+  )
+}
+
+/** Picks what a deal needs before entering a stage; shows the choice as a sentence. */
+function RequirementPicker({ stageName, options, value, onChange }: { stageName: string; options: StageRequirement[]; value: string[]; onChange: (value: string[]) => void }) {
+  const labelOf = (key: string) => options.find((x) => x.key === key)?.label ?? key.replace(/^cf:/, '')
+  return (
+    <details className="text-xs">
+      <summary className="cursor-pointer list-none text-slate-500 hover:text-slate-700">
+        {value.length ? <>Needs before {stageName}: <span className="text-slate-700">{value.map(labelOf).join(', ')}</span></> : <>Nothing required to enter {stageName} · <span className="underline">add a requirement</span></>}
+      </summary>
+      <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 rounded-lg border border-slate-200 bg-white p-2">
+        {options.map((option) => (
+          <label key={option.key} className="flex items-center gap-1.5 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={value.includes(option.key)}
+              onChange={(event) => onChange(event.target.checked ? [...value, option.key] : value.filter((x) => x !== option.key))}
+            />
+            {option.label}
+          </label>
+        ))}
+      </div>
+    </details>
   )
 }

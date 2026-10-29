@@ -24,6 +24,8 @@ import type {
   SalesStage,
   SalesPipeline,
   UpsertPipelinePayload,
+  DealFieldsResponse,
+  UpsertDealFieldPayload,
   UpsertOpportunityPayload,
 } from './types'
 
@@ -37,10 +39,10 @@ export function usePipelineSummary(pipelineId?: string | undefined) {
   })
 }
 
-export function useOpportunities(params?: { stage?: string | undefined; search?: string | undefined; clientId?: string | undefined; ownerUserId?: string | undefined; pipelineId?: string | undefined }) {
+export function useOpportunities(params?: { stage?: string | undefined; search?: string | undefined; clientId?: string | undefined; ownerUserId?: string | undefined; pipelineId?: string | undefined; field?: string | undefined; fieldValue?: string | undefined }) {
   return useQuery({
     queryKey: [...crmKey, 'opportunities', params ?? {}],
-    queryFn: () => api.get<SalesOpportunityListItem[]>(endpoints.crm.opportunities, { stage: params?.stage, search: params?.search, clientId: params?.clientId, ownerUserId: params?.ownerUserId, pipelineId: params?.pipelineId }),
+    queryFn: () => api.get<SalesOpportunityListItem[]>(endpoints.crm.opportunities, { stage: params?.stage, search: params?.search, clientId: params?.clientId, ownerUserId: params?.ownerUserId, pipelineId: params?.pipelineId, field: params?.field, fieldValue: params?.fieldValue }),
     staleTime: 30_000,
   })
 }
@@ -63,6 +65,27 @@ export function useDeletePipeline() {
   const invalidate = useInvalidateCrm()
   return useMutation({
     mutationFn: (id: string) => api.delete<SalesPipeline[]>(endpoints.crm.pipeline(id)),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDealFields() {
+  return useQuery({ queryKey: [...crmKey, 'fields'], queryFn: () => api.get<DealFieldsResponse>(endpoints.crm.fields), staleTime: 5 * 60_000 })
+}
+
+export function useSaveDealField() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id?: string | undefined; payload: UpsertDealFieldPayload }) =>
+      id ? api.put<DealFieldsResponse>(endpoints.crm.field(id), payload) : api.post<DealFieldsResponse>(endpoints.crm.fields, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteDealField() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (id: string) => api.delete<DealFieldsResponse>(endpoints.crm.field(id)),
     onSuccess: invalidate,
   })
 }

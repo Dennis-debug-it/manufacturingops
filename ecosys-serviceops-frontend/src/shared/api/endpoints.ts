@@ -522,6 +522,8 @@ export const endpoints = {
     settings: '/api/crm/settings',
     pipelines: '/api/crm/pipelines',
     pipeline: (id: string) => `/api/crm/pipelines/${id}`,
+    fields: '/api/crm/fields',
+    field: (id: string) => `/api/crm/fields/${id}`,
     assignmentRules: '/api/crm/assignment-rules',
     targets: '/api/crm/targets',
     assignmentRule: (id: string) => `/api/crm/assignment-rules/${id}`,

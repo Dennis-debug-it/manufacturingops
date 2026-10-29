@@ -7,9 +7,10 @@ import { useClients, useSites } from '../../clients/api'
 import { PossibleDuplicates } from '../../clients/components/PossibleDuplicates'
 import { workTypeOptions } from '../../work-orders/schemas'
 import { useAuth } from '../../../shared/hooks/useAuth'
-import { useCreateOpportunity, usePipelines, useUpdateOpportunity } from '../api'
+import { useCreateOpportunity, useDealFields, usePipelines, useUpdateOpportunity } from '../api'
 import { OwnerSelect } from './OwnerSelect'
-import { pipelineFor, sourceOptions, type SalesOpportunityDetail } from '../types'
+import { fieldAppliesTo, pipelineFor, sourceOptions, type SalesOpportunityDetail } from '../types'
+import { DealFieldInput } from './DealFieldInput'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -32,6 +33,8 @@ interface FormState {
   expectedCloseDate: string
   ownerUserId: string
   pipelineId: string
+  /** Custom field values by key. */
+  custom: Record<string, string>
 }
 
 function toForm(opportunity: SalesOpportunityDetail | null | undefined, currentUserId: string, defaultClientId?: string, defaultPipelineId?: string): FormState {
@@ -55,6 +58,7 @@ function toForm(opportunity: SalesOpportunityDetail | null | undefined, currentU
     expectedCloseDate: opportunity?.expectedCloseDate ? opportunity.expectedCloseDate.slice(0, 10) : '',
     ownerUserId: opportunity ? (opportunity.ownerUserId ?? '') : currentUserId,
     pipelineId: opportunity ? (opportunity.pipelineId ?? '') : (defaultPipelineId ?? ''),
+    custom: Object.fromEntries((opportunity?.customFields ?? []).map((field) => [field.key, field.value ?? ''])),
   }
 }
 
@@ -72,6 +76,7 @@ export function OpportunityFormDrawer({ open, onClose, opportunity, defaultClien
   const update = useUpdateOpportunity(opportunity?.id ?? '')
   const saving = create.isPending || update.isPending
   const { data: pipelines } = usePipelines()
+  const { data: dealFields } = useDealFields()
   const usablePipelines = (pipelines ?? []).filter((p) => p.isActive && p.available)
   const currentPipeline = pipelineFor(pipelines, opportunity?.pipelineId)
   const movingTo = isEdit && form.pipelineId && form.pipelineId !== currentPipeline?.id ? usablePipelines.find((p) => p.id === form.pipelineId) : undefined
@@ -79,6 +84,8 @@ export function OpportunityFormDrawer({ open, onClose, opportunity, defaultClien
   const landsIn = movingTo && opportunity
     ? (movingTo.stages.find((s) => s.key === opportunity.stage) ?? movingTo.stages.find((s) => !s.isClosed))?.name
     : undefined
+
+  const shownFields = (dealFields?.fields ?? []).filter((field) => fieldAppliesTo(field, form.pipelineId || currentPipeline?.id))
 
   useEffect(() => {
     if (open) setForm(toForm(opportunity, currentUserId, defaultClientId, defaultPipelineId))
@@ -117,6 +124,8 @@ export function OpportunityFormDrawer({ open, onClose, opportunity, defaultClien
       expectedCloseDate: form.expectedCloseDate ? new Date(form.expectedCloseDate).toISOString() : null,
       ownerUserId: form.ownerUserId || null,
       pipelineId: form.pipelineId || null,
+      // Only the fields on the form are sent, so values for fields that are switched off are kept.
+      customFields: Object.fromEntries(shownFields.map((field) => [field.key, form.custom[field.key]?.trim() || null])),
     }
     try {
       if (isEdit) {
@@ -280,6 +289,18 @@ export function OpportunityFormDrawer({ open, onClose, opportunity, defaultClien
             </select>
           </div>
         </div>
+
+        {shownFields.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {shownFields.map((field) => (
+              <div key={field.id}>
+                {field.fieldType === 'Checkbox' ? <span className={`${labelClass} invisible`} aria-hidden="true">{field.label}</span> : <label className={labelClass} htmlFor={`deal-field-${field.key}`}>{field.label}</label>}
+                <DealFieldInput field={field} value={form.custom[field.key] ?? ''} onChange={(value) => set({ custom: { ...form.custom, [field.key]: value } })} className={fieldClass} />
+                {field.helpText ? <p className="mt-1 text-xs text-slate-500">{field.helpText}</p> : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <div>
           <label className={labelClass} htmlFor="opp-description">Scope / notes</label>

@@ -11,14 +11,14 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { formatDate, isPast } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { cn } from '../../shared/utils/cn'
-import { useChangeStage, useOpportunities, usePipelines, usePipelineSummary } from './api'
+import { useChangeStage, useDealFields, useOpportunities, usePipelines, usePipelineSummary } from './api'
 import { OpportunityFormDrawer } from './components/OpportunityFormDrawer'
 import { CrmNav } from './components/CrmNav'
 import { ExchangeRatesDrawer } from './components/ExchangeRatesDrawer'
 import { DealImportDrawer } from './components/DealImportDrawer'
 import { importService } from '../../shared/services/importService'
 import { OwnerSelect } from './components/OwnerSelect'
-import { SALES_STAGES, isClosedStage, opportunityParty, openStagesOf, pipelineFor, stageLabels, type SalesOpportunityListItem, type SalesStage } from './types'
+import { SALES_STAGES, fieldAppliesTo, isClosedStage, opportunityParty, openStagesOf, pipelineFor, stageLabels, type SalesOpportunityListItem, type SalesStage } from './types'
 
 type View = 'board' | 'list'
 
@@ -31,6 +31,9 @@ export function PipelinePage() {
   const [showRates, setShowRates] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [ownerFilter, setOwnerFilter] = useState('')
+  const [fieldFilter, setFieldFilter] = useState('')
+  const [fieldValue, setFieldValue] = useState('')
+  const debouncedFieldValue = useDebounce(fieldValue, 300)
   const { user } = useAuth()
   const debouncedSearch = useDebounce(search, 300)
   const [searchParams, setSearchParams] = useSearchParams()
@@ -39,8 +42,13 @@ export function PipelinePage() {
   const pipeline = pipelineFor(usable, searchParams.get('pipeline'))
   // With one pipeline there is nothing to narrow, so the first load does not wait for the pipeline list.
   const pipelineId = usable.length > 1 ? pipeline?.id : undefined
+  const { data: dealFields } = useDealFields()
+  const filterableFields = (dealFields?.fields ?? []).filter((field) => fieldAppliesTo(field, pipeline?.id))
+  const filterField = filterableFields.find((field) => field.key === fieldFilter)
   const choosePipeline = (id: string) => {
     setStageFilter('')
+    setFieldFilter('')
+    setFieldValue('')
     setSearchParams((params) => { params.set('pipeline', id); return params }, { replace: true })
   }
   const { data: summary } = usePipelineSummary(pipelineId)
@@ -49,6 +57,8 @@ export function PipelinePage() {
     stage: view === 'list' ? stageFilter || undefined : undefined,
     ownerUserId: ownerFilter || undefined,
     pipelineId,
+    field: view === 'list' && filterField ? filterField.key : undefined,
+    fieldValue: view === 'list' && filterField ? debouncedFieldValue || undefined : undefined,
   })
   const boardStages = useMemo(
     () => pipeline?.stages.map((s) => ({ key: s.key, name: s.name })) ?? SALES_STAGES.map((key) => ({ key, name: stageLabels[key] ?? key })),
@@ -179,6 +189,29 @@ export function PipelinePage() {
               <option key={stage.key} value={stage.key}>{stage.name}</option>
             ))}
           </select>
+        ) : null}
+        {view === 'list' && filterableFields.length > 0 ? (
+          <div className="flex items-center gap-2">
+            <select value={fieldFilter} onChange={(event) => { setFieldFilter(event.target.value); setFieldValue('') }} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" aria-label="Filter by field">
+              <option value="">Any field</option>
+              {filterableFields.map((field) => <option key={field.key} value={field.key}>{field.label}</option>)}
+            </select>
+            {filterField?.fieldType === 'Dropdown' || filterField?.fieldType === 'Checkbox' ? (
+              <select value={fieldValue} onChange={(event) => setFieldValue(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" aria-label={`${filterField.label} is`}>
+                <option value="">{filterField.fieldType === 'Checkbox' ? 'Ticked or not' : 'Any value'}</option>
+                {(filterField.fieldType === 'Checkbox' ? ['Yes', 'No'] : filterField.options).map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            ) : filterField ? (
+              <input
+                value={fieldValue}
+                onChange={(event) => setFieldValue(event.target.value)}
+                type={filterField.fieldType === 'Date' ? 'date' : filterField.fieldType === 'Number' ? 'number' : 'text'}
+                placeholder={filterField.fieldType === 'Text' ? 'Contains…' : 'Any value'}
+                aria-label={`${filterField.label} value`}
+                className="h-10 w-36 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
+              />
+            ) : null}
+          </div>
         ) : null}
         <OwnerSelect
           aria-label="Filter by owner"

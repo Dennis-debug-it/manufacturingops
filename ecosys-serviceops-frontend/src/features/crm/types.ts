@@ -30,6 +30,8 @@ export interface SalesPipelineStage {
   isClosed: boolean
   /** Deals in this stage right now. */
   dealCount: number
+  /** What a deal needs before entering this stage (and every later one): built-in keys or `cf:<field key>`. */
+  requiredFields?: string[]
 }
 
 export interface SalesPipeline {
@@ -51,8 +53,63 @@ export interface UpsertPipelinePayload {
   isActive: boolean
   isDefault: boolean
   /** Open stages in order; Won and Lost are added after them. Omit `key` for a new stage. */
-  stages: Array<{ key?: string | null; name: string; probability: number }>
+  stages: Array<{ key?: string | null; name: string; probability: number; requiredFields?: string[] }>
   sortOrder?: number
+  wonRequiredFields?: string[]
+}
+
+export const DEAL_FIELD_TYPES = ['Text', 'Number', 'Date', 'Dropdown', 'Checkbox'] as const
+export type DealFieldType = (typeof DEAL_FIELD_TYPES)[number]
+
+/** A field the workspace adds to its deals (Settings › Sales). */
+export interface DealField {
+  id: string
+  /** Stable; used in imports, filters and stage rules (as `cf:<key>`). */
+  key: string
+  label: string
+  fieldType: DealFieldType
+  options: string[]
+  helpText: string | null
+  /** Only on deals in this pipeline; null for all. */
+  pipelineId: string | null
+  isActive: boolean
+  sortOrder: number
+  /** Deals with a value for it. */
+  valueCount: number
+}
+
+export interface StageRequirement {
+  key: string
+  label: string
+}
+
+export interface DealFieldsResponse {
+  fields: DealField[]
+  /** Everything a stage can require: built-in checks, then active fields. */
+  requirements: StageRequirement[]
+}
+
+export interface UpsertDealFieldPayload {
+  label: string
+  fieldType: DealFieldType
+  options: string[] | null
+  helpText: string | null
+  pipelineId: string | null
+  isActive: boolean
+  sortOrder?: number
+}
+
+export interface DealFieldValue {
+  fieldId: string
+  key: string
+  label: string
+  fieldType: DealFieldType
+  value: string | null
+}
+
+/** Whether a field shows on deals in a pipeline. */
+export function fieldAppliesTo(field: DealField, pipelineId: string | null | undefined) {
+  return field.isActive && (field.pipelineId === null || field.pipelineId === pipelineId)
 }
 
 /** The pipeline a deal belongs to: the one named, else the default. */
@@ -204,6 +261,10 @@ export interface SalesOpportunityDetail {
   contacts?: ClientContact[]
   pipelineId?: string | null
   pipelineName?: string | null
+  /** Values for the deal fields that show in its pipeline. */
+  customFields?: DealFieldValue[]
+  /** Stage key → what the deal still lacks to enter it; stages it can enter are left out. */
+  stageBlockers?: Record<string, string[]>
 }
 
 /** Every value is in `reportingCurrency`; deals in a currency with no rate are listed in `unconvertedCurrencies` instead. */
@@ -394,6 +455,8 @@ export interface UpsertOpportunityPayload {
   stage?: SalesStage
   /** Omit for the default pipeline (new deals) or to keep the current one. */
   pipelineId?: string | null
+  /** By field key; an empty value clears it, a key left out keeps its value. */
+  customFields?: Record<string, string | null>
 }
 
 /** Display name for whoever the deal is with: the linked client, else the prospect. */
