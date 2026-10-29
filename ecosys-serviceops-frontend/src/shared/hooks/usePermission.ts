@@ -193,6 +193,7 @@ const capabilityActions = new Set([
   'activities.view',
   'activities.manage',
   'calendar.team',
+  'crm.view_all',
 ])
 
 /** The same check as usePermission, for code that isn't a component (e.g. route access rules). */

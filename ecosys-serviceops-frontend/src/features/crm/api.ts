@@ -16,6 +16,7 @@ import type {
   SalesOpportunityListItem,
   SalesPipelineSummary,
   SalesReport,
+  SalesSettings,
   SalesStage,
   UpsertOpportunityPayload,
 } from './types'
@@ -166,6 +167,18 @@ export function useCreateWorkOrderFromOpportunity() {
 }
 
 // Owners
+
+export function useSalesSettings() {
+  return useQuery({ queryKey: [...crmKey, 'settings'], queryFn: () => api.get<SalesSettings>(endpoints.crm.settings), staleTime: 60_000 })
+}
+
+export function useUpdateSalesSettings() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (payload: Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals'>) => api.put<SalesSettings>(endpoints.crm.settings, payload),
+    onSuccess: invalidate,
+  })
+}
 
 export function useSalesOwners() {
   return useQuery({ queryKey: [...crmKey, 'owners'], queryFn: () => api.get<SalesOwnerOption[]>(endpoints.crm.owners), staleTime: 60_000 })

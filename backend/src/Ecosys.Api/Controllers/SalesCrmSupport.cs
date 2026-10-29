@@ -20,59 +20,12 @@ internal static class SalesCrmAccess
     public static bool CanView(ITenantContext tenantContext) =>
         CanManage(tenantContext) || tenantContext.HasPermission(PermissionNames.CrmView);
 
-    /// <summary>
-    /// The active users who can manage the pipeline, and so can own a deal or RFP/RFQ. Resolved in
-    /// a handful of set queries with the same layering as <c>DynamicAccessService</c>: the role
-    /// matrix is the baseline, a permission group adds to it, and a per-user override has the last
-    /// word either way.
-    /// </summary>
+    /// <summary>The active users who can manage the pipeline, and so can own a deal or RFP/RFQ.</summary>
     public static async Task<IReadOnlyList<SalesOwnerOption>> ListEligibleOwnersAsync(
-        AppDbContext dbContext, IRolePermissionService rolePermissionService, Guid tenantId, CancellationToken cancellationToken)
-    {
-        var capability = PermissionNames.CrmManage.ToLower();
-        var users = await dbContext.Users
-            .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.IsActive)
-            .Select(x => new { x.Id, x.FullName, x.Role })
-            .ToListAsync(cancellationToken);
-
-        var matrix = await rolePermissionService.GetMatrixAsync(tenantId, cancellationToken);
-        var viewerRow = matrix.FirstOrDefault(x => string.Equals(x.Role, AppRoles.Viewer, StringComparison.OrdinalIgnoreCase));
-        bool RoleGrants(string role)
-        {
-            if (string.Equals(role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase)) return true;
-            // Unknown and legacy roles resolve as Viewer, exactly as RolePermissionService does.
-            var row = matrix.FirstOrDefault(x => string.Equals(x.Role, role, StringComparison.OrdinalIgnoreCase)) ?? viewerRow;
-            return row?.Permissions.CanManageCrm == true;
-        }
-
-        var grantingGroups = await dbContext.GroupCapabilities
-            .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.Capability.ToLower() == capability)
-            .Select(x => x.PermissionGroupId)
-            .ToListAsync(cancellationToken);
-        var groupMembers = (await dbContext.UserPermissionGroups
-                .AsNoTracking()
-                .Where(x => x.TenantId == tenantId && grantingGroups.Contains(x.PermissionGroupId))
-                .Select(x => x.UserId)
-                .ToListAsync(cancellationToken))
-            .ToHashSet();
-        var overrides = (await dbContext.UserPermissionOverrides
-                .AsNoTracking()
-                .Where(x => x.TenantId == tenantId && x.Capability.ToLower() == capability)
-                .Select(x => new { x.UserId, x.IsAllowed })
-                .ToListAsync(cancellationToken))
-            .GroupBy(x => x.UserId)
-            .ToDictionary(g => g.Key, g => g.First().IsAllowed);
-
-        return users
-            .Where(user => overrides.TryGetValue(user.Id, out var allowed)
-                ? allowed
-                : RoleGrants(user.Role) || groupMembers.Contains(user.Id))
-            .OrderBy(x => x.FullName)
+        AppDbContext dbContext, IRolePermissionService rolePermissionService, Guid tenantId, CancellationToken cancellationToken) =>
+        (await SalesOwnerDirectory.ListAsync(dbContext, rolePermissionService, tenantId, cancellationToken))
             .Select(x => new SalesOwnerOption(x.Id, x.FullName, x.Role))
             .ToList();
-    }
 
     /// <summary>Resolves an owner for a deal or tender: an active user of this tenant who can manage the pipeline.</summary>
     public static async Task<string> ResolveOwnerNameAsync(
@@ -221,5 +174,32 @@ internal static class SalesQuotationSync
             LoggedByName = actorName,
         });
         opportunity.LastActivityAt = now;
+    }
+}
+
+/// <summary>
+/// Who sees which deals. By default everyone with CRM access sees the whole pipeline. A workspace
+/// can limit people to the deals, RFP/RFQs and follow-ups they own (Sales settings), the common
+/// "owned only" setting in CRMs such as HubSpot; admins and anyone granted
+/// <see cref="PermissionNames.CrmViewAll"/> (sales managers by default) still see everything.
+/// </summary>
+internal static class SalesVisibility
+{
+    public const string All = "All";
+    public const string Own = "Own";
+
+    public static string Normalize(string? value) =>
+        string.Equals(value?.Trim(), Own, StringComparison.OrdinalIgnoreCase) ? Own : All;
+
+    /// <summary>The user the caller is limited to, or null when they see every deal.</summary>
+    public static async Task<Guid?> OwnerScopeAsync(AppDbContext dbContext, ITenantContext tenantContext, Guid tenantId, CancellationToken cancellationToken)
+    {
+        if (tenantContext.IsAdmin || tenantContext.HasPermission(PermissionNames.CrmViewAll))
+            return null;
+        var visibility = await dbContext.TenantSalesSettings.AsNoTracking()
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => x.DealVisibility)
+            .FirstOrDefaultAsync(cancellationToken);
+        return Normalize(visibility) == Own ? tenantContext.GetRequiredUserId() : null;
     }
 }

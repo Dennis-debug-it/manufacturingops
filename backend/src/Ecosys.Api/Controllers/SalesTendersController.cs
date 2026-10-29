@@ -37,7 +37,8 @@ public sealed class SalesTendersController(
         CancellationToken cancellationToken)
     {
         EnsureCanView();
-        var query = dbContext.SalesTenders.AsNoTracking().Include(x => x.Client).Where(x => x.TenantId == TenantId);
+        var scope = await OwnerScopeAsync(cancellationToken);
+        var query = dbContext.SalesTenders.AsNoTracking().Include(x => x.Client).Where(x => x.TenantId == TenantId && (scope == null || x.OwnerUserId == scope));
 
         if (!string.IsNullOrWhiteSpace(type))
             query = query.Where(x => x.Type == SalesTenderTypes.Normalize(type));
@@ -89,7 +90,7 @@ public sealed class SalesTendersController(
         dbContext.SalesTenders.Add(tender);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "crm.tender.created", nameof(SalesTender), tender.Id.ToString(), $"Logged {tender.Type} '{tender.Title}'.", cancellationToken);
-        return CreatedAtAction(nameof(Get), new { id = tender.Id }, await LoadDetailAsync(tender.Id, cancellationToken));
+        return CreatedAtAction(nameof(Get), new { id = tender.Id }, await LoadDetailAsync(tender.Id, cancellationToken, checkVisibility: false));
     }
 
     [HttpPut("{id:guid}")]
@@ -99,7 +100,7 @@ public sealed class SalesTendersController(
         var tender = await LoadAsync(id, cancellationToken);
         await ApplyAsync(tender, request, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(await LoadDetailAsync(id, cancellationToken));
+        return Ok(await LoadDetailAsync(id, cancellationToken, checkVisibility: false));
     }
 
     /// <summary>
@@ -160,7 +161,7 @@ public sealed class SalesTendersController(
             await dbContext.SaveChangesAsync(cancellationToken);
             await auditLogService.LogAsync(TenantId, UserId, "crm.tender.owner_changed", nameof(SalesTender), tender.Id.ToString(), $"Owner changed from {previous} to {tender.OwnerName}.", cancellationToken);
         }
-        return Ok(await LoadDetailAsync(id, cancellationToken));
+        return Ok(await LoadDetailAsync(id, cancellationToken, checkVisibility: false));
     }
 
     /// <summary>
@@ -249,9 +250,34 @@ public sealed class SalesTendersController(
         await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
     }
 
-    private async Task<SalesTender> LoadAsync(Guid id, CancellationToken cancellationToken) =>
-        await dbContext.SalesTenders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
-        ?? throw new NotFoundException("RFP/RFQ not found.");
+    private Guid? _ownerScope;
+    private bool _ownerScopeLoaded;
+
+    /// <summary>The user this caller is limited to when the workspace shows people only their own deals; null when they see all.</summary>
+    private async Task<Guid?> OwnerScopeAsync(CancellationToken cancellationToken)
+    {
+        if (!_ownerScopeLoaded)
+        {
+            _ownerScope = await SalesVisibility.OwnerScopeAsync(dbContext, tenantContext, TenantId, cancellationToken);
+            _ownerScopeLoaded = true;
+        }
+        return _ownerScope;
+    }
+
+    private async Task EnsureVisibleAsync(Guid? ownerUserId, CancellationToken cancellationToken)
+    {
+        var scope = await OwnerScopeAsync(cancellationToken);
+        if (scope.HasValue && ownerUserId != scope)
+            throw new NotFoundException("RFP/RFQ not found.");
+    }
+
+    private async Task<SalesTender> LoadAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var tender = await dbContext.SalesTenders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("RFP/RFQ not found.");
+        await EnsureVisibleAsync(tender.OwnerUserId, cancellationToken);
+        return tender;
+    }
 
     /// <summary>
     /// Keeps the linked deal in step with the tender's outcome, and logs every status change on the
@@ -346,7 +372,8 @@ public sealed class SalesTendersController(
         tender.Currency = currency.Length == 0 ? "KES" : currency;
     }
 
-    private async Task<SalesTenderDetailResponse> LoadDetailAsync(Guid id, CancellationToken cancellationToken)
+    /// <param name="checkVisibility">False only straight after the caller created or handed over the request, which they may now not own.</param>
+    private async Task<SalesTenderDetailResponse> LoadDetailAsync(Guid id, CancellationToken cancellationToken, bool checkVisibility = true)
     {
         var tender = await dbContext.SalesTenders
             .AsNoTracking()
@@ -354,6 +381,8 @@ public sealed class SalesTendersController(
             .Include(x => x.Opportunity)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("RFP/RFQ not found.");
+        if (checkVisibility)
+            await EnsureVisibleAsync(tender.OwnerUserId, cancellationToken);
         var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
 
         return new SalesTenderDetailResponse(

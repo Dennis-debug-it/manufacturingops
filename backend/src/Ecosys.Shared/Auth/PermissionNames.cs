@@ -61,10 +61,16 @@ public static class PermissionNames
         ProjectsFinancialsManage,
         ActivitiesView,
         ActivitiesManage,
-        CalendarTeam
+        CalendarTeam,
+        CrmViewAll
     ];
     public const string CrmView = "crm.view";
     public const string CrmManage = "crm.manage";
+    /// <summary>
+    /// Sees every deal, RFP/RFQ and follow-up when the workspace limits people to their own deals
+    /// (Sales settings). Without it, and with that limit on, people see what they own.
+    /// </summary>
+    public const string CrmViewAll = "crm.view_all";
 
     public static readonly string[] All =
     [
@@ -106,6 +112,7 @@ public static class PermissionNames
         ActivitiesManage,
         CalendarTeam,
         CrmView,
-        CrmManage
+        CrmManage,
+        CrmViewAll
     ];
 }

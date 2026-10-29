@@ -196,6 +196,16 @@ export interface SalesReport {
   unconvertedDeals: number
 }
 
+export type DealVisibility = 'All' | 'Own'
+
+export interface SalesSettings {
+  /** Gets system-created deals when no better owner is found; null picks automatically. */
+  defaultOwnerUserId: string | null
+  defaultOwnerName: string | null
+  dealVisibility: DealVisibility
+  createRenewalDeals: boolean
+}
+
 export interface SalesOwnerOption {
   id: string
   fullName: string

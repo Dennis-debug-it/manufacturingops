@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Ecosys.Api.Controllers;
 using Ecosys.Domain.Entities;
+using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
@@ -438,6 +439,81 @@ public sealed class SalesCrmFlowTests
 
         var salesOnly = CreateCrmController(dbContext, tenant.Id, actor, new ScopedTenantContext(tenant.Id, actor.Id, AppRoles.Viewer, PermissionNames.CrmView));
         Assert.Equal("QT-DEAL", Assert.Single(Ok<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>(await salesOnly.ListQuotesAwaitingAnswer(null, CancellationToken.None))).QuoteNumber);
+    }
+
+    [Fact]
+    public async Task OwnDealsOnly_HidesOtherPeoplesDeals_ButNotFromManagers()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var rep = new User { TenantId = tenant.Id, FullName = "Rep One", Email = "rep@acme.test", PasswordHash = "hash", Role = AppRoles.FinanceUser, IsActive = true };
+        dbContext.Users.Add(rep);
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        async Task<Guid> DealOwnedBy(string title, User owner)
+        {
+            var created = await crm.CreateOpportunity(Deal(title, 10_000m, "KES") with { OwnerUserId = owner.Id }, CancellationToken.None);
+            var id = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+            await crm.AddActivity(id, new CreateSalesActivityRequest("Call", $"Call about {title}", null, DateTime.UtcNow.AddDays(-1)), CancellationToken.None);
+            return id;
+        }
+        var mine = await DealOwnedBy("Rep's deal", rep);
+        var theirs = await DealOwnedBy("Admin's deal", admin);
+
+        SalesCrmController As(params string[] permissions) =>
+            CreateCrmController(dbContext, tenant.Id, rep, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.FinanceUser, permissions));
+        var repView = As(PermissionNames.CrmView, PermissionNames.CrmManage);
+
+        // Default: everyone sees the whole pipeline.
+        Assert.Equal(2, Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await repView.ListOpportunities(null, null, null, null, CancellationToken.None)).Count);
+
+        Ok<SalesSettingsResponse>(await crm.UpdateSettings(new UpdateSalesSettingsRequest(null, "own", true), CancellationToken.None));
+        repView = As(PermissionNames.CrmView, PermissionNames.CrmManage);
+
+        Assert.Equal(mine, Assert.Single(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await repView.ListOpportunities(null, null, null, null, CancellationToken.None))).Id);
+        Assert.Equal(mine, Assert.Single(Ok<IReadOnlyCollection<SalesFollowUpItem>>(await repView.ListFollowUps(null, CancellationToken.None))).OpportunityId);
+        Assert.Equal(1, Ok<SalesPipelineSummary>(await repView.GetSummary(CancellationToken.None)).OpenCount);
+        await Assert.ThrowsAsync<NotFoundException>(() => repView.GetOpportunity(theirs, CancellationToken.None));
+        await Assert.ThrowsAsync<NotFoundException>(() => repView.ChangeStage(theirs, new ChangeSalesStageRequest(SalesStages.Qualified, null), CancellationToken.None));
+
+        var repReports = new SalesReportsController(dbContext, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.FinanceUser, PermissionNames.CrmView), new NoOpUserAccessService());
+        Assert.Equal(1, Ok<SalesReport>(await repReports.Get(null, null, admin.Id, CancellationToken.None)).OpenCount);
+
+        // A sales manager still sees everything.
+        var manager = As(PermissionNames.CrmView, PermissionNames.CrmManage, PermissionNames.CrmViewAll);
+        Assert.Equal(2, Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await manager.ListOpportunities(null, null, null, null, CancellationToken.None)).Count);
+    }
+
+    [Fact]
+    public async Task SystemCreatedDeals_GoToTheBestAvailableOwner()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var accountManager = new User { TenantId = tenant.Id, FullName = "Account Manager", Email = "am@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+        var salesLead = new User { TenantId = tenant.Id, FullName = "Sales Lead", Email = "lead@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+        var leaver = new User { TenantId = tenant.Id, FullName = "Left the company", Email = "gone@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = false };
+        var client = new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" };
+        var otherClient = new Client { TenantId = tenant.Id, ClientName = "Nyali Mall" };
+        dbContext.AddRange(accountManager, salesLead, leaver, client, otherClient);
+        dbContext.Contracts.Add(new Contract
+        {
+            TenantId = tenant.Id, ClientId = client.Id, ContractNumber = "CT-1", Name = "Chiller AMC", Status = ContractStatus.Active,
+            StartDate = DateTime.UtcNow.AddMonths(-11), EndDate = DateTime.UtcNow.AddMonths(1), AccountManagerUserId = accountManager.Id,
+        });
+        await dbContext.SaveChangesAsync();
+        var resolver = new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext));
+
+        // An inactive preferred owner is skipped; the client's contract account manager is next.
+        Assert.Equal(accountManager.Id, (await resolver.ResolveAsync(tenant.Id, [leaver.Id], client.Id))!.Id);
+        // No client history: falls back to an admin until a default sales owner is set.
+        Assert.Equal(admin.Id, (await resolver.ResolveAsync(tenant.Id, [], otherClient.Id))!.Id);
+        dbContext.TenantSalesSettings.Add(new TenantSalesSettings { TenantId = tenant.Id, DefaultOwnerUserId = salesLead.Id });
+        await dbContext.SaveChangesAsync();
+        Assert.Equal(salesLead.Id, (await resolver.ResolveAsync(tenant.Id, [], otherClient.Id))!.Id);
+        // Whoever owns the client's live deal beats the default.
+        dbContext.SalesOpportunities.Add(new SalesOpportunity { TenantId = tenant.Id, Title = "Open deal", ClientId = otherClient.Id, Stage = SalesStages.Proposal, OwnerUserId = accountManager.Id });
+        await dbContext.SaveChangesAsync();
+        Assert.Equal(accountManager.Id, (await resolver.ResolveAsync(tenant.Id, [], otherClient.Id))!.Id);
     }
 
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>

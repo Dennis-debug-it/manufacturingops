@@ -40,6 +40,10 @@ public sealed class SalesOpportunity : AuditableEntity, ITenantEntity
     public DateTime? WonAt { get; set; }
     public DateTime? LostAt { get; set; }
     public DateTime? LastActivityAt { get; set; }
+    /// <summary>Set on a renewal deal: the contract it renews. Renewing that contract wins the deal; letting it lapse loses it.</summary>
+    public Guid? RenewalOfContractId { get; set; }
+    /// <summary>Set on a lead a technician flagged from a job: the work order it was raised on.</summary>
+    public Guid? SourceWorkOrderId { get; set; }
 
     public Tenant? Tenant { get; set; }
     public Client? Client { get; set; }
@@ -121,4 +125,19 @@ public sealed class SalesTender : AuditableEntity, ITenantEntity
     public Tenant? Tenant { get; set; }
     public Client? Client { get; set; }
     public SalesOpportunity? Opportunity { get; set; }
+}
+
+/// <summary>
+/// Per-workspace sales CRM settings. A workspace with no row uses the defaults below, so nothing has
+/// to be set up before the CRM works.
+/// </summary>
+public sealed class TenantSalesSettings : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    /// <summary>Who gets deals the system creates when no better owner can be found (renewals, technician leads).</summary>
+    public Guid? DefaultOwnerUserId { get; set; }
+    /// <summary>"All": everyone with CRM access sees every deal. "Own": people see their own deals unless they may see all.</summary>
+    public string DealVisibility { get; set; } = "All";
+    /// <summary>Open a renewal deal when a contract enters its renewal notice window.</summary>
+    public bool CreateRenewalDeals { get; set; } = true;
 }

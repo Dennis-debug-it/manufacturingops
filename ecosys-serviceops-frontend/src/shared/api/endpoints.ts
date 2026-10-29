@@ -512,6 +512,7 @@ export const endpoints = {
     followUps: '/api/crm/follow-ups',
     quotesAwaitingAnswer: '/api/crm/quotes-awaiting-answer',
     reports: '/api/crm/reports',
+    settings: '/api/crm/settings',
     convertToClient: (id: string) => `/api/crm/opportunities/${id}/convert-to-client`,
     convertToQuotation: (id: string) => `/api/crm/opportunities/${id}/convert-to-quotation`,
     createWorkOrder: '/api/workorders/from-opportunity',

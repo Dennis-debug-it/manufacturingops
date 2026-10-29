@@ -193,6 +193,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<SalesOpportunity> SalesOpportunities => Set<SalesOpportunity>();
     public DbSet<SalesActivity> SalesActivities => Set<SalesActivity>();
     public DbSet<SalesTender> SalesTenders => Set<SalesTender>();
+    public DbSet<TenantSalesSettings> TenantSalesSettings => Set<TenantSalesSettings>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
     public DbSet<ProjectType> ProjectTypes => Set<ProjectType>();
@@ -3506,8 +3507,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.Stage });
             entity.HasIndex(x => new { x.TenantId, x.ClientId });
             entity.HasIndex(x => new { x.TenantId, x.OwnerUserId });
+            entity.HasIndex(x => new { x.TenantId, x.RenewalOfContractId });
+            entity.HasIndex(x => new { x.TenantId, x.SourceWorkOrderId });
         });
         ApplyTenantFilter<SalesOpportunity>(modelBuilder);
+
+        modelBuilder.Entity<TenantSalesSettings>(entity =>
+        {
+            entity.ToTable("tenant_sales_settings");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.TenantId).IsUnique();
+            entity.Property(x => x.DealVisibility).HasMaxLength(20).IsRequired();
+        });
+        ApplyTenantFilter<TenantSalesSettings>(modelBuilder);
 
         modelBuilder.Entity<SalesActivity>(entity =>
         {

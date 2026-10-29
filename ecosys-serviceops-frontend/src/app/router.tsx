@@ -150,6 +150,7 @@ import { SlaPoliciesPage } from '../features/settings/SlaPoliciesPage'
 import { WorkflowsSettingsPage } from '../features/settings/WorkflowsSettingsPage'
 import { OperationalDefaultsSettingsPage } from '../features/settings/OperationalDefaultsSettingsPage'
 import { FinanceDefaultsSettingsPage } from '../features/settings/FinanceDefaultsSettingsPage'
+import { SalesSettingsPage } from '../features/settings/SalesSettingsPage'
 import { EscalationRulesSettingsPage } from '../features/settings/EscalationRulesSettingsPage'
 import { WOTemplatesSettingsPage } from '../features/settings/WOTemplatesSettingsPage'
 import { MyApprovalsPage } from '../features/approvals/MyApprovalsPage'
@@ -443,6 +444,7 @@ export function AppRouter() {
       ['/settings/workflows', WorkflowsSettingsPage],
       ['/settings/operational-defaults', OperationalDefaultsSettingsPage],
       ['/settings/finance-defaults', FinanceDefaultsSettingsPage],
+      ['/settings/sales', SalesSettingsPage],
       ['/settings/escalation-rules', EscalationRulesSettingsPage],
       ['/settings/wo-templates', WOTemplatesSettingsPage],
       ['/approvals', MyApprovalsPage],

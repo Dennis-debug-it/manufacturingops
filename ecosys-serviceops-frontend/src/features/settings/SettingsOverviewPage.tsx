@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
   Radio, MessageCircle, CreditCard, ShieldCheck, Users, Bell, Plug, LineChart,
-  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Rocket, Percent, LayoutDashboard,
+  UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Rocket, Percent, LayoutDashboard, Handshake,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
@@ -62,6 +62,12 @@ const groups: SettingsGroup[] = [
       { to: '/settings/payments', label: 'Payments', description: 'M-Pesa, Stripe, and bank transfer settings.', icon: CreditCard },
       { to: '/settings/credit-control', label: 'Credit Control', description: 'Payment terms and credit limits.', icon: ShieldCheck },
       { to: '/settings/approval-matrix', label: 'Approval Matrix', description: 'Amount-based approval chains for POs and expenses.', icon: GitBranch },
+    ],
+  },
+  {
+    title: 'Sales',
+    items: [
+      { to: '/settings/sales', label: 'Sales Settings', description: 'Who sees which deals, default owner, and renewal deals.', icon: Handshake },
     ],
   },
   {

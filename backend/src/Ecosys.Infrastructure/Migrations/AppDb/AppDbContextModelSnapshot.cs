@@ -8602,6 +8602,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<int>("Probability")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("RenewalOfContractId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("ServiceType")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
@@ -8612,6 +8615,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<string>("Source")
                         .HasMaxLength(60)
                         .HasColumnType("character varying(60)");
+
+                    b.Property<Guid?>("SourceWorkOrderId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Stage")
                         .IsRequired()
@@ -8641,6 +8647,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("TenantId", "ClientId");
 
                     b.HasIndex("TenantId", "OwnerUserId");
+
+                    b.HasIndex("TenantId", "RenewalOfContractId");
+
+                    b.HasIndex("TenantId", "SourceWorkOrderId");
 
                     b.HasIndex("TenantId", "Stage");
 
@@ -10669,6 +10679,40 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("RateCardId");
 
                     b.ToTable("tenant_quotation_lines", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.TenantSalesSettings", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("CreateRenewalDeals")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DealVisibility")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("DefaultOwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.ToTable("tenant_sales_settings", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantSecurityPolicy", b =>

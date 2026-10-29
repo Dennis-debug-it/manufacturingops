@@ -47,6 +47,8 @@ public sealed class SalesReportsController(
             throw new BusinessRuleException("The end of the period must be on or after its start.");
 
         var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
+        // Someone limited to their own deals gets their own report, whatever owner they ask for.
+        ownerUserId = await SalesVisibility.OwnerScopeAsync(dbContext, tenantContext, TenantId, cancellationToken) ?? ownerUserId;
 
         var dealQuery = dbContext.SalesOpportunities.AsNoTracking().Where(x => x.TenantId == TenantId);
         if (ownerUserId.HasValue)
