@@ -40,6 +40,8 @@ public sealed class SalesOpportunity : AuditableEntity, ITenantEntity
     public DateTime? WonAt { get; set; }
     public DateTime? LostAt { get; set; }
     public DateTime? LastActivityAt { get; set; }
+    /// <summary>The pipeline the deal is in; null means the workspace's default pipeline.</summary>
+    public Guid? PipelineId { get; set; }
     /// <summary>When the deal entered its current stage (maintained with the stage history).</summary>
     public DateTime? StageChangedAt { get; set; }
     /// <summary>When the owner was told the deal had gone quiet; cleared in effect by any newer activity.</summary>
@@ -205,4 +207,40 @@ public sealed class SalesTarget : AuditableEntity, ITenantEntity
     /// <summary>The first day of the month the target is for.</summary>
     public DateTime Month { get; set; }
     public decimal Amount { get; set; }
+}
+
+/// <summary>
+/// A sales pipeline: its own ordered stages, e.g. "Installations", "Maintenance contracts", "Spares".
+/// A pipeline tied to a <see cref="Module"/> only shows on plans that include that module, so selling
+/// modules separately decides which pipelines a workspace sees. Every workspace has one default.
+/// </summary>
+public sealed class SalesPipeline : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    /// <summary>A ServiceOps module code (e.g. "maintenance"); null shows on every plan.</summary>
+    public string? Module { get; set; }
+    public bool IsDefault { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    public ICollection<SalesPipelineStage> Stages { get; set; } = new List<SalesPipelineStage>();
+}
+
+/// <summary>
+/// One stage of a pipeline. <see cref="Key"/> is what a deal stores and never changes once used, so a
+/// stage can be renamed freely; every pipeline has a "Won" and a "Lost" stage with those keys.
+/// </summary>
+public sealed class SalesPipelineStage : ITenantEntity
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid TenantId { get; set; }
+    public Guid PipelineId { get; set; }
+    public string Key { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    /// <summary>The probability a deal takes on when it moves into this stage.</summary>
+    public int Probability { get; set; }
+
+    public SalesPipeline? Pipeline { get; set; }
 }

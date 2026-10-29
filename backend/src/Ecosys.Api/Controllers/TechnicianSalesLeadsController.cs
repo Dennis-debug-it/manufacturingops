@@ -34,6 +34,7 @@ public sealed class TechnicianSalesLeadsController(
     public async Task<ActionResult<TechnicianSalesLeadResponse>> Flag(Guid workOrderId, [FromBody] FlagSalesLeadRequest request, CancellationToken cancellationToken)
     {
         userAccessService.EnsureTenantOperationalAccess();
+        var pipeline = SalesPipelineCatalog.Default(await SalesPipelineCatalog.LoadAsync(dbContext, TenantId, cancellationToken));
         var note = request.Note?.Trim();
         if (string.IsNullOrWhiteSpace(note))
             throw new BusinessRuleException("Say what the client could use, e.g. \"Chiller 2 compressor near end of life\".");
@@ -78,8 +79,9 @@ public sealed class TechnicianSalesLeadsController(
         {
             TenantId = TenantId,
             Title = Truncate($"{subject}: {note}", 200),
-            Stage = SalesStages.Lead,
-            Probability = SalesStages.DefaultProbability(SalesStages.Lead),
+            Stage = pipeline.FirstOpen.Key,
+            Probability = pipeline.FirstOpen.Probability,
+            PipelineId = pipeline.Id,
             ClientId = workOrder.ClientId,
             SiteId = workOrder.SiteId,
             Source = TechnicianSource,

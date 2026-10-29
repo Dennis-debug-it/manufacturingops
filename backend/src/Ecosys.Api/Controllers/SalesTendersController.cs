@@ -111,6 +111,7 @@ public sealed class SalesTendersController(
     public async Task<ActionResult<SalesTenderDetailResponse>> ChangeStatus(Guid id, [FromBody] ChangeSalesTenderStatusRequest request, CancellationToken cancellationToken)
     {
         await EnsureCanManageAsync(cancellationToken);
+        _pipelines = await SalesPipelineCatalog.LoadAsync(dbContext, TenantId, cancellationToken);
         var tender = await LoadAsync(id, cancellationToken);
         var status = SalesTenderStatuses.Normalize(request.Status);
         if (status == tender.Status)
@@ -172,6 +173,9 @@ public sealed class SalesTendersController(
     public async Task<ActionResult<SalesTenderDetailResponse>> CreateOpportunity(Guid id, CancellationToken cancellationToken)
     {
         await EnsureCanManageAsync(cancellationToken);
+        var pipeline = SalesPipelineCatalog.Default(await SalesPipelineCatalog.LoadAsync(dbContext, TenantId, cancellationToken));
+        // A bid goes in at the pipeline's Proposal stage where it has one.
+        var stage = pipeline.Find(SalesStages.Proposal) ?? pipeline.FirstOpen;
         var tender = await LoadAsync(id, cancellationToken);
         if (tender.OpportunityId.HasValue)
             throw new BusinessRuleException("This tender already has an opportunity.");
@@ -182,8 +186,9 @@ public sealed class SalesTendersController(
         {
             TenantId = TenantId,
             Title = tender.Title,
-            Stage = SalesStages.Proposal,
-            Probability = SalesStages.DefaultProbability(SalesStages.Proposal),
+            Stage = stage.Key,
+            Probability = stage.Probability,
+            PipelineId = pipeline.Id,
             ClientId = tender.ClientId,
             CompanyName = tender.ClientId.HasValue ? null : tender.IssuerName,
             ContactName = tender.ContactName,
@@ -251,6 +256,7 @@ public sealed class SalesTendersController(
     }
 
     private Guid? _ownerScope;
+    private IReadOnlyList<SalesPipelineView>? _pipelines;
     private bool _ownerScopeLoaded;
 
     /// <summary>The user this caller is limited to when the workspace shows people only their own deals; null when they see all.</summary>
@@ -306,10 +312,14 @@ public sealed class SalesTendersController(
             opportunity.LostAt = DateTime.UtcNow;
             opportunity.LostReason = $"{SalesTenderStatuses.Label(status)}: {notes}";
         }
-        else if (status == SalesTenderStatuses.Submitted && SalesStages.Rank(opportunity.Stage) < SalesStages.Rank(SalesStages.Negotiation)
-            && !SalesStages.IsClosed(opportunity.Stage))
+        else if (status == SalesTenderStatuses.Submitted && !SalesStages.IsClosed(opportunity.Stage)
+            && SalesPipelineCatalog.For(_pipelines ?? [], opportunity.PipelineId) is var pipeline
+            && pipeline.Find(SalesStages.Proposal) is { } proposal
+            && pipeline.Rank(opportunity.Stage) < pipeline.Rank(proposal.Key))
         {
-            opportunity.Stage = SalesStages.Proposal;
+            // A submitted bid is at least at Proposal; one already further on is left there.
+            opportunity.Stage = proposal.Key;
+            opportunity.Probability = proposal.Probability;
             if (tender.SubmittedValue.HasValue) opportunity.EstimatedValue = tender.SubmittedValue.Value;
         }
 

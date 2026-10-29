@@ -646,6 +646,15 @@ public sealed class SalesCrmFlowTests
             await SalesReminderTests.CreateService(dbContext, push).RunAsync(new DateTime(2026, 11, 2, 9, 0, 0, DateTimeKind.Utc));
             Assert.NotEmpty(await dbContext.SalesStageChanges.ToListAsync());
 
+            // Phase 4: pipelines.
+            var withSpares = Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.CreatePipeline(new UpsertSalesPipelineRequest("Spares", null, true, false, [new(null, "Enquiry", 20)]), CancellationToken.None));
+            var sparesId = withSpares.Single(x => x.Name == "Spares").Id;
+            Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, withSpares.Single(x => x.IsDefault).Id));
+            Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None, sparesId));
+            Ok<SalesReport>(await new SalesReportsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService())
+                .Get(null, null, null, CancellationToken.None, sparesId));
+            Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.UpdatePipeline(sparesId, new UpsertSalesPipelineRequest("Spares", null, true, true, [new("Enquiry", "Enquiry", 25)]), CancellationToken.None));
+
             // Answering the quote wins the deal.
             var quotes = new TenantQuotationController(
                 dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpDocumentNumberingService(), null!,
@@ -972,6 +981,54 @@ public sealed class SalesCrmFlowTests
         await Assert.ThrowsAsync<ForbiddenException>(() => plainRep.SetTargets(new SetSalesTargetsRequest(2026, []), CancellationToken.None));
     }
 
+    [Fact]
+    public async Task Pipelines_HaveTheirOwnStages_AndDealsMoveBetweenThem()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+
+        // A workspace starts with the default pipeline and the standard stages.
+        var start = Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.ListPipelines(CancellationToken.None));
+        var sales = Assert.Single(start);
+        Assert.Equal(["Lead", "Qualified", "SiteSurvey", "Proposal", "Negotiation", "Won", "Lost"], sales.Stages.Select(x => x.Key).ToArray());
+
+        var all = Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.CreatePipeline(new UpsertSalesPipelineRequest("Spares", null, true, false,
+            [new(null, "Enquiry", 20), new(null, "Quoted", 60)]), CancellationToken.None));
+        var spares = all.Single(x => x.Name == "Spares");
+        Assert.Equal(["Enquiry", "Quoted", "Won", "Lost"], spares.Stages.Select(x => x.Key).ToArray());
+        // Tied to a module the plan lacks: admins see it (marked unavailable), others do not.
+        Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.CreatePipeline(new UpsertSalesPipelineRequest("Maintenance contracts", "maintenance", true, false, [new(null, "Renewal due", 50)]), CancellationToken.None));
+        var rep = CreateCrmController(dbContext, tenant.Id, admin, new ScopedTenantContext(tenant.Id, admin.Id, AppRoles.Manager, PermissionNames.CrmView, PermissionNames.CrmManage));
+        Assert.DoesNotContain(Ok<IReadOnlyList<SalesPipelineResponse>>(await rep.ListPipelines(CancellationToken.None)), x => x.Name == "Maintenance contracts");
+
+        // A deal in Spares starts at its first stage and moves only between its stages.
+        var deal = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+            (await crm.CreateOpportunity(Deal("Pump seals", 40_000m, "KES") with { PipelineId = spares.Id }, CancellationToken.None)).Result).Value);
+        Assert.Equal(("Enquiry", 20, "Spares"), (deal.Stage, deal.Probability, deal.PipelineName));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Proposal", null), CancellationToken.None));
+        var quoted = Ok<SalesOpportunityDetailResponse>(await crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("quoted", null), CancellationToken.None));
+        Assert.Equal(("Quoted", 60), (quoted.Stage, quoted.Probability));
+
+        // Board and summary per pipeline.
+        Assert.Single(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, spares.Id)));
+        Assert.Empty(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, sales.Id)));
+        Assert.Equal(1, Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None, spares.Id)).Stages.Single(x => x.Stage == "Quoted").Count);
+
+        // Renaming keeps the key; a stage with deals cannot be removed.
+        var renamed = Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.UpdatePipeline(spares.Id, new UpsertSalesPipelineRequest("Spares", null, true, false,
+            [new("Enquiry", "Enquiry", 20), new("Quoted", "Quote sent", 65)]), CancellationToken.None)).Single(x => x.Id == spares.Id);
+        Assert.Equal("Quote sent", renamed.Stages.Single(x => x.Key == "Quoted").Name);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.UpdatePipeline(spares.Id, new UpsertSalesPipelineRequest("Spares", null, true, false,
+            [new("Enquiry", "Enquiry", 20)]), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.DeletePipeline(spares.Id, CancellationToken.None));
+
+        // Moving the deal to the default pipeline: no "Quoted" there, so it starts at Lead.
+        var moved = Ok<SalesOpportunityDetailResponse>(await crm.UpdateOpportunity(deal.Id, Deal("Pump seals", 40_000m, "KES") with { PipelineId = sales.Id }, CancellationToken.None));
+        Assert.Equal(("Lead", "Sales"), (moved.Stage, moved.PipelineName));
+        Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.DeletePipeline(spares.Id, CancellationToken.None));
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 
@@ -1154,7 +1211,10 @@ public sealed class SalesCrmFlowTests
 
     private sealed class NoOpLicenseGuardService : ILicenseGuardService
     {
-        public Task<TenantLicenseSnapshot> GetSnapshotAsync(Guid tenantId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        // An Essentials plan: Operations and Finance, no Maintenance.
+        public Task<TenantLicenseSnapshot> GetSnapshotAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TenantLicenseSnapshot(tenantId, Guid.Empty, "essentials", "Essentials", "Active", DateTime.UtcNow.AddYears(-1), null, null, null,
+                false, false, false, 10, 10, null, false, false, null) { Modules = [ServiceOpsPlans.Operations, ServiceOpsPlans.Finance] });
         public Task<LicenseUsageSnapshot> GetUsageAsync(Guid tenantId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<PlatformLicenseUsageSnapshot>> GetPlatformUsageAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<PlatformLicenseUsageSnapshot>>([]);
         public Task EnsureTenantCanMutateAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;

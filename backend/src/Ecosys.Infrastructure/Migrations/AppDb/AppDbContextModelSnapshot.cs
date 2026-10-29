@@ -8723,6 +8723,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("OwnerUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("PipelineId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Probability")
                         .HasColumnType("integer");
 
@@ -8778,6 +8781,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("TenantId", "OwnerUserId");
 
+                    b.HasIndex("TenantId", "PipelineId");
+
                     b.HasIndex("TenantId", "RenewalOfContractId");
 
                     b.HasIndex("TenantId", "SourceWorkOrderId");
@@ -8816,6 +8821,82 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsUnique();
 
                     b.ToTable("sales_opportunity_contacts", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesPipeline", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Module")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "SortOrder");
+
+                    b.ToTable("sales_pipelines", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesPipelineStage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<Guid>("PipelineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Probability")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PipelineId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("sales_pipeline_stages", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesStageChange", b =>
@@ -16554,6 +16635,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Opportunity");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesPipelineStage", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.SalesPipeline", "Pipeline")
+                        .WithMany("Stages")
+                        .HasForeignKey("PipelineId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Pipeline");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesStageChange", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.SalesOpportunity", "Opportunity")
@@ -18589,6 +18681,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenders");
 
                     b.Navigation("WorkOrders");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesPipeline", b =>
+                {
+                    b.Navigation("Stages");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.Site", b =>

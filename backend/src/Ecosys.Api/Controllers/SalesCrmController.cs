@@ -51,6 +51,29 @@ public sealed partial class SalesCrmController(
             throw new NotFoundException("Opportunity not found.");
     }
 
+    private IReadOnlyList<SalesPipelineView>? _pipelines;
+
+    /// <summary>The pipeline a deal is being put in: the one asked for (it must exist and be active), else the default.</summary>
+    private static SalesPipelineView PipelineForWrite(IReadOnlyList<SalesPipelineView> pipelines, Guid? pipelineId)
+    {
+        if (!pipelineId.HasValue)
+            return SalesPipelineCatalog.Default(pipelines);
+        var pipeline = pipelines.FirstOrDefault(x => x.Id == pipelineId) ?? throw new NotFoundException("Pipeline not found.");
+        if (!pipeline.IsActive)
+            throw new BusinessRuleException($"The {pipeline.Name} pipeline is switched off.");
+        return pipeline;
+    }
+
+    /// <summary>The workspace's pipelines (the default is created on first use). Load before making other changes.</summary>
+    private async Task<IReadOnlyList<SalesPipelineView>> PipelinesAsync(CancellationToken cancellationToken) =>
+        _pipelines ??= await SalesPipelineCatalog.LoadAsync(dbContext, TenantId, cancellationToken);
+
+    /// <summary>Deals in this pipeline; deals with no pipeline are in the default one.</summary>
+    private static IQueryable<SalesOpportunity> InPipeline(IQueryable<SalesOpportunity> query, SalesPipelineView pipeline) =>
+        pipeline.IsDefault
+            ? query.Where(x => x.PipelineId == pipeline.Id || x.PipelineId == null)
+            : query.Where(x => x.PipelineId == pipeline.Id);
+
     // ── Pipeline ─────────────────────────────────────────────────────────────
 
     [HttpGet("opportunities")]
@@ -59,14 +82,18 @@ public sealed partial class SalesCrmController(
         [FromQuery] string? search,
         [FromQuery] Guid? ownerUserId,
         [FromQuery] Guid? clientId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] Guid? pipelineId = null)
     {
         EnsureCanView();
+        var pipelines = await PipelinesAsync(cancellationToken);
 
         var query = dbContext.SalesOpportunities
             .AsNoTracking()
             .Include(x => x.Client)
             .Where(x => x.TenantId == TenantId);
+        if (pipelineId.HasValue)
+            query = InPipeline(query, SalesPipelineCatalog.For(pipelines, pipelineId));
 
         query = await ApplyStageFilterAsync(query, stage, cancellationToken);
         if (ownerUserId.HasValue)
@@ -102,13 +129,16 @@ public sealed partial class SalesCrmController(
             .ToListAsync(cancellationToken);
 
         var stalledAfter = await SalesStalls.ThresholdDaysAsync(dbContext, TenantId, cancellationToken);
-        return Ok(rows.Select(x => MapListItem(x.Opportunity, x.WorkOrderCount, x.NextFollowUpAt, converter, stalledAfter)).ToList());
+        var defaultPipelineId = SalesPipelineCatalog.Default(pipelines).Id;
+        return Ok(rows.Select(x => MapListItem(x.Opportunity, x.WorkOrderCount, x.NextFollowUpAt, converter, stalledAfter) with { PipelineId = x.Opportunity.PipelineId ?? defaultPipelineId }).ToList());
     }
 
     [HttpGet("summary")]
-    public async Task<ActionResult<SalesPipelineSummary>> GetSummary(CancellationToken cancellationToken)
+    public async Task<ActionResult<SalesPipelineSummary>> GetSummary(CancellationToken cancellationToken, [FromQuery] Guid? pipelineId = null)
     {
         EnsureCanView();
+        var pipelines = await PipelinesAsync(cancellationToken);
+        var pipeline = SalesPipelineCatalog.For(pipelines, pipelineId);
 
         var now = DateTime.UtcNow;
         var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -116,9 +146,10 @@ public sealed partial class SalesCrmController(
         var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
         var scope = await OwnerScopeAsync(cancellationToken);
 
-        var opportunities = (await dbContext.SalesOpportunities
-            .AsNoTracking()
-            .Where(x => x.TenantId == TenantId && (scope == null || x.OwnerUserId == scope))
+        var dealQuery = dbContext.SalesOpportunities.AsNoTracking().Where(x => x.TenantId == TenantId && (scope == null || x.OwnerUserId == scope));
+        if (pipelineId.HasValue)
+            dealQuery = InPipeline(dealQuery, pipeline);
+        var opportunities = (await dealQuery
             .Select(x => new { x.Stage, x.EstimatedValue, x.Currency, x.Probability, x.WonAt, x.LostAt })
             .ToListAsync(cancellationToken))
             .Select(x => new { x.Stage, x.EstimatedValue, x.Currency, x.Probability, x.WonAt, x.LostAt, Value = converter.Convert(x.EstimatedValue, x.Currency) })
@@ -149,11 +180,11 @@ public sealed partial class SalesCrmController(
             .Select(x => x.SubmissionDeadline)
             .ToListAsync(cancellationToken);
 
-        var stages = SalesStages.All
+        var stages = pipeline.Stages
             .Select(stage =>
             {
-                var inStage = opportunities.Where(x => x.Stage == stage).ToList();
-                return new SalesStageSummary(stage, inStage.Count, inStage.Sum(x => x.Value ?? 0));
+                var inStage = opportunities.Where(x => x.Stage == stage.Key).ToList();
+                return new SalesStageSummary(stage.Key, inStage.Count, inStage.Sum(x => x.Value ?? 0));
             })
             .ToList();
 
@@ -309,8 +340,9 @@ public sealed partial class SalesCrmController(
         [FromBody] UpsertSalesOpportunityRequest request, CancellationToken cancellationToken)
     {
         await EnsureCanManageAsync(cancellationToken);
+        var pipeline = PipelineForWrite(await PipelinesAsync(cancellationToken), request.PipelineId);
 
-        var opportunity = new SalesOpportunity { TenantId = TenantId, Stage = SalesStages.Lead };
+        var opportunity = new SalesOpportunity { TenantId = TenantId, Stage = pipeline.FirstOpen.Key, PipelineId = pipeline.Id };
         await ApplyAsync(opportunity, request, cancellationToken);
         await ProspectClients.LinkAsync(dbContext, opportunity, null, cancellationToken);
         await LinkDealFieldsContactAsync(opportunity, cancellationToken);
@@ -319,10 +351,12 @@ public sealed partial class SalesCrmController(
             opportunity.OwnerUserId = UserId;
             opportunity.OwnerName = await ResolveUserNameAsync(UserId, cancellationToken);
         }
-        opportunity.Stage = SalesStages.Normalize(request.Stage ?? SalesStages.Lead);
-        if (SalesStages.IsClosed(opportunity.Stage))
+        var stage = request.Stage is null ? pipeline.FirstOpen : pipeline.Find(request.Stage)
+            ?? throw new BusinessRuleException($"'{request.Stage}' is not a stage of the {pipeline.Name} pipeline.");
+        if (stage.IsClosed)
             throw new BusinessRuleException("Create the opportunity first, then mark it won or lost.");
-        opportunity.Probability = request.Probability ?? SalesStages.DefaultProbability(opportunity.Stage);
+        opportunity.Stage = stage.Key;
+        opportunity.Probability = request.Probability ?? stage.Probability;
 
         dbContext.SalesOpportunities.Add(opportunity);
         await AddSystemActivityAsync(opportunity, "Opportunity created.", cancellationToken);
@@ -341,8 +375,23 @@ public sealed partial class SalesCrmController(
         var previousOwnerId = opportunity.OwnerUserId;
         var previousOwnerName = opportunity.OwnerName ?? "nobody";
         var previousClientId = opportunity.ClientId;
+        var pipelines = await PipelinesAsync(cancellationToken);
+        var currentPipeline = SalesPipelineCatalog.For(pipelines, opportunity.PipelineId);
 
         await ApplyAsync(opportunity, request, cancellationToken);
+        if (request.PipelineId.HasValue && request.PipelineId != currentPipeline.Id)
+        {
+            // Moving pipelines keeps the stage where the new pipeline has it (Won and Lost always), else starts it at the first stage.
+            var target = PipelineForWrite(pipelines, request.PipelineId);
+            var stage = target.Find(opportunity.Stage) ?? target.FirstOpen;
+            opportunity.PipelineId = target.Id;
+            if (stage.Key != opportunity.Stage)
+            {
+                opportunity.Stage = stage.Key;
+                opportunity.Probability = stage.Probability;
+            }
+            await AddSystemActivityAsync(opportunity, $"Moved from the {currentPipeline.Name} pipeline to {target.Name} ({stage.Name}).", cancellationToken);
+        }
         await ProspectClients.LinkAsync(dbContext, opportunity, previousClientId, cancellationToken);
         await LinkDealFieldsContactAsync(opportunity, cancellationToken);
         if (opportunity.OwnerUserId != previousOwnerId)
@@ -361,23 +410,26 @@ public sealed partial class SalesCrmController(
         await EnsureCanManageAsync(cancellationToken);
         var opportunity = await LoadAsync(id, cancellationToken);
 
-        var stage = SalesStages.Normalize(request.Stage);
+        var pipeline = SalesPipelineCatalog.For(await PipelinesAsync(cancellationToken), opportunity.PipelineId);
+        var target = pipeline.Find(request.Stage)
+            ?? throw new BusinessRuleException($"'{request.Stage}' is not a stage of the {pipeline.Name} pipeline.");
+        var stage = target.Key;
         if (stage == opportunity.Stage)
             return Ok(await LoadDetailAsync(id, cancellationToken));
 
         if (stage == SalesStages.Lost && string.IsNullOrWhiteSpace(request.LostReason))
             throw new BusinessRuleException("Give a reason when marking an opportunity as lost.");
 
-        var previous = opportunity.Stage;
+        var previous = pipeline.Find(opportunity.Stage)?.Name ?? opportunity.Stage;
         opportunity.Stage = stage;
-        opportunity.Probability = SalesStages.DefaultProbability(stage);
+        opportunity.Probability = target.Probability;
         opportunity.WonAt = stage == SalesStages.Won ? DateTime.UtcNow : null;
         opportunity.LostAt = stage == SalesStages.Lost ? DateTime.UtcNow : null;
         opportunity.LostReason = stage == SalesStages.Lost ? request.LostReason!.Trim() : null;
 
         var note = stage == SalesStages.Lost
             ? $"Stage changed from {previous} to Lost: {opportunity.LostReason}"
-            : $"Stage changed from {previous} to {stage}.";
+            : $"Stage changed from {previous} to {target.Name}.";
         if (stage == SalesStages.Won && await ProspectClients.PromoteAsync(dbContext, TenantId, opportunity.ClientId, cancellationToken))
             note += " The prospect is now a client.";
         await AddSystemActivityAsync(opportunity, note, cancellationToken);
@@ -671,6 +723,7 @@ public sealed partial class SalesCrmController(
         await EnsureCanManageAsync(cancellationToken);
         userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceManageBillableWork);
         var opportunity = await LoadAsync(id, cancellationToken);
+        var dealPipeline = SalesPipelineCatalog.For(await PipelinesAsync(cancellationToken), opportunity.PipelineId);
 
         if (!opportunity.ClientId.HasValue)
             throw new BusinessRuleException("Link or create the client for this opportunity before quoting.");
@@ -708,10 +761,11 @@ public sealed partial class SalesCrmController(
         quote.TotalAmount = quote.Lines.Sum(x => x.GrandTotal);
 
         dbContext.TenantQuotations.Add(quote);
-        if (SalesStages.Rank(opportunity.Stage) < SalesStages.Rank(SalesStages.Proposal))
+        // Quoting moves an earlier deal to the pipeline's Proposal stage, where it has one.
+        if (dealPipeline.Find(SalesStages.Proposal) is { } proposal && dealPipeline.Rank(opportunity.Stage) < dealPipeline.Rank(proposal.Key) && !SalesStages.IsClosed(opportunity.Stage))
         {
-            opportunity.Stage = SalesStages.Proposal;
-            opportunity.Probability = SalesStages.DefaultProbability(SalesStages.Proposal);
+            opportunity.Stage = proposal.Key;
+            opportunity.Probability = proposal.Probability;
         }
         await AddSystemActivityAsync(opportunity, $"Draft quotation {quote.QuoteNumber} created.", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -753,8 +807,8 @@ public sealed partial class SalesCrmController(
                 ? query.Where(x => false)
                 : query.Where(x => x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost && (x.LastActivityAt ?? x.CreatedAt) <= quietSince);
         }
-        var normalized = SalesStages.Normalize(stage);
-        return query.Where(x => x.Stage == normalized);
+        var key = stage.Trim();
+        return query.Where(x => x.Stage == key);
     }
 
     private async Task<SalesOpportunity> LoadAsync(Guid id, CancellationToken cancellationToken)
@@ -872,6 +926,7 @@ public sealed partial class SalesCrmController(
             .ToListAsync(cancellationToken);
 
         var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
+        var dealPipeline = SalesPipelineCatalog.For(await PipelinesAsync(cancellationToken), opportunity.PipelineId);
         var contacts = await dbContext.SalesOpportunityContacts.AsNoTracking()
             .Where(x => x.TenantId == TenantId && x.OpportunityId == id && x.Contact!.IsActive)
             .Select(x => x.Contact!)
@@ -904,7 +959,9 @@ public sealed partial class SalesCrmController(
             opportunity.RenewalOfContractId, renewalContractNumber,
             opportunity.SourceWorkOrderId, sourceWorkOrderNumber,
             opportunity.Client?.IsProspect ?? false,
-            contacts.Select(ClientContacts.Map).ToList());
+            contacts.Select(ClientContacts.Map).ToList(),
+            dealPipeline.Id,
+            dealPipeline.Name);
     }
 
     private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt, SalesCurrencyConverter converter, int stalledAfterDays)
@@ -984,7 +1041,8 @@ public sealed record UpsertSalesOpportunityRequest(
     int? Probability,
     DateTime? ExpectedCloseDate,
     Guid? OwnerUserId,
-    [StringLength(40)] string? Stage = null);
+    [StringLength(40)] string? Stage = null,
+    Guid? PipelineId = null);
 
 public sealed record ChangeSalesStageRequest([StringLength(40)] string Stage, [StringLength(500)] string? LostReason);
 
@@ -1001,7 +1059,7 @@ public sealed record SalesOpportunityListItem(
     Guid? OwnerUserId, string? OwnerName, string? ServiceType,
     int WorkOrderCount, DateTime? NextFollowUpAt, DateTime? LastActivityAt, DateTime CreatedAt,
     decimal? ConvertedValue, bool ClientIsProspect = false,
-    int DaysIdle = 0, bool IsStalled = false, DateTime? StageChangedAt = null);
+    int DaysIdle = 0, bool IsStalled = false, DateTime? StageChangedAt = null, Guid? PipelineId = null);
 
 public sealed record SalesOpportunityDetailResponse(
     Guid Id, string Title, string Stage,
@@ -1022,7 +1080,9 @@ public sealed record SalesOpportunityDetailResponse(
     Guid? SourceWorkOrderId = null,
     string? SourceWorkOrderNumber = null,
     bool ClientIsProspect = false,
-    IReadOnlyCollection<ClientContactResponse>? Contacts = null);
+    IReadOnlyCollection<ClientContactResponse>? Contacts = null,
+    Guid? PipelineId = null,
+    string? PipelineName = null);
 
 public sealed record AddDealContactRequest(
     Guid? ContactId,

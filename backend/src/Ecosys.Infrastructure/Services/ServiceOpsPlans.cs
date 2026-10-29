@@ -34,6 +34,9 @@ public static class ServiceOpsPlans
 
     public static readonly IReadOnlyList<string> Editions = [Essentials, Professional, Enterprise];
 
+    /// <summary>Every module a sales pipeline can be tied to.</summary>
+    public static readonly IReadOnlyList<string> AllModules = [Operations, Finance, Maintenance, Inventory, Projects, Advanced, EnterpriseModule];
+
     public static bool IsEdition(string? code) => code is Essentials or Professional or Enterprise;
 
     public static string DisplayName(string code) => code switch

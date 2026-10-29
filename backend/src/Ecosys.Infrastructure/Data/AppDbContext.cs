@@ -198,6 +198,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<SalesAssignmentRule> SalesAssignmentRules => Set<SalesAssignmentRule>();
     public DbSet<SalesStageChange> SalesStageChanges => Set<SalesStageChange>();
     public DbSet<SalesTarget> SalesTargets => Set<SalesTarget>();
+    public DbSet<SalesPipeline> SalesPipelines => Set<SalesPipeline>();
+    public DbSet<SalesPipelineStage> SalesPipelineStages => Set<SalesPipelineStage>();
     public DbSet<SalesOpportunityContact> SalesOpportunityContacts => Set<SalesOpportunityContact>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
@@ -3516,6 +3518,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.ClientId });
             entity.HasIndex(x => new { x.TenantId, x.OwnerUserId });
             entity.HasIndex(x => new { x.TenantId, x.RenewalOfContractId });
+            entity.HasIndex(x => new { x.TenantId, x.PipelineId });
             entity.HasIndex(x => new { x.TenantId, x.SourceWorkOrderId });
         });
         ApplyTenantFilter<SalesOpportunity>(modelBuilder);
@@ -3589,6 +3592,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.Month, x.OwnerUserId }).IsUnique();
         });
         ApplyTenantFilter<SalesTarget>(modelBuilder);
+
+        modelBuilder.Entity<SalesPipeline>(entity =>
+        {
+            entity.ToTable("sales_pipelines");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Module).HasMaxLength(40);
+            entity.HasIndex(x => new { x.TenantId, x.SortOrder });
+        });
+        ApplyTenantFilter<SalesPipeline>(modelBuilder);
+
+        modelBuilder.Entity<SalesPipelineStage>(entity =>
+        {
+            entity.ToTable("sales_pipeline_stages");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Key).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(60).IsRequired();
+            entity.HasOne(x => x.Pipeline).WithMany(x => x.Stages).HasForeignKey(x => x.PipelineId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.PipelineId, x.Key }).IsUnique();
+        });
+        ApplyTenantFilter<SalesPipelineStage>(modelBuilder);
 
         modelBuilder.Entity<SalesActivity>(entity =>
         {

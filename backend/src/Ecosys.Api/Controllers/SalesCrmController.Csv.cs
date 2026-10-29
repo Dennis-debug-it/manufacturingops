@@ -19,7 +19,7 @@ public sealed partial class SalesCrmController
     private static readonly string[] DealImportHeaders =
     [
         "Title", "Company", "ContactName", "ContactEmail", "ContactPhone", "Stage", "EstimatedValue", "Currency",
-        "ExpectedCloseDate", "Owner", "Source", "ServiceType", "Location", "Description", "LostReason",
+        "ExpectedCloseDate", "Owner", "Source", "ServiceType", "Location", "Description", "LostReason", "Pipeline",
     ];
 
     [HttpGet("export/deals")]
@@ -72,7 +72,7 @@ public sealed partial class SalesCrmController
         return CsvFile("deals_import_template.csv", string.Join(',', DealImportHeaders),
         [
             ["Rooftop solar for warehouse", "Baraka Logistics", "Wanjiru Otieno", "wanjiru@baraka.co.ke", "+254700000200", "Qualified", "1250000", "KES",
-                DateTime.UtcNow.AddMonths(2).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), "", "Referral", "", "Mombasa Road", "20 kWp grid-tie system", ""],
+                DateTime.UtcNow.AddMonths(2).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), "", "Referral", "", "Mombasa Road", "20 kWp grid-tie system", "", ""],
         ]);
     }
 
@@ -81,7 +81,7 @@ public sealed partial class SalesCrmController
     {
         await EnsureCanManageAsync(cancellationToken);
         var rows = await ReadDealRowsAsync(request.File, cancellationToken);
-        var context = await DealImportContext.LoadAsync(dbContext, rolePermissionService, TenantId, cancellationToken);
+        var context = await DealImportContext.LoadAsync(dbContext, rolePermissionService, TenantId, await PipelinesAsync(cancellationToken), cancellationToken);
         var preview = rows.Select(row =>
         {
             var parsed = context.Parse(row.Values);
@@ -96,7 +96,7 @@ public sealed partial class SalesCrmController
     {
         await EnsureCanManageAsync(cancellationToken);
         var rows = await ReadDealRowsAsync(request.File, cancellationToken);
-        var context = await DealImportContext.LoadAsync(dbContext, rolePermissionService, TenantId, cancellationToken);
+        var context = await DealImportContext.LoadAsync(dbContext, rolePermissionService, TenantId, await PipelinesAsync(cancellationToken), cancellationToken);
         var importerName = await ResolveUserNameAsync(UserId, cancellationToken);
         var errors = new List<ImportCommitRowErrorResponse>();
         var created = 0;
@@ -111,7 +111,7 @@ public sealed partial class SalesCrmController
             }
             try
             {
-                var opportunity = new SalesOpportunity { TenantId = TenantId, Stage = SalesStages.Lead };
+                var opportunity = new SalesOpportunity { TenantId = TenantId, Stage = parsed.Stage, PipelineId = parsed.PipelineId };
                 await ApplyAsync(opportunity, parsed.Request, cancellationToken);
                 await ProspectClients.LinkAsync(dbContext, opportunity, null, cancellationToken);
                 await LinkDealFieldsContactAsync(opportunity, cancellationToken);
@@ -123,7 +123,7 @@ public sealed partial class SalesCrmController
                     opportunity.OwnerName = byRule?.FullName ?? importerName;
                 }
                 opportunity.Stage = parsed.Stage;
-                opportunity.Probability = SalesStages.DefaultProbability(parsed.Stage);
+                opportunity.Probability = parsed.Probability;
                 var closedOn = opportunity.ExpectedCloseDate ?? DateTime.UtcNow;
                 if (parsed.Stage == SalesStages.Won)
                 {
@@ -197,6 +197,7 @@ public sealed partial class SalesCrmController
         private readonly IReadOnlyList<SalesOwnerOption> owners;
         private readonly IReadOnlyList<(string Key, string Name, bool IsProspect)> clients;
         private readonly HashSet<string> existingDeals;
+        private IReadOnlyList<SalesPipelineView> pipelines = [];
 
         private DealImportContext(IReadOnlyList<SalesOwnerOption> owners, IReadOnlyList<(string, string, bool)> clients, HashSet<string> existingDeals, IReadOnlyDictionary<Guid, string> ownerEmails)
         {
@@ -209,7 +210,8 @@ public sealed partial class SalesCrmController
         private IReadOnlyDictionary<Guid, string> OwnerEmails { get; }
 
         public static async Task<DealImportContext> LoadAsync(
-            Infrastructure.Data.AppDbContext db, Infrastructure.Services.IRolePermissionService rolePermissions, Guid tenantId, CancellationToken cancellationToken)
+            Infrastructure.Data.AppDbContext db, Infrastructure.Services.IRolePermissionService rolePermissions, Guid tenantId,
+            IReadOnlyList<SalesPipelineView> pipelines, CancellationToken cancellationToken)
         {
             var owners = await SalesCrmAccess.ListEligibleOwnersAsync(db, rolePermissions, tenantId, cancellationToken);
             var ownerIds = owners.Select(x => x.Id).ToList();
@@ -220,7 +222,7 @@ public sealed partial class SalesCrmController
             var deals = (await db.SalesOpportunities.AsNoTracking().Where(x => x.TenantId == tenantId)
                     .Select(x => new { x.Title, Party = x.Client != null ? x.Client.ClientName : x.CompanyName ?? x.ContactName }).ToListAsync(cancellationToken))
                 .Select(x => DealKey(x.Title, x.Party)).ToHashSet();
-            return new DealImportContext(owners, clients, deals, emails);
+            return new DealImportContext(owners, clients, deals, emails) { pipelines = pipelines };
         }
 
         public void Remember(string title, string? party) => existingDeals.Add(DealKey(title, party));
@@ -236,13 +238,21 @@ public sealed partial class SalesCrmController
             if (string.IsNullOrWhiteSpace(title)) errors.Add("Title is required.");
             if (string.IsNullOrWhiteSpace(company) && string.IsNullOrWhiteSpace(contact)) errors.Add("Give a Company or a ContactName.");
 
-            var stage = SalesStages.Lead;
+            var pipeline = SalesPipelineCatalog.Default(pipelines);
+            if (!string.IsNullOrWhiteSpace(row["Pipeline"]))
+            {
+                var named = pipelines.FirstOrDefault(x => x.IsActive && string.Equals(x.Name, row["Pipeline"]!.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (named is null) errors.Add($"Unknown pipeline '{row["Pipeline"]}'. Use one of: {string.Join(", ", pipelines.Where(x => x.IsActive).Select(x => x.Name))}.");
+                else pipeline = named;
+            }
+            var stageView = pipeline.FirstOpen;
             if (!string.IsNullOrWhiteSpace(row["Stage"]))
             {
-                var match = SalesStages.All.FirstOrDefault(x => string.Equals(x, row["Stage"]!.Replace(" ", ""), StringComparison.OrdinalIgnoreCase));
-                if (match is null) errors.Add($"Unknown stage '{row["Stage"]}'. Use one of: {string.Join(", ", SalesStages.All)}.");
-                else stage = match;
+                var match = pipeline.Find(row["Stage"]);
+                if (match is null) errors.Add($"Unknown stage '{row["Stage"]}' for the {pipeline.Name} pipeline. Use one of: {string.Join(", ", pipeline.Stages.Select(x => x.Name))}.");
+                else stageView = match;
             }
+            var stage = stageView.Key;
             if (stage == SalesStages.Lost && string.IsNullOrWhiteSpace(row["LostReason"])) errors.Add("A Lost deal needs a LostReason.");
 
             decimal value = 0;
@@ -280,11 +290,11 @@ public sealed partial class SalesCrmController
             var request = errors.Count > 0 ? null : new UpsertSalesOpportunityRequest(
                 title!.Trim(), null, null, company, contact, row["ContactEmail"], row["ContactPhone"], row["Location"], row["Source"],
                 row["ServiceType"], row["Description"], value, row["Currency"], null, close, ownerId);
-            return new ParsedDealRow(request, stage, row["LostReason"], errors, clientNote);
+            return new ParsedDealRow(request, stage, row["LostReason"], errors, clientNote, pipeline.Id, stageView.Probability);
         }
     }
 
-    private sealed record ParsedDealRow(UpsertSalesOpportunityRequest? Request, string Stage, string? LostReason, IReadOnlyList<string> Errors, string ClientNote);
+    private sealed record ParsedDealRow(UpsertSalesOpportunityRequest? Request, string Stage, string? LostReason, IReadOnlyList<string> Errors, string ClientNote, Guid PipelineId, int Probability);
 
     private static string? Day(DateTime? value) => value?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 

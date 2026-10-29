@@ -180,6 +180,11 @@ internal sealed class SalesReminderService(
             .Where(x => x.EndDate.Date <= today.AddDays(x.RenewalNoticeDays))
             .ToList();
 
+        // Each workspace's pipelines, loaded before anything is added (loading may create the default).
+        var pipelinesByTenant = new Dictionary<Guid, IReadOnlyList<SalesPipelineView>>();
+        foreach (var tenantId in due.Select(x => x.TenantId).Distinct())
+            pipelinesByTenant[tenantId] = await SalesPipelineCatalog.LoadAsync(dbContext, tenantId, cancellationToken);
+
         var opened = 0;
         var settingsByTenant = new Dictionary<Guid, bool>();
         foreach (var contract in due)
@@ -199,11 +204,17 @@ internal sealed class SalesReminderService(
                 contract.TenantId, [contract.RenewalOwnerUserId, contract.AccountManagerUserId], contract.ClientId,
                 new SalesLeadFacts(RenewalSource, null, contract.Client?.Location), cancellationToken);
             var client = contract.Client?.ClientName ?? "the client";
+            // Renewals go to a pipeline kept for maintenance contracts where there is one.
+            var pipelines = pipelinesByTenant[contract.TenantId];
+            var pipeline = pipelines.FirstOrDefault(x => x.IsActive && string.Equals(x.Module, ServiceOpsPlans.Maintenance, StringComparison.OrdinalIgnoreCase))
+                ?? SalesPipelineCatalog.Default(pipelines);
+            var stage = pipeline.Find("Qualified") ?? pipeline.FirstOpen;
             var deal = new SalesOpportunity
             {
                 TenantId = contract.TenantId,
                 Title = $"Renewal: {contract.Name}",
-                Stage = "Qualified",
+                Stage = stage.Key,
+                PipelineId = pipeline.Id,
                 ClientId = contract.ClientId,
                 Source = RenewalSource,
                 Description = $"Contract {contract.ContractNumber} ends on {contract.EndDate:d MMM yyyy}.",

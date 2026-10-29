@@ -34,11 +34,15 @@ public sealed class SalesReportsController(
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
         [FromQuery] Guid? ownerUserId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] Guid? pipelineId = null)
     {
         userAccessService.EnsureTenantOperationalAccess();
         if (!SalesCrmAccess.CanView(tenantContext))
             throw new ForbiddenException("You do not have access to the sales pipeline.");
+        var pipelines = await SalesPipelineCatalog.LoadAsync(dbContext, TenantId, cancellationToken);
+        // The funnel follows one pipeline's stages: the one asked for, else the default.
+        var pipeline = SalesPipelineCatalog.For(pipelines, pipelineId);
 
         var now = DateTime.UtcNow;
         var start = DateTime.SpecifyKind((from ?? now - DefaultPeriod).Date, DateTimeKind.Utc);
@@ -53,6 +57,10 @@ public sealed class SalesReportsController(
         var dealQuery = dbContext.SalesOpportunities.AsNoTracking().Where(x => x.TenantId == TenantId);
         if (ownerUserId.HasValue)
             dealQuery = dealQuery.Where(x => x.OwnerUserId == ownerUserId.Value);
+        if (pipelineId.HasValue)
+            dealQuery = pipeline.IsDefault
+                ? dealQuery.Where(x => x.PipelineId == pipeline.Id || x.PipelineId == null)
+                : dealQuery.Where(x => x.PipelineId == pipeline.Id);
         var deals = (await dealQuery
             .Select(x => new { x.Stage, x.EstimatedValue, x.Currency, x.Probability, x.Source, x.LostReason, x.OwnerUserId, x.OwnerName, x.ExpectedCloseDate, x.CreatedAt, x.WonAt, x.LostAt })
             .ToListAsync(cancellationToken))
@@ -120,10 +128,13 @@ public sealed class SalesReportsController(
         var changeQuery = dbContext.SalesStageChanges.AsNoTracking().Where(x => x.TenantId == TenantId);
         if (ownerUserId.HasValue)
             changeQuery = changeQuery.Where(x => x.Opportunity!.OwnerUserId == ownerUserId.Value);
+        changeQuery = pipeline.IsDefault
+            ? changeQuery.Where(x => x.Opportunity!.PipelineId == pipeline.Id || x.Opportunity.PipelineId == null)
+            : changeQuery.Where(x => x.Opportunity!.PipelineId == pipeline.Id);
         var changes = await changeQuery
             .Select(x => new StageMove(x.OpportunityId, x.ToStage, x.ChangedAt))
             .ToListAsync(cancellationToken);
-        var funnel = BuildStageFunnel(changes, start, end, now);
+        var funnel = BuildStageFunnel(changes, start, end, now, pipeline);
 
         var targetRows = await dbContext.SalesTargets.AsNoTracking()
             .Where(x => x.TenantId == TenantId && x.Month < end && x.Month >= start.AddMonths(-1))
@@ -163,7 +174,8 @@ public sealed class SalesReportsController(
             deals.Count(x => x.Value is null
                 && (x.WonInPeriodAt.HasValue || x.LostInPeriod || !SalesStages.IsClosed(x.Stage) || (x.CreatedAt >= start && x.CreatedAt < end))),
             funnel,
-            target is null or 0 ? null : Math.Round(target.Value, 2)));
+            target is null or 0 ? null : Math.Round(target.Value, 2),
+            pipeline.Id, pipeline.Name));
     }
 
     /// <summary>Monthly targets counted for the part of each month inside the period.</summary>
@@ -192,13 +204,15 @@ public sealed class SalesReportsController(
     /// and what sits in it now. Built from the stage history, so it reflects how deals actually
     /// moved, including stages skipped or returned to.
     /// </summary>
-    public static List<SalesStageFunnelRow> BuildStageFunnel(IReadOnlyCollection<StageMove> changes, DateTime start, DateTime end, DateTime now)
+    public static List<SalesStageFunnelRow> BuildStageFunnel(IReadOnlyCollection<StageMove> changes, DateTime start, DateTime end, DateTime now, SalesPipelineView? pipeline = null)
     {
+        pipeline ??= new SalesPipelineView(Guid.Empty, "Sales", 0, null, true, true,
+            SalesPipelineCatalog.DefaultStages.Select((x, i) => new SalesPipelineStageView(x.Key, x.Name, i, x.Probability)).ToList());
         var byDeal = changes.GroupBy(x => x.DealId).ToDictionary(g => g.Key, g => g.OrderBy(x => x.At).ToList());
         var rows = new List<SalesStageFunnelRow>();
-        foreach (var stage in SalesStages.All.Where(x => !SalesStages.IsClosed(x)))
+        foreach (var stage in pipeline.OpenStages.Select(x => x.Key))
         {
-            var rank = SalesStages.Rank(stage);
+            var rank = pipeline.Rank(stage);
             int entered = 0, movedOn = 0, won = 0;
             var daysInStage = new List<double>();
             foreach (var moves in byDeal.Values)
@@ -210,7 +224,7 @@ public sealed class SalesReportsController(
                     if (moves[i].At < start || moves[i].At >= end) continue;
                     entered++;
                     var later = moves.Skip(i + 1).ToList();
-                    if (later.Any(x => x.ToStage == SalesStages.Won || (x.ToStage != SalesStages.Lost && SalesStages.Rank(x.ToStage) > rank))) movedOn++;
+                    if (later.Any(x => x.ToStage == SalesStages.Won || (x.ToStage != SalesStages.Lost && pipeline.Rank(x.ToStage) > rank))) movedOn++;
                     if (later.Any(x => x.ToStage == SalesStages.Won)) won++;
                 }
             }
@@ -221,7 +235,8 @@ public sealed class SalesReportsController(
                 entered == 0 ? null : Math.Round(won * 100m / entered, 1),
                 daysInStage.Count == 0 ? null : Math.Round((decimal)daysInStage.Average(), 1),
                 current.Count,
-                current.Count == 0 ? null : Math.Round((decimal)current.Average(), 1)));
+                current.Count == 0 ? null : Math.Round((decimal)current.Average(), 1),
+                pipeline.Find(stage)?.Name ?? stage));
         }
         return rows;
     }
@@ -282,7 +297,9 @@ public sealed record SalesReport(
     SalesTenderOutcomes Tenders,
     int UnconvertedDeals,
     IReadOnlyCollection<SalesStageFunnelRow>? Funnel = null,
-    decimal? TargetValue = null);
+    decimal? TargetValue = null,
+    Guid? PipelineId = null,
+    string? PipelineName = null);
 
 /// <summary>
 /// One stage of the funnel. <see cref="Entered"/>, <see cref="MovedOn"/> and <see cref="Won"/> count deals that
@@ -291,7 +308,7 @@ public sealed record SalesReport(
 /// </summary>
 public sealed record SalesStageFunnelRow(
     string Stage, int Entered, int MovedOn, int Won, decimal? MovedOnRate, decimal? WinRateFromHere,
-    decimal? AverageDaysInStage, int NowInStage, decimal? AverageDaysNowInStage);
+    decimal? AverageDaysInStage, int NowInStage, decimal? AverageDaysNowInStage, string? StageName = null);
 
 /// <summary><see cref="Key"/> is "overdue", "later", "none" or the month as yyyy-MM (then <see cref="Month"/> is set).</summary>
 public sealed record SalesForecastBucket(string Key, DateTime? Month, int Count, decimal Value, decimal WeightedValue);
