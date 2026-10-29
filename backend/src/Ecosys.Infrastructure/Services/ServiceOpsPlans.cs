@@ -139,7 +139,7 @@ public static class ServiceOpsPlans
     /// </summary>
     public static readonly IReadOnlySet<string> CrmControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "SalesCrm", "SalesTenders", "SalesReports", "TechnicianSalesLeads"
+        "SalesCrm", "SalesTenders", "SalesReports", "TechnicianSalesLeads", "SalesLeadForm"
     };
 
     /// <summary>Controllers whose module requirement is decided per route inside <see cref="RequiredModules"/>.</summary>

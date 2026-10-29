@@ -724,6 +724,25 @@ public sealed class SalesCrmFlowTests
             Assert.NotNull(Ok<SalesOpportunityDetailResponse>(await crm.GetOpportunity(prospectDeal.Id, CancellationToken.None)).StageBlockers);
             Assert.IsType<FileContentResult>(await crm.ExportDeals(null, null, CancellationToken.None));
 
+            // Phases 5 and 6: inbound mail, sequences, scoring, views, the calendar and WhatsApp.
+            var inbound = InboundHandler(dbContext);
+            await inbound.TryHandleAsync(tenant.Id, Inbound("w@baraka.co.ke", $"Re: {SalesDealTags.For(prospectDeal.Id)}", "Yes please"));
+            Ok<SalesSettingsResponse>(await crm.UpdateSettings(new UpdateSalesSettingsRequest(rep.Id, "Own", true, LeadEmailAddress: "sales@acme.test", WebFormEnabled: true), CancellationToken.None));
+            Assert.NotNull(await inbound.TryHandleAsync(tenant.Id, Inbound("new@lead.co.ke", "Quote", "Need a quote", "sales@acme.test")));
+            var seq = Ok<IReadOnlyList<SalesSequenceResponse>>(await crm.CreateSequence(new UpsertSalesSequenceRequest("Chase", true, true, [new(0, "Task", null, "Call"), new(1, "Email", "Hi", "Hello {{ContactName}}")]), CancellationToken.None)).Single();
+            Ok<SalesOpportunityDetailResponse>(await crm.StartSequence(dealId, new StartSalesSequenceRequest(seq.Id), CancellationToken.None));
+            await SalesSequences.RunDueAsync(dbContext, new ActivitiesCalendarTests.RecordingOutbox(), new HashSet<Guid> { tenant.Id }, DateTime.UtcNow.AddDays(2), CancellationToken.None);
+            await SalesSequences.StopAsync(dbContext, tenant.Id, dealId, "test", DateTime.UtcNow, CancellationToken.None);
+            await dbContext.SaveChangesAsync();
+            Ok<IReadOnlyList<SalesSequenceResponse>>(await crm.ListSequences(CancellationToken.None));
+            Ok<IReadOnlyList<SalesSavedViewResponse>>(await crm.SaveView(new SaveSalesViewRequest("Mine", "view=list", true), CancellationToken.None));
+            Ok<IReadOnlyList<SalesSavedViewResponse>>(await repCrm.ListViews(CancellationToken.None));
+            Ok<IReadOnlyList<SalesWhatsAppMessage>>(await crm.DealWhatsApp(prospectDeal.Id, CancellationToken.None));
+            Assert.NotNull((await SalesScoring.LoadAsync(dbContext, tenant.Id, await SalesPipelineCatalog.LoadAsync(dbContext, tenant.Id, CancellationToken.None), CancellationToken.None)));
+            var calendar = new CalendarService(dbContext, new LinkedRecordService(dbContext, new ProjectSettingsService(dbContext)));
+            await calendar.GetItemsAsync(new AccessViewer(tenant.Id, rep.Id, false, _ => true, [ServiceOpsPlans.Operations, ServiceOpsPlans.Finance]),
+                DateTime.UtcNow.AddDays(-30), DateTime.UtcNow.AddDays(30), [CalendarSources.Sales], null, CancellationToken.None);
+
             // Answering the quote wins the deal.
             var quotes = new TenantQuotationController(
                 dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpDocumentNumberingService(), null!,
@@ -1183,6 +1202,190 @@ public sealed class SalesCrmFlowTests
         Assert.Equal(["80", "Pitched"], (await dbContext.SalesCustomFieldValues.Where(x => x.OpportunityId == imported.Id).Select(x => x.Value).ToListAsync()).Order().ToArray());
     }
 
+    private static SalesInboundEmailHandler InboundHandler(AppDbContext dbContext, SalesReminderTests.RecordingPushQueue? push = null) =>
+        new(dbContext, new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)), push ?? new SalesReminderTests.RecordingPushQueue(), new NoOpLicenseGuardService());
+
+    private static SalesInboundEmail Inbound(string from, string subject, string body, params string[] to) =>
+        new(from, null, to.Length == 0 ? ["intake@acme.test"] : to, subject, body, DateTime.UtcNow);
+
+    [Fact]
+    public async Task DealEmail_IsTaggedAndLogged_AndClientRepliesComeBackOnTheDeal()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var outbox = new ActivitiesCalendarTests.RecordingOutbox();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin, outbox: outbox);
+        var deal = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(
+            Deal("Chiller service", 90_000m, "KES") with { CompanyName = "Kilele Hotel", ContactName = "Amina Otieno", ContactEmail = "amina@kilele.co.ke" },
+            CancellationToken.None)).Result).Value);
+
+        var logged = Ok<SalesActivityResponse>(await crm.EmailContact(deal.Id, new SendDealEmailRequest("amina@kilele.co.ke", "Amina Otieno", null, "Your quote", "Hi Amina,\nAttached."), CancellationToken.None));
+        var sent = Assert.Single(outbox.Queued);
+        Assert.Equal(SalesDealTags.WithTag("Your quote", deal.Id), sent.Subject);
+        Assert.Equal(admin.Email, sent.ReplyToEmail);
+        Assert.Equal(("Email", true), (logged.Type, logged.Summary.StartsWith("Emailed Amina Otieno <amina@kilele.co.ke>: Your quote", StringComparison.Ordinal)));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.EmailContact(deal.Id, new SendDealEmailRequest("not-an-address", null, null, "x", "y"), CancellationToken.None));
+
+        // With an intake mailbox, replies are sent there so they come back onto the deal.
+        dbContext.EmailIntakeSettings.Add(new EmailIntakeSetting { TenantId = tenant.Id, IsEnabled = true, IntakeEmailAddress = "intake@acme.test" });
+        await dbContext.SaveChangesAsync();
+        Ok<SalesActivityResponse>(await crm.EmailContact(deal.Id, new SendDealEmailRequest("amina@kilele.co.ke", null, ["gm@kilele.co.ke"], "Follow-up", "Any news?"), CancellationToken.None));
+        Assert.Equal("intake@acme.test", outbox.Queued[^1].ReplyToEmail);
+
+        var push = new SalesReminderTests.RecordingPushQueue();
+        var handler = InboundHandler(dbContext, push);
+        var reply = await handler.TryHandleAsync(tenant.Id, Inbound("amina@kilele.co.ke", $"RE: Your quote {SalesDealTags.For(deal.Id)}", "Looks good, send the contract."));
+        Assert.Equal((SalesInboundOutcomes.AddedToDeal, deal.Id), (reply!.Outcome, reply.OpportunityId));
+        Assert.Single(push.Sent);
+        // A colleague at the same company counts; a stranger who copies the tag does not.
+        Assert.NotNull(await handler.TryHandleAsync(tenant.Id, Inbound("gm@kilele.co.ke", $"Re: {SalesDealTags.For(deal.Id)}", "Approved.")));
+        Assert.Null(await handler.TryHandleAsync(tenant.Id, Inbound("someone@elsewhere.com", $"Re: {SalesDealTags.For(deal.Id)}", "Spam")));
+        Assert.Null(await handler.TryHandleAsync(tenant.Id, Inbound("amina@kilele.co.ke", "Chiller leaking again", "Please send someone.")));
+        var received = await dbContext.SalesActivities.Where(x => x.OpportunityId == deal.Id && x.Type == SalesActivityKinds.EmailReceived).ToListAsync();
+        Assert.Equal(2, received.Count);
+        Assert.Contains(received, x => x.Summary.Contains("send the contract"));
+
+        // WhatsApp: logged as an activity, and the workspace inbox's conversation with the contact is listed.
+        Ok<SalesActivityResponse>(await crm.AddActivity(deal.Id, new CreateSalesActivityRequest("WhatsApp", "Sent the site visit times", null, null), CancellationToken.None));
+        Assert.Equal("WhatsApp", (await dbContext.SalesActivities.OrderByDescending(x => x.CreatedAt).FirstAsync(x => x.OpportunityId == deal.Id && x.Summary == "Sent the site visit times")).Type);
+        Ok<SalesOpportunityDetailResponse>(await crm.UpdateOpportunity(deal.Id, Deal("Chiller service", 90_000m, "KES") with { CompanyName = "Kilele Hotel", ContactName = "Amina Otieno", ContactEmail = "amina@kilele.co.ke", ContactPhone = "0712 345 678" }, CancellationToken.None));
+        var conversation = new WhatsAppConversation { TenantId = tenant.Id, ContactName = "Amina", ContactPhone = "+254712345678" };
+        dbContext.WhatsAppConversations.Add(conversation);
+        dbContext.WhatsAppMessages.Add(new WhatsAppMessage { TenantId = tenant.Id, ConversationId = conversation.Id, Direction = "Inbound", Body = "On my way" });
+        await dbContext.SaveChangesAsync();
+        Assert.Equal("On my way", Assert.Single(Ok<IReadOnlyList<SalesWhatsAppMessage>>(await crm.DealWhatsApp(deal.Id, CancellationToken.None))).Body);
+    }
+
+    [Fact]
+    public async Task Leads_ComeInFromTheLeadAddressAndTheWebsiteForm()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        var settings = Ok<SalesSettingsResponse>(await crm.UpdateSettings(new UpdateSalesSettingsRequest(admin.Id, "All", true, LeadEmailAddress: " Sales@Acme.test ", WebFormEnabled: true), CancellationToken.None));
+        Assert.Equal("sales@acme.test", settings.LeadEmailAddress);
+        Assert.Matches("^[0-9a-f]{32}$", settings.WebFormKey!);
+
+        // Mail to the lead address becomes a lead with a follow-up; mail to other intake addresses is left alone.
+        var handler = InboundHandler(dbContext);
+        Assert.Null(await handler.TryHandleAsync(tenant.Id, Inbound("peter@baraka.co.ke", "Leaking roof", "Help", "support@acme.test")));
+        var lead = await handler.TryHandleAsync(tenant.Id, Inbound("peter@baraka.co.ke", "Solar for our depot", "We need 50 kW on the warehouse roof.", "sales@acme.test"));
+        Assert.Equal(SalesInboundOutcomes.LeadCreated, lead!.Outcome);
+        var deal = await dbContext.SalesOpportunities.Include(x => x.Client).SingleAsync(x => x.Id == lead.OpportunityId);
+        Assert.Equal(("Email", "peter@baraka.co.ke", true, admin.Id), (deal.Source, deal.ContactEmail, deal.Client!.IsProspect, deal.OwnerUserId));
+        Assert.Contains(await dbContext.SalesActivities.Where(x => x.OpportunityId == deal.Id).ToListAsync(), x => x.Type == "FollowUp" && x.DueAt != null);
+        // A second email from the same person within the week joins that lead.
+        Assert.Equal((SalesInboundOutcomes.AddedToDeal, deal.Id),
+            await handler.TryHandleAsync(tenant.Id, Inbound("peter@baraka.co.ke", "Also", "And a backup generator.", "sales@acme.test")) is { } again ? (again.Outcome, again.OpportunityId!.Value) : default);
+
+        // The website form.
+        var form = new SalesLeadFormController(dbContext, new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)), new SalesReminderTests.RecordingPushQueue(), new NoOpLicenseGuardService());
+        Assert.Equal("Acme Facilities", Ok<SalesLeadFormInfo>(await form.Get(settings.WebFormKey!, CancellationToken.None)).CompanyName);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => form.Submit(settings.WebFormKey!, new SalesLeadFormRequest("Grace", null, null, null, null, "Quote please"), CancellationToken.None));
+        Ok<SalesLeadFormReceipt>(await form.Submit(settings.WebFormKey!, new SalesLeadFormRequest("Grace Wanjiku", "Nyali Mall", "grace@nyalimall.co.ke", "0700 111 222", "Mombasa", "Annual AC maintenance for 40 units"), CancellationToken.None));
+        var web = await dbContext.SalesOpportunities.SingleAsync(x => x.Source == "Website");
+        Assert.Equal(("Nyali Mall", "Mombasa"), (web.Client is null ? (await dbContext.Clients.SingleAsync(x => x.Id == web.ClientId)).ClientName : web.Client.ClientName, web.Location));
+        Assert.Single(await dbContext.ClientContacts.Where(x => x.ClientId == web.ClientId && x.FullName == "Grace Wanjiku").ToListAsync());
+        // Bots fill the hidden field: thanked, nothing saved.
+        Ok<SalesLeadFormReceipt>(await form.Submit(settings.WebFormKey!, new SalesLeadFormRequest("Bot", null, "x@y.z", null, null, "Buy now", "http://spam"), CancellationToken.None));
+        Assert.Equal(1, await dbContext.SalesOpportunities.CountAsync(x => x.Source == "Website"));
+
+        // Off, or a wrong key: not found.
+        await Assert.ThrowsAsync<NotFoundException>(() => form.Get("0123456789abcdef0123456789abcdef", CancellationToken.None));
+        Ok<SalesSettingsResponse>(await crm.UpdateSettings(new UpdateSalesSettingsRequest(admin.Id, "All", true, WebFormEnabled: false), CancellationToken.None));
+        await Assert.ThrowsAsync<NotFoundException>(() => form.Get(settings.WebFormKey!, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Sequences_RunTheirSteps_AndStopOnReplyOrClose()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var outbox = new ActivitiesCalendarTests.RecordingOutbox();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin, outbox: outbox);
+        var sequences = Ok<IReadOnlyList<SalesSequenceResponse>>(await crm.CreateSequence(new UpsertSalesSequenceRequest("New lead", true, true,
+        [
+            new(0, "Task", null, "Call {{ContactName}} at {{CompanyName}}"),
+            new(2, "Email", "Following up on {{DealTitle}}", "Hi {{ContactName}},\nAny questions?\n{{OwnerName}}"),
+            new(3, "Task", null, "Last call"),
+        ]), CancellationToken.None));
+        var sequence = Assert.Single(sequences);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.CreateSequence(new UpsertSalesSequenceRequest("Bad", true, true, [new(1, "Email", null, "No subject")]), CancellationToken.None));
+
+        async Task<Guid> NewDeal(string title) => Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(
+            Deal(title, 50_000m, "KES") with { CompanyName = "Baraka Logistics", ContactName = "Peter Mwangi", ContactEmail = "peter@baraka.co.ke" }, CancellationToken.None)).Result).Value).Id;
+        var dealId = await NewDeal("Depot solar");
+
+        // The first step is due at once.
+        var started = Ok<SalesOpportunityDetailResponse>(await crm.StartSequence(dealId, new StartSalesSequenceRequest(sequence.Id), CancellationToken.None));
+        Assert.Equal(("New lead", 1, 3), (started.Sequence!.Name, started.Sequence.NextStep, started.Sequence.StepCount));
+        Assert.Contains(started.Activities, x => x.Type == "FollowUp" && x.Summary == "Call Peter at Baraka Logistics (New lead)");
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.StartSequence(dealId, new StartSalesSequenceRequest(sequence.Id), CancellationToken.None));
+
+        // Two days on, the email goes out as the owner.
+        var tenantSet = new HashSet<Guid> { tenant.Id };
+        Assert.Equal(0, await SalesSequences.RunDueAsync(dbContext, outbox, tenantSet, DateTime.UtcNow.AddDays(1), CancellationToken.None));
+        Assert.Equal(1, await SalesSequences.RunDueAsync(dbContext, outbox, tenantSet, DateTime.UtcNow.AddDays(2).AddHours(1), CancellationToken.None));
+        var email = Assert.Single(outbox.Queued);
+        Assert.Equal(("peter@baraka.co.ke", SalesDealTags.WithTag("Following up on Depot solar", dealId)), (email.RecipientEmail, email.Subject));
+        Assert.Contains("Hi Peter,", email.TextBody);
+        Assert.Contains("Sales Admin", email.TextBody);
+
+        // The client replies: the sequence stops and its open task is closed.
+        await InboundHandler(dbContext).TryHandleAsync(tenant.Id, Inbound("peter@baraka.co.ke", $"Re: {SalesDealTags.For(dealId)}", "Let's meet Monday."));
+        var stopped = Ok<SalesOpportunityDetailResponse>(await crm.GetOpportunity(dealId, CancellationToken.None));
+        Assert.Equal((SalesSequenceStatuses.Stopped, "The client replied."), (stopped.Sequence!.Status, stopped.Sequence.StoppedReason));
+        Assert.DoesNotContain(stopped.Activities, x => x.Summary.EndsWith("(New lead)", StringComparison.Ordinal) && x.CompletedAt == null);
+
+        // Closing a deal stops its sequence too; a sequence in use cannot be deleted.
+        var other = await NewDeal("Office AC");
+        Ok<SalesOpportunityDetailResponse>(await crm.StartSequence(other, new StartSalesSequenceRequest(sequence.Id), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.DeleteSequence(sequence.Id, CancellationToken.None));
+        var lost = Ok<SalesOpportunityDetailResponse>(await crm.ChangeStage(other, new ChangeSalesStageRequest("Lost", "Went quiet"), CancellationToken.None));
+        Assert.Equal(SalesSequenceStatuses.Stopped, lost.Sequence!.Status);
+        Ok<IReadOnlyList<SalesSequenceResponse>>(await crm.DeleteSequence(sequence.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Scoring_ViewsDocumentsAndVisits()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        var open = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(Deal("Open deal", 1_000m, "KES") with { Source = "Referral" }, CancellationToken.None)).Result).Value);
+        Assert.Null(open.Score); // too little history
+
+        // A year's history: of 12 deals that reached Proposal, 9 were won.
+        var pipelineId = open.PipelineId!.Value;
+        for (var i = 0; i < 12; i++)
+        {
+            var won = i < 9;
+            var closed = new SalesOpportunity
+            {
+                TenantId = tenant.Id, Title = $"Old {i}", PipelineId = pipelineId, Source = "Referral", Stage = won ? "Won" : "Lost",
+                WonAt = won ? DateTime.UtcNow.AddDays(-30) : null, LostAt = won ? null : DateTime.UtcNow.AddDays(-30),
+            };
+            dbContext.SalesOpportunities.Add(closed);
+            dbContext.SalesStageChanges.Add(new SalesStageChange { TenantId = tenant.Id, OpportunityId = closed.Id, FromStage = "Lead", ToStage = "Proposal", ChangedAt = DateTime.UtcNow.AddDays(-40) });
+        }
+        await dbContext.SaveChangesAsync();
+        var proposal = Ok<SalesOpportunityDetailResponse>(await crm.ChangeStage(open.Id, new ChangeSalesStageRequest("Proposal", null), CancellationToken.None));
+        Assert.Equal(71, proposal.Score!.Probability); // (9 + 1) / (12 + 2)
+        Assert.Equal("9 of 12 deals that reached Proposal were won", proposal.Score.Reasons[0]);
+        Assert.Equal(71, Assert.Single(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities("Open", null, null, null, CancellationToken.None))).SuggestedProbability);
+
+        // Saved views: mine, and shared ones.
+        var views = Ok<IReadOnlyList<SalesSavedViewResponse>>(await crm.SaveView(new SaveSalesViewRequest("My hot deals", "?view=list&stage=Proposal", false), CancellationToken.None));
+        Assert.Equal(("My hot deals", "view=list&stage=Proposal", true), (views.Single().Name, views.Single().Query, views.Single().IsMine));
+        Assert.Single(Ok<IReadOnlyList<SalesSavedViewResponse>>(await crm.SaveView(new SaveSalesViewRequest("My hot deals", "view=board", true), CancellationToken.None)));
+        Assert.Empty(Ok<IReadOnlyList<SalesSavedViewResponse>>(await crm.DeleteView(views.Single().Id, CancellationToken.None)));
+
+        // A site visit logged with the phone's location.
+        var visit = Ok<SalesActivityResponse>(await crm.AddActivity(open.Id, new CreateSalesActivityRequest("SiteVisit", "Walked the plant room", null, null, -1.2921234567, 36.8219, 12.34), CancellationToken.None));
+        Assert.Equal((-1.292123, 36.8219, 12.3), (visit.Latitude!.Value, visit.Longitude!.Value, visit.AccuracyMeters!.Value));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.AddActivity(open.Id, new CreateSalesActivityRequest("SiteVisit", "x", null, null, 120, 0), CancellationToken.None));
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 
@@ -1252,7 +1455,7 @@ public sealed class SalesCrmFlowTests
         }
     };
 
-    private static SalesCrmController CreateCrmController(AppDbContext dbContext, Guid tenantId, User actor, ITenantContext? tenantContext = null) =>
+    private static SalesCrmController CreateCrmController(AppDbContext dbContext, Guid tenantId, User actor, ITenantContext? tenantContext = null, IEmailOutboxService? outbox = null) =>
         new(
             dbContext,
             tenantContext ?? new FakeTenantContext(tenantId, actor.Id, actor.Email),
@@ -1261,7 +1464,8 @@ public sealed class SalesCrmFlowTests
             new NoOpUserAccessService(),
             new NoOpLicenseGuardService(),
             new RolePermissionService(dbContext),
-            new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)))
+            new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)),
+            outbox)
         {
             ControllerContext = CreateControllerContext(actor)
         };

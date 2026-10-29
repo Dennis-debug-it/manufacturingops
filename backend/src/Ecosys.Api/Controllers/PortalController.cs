@@ -361,7 +361,7 @@ public sealed class PortalController(
     }
 
     [HttpPost("quotations/{id:guid}/accept")]
-    public async Task<ActionResult<PortalQuotationDetailResponse>> AcceptQuotation(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<PortalQuotationDetailResponse>> AcceptQuotation(Guid id, [FromBody] PortalAcceptQuotationRequest? request, CancellationToken cancellationToken)
     {
         await EnsureQuoteResponsesAllowedAsync(cancellationToken);
         var quote = await LoadQuotationAsync(id, cancellationToken);
@@ -370,10 +370,23 @@ public sealed class PortalController(
             throw new BusinessRuleException("Only a sent quotation can be accepted.");
         }
 
+        // The typed name is the signature; with the time, the address it came from and the signed-in
+        // portal user it is the record of the client's acceptance.
+        var signedName = request?.SignedName?.Trim();
+        if (string.IsNullOrWhiteSpace(signedName) || signedName.Length < 2)
+            throw new BusinessRuleException("Type your full name to sign and accept the quotation.");
+        if (request?.Agreed != true)
+            throw new BusinessRuleException("Tick the box to confirm you accept the quotation.");
+        quote.AcceptedByName = signedName.Length > 150 ? signedName[..150] : signedName;
+        quote.AcceptedByTitle = string.IsNullOrWhiteSpace(request.Title) ? null : request.Title.Trim()[..Math.Min(request.Title.Trim().Length, 120)];
+        quote.AcceptedAt = DateTime.UtcNow;
+        quote.AcceptedFromIp = HttpContext?.Connection.RemoteIpAddress?.ToString();
+        quote.AcceptedByPortalUserId = portalContext.PortalUserId;
+
         quote.Status = "Accepted";
         await SalesQuotationSync.OnAnsweredAsync(dbContext, quote, accepted: true, null, null, portalContext.FullName, "by the client in the portal", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(TenantId, null, "portal.quotation.accepted", nameof(TenantQuotation), quote.Id.ToString(), $"Quotation '{quote.QuoteNumber}' accepted via client portal.", actorName: portalContext.FullName, cancellationToken: cancellationToken);
+        await auditLogService.LogAsync(TenantId, null, "portal.quotation.accepted", nameof(TenantQuotation), quote.Id.ToString(), $"Quotation '{quote.QuoteNumber}' accepted via client portal, signed by {quote.AcceptedByName}{(quote.AcceptedByTitle is null ? "" : $" ({quote.AcceptedByTitle})")} from {quote.AcceptedFromIp ?? "an unknown address"}.", actorName: portalContext.FullName, cancellationToken: cancellationToken);
         return Ok(MapQuotationDetail(quote));
     }
 
@@ -517,7 +530,8 @@ public sealed class PortalController(
 
     private static PortalQuotationDetailResponse MapQuotationDetail(TenantQuotation x) => new(
         x.Id, x.QuoteNumber, x.Status, x.QuoteDate, x.ValidUntil, x.Subject, x.Subtotal, x.TaxAmount, x.TotalAmount, x.Currency, x.RejectionReason,
-        x.Lines.Select(l => new PortalQuotationLineItem(l.Description, l.Quantity, l.Unit, l.UnitRate, l.LineTotal, l.GrandTotal)).ToList());
+        x.Lines.Select(l => new PortalQuotationLineItem(l.Description, l.Quantity, l.Unit, l.UnitRate, l.LineTotal, l.GrandTotal)).ToList(),
+        x.AcceptedByName, x.AcceptedByTitle, x.AcceptedAt);
 }
 
 // ── Response / request DTOs ─────────────────────────────────────────────────
@@ -567,7 +581,14 @@ public sealed record PortalInvoiceDetailResponse(Guid Id, string InvoiceNumber, 
 
 public sealed record PortalQuotationListItem(Guid Id, string QuoteNumber, string Status, DateTime QuoteDate, DateTime ValidUntil, decimal TotalAmount, string Currency);
 public sealed record PortalQuotationLineItem(string Description, decimal Quantity, string Unit, decimal UnitRate, decimal LineTotal, decimal GrandTotal);
-public sealed record PortalQuotationDetailResponse(Guid Id, string QuoteNumber, string Status, DateTime QuoteDate, DateTime ValidUntil, string? Subject, decimal Subtotal, decimal TaxAmount, decimal TotalAmount, string Currency, string? RejectionReason, IReadOnlyCollection<PortalQuotationLineItem> Lines);
+public sealed record PortalQuotationDetailResponse(Guid Id, string QuoteNumber, string Status, DateTime QuoteDate, DateTime ValidUntil, string? Subject, decimal Subtotal, decimal TaxAmount, decimal TotalAmount, string Currency, string? RejectionReason, IReadOnlyCollection<PortalQuotationLineItem> Lines,
+    string? AcceptedByName = null, string? AcceptedByTitle = null, DateTime? AcceptedAt = null);
+
+/// <param name="SignedName">The full name the client types as their signature.</param>
+public sealed record PortalAcceptQuotationRequest(
+    [System.ComponentModel.DataAnnotations.StringLength(150)] string? SignedName,
+    [System.ComponentModel.DataAnnotations.StringLength(120)] string? Title,
+    bool Agreed);
 public sealed record PortalRejectQuotationRequest(string? Reason);
 
 public sealed record PortalContractListItem(Guid Id, string ContractNumber, string Name, string Status, string ContractType, DateTime StartDate, DateTime EndDate);

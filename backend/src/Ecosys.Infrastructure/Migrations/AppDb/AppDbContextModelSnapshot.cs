@@ -8555,12 +8555,21 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("DueAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("LocationAccuracyMeters")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("LoggedByName")
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
                     b.Property<Guid?>("LoggedByUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
 
                     b.Property<DateTime>("OccurredAt")
                         .HasColumnType("timestamp with time zone");
@@ -8573,6 +8582,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<DateTime?>("ReminderSentAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("SequenceEnrollmentId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Summary")
                         .IsRequired()
@@ -8990,6 +9002,171 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsUnique();
 
                     b.ToTable("sales_pipeline_stages", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesSavedView", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsShared")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Query")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "UserId");
+
+                    b.ToTable("sales_saved_views", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesSequence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("StopOnReply")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("sales_sequences", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesSequenceEnrollment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("EnrolledByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("NextDueAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("NextStep")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("OpportunityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("SequenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("StoppedReason")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OpportunityId");
+
+                    b.HasIndex("SequenceId");
+
+                    b.HasIndex("Status", "NextDueAt");
+
+                    b.HasIndex("TenantId", "OpportunityId");
+
+                    b.ToTable("sales_sequence_enrollments", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesSequenceStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<int>("DelayDays")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SequenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Subject")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SequenceId");
+
+                    b.ToTable("sales_sequence_steps", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesStageChange", b =>
@@ -10925,6 +11102,24 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AcceptedByName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("AcceptedByPortalUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AcceptedByTitle")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("AcceptedFromIp")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<int>("ChaseReminderStage")
                         .HasColumnType("integer");
 
@@ -11104,6 +11299,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("DefaultOwnerUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("LeadEmailAddress")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
                     b.Property<bool>("SendWeeklySummary")
                         .HasColumnType("boolean");
 
@@ -11116,12 +11315,22 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("WebFormEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("WebFormKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTime?>("WeeklySummaryWeek")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.HasIndex("WebFormKey")
                         .IsUnique();
 
                     b.ToTable("tenant_sales_settings", (string)null);
@@ -16766,6 +16975,36 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Pipeline");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesSequenceEnrollment", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.SalesOpportunity", "Opportunity")
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.SalesSequence", "Sequence")
+                        .WithMany()
+                        .HasForeignKey("SequenceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Opportunity");
+
+                    b.Navigation("Sequence");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesSequenceStep", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.SalesSequence", "Sequence")
+                        .WithMany("Steps")
+                        .HasForeignKey("SequenceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Sequence");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesStageChange", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.SalesOpportunity", "Opportunity")
@@ -18808,6 +19047,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesPipeline", b =>
                 {
                     b.Navigation("Stages");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesSequence", b =>
+                {
+                    b.Navigation("Steps");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.Site", b =>

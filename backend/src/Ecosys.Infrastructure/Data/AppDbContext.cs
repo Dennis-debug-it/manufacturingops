@@ -202,6 +202,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<SalesPipelineStage> SalesPipelineStages => Set<SalesPipelineStage>();
     public DbSet<SalesCustomField> SalesCustomFields => Set<SalesCustomField>();
     public DbSet<SalesCustomFieldValue> SalesCustomFieldValues => Set<SalesCustomFieldValue>();
+    public DbSet<SalesSequence> SalesSequences => Set<SalesSequence>();
+    public DbSet<SalesSequenceStep> SalesSequenceSteps => Set<SalesSequenceStep>();
+    public DbSet<SalesSequenceEnrollment> SalesSequenceEnrollments => Set<SalesSequenceEnrollment>();
+    public DbSet<SalesSavedView> SalesSavedViews => Set<SalesSavedView>();
     public DbSet<SalesOpportunityContact> SalesOpportunityContacts => Set<SalesOpportunityContact>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
@@ -3475,6 +3479,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasKey(x => x.Id);
             entity.Property(x => x.QuoteNumber).HasMaxLength(60).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.AcceptedByName).HasMaxLength(150);
+            entity.Property(x => x.AcceptedByTitle).HasMaxLength(120);
+            entity.Property(x => x.AcceptedFromIp).HasMaxLength(64);
             entity.Property(x => x.Subject).HasMaxLength(300);
             entity.Property(x => x.Notes).HasMaxLength(2000);
             entity.Property(x => x.RejectionReason).HasMaxLength(500);
@@ -3531,8 +3538,54 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasKey(x => x.Id);
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.Property(x => x.DealVisibility).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.LeadEmailAddress).HasMaxLength(256);
+            entity.Property(x => x.WebFormKey).HasMaxLength(64);
+            entity.HasIndex(x => x.WebFormKey).IsUnique();
         });
         ApplyTenantFilter<TenantSalesSettings>(modelBuilder);
+
+        modelBuilder.Entity<SalesSequence>(entity =>
+        {
+            entity.ToTable("sales_sequences");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.HasIndex(x => x.TenantId);
+        });
+        ApplyTenantFilter<SalesSequence>(modelBuilder);
+
+        modelBuilder.Entity<SalesSequenceStep>(entity =>
+        {
+            entity.ToTable("sales_sequence_steps");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Action).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Subject).HasMaxLength(200);
+            entity.Property(x => x.Body).HasMaxLength(4000).IsRequired();
+            entity.HasOne(x => x.Sequence).WithMany(x => x.Steps).HasForeignKey(x => x.SequenceId).OnDelete(DeleteBehavior.Cascade);
+        });
+        ApplyTenantFilter<SalesSequenceStep>(modelBuilder);
+
+        modelBuilder.Entity<SalesSequenceEnrollment>(entity =>
+        {
+            entity.ToTable("sales_sequence_enrollments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.StoppedReason).HasMaxLength(300);
+            entity.HasOne(x => x.Sequence).WithMany().HasForeignKey(x => x.SequenceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Opportunity).WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.Status, x.NextDueAt });
+            entity.HasIndex(x => new { x.TenantId, x.OpportunityId });
+        });
+        ApplyTenantFilter<SalesSequenceEnrollment>(modelBuilder);
+
+        modelBuilder.Entity<SalesSavedView>(entity =>
+        {
+            entity.ToTable("sales_saved_views");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Query).HasMaxLength(1000).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.UserId });
+        });
+        ApplyTenantFilter<SalesSavedView>(modelBuilder);
 
         modelBuilder.Entity<ClientContact>(entity =>
         {

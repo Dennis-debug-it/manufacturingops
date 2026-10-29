@@ -193,6 +193,7 @@ public sealed class TenantQuotationController(
         var quote = await LoadQuoteAsync(id, cancellationToken);
         if (quote.Status != "Sent") throw new BusinessRuleException("Only Sent quotations can be accepted.");
         quote.Status = "Accepted";
+        quote.AcceptedAt = DateTime.UtcNow;
         await SalesQuotationSync.OnAnsweredAsync(dbContext, quote, accepted: true, null, UserId, await ActorNameAsync(cancellationToken), "(recorded by staff)", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapDetail(quote));
@@ -471,7 +472,8 @@ public sealed class TenantQuotationController(
             q.SiteId, q.QuoteNumber, q.Status, q.Subject, q.QuoteDate, q.ValidUntil,
             q.Notes, q.Subtotal, q.TaxAmount, q.TotalAmount, q.Currency,
             q.ConvertedToInvoiceId, q.ConvertedToWorkOrderId, q.RejectionReason, q.CreatedAt,
-            q.Lines.Select(MapQLine).ToList());
+            q.Lines.Select(MapQLine).ToList(),
+            AcceptedByName: q.AcceptedByName, AcceptedByTitle: q.AcceptedByTitle, AcceptedAt: q.AcceptedAt, AcceptedFromIp: q.AcceptedFromIp);
 
     private static TenantQuotationLineResponse MapQLine(TenantQuotationLine l) =>
         new(l.Id, l.QuotationId, l.RateCardId, l.Description, l.ItemType,
@@ -507,7 +509,11 @@ public sealed record TenantQuotationDetailResponse(
     string? RejectionReason, DateTime CreatedAt,
     IReadOnlyCollection<TenantQuotationLineResponse> Lines,
     string? ApprovalStatus = null,
-    decimal? ApprovedAmount = null);
+    decimal? ApprovedAmount = null,
+    string? AcceptedByName = null,
+    string? AcceptedByTitle = null,
+    DateTime? AcceptedAt = null,
+    string? AcceptedFromIp = null);
 
 public sealed record TenantQuotationLineResponse(
     Guid Id, Guid QuotationId, Guid? RateCardId,

@@ -29,7 +29,7 @@ public static class SalesReminderKeys
     public const string WeeklySummary = "crm.weekly-summary";
 }
 
-public sealed record SalesReminderRunResult(int FollowUpReminders, int TenderReminders, int QuoteReminders = 0, int RenewalDealsOpened = 0, int RenewalDealsClosed = 0, int StalledReminders = 0, int WeeklySummaries = 0);
+public sealed record SalesReminderRunResult(int FollowUpReminders, int TenderReminders, int QuoteReminders = 0, int RenewalDealsOpened = 0, int RenewalDealsClosed = 0, int StalledReminders = 0, int WeeklySummaries = 0, int SequenceSteps = 0);
 
 public interface ISalesReminderService
 {
@@ -96,12 +96,26 @@ internal sealed class SalesReminderService(
     public async Task<SalesReminderRunResult> RunAsync(DateTime utcNow, CancellationToken cancellationToken = default)
     {
         var (opened, closed) = await SyncRenewalDealsAsync(utcNow, cancellationToken);
+        // Sequence steps first, so a task a step adds is reminded in this same run.
+        var sequenceSteps = await RunSequencesAsync(utcNow, cancellationToken);
         var followUps = await RemindFollowUpsAsync(utcNow, cancellationToken);
         var tenders = await RemindTenderDeadlinesAsync(utcNow, cancellationToken);
         var quotes = await RemindUnansweredQuotesAsync(utcNow, cancellationToken);
         var stalled = await RemindStalledDealsAsync(utcNow, cancellationToken);
         var summaries = await SendWeeklySummariesAsync(utcNow, cancellationToken);
-        return new SalesReminderRunResult(followUps, tenders, quotes, opened, closed, stalled, summaries);
+        return new SalesReminderRunResult(followUps, tenders, quotes, opened, closed, stalled, summaries, sequenceSteps);
+    }
+
+    private async Task<int> RunSequencesAsync(DateTime now, CancellationToken cancellationToken)
+    {
+        var tenantIds = await dbContext.SalesSequenceEnrollments.IgnoreQueryFilters().AsNoTracking()
+            .Where(x => x.Status == SalesSequenceStatuses.Active && x.NextDueAt != null && x.NextDueAt <= now)
+            .Select(x => x.TenantId).Distinct().ToListAsync(cancellationToken);
+        var enabled = new HashSet<Guid>();
+        foreach (var tenantId in tenantIds)
+            if (await CrmEnabledAsync(tenantId, cancellationToken))
+                enabled.Add(tenantId);
+        return enabled.Count == 0 ? 0 : await SalesSequences.RunDueAsync(dbContext, emailOutboxService, enabled, now, cancellationToken);
     }
 
     private async Task<int> RemindFollowUpsAsync(DateTime now, CancellationToken cancellationToken)

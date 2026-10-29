@@ -66,7 +66,7 @@ public sealed class SalesActivity : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
     public Guid OpportunityId { get; set; }
-    public string Type { get; set; } = "Note"; // Call|Email|Meeting|SiteVisit|Note|FollowUp|System
+    public string Type { get; set; } = "Note"; // Call|Email|WhatsApp|Meeting|SiteVisit|Note|FollowUp|EmailReceived|System
     public string Summary { get; set; } = string.Empty;
     public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
     /// <summary>For follow-ups: when it is due. Open until <see cref="CompletedAt"/> is set.</summary>
@@ -77,6 +77,12 @@ public sealed class SalesActivity : AuditableEntity, ITenantEntity
     public int ReminderCount { get; set; }
     public Guid? LoggedByUserId { get; set; }
     public string? LoggedByName { get; set; }
+    /// <summary>Where a site visit was logged from (the phone's location when the visit report was saved).</summary>
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public double? LocationAccuracyMeters { get; set; }
+    /// <summary>Set on an activity a sequence created, so stopping the sequence can close what it left open.</summary>
+    public Guid? SequenceEnrollmentId { get; set; }
 
     public SalesOpportunity? Opportunity { get; set; }
 }
@@ -153,6 +159,88 @@ public sealed class TenantSalesSettings : AuditableEntity, ITenantEntity
     public bool SendWeeklySummary { get; set; } = true;
     /// <summary>The Monday (workspace time) the last weekly summary went out for, so it is sent once.</summary>
     public DateTime? WeeklySummaryWeek { get; set; }
+    /// <summary>
+    /// An address (an alias of the intake mailbox) whose emails become leads instead of work orders,
+    /// e.g. sales@company.co.ke. Null keeps every intake email on the service side.
+    /// </summary>
+    public string? LeadEmailAddress { get; set; }
+    /// <summary>The website enquiry form: on/off, and the key in its public link (changing it retires old links).</summary>
+    public bool WebFormEnabled { get; set; }
+    public string? WebFormKey { get; set; }
+}
+
+/// <summary>
+/// An automated run of follow-ups (e.g. "New lead": call today, email on day 2, call on day 5). A deal
+/// is enrolled in one; each step comes due in turn. A reply from the client, or closing the deal, stops it.
+/// </summary>
+public sealed class SalesSequence : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public bool IsActive { get; set; } = true;
+    /// <summary>Stop when the client emails back on the deal.</summary>
+    public bool StopOnReply { get; set; } = true;
+
+    public ICollection<SalesSequenceStep> Steps { get; set; } = new List<SalesSequenceStep>();
+}
+
+public sealed class SalesSequenceStep : ITenantEntity
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid TenantId { get; set; }
+    public Guid SequenceId { get; set; }
+    public int SortOrder { get; set; }
+    /// <summary>Days after the previous step (after enrolment for the first).</summary>
+    public int DelayDays { get; set; }
+    /// <summary>Task: a follow-up for the owner. Email: sent to the deal's contact as the owner.</summary>
+    public string Action { get; set; } = SalesSequenceActions.Task;
+    public string? Subject { get; set; }
+    /// <summary>The task's wording or the email's body; {{ContactName}}, {{CompanyName}}, {{DealTitle}} and {{OwnerName}} are filled in.</summary>
+    public string Body { get; set; } = string.Empty;
+
+    public SalesSequence? Sequence { get; set; }
+}
+
+public static class SalesSequenceActions
+{
+    public const string Task = "Task";
+    public const string Email = "Email";
+    public static readonly string[] All = [Task, Email];
+}
+
+public sealed class SalesSequenceEnrollment : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid SequenceId { get; set; }
+    public Guid OpportunityId { get; set; }
+    /// <summary>Index into the sequence's steps (in order) of the next one to run.</summary>
+    public int NextStep { get; set; }
+    public DateTime? NextDueAt { get; set; }
+    public string Status { get; set; } = SalesSequenceStatuses.Active;
+    public string? StoppedReason { get; set; }
+    public DateTime? FinishedAt { get; set; }
+    public Guid? EnrolledByUserId { get; set; }
+
+    public SalesSequence? Sequence { get; set; }
+    public SalesOpportunity? Opportunity { get; set; }
+}
+
+public static class SalesSequenceStatuses
+{
+    public const string Active = "Active";
+    public const string Completed = "Completed";
+    public const string Stopped = "Stopped";
+}
+
+/// <summary>A named set of pipeline filters a person keeps; shared ones show for everyone.</summary>
+public sealed class SalesSavedView : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid UserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    /// <summary>The filters as the pipeline page's query string (e.g. "view=list&amp;stage=Open&amp;owner=…").</summary>
+    public string Query { get; set; } = string.Empty;
+    public bool IsShared { get; set; }
 }
 
 /// <summary>

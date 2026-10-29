@@ -27,7 +27,8 @@ public sealed partial class SalesCrmController(
     IUserAccessService userAccessService,
     ILicenseGuardService licenseGuardService,
     IRolePermissionService rolePermissionService,
-    ISalesOwnerResolver salesOwnerResolver) : TenantAwareControllerBase(tenantContext)
+    ISalesOwnerResolver salesOwnerResolver,
+    IEmailOutboxService? emailOutbox = null) : TenantAwareControllerBase(tenantContext)
 {
     private const string FallbackCurrency = "KES";
     private Guid? _ownerScope;
@@ -133,7 +134,13 @@ public sealed partial class SalesCrmController(
 
         var stalledAfter = await SalesStalls.ThresholdDaysAsync(dbContext, TenantId, cancellationToken);
         var defaultPipelineId = SalesPipelineCatalog.Default(pipelines).Id;
-        return Ok(rows.Select(x => MapListItem(x.Opportunity, x.WorkOrderCount, x.NextFollowUpAt, converter, stalledAfter) with { PipelineId = x.Opportunity.PipelineId ?? defaultPipelineId }).ToList());
+        var scoring = await SalesScoring.LoadAsync(dbContext, TenantId, pipelines, cancellationToken);
+        var now = DateTime.UtcNow;
+        return Ok(rows.Select(x => MapListItem(x.Opportunity, x.WorkOrderCount, x.NextFollowUpAt, converter, stalledAfter) with
+        {
+            PipelineId = x.Opportunity.PipelineId ?? defaultPipelineId,
+            SuggestedProbability = scoring.Score(x.Opportunity, now)?.Probability,
+        }).ToList());
     }
 
     [HttpGet("summary")]
@@ -261,6 +268,19 @@ public sealed partial class SalesCrmController(
             throw new BusinessRuleException("Stalled after must be between 0 (off) and 365 days.");
         settings.StalledAfterDays = request.StalledAfterDays ?? settings.StalledAfterDays;
         settings.SendWeeklySummary = request.SendWeeklySummary ?? settings.SendWeeklySummary;
+        if (request.LeadEmailAddress is not null)
+        {
+            var leadAddress = request.LeadEmailAddress.Trim().ToLowerInvariant();
+            if (leadAddress.Length > 0 && !System.Net.Mail.MailAddress.TryCreate(leadAddress, out _))
+                throw new BusinessRuleException($"'{request.LeadEmailAddress}' is not an email address.");
+            settings.LeadEmailAddress = leadAddress.Length == 0 ? null : leadAddress;
+        }
+        if (request.WebFormEnabled.HasValue)
+        {
+            settings.WebFormEnabled = request.WebFormEnabled.Value;
+            if (settings.WebFormEnabled)
+                settings.WebFormKey ??= SalesLeadFormController.NewKey();
+        }
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "crm.settings.updated", nameof(TenantSalesSettings), settings.Id.ToString(),
             $"Sales settings updated: deal visibility {settings.DealVisibility}" + (previousVisibility != settings.DealVisibility ? $" (was {previousVisibility})" : "") + $", renewal deals {(settings.CreateRenewalDeals ? "on" : "off")}.",
@@ -273,7 +293,12 @@ public sealed partial class SalesCrmController(
         var settings = await dbContext.TenantSalesSettings.AsNoTracking().SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken)
             ?? new TenantSalesSettings { TenantId = TenantId };
         var ownerName = settings.DefaultOwnerUserId is null ? null : await ResolveUserNameAsync(settings.DefaultOwnerUserId.Value, cancellationToken);
-        return new SalesSettingsResponse(settings.DefaultOwnerUserId, ownerName, SalesVisibility.Normalize(settings.DealVisibility), settings.CreateRenewalDeals, settings.StalledAfterDays, settings.SendWeeklySummary);
+        var intakeAddress = await dbContext.EmailIntakeSettings.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.IsEnabled)
+            .Select(x => x.IntakeEmailAddress)
+            .FirstOrDefaultAsync(cancellationToken);
+        return new SalesSettingsResponse(settings.DefaultOwnerUserId, ownerName, SalesVisibility.Normalize(settings.DealVisibility), settings.CreateRenewalDeals, settings.StalledAfterDays, settings.SendWeeklySummary,
+            settings.LeadEmailAddress, intakeAddress, settings.WebFormEnabled, settings.WebFormEnabled ? settings.WebFormKey : null);
     }
 
     [HttpGet("currency")]
@@ -439,6 +464,8 @@ public sealed partial class SalesCrmController(
             : $"Stage changed from {previous} to {target.Name}.";
         if (stage == SalesStages.Won && await ProspectClients.PromoteAsync(dbContext, TenantId, opportunity.ClientId, cancellationToken))
             note += " The prospect is now a client.";
+        if (target.IsClosed && await SalesSequences.StopAsync(dbContext, TenantId, opportunity.Id, $"The deal was {stage.ToLowerInvariant()}.", DateTime.UtcNow, cancellationToken) > 0)
+            note += " Its follow-up sequence stopped.";
         await AddSystemActivityAsync(opportunity, note, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "crm.opportunity.stage_changed", nameof(SalesOpportunity), opportunity.Id.ToString(), note, cancellationToken);
@@ -507,6 +534,14 @@ public sealed partial class SalesCrmController(
             LoggedByUserId = UserId,
             LoggedByName = await ResolveUserNameAsync(UserId, cancellationToken),
         };
+        if (request.Latitude.HasValue && request.Longitude.HasValue)
+        {
+            if (request.Latitude is < -90 or > 90 || request.Longitude is < -180 or > 180)
+                throw new BusinessRuleException("That location is not valid.");
+            activity.Latitude = Math.Round(request.Latitude.Value, 6);
+            activity.Longitude = Math.Round(request.Longitude.Value, 6);
+            activity.LocationAccuracyMeters = request.AccuracyMeters is > 0 ? Math.Round(request.AccuracyMeters.Value, 1) : null;
+        }
 
         dbContext.SalesActivities.Add(activity);
         opportunity.LastActivityAt = DateTime.UtcNow;
@@ -973,7 +1008,10 @@ public sealed partial class SalesCrmController(
             dealPipeline.Id,
             dealPipeline.Name,
             await DealFieldValuesAsync(id, dealPipeline.Id, cancellationToken),
-            await StageBlockersAsync(opportunity, dealPipeline, cancellationToken));
+            await StageBlockersAsync(opportunity, dealPipeline, cancellationToken),
+            await DealSequenceAsync(id, cancellationToken),
+            SalesStages.IsClosed(opportunity.Stage) ? null
+                : (await SalesScoring.LoadAsync(dbContext, TenantId, await PipelinesAsync(cancellationToken), cancellationToken)).Score(opportunity, DateTime.UtcNow));
     }
 
     /// <summary>For each stage the deal could move to, what it is still missing (stages with nothing missing are left out).</summary>
@@ -1000,7 +1038,7 @@ public sealed partial class SalesCrmController(
     }
 
     private static SalesActivityResponse MapActivity(SalesActivity x) =>
-        new(x.Id, x.OpportunityId, x.Type, x.Summary, x.OccurredAt, x.DueAt, x.CompletedAt, x.LoggedByName);
+        new(x.Id, x.OpportunityId, x.Type, x.Summary, x.OccurredAt, x.DueAt, x.CompletedAt, x.LoggedByName, x.Latitude, x.Longitude, x.LocationAccuracyMeters);
 }
 
 public static class SalesStages
@@ -1041,7 +1079,7 @@ public static class SalesActivityTypes
 {
     public const string System = "System";
 
-    private static readonly string[] UserTypes = ["Call", "Email", "Meeting", "SiteVisit", "Note", "FollowUp"];
+    private static readonly string[] UserTypes = ["Call", "Email", "WhatsApp", "Meeting", "SiteVisit", "Note", "FollowUp"];
 
     public static string Normalize(string? type) =>
         UserTypes.FirstOrDefault(x => string.Equals(x, type?.Trim(), StringComparison.OrdinalIgnoreCase)) ?? "Note";
@@ -1072,11 +1110,15 @@ public sealed record UpsertSalesOpportunityRequest(
 
 public sealed record ChangeSalesStageRequest([StringLength(40)] string Stage, [StringLength(500)] string? LostReason);
 
+/// <param name="Latitude">With <paramref name="Longitude"/>: where a site visit was logged from.</param>
 public sealed record CreateSalesActivityRequest(
     [StringLength(40)] string? Type,
     [StringLength(2000)] string Summary,
     DateTime? OccurredAt,
-    DateTime? DueAt);
+    DateTime? DueAt,
+    double? Latitude = null,
+    double? Longitude = null,
+    double? AccuracyMeters = null);
 
 public sealed record SalesOpportunityListItem(
     Guid Id, string Title, string Stage, Guid? ClientId, string? ClientName,
@@ -1085,7 +1127,8 @@ public sealed record SalesOpportunityListItem(
     Guid? OwnerUserId, string? OwnerName, string? ServiceType,
     int WorkOrderCount, DateTime? NextFollowUpAt, DateTime? LastActivityAt, DateTime CreatedAt,
     decimal? ConvertedValue, bool ClientIsProspect = false,
-    int DaysIdle = 0, bool IsStalled = false, DateTime? StageChangedAt = null, Guid? PipelineId = null);
+    int DaysIdle = 0, bool IsStalled = false, DateTime? StageChangedAt = null, Guid? PipelineId = null,
+    int? SuggestedProbability = null);
 
 public sealed record SalesOpportunityDetailResponse(
     Guid Id, string Title, string Stage,
@@ -1110,7 +1153,9 @@ public sealed record SalesOpportunityDetailResponse(
     Guid? PipelineId = null,
     string? PipelineName = null,
     IReadOnlyList<SalesDealFieldValue>? CustomFields = null,
-    IReadOnlyDictionary<string, IReadOnlyList<string>>? StageBlockers = null);
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? StageBlockers = null,
+    SalesDealSequence? Sequence = null,
+    SalesDealScore? Score = null);
 
 public sealed record AddDealContactRequest(
     Guid? ContactId,
@@ -1122,7 +1167,8 @@ public sealed record AddDealContactRequest(
 
 public sealed record SalesActivityResponse(
     Guid Id, Guid OpportunityId, string Type, string Summary,
-    DateTime OccurredAt, DateTime? DueAt, DateTime? CompletedAt, string? LoggedByName);
+    DateTime OccurredAt, DateTime? DueAt, DateTime? CompletedAt, string? LoggedByName,
+    double? Latitude = null, double? Longitude = null, double? AccuracyMeters = null);
 
 /// <summary>An open follow-up with enough of its deal to act on it from a list.</summary>
 public sealed record SalesFollowUpItem(
@@ -1160,9 +1206,13 @@ public sealed record SalesPipelineSummary(
     int StalledDeals = 0,
     int StalledAfterDays = 0);
 
-public sealed record SalesSettingsResponse(Guid? DefaultOwnerUserId, string? DefaultOwnerName, string DealVisibility, bool CreateRenewalDeals, int StalledAfterDays = 14, bool SendWeeklySummary = true);
+/// <param name="IntakeEmailAddress">The workspace's intake mailbox (Settings › Email intake), when on: replies to deal emails come back through it.</param>
+public sealed record SalesSettingsResponse(Guid? DefaultOwnerUserId, string? DefaultOwnerName, string DealVisibility, bool CreateRenewalDeals, int StalledAfterDays = 14, bool SendWeeklySummary = true,
+    string? LeadEmailAddress = null, string? IntakeEmailAddress = null, bool WebFormEnabled = false, string? WebFormKey = null);
 
-public sealed record UpdateSalesSettingsRequest(Guid? DefaultOwnerUserId, [StringLength(20)] string? DealVisibility, bool CreateRenewalDeals = true, int? StalledAfterDays = null, bool? SendWeeklySummary = null);
+/// <param name="LeadEmailAddress">Null leaves it; empty clears it.</param>
+public sealed record UpdateSalesSettingsRequest(Guid? DefaultOwnerUserId, [StringLength(20)] string? DealVisibility, bool CreateRenewalDeals = true, int? StalledAfterDays = null, bool? SendWeeklySummary = null,
+    [StringLength(256)] string? LeadEmailAddress = null, bool? WebFormEnabled = null);
 
 public sealed record SalesOwnerOption(Guid Id, string FullName, string Role);
 

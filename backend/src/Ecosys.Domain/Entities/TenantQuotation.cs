@@ -21,6 +21,12 @@ public sealed class TenantQuotation : AuditableEntity, ITenantEntity
     public Guid? ConvertedToWorkOrderId { get; set; }
     public Guid? ConvertedToProjectId { get; set; }
     public string? RejectionReason { get; set; }
+    /// <summary>The client's acceptance in the portal: the name they typed as their signature, when, and from where.</summary>
+    public string? AcceptedByName { get; set; }
+    public string? AcceptedByTitle { get; set; }
+    public DateTime? AcceptedAt { get; set; }
+    public string? AcceptedFromIp { get; set; }
+    public Guid? AcceptedByPortalUserId { get; set; }
     public Guid? SalesOpportunityId { get; set; }
     /// <summary>When the quotation was sent to the client, and by whom; the sales chase list counts from here.</summary>
     public DateTime? SentAt { get; set; }

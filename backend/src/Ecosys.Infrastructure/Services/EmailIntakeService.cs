@@ -56,7 +56,8 @@ internal sealed partial class EmailIntakeService(
     IEmailTemplateService emailTemplateService,
     IEmailOutboxService emailOutboxService,
     IAuditLogService auditLogService,
-    ILogger<EmailIntakeService> logger) : IEmailIntakeService
+    ILogger<EmailIntakeService> logger,
+    ISalesInboundEmailHandler? salesInbound = null) : IEmailIntakeService
 {
     private const int MaxMessagesPerRead = 25;
     /// <summary>Automatic replies to one address per hour, so two auto-responders can't ping-pong.</summary>
@@ -217,6 +218,19 @@ internal sealed partial class EmailIntakeService(
         if (await IsOwnAddressAsync(settings, address, cancellationToken))
         {
             return await RecordAsync(settings, message, EmailIntakeOutcomes.Ignored, "Sent from this workspace's own address.", null, null, false, cancellationToken);
+        }
+
+        // Sales mail first: a reply on a deal, or mail to the workspace's lead address, is not a service request.
+        if (salesInbound is not null)
+        {
+            var sales = await salesInbound.TryHandleAsync(tenantId, new SalesInboundEmail(
+                address, from.Name,
+                message.To.Mailboxes.Concat(message.Cc.Mailboxes).Select(x => x.Address.Trim().ToLowerInvariant()).ToList(),
+                string.IsNullOrWhiteSpace(message.Subject) ? "(no subject)" : message.Subject.Trim(),
+                StripQuotedReply(BodyText(message)),
+                message.Date == DateTimeOffset.MinValue ? DateTime.UtcNow : message.Date.UtcDateTime), cancellationToken);
+            if (sales is not null)
+                return await RecordAsync(settings, message, sales.Outcome, sales.Detail, null, sales.ClientId, false, cancellationToken);
         }
 
         var canAutoReply = settings.AutoReplyEnabled
