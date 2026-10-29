@@ -26,7 +26,8 @@ public sealed partial class SalesCrmController(
     IAuditLogService auditLogService,
     IUserAccessService userAccessService,
     ILicenseGuardService licenseGuardService,
-    IRolePermissionService rolePermissionService) : TenantAwareControllerBase(tenantContext)
+    IRolePermissionService rolePermissionService,
+    ISalesOwnerResolver salesOwnerResolver) : TenantAwareControllerBase(tenantContext)
 {
     private const string FallbackCurrency = "KES";
     private Guid? _ownerScope;

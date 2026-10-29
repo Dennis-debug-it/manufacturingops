@@ -219,6 +219,29 @@ export interface SalesSettings {
   createRenewalDeals: boolean
 }
 
+export interface SalesAssignmentRule {
+  id: string
+  name: string
+  sortOrder: number
+  isActive: boolean
+  source: string | null
+  serviceType: string | null
+  locationContains: string | null
+  method: 'Fixed' | 'RoundRobin'
+  owners: Array<{ id: string; fullName: string }>
+}
+
+export interface UpsertAssignmentRulePayload {
+  name: string
+  isActive: boolean
+  source: string | null
+  serviceType: string | null
+  locationContains: string | null
+  method: 'Fixed' | 'RoundRobin'
+  ownerUserIds: string[]
+  sortOrder?: number
+}
+
 export interface SalesOwnerOption {
   id: string
   fullName: string

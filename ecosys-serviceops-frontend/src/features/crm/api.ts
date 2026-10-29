@@ -16,6 +16,8 @@ import type {
   SalesOpportunityListItem,
   SalesPipelineSummary,
   SalesReport,
+  SalesAssignmentRule,
+  UpsertAssignmentRulePayload,
   SalesSettings,
   SalesStage,
   UpsertOpportunityPayload,
@@ -193,6 +195,27 @@ export function useUpdateSalesSettings() {
   const invalidate = useInvalidateCrm()
   return useMutation({
     mutationFn: (payload: Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals'>) => api.put<SalesSettings>(endpoints.crm.settings, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useAssignmentRules() {
+  return useQuery({ queryKey: [...crmKey, 'assignment-rules'], queryFn: () => api.get<SalesAssignmentRule[]>(endpoints.crm.assignmentRules) })
+}
+
+export function useSaveAssignmentRule() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: ({ id, ...payload }: UpsertAssignmentRulePayload & { id?: string }) =>
+      id ? api.put<SalesAssignmentRule[]>(endpoints.crm.assignmentRule(id), payload) : api.post<SalesAssignmentRule[]>(endpoints.crm.assignmentRules, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteAssignmentRule() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (id: string) => api.delete<SalesAssignmentRule[]>(endpoints.crm.assignmentRule(id)),
     onSuccess: invalidate,
   })
 }

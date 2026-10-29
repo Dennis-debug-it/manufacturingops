@@ -141,3 +141,26 @@ public sealed class TenantSalesSettings : AuditableEntity, ITenantEntity
     /// <summary>Open a renewal deal when a contract enters its renewal notice window.</summary>
     public bool CreateRenewalDeals { get; set; } = true;
 }
+
+/// <summary>
+/// Who gets a new lead the system takes in (technician leads, imports without an owner, inbound
+/// leads). Rules are tried in <see cref="SortOrder"/>; the first whose conditions all hold picks the
+/// owner, either always the same person or each of <see cref="OwnerUserIds"/> in turn.
+/// </summary>
+public sealed class SalesAssignmentRule : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+    /// <summary>Conditions; null matches anything. Location matches when the lead's location contains it.</summary>
+    public string? Source { get; set; }
+    public string? ServiceType { get; set; }
+    public string? LocationContains { get; set; }
+    /// <summary>"Fixed": always the first owner. "RoundRobin": each owner in turn.</summary>
+    public string Method { get; set; } = "Fixed";
+    /// <summary>Comma-separated user ids, in rotation order.</summary>
+    public string OwnerUserIds { get; set; } = string.Empty;
+    /// <summary>Index of the owner the round-robin gave the last lead to.</summary>
+    public int LastAssignedIndex { get; set; } = -1;
+}

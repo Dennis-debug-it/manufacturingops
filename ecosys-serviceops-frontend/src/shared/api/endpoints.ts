@@ -520,6 +520,8 @@ export const endpoints = {
     quotesAwaitingAnswer: '/api/crm/quotes-awaiting-answer',
     reports: '/api/crm/reports',
     settings: '/api/crm/settings',
+    assignmentRules: '/api/crm/assignment-rules',
+    assignmentRule: (id: string) => `/api/crm/assignment-rules/${id}`,
     exportDeals: '/api/crm/export/deals',
     exportContacts: '/api/crm/export/contacts',
     dealImportTemplate: '/api/crm/import/deals/template',

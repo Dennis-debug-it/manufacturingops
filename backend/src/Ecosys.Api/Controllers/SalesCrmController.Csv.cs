@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
+using Ecosys.Infrastructure.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -119,8 +120,10 @@ public sealed partial class SalesCrmController
                 await LinkDealFieldsContactAsync(opportunity, cancellationToken);
                 if (!parsed.Request.OwnerUserId.HasValue)
                 {
-                    opportunity.OwnerUserId = UserId;
-                    opportunity.OwnerName = importerName;
+                    // A matching lead assignment rule decides; otherwise the deal is the importer's.
+                    var byRule = await salesOwnerResolver.PickByRuleAsync(TenantId, new SalesLeadFacts(opportunity.Source, opportunity.ServiceType, opportunity.Location), cancellationToken);
+                    opportunity.OwnerUserId = byRule?.Id ?? UserId;
+                    opportunity.OwnerName = byRule?.FullName ?? importerName;
                 }
                 opportunity.Stage = parsed.Stage;
                 opportunity.Probability = SalesStages.DefaultProbability(parsed.Stage);

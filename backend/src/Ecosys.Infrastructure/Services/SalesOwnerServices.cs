@@ -6,6 +6,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Infrastructure.Services;
 
+/// <summary>What is known about a new lead, for the assignment rules.</summary>
+public sealed record SalesLeadFacts(string? Source, string? ServiceType, string? Location);
+
 /// <summary>An active user who can manage the sales pipeline, and so can own a deal or RFP/RFQ.</summary>
 public sealed record SalesEligibleOwner(Guid Id, string FullName, string Role);
 
@@ -75,12 +78,19 @@ public interface ISalesOwnerResolver
     /// <item>whoever the caller prefers (e.g. a contract's renewal owner, then its account manager);</item>
     /// <item>the owner of the client's most recent open deal, else its most recent won deal;</item>
     /// <item>the account manager, then the renewal owner, on the client's newest live contract;</item>
+    /// <item>the first lead assignment rule that matches <paramref name="lead"/> (a fixed person or the next in a rotation);</item>
     /// <item>the workspace's default sales owner (CRM settings);</item>
     /// <item>any admin, then anyone else who can manage the pipeline.</item>
     /// </list>
     /// Returns null only when nobody in the workspace can manage the pipeline.
     /// </summary>
-    Task<SalesEligibleOwner?> ResolveAsync(Guid tenantId, IEnumerable<Guid?> preferred, Guid? clientId, CancellationToken cancellationToken = default);
+    Task<SalesEligibleOwner?> ResolveAsync(Guid tenantId, IEnumerable<Guid?> preferred, Guid? clientId, SalesLeadFacts? lead, CancellationToken cancellationToken = default);
+
+    Task<SalesEligibleOwner?> ResolveAsync(Guid tenantId, IEnumerable<Guid?> preferred, Guid? clientId, CancellationToken cancellationToken = default) =>
+        ResolveAsync(tenantId, preferred, clientId, null, cancellationToken);
+
+    /// <summary>The owner a lead assignment rule gives this lead, or null when no rule matches.</summary>
+    Task<SalesEligibleOwner?> PickByRuleAsync(Guid tenantId, SalesLeadFacts lead, CancellationToken cancellationToken = default);
 }
 
 internal sealed class SalesOwnerResolver(AppDbContext dbContext, IRolePermissionService rolePermissionService) : ISalesOwnerResolver
@@ -88,7 +98,7 @@ internal sealed class SalesOwnerResolver(AppDbContext dbContext, IRolePermission
     private static readonly ContractStatus[] LiveContractStatuses =
         [ContractStatus.Active, ContractStatus.ExpiringSoon, ContractStatus.RenewalInProgress];
 
-    public async Task<SalesEligibleOwner?> ResolveAsync(Guid tenantId, IEnumerable<Guid?> preferred, Guid? clientId, CancellationToken cancellationToken = default)
+    public async Task<SalesEligibleOwner?> ResolveAsync(Guid tenantId, IEnumerable<Guid?> preferred, Guid? clientId, SalesLeadFacts? lead = null, CancellationToken cancellationToken = default)
     {
         var eligible = await SalesOwnerDirectory.ListAsync(dbContext, rolePermissionService, tenantId, cancellationToken);
         if (eligible.Count == 0)
@@ -115,6 +125,8 @@ internal sealed class SalesOwnerResolver(AppDbContext dbContext, IRolePermission
             candidates.Add(contract?.AccountManagerUserId);
             candidates.Add(contract?.RenewalOwnerUserId);
         }
+        if (lead is not null)
+            candidates.Add(await PickByRuleAsync(tenantId, lead, eligible, cancellationToken));
         candidates.Add(await dbContext.TenantSalesSettings.AsNoTracking()
             .Where(x => x.TenantId == tenantId)
             .Select(x => x.DefaultOwnerUserId)
@@ -128,4 +140,62 @@ internal sealed class SalesOwnerResolver(AppDbContext dbContext, IRolePermission
         }
         return eligible.FirstOrDefault(x => string.Equals(x.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase)) ?? eligible[0];
     }
+
+    public async Task<SalesEligibleOwner?> PickByRuleAsync(Guid tenantId, SalesLeadFacts lead, CancellationToken cancellationToken = default)
+    {
+        var eligible = await SalesOwnerDirectory.ListAsync(dbContext, rolePermissionService, tenantId, cancellationToken);
+        var id = await PickByRuleAsync(tenantId, lead, eligible, cancellationToken);
+        return id is null ? null : eligible.First(x => x.Id == id);
+    }
+
+    /// <summary>
+    /// The owner the first matching rule gives this lead. A rotation skips people who can no longer
+    /// manage the pipeline and remembers where it got to (saved with the caller's changes).
+    /// </summary>
+    private async Task<Guid?> PickByRuleAsync(Guid tenantId, SalesLeadFacts lead, IReadOnlyList<SalesEligibleOwner> eligible, CancellationToken cancellationToken)
+    {
+        var rules = await dbContext.SalesAssignmentRules
+            .Where(x => x.TenantId == tenantId && x.IsActive)
+            .OrderBy(x => x.SortOrder).ThenBy(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+        foreach (var rule in rules.Where(rule => Matches(rule, lead)))
+        {
+            var owners = SalesAssignmentRules.ParseOwners(rule.OwnerUserIds)
+                .Where(id => eligible.Any(x => x.Id == id))
+                .ToList();
+            if (owners.Count == 0)
+                continue;
+            if (!string.Equals(rule.Method, SalesAssignmentRules.RoundRobin, StringComparison.OrdinalIgnoreCase))
+                return owners[0];
+            var all = SalesAssignmentRules.ParseOwners(rule.OwnerUserIds);
+            for (var step = 1; step <= all.Count; step++)
+            {
+                var index = (rule.LastAssignedIndex + step) % all.Count;
+                if (owners.Contains(all[index]))
+                {
+                    rule.LastAssignedIndex = index;
+                    return all[index];
+                }
+            }
+        }
+        return null;
+    }
+
+    private static bool Matches(SalesAssignmentRule rule, SalesLeadFacts lead) =>
+        (rule.Source is null || string.Equals(rule.Source, lead.Source?.Trim(), StringComparison.OrdinalIgnoreCase))
+        && (rule.ServiceType is null || string.Equals(rule.ServiceType, lead.ServiceType?.Trim(), StringComparison.OrdinalIgnoreCase))
+        && (rule.LocationContains is null || (lead.Location ?? string.Empty).Contains(rule.LocationContains, StringComparison.OrdinalIgnoreCase));
+}
+
+public static class SalesAssignmentRules
+{
+    public const string Fixed = "Fixed";
+    public const string RoundRobin = "RoundRobin";
+
+    public static List<Guid> ParseOwners(string? value) =>
+        (value ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(x => Guid.TryParse(x, out var id) ? id : Guid.Empty)
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
 }

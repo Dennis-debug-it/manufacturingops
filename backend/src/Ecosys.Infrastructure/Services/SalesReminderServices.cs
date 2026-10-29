@@ -181,7 +181,8 @@ internal sealed class SalesReminderService(
                 continue;
 
             var owner = await salesOwnerResolver.ResolveAsync(
-                contract.TenantId, [contract.RenewalOwnerUserId, contract.AccountManagerUserId], contract.ClientId, cancellationToken);
+                contract.TenantId, [contract.RenewalOwnerUserId, contract.AccountManagerUserId], contract.ClientId,
+                new SalesLeadFacts(RenewalSource, null, contract.Client?.Location), cancellationToken);
             var client = contract.Client?.ClientName ?? "the client";
             var deal = new SalesOpportunity
             {

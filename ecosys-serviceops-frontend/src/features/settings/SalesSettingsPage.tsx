@@ -5,6 +5,7 @@ import { Spinner } from '../../shared/components/Spinner'
 import { cn } from '../../shared/utils/cn'
 import { useSalesSettings, useUpdateSalesSettings } from '../crm/api'
 import { OwnerSelect } from '../crm/components/OwnerSelect'
+import { AssignmentRulesSection } from './components/AssignmentRulesSection'
 import type { DealVisibility, SalesSettings } from '../crm/types'
 
 const visibilityOptions: Array<{ value: DealVisibility; title: string; description: string }> = [
@@ -78,7 +79,7 @@ export function SalesSettingsPage() {
         <h2 className="text-sm font-semibold text-slate-900">Deals the system opens</h2>
         <p className="text-sm text-slate-500">
           Renewal deals and leads flagged by technicians go to the best owner available: the contract's renewal owner or account manager, then
-          whoever owns the client's latest deal, then the default owner below, then an admin.
+          whoever owns the client's latest deal, then the first matching lead assignment rule (below), then the default owner, then an admin.
         </p>
         <label className="block max-w-sm text-sm">
           <span className="font-medium text-slate-700">Default owner</span>
@@ -103,6 +104,8 @@ export function SalesSettingsPage() {
           Save
         </button>
       </div>
+
+      <AssignmentRulesSection />
     </div>
   )
 }

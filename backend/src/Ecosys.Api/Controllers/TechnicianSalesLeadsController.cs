@@ -47,6 +47,7 @@ public sealed class TechnicianSalesLeadsController(
             .AsNoTracking()
             .Include(x => x.Client)
             .Include(x => x.Asset)
+            .Include(x => x.Site)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == workOrderId, cancellationToken)
             ?? throw new NotFoundException("Work order not found.");
 
@@ -65,7 +66,9 @@ public sealed class TechnicianSalesLeadsController(
         var flaggedBy = technician?.FullName
             ?? await dbContext.Users.Where(x => x.TenantId == TenantId && x.Id == UserId).Select(x => x.FullName).FirstOrDefaultAsync(cancellationToken)
             ?? "A technician";
-        var owner = await salesOwnerResolver.ResolveAsync(TenantId, [], workOrder.ClientId, cancellationToken);
+        var owner = await salesOwnerResolver.ResolveAsync(TenantId, [], workOrder.ClientId,
+            new SalesLeadFacts(TechnicianSource, workOrder.WorkType,
+                string.Join(' ', new[] { workOrder.Site?.TownCity, workOrder.Site?.County, workOrder.Site?.Region, workOrder.Site?.SiteName }.Where(x => !string.IsNullOrWhiteSpace(x)))), cancellationToken);
         var subject = workOrder.Asset?.AssetName ?? workOrder.Title;
         var now = DateTime.UtcNow;
         var currency = await dbContext.Tenants.Where(x => x.Id == TenantId).Select(x => x.Currency).FirstOrDefaultAsync(cancellationToken);

@@ -195,6 +195,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<SalesTender> SalesTenders => Set<SalesTender>();
     public DbSet<TenantSalesSettings> TenantSalesSettings => Set<TenantSalesSettings>();
     public DbSet<ClientContact> ClientContacts => Set<ClientContact>();
+    public DbSet<SalesAssignmentRule> SalesAssignmentRules => Set<SalesAssignmentRule>();
     public DbSet<SalesOpportunityContact> SalesOpportunityContacts => Set<SalesOpportunityContact>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
@@ -3549,6 +3550,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.OpportunityId, x.ContactId }).IsUnique();
         });
         ApplyTenantFilter<SalesOpportunityContact>(modelBuilder);
+
+        modelBuilder.Entity<SalesAssignmentRule>(entity =>
+        {
+            entity.ToTable("sales_assignment_rules");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Source).HasMaxLength(60);
+            entity.Property(x => x.ServiceType).HasMaxLength(50);
+            entity.Property(x => x.LocationContains).HasMaxLength(120);
+            entity.Property(x => x.Method).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.OwnerUserIds).HasMaxLength(2000).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.SortOrder });
+        });
+        ApplyTenantFilter<SalesAssignmentRule>(modelBuilder);
 
         modelBuilder.Entity<SalesActivity>(entity =>
         {

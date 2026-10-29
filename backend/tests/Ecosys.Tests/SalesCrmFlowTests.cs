@@ -621,6 +621,23 @@ public sealed class SalesCrmFlowTests
             Ok<SalesReport>(await reports.Get(DateTime.UtcNow.AddDays(-30), DateTime.UtcNow, null, CancellationToken.None));
             Ok<SalesSettingsResponse>(await crm.GetSettings(CancellationToken.None));
 
+            // Phase 2: prospects, contacts, duplicates, rules and CSV.
+            var prospectDeal = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(
+                Deal("Depot solar", 1_000m, "KES") with { CompanyName = "Baraka Logistics Ltd", ContactName = "Wanjiru", ContactEmail = "w@baraka.co.ke" }, CancellationToken.None)).Result).Value);
+            Assert.True(prospectDeal.ClientIsProspect);
+            Ok<SalesOpportunityDetailResponse>(await crm.AddContact(prospectDeal.Id, new AddDealContactRequest(null, "Peter", null, "0700000300", null, "Procurement"), CancellationToken.None));
+            Assert.NotEmpty(await ClientMatching.FindAsync(dbContext, tenant.Id, "baraka logistics", "x@baraka.co.ke", "+254700000300", null, CancellationToken.None));
+            Ok<IReadOnlyList<SalesAssignmentRuleResponse>>(await crm.CreateAssignmentRule(new UpsertSalesAssignmentRuleRequest("All", true, null, null, null, "RoundRobin", [rep.Id, admin.Id]), CancellationToken.None));
+            Assert.NotNull(await new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)).PickByRuleAsync(tenant.Id, new SalesLeadFacts("Website", null, "Nairobi")));
+            var csv = "Title,Company\nImported deal,Nyali Mall";
+            Ok<ImportCommitResponse>(await crm.CommitDealImport(new CsvUploadRequest(new FormFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(csv)), 0, csv.Length, "file", "d.csv")), CancellationToken.None));
+            Assert.IsType<FileContentResult>(await crm.ExportDeals("Open", null, CancellationToken.None));
+            Assert.IsType<FileContentResult>(await repCrm.ExportContacts(CancellationToken.None));
+            var clientsApi = new ClientsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService(), new AuditLogService(dbContext, new HttpContextAccessor()));
+            Assert.IsType<OkObjectResult>(await clientsApi.GetAll("baraka", "all", 1, 20, CancellationToken.None, "prospects"));
+            await ClientMatching.MergeProspectAsync(dbContext, tenant.Id, prospectDeal.ClientId!.Value, client.Id, CancellationToken.None);
+            await dbContext.SaveChangesAsync();
+
             // Answering the quote wins the deal.
             var quotes = new TenantQuotationController(
                 dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpDocumentNumberingService(), null!,
@@ -816,6 +833,49 @@ public sealed class SalesCrmFlowTests
         Assert.Contains("amina@kilele.test", contacts);
     }
 
+    [Fact]
+    public async Task AssignmentRules_RotateMatchingLeads_AndSkipPeopleWhoLeft()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        User Rep(string name) => new() { TenantId = tenant.Id, FullName = name, Email = $"{name.Replace(" ", "")}@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+        var (ann, ben, coast) = (Rep("Ann"), Rep("Ben"), Rep("Coast Rep"));
+        dbContext.AddRange(ann, ben, coast);
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+
+        Ok<IReadOnlyList<SalesAssignmentRuleResponse>>(await crm.CreateAssignmentRule(
+            new UpsertSalesAssignmentRuleRequest("Coast", true, null, null, "Mombasa", "Fixed", [coast.Id]), CancellationToken.None));
+        var rules = Ok<IReadOnlyList<SalesAssignmentRuleResponse>>(await crm.CreateAssignmentRule(
+            new UpsertSalesAssignmentRuleRequest("Technician leads", true, "Technician", null, null, "RoundRobin", [ann.Id, ben.Id]), CancellationToken.None));
+        Assert.Equal(["Coast", "Technician leads"], rules.Select(x => x.Name).ToArray());
+
+        var resolver = new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext));
+        async Task<string?> Next(string? source, string? location)
+        {
+            var owner = await resolver.PickByRuleAsync(tenant.Id, new SalesLeadFacts(source, null, location));
+            await dbContext.SaveChangesAsync();
+            return owner?.FullName;
+        }
+        Assert.Equal("Coast Rep", await Next("Technician", "Nyali, Mombasa"));
+        Assert.Equal("Ann,Ben,Ann", string.Join(',', await Next("Technician", "Nairobi"), await Next("Technician", "Nairobi"), await Next("Technician", "Nairobi")));
+        Assert.Null(await Next("Website", "Nairobi"));
+
+        // Someone who leaves is skipped, not handed leads.
+        ben.IsActive = false;
+        await dbContext.SaveChangesAsync();
+        Assert.Equal("Ann,Ann", string.Join(',', await Next("Technician", null), await Next("Technician", null)));
+
+        // An imported deal with no owner follows the rules too.
+        var csv = "Title,Company,Location\nGenerator AMC,Nyali Mall,Mombasa Road";
+        var file = new FormFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(csv)), 0, csv.Length, "file", "deals.csv");
+        Ok<ImportCommitResponse>(await crm.CommitDealImport(new CsvUploadRequest(file), CancellationToken.None));
+        Assert.Equal(coast.Id, (await dbContext.SalesOpportunities.SingleAsync()).OwnerUserId);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.CreateAssignmentRule(
+            new UpsertSalesAssignmentRuleRequest("Broken", true, null, null, null, "Fixed", [ben.Id]), CancellationToken.None));
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 
@@ -893,7 +953,8 @@ public sealed class SalesCrmFlowTests
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpUserAccessService(),
             new NoOpLicenseGuardService(),
-            new RolePermissionService(dbContext))
+            new RolePermissionService(dbContext),
+            new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)))
         {
             ControllerContext = CreateControllerContext(actor)
         };
