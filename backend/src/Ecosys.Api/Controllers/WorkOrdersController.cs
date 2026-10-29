@@ -1462,6 +1462,10 @@ public sealed class WorkOrdersController(
         var opportunity = await dbContext.SalesOpportunities
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.OpportunityId, cancellationToken)
             ?? throw new NotFoundException("Opportunity was not found.");
+        // Someone limited to their own deals (Sales settings) cannot reach anyone else's this way either.
+        var ownerScope = await SalesVisibility.OwnerScopeAsync(dbContext, tenantContext, TenantId, cancellationToken);
+        if (ownerScope.HasValue && opportunity.OwnerUserId != ownerScope)
+            throw new NotFoundException("Opportunity was not found.");
 
         if (!string.Equals(opportunity.Stage, SalesStages.Won, StringComparison.OrdinalIgnoreCase))
         {

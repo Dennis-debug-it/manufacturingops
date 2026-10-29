@@ -476,6 +476,9 @@ public sealed class SalesCrmFlowTests
         Assert.Equal(1, Ok<SalesPipelineSummary>(await repView.GetSummary(CancellationToken.None)).OpenCount);
         await Assert.ThrowsAsync<NotFoundException>(() => repView.GetOpportunity(theirs, CancellationToken.None));
         await Assert.ThrowsAsync<NotFoundException>(() => repView.ChangeStage(theirs, new ChangeSalesStageRequest(SalesStages.Qualified, null), CancellationToken.None));
+        var repWorkOrders = CreateWorkOrdersController(dbContext, tenant.Id, rep, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.FinanceUser, PermissionNames.CrmView, PermissionNames.CanCreateWorkOrders));
+        await Assert.ThrowsAsync<NotFoundException>(() => repWorkOrders.CreateFromOpportunity(
+            new CreateWorkOrderFromOpportunityRequest(theirs, null, null, null, null, null, null), CancellationToken.None));
 
         var repReports = new SalesReportsController(dbContext, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.FinanceUser, PermissionNames.CrmView), new NoOpUserAccessService());
         Assert.Equal(1, Ok<SalesReport>(await repReports.Get(null, null, admin.Id, CancellationToken.None)).OpenCount);
@@ -742,10 +745,10 @@ public sealed class SalesCrmFlowTests
             ControllerContext = CreateControllerContext(actor)
         };
 
-    private static WorkOrdersController CreateWorkOrdersController(AppDbContext dbContext, Guid tenantId, User actor) =>
+    private static WorkOrdersController CreateWorkOrdersController(AppDbContext dbContext, Guid tenantId, User actor, ITenantContext? tenantContext = null) =>
         new(
             dbContext,
-            new FakeTenantContext(tenantId, actor.Id, actor.Email),
+            tenantContext ?? new FakeTenantContext(tenantId, actor.Id, actor.Email),
             new NoOpDocumentNumberingService(),
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpUserAccessService(),
