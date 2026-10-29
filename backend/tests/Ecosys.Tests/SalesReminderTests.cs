@@ -315,7 +315,7 @@ public sealed class SalesReminderTests
         public void Enqueue(Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message) => Sent.Add((tenantId, userIds, message));
     }
 
-    private sealed class FixedLicenseGuard(string[] modules) : ILicenseGuardService
+    internal sealed class FixedLicenseGuard(string[] modules) : ILicenseGuardService
     {
         public Task<TenantLicenseSnapshot> GetSnapshotAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
             Task.FromResult(new TenantLicenseSnapshot(tenantId, Guid.Empty, "essentials", "Essentials", "Active", Now.AddYears(-1), null, null, null,

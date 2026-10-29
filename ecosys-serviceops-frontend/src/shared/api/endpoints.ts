@@ -169,6 +169,7 @@ export const endpoints = {
     list: '/api/technician/jobs',
     me: '/api/technician/jobs/me',
     detail: (id: string) => `/api/technician/jobs/${id}`,
+    salesLead: (id: string) => `/api/technician/jobs/${id}/sales-lead`,
   },
   technicians: {
     list: '/api/technicians',

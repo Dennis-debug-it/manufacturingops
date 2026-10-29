@@ -516,6 +516,39 @@ public sealed class SalesCrmFlowTests
         Assert.Equal(accountManager.Id, (await resolver.ResolveAsync(tenant.Id, [], otherClient.Id))!.Id);
     }
 
+    [Fact]
+    public async Task Technician_FlagsALeadFromTheirJob_ForTheClientsSalesOwner()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var techUser = new User { TenantId = tenant.Id, FullName = "Juma Fundi", Email = "juma@acme.test", PasswordHash = "hash", Role = AppRoles.Technician, IsActive = true };
+        var technician = new Technician { TenantId = tenant.Id, UserId = techUser.Id, FullName = "Juma Fundi", Email = "juma@acme.test", IsActive = true };
+        var client = new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" };
+        var asset = new Asset { TenantId = tenant.Id, ClientId = client.Id, AssetName = "Chiller 2", AssetCode = "CH-2" };
+        var job = new WorkOrder { TenantId = tenant.Id, ClientId = client.Id, AssetId = asset.Id, WorkOrderNumber = "WO-0042", Title = "Chiller service", AssignedTechnicianId = technician.Id };
+        var otherJob = new WorkOrder { TenantId = tenant.Id, ClientId = client.Id, WorkOrderNumber = "WO-0043", Title = "Generator PM" };
+        dbContext.AddRange(techUser, technician, client, asset, job, otherJob);
+        await dbContext.SaveChangesAsync();
+
+        TechnicianSalesLeadsController Controller(string[] modules) => new(
+            dbContext, new ScopedTenantContext(tenant.Id, techUser.Id, AppRoles.Technician), new NoOpUserAccessService(),
+            new SalesReminderTests.FixedLicenseGuard(modules), new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)),
+            new AuditLogService(dbContext, new HttpContextAccessor()));
+        var withCrm = Controller([ServiceOpsPlans.Operations, ServiceOpsPlans.Finance]);
+
+        var flagged = Ok<TechnicianSalesLeadResponse>(await withCrm.Flag(job.Id, new FlagSalesLeadRequest("Compressor near end of life, quote a replacement"), CancellationToken.None));
+        Assert.Equal("Sales Admin", flagged.OwnerName);
+        var lead = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == flagged.Id);
+        Assert.Equal((SalesStages.Lead, client.Id, job.Id, "Technician"), (lead.Stage, lead.ClientId, lead.SourceWorkOrderId, lead.Source));
+        Assert.StartsWith("Chiller 2: Compressor", lead.Title);
+        Assert.Contains(await dbContext.SalesActivities.Where(x => x.OpportunityId == lead.Id).ToListAsync(), x => x.DueAt != null && x.CompletedAt == null);
+
+        // Only from their own jobs, only with something to say, only on a plan with the CRM.
+        await Assert.ThrowsAsync<ForbiddenException>(() => withCrm.Flag(otherJob.Id, new FlagSalesLeadRequest("Generator is old"), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => withCrm.Flag(job.Id, new FlagSalesLeadRequest("  "), CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => Controller([ServiceOpsPlans.Operations]).Flag(job.Id, new FlagSalesLeadRequest("New pump"), CancellationToken.None));
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 
