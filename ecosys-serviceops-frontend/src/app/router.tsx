@@ -93,6 +93,7 @@ import { PipelinePage } from '../features/crm/PipelinePage'
 import { OpportunityDetailPage } from '../features/crm/OpportunityDetailPage'
 import { TendersPage } from '../features/crm/TendersPage'
 import { FollowUpsPage } from '../features/crm/FollowUpsPage'
+import { SalesReportsPage } from '../features/crm/SalesReportsPage'
 import { TenderDetailPage } from '../features/crm/TenderDetailPage'
 import { QuoteDetailPage } from '../features/finance/QuoteDetailPage'
 import { AgingPage as FinanceAgingPageReal } from '../features/finance/AgingPage'
@@ -314,6 +315,7 @@ export function AppRouter() {
       ['/crm', PipelinePage],
       ['/crm/opportunities/:id', OpportunityDetailPage],
       ['/crm/follow-ups', FollowUpsPage],
+      ['/crm/reports', SalesReportsPage],
       ['/crm/tenders', TendersPage],
       ['/crm/tenders/:id', TenderDetailPage],
       ['/clients', ClientsPage],

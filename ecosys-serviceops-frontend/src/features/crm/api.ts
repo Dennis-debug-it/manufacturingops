@@ -14,6 +14,7 @@ import type {
   SalesOpportunityDetail,
   SalesOpportunityListItem,
   SalesPipelineSummary,
+  SalesReport,
   SalesStage,
   UpsertOpportunityPayload,
 } from './types'
@@ -29,6 +30,15 @@ export function useOpportunities(params?: { stage?: string | undefined; search?:
     queryKey: [...crmKey, 'opportunities', params ?? {}],
     queryFn: () => api.get<SalesOpportunityListItem[]>(endpoints.crm.opportunities, { stage: params?.stage, search: params?.search, clientId: params?.clientId, ownerUserId: params?.ownerUserId }),
     staleTime: 30_000,
+  })
+}
+
+export function useSalesReport(params: { from: string; to: string; ownerUserId?: string | undefined }, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...crmKey, 'report', params],
+    enabled: options?.enabled ?? true,
+    queryFn: () => api.get<SalesReport>(endpoints.crm.reports, { from: params.from, to: params.to, ownerUserId: params.ownerUserId }),
+    staleTime: 60_000,
   })
 }
 

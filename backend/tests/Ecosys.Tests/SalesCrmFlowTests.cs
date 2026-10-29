@@ -310,6 +310,64 @@ public sealed class SalesCrmFlowTests
         Assert.Equal(1, Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None)).OverdueFollowUps);
     }
 
+    [Fact]
+    public async Task Report_CountsResultsInThePeriod_AndForecastsOpenDealsByCloseMonth()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        async Task<Guid> Create(string title, decimal value, string? source = null)
+        {
+            var created = await crm.CreateOpportunity(Deal(title, value, "KES") with { Source = source }, CancellationToken.None);
+            return Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+        }
+
+        var wonId = await Create("Won deal", 100_000m, "Referral");
+        var oldWinId = await Create("Won long ago", 999_000m, "Referral");
+        var lostId = await Create("Lost on price", 40_000m, "Website");
+        var lost2Id = await Create("Also lost on price", 60_000m, "Website");
+        var openId = await Create("Open deal", 200_000m);
+        await Create("Open, no date", 50_000m);
+        await crm.ChangeStage(wonId, new ChangeSalesStageRequest(SalesStages.Won, null), CancellationToken.None);
+        await crm.ChangeStage(oldWinId, new ChangeSalesStageRequest(SalesStages.Won, null), CancellationToken.None);
+        await crm.ChangeStage(lostId, new ChangeSalesStageRequest(SalesStages.Lost, "Price"), CancellationToken.None);
+        await crm.ChangeStage(lost2Id, new ChangeSalesStageRequest(SalesStages.Lost, " price "), CancellationToken.None);
+
+        var now = DateTime.UtcNow;
+        var won = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == wonId);
+        won.CreatedAt = won.WonAt!.Value.AddDays(-10);
+        (await dbContext.SalesOpportunities.SingleAsync(x => x.Id == oldWinId)).WonAt = now.AddYears(-1);
+        (await dbContext.SalesOpportunities.SingleAsync(x => x.Id == openId)).ExpectedCloseDate = new DateTime(now.Year, now.Month, 15, 0, 0, 0, DateTimeKind.Utc).AddMonths(1);
+        await dbContext.SaveChangesAsync();
+
+        var reports = new SalesReportsController(dbContext, new FakeTenantContext(tenant.Id, actor.Id, actor.Email), new NoOpUserAccessService())
+        {
+            ControllerContext = CreateControllerContext(actor)
+        };
+        var report = Ok<SalesReport>(await reports.Get(now.AddDays(-30), now, null, CancellationToken.None));
+
+        Assert.Equal((1, 100_000m), (report.WonCount, report.WonValue));
+        Assert.Equal((2, 100_000m), (report.LostCount, report.LostValue));
+        Assert.Equal(33.3m, report.WinRate);
+        Assert.Equal(10m, report.AverageDaysToWin);
+        Assert.Equal((2, 250_000m), (report.OpenCount, report.OpenValue));
+
+        var reason = Assert.Single(report.LostReasons);
+        Assert.Equal((2, 100_000m), (reason.Count, reason.Value));
+
+        var referral = Assert.Single(report.Sources, x => x.Source == "Referral");
+        Assert.Equal((1, 100_000m, 0), (referral.WonCount, referral.WonValue, referral.LostCount));
+        Assert.Equal(0m, Assert.Single(report.Sources, x => x.Source == "Website").WinRate);
+
+        var nextMonth = report.Forecast.Single(x => x.Month == new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1));
+        Assert.Equal((1, 200_000m), (nextMonth.Count, nextMonth.Value));
+        Assert.Equal(1, report.Forecast.Single(x => x.Key == "none").Count);
+        Assert.Equal(SalesReportsController.ForecastMonths + 3, report.Forecast.Count);
+
+        // Someone else's deals only.
+        Assert.Equal(0, Ok<SalesReport>(await reports.Get(now.AddDays(-30), now, Guid.NewGuid(), CancellationToken.None)).OpenCount);
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 

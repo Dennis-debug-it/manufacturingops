@@ -25,6 +25,8 @@ const tenantPages = [
   // Sign-up creates a Suite trial, which includes the sales CRM.
   { name: 'sales pipeline', path: '/crm', heading: /sales pipeline/i },
   { name: 'rfps and rfqs', path: '/crm/tenders', heading: /rfps & rfqs/i },
+  { name: 'sales follow-ups', path: '/crm/follow-ups', heading: /follow-ups/i },
+  { name: 'sales reports', path: '/crm/reports', heading: /sales reports/i },
 ] as const
 
 let tenantCredentials: Credentials

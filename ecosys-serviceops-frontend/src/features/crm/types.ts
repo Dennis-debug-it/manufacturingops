@@ -125,6 +125,61 @@ export interface SalesPipelineSummary {
   unconvertedCurrencies: Array<{ currency: string; count: number; value: number }>
 }
 
+/** `key` is 'overdue', 'later', 'none' or the month as yyyy-MM. */
+export interface SalesForecastBucket {
+  key: string
+  month: string | null
+  count: number
+  value: number
+  weightedValue: number
+}
+
+export interface SalesOwnerPerformance {
+  ownerUserId: string | null
+  ownerName: string | null
+  openCount: number
+  openValue: number
+  weightedValue: number
+  wonCount: number
+  wonValue: number
+  lostCount: number
+  winRate: number | null
+}
+
+export interface SalesSourcePerformance {
+  source: string | null
+  newDeals: number
+  wonCount: number
+  wonValue: number
+  lostCount: number
+  winRate: number | null
+}
+
+/** Results over a period, every value in `reportingCurrency`; `from` and `to` are inclusive days. */
+export interface SalesReport {
+  reportingCurrency: string
+  from: string
+  to: string
+  newDeals: number
+  wonCount: number
+  wonValue: number
+  lostCount: number
+  lostValue: number
+  winRate: number | null
+  averageWonValue: number | null
+  averageDaysToWin: number | null
+  openCount: number
+  openValue: number
+  weightedValue: number
+  forecast: SalesForecastBucket[]
+  owners: SalesOwnerPerformance[]
+  sources: SalesSourcePerformance[]
+  lostReasons: Array<{ reason: string; count: number; value: number }>
+  tenders: { submitted: number; won: number; lost: number; noBid: number; cancelled: number; winRate: number | null }
+  /** Deals in the report with no exchange rate: counted, but left out of every value. */
+  unconvertedDeals: number
+}
+
 export interface SalesOwnerOption {
   id: string
   fullName: string
