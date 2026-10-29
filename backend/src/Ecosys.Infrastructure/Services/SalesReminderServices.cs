@@ -24,9 +24,12 @@ public static class SalesReminderKeys
 
     /// <summary>Notification and email-template key for an open deal nobody has touched for the workspace's stall period.</summary>
     public const string DealStalled = "crm.deal.stalled";
+
+    /// <summary>Notification and email-template key for the Monday summary of the past week's sales.</summary>
+    public const string WeeklySummary = "crm.weekly-summary";
 }
 
-public sealed record SalesReminderRunResult(int FollowUpReminders, int TenderReminders, int QuoteReminders = 0, int RenewalDealsOpened = 0, int RenewalDealsClosed = 0, int StalledReminders = 0);
+public sealed record SalesReminderRunResult(int FollowUpReminders, int TenderReminders, int QuoteReminders = 0, int RenewalDealsOpened = 0, int RenewalDealsClosed = 0, int StalledReminders = 0, int WeeklySummaries = 0);
 
 public interface ISalesReminderService
 {
@@ -44,6 +47,8 @@ public interface ISalesReminderService
 /// days before it expires. It goes to the owner of the deal it was raised from, else whoever sent it.</item>
 /// <item>An open deal with nothing logged for the workspace's stall period (Sales settings), once per
 /// quiet spell: any activity on the deal starts the clock again.</item>
+/// <item>On Monday from 07:00 workspace time, a summary of the past seven days to everyone who works
+/// the pipeline: their own results, and the team's too for admins and sales managers.</item>
 /// </list>
 /// Before reminding, it keeps renewal deals in step with contracts: a contract that enters its
 /// renewal notice period gets a renewal deal (unless the workspace turned that off in Sales
@@ -64,6 +69,8 @@ internal sealed class SalesReminderService(
     IPushNotificationQueue pushNotificationQueue,
     IOptions<PublicAppOptions> publicAppOptions,
     ISalesOwnerResolver salesOwnerResolver,
+    IRolePermissionService rolePermissionService,
+    IDynamicAccessService dynamicAccessService,
     ILogger<SalesReminderService> logger) : ISalesReminderService
 {
     public static readonly TimeSpan FollowUpRepeatInterval = TimeSpan.FromHours(24);
@@ -93,7 +100,8 @@ internal sealed class SalesReminderService(
         var tenders = await RemindTenderDeadlinesAsync(utcNow, cancellationToken);
         var quotes = await RemindUnansweredQuotesAsync(utcNow, cancellationToken);
         var stalled = await RemindStalledDealsAsync(utcNow, cancellationToken);
-        return new SalesReminderRunResult(followUps, tenders, quotes, opened, closed, stalled);
+        var summaries = await SendWeeklySummariesAsync(utcNow, cancellationToken);
+        return new SalesReminderRunResult(followUps, tenders, quotes, opened, closed, stalled, summaries);
     }
 
     private async Task<int> RemindFollowUpsAsync(DateTime now, CancellationToken cancellationToken)
@@ -338,6 +346,99 @@ internal sealed class SalesReminderService(
         return sent;
     }
 
+    private async Task<int> SendWeeklySummariesAsync(DateTime now, CancellationToken cancellationToken)
+    {
+        var tenantIds = await dbContext.SalesOpportunities.IgnoreQueryFilters().AsNoTracking()
+            .Select(x => x.TenantId).Distinct().ToListAsync(cancellationToken);
+        var sent = 0;
+        foreach (var tenantId in tenantIds)
+        {
+            var local = await tenantTimeZoneService.ToTenantTimeAsync(now, tenantId, cancellationToken);
+            if (local.DayOfWeek != DayOfWeek.Monday || local.Hour < WeeklySummaryHour)
+                continue;
+            var week = DateTime.SpecifyKind(local.Date, DateTimeKind.Utc);
+            var settings = await dbContext.TenantSalesSettings.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
+            if (settings is { SendWeeklySummary: false } || settings?.WeeklySummaryWeek == week)
+                continue;
+            if (!await CrmEnabledAsync(tenantId, cancellationToken))
+                continue;
+
+            // Marked first, so a failure while sending never repeats the batch.
+            if (settings is null)
+            {
+                settings = new TenantSalesSettings { TenantId = tenantId };
+                dbContext.TenantSalesSettings.Add(settings);
+            }
+            settings.WeeklySummaryWeek = week;
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var from = now.AddDays(-7);
+            var converter = await SalesCurrencyConverter.LoadAsync(dbContext, tenantId, cancellationToken);
+            var stalledAfter = settings.StalledAfterDays;
+            var deals = (await dbContext.SalesOpportunities.IgnoreQueryFilters().AsNoTracking()
+                    .Where(x => x.TenantId == tenantId)
+                    .Select(x => new { x.OwnerUserId, x.Stage, x.EstimatedValue, x.Currency, x.CreatedAt, x.WonAt, x.LostAt, Touched = x.LastActivityAt ?? x.CreatedAt })
+                    .ToListAsync(cancellationToken))
+                .Select(x => new WeekDeal(x.OwnerUserId, x.Stage, converter.Convert(x.EstimatedValue, x.Currency) ?? 0, x.CreatedAt >= from,
+                    x.Stage == "Won" && x.WonAt >= from, x.Stage == "Lost" && x.LostAt >= from,
+                    !ClosedDealStages.Contains(x.Stage) && stalledAfter > 0 && x.Touched <= now.AddDays(-stalledAfter)))
+                .ToList();
+            var overdue = await dbContext.SalesActivities.IgnoreQueryFilters().AsNoTracking()
+                .Where(x => x.TenantId == tenantId && x.DueAt < now && x.CompletedAt == null && x.Opportunity != null && !ClosedDealStages.Contains(x.Opportunity.Stage))
+                .Select(x => x.Opportunity!.OwnerUserId)
+                .ToListAsync(cancellationToken);
+
+            var weekLabel = $"{local.Date.AddDays(-7):d MMM} – {local.Date.AddDays(-1):d MMM yyyy}";
+            foreach (var person in await SalesOwnerDirectory.ListAsync(dbContext, rolePermissionService, tenantId, cancellationToken))
+            {
+                var recipient = await LoadRecipientAsync(tenantId, person.Id, cancellationToken);
+                if (recipient is null)
+                    continue;
+                var mine = WeekFigures.For(deals.Where(x => x.OwnerUserId == person.Id), overdue.Count(x => x == person.Id), converter.ReportingCurrency);
+                var seesTeam = string.Equals(person.Role, Shared.Auth.AppRoles.Admin, StringComparison.OrdinalIgnoreCase)
+                    || (await dynamicAccessService.GetEffectiveAccessAsync(tenantId, person.Id, cancellationToken))
+                        .Any(x => x.Allowed && string.Equals(x.Capability, Shared.Auth.PermissionNames.CrmViewAll, StringComparison.OrdinalIgnoreCase));
+                var team = seesTeam ? WeekFigures.For(deals, overdue.Count, converter.ReportingCurrency) : null;
+
+                await DeliverAsync(recipient, SalesReminderKeys.WeeklySummary,
+                    new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["OwnerName"] = recipient.FullName,
+                        ["Week"] = weekLabel,
+                        ["Summary"] = mine.Text,
+                        ["TeamSummary"] = team is null ? string.Empty : $"Whole team: {team.Text}",
+                        ["PipelineUrl"] = AbsoluteUrl("/crm"),
+                    },
+                    new PushMessage(
+                        Title: $"Your sales week: {mine.WonCount} won",
+                        Body: mine.Text,
+                        Url: "/crm/reports",
+                        Tag: $"crm-weekly-{week:yyyyMMdd}"),
+                    cancellationToken);
+                sent++;
+            }
+        }
+        return sent;
+    }
+
+    public const int WeeklySummaryHour = 7;
+
+    private sealed record WeekDeal(Guid? OwnerUserId, string Stage, decimal Value, bool New, bool WonThisWeek, bool LostThisWeek, bool Stalled);
+
+    private sealed record WeekFigures(int WonCount, string Text)
+    {
+        public static WeekFigures For(IEnumerable<WeekDeal> deals, int overdueFollowUps, string currency)
+        {
+            var list = deals.ToList();
+            var won = list.Where(x => x.WonThisWeek).ToList();
+            var open = list.Where(x => !ClosedDealStages.Contains(x.Stage)).ToList();
+            var text = $"{won.Count} won ({currency} {won.Sum(x => x.Value):N0}), {list.Count(x => x.LostThisWeek)} lost, {list.Count(x => x.New)} new. "
+                + $"Open pipeline: {open.Count} deals, {currency} {open.Sum(x => x.Value):N0}. "
+                + $"Overdue follow-ups: {overdueFollowUps}. Gone quiet: {open.Count(x => x.Stalled)}.";
+            return new WeekFigures(won.Count, text);
+        }
+    }
+
     private async Task<int> RemindStalledDealsAsync(DateTime now, CancellationToken cancellationToken)
     {
         var thresholds = await dbContext.TenantSalesSettings.IgnoreQueryFilters().AsNoTracking()
@@ -556,6 +657,8 @@ public sealed class SalesReminderWorker(
             {
                 using var scope = serviceScopeFactory.CreateScope();
                 var result = await scope.ServiceProvider.GetRequiredService<ISalesReminderService>().RunAsync(DateTime.UtcNow, stoppingToken);
+                if (result.WeeklySummaries > 0)
+                    logger.LogInformation("Weekly sales summaries sent: {Count}.", result.WeeklySummaries);
                 if (result.RenewalDealsOpened + result.RenewalDealsClosed > 0)
                     logger.LogInformation("Renewal deals: {Opened} opened, {Closed} settled from their contracts.", result.RenewalDealsOpened, result.RenewalDealsClosed);
                 if (result.FollowUpReminders + result.TenderReminders + result.QuoteReminders + result.StalledReminders > 0)

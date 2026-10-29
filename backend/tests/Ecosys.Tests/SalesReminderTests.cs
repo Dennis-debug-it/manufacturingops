@@ -262,6 +262,34 @@ public sealed class SalesReminderTests
     }
 
     [Fact]
+    public async Task WeeklySummary_GoesOutMondayMorningOnce_WithTeamFiguresForManagers()
+    {
+        await using var db = CreateDbContext();
+        var fixture = await SeedAsync(db); // owner is a Manager: sees the whole team
+        var rep = new User { TenantId = fixture.Tenant.Id, FullName = "Rep One", Email = "rep@acme.test", HasEmail = true, PasswordHash = "hash", Role = AppRoles.FinanceUser, IsActive = true };
+        db.Users.Add(rep);
+        var monday = new DateTime(2026, 10, 26, 5, 0, 0, DateTimeKind.Utc); // 08:00 in Nairobi
+        db.SalesOpportunities.Add(new SalesOpportunity { TenantId = fixture.Tenant.Id, Title = "Won deal", Stage = "Won", WonAt = monday.AddDays(-2), EstimatedValue = 250_000m, Currency = "KES", CompanyName = "X", OwnerUserId = rep.Id });
+        await db.SaveChangesAsync();
+        var push = new RecordingPushQueue();
+
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(monday.AddHours(-3))).WeeklySummaries); // 05:00 local: too early
+        Assert.Equal(2, (await CreateService(db, push).RunAsync(monday)).WeeklySummaries);
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(monday.AddHours(1))).WeeklySummaries);
+
+        var emails = await db.EmailOutboxMessages.Where(x => x.EventKey == SalesReminderKeys.WeeklySummary).ToListAsync();
+        var repEmail = Assert.Single(emails, x => x.RecipientEmail == "rep@acme.test");
+        Assert.Contains("1 won (KES 250,000)", repEmail.TextBody);
+        Assert.DoesNotContain("Whole team", repEmail.TextBody);
+        Assert.Contains("Whole team: 1 won", Assert.Single(emails, x => x.RecipientEmail == "grace@acme.test").TextBody);
+
+        // Turned off: the next Monday is quiet.
+        (await db.TenantSalesSettings.SingleAsync()).SendWeeklySummary = false;
+        await db.SaveChangesAsync();
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(monday.AddDays(7))).WeeklySummaries);
+    }
+
+    [Fact]
     public async Task OwnerWithoutAMailbox_GetsThePushOnly()
     {
         await using var db = CreateDbContext();
@@ -336,6 +364,8 @@ public sealed class SalesReminderTests
             push,
             Options.Create(new PublicAppOptions { PublicUrl = "https://app.test/" }),
             new SalesOwnerResolver(db, new RolePermissionService(db)),
+            new RolePermissionService(db),
+            new DynamicAccessService(db, new RolePermissionService(db)),
             NullLogger<SalesReminderService>.Instance);
 
     internal sealed class RecordingPushQueue : IPushNotificationQueue

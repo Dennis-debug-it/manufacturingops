@@ -226,6 +226,7 @@ public sealed partial class SalesCrmController(
         if (request.StalledAfterDays is < 0 or > 365)
             throw new BusinessRuleException("Stalled after must be between 0 (off) and 365 days.");
         settings.StalledAfterDays = request.StalledAfterDays ?? settings.StalledAfterDays;
+        settings.SendWeeklySummary = request.SendWeeklySummary ?? settings.SendWeeklySummary;
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "crm.settings.updated", nameof(TenantSalesSettings), settings.Id.ToString(),
             $"Sales settings updated: deal visibility {settings.DealVisibility}" + (previousVisibility != settings.DealVisibility ? $" (was {previousVisibility})" : "") + $", renewal deals {(settings.CreateRenewalDeals ? "on" : "off")}.",
@@ -238,7 +239,7 @@ public sealed partial class SalesCrmController(
         var settings = await dbContext.TenantSalesSettings.AsNoTracking().SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken)
             ?? new TenantSalesSettings { TenantId = TenantId };
         var ownerName = settings.DefaultOwnerUserId is null ? null : await ResolveUserNameAsync(settings.DefaultOwnerUserId.Value, cancellationToken);
-        return new SalesSettingsResponse(settings.DefaultOwnerUserId, ownerName, SalesVisibility.Normalize(settings.DealVisibility), settings.CreateRenewalDeals, settings.StalledAfterDays);
+        return new SalesSettingsResponse(settings.DefaultOwnerUserId, ownerName, SalesVisibility.Normalize(settings.DealVisibility), settings.CreateRenewalDeals, settings.StalledAfterDays, settings.SendWeeklySummary);
     }
 
     [HttpGet("currency")]
@@ -1071,9 +1072,9 @@ public sealed record SalesPipelineSummary(
     int StalledDeals = 0,
     int StalledAfterDays = 0);
 
-public sealed record SalesSettingsResponse(Guid? DefaultOwnerUserId, string? DefaultOwnerName, string DealVisibility, bool CreateRenewalDeals, int StalledAfterDays = 14);
+public sealed record SalesSettingsResponse(Guid? DefaultOwnerUserId, string? DefaultOwnerName, string DealVisibility, bool CreateRenewalDeals, int StalledAfterDays = 14, bool SendWeeklySummary = true);
 
-public sealed record UpdateSalesSettingsRequest(Guid? DefaultOwnerUserId, [StringLength(20)] string? DealVisibility, bool CreateRenewalDeals = true, int? StalledAfterDays = null);
+public sealed record UpdateSalesSettingsRequest(Guid? DefaultOwnerUserId, [StringLength(20)] string? DealVisibility, bool CreateRenewalDeals = true, int? StalledAfterDays = null, bool? SendWeeklySummary = null);
 
 public sealed record SalesOwnerOption(Guid Id, string FullName, string Role);
 

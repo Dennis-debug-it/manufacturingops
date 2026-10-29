@@ -261,6 +261,8 @@ export interface SalesSettings {
   createRenewalDeals: boolean
   /** An open deal with nothing logged for this many days is stalled; 0 turns it off. */
   stalledAfterDays: number
+  /** Monday-morning email of each person's past week (and the team's for managers). */
+  sendWeeklySummary: boolean
 }
 
 export interface SalesAssignmentRule {

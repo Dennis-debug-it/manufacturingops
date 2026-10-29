@@ -638,6 +638,14 @@ public sealed class SalesCrmFlowTests
             await ClientMatching.MergeProspectAsync(dbContext, tenant.Id, prospectDeal.ClientId!.Value, client.Id, CancellationToken.None);
             await dbContext.SaveChangesAsync();
 
+            // Phase 3: stalled filter, targets, the funnel (in the scoped report above) and the Monday summary.
+            Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities("Stalled", null, null, null, CancellationToken.None));
+            Ok<SalesTargetsResponse>(await crm.SetTargets(new SetSalesTargetsRequest(2026, [new SalesTargetRow(null, new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc), 1_000m)]), CancellationToken.None));
+            Assert.NotNull(Ok<SalesReport>(await new SalesReportsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService())
+                .Get(new DateTime(2026, 10, 1), new DateTime(2026, 10, 31), null, CancellationToken.None)).Funnel);
+            await SalesReminderTests.CreateService(dbContext, push).RunAsync(new DateTime(2026, 11, 2, 9, 0, 0, DateTimeKind.Utc));
+            Assert.NotEmpty(await dbContext.SalesStageChanges.ToListAsync());
+
             // Answering the quote wins the deal.
             var quotes = new TenantQuotationController(
                 dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpDocumentNumberingService(), null!,

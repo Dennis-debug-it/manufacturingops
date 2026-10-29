@@ -10930,6 +10930,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("DefaultOwnerUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("SendWeeklySummary")
+                        .HasColumnType("boolean");
+
                     b.Property<int>("StalledAfterDays")
                         .HasColumnType("integer");
 
@@ -10937,6 +10940,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("WeeklySummaryWeek")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");

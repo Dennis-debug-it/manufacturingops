@@ -41,6 +41,7 @@ public sealed class EmailSubjectRuleService(AppDbContext dbContext) : IEmailSubj
             ["crm.tender.deadline"] = "[Sales]",
             ["crm.quote.awaiting-answer"] = "[Sales]",
             ["crm.deal.stalled"] = "[Sales]",
+            ["crm.weekly-summary"] = "[Sales]",
             ["material.request.submitted"] = "[Materials]",
             ["smtp.failure"] = "[System]",
             ["platform.invoice.issued"] = "[Invoice]",

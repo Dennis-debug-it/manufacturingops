@@ -36,6 +36,7 @@ public sealed class Phase2GovernanceTests
                 "crm.follow-up.due",
                 "crm.quote.awaiting-answer",
                 "crm.tender.deadline",
+                "crm.weekly-summary",
                 "csat.survey",
                 "email-intake.email-intake-received",
                 "email-intake.email-intake-reply-added",

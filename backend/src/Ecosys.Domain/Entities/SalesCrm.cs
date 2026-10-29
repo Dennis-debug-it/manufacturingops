@@ -146,6 +146,10 @@ public sealed class TenantSalesSettings : AuditableEntity, ITenantEntity
     public bool CreateRenewalDeals { get; set; } = true;
     /// <summary>An open deal with no activity for this many days is stalled (0 turns it off).</summary>
     public int StalledAfterDays { get; set; } = 14;
+    /// <summary>Email everyone who works the pipeline a summary of their week, Monday morning.</summary>
+    public bool SendWeeklySummary { get; set; } = true;
+    /// <summary>The Monday (workspace time) the last weekly summary went out for, so it is sent once.</summary>
+    public DateTime? WeeklySummaryWeek { get; set; }
 }
 
 /// <summary>

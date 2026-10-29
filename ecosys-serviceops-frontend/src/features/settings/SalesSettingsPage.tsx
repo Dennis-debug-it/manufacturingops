@@ -21,7 +21,7 @@ const visibilityOptions: Array<{ value: DealVisibility; title: string; descripti
   },
 ]
 
-type FormState = Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals' | 'stalledAfterDays'>
+type FormState = Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals' | 'stalledAfterDays' | 'sendWeeklySummary'>
 
 export function SalesSettingsPage() {
   const { data, isLoading } = useSalesSettings()
@@ -29,7 +29,7 @@ export function SalesSettingsPage() {
   const [form, setForm] = useState<FormState | null>(null)
 
   useEffect(() => {
-    if (data) setForm({ defaultOwnerUserId: data.defaultOwnerUserId, dealVisibility: data.dealVisibility, createRenewalDeals: data.createRenewalDeals, stalledAfterDays: data.stalledAfterDays })
+    if (data) setForm({ defaultOwnerUserId: data.defaultOwnerUserId, dealVisibility: data.dealVisibility, createRenewalDeals: data.createRenewalDeals, stalledAfterDays: data.stalledAfterDays, sendWeeklySummary: data.sendWeeklySummary })
   }, [data])
 
   if (isLoading || !form) return <Spinner label="Loading sales settings" />
@@ -115,6 +115,17 @@ export function SalesSettingsPage() {
           days.
         </label>
         <p className="text-xs text-slate-500">The deal is marked on the pipeline and its owner is told once; logging anything on it starts the clock again. 0 turns this off.</p>
+      </section>
+
+      <section className="space-y-2 rounded-[var(--radius-card)] border border-slate-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-slate-900">Weekly summary</h2>
+        <label className="flex items-start gap-3 text-sm">
+          <input type="checkbox" className="mt-1" checked={form.sendWeeklySummary} onChange={(event) => setForm({ ...form, sendWeeklySummary: event.target.checked })} />
+          <span>
+            <span className="block font-medium text-slate-900">Email a summary of the week every Monday morning</span>
+            <span className="mt-0.5 block text-slate-500">Everyone who works the pipeline gets their won, lost and new deals, open pipeline, overdue follow-ups and deals gone quiet; admins and sales managers also get the team's. People can turn it off for themselves in My Notifications.</span>
+          </span>
+        </label>
       </section>
 
       <div className="flex justify-end">
