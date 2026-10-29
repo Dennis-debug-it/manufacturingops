@@ -82,18 +82,39 @@ Sizes are rough, for one developer: **S** ≈ 1 day, **M** ≈ 2–4 days, **L**
     approval matrix (Settings › Approvals) has a Quotations type; a quote in a band is held until approved
     at its current total, and changing the total afterwards asks again.
 
-### Phase 5: Communication and lead capture
-- [ ] **5.1 WhatsApp and email on deals:** send from the deal; incoming messages matched by contact (needs 2.2).
-- [ ] **5.2 Inbound lead capture:** a website form per workspace, a sales email address handled by `EmailIntakeService`, and WhatsApp messages from unknown numbers.
-- [ ] **5.3 Calendar feed** for follow-ups.
-- [ ] **5.4 Online signature on portal quotes** (typed name, time and IP stored with the acceptance).
-- [ ] **5.5 Sequences** (automated multi-step follow-ups).
+### Phase 5: Communication and lead capture (done)
+- [x] **5.1 Email and WhatsApp on deals.**
+  - Email is written on the deal, sent from the workspace's address with the sender's name, and logged.
+    Its subject carries the deal's tag ("[Deal D-1A2B3C4D]"). With the intake mailbox on, replies are
+    addressed to it; a reply carrying the tag goes back on the deal when it comes from someone at the
+    client (a contact's address or the same company domain), so a copied tag cannot write on a deal.
+  - WhatsApp opens the salesperson's own WhatsApp with the message ready and logs it. The platform's
+    WhatsApp number is shared by every workspace and only sends approved templates, so it cannot carry
+    free-text sales chat, and its replies cannot be tied to one workspace. The workspace's own WhatsApp
+    inbox conversations with the deal's contacts (matched on phone number) are shown on the deal.
+- [x] **5.2 Inbound lead capture.** A sales email address (an alias of the intake mailbox, set in
+  Settings › Sales) turns mail into leads instead of work orders; the website enquiry form has a public
+  link and an embed snippet (the only page other sites may frame). Leads are matched to an existing
+  client or become a prospect, get an owner by the usual rules and a follow-up due now; a repeat within a
+  week joins the open lead. WhatsApp from unknown numbers is not possible on the shared number (above).
+- [x] **5.3 Calendar feed:** "My calendar" and its private feed gain a Sales source (follow-ups on open
+  deals and unsubmitted RFP/RFQ deadlines, for their owner).
+- [x] **5.4 Signed acceptance on portal quotes:** the client types their name (and position) and ticks
+  that they accept; the name, time, network address and portal user are stored and shown on the quote.
+- [x] **5.5 Sequences:** task and email steps with waits between them, run hourly. Started on a deal;
+  a client reply (if the sequence says so) or closing the deal stops it and closes what it left open.
 
-### Phase 6: Field sales and polish
-- [ ] **6.1 Field visit reports with GPS**, reusing the technician app's location and offline saving.
-- [ ] **6.2 Drag-and-drop pipeline board** (`@dnd-kit` is already a dependency).
-- [ ] **6.3 Saved views; documents on deals.**
-- [ ] **6.5 Win-probability scoring**, after about 6 months of stage history.
+### Phase 6: Field sales and polish (done)
+- [x] **6.1 Field visit reports with GPS:** a site visit logged from the phone can carry its location
+  (asked for only when the person taps for it), shown on the deal with a map link.
+- [x] **6.2 Drag-and-drop pipeline board** (`@dnd-kit`): drag a card to a stage; Lost asks for the
+  reason; stage rules still apply. The stage menu on each card remains the keyboard way to move a deal.
+- [x] **6.3 Saved views** (the pipeline's filters, kept in the address so they can be bookmarked too;
+  managers can share them) **and documents on deals.**
+- [x] **6.5 Win-probability scoring:** from the last 12 months of closed deals in the same pipeline: the
+  smoothed win rate of deals that reached the deal's stage, adjusted for the lead source's record, for
+  going quiet and for an overdue close date. Shown once a pipeline has 10 closed deals, beside the
+  owner's own probability, with the reasons.
 
 ### Not planned
 Territories, team forecasting and opportunity splits; website chatbots and prospect databases; AI agents that write emails.

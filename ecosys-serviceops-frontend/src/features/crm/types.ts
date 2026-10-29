@@ -137,6 +137,7 @@ export const sourceOptions = ['Referral', 'Website', 'Walk-in', 'Cold call', 'Te
 export const activityTypeOptions = [
   { value: 'Call', label: 'Call' },
   { value: 'Email', label: 'Email' },
+  { value: 'WhatsApp', label: 'WhatsApp' },
   { value: 'Meeting', label: 'Meeting' },
   { value: 'SiteVisit', label: 'Site visit' },
   { value: 'Note', label: 'Note' },
@@ -173,6 +174,8 @@ export interface SalesOpportunityListItem {
   /** When the deal entered its current stage. */
   stageChangedAt?: string | null
   pipelineId?: string | null
+  /** Win chance from history (see DealScore); absent until there is enough of it. */
+  suggestedProbability?: number | null
 }
 
 export interface SalesActivity {
@@ -184,6 +187,89 @@ export interface SalesActivity {
   dueAt: string | null
   completedAt: string | null
   loggedByName: string | null
+  /** Where a site visit was logged from. */
+  latitude?: number | null
+  longitude?: number | null
+  accuracyMeters?: number | null
+}
+
+/** Activity types the system writes (not offered when logging). */
+export const activityTypeLabels: Record<string, string> = {
+  EmailReceived: 'Email received',
+  System: 'Update',
+  SiteVisit: 'Site visit',
+  FollowUp: 'Follow-up',
+}
+
+/** The deal's follow-up sequence (the latest one, running or not). */
+export interface DealSequence {
+  enrollmentId: string
+  sequenceId: string
+  name: string
+  status: 'Active' | 'Completed' | 'Stopped'
+  /** Steps run so far. */
+  nextStep: number
+  stepCount: number
+  nextDueAt: string | null
+  stoppedReason: string | null
+  finishedAt: string | null
+}
+
+/** Win chance from the workspace's own history; absent until there is enough of it. */
+export interface DealScore {
+  probability: number
+  reasons: string[]
+  basedOnDeals: number
+}
+
+export interface SalesSequenceStep {
+  delayDays: number
+  action: 'Task' | 'Email'
+  subject: string | null
+  body: string
+}
+
+export interface SalesSequence {
+  id: string
+  name: string
+  isActive: boolean
+  stopOnReply: boolean
+  runningDeals: number
+  steps: SalesSequenceStep[]
+}
+
+export interface UpsertSequencePayload {
+  name: string
+  isActive: boolean
+  stopOnReply: boolean
+  steps: SalesSequenceStep[]
+}
+
+export interface SalesSavedView {
+  id: string
+  name: string
+  /** The pipeline page's query string, without "?". */
+  query: string
+  isShared: boolean
+  isMine: boolean
+}
+
+export interface DealWhatsAppMessage {
+  id: string
+  conversationId: string
+  contactName: string
+  contactPhone: string
+  direction: 'Inbound' | 'Outbound'
+  body: string
+  sentAt: string
+  status: string
+}
+
+/** wa.me wants the number in international form, digits only; a Kenyan 07… number gets 254. */
+export function whatsAppLink(phone: string, text: string) {
+  let digits = phone.replace(/\D/g, '')
+  if (digits.startsWith('0')) digits = `254${digits.slice(1)}`
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
 }
 
 /** An open follow-up on an open deal, as listed across the whole pipeline. */
@@ -265,6 +351,8 @@ export interface SalesOpportunityDetail {
   customFields?: DealFieldValue[]
   /** Stage key → what the deal still lacks to enter it; stages it can enter are left out. */
   stageBlockers?: Record<string, string[]>
+  sequence?: DealSequence | null
+  score?: DealScore | null
 }
 
 /** Every value is in `reportingCurrency`; deals in a currency with no rate are listed in `unconvertedCurrencies` instead. */
@@ -389,6 +477,13 @@ export interface SalesSettings {
   stalledAfterDays: number
   /** Monday-morning email of each person's past week (and the team's for managers). */
   sendWeeklySummary: boolean
+  /** Mail to this address (an alias of the intake mailbox) becomes a lead. */
+  leadEmailAddress?: string | null
+  /** The intake mailbox, when on: replies to deal emails come back through it. */
+  intakeEmailAddress?: string | null
+  webFormEnabled?: boolean
+  /** The key in the website form's public link; null while the form is off. */
+  webFormKey?: string | null
 }
 
 export interface SalesAssignmentRule {

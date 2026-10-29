@@ -130,7 +130,7 @@ export interface SaveActionItemPayload {
   entityId: string | null
 }
 
-export type CalendarSource = 'activities' | 'action-items' | 'work-orders' | 'maintenance' | 'projects' | 'contracts'
+export type CalendarSource = 'activities' | 'action-items' | 'work-orders' | 'maintenance' | 'projects' | 'contracts' | 'sales'
 
 export const calendarSourceLabels: Record<CalendarSource, string> = {
   activities: 'Meetings & visits',
@@ -139,6 +139,7 @@ export const calendarSourceLabels: Record<CalendarSource, string> = {
   maintenance: 'Maintenance due',
   projects: 'Project dates',
   contracts: 'Contract dates',
+  sales: 'Sales follow-ups',
 }
 
 export interface CalendarItem {

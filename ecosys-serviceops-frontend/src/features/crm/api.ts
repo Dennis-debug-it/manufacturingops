@@ -24,6 +24,10 @@ import type {
   SalesStage,
   SalesPipeline,
   UpsertPipelinePayload,
+  DealWhatsAppMessage,
+  SalesSavedView,
+  SalesSequence,
+  UpsertSequencePayload,
   DealFieldsResponse,
   UpsertDealFieldPayload,
   UpsertOpportunityPayload,
@@ -148,7 +152,7 @@ export function useDeleteOpportunity() {
 export function useAddActivity(opportunityId: string) {
   const invalidate = useInvalidateCrm()
   return useMutation({
-    mutationFn: (payload: { type: string; summary: string; dueAt?: string | null }) =>
+    mutationFn: (payload: { type: string; summary: string; dueAt?: string | null; latitude?: number; longitude?: number; accuracyMeters?: number }) =>
       api.post<SalesActivity>(endpoints.crm.activities(opportunityId), payload),
     onSuccess: invalidate,
   })
@@ -185,6 +189,72 @@ export function useRemoveDealContact(opportunityId: string) {
     mutationFn: (contactId: string) => api.delete<SalesOpportunityDetail>(endpoints.crm.dealContact(opportunityId, contactId)),
     onSuccess: invalidate,
   })
+}
+
+export function useSendDealEmail(opportunityId: string) {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (payload: { to: string; toName: string | null; cc: string[] | null; subject: string; body: string }) =>
+      api.post<SalesActivity>(endpoints.crm.dealEmail(opportunityId), payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDealWhatsApp(opportunityId: string | undefined) {
+  return useQuery({
+    queryKey: [...crmKey, 'opportunity', opportunityId, 'whatsapp'],
+    queryFn: () => api.get<DealWhatsAppMessage[]>(endpoints.crm.dealWhatsApp(opportunityId ?? '')),
+    enabled: Boolean(opportunityId),
+    staleTime: 60_000,
+  })
+}
+
+export function useSequences() {
+  return useQuery({ queryKey: [...crmKey, 'sequences'], queryFn: () => api.get<SalesSequence[]>(endpoints.crm.sequences), staleTime: 5 * 60_000 })
+}
+
+export function useSaveSequence() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id?: string | undefined; payload: UpsertSequencePayload }) =>
+      id ? api.put<SalesSequence[]>(endpoints.crm.sequence(id), payload) : api.post<SalesSequence[]>(endpoints.crm.sequences, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteSequence() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({ mutationFn: (id: string) => api.delete<SalesSequence[]>(endpoints.crm.sequence(id)), onSuccess: invalidate })
+}
+
+export function useStartSequence(opportunityId: string) {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (sequenceId: string) => api.post<SalesOpportunityDetail>(endpoints.crm.dealSequence(opportunityId), { sequenceId }),
+    onSuccess: invalidate,
+  })
+}
+
+export function useStopSequence(opportunityId: string) {
+  const invalidate = useInvalidateCrm()
+  return useMutation({ mutationFn: () => api.delete<SalesOpportunityDetail>(endpoints.crm.dealSequence(opportunityId)), onSuccess: invalidate })
+}
+
+export function useSavedViews() {
+  return useQuery({ queryKey: [...crmKey, 'views'], queryFn: () => api.get<SalesSavedView[]>(endpoints.crm.views), staleTime: 5 * 60_000 })
+}
+
+export function useSaveView() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (payload: { name: string; query: string; isShared: boolean }) => api.post<SalesSavedView[]>(endpoints.crm.views, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteView() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({ mutationFn: (id: string) => api.delete<SalesSavedView[]>(endpoints.crm.view(id)), onSuccess: invalidate })
 }
 
 export function useCompleteActivity() {
@@ -247,7 +317,8 @@ export function useSalesSettings() {
 export function useUpdateSalesSettings() {
   const invalidate = useInvalidateCrm()
   return useMutation({
-    mutationFn: (payload: Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals' | 'stalledAfterDays' | 'sendWeeklySummary'>) => api.put<SalesSettings>(endpoints.crm.settings, payload),
+    mutationFn: (payload: Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals' | 'stalledAfterDays' | 'sendWeeklySummary'> & { leadEmailAddress?: string; webFormEnabled?: boolean }) =>
+      api.put<SalesSettings>(endpoints.crm.settings, payload),
     onSuccess: invalidate,
   })
 }
@@ -394,34 +465,37 @@ export interface TenderDocument {
   createdAt: string
 }
 
-const tenderDocumentsKey = (tenderId: string) => ['attachments', 'SalesTender', tenderId] as const
+/** Files kept with an RFP/RFQ or a deal (the shared attachments). */
+export type SalesDocumentOwner = 'SalesTender' | 'SalesOpportunity'
 
-export function useTenderDocuments(tenderId: string) {
+const tenderDocumentsKey = (tenderId: string, entityType: SalesDocumentOwner = 'SalesTender') => ['attachments', entityType, tenderId] as const
+
+export function useTenderDocuments(tenderId: string, entityType: SalesDocumentOwner = 'SalesTender') {
   return useQuery({
-    queryKey: tenderDocumentsKey(tenderId),
-    queryFn: () => api.get<TenderDocument[]>(endpoints.crm.documents(tenderId)),
+    queryKey: tenderDocumentsKey(tenderId, entityType),
+    queryFn: () => api.get<TenderDocument[]>(entityType === 'SalesTender' ? endpoints.crm.documents(tenderId) : endpoints.crm.dealDocuments(tenderId)),
     enabled: Boolean(tenderId),
   })
 }
 
-export function useUploadTenderDocument(tenderId: string) {
+export function useUploadTenderDocument(tenderId: string, entityType: SalesDocumentOwner = 'SalesTender') {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (file: File) => {
       const form = new FormData()
-      form.append('entityType', 'SalesTender')
+      form.append('entityType', entityType)
       form.append('entityId', tenderId)
       form.append('file', file)
       return api.post<TenderDocument>(endpoints.crm.uploadDocument, form)
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: tenderDocumentsKey(tenderId) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: tenderDocumentsKey(tenderId, entityType) }),
   })
 }
 
-export function useDeleteTenderDocument(tenderId: string) {
+export function useDeleteTenderDocument(tenderId: string, entityType: SalesDocumentOwner = 'SalesTender') {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (attachmentId: string) => api.delete<void>(endpoints.crm.deleteDocument(attachmentId)),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: tenderDocumentsKey(tenderId) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: tenderDocumentsKey(tenderId, entityType) }),
   })
 }

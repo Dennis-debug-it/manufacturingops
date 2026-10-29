@@ -8,6 +8,8 @@ import { OwnerSelect } from '../crm/components/OwnerSelect'
 import { AssignmentRulesSection } from './components/AssignmentRulesSection'
 import { PipelinesSection } from './components/PipelinesSection'
 import { DealFieldsSection } from './components/DealFieldsSection'
+import { SequencesSection } from './components/SequencesSection'
+import { LeadCaptureSection } from './components/LeadCaptureSection'
 import type { DealVisibility, SalesSettings } from '../crm/types'
 
 const visibilityOptions: Array<{ value: DealVisibility; title: string; description: string }> = [
@@ -23,7 +25,7 @@ const visibilityOptions: Array<{ value: DealVisibility; title: string; descripti
   },
 ]
 
-type FormState = Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals' | 'stalledAfterDays' | 'sendWeeklySummary'>
+type FormState = Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals' | 'stalledAfterDays' | 'sendWeeklySummary'> & { leadEmailAddress: string; webFormEnabled: boolean }
 
 export function SalesSettingsPage() {
   const { data, isLoading } = useSalesSettings()
@@ -31,7 +33,11 @@ export function SalesSettingsPage() {
   const [form, setForm] = useState<FormState | null>(null)
 
   useEffect(() => {
-    if (data) setForm({ defaultOwnerUserId: data.defaultOwnerUserId, dealVisibility: data.dealVisibility, createRenewalDeals: data.createRenewalDeals, stalledAfterDays: data.stalledAfterDays, sendWeeklySummary: data.sendWeeklySummary })
+    if (data)
+      setForm({
+        defaultOwnerUserId: data.defaultOwnerUserId, dealVisibility: data.dealVisibility, createRenewalDeals: data.createRenewalDeals, stalledAfterDays: data.stalledAfterDays,
+        sendWeeklySummary: data.sendWeeklySummary, leadEmailAddress: data.leadEmailAddress ?? '', webFormEnabled: data.webFormEnabled ?? false,
+      })
   }, [data])
 
   if (isLoading || !form) return <Spinner label="Loading sales settings" />
@@ -47,7 +53,7 @@ export function SalesSettingsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Sales Settings" subtitle="Pipelines and stages, who sees which deals, and who owns the deals the system opens for you." />
+      <PageHeader title="Sales Settings" subtitle="Who sees which deals, where leads come in from, pipelines and stages, and automatic follow-ups." />
 
       <section className="space-y-3 rounded-[var(--radius-card)] border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-900">Deal visibility</h2>
@@ -130,6 +136,14 @@ export function SalesSettingsPage() {
         </label>
       </section>
 
+      <LeadCaptureSection
+        leadEmailAddress={form.leadEmailAddress}
+        webFormEnabled={form.webFormEnabled}
+        webFormKey={data?.webFormKey ?? null}
+        intakeEmailAddress={data?.intakeEmailAddress ?? null}
+        onChange={(patch) => setForm({ ...form, ...patch })}
+      />
+
       <div className="flex justify-end">
         <button type="button" disabled={update.isPending} onClick={() => void save()} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-5 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
           Save
@@ -141,6 +155,8 @@ export function SalesSettingsPage() {
       <DealFieldsSection />
 
       <AssignmentRulesSection />
+
+      <SequencesSection />
     </div>
   )
 }

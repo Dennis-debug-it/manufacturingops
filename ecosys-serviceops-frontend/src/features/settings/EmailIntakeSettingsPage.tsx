@@ -57,7 +57,7 @@ interface IntakeMessage {
   fromAddress: string
   fromName: string | null
   subject: string
-  outcome: 'WorkOrderCreated' | 'AddedToWorkOrder' | 'Rejected' | 'Ignored' | 'Failed'
+  outcome: 'WorkOrderCreated' | 'AddedToWorkOrder' | 'AddedToDeal' | 'LeadCreated' | 'Rejected' | 'Ignored' | 'Failed'
   detail: string | null
   workOrderId: string | null
   workOrderNumber: string | null
@@ -69,6 +69,8 @@ const PRIORITIES = ['Low', 'Medium', 'High', 'Critical']
 const OUTCOME_LABELS: Record<IntakeMessage['outcome'], { label: string; className: string }> = {
   WorkOrderCreated: { label: 'Work order created', className: 'bg-emerald-50 text-emerald-700' },
   AddedToWorkOrder: { label: 'Added to job', className: 'bg-sky-50 text-sky-700' },
+  AddedToDeal: { label: 'Added to deal', className: 'bg-indigo-50 text-indigo-700' },
+  LeadCreated: { label: 'New sales lead', className: 'bg-violet-50 text-violet-700' },
   Rejected: { label: 'Not recognised', className: 'bg-amber-50 text-amber-800' },
   Ignored: { label: 'Ignored', className: 'bg-slate-100 text-slate-600' },
   Failed: { label: 'Failed', className: 'bg-rose-50 text-rose-700' },

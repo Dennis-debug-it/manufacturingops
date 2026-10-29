@@ -1,10 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import toast from 'react-hot-toast'
+import { DndContext, PointerSensor, TouchSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { Link, useSearchParams } from 'react-router-dom'
-import { AlertTriangle, CalendarClock, ClipboardList, Coins, Download, FileText, LayoutGrid, List, Plus, Search, Upload } from 'lucide-react'
+import { AlertTriangle, CalendarClock, ClipboardList, Coins, Download, FileText, GripVertical, LayoutGrid, List, Plus, Search, Upload } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatCard } from '../../shared/components/StatCard'
 import { StatusBadge } from '../../shared/components/StatusBadge'
+import { FormDrawer } from '../../shared/components/FormDrawer'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useAuth } from '../../shared/hooks/useAuth'
@@ -18,25 +21,43 @@ import { ExchangeRatesDrawer } from './components/ExchangeRatesDrawer'
 import { DealImportDrawer } from './components/DealImportDrawer'
 import { importService } from '../../shared/services/importService'
 import { OwnerSelect } from './components/OwnerSelect'
+import { SavedViewsMenu } from './components/SavedViewsMenu'
 import { SALES_STAGES, fieldAppliesTo, isClosedStage, opportunityParty, openStagesOf, pipelineFor, stageLabels, type SalesOpportunityListItem, type SalesStage } from './types'
 
 type View = 'board' | 'list'
 
+/** The page's filters as a query string, for saved views and shareable links; empty filters are left out. */
+export function pipelineQuery(filters: { view: View; search: string; stage: string; owner: string; field: string; value: string; pipeline: string | undefined }) {
+  const params = new URLSearchParams()
+  if (filters.pipeline) params.set('pipeline', filters.pipeline)
+  if (filters.view === 'list') params.set('view', 'list')
+  if (filters.search.trim()) params.set('q', filters.search.trim())
+  if (filters.view === 'list' && filters.stage) params.set('stage', filters.stage)
+  if (filters.owner) params.set('owner', filters.owner)
+  if (filters.view === 'list' && filters.field) {
+    params.set('field', filters.field)
+    if (filters.value) params.set('value', filters.value)
+  }
+  return params.toString()
+}
+
 export function PipelinePage() {
   const canManage = usePermission('crm.manage')
-  const [view, setView] = useState<View>('board')
-  const [search, setSearch] = useState('')
-  const [stageFilter, setStageFilter] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [view, setView] = useState<View>(searchParams.get('view') === 'list' ? 'list' : 'board')
+  const [search, setSearch] = useState(searchParams.get('q') ?? '')
+  const [stageFilter, setStageFilter] = useState(searchParams.get('stage') ?? '')
   const [showForm, setShowForm] = useState(false)
   const [showRates, setShowRates] = useState(false)
   const [showImport, setShowImport] = useState(false)
-  const [ownerFilter, setOwnerFilter] = useState('')
-  const [fieldFilter, setFieldFilter] = useState('')
-  const [fieldValue, setFieldValue] = useState('')
+  const [ownerFilter, setOwnerFilter] = useState(searchParams.get('owner') ?? '')
+  const [fieldFilter, setFieldFilter] = useState(searchParams.get('field') ?? '')
+  const [fieldValue, setFieldValue] = useState(searchParams.get('value') ?? '')
+  const [losing, setLosing] = useState<SalesOpportunityListItem | null>(null)
+  const [lostReason, setLostReason] = useState('')
   const debouncedFieldValue = useDebounce(fieldValue, 300)
   const { user } = useAuth()
   const debouncedSearch = useDebounce(search, 300)
-  const [searchParams, setSearchParams] = useSearchParams()
   const { data: pipelines } = usePipelines()
   const usable = useMemo(() => (pipelines ?? []).filter((p) => p.isActive && p.available), [pipelines])
   const pipeline = pipelineFor(usable, searchParams.get('pipeline'))
@@ -70,11 +91,55 @@ export function PipelinePage() {
   const changeStage = useChangeStage()
   const rows = useMemo(() => data ?? [], [data])
 
+  // Keep the address bar in step with the filters, so a view can be bookmarked, shared or saved.
+  const currentQuery = pipelineQuery({ view, search: debouncedSearch, stage: stageFilter, owner: ownerFilter, field: fieldFilter, value: debouncedFieldValue, pipeline: searchParams.get('pipeline') ?? undefined })
+  useEffect(() => {
+    if (currentQuery !== searchParams.toString()) setSearchParams(new URLSearchParams(currentQuery), { replace: true })
+  }, [currentQuery, searchParams, setSearchParams])
+  const applyQuery = (query: string) => {
+    const params = new URLSearchParams(query)
+    setView(params.get('view') === 'list' ? 'list' : 'board')
+    setSearch(params.get('q') ?? '')
+    setStageFilter(params.get('stage') ?? '')
+    setOwnerFilter(params.get('owner') ?? '')
+    setFieldFilter(params.get('field') ?? '')
+    setFieldValue(params.get('value') ?? '')
+    setSearchParams(params, { replace: true })
+  }
+
+  // A card dragged to another column shows there at once; the server has the last word.
+  const [moved, setMoved] = useState<Record<string, SalesStage>>({})
+  const moveDeal = (item: SalesOpportunityListItem, stage: SalesStage) => {
+    if (stage === item.stage) return
+    if (stage === 'Lost') {
+      setLosing(item)
+      return
+    }
+    setMoved((current) => ({ ...current, [item.id]: stage }))
+    changeStage.mutate(
+      { id: item.id, stage },
+      {
+        onSuccess: () => toast.success(`${item.title} moved to ${nameOf(stage)}`),
+        onSettled: () => setMoved((current) => { const next = { ...current }; delete next[item.id]; return next }),
+      },
+    )
+  }
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    // No keyboard dragging: keys pressed in a card's stage menu would start one. That menu is the keyboard way to move a deal.
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  )
+  const onDragEnd = (event: DragEndEvent) => {
+    const item = rows.find((row) => row.id === event.active.id)
+    const stage = event.over?.id
+    if (item && typeof stage === 'string') moveDeal(item, stage)
+  }
+
   const byStage = useMemo(() => {
     const groups = new Map<SalesStage, SalesOpportunityListItem[]>(boardStages.map((stage) => [stage.key, []]))
-    rows.forEach((row) => groups.get(row.stage)?.push(row))
+    rows.forEach((row) => groups.get(moved[row.id] ?? row.stage)?.push(row))
     return groups
-  }, [rows, boardStages])
+  }, [rows, boardStages, moved])
 
   const columns: DataTableColumn<SalesOpportunityListItem>[] = [
     { key: 'title', header: 'Opportunity', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/crm/opportunities/${row.id}`}>{row.title}</Link> },
@@ -242,6 +307,7 @@ export function PipelinePage() {
             <button type="button" onClick={() => void importService.exportSales('contacts')} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Contacts</button>
           </div>
         </details>
+        <SavedViewsMenu currentQuery={currentQuery} onApply={applyQuery} />
         <div className="inline-flex self-start rounded-lg border border-slate-200 p-1 sm:self-auto">
           {([['board', LayoutGrid, 'Board'], ['list', List, 'List']] as const).map(([key, Icon, label]) => (
             <button
@@ -265,6 +331,7 @@ export function PipelinePage() {
           emptyDescription={isError ? 'The pipeline could not be loaded.' : 'Add your first lead to start tracking sales.'}
         />
       ) : (
+        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
         <div className="-mx-1 overflow-x-auto pb-2">
           <div className="flex min-w-max gap-3 px-1">
             {boardStages.map(({ key: stage, name }) => {
@@ -272,7 +339,7 @@ export function PipelinePage() {
               const total = items.reduce((sum, item) => sum + (item.convertedValue ?? 0), 0)
               const hasUnconverted = items.some((item) => item.convertedValue === null)
               return (
-                <section key={stage} className="flex w-72 shrink-0 flex-col rounded-[var(--radius-card)] border border-slate-200 bg-slate-50/70">
+                <BoardColumn key={stage} stage={stage} enabled={canManage}>
                   <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2.5">
                     <div className="text-sm font-semibold text-slate-900">
                       {name} <span className="font-normal text-slate-500">({items.length})</span>
@@ -285,27 +352,87 @@ export function PipelinePage() {
                     {isLoading ? <div className="px-2 py-6 text-center text-sm text-slate-400">Loading…</div> : null}
                     {!isLoading && items.length === 0 ? <div className="px-2 py-6 text-center text-sm text-slate-400">No deals</div> : null}
                     {items.map((item) => (
-                      <OpportunityCard
-                        key={item.id}
-                        item={item}
-                        canManage={canManage}
-                        reportingCurrency={reporting}
-                        openStages={openStages}
-                        moving={changeStage.isPending && changeStage.variables?.id === item.id}
-                        onMove={(next) => changeStage.mutate({ id: item.id, stage: next })}
-                      />
+                      <DraggableCard key={item.id} id={item.id} enabled={canManage}>
+                        <OpportunityCard
+                          item={item}
+                          canManage={canManage}
+                          reportingCurrency={reporting}
+                          openStages={openStages}
+                          moving={changeStage.isPending && changeStage.variables?.id === item.id}
+                          onMove={(next) => moveDeal(item, next)}
+                        />
+                      </DraggableCard>
                     ))}
                   </div>
-                </section>
+                </BoardColumn>
               )
             })}
           </div>
         </div>
+        </DndContext>
       )}
+
+      <FormDrawer
+        open={Boolean(losing)}
+        title="Mark Deal as Lost"
+        onClose={() => setLosing(null)}
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <button type="button" onClick={() => setLosing(null)} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700">Cancel</button>
+            <button
+              type="button"
+              disabled={!lostReason.trim() || changeStage.isPending}
+              onClick={() => {
+                if (!losing) return
+                changeStage.mutate({ id: losing.id, stage: 'Lost', lostReason: lostReason.trim() }, {
+                  onSuccess: () => {
+                    toast.success(`${losing.title} marked lost`)
+                    setLosing(null)
+                    setLostReason('')
+                  },
+                })
+              }}
+              className="inline-flex h-11 items-center rounded-lg bg-rose-600 px-4 text-sm font-medium text-white transition hover:bg-rose-700 disabled:opacity-60"
+            >
+              Mark Lost
+            </button>
+          </div>
+        }
+      >
+        <p className="mb-3 text-sm text-slate-600">{losing?.title}</p>
+        <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="board-lost-reason">Why was it lost?</label>
+        <textarea id="board-lost-reason" value={lostReason} onChange={(event) => setLostReason(event.target.value)} rows={4} maxLength={500} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" placeholder="e.g. Price, timing, went with a competitor" />
+      </FormDrawer>
 
       <OpportunityFormDrawer open={showForm} onClose={() => setShowForm(false)} defaultPipelineId={pipeline?.id} />
       <ExchangeRatesDrawer open={showRates} onClose={() => setShowRates(false)} canManage={canManage} />
       <DealImportDrawer open={showImport} onClose={() => setShowImport(false)} />
+    </div>
+  )
+}
+
+/** A board column that takes dropped cards. */
+function BoardColumn({ stage, enabled, children }: { stage: string; enabled: boolean; children: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage, disabled: !enabled })
+  return (
+    <section ref={setNodeRef} className={cn('flex w-72 shrink-0 flex-col rounded-[var(--radius-card)] border bg-slate-50/70 transition', isOver ? 'border-[var(--app-primary)] bg-sky-50/60' : 'border-slate-200')}>
+      {children}
+    </section>
+  )
+}
+
+/** A card that can be dragged to another stage (by its handle on touch screens, anywhere with a mouse). */
+function DraggableCard({ id, enabled, children }: { id: string; enabled: boolean; children: ReactNode }) {
+  const { listeners, setNodeRef, transform, isDragging } = useDraggable({ id, disabled: !enabled })
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined}
+      className={cn('relative', enabled && 'cursor-grab', isDragging && 'z-30 cursor-grabbing opacity-90 shadow-lg')}
+    >
+      {enabled ? <GripVertical className="absolute right-1.5 top-2 h-3.5 w-3.5 text-slate-300" aria-hidden="true" /> : null}
+      {children}
     </div>
   )
 }
@@ -338,7 +465,12 @@ function OpportunityCard({ item, canManage, reportingCurrency, openStages, movin
       ) : null}
       <div className="mt-2 flex items-start justify-between text-sm">
         <span className="font-semibold text-slate-900"><DealValue item={item} reportingCurrency={reportingCurrency} /></span>
-        <span className="text-xs text-slate-500">{item.probability}%</span>
+        <span className="text-right text-xs text-slate-500">
+          {item.probability}%
+          {item.suggestedProbability != null && Math.abs(item.suggestedProbability - item.probability) >= 10 ? (
+            <span className="block text-[11px] text-slate-400" title="What deals like this have done in the past">history {item.suggestedProbability}%</span>
+          ) : null}
+        </span>
       </div>
       {item.ownerName ? <div className="mt-1 text-xs text-slate-500">Owner: {item.ownerName}</div> : null}
       <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">

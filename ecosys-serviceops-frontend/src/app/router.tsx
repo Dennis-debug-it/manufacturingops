@@ -37,6 +37,7 @@ import { SignupPage } from '../features/public/SignupPage'
 import { SignupVerifyPage } from '../features/public/SignupVerifyPage'
 import { DemoConfirmationPage } from '../features/public/DemoConfirmationPage'
 import { CsatSurveyPage } from '../features/public/CsatSurveyPage'
+import { EnquiryFormPage } from '../features/public/EnquiryFormPage'
 import { TrackJobPage } from '../features/portal/TrackJobPage'
 import { ForbiddenPage } from '../features/public/ForbiddenPage'
 import { NotFoundPage } from '../features/public/NotFoundPage'
@@ -474,6 +475,7 @@ export function AppRouter() {
         <Route path="/signup/verify" element={<SignupVerifyPage />} />
         <Route path="/demo-confirmation" element={<DemoConfirmationPage />} />
         <Route path="/csat/:token" element={<CsatSurveyPage />} />
+        <Route path="/enquiry/:key" element={<EnquiryFormPage />} />
         <Route path="/track/:token" element={<TrackJobPage />} />
         <Route path="/403" element={<ForbiddenPage />} />
         <Route path="/404" element={<NotFoundPage />} />
