@@ -109,9 +109,11 @@ public sealed class SalesCrmController(
         var lostRecently = opportunities.Count(x => x.Stage == SalesStages.Lost && x.LostAt >= winRateWindowStart);
         var wonThisMonth = opportunities.Where(x => x.Stage == SalesStages.Won && x.WonAt >= monthStart).ToList();
 
+        // Closing a deal stops its reminders, so its leftover follow-ups are not overdue work either.
         var overdueFollowUps = await dbContext.SalesActivities
             .AsNoTracking()
-            .CountAsync(x => x.TenantId == TenantId && x.DueAt != null && x.CompletedAt == null && x.DueAt < now, cancellationToken);
+            .CountAsync(x => x.TenantId == TenantId && x.DueAt != null && x.CompletedAt == null && x.DueAt < now
+                && x.Opportunity != null && x.Opportunity.Stage != SalesStages.Won && x.Opportunity.Stage != SalesStages.Lost, cancellationToken);
 
         var weekAhead = now.AddDays(7);
         var openTenders = await dbContext.SalesTenders
@@ -370,6 +372,36 @@ public sealed class SalesCrmController(
         opportunity.LastActivityAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapActivity(activity));
+    }
+
+    /// <summary>
+    /// Every open follow-up across the pipeline, soonest first: the sales to-do list. Follow-ups on
+    /// closed deals are left out, as they are by the reminders. <paramref name="ownerUserId"/> narrows
+    /// it to the deals one person owns, which is who the reminders go to.
+    /// </summary>
+    [HttpGet("follow-ups")]
+    public async Task<ActionResult<IReadOnlyCollection<SalesFollowUpItem>>> ListFollowUps(
+        [FromQuery] Guid? ownerUserId, CancellationToken cancellationToken)
+    {
+        EnsureCanView();
+
+        var query = dbContext.SalesActivities
+            .AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.DueAt != null && x.CompletedAt == null
+                && x.Opportunity != null && x.Opportunity.Stage != SalesStages.Won && x.Opportunity.Stage != SalesStages.Lost);
+        if (ownerUserId.HasValue)
+            query = query.Where(x => x.Opportunity!.OwnerUserId == ownerUserId.Value);
+
+        var rows = await query
+            .OrderBy(x => x.DueAt)
+            .Take(500)
+            .Select(x => new SalesFollowUpItem(
+                x.Id, x.Type, x.Summary, x.DueAt!.Value, x.LoggedByName,
+                x.OpportunityId, x.Opportunity!.Title, x.Opportunity.Stage,
+                x.Opportunity.Client != null ? x.Opportunity.Client.ClientName : x.Opportunity.CompanyName ?? x.Opportunity.ContactName,
+                x.Opportunity.OwnerUserId, x.Opportunity.OwnerName))
+            .ToListAsync(cancellationToken);
+        return Ok(rows);
     }
 
     [HttpPost("activities/{activityId:guid}/complete")]
@@ -743,6 +775,12 @@ public sealed record SalesOpportunityDetailResponse(
 public sealed record SalesActivityResponse(
     Guid Id, Guid OpportunityId, string Type, string Summary,
     DateTime OccurredAt, DateTime? DueAt, DateTime? CompletedAt, string? LoggedByName);
+
+/// <summary>An open follow-up with enough of its deal to act on it from a list.</summary>
+public sealed record SalesFollowUpItem(
+    Guid Id, string Type, string Summary, DateTime DueAt, string? LoggedByName,
+    Guid OpportunityId, string OpportunityTitle, string OpportunityStage, string? PartyName,
+    Guid? OwnerUserId, string? OwnerName);
 
 public sealed record SalesLinkedWorkOrder(Guid Id, string WorkOrderNumber, string Title, string Status, DateTime CreatedAt);
 

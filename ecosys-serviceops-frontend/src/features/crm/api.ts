@@ -5,6 +5,7 @@ import type { WorkOrder } from '../work-orders/types'
 import type {
   SalesActivity,
   SalesCurrencySettings,
+  SalesFollowUpItem,
   SalesOwnerOption,
   SalesTenderDetail,
   SalesTenderListItem,
@@ -83,6 +84,14 @@ export function useAddActivity(opportunityId: string) {
     mutationFn: (payload: { type: string; summary: string; dueAt?: string | null }) =>
       api.post<SalesActivity>(endpoints.crm.activities(opportunityId), payload),
     onSuccess: invalidate,
+  })
+}
+
+export function useFollowUps(params?: { ownerUserId?: string | undefined }) {
+  return useQuery({
+    queryKey: [...crmKey, 'follow-ups', params ?? {}],
+    queryFn: () => api.get<SalesFollowUpItem[]>(endpoints.crm.followUps, { ownerUserId: params?.ownerUserId }),
+    staleTime: 30_000,
   })
 }
 

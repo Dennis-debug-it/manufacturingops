@@ -59,6 +59,21 @@ export interface SalesActivity {
   loggedByName: string | null
 }
 
+/** An open follow-up on an open deal, as listed across the whole pipeline. */
+export interface SalesFollowUpItem {
+  id: string
+  type: string
+  summary: string
+  dueAt: string
+  loggedByName: string | null
+  opportunityId: string
+  opportunityTitle: string
+  opportunityStage: SalesStage
+  partyName: string | null
+  ownerUserId: string | null
+  ownerName: string | null
+}
+
 export interface SalesOpportunityDetail {
   id: string
   title: string

@@ -73,15 +73,19 @@ export function PipelinePage() {
 
       <CrmNav />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard label="Open pipeline" value={summary ? formatCurrency(summary.openValue, reporting) : '—'} />
         <StatCard label="Weighted forecast" value={summary ? formatCurrency(summary.weightedValue, reporting) : '—'} />
         <StatCard label="Won this month" value={summary ? `${summary.wonThisMonthCount} · ${formatCurrency(summary.wonThisMonthValue, reporting)}` : '—'} tone="success" />
-        <StatCard
-          label="Overdue follow-ups"
-          value={summary ? summary.overdueFollowUps : '—'}
-          tone={summary && summary.overdueFollowUps > 0 ? 'warning' : 'default'}
-        />
+        <StatCard label="Win rate (90 days)" value={summary?.winRate != null ? `${summary.winRate}%` : '—'} />
+        <Link to="/crm/follow-ups" className="block rounded-[var(--radius-card)] transition hover:opacity-90">
+          <StatCard
+            label="Overdue follow-ups"
+            value={summary ? summary.overdueFollowUps : '—'}
+            tone={summary && summary.overdueFollowUps > 0 ? 'warning' : 'default'}
+            className="h-full"
+          />
+        </Link>
       </div>
 
       {summary && summary.unconvertedCurrencies.length > 0 ? (

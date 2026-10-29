@@ -3,6 +3,7 @@ import { cn } from '../../../shared/utils/cn'
 
 const items = [
   { to: '/crm', label: 'Pipeline', end: true },
+  { to: '/crm/follow-ups', label: 'Follow-ups', end: false },
   { to: '/crm/tenders', label: 'RFPs & RFQs', end: false },
 ]
 

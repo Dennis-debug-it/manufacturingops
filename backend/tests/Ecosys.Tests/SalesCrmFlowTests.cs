@@ -280,6 +280,36 @@ public sealed class SalesCrmFlowTests
         Assert.Equal(0, (await dbContext.SalesTenders.SingleAsync(x => x.Id == created.Id)).DeadlineReminderStage);
     }
 
+    [Fact]
+    public async Task FollowUps_ListOpenOnesOnOpenDeals_SoonestFirst()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        var open = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(Deal("Chiller service", 50_000m, "KES"), CancellationToken.None)).Result).Value);
+        var closed = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(Deal("Lift AMC", 80_000m, "KES"), CancellationToken.None)).Result).Value);
+
+        var now = DateTime.UtcNow;
+        var later = Ok<SalesActivityResponse>(await crm.AddActivity(open.Id, new CreateSalesActivityRequest("FollowUp", "Send revised quote", null, now.AddDays(2)), CancellationToken.None));
+        var overdue = Ok<SalesActivityResponse>(await crm.AddActivity(open.Id, new CreateSalesActivityRequest("Call", "Call the facilities manager", null, now.AddDays(-1)), CancellationToken.None));
+        var done = Ok<SalesActivityResponse>(await crm.AddActivity(open.Id, new CreateSalesActivityRequest("FollowUp", "Book site survey", null, now.AddDays(-2)), CancellationToken.None));
+        await crm.CompleteActivity(done.Id, CancellationToken.None);
+        await crm.AddActivity(open.Id, new CreateSalesActivityRequest("Note", "Prefers email", null, null), CancellationToken.None);
+        await crm.AddActivity(closed.Id, new CreateSalesActivityRequest("FollowUp", "Chase decision", null, now.AddDays(-3)), CancellationToken.None);
+        await crm.ChangeStage(closed.Id, new ChangeSalesStageRequest(SalesStages.Lost, "Budget cut"), CancellationToken.None);
+
+        var list = Ok<IReadOnlyCollection<SalesFollowUpItem>>(await crm.ListFollowUps(null, CancellationToken.None));
+        Assert.Equal(new[] { overdue.Id, later.Id }, list.Select(x => x.Id));
+        Assert.All(list, x => Assert.Equal("Chiller service", x.OpportunityTitle));
+        Assert.Equal("Prospect Ltd", list.First().PartyName);
+
+        Assert.Empty(Ok<IReadOnlyCollection<SalesFollowUpItem>>(await crm.ListFollowUps(Guid.NewGuid(), CancellationToken.None)));
+        Assert.Equal(2, Ok<IReadOnlyCollection<SalesFollowUpItem>>(await crm.ListFollowUps(actor.Id, CancellationToken.None)).Count);
+
+        // The lost deal's follow-up is not overdue work.
+        Assert.Equal(1, Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None)).OverdueFollowUps);
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 

@@ -92,6 +92,7 @@ import { QuotesPage } from '../features/finance/QuotesPage'
 import { PipelinePage } from '../features/crm/PipelinePage'
 import { OpportunityDetailPage } from '../features/crm/OpportunityDetailPage'
 import { TendersPage } from '../features/crm/TendersPage'
+import { FollowUpsPage } from '../features/crm/FollowUpsPage'
 import { TenderDetailPage } from '../features/crm/TenderDetailPage'
 import { QuoteDetailPage } from '../features/finance/QuoteDetailPage'
 import { AgingPage as FinanceAgingPageReal } from '../features/finance/AgingPage'
@@ -312,6 +313,7 @@ export function AppRouter() {
       ['/maintenance/engine', MaintenanceEnginePage],
       ['/crm', PipelinePage],
       ['/crm/opportunities/:id', OpportunityDetailPage],
+      ['/crm/follow-ups', FollowUpsPage],
       ['/crm/tenders', TendersPage],
       ['/crm/tenders/:id', TenderDetailPage],
       ['/clients', ClientsPage],
