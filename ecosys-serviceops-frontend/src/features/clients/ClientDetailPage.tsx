@@ -20,6 +20,7 @@ import { ClientPortalContactsTab } from './components/ClientPortalContactsTab'
 import type { ClientSiteSummary } from './types'
 import { RecordActivitiesPanel } from '../activities/RecordActivitiesPanel'
 import { ClientSalesTab } from '../crm/components/ClientSalesTab'
+import { ClientContactsPanel } from './components/ClientContactsPanel'
 
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -104,6 +105,11 @@ export function ClientDetailPage() {
                 ) : null}
               </SummarySection>
             ),
+          },
+          {
+            id: 'contacts',
+            label: 'Contacts',
+            content: <ClientContactsPanel clientId={id} />,
           },
           {
             id: 'portal-access',

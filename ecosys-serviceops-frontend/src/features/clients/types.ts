@@ -25,6 +25,31 @@ export interface Client {
   isProspect?: boolean
 }
 
+export const CONTACT_ROLES = ['DecisionMaker', 'Procurement', 'Technical', 'Finance', 'Other'] as const
+export type ContactRole = (typeof CONTACT_ROLES)[number]
+export const contactRoleLabels: Record<ContactRole, string> = {
+  DecisionMaker: 'Decision maker',
+  Procurement: 'Procurement',
+  Technical: 'Technical',
+  Finance: 'Finance',
+  Other: 'Other',
+}
+
+/** A person at a client or prospect (not a portal login). */
+export interface ClientContact {
+  id: string
+  clientId: string
+  fullName: string
+  jobTitle: string | null
+  email: string | null
+  phone: string | null
+  role: ContactRole
+  isPrimary: boolean
+  notes: string | null
+}
+
+export type UpsertClientContactPayload = Omit<ClientContact, 'id' | 'clientId'>
+
 export interface ClientSiteSummary {
   siteId: string
   siteCode: string

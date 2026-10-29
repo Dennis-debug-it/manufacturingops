@@ -194,6 +194,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<SalesActivity> SalesActivities => Set<SalesActivity>();
     public DbSet<SalesTender> SalesTenders => Set<SalesTender>();
     public DbSet<TenantSalesSettings> TenantSalesSettings => Set<TenantSalesSettings>();
+    public DbSet<ClientContact> ClientContacts => Set<ClientContact>();
+    public DbSet<SalesOpportunityContact> SalesOpportunityContacts => Set<SalesOpportunityContact>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
     public DbSet<ProjectType> ProjectTypes => Set<ProjectType>();
@@ -3521,6 +3523,32 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.DealVisibility).HasMaxLength(20).IsRequired();
         });
         ApplyTenantFilter<TenantSalesSettings>(modelBuilder);
+
+        modelBuilder.Entity<ClientContact>(entity =>
+        {
+            entity.ToTable("client_contacts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FullName).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.JobTitle).HasMaxLength(120);
+            entity.Property(x => x.Email).HasMaxLength(256);
+            entity.Property(x => x.Phone).HasMaxLength(50);
+            entity.Property(x => x.Role).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.TenantId, x.ClientId });
+            entity.HasIndex(x => new { x.TenantId, x.Email });
+        });
+        ApplyTenantFilter<ClientContact>(modelBuilder);
+
+        modelBuilder.Entity<SalesOpportunityContact>(entity =>
+        {
+            entity.ToTable("sales_opportunity_contacts");
+            entity.HasKey(x => x.Id);
+            entity.HasOne(x => x.Opportunity).WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Contact).WithMany().HasForeignKey(x => x.ContactId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OpportunityId, x.ContactId }).IsUnique();
+        });
+        ApplyTenantFilter<SalesOpportunityContact>(modelBuilder);
 
         modelBuilder.Entity<SalesActivity>(entity =>
         {

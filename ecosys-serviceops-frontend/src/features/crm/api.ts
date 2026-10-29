@@ -115,6 +115,23 @@ export function useQuotesAwaitingAnswer(params?: { ownerUserId?: string | undefi
   })
 }
 
+export function useAddDealContact(opportunityId: string) {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (payload: { contactId?: string | null; fullName?: string | null; email?: string | null; phone?: string | null; jobTitle?: string | null; role?: string | null }) =>
+      api.post<SalesOpportunityDetail>(endpoints.crm.dealContacts(opportunityId), payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useRemoveDealContact(opportunityId: string) {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (contactId: string) => api.delete<SalesOpportunityDetail>(endpoints.crm.dealContact(opportunityId, contactId)),
+    onSuccess: invalidate,
+  })
+}
+
 export function useCompleteActivity() {
   const invalidate = useInvalidateCrm()
   return useMutation({

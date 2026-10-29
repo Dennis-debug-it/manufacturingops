@@ -140,6 +140,8 @@ export const endpoints = {
     deactivateAction: (id: string) => `/api/clients/${id}/deactivate`,
     validateDeletion: (id: string) => `/api/clients/${id}/validate-deletion`,
     deletePermanent: (id: string) => `/api/clients/${id}/permanent`,
+    contacts: (id: string) => `/api/clients/${id}/contacts`,
+    contact: (id: string, contactId: string) => `/api/clients/${id}/contacts/${contactId}`,
   },
   sites: {
     list: (clientId: string) => `/api/clients/${clientId}/sites`,
@@ -510,6 +512,8 @@ export const endpoints = {
     stage: (id: string) => `/api/crm/opportunities/${id}/stage`,
     activities: (id: string) => `/api/crm/opportunities/${id}/activities`,
     completeActivity: (activityId: string) => `/api/crm/activities/${activityId}/complete`,
+    dealContacts: (id: string) => `/api/crm/opportunities/${id}/contacts`,
+    dealContact: (id: string, contactId: string) => `/api/crm/opportunities/${id}/contacts/${contactId}`,
     followUps: '/api/crm/follow-ups',
     quotesAwaitingAnswer: '/api/crm/quotes-awaiting-answer',
     reports: '/api/crm/reports',

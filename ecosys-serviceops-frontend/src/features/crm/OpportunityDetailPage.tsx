@@ -25,6 +25,7 @@ import {
   useOpportunity,
   useReassignOpportunityOwner,
 } from './api'
+import { DealPeople } from './components/DealPeople'
 import { ConvertToWorkOrderDrawer } from './components/ConvertToWorkOrderDrawer'
 import { OpportunityFormDrawer } from './components/OpportunityFormDrawer'
 import { OwnerSelect } from './components/OwnerSelect'
@@ -294,6 +295,7 @@ export function OpportunityDetailPage() {
         </div>
 
         <div className="space-y-4">
+          <DealPeople opportunity={opportunity} canManage={canManage} />
           <SummarySection title="Work Orders" description="Jobs raised from this deal.">
             {opportunity.workOrders.length === 0 ? (
               <p className="text-sm text-slate-500">{isWon ? 'None yet.' : 'Win the deal to create work orders from it.'}</p>

@@ -121,7 +121,7 @@ public static class ServiceOpsPlans
     public static readonly IReadOnlySet<string> SharedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "AccessControl", "ActionItems", "Activities", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "Calendar", "CalendarFeed", "ClientPortalContacts",
-        "Clients", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "Notifications", "PortalAuth", "PortalKnowledge",
+        "Clients", "ClientContacts", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "Notifications", "PortalAuth", "PortalKnowledge",
         "PublicWorkOrder", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
         // WhatsApp reminders (Release 3 design 6): every edition, gated by the WhatsApp add-on.

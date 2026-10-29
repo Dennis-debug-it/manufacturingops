@@ -1517,6 +1517,67 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("clients", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.ClientContact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("JobTitle")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("TenantId", "ClientId");
+
+                    b.HasIndex("TenantId", "Email");
+
+                    b.ToTable("client_contacts", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.ClientPortalLoginToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8662,6 +8723,37 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("sales_opportunities", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesOpportunityContact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ContactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OpportunityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContactId");
+
+                    b.HasIndex("OpportunityId", "ContactId")
+                        .IsUnique();
+
+                    b.ToTable("sales_opportunity_contacts", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesTender", b =>
                 {
                     b.Property<Guid>("Id")
@@ -14038,6 +14130,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.ClientContact", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Client", "Client")
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.ClientPortalLoginToken", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.ClientPortalUser", "ClientPortalUser")
@@ -16289,6 +16392,25 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Site");
 
                     b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesOpportunityContact", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.ClientContact", "Contact")
+                        .WithMany()
+                        .HasForeignKey("ContactId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.SalesOpportunity", "Opportunity")
+                        .WithMany()
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Contact");
+
+                    b.Navigation("Opportunity");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesTender", b =>

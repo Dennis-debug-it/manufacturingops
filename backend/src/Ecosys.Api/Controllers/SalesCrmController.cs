@@ -305,6 +305,7 @@ public sealed class SalesCrmController(
         var opportunity = new SalesOpportunity { TenantId = TenantId, Stage = SalesStages.Lead };
         await ApplyAsync(opportunity, request, cancellationToken);
         await ProspectClients.LinkAsync(dbContext, opportunity, null, cancellationToken);
+        await LinkDealFieldsContactAsync(opportunity, cancellationToken);
         if (!request.OwnerUserId.HasValue)
         {
             opportunity.OwnerUserId = UserId;
@@ -335,6 +336,7 @@ public sealed class SalesCrmController(
 
         await ApplyAsync(opportunity, request, cancellationToken);
         await ProspectClients.LinkAsync(dbContext, opportunity, previousClientId, cancellationToken);
+        await LinkDealFieldsContactAsync(opportunity, cancellationToken);
         if (opportunity.OwnerUserId != previousOwnerId)
             await AddSystemActivityAsync(opportunity, $"Owner changed from {previousOwnerName} to {opportunity.OwnerName}.", cancellationToken);
         if (request.Probability.HasValue)
@@ -513,6 +515,71 @@ public sealed class SalesCrmController(
                     : dbContext.Users.Where(u => u.Id == x.SentByUserId).Select(u => u.FullName).FirstOrDefault()))
             .ToListAsync(cancellationToken);
         return Ok(rows);
+    }
+
+    // ── People on the deal ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Adds a person to the deal: an existing contact of the deal's client, or a new one (matched to
+    /// an existing contact by email, then name, so nobody is entered twice).
+    /// </summary>
+    [HttpPost("opportunities/{id:guid}/contacts")]
+    public async Task<ActionResult<SalesOpportunityDetailResponse>> AddContact(Guid id, [FromBody] AddDealContactRequest request, CancellationToken cancellationToken)
+    {
+        await EnsureCanManageAsync(cancellationToken);
+        var opportunity = await LoadAsync(id, cancellationToken);
+        if (!opportunity.ClientId.HasValue)
+            throw new BusinessRuleException("Give the deal a client or prospect first.");
+
+        ClientContact contact;
+        if (request.ContactId.HasValue)
+        {
+            contact = await dbContext.ClientContacts.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.ContactId && x.ClientId == opportunity.ClientId && x.IsActive, cancellationToken)
+                ?? throw new NotFoundException("Contact not found for this client.");
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(request.FullName))
+                throw new BusinessRuleException("Pick a contact or enter a name.");
+            contact = await ClientContacts.FindOrAddAsync(dbContext, TenantId, opportunity.ClientId.Value, request.FullName, request.Email, request.Phone, cancellationToken);
+            contact.JobTitle ??= string.IsNullOrWhiteSpace(request.JobTitle) ? null : request.JobTitle.Trim();
+            if (!string.IsNullOrWhiteSpace(request.Role))
+                contact.Role = ClientContacts.NormalizeRole(request.Role);
+        }
+        if (await LinkContactAsync(opportunity, contact, cancellationToken))
+            await AddSystemActivityAsync(opportunity, $"{contact.FullName} added to the deal.", cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(await LoadDetailAsync(id, cancellationToken));
+    }
+
+    [HttpDelete("opportunities/{id:guid}/contacts/{contactId:guid}")]
+    public async Task<ActionResult<SalesOpportunityDetailResponse>> RemoveContact(Guid id, Guid contactId, CancellationToken cancellationToken)
+    {
+        await EnsureCanManageAsync(cancellationToken);
+        await LoadAsync(id, cancellationToken);
+        var links = await dbContext.SalesOpportunityContacts.Where(x => x.TenantId == TenantId && x.OpportunityId == id && x.ContactId == contactId).ToListAsync(cancellationToken);
+        dbContext.SalesOpportunityContacts.RemoveRange(links);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(await LoadDetailAsync(id, cancellationToken));
+    }
+
+    /// <summary>The contact typed on the deal form (name, email, phone) becomes a contact of its client, on the deal.</summary>
+    private async Task LinkDealFieldsContactAsync(SalesOpportunity opportunity, CancellationToken cancellationToken)
+    {
+        if (!opportunity.ClientId.HasValue || string.IsNullOrWhiteSpace(opportunity.ContactName))
+            return;
+        var contact = await ClientContacts.FindOrAddAsync(dbContext, TenantId, opportunity.ClientId.Value, opportunity.ContactName, opportunity.ContactEmail, opportunity.ContactPhone, cancellationToken);
+        await LinkContactAsync(opportunity, contact, cancellationToken);
+    }
+
+    private async Task<bool> LinkContactAsync(SalesOpportunity opportunity, ClientContact contact, CancellationToken cancellationToken)
+    {
+        var linked = dbContext.SalesOpportunityContacts.Local.Any(x => x.OpportunityId == opportunity.Id && x.ContactId == contact.Id)
+            || await dbContext.SalesOpportunityContacts.AnyAsync(x => x.OpportunityId == opportunity.Id && x.ContactId == contact.Id, cancellationToken);
+        if (linked)
+            return false;
+        dbContext.SalesOpportunityContacts.Add(new SalesOpportunityContact { TenantId = TenantId, OpportunityId = opportunity.Id, ContactId = contact.Id });
+        return true;
     }
 
     [HttpPost("activities/{activityId:guid}/complete")]
@@ -778,6 +845,11 @@ public sealed class SalesCrmController(
             .ToListAsync(cancellationToken);
 
         var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
+        var contacts = await dbContext.SalesOpportunityContacts.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.OpportunityId == id && x.Contact!.IsActive)
+            .Select(x => x.Contact!)
+            .OrderByDescending(x => x.IsPrimary).ThenBy(x => x.FullName)
+            .ToListAsync(cancellationToken);
         var renewalContractNumber = opportunity.RenewalOfContractId is null ? null : await dbContext.Contracts.AsNoTracking()
             .Where(x => x.TenantId == TenantId && x.Id == opportunity.RenewalOfContractId)
             .Select(x => x.ContractNumber)
@@ -804,7 +876,8 @@ public sealed class SalesCrmController(
             converter.ReportingCurrency,
             opportunity.RenewalOfContractId, renewalContractNumber,
             opportunity.SourceWorkOrderId, sourceWorkOrderNumber,
-            opportunity.Client?.IsProspect ?? false);
+            opportunity.Client?.IsProspect ?? false,
+            contacts.Select(ClientContacts.Map).ToList());
     }
 
     private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt, SalesCurrencyConverter converter) =>
@@ -916,7 +989,16 @@ public sealed record SalesOpportunityDetailResponse(
     string? RenewalContractNumber = null,
     Guid? SourceWorkOrderId = null,
     string? SourceWorkOrderNumber = null,
-    bool ClientIsProspect = false);
+    bool ClientIsProspect = false,
+    IReadOnlyCollection<ClientContactResponse>? Contacts = null);
+
+public sealed record AddDealContactRequest(
+    Guid? ContactId,
+    [StringLength(150)] string? FullName,
+    [StringLength(256)] string? Email,
+    [StringLength(50)] string? Phone,
+    [StringLength(120)] string? JobTitle,
+    [StringLength(30)] string? Role);
 
 public sealed record SalesActivityResponse(
     Guid Id, Guid OpportunityId, string Type, string Summary,

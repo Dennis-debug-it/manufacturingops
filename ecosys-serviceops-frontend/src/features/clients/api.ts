@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { PagedResult } from '../../shared/types/pagination'
-import type { Asset, Client, ClientSummary, SiteDetail } from './types'
+import type { Asset, Client, ClientContact, ClientSummary, SiteDetail, UpsertClientContactPayload } from './types'
 
 export interface ClientListFilters {
   search?: string
@@ -368,6 +368,38 @@ export function useDeleteClientPermanent(id: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['clients'] })
       void queryClient.removeQueries({ queryKey: ['clients', id] })
+    },
+  })
+}
+
+export function useClientContacts(clientId: string | undefined) {
+  return useQuery({
+    queryKey: ['clients', clientId, 'contacts'],
+    queryFn: () => api.get<ClientContact[]>(endpoints.clients.contacts(clientId ?? '')),
+    enabled: Boolean(clientId),
+    staleTime: 30_000,
+  })
+}
+
+export function useSaveClientContact(clientId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...payload }: UpsertClientContactPayload & { id?: string }) =>
+      id ? api.put<ClientContact>(endpoints.clients.contact(clientId, id), payload) : api.post<ClientContact>(endpoints.clients.contacts(clientId), payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['clients', clientId, 'contacts'] })
+      void queryClient.invalidateQueries({ queryKey: ['crm'] })
+    },
+  })
+}
+
+export function useDeleteClientContact(clientId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (contactId: string) => api.delete<void>(endpoints.clients.contact(clientId, contactId)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['clients', clientId, 'contacts'] })
+      void queryClient.invalidateQueries({ queryKey: ['crm'] })
     },
   })
 }

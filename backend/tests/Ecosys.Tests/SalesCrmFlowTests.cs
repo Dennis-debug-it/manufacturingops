@@ -701,6 +701,35 @@ public sealed class SalesCrmFlowTests
         Assert.Equal(2, List(null).Count);
     }
 
+    [Fact]
+    public async Task DealContacts_BecomeClientContacts_WithoutDuplicates()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        async Task<SalesOpportunityDetailResponse> Create(string title, string contact, string? email) =>
+            Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+                (await crm.CreateOpportunity(Deal(title, 1_000m, "KES") with { CompanyName = "Baraka Logistics", ContactName = contact, ContactEmail = email }, CancellationToken.None)).Result).Value);
+
+        var first = await Create("Solar", "Wanjiru Otieno", "Wanjiru@Baraka.test");
+        // Same person, spelt differently: matched on email.
+        var second = await Create("Solar phase 2", "Wanjiru O.", "wanjiru@baraka.test");
+        var contact = Assert.Single(first.Contacts!);
+        Assert.Equal(contact.Id, Assert.Single(second.Contacts!).Id);
+        Assert.True(contact.IsPrimary);
+
+        var withBuyer = Ok<SalesOpportunityDetailResponse>(await crm.AddContact(first.Id, new AddDealContactRequest(null, "Peter Kamau", null, "+254700000300", "Procurement lead", "procurement"), CancellationToken.None));
+        Assert.Equal(2, withBuyer.Contacts!.Count);
+        Assert.Contains(withBuyer.Contacts!, x => x.FullName == "Peter Kamau" && x.Role == "Procurement" && !x.IsPrimary);
+
+        var contacts = new ClientContactsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService());
+        var list = Ok<IReadOnlyCollection<ClientContactResponse>>(await contacts.List(first.ClientId!.Value, CancellationToken.None));
+        Assert.Equal(["Wanjiru Otieno", "Peter Kamau"], list.Select(x => x.FullName).ToArray());
+
+        var afterRemove = Ok<SalesOpportunityDetailResponse>(await crm.RemoveContact(first.Id, contact.Id, CancellationToken.None));
+        Assert.Equal("Peter Kamau", Assert.Single(afterRemove.Contacts!).FullName);
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 

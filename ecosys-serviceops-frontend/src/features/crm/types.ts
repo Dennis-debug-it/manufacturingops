@@ -1,3 +1,5 @@
+import type { ClientContact } from '../clients/types'
+
 export const SALES_STAGES = ['Lead', 'Qualified', 'SiteSurvey', 'Proposal', 'Negotiation', 'Won', 'Lost'] as const
 export type SalesStage = (typeof SALES_STAGES)[number]
 
@@ -132,6 +134,8 @@ export interface SalesOpportunityDetail {
   sourceWorkOrderId?: string | null
   sourceWorkOrderNumber?: string | null
   clientIsProspect?: boolean
+  /** People at the client involved in this deal. */
+  contacts?: ClientContact[]
 }
 
 /** Every value is in `reportingCurrency`; deals in a currency with no rate are listed in `unconvertedCurrencies` instead. */
