@@ -436,6 +436,17 @@ export interface WorkOrderServiceReportPreview {
   photoGroups: WorkOrderReportPhotoGroup[]
   signatures: WorkOrderReportSignature[]
   showPoweredByEcosys: boolean
+  /** Equipment in service at the job's site; `onThisJob` marks the asset the job was raised against. */
+  siteEquipment: WorkOrderReportEquipment[]
+}
+
+export interface WorkOrderReportEquipment {
+  name: string
+  code: string | null
+  description: string | null
+  serialNumber: string | null
+  location: string | null
+  onThisJob: boolean
 }
 
 export interface WorkOrderExecutionBundle {

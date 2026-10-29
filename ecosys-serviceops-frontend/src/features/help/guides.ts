@@ -212,7 +212,7 @@ const technicianApp: Guide = {
     {
       title: 'Finish the job',
       steps: [
-        'Open the Finish tab and write the Work done: what the fault was and what you did. It goes on the service report.',
+        'Open the Finish tab, check the Problem reported, then write your Findings (what you found and why it failed) and the Work done (what you did). Both go on the service report and are required to complete the job.',
         'Capture Your signature and the Client signature (with the client’s name and role).',
         'Tap Complete. An administrator reviews and closes the job.',
       ],

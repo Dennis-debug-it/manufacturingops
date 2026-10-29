@@ -161,7 +161,7 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
         <Row label="Site">{job.siteName}</Row>
         <Row label="Contact">{job.siteContactPerson ?? job.clientContactPerson}</Row>
         <Row label="Hours">{job.siteOperatingHours}</Row>
-        <Row label="Access">{job.siteAccessNotes ?? job.jobCardNotes}</Row>
+        <Row label="Access">{job.siteAccessNotes}</Row>
         {phone || mapUrl ? (
           <div className="mt-3 grid grid-cols-2 gap-2">
             {phone ? (

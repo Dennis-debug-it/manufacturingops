@@ -586,6 +586,35 @@ public sealed class WorkOrderExecutionFlowTests
     }
 
     [Fact]
+    public async Task TheReport_ListsTheSitesEquipment_AndUsesTheTitleWhenThereIsNoDescription()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        fixture.WorkOrder.Description = null;
+        fixture.Asset.Manufacturer = "Perkins";
+        fixture.Asset.Model = "1103A";
+        fixture.Asset.SerialNumber = "PK-1103-77";
+        dbContext.Assets.AddRange(
+            new Asset { TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, SiteId = fixture.Site.Id, AssetName = "ATS Panel", AssetCode = "ATS-01", Status = "Active" },
+            new Asset { TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, SiteId = fixture.Site.Id, AssetName = "Old Pump", AssetCode = "PMP-09", Status = "Inactive" },
+            new Asset { TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, AssetName = "Elsewhere", AssetCode = "ELS-01", Status = "Active" });
+        await dbContext.SaveChangesAsync();
+        var pdfRenderer = new FakePdfRenderer();
+        var controller = CreateExecutionController(dbContext, fixture, pdfRenderer: pdfRenderer);
+
+        await controller.DownloadServiceReportPdf(fixture.WorkOrder.Id, CancellationToken.None);
+
+        var report = pdfRenderer.LastReport!;
+        Assert.Equal(fixture.WorkOrder.Title, report.ReportedProblem);
+        Assert.Equal(["ATS Panel", "Generator 02"], report.SiteEquipment!.Select(x => x.Name));
+        var generator = report.SiteEquipment!.Single(x => x.Name == "Generator 02");
+        Assert.True(generator.OnThisJob);
+        Assert.Equal("Perkins 1103A", generator.Description);
+        Assert.Equal("PK-1103-77", generator.SerialNumber);
+        Assert.False(report.SiteEquipment!.Single(x => x.Name == "ATS Panel").OnThisJob);
+    }
+
+    [Fact]
     public async Task EditingAnApprovedReport_SendsItBackForApproval()
     {
         await using var dbContext = CreateDbContext();

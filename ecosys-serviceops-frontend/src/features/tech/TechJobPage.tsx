@@ -43,9 +43,12 @@ export function TechJobPage() {
   const [holdReason, setHoldReason] = useState('')
   const [clockOutPrompt, setClockOutPrompt] = useState(false)
   const [workDoneDraft, setWorkDoneDraft] = useState<string | null>(null)
+  const [findingsDraft, setFindingsDraft] = useState<string | null>(null)
   // Covers the whole action, including the location lookup that runs before the request.
   const [acting, setActing] = useState(false)
   const workDone = workDoneDraft ?? bundle?.notes.workDone ?? job?.workDoneNotes ?? ''
+  const savedFindings = bundle?.notes.findings ?? ''
+  const findings = findingsDraft ?? savedFindings
 
   const sheetOpen = menuOpen || holdOpen || clockOutPrompt
   const closeSheet = () => {
@@ -103,13 +106,24 @@ export function TechJobPage() {
       navigate(`/tech/jobs/${id}/complete`)
       return
     }
+    if (!findings.trim()) {
+      toast.error('Add your findings first')
+      document.getElementById('tech-findings')?.focus()
+      return
+    }
     if (!workDone.trim()) {
       toast.error('Add the work done notes first')
       document.getElementById('tech-work-done')?.focus()
       return
     }
-    if (await run('Job updated', () => actions.complete(job, workDone.trim()))) {
+    // Findings are saved first so they are on the job, and its report, when it completes.
+    const completed = await run('Job updated', async () => {
+      if (findings.trim() !== savedFindings.trim()) await actions.saveNotes(job, { findings: findings.trim() })
+      return actions.complete(job, workDone.trim())
+    })
+    if (completed) {
       setWorkDoneDraft(null)
+      setFindingsDraft(null)
     }
   }
 
@@ -225,7 +239,13 @@ export function TechJobPage() {
       {section === 'complete' ? (
         <>
           <TechMaterials job={job} editable={editable} />
-          <TechFinish workOrderId={id} workOrderNumber={job.workOrderNumber} editable={editable} workDone={workDone} onWorkDoneChange={setWorkDoneDraft} />
+          <TechFinish workOrderId={id} workOrderNumber={job.workOrderNumber} editable={editable}
+            reportedProblem={job.description?.trim() || job.title}
+            findings={findings}
+            onFindingsChange={setFindingsDraft}
+            workDone={workDone}
+            onWorkDoneChange={setWorkDoneDraft}
+          />
         </>
       ) : null}
 

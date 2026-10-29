@@ -369,15 +369,6 @@ public sealed class WorkOrdersController(
         var branchId = await ResolveWorkOrderBranchIdAsync(request.BranchId, asset?.BranchId, cancellationToken);
 
         var normalizedAssignmentType = NormalizeAssignmentType(request.AssignmentType, request.AssignmentGroupId, request.AssignedTechnicianId, request.AssignedTechnicianIds);
-        string? siteAccessNotes = null;
-        if (request.SiteId.HasValue)
-        {
-            siteAccessNotes = await dbContext.Sites
-                .Where(x => x.TenantId == TenantId && x.Id == request.SiteId.Value)
-                .Select(x => x.AccessNotes)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
-
         var repeatVisitCount = request.AssetId.HasValue
             ? await dbContext.WorkOrders
                 .Where(x => x.TenantId == TenantId
@@ -412,7 +403,6 @@ public sealed class WorkOrdersController(
             AssignedTechnicianIdsJson = null,
             IsPreventiveMaintenance = WorkOrderTypes.IsPreventiveMaintenanceType(normalizedWorkType),
             PmTemplateId = request.PmTemplateId,
-            JobCardNotes = !string.IsNullOrWhiteSpace(siteAccessNotes) ? siteAccessNotes : null,
             NotifyClient = request.NotifyClient,
             ClientContactEmail = request.ClientContactEmail?.Trim(),
             TrackingToken = TrackingTokenGenerator.Generate(),

@@ -1,10 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace Ecosys.Shared.Contracts.Integration;
 
 /// <summary>
 /// Per-tenant report template configuration stored as JSON on the Tenant record.
 /// All fields are optional — defaults are applied by the renderer when null.
 /// </summary>
-public sealed class ReportTemplateConfig
+public sealed class ReportTemplateConfig : IJsonOnDeserialized
 {
     /// <summary>Selected document layout preset name.</summary>
     public string LayoutStyle { get; set; } = "Modern";
@@ -191,11 +193,41 @@ public sealed class ReportTemplateConfig
         new("problem",          "Problem Reported",      true, 1),
         new("findings",         "Findings",              true, 2),
         new("work-done",        "Work Done",             true, 3),
+        new("equipment",        "Equipment on Site",     true, 4),
         new("checklist",        "Checklist Responses",   true, 5),
         new("materials",        "Materials Used",        true, 6),
         new("photos",           "Photo Evidence",        true, 7),
         new("signatures",       "Signatures / Sign-off", true, 8),
     ];
+
+    /// <summary>
+    /// Designs saved before a section existed don't list it; add it where the defaults put it
+    /// (after the section that precedes it), enabled, so existing tenants get new sections too.
+    /// A section the tenant switched off is still listed, so it stays off.
+    /// </summary>
+    void IJsonOnDeserialized.OnDeserialized()
+    {
+        if (Sections is not { Count: > 0 })
+            return;
+
+        var defaults = DefaultSections().OrderBy(s => s.Order).ToList();
+        var ordered = Sections.OrderBy(s => s.Order).ToList();
+        var added = false;
+        for (var i = 0; i < defaults.Count; i++)
+        {
+            if (ordered.Any(s => string.Equals(s.Id, defaults[i].Id, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            var after = i == 0 ? -1 : ordered.FindIndex(s => string.Equals(s.Id, defaults[i - 1].Id, StringComparison.OrdinalIgnoreCase));
+            ordered.Insert(after < 0 && i > 0 ? ordered.Count : after + 1, defaults[i]);
+            added = true;
+        }
+
+        if (!added)
+            return;
+        for (var i = 0; i < ordered.Count; i++)
+            ordered[i].Order = i;
+        Sections = ordered;
+    }
 }
 
 public sealed class ReportSection

@@ -885,7 +885,8 @@ public sealed partial class WorkOrderExecutionController(
                 x.Category,
                 x.Photos.Select(p => new WorkOrderReportPhotoResponse(p.Caption, p.PublicUrl)).ToList())).ToList(),
             pdfModel.Signatures.Select(x => new WorkOrderReportSignatureResponse(x.SignatureType, x.SignerName, x.SignerRole, x.Comment, x.CapturedAtLabel)).ToList(),
-            pdfModel.ShowPoweredByEcosys);
+            pdfModel.ShowPoweredByEcosys,
+            (pdfModel.SiteEquipment ?? []).Select(x => new WorkOrderReportEquipmentResponse(x.Name, x.Code, x.Description, x.SerialNumber, x.Location, x.OnThisJob)).ToList());
     }
 
     private async Task<WorkOrderReportPdfModel> BuildPdfModelAsync(Guid workOrderId, CancellationToken cancellationToken, bool skipTechnicianScope = false)
@@ -984,6 +985,26 @@ public sealed partial class WorkOrderExecutionController(
                     item.AttachmentId.HasValue ? $"/api/attachments/{item.AttachmentId}/download" : null)).ToList()))
             .ToList();
 
+        // Everything still in service at the site, so the client sees the equipment the visit covered.
+        var siteEquipment = (workOrder.SiteId ?? workOrder.Asset?.SiteId) is { } siteId
+            ? (await dbContext.Assets
+                .AsNoTracking()
+                .Where(x => x.TenantId == TenantId && x.SiteId == siteId && x.Status != "Inactive")
+                .OrderBy(x => x.AssetName)
+                .ThenBy(x => x.AssetCode)
+                .ToListAsync(cancellationToken))
+                .Select(asset => new WorkOrderReportPdfEquipment(
+                    asset.AssetName,
+                    string.IsNullOrWhiteSpace(asset.AssetCode) ? null : asset.AssetCode,
+                    NullIfEmpty(string.Join(" ", new[] { asset.Manufacturer, asset.Model }.Where(x => !string.IsNullOrWhiteSpace(x))))
+                        ?? NullIfEmpty(asset.AssetType),
+                    NullIfEmpty(asset.SerialNumber),
+                    NullIfEmpty(string.Join(", ", new[] { asset.BuildingBlock, asset.FloorLevel, asset.RoomArea }.Where(x => !string.IsNullOrWhiteSpace(x))))
+                        ?? NullIfEmpty(asset.Location),
+                    asset.Id == workOrder.AssetId))
+                .ToList()
+            : [];
+
         // Fetch logo bytes so the renderer can embed the image without making outbound HTTP calls
         var logoBytes = await TryFetchLogoBytesAsync(tenant.LogoUrl, cancellationToken);
 
@@ -1007,7 +1028,8 @@ public sealed partial class WorkOrderExecutionController(
             workOrder.PmTemplateNameSnapshot ?? workOrder.PmTemplate?.Name,
             workOrder.PmTemplateVersionSnapshot,
             // Office edits to the report's wording win over the job's own text.
-            workOrder.ReportProblemText ?? workOrder.Description,
+            // A job raised with only a title has its problem in the title.
+            workOrder.ReportProblemText ?? NullIfEmpty(workOrder.Description) ?? workOrder.Title,
             workOrder.ReportFindingsText ?? workOrder.JobCardNotes,
             workOrder.ReportWorkDoneText ?? workOrder.WorkDoneNotes,
             $"{FormatReportDate(DateTime.UtcNow, templateConfig)} UTC",
@@ -1029,8 +1051,11 @@ public sealed partial class WorkOrderExecutionController(
                 x.Notes)).ToList(),
             groupedPhotos,
             signatureModels,
-            templateConfig);
+            templateConfig,
+            siteEquipment);
     }
+
+    private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     /// <summary>A date and time in the design's date format (invalid formats fall back to the default).</summary>
     private static string FormatReportDate(DateTime value, ReportTemplateConfig? config)
@@ -1464,7 +1489,9 @@ public sealed record WorkOrderServiceReportPreviewResponse(
     IReadOnlyCollection<WorkOrderReportMaterialResponse> Materials,
     IReadOnlyCollection<WorkOrderReportPhotoGroupResponse> PhotoGroups,
     IReadOnlyCollection<WorkOrderReportSignatureResponse> Signatures,
-    bool ShowPoweredByEcosys);
+    bool ShowPoweredByEcosys,
+    IReadOnlyCollection<WorkOrderReportEquipmentResponse> SiteEquipment);
+public sealed record WorkOrderReportEquipmentResponse(string Name, string? Code, string? Description, string? SerialNumber, string? Location, bool OnThisJob);
 public sealed record WorkOrderReportTimestampResponse(string Label, string? Value);
 public sealed record WorkOrderReportChecklistSectionResponse(string SectionName, IReadOnlyCollection<WorkOrderReportChecklistItemResponse> Items);
 public sealed record WorkOrderReportChecklistItemResponse(string Question, string InputType, string? ResponseValue, string? Unit, string? Remarks, bool IsRequired, bool IsCompleted, bool EvidenceRequired, string? EvidenceUrl);
