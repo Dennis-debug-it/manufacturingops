@@ -9,6 +9,7 @@ using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Ecosys.Tests;
 
@@ -547,6 +548,116 @@ public sealed class SalesCrmFlowTests
         await Assert.ThrowsAsync<ForbiddenException>(() => withCrm.Flag(otherJob.Id, new FlagSalesLeadRequest("Generator is old"), CancellationToken.None));
         await Assert.ThrowsAsync<BusinessRuleException>(() => withCrm.Flag(job.Id, new FlagSalesLeadRequest("  "), CancellationToken.None));
         await Assert.ThrowsAsync<ForbiddenException>(() => Controller([ServiceOpsPlans.Operations]).Flag(job.Id, new FlagSalesLeadRequest("New pump"), CancellationToken.None));
+    }
+
+    /// <summary>Every CRM query on Postgres, so a query EF can only run in memory fails here rather than in production.</summary>
+    [Fact]
+    public async Task Postgres_CrmQueriesTranslate()
+    {
+        await WithPostgresAsync(async connection =>
+        {
+            await using var dbContext = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
+            var (tenant, admin) = await SeedAsync(dbContext);
+            var rep = new User { TenantId = tenant.Id, FullName = "Rep One", Email = $"rep-{Guid.NewGuid():N}@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+            var techUser = new User { TenantId = tenant.Id, FullName = "Juma Fundi", Email = $"juma-{Guid.NewGuid():N}@acme.test", PasswordHash = "hash", Role = AppRoles.Technician, IsActive = true };
+            var technician = new Technician { TenantId = tenant.Id, UserId = techUser.Id, FullName = "Juma Fundi", Email = techUser.Email, IsActive = true };
+            var client = new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" };
+            dbContext.AddRange(rep, techUser, technician, client);
+            await dbContext.SaveChangesAsync();
+            var job = new WorkOrder { TenantId = tenant.Id, ClientId = client.Id, WorkOrderNumber = "WO-0042", Title = "Chiller service", AssignedTechnicianId = technician.Id };
+            var contract = new Contract
+            {
+                TenantId = tenant.Id, ClientId = client.Id, ContractNumber = "CT-1", Name = "Chiller AMC", Status = ContractStatus.ExpiringSoon,
+                StartDate = DateTime.UtcNow.AddYears(-1), EndDate = DateTime.UtcNow.Date.AddDays(20), RenewalNoticeDays = 30, ContractValue = 900_000m, AccountManagerUserId = rep.Id,
+            };
+            dbContext.AddRange(job, contract);
+            await dbContext.SaveChangesAsync();
+
+            var crm = CreateCrmController(dbContext, tenant.Id, admin);
+            var created = await crm.CreateOpportunity(Deal("Lift modernisation", 500_000m, "KES") with { ClientId = client.Id, CompanyName = null, OwnerUserId = rep.Id }, CancellationToken.None);
+            var dealId = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+            await crm.AddActivity(dealId, new CreateSalesActivityRequest("Call", "Call procurement", null, DateTime.UtcNow.AddDays(-1)), CancellationToken.None);
+            await crm.ConvertToQuotation(dealId, CancellationToken.None);
+            var quote = await dbContext.TenantQuotations.SingleAsync(x => x.SalesOpportunityId == dealId);
+            quote.Status = "Sent";
+            quote.ValidUntil = DateTime.UtcNow.AddDays(1);
+            dbContext.TenantQuotations.Add(new TenantQuotation
+            {
+                TenantId = tenant.Id, ClientId = client.Id, QuoteNumber = "QT-OTHER", Status = "Sent", QuoteDate = DateTime.UtcNow.AddDays(-5),
+                ValidUntil = DateTime.UtcNow.AddDays(10), SentByUserId = admin.Id,
+            });
+            await dbContext.SaveChangesAsync();
+
+            // Owners, renewals and reminders, then the technician's lead.
+            Assert.NotNull(await new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)).ResolveAsync(tenant.Id, [Guid.NewGuid()], client.Id));
+            var push = new SalesReminderTests.RecordingPushQueue();
+            var run = await SalesReminderTests.CreateService(dbContext, push).RunAsync(DateTime.UtcNow);
+            Assert.Equal(1, run.RenewalDealsOpened);
+            Assert.True(run.QuoteReminders >= 1);
+            contract.Status = ContractStatus.Renewed;
+            await dbContext.SaveChangesAsync();
+            Assert.Equal(1, (await SalesReminderTests.CreateService(dbContext, push).RunAsync(DateTime.UtcNow.AddHours(1))).RenewalDealsClosed);
+            var leads = new TechnicianSalesLeadsController(
+                dbContext, new ScopedTenantContext(tenant.Id, techUser.Id, AppRoles.Technician), new NoOpUserAccessService(),
+                new SalesReminderTests.FixedLicenseGuard([ServiceOpsPlans.Operations, ServiceOpsPlans.Finance]), new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)),
+                new AuditLogService(dbContext, new HttpContextAccessor()));
+            Ok<TechnicianSalesLeadResponse>(await leads.Flag(job.Id, new FlagSalesLeadRequest("Compressor is tired"), CancellationToken.None));
+
+            // Every list, both seeing everything and limited to one's own deals.
+            Ok<SalesSettingsResponse>(await crm.UpdateSettings(new UpdateSalesSettingsRequest(rep.Id, "Own", true), CancellationToken.None));
+            var repCrm = CreateCrmController(dbContext, tenant.Id, rep, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.Manager, PermissionNames.CrmView, PermissionNames.CrmManage));
+            foreach (var view in new[] { crm, repCrm })
+            {
+                Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await view.ListOpportunities("Open", "lift", null, client.Id, CancellationToken.None));
+                Ok<SalesPipelineSummary>(await view.GetSummary(CancellationToken.None));
+                Assert.NotEmpty(Ok<IReadOnlyCollection<SalesFollowUpItem>>(await view.ListFollowUps(rep.Id, CancellationToken.None)));
+                Ok<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>(await view.ListQuotesAwaitingAnswer(rep.Id, CancellationToken.None));
+                Ok<SalesOpportunityDetailResponse>(await view.GetOpportunity(dealId, CancellationToken.None));
+            }
+            Assert.Equal(2, Ok<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>(await crm.ListQuotesAwaitingAnswer(null, CancellationToken.None)).Count);
+            var reports = new SalesReportsController(dbContext, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.Manager, PermissionNames.CrmView), new NoOpUserAccessService());
+            Ok<SalesReport>(await reports.Get(DateTime.UtcNow.AddDays(-30), DateTime.UtcNow, null, CancellationToken.None));
+            Ok<SalesSettingsResponse>(await crm.GetSettings(CancellationToken.None));
+
+            // Answering the quote wins the deal.
+            var quotes = new TenantQuotationController(
+                dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpDocumentNumberingService(), null!,
+                new AuditLogService(dbContext, new HttpContextAccessor()), new NoOpUserAccessService(), null!, null!, null!, null!, null!)
+            {
+                ControllerContext = CreateControllerContext(admin)
+            };
+            await quotes.AcceptQuotation(quote.Id, CancellationToken.None);
+            Assert.Equal(SalesStages.Won, (await dbContext.SalesOpportunities.AsNoTracking().SingleAsync(x => x.Id == dealId)).Stage);
+        });
+    }
+
+    private static async Task WithPostgresAsync(Func<string, Task> body)
+    {
+        var server = Environment.GetEnvironmentVariable("ECOSYS_TEST_DB_CONNECTION")
+            ?? "Host=localhost;Port=5432;Database=ecosys_test;Username=postgres;Password=postgres";
+        var databaseName = $"ecosys_sales_{Guid.NewGuid():N}";
+        var database = new NpgsqlConnectionStringBuilder(server) { Database = databaseName, Pooling = false }.ConnectionString;
+        var adminDb = new NpgsqlConnectionStringBuilder(server) { Database = "postgres", Pooling = false }.ConnectionString;
+
+        await ExecuteAdminAsync(adminDb, $"CREATE DATABASE \"{databaseName}\"");
+        try
+        {
+            await using (var setup = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(database).Options))
+                await setup.Database.MigrateAsync();
+            await body(database);
+        }
+        finally
+        {
+            await ExecuteAdminAsync(adminDb, $"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)");
+        }
+    }
+
+    private static async Task ExecuteAdminAsync(string connectionString, string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>

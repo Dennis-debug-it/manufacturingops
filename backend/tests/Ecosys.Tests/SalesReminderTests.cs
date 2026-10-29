@@ -296,7 +296,7 @@ public sealed class SalesReminderTests
     private static AppDbContext CreateDbContext() =>
         new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase($"ecosys-sales-reminders-{Guid.NewGuid():N}").Options);
 
-    private static SalesReminderService CreateService(AppDbContext db, RecordingPushQueue push, string[]? modules = null) =>
+    internal static SalesReminderService CreateService(AppDbContext db, RecordingPushQueue push, string[]? modules = null) =>
         new(
             db,
             new FixedLicenseGuard(modules ?? [ServiceOpsPlans.Operations, ServiceOpsPlans.Finance]),
@@ -309,7 +309,7 @@ public sealed class SalesReminderTests
             new SalesOwnerResolver(db, new RolePermissionService(db)),
             NullLogger<SalesReminderService>.Instance);
 
-    private sealed class RecordingPushQueue : IPushNotificationQueue
+    internal sealed class RecordingPushQueue : IPushNotificationQueue
     {
         public List<(Guid TenantId, IReadOnlyCollection<Guid> UserIds, PushMessage Message)> Sent { get; } = [];
         public void Enqueue(Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message) => Sent.Add((tenantId, userIds, message));
