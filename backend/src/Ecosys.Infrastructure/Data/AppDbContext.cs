@@ -200,6 +200,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<SalesTarget> SalesTargets => Set<SalesTarget>();
     public DbSet<SalesPipeline> SalesPipelines => Set<SalesPipeline>();
     public DbSet<SalesPipelineStage> SalesPipelineStages => Set<SalesPipelineStage>();
+    public DbSet<SalesCustomField> SalesCustomFields => Set<SalesCustomField>();
+    public DbSet<SalesCustomFieldValue> SalesCustomFieldValues => Set<SalesCustomFieldValue>();
     public DbSet<SalesOpportunityContact> SalesOpportunityContacts => Set<SalesOpportunityContact>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
@@ -3609,10 +3611,37 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Key).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.RequiredFields).HasMaxLength(2000);
             entity.HasOne(x => x.Pipeline).WithMany(x => x.Stages).HasForeignKey(x => x.PipelineId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => new { x.PipelineId, x.Key }).IsUnique();
         });
         ApplyTenantFilter<SalesPipelineStage>(modelBuilder);
+
+        modelBuilder.Entity<SalesCustomField>(entity =>
+        {
+            entity.ToTable("sales_custom_fields");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Key).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Label).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.FieldType).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Options).HasMaxLength(4000);
+            entity.Property(x => x.HelpText).HasMaxLength(300);
+            entity.HasOne<SalesPipeline>().WithMany().HasForeignKey(x => x.PipelineId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.Key }).IsUnique();
+        });
+        ApplyTenantFilter<SalesCustomField>(modelBuilder);
+
+        modelBuilder.Entity<SalesCustomFieldValue>(entity =>
+        {
+            entity.ToTable("sales_custom_field_values");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Value).HasMaxLength(1000).IsRequired();
+            entity.HasOne(x => x.Opportunity).WithMany(x => x.CustomFieldValues).HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Field).WithMany().HasForeignKey(x => x.FieldId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.OpportunityId, x.FieldId }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.FieldId, x.Value });
+        });
+        ApplyTenantFilter<SalesCustomFieldValue>(modelBuilder);
 
         modelBuilder.Entity<SalesActivity>(entity =>
         {

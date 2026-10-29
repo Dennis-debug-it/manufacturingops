@@ -33,17 +33,19 @@ public sealed partial class SalesCrmController
         if (ownerUserId.HasValue) query = query.Where(x => x.OwnerUserId == ownerUserId);
         if (pipelineId.HasValue) query = InPipeline(query, SalesPipelineCatalog.For(pipelines, pipelineId));
         query = await ApplyStageFilterAsync(query, stage, cancellationToken);
-        var deals = await query.OrderBy(x => x.CreatedAt).ToListAsync(cancellationToken);
+        var deals = await query.Include(x => x.CustomFieldValues).OrderBy(x => x.CreatedAt).ToListAsync(cancellationToken);
+        var fields = (await SalesCustomFields.LoadAsync(dbContext, TenantId, cancellationToken)).Where(x => x.IsActive).ToList();
 
         return CsvFile("deals.csv",
-            "Title,Company,Prospect,Contact,Email,Phone,Stage,Value,Currency,Probability,Expected Close,Owner,Source,Service Type,Location,Created,Won,Lost,Lost Reason,Pipeline",
+            "Title,Company,Prospect,Contact,Email,Phone,Stage,Value,Currency,Probability,Expected Close,Owner,Source,Service Type,Location,Created,Won,Lost,Lost Reason,Pipeline"
+                + (fields.Count == 0 ? string.Empty : "," + Csv.Row(fields.Select(f => (object?)f.Label).ToArray())),
             deals.Select(x => new object?[]
             {
                 x.Title, x.Client?.ClientName ?? x.CompanyName, x.Client?.IsProspect == true ? "Yes" : "No", x.ContactName, x.ContactEmail, x.ContactPhone,
                 SalesPipelineCatalog.For(pipelines, x.PipelineId).Find(x.Stage)?.Name ?? x.Stage, x.EstimatedValue.ToString(CultureInfo.InvariantCulture), x.Currency, x.Probability, Day(x.ExpectedCloseDate), x.OwnerName,
                 x.Source, x.ServiceType, x.Location, Day(x.CreatedAt), Day(x.WonAt), Day(x.LostAt), x.LostReason,
                 SalesPipelineCatalog.For(pipelines, x.PipelineId).Name,
-            }));
+            }.Concat(fields.Select(f => (object?)x.CustomFieldValues.FirstOrDefault(v => v.FieldId == f.Id)?.Value)).ToArray()));
     }
 
     /// <summary>The people at clients and prospects; limited to the clients of one's own deals when the workspace shows own deals only.</summary>
@@ -72,19 +74,24 @@ public sealed partial class SalesCrmController
     public async Task<IActionResult> DealImportTemplate(CancellationToken cancellationToken)
     {
         await EnsureCanManageAsync(cancellationToken);
-        return CsvFile("deals_import_template.csv", string.Join(',', DealImportHeaders),
+        var fields = (await SalesCustomFields.LoadAsync(dbContext, TenantId, cancellationToken)).Where(x => x.IsActive).ToList();
+        object?[] sample =
         [
-            ["Rooftop solar for warehouse", "Baraka Logistics", "Wanjiru Otieno", "wanjiru@baraka.co.ke", "+254700000200", "Qualified", "1250000", "KES",
-                DateTime.UtcNow.AddMonths(2).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), "", "Referral", "", "Mombasa Road", "20 kWp grid-tie system", "", ""],
-        ]);
+            "Rooftop solar for warehouse", "Baraka Logistics", "Wanjiru Otieno", "wanjiru@baraka.co.ke", "+254700000200", "Qualified", "1250000", "KES",
+            DateTime.UtcNow.AddMonths(2).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), "", "Referral", "", "Mombasa Road", "20 kWp grid-tie system", "", "",
+        ];
+        return CsvFile("deals_import_template.csv",
+            string.Join(',', DealImportHeaders) + (fields.Count == 0 ? string.Empty : "," + Csv.Row(fields.Select(f => (object?)f.Label).ToArray())),
+            [sample.Concat(fields.Select(_ => (object?)string.Empty)).ToArray()]);
     }
 
     [HttpPost("import/deals/preview")]
     public async Task<ActionResult<ImportPreviewResponse>> PreviewDealImport([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
         await EnsureCanManageAsync(cancellationToken);
-        var rows = await ReadDealRowsAsync(request.File, cancellationToken);
-        var context = await DealImportContext.LoadAsync(dbContext, rolePermissionService, TenantId, await PipelinesAsync(cancellationToken), cancellationToken);
+        var fields = await SalesCustomFields.LoadAsync(dbContext, TenantId, cancellationToken);
+        var rows = await ReadDealRowsAsync(request.File, fields, cancellationToken);
+        var context = await DealImportContext.LoadAsync(dbContext, rolePermissionService, TenantId, await PipelinesAsync(cancellationToken), fields, cancellationToken);
         var preview = rows.Select(row =>
         {
             var parsed = context.Parse(row.Values);
@@ -98,8 +105,9 @@ public sealed partial class SalesCrmController
     public async Task<ActionResult<ImportCommitResponse>> CommitDealImport([FromForm] CsvUploadRequest request, CancellationToken cancellationToken)
     {
         await EnsureCanManageAsync(cancellationToken);
-        var rows = await ReadDealRowsAsync(request.File, cancellationToken);
-        var context = await DealImportContext.LoadAsync(dbContext, rolePermissionService, TenantId, await PipelinesAsync(cancellationToken), cancellationToken);
+        var fields = await SalesCustomFields.LoadAsync(dbContext, TenantId, cancellationToken);
+        var rows = await ReadDealRowsAsync(request.File, fields, cancellationToken);
+        var context = await DealImportContext.LoadAsync(dbContext, rolePermissionService, TenantId, await PipelinesAsync(cancellationToken), fields, cancellationToken);
         var importerName = await ResolveUserNameAsync(UserId, cancellationToken);
         var errors = new List<ImportCommitRowErrorResponse>();
         var created = 0;
@@ -157,8 +165,11 @@ public sealed partial class SalesCrmController
 
     private sealed record DealRow(int RowNumber, IReadOnlyDictionary<string, string?> Values);
 
-    /// <summary>Reads a CSV whose first row names the columns; header names are matched ignoring case and spaces.</summary>
-    private static async Task<List<DealRow>> ReadDealRowsAsync(IFormFile? file, CancellationToken cancellationToken)
+    /// <summary>
+    /// Reads a CSV whose first row names the columns; header names are matched ignoring case and spaces.
+    /// A column named after an active custom field (its label or key) fills that field, under "cf:" plus its key.
+    /// </summary>
+    private static async Task<List<DealRow>> ReadDealRowsAsync(IFormFile? file, IReadOnlyList<SalesCustomField> fields, CancellationToken cancellationToken)
     {
         if (file is null || file.Length == 0)
             throw new Shared.Errors.BusinessRuleException("Choose a CSV file to import.");
@@ -170,8 +181,10 @@ public sealed partial class SalesCrmController
         if (header is null)
             return [];
         static string Key(string value) => new string(value.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        var fieldColumns = fields.Where(x => x.IsActive).ToList();
         var columns = ImportController.ParseCsvLine(header.TrimStart('﻿'))
-            .Select(name => DealImportHeaders.FirstOrDefault(known => Key(known) == Key(name)))
+            .Select(name => DealImportHeaders.FirstOrDefault(known => Key(known) == Key(name))
+                ?? fieldColumns.Where(f => Key(f.Label) == Key(name) || Key(f.Key) == Key(name)).Select(f => SalesStageRules.CustomPrefix + f.Key).FirstOrDefault())
             .ToList();
         if (!columns.Contains("Title"))
             throw new Shared.Errors.BusinessRuleException("The file needs a Title column. Download the template to see the columns.");
@@ -201,6 +214,7 @@ public sealed partial class SalesCrmController
         private readonly IReadOnlyList<(string Key, string Name, bool IsProspect)> clients;
         private readonly HashSet<string> existingDeals;
         private IReadOnlyList<SalesPipelineView> pipelines = [];
+        private IReadOnlyList<SalesCustomField> fields = [];
 
         private DealImportContext(IReadOnlyList<SalesOwnerOption> owners, IReadOnlyList<(string, string, bool)> clients, HashSet<string> existingDeals, IReadOnlyDictionary<Guid, string> ownerEmails)
         {
@@ -214,7 +228,7 @@ public sealed partial class SalesCrmController
 
         public static async Task<DealImportContext> LoadAsync(
             Infrastructure.Data.AppDbContext db, Infrastructure.Services.IRolePermissionService rolePermissions, Guid tenantId,
-            IReadOnlyList<SalesPipelineView> pipelines, CancellationToken cancellationToken)
+            IReadOnlyList<SalesPipelineView> pipelines, IReadOnlyList<SalesCustomField> fields, CancellationToken cancellationToken)
         {
             var owners = await SalesCrmAccess.ListEligibleOwnersAsync(db, rolePermissions, tenantId, cancellationToken);
             var ownerIds = owners.Select(x => x.Id).ToList();
@@ -225,7 +239,7 @@ public sealed partial class SalesCrmController
             var deals = (await db.SalesOpportunities.AsNoTracking().Where(x => x.TenantId == tenantId)
                     .Select(x => new { x.Title, Party = x.Client != null ? x.Client.ClientName : x.CompanyName ?? x.ContactName }).ToListAsync(cancellationToken))
                 .Select(x => DealKey(x.Title, x.Party)).ToHashSet();
-            return new DealImportContext(owners, clients, deals, emails) { pipelines = pipelines };
+            return new DealImportContext(owners, clients, deals, emails) { pipelines = pipelines, fields = fields };
         }
 
         public void Remember(string title, string? party) => existingDeals.Add(DealKey(title, party));
@@ -290,9 +304,23 @@ public sealed partial class SalesCrmController
             var existing = clients.FirstOrDefault(x => x.Key == partyKey && partyKey.Length > 0);
             var clientNote = existing.Name is null ? "New prospect" : existing.IsProspect ? $"Existing prospect: {existing.Name}" : $"Existing client: {existing.Name}";
 
+            var custom = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (column, raw) in row.Where(x => x.Key.StartsWith(SalesStageRules.CustomPrefix, StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(x.Value)))
+            {
+                var field = fields.First(f => SalesStageRules.CustomPrefix + f.Key == column);
+                try
+                {
+                    custom[field.Key] = SalesCustomFields.Normalize(field, raw);
+                }
+                catch (Shared.Errors.BusinessRuleException exception)
+                {
+                    errors.Add(exception.Message);
+                }
+            }
+
             var request = errors.Count > 0 ? null : new UpsertSalesOpportunityRequest(
                 title!.Trim(), null, null, company, contact, row["ContactEmail"], row["ContactPhone"], row["Location"], row["Source"],
-                row["ServiceType"], row["Description"], value, row["Currency"], null, close, ownerId);
+                row["ServiceType"], row["Description"], value, row["Currency"], null, close, ownerId, CustomFields: custom);
             return new ParsedDealRow(request, stage, row["LostReason"], errors, clientNote, pipeline.Id, stageView.Probability);
         }
     }

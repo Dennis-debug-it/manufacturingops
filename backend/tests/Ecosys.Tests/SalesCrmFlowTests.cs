@@ -654,6 +654,20 @@ public sealed class SalesCrmFlowTests
             Ok<SalesReport>(await new SalesReportsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService())
                 .Get(null, null, null, CancellationToken.None, sparesId));
             Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.UpdatePipeline(sparesId, new UpsertSalesPipelineRequest("Spares", null, true, true, [new("Enquiry", "Enquiry", 25)]), CancellationToken.None));
+            Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Roof type", "Dropdown", ["Flat", "Pitched"], null, null), CancellationToken.None));
+            Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Decision maker", "Text", null, null, null), CancellationToken.None));
+            Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.UpdatePipeline(sparesId, new UpsertSalesPipelineRequest("Spares", null, true, true,
+                [new("Enquiry", "Enquiry", 25, ["cf:roof_type", "contact"])], WonRequiredFields: ["quote"]), CancellationToken.None));
+            Ok<SalesOpportunityDetailResponse>(await crm.UpdateOpportunity(prospectDeal.Id, Deal("Depot solar", 1_000m, "KES") with
+            {
+                CompanyName = "Baraka Logistics Ltd", PipelineId = sparesId,
+                CustomFields = new Dictionary<string, string?> { ["roof_type"] = "Flat", ["decision_maker"] = "Peter" },
+            }, CancellationToken.None));
+            Assert.Single(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, null, "decision_maker", "pet")));
+            Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, null, "roof_type", "Flat"));
+            Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, null, "roof_type", null));
+            Assert.NotNull(Ok<SalesOpportunityDetailResponse>(await crm.GetOpportunity(prospectDeal.Id, CancellationToken.None)).StageBlockers);
+            Assert.IsType<FileContentResult>(await crm.ExportDeals(null, null, CancellationToken.None));
 
             // Answering the quote wins the deal.
             var quotes = new TenantQuotationController(
@@ -1028,6 +1042,90 @@ public sealed class SalesCrmFlowTests
         var moved = Ok<SalesOpportunityDetailResponse>(await crm.UpdateOpportunity(deal.Id, Deal("Pump seals", 40_000m, "KES") with { PipelineId = sales.Id }, CancellationToken.None));
         Assert.Equal(("Lead", "Sales"), (moved.Stage, moved.PipelineName));
         Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.DeletePipeline(spares.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DealFields_AreFilledFiltered_AndRequiredByStages()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+
+        Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Building size (m²)", "Number", null, null, null), CancellationToken.None));
+        Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Decision maker", "Text", null, null, null), CancellationToken.None));
+        Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Roof type", "Dropdown", ["Flat", "Pitched"], null, null), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.CreateField(new UpsertSalesCustomFieldRequest("Colour", "Dropdown", [], null, null), CancellationToken.None));
+        var fields = Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Spare", "Text", null, null, null), CancellationToken.None));
+        Assert.Equal(["building_size_m", "decision_maker", "roof_type", "spare"], fields.Fields.Select(x => x.Key).ToArray());
+        Assert.Contains(fields.Requirements, x => x.Key == "cf:building_size_m" && x.Label == "Building size (m²)");
+
+        // Proposal needs a value and the building size; Won needs a quotation.
+        var sales = Assert.Single(Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.ListPipelines(CancellationToken.None)));
+        var stages = sales.Stages.Where(x => !x.IsClosed)
+            .Select(x => new UpsertSalesPipelineStageRequest(x.Key, x.Name, x.Probability, x.Key == "Proposal" ? ["value", "cf:building_size_m", "cf:spare"] : null))
+            .ToList();
+        var updated = Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.UpdatePipeline(sales.Id,
+            new UpsertSalesPipelineRequest("Sales", null, true, true, stages, WonRequiredFields: ["quote"]), CancellationToken.None)).Single();
+        Assert.Equal(["value", "cf:building_size_m", "cf:spare"], updated.Stages.Single(x => x.Key == "Proposal").RequiredFields.ToArray());
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.UpdatePipeline(sales.Id,
+            new UpsertSalesPipelineRequest("Sales", null, true, true, stages, WonRequiredFields: ["cf:nonsense"]), CancellationToken.None));
+
+        var deal = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(
+            Deal("Warehouse roof", 0m, "KES") with { CustomFields = new Dictionary<string, string?> { ["roof_type"] = "flat", ["decision_maker"] = "Grace Wanjiku" } },
+            CancellationToken.None)).Result).Value);
+        Assert.Equal("Flat", deal.CustomFields!.Single(x => x.Key == "roof_type").Value);
+        Assert.Null(deal.CustomFields!.Single(x => x.Key == "building_size_m").Value);
+        Assert.Equal(["Proposal", "Negotiation", "Won"], deal.StageBlockers!.Keys.ToArray());
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.UpdateOpportunity(deal.Id,
+            Deal("Warehouse roof", 0m, "KES") with { CustomFields = new Dictionary<string, string?> { ["building_size_m"] = "big" } }, CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.UpdateOpportunity(deal.Id,
+            Deal("Warehouse roof", 0m, "KES") with { CustomFields = new Dictionary<string, string?> { ["no_such_field"] = "x" } }, CancellationToken.None));
+
+        var blocked = await Assert.ThrowsAsync<BusinessRuleException>(() => crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Proposal", null), CancellationToken.None));
+        Assert.Equal("Before moving to Proposal, fill in: Estimated value, Building size (m²), Spare.", blocked.Message);
+        // Skipping the stage does not skip its rules.
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Negotiation", null), CancellationToken.None));
+
+        // A switched-off field is no longer asked for.
+        var spare = fields.Fields.Single(x => x.Key == "spare");
+        Ok<SalesFieldsResponse>(await crm.UpdateField(spare.Id, new UpsertSalesCustomFieldRequest("Spare", "Text", null, null, null, IsActive: false), CancellationToken.None));
+        var filled = Ok<SalesOpportunityDetailResponse>(await crm.UpdateOpportunity(deal.Id,
+            Deal("Warehouse roof", 250_000m, "KES") with { CustomFields = new Dictionary<string, string?> { ["building_size_m"] = "1,200", ["decision_maker"] = "Grace Wanjiku" } }, CancellationToken.None));
+        Assert.Equal("1200", filled.CustomFields!.Single(x => x.Key == "building_size_m").Value);
+        Assert.Equal("Flat", filled.CustomFields!.Single(x => x.Key == "roof_type").Value);
+        Assert.Equal(["Won"], filled.StageBlockers!.Keys.ToArray());
+        Assert.Equal("Negotiation", Ok<SalesOpportunityDetailResponse>(await crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Negotiation", null), CancellationToken.None)).Stage);
+        Assert.Contains("A quotation", (await Assert.ThrowsAsync<BusinessRuleException>(() => crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Won", null), CancellationToken.None))).Message);
+        // Lost never has requirements.
+        Assert.Equal("Lost", Ok<SalesOpportunityDetailResponse>(await crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Lost", "Budget cut"), CancellationToken.None)).Stage);
+
+        // Filters: exact for choices, "contains" for text, "has any value" without a value.
+        IReadOnlyCollection<SalesOpportunityListItem> Filter(string field, string? value) =>
+            Ok<IReadOnlyCollection<SalesOpportunityListItem>>(crm.ListOpportunities(null, null, null, null, CancellationToken.None, null, field, value).GetAwaiter().GetResult());
+        Assert.Single(Filter("roof_type", "flat"));
+        Assert.Empty(Filter("roof_type", "Pitched"));
+        Assert.Single(Filter("decision_maker", "wanjiku"));
+        Assert.Single(Filter("building_size_m", null));
+
+        // The type of a field in use is fixed, and it cannot be deleted; an unused one can, leaving the stage rules.
+        var size = fields.Fields.Single(x => x.Key == "building_size_m");
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.UpdateField(size.Id, new UpsertSalesCustomFieldRequest("Size", "Text", null, null, null), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.DeleteField(size.Id, CancellationToken.None));
+        Ok<SalesFieldsResponse>(await crm.DeleteField(spare.Id, CancellationToken.None));
+        Assert.Equal(["value", "cf:building_size_m"],
+            Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.ListPipelines(CancellationToken.None)).Single().Stages.Single(x => x.Key == "Proposal").RequiredFields.ToArray());
+
+        // CSV: a column per field out, and in by label.
+        var export = System.Text.Encoding.UTF8.GetString(Assert.IsType<FileContentResult>(await crm.ExportDeals(null, null, CancellationToken.None)).FileContents);
+        Assert.Contains("\"Building size (m²)\",\"Decision maker\",\"Roof type\"", export);
+        Assert.Contains("\"1200\",\"Grace Wanjiku\",\"Flat\"", export);
+        var csv = "Title,Company,Roof Type,Building size (m²)\nTank farm,Kisumu Oils,Pitched,80\nSilo,Kisumu Oils,Thatch,";
+        IFormFile File() => new FormFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(csv)), 0, System.Text.Encoding.UTF8.GetByteCount(csv), "file", "deals.csv");
+        var preview = Ok<ImportPreviewResponse>(await crm.PreviewDealImport(new CsvUploadRequest(File()), CancellationToken.None));
+        Assert.Contains("Roof type must be one of: Flat, Pitched.", preview.Rows.Last().Errors);
+        Assert.Equal(1, Ok<ImportCommitResponse>(await crm.CommitDealImport(new CsvUploadRequest(File()), CancellationToken.None)).SuccessfulRows);
+        var imported = await dbContext.SalesOpportunities.SingleAsync(x => x.Title == "Tank farm");
+        Assert.Equal(["80", "Pitched"], (await dbContext.SalesCustomFieldValues.Where(x => x.OpportunityId == imported.Id).Select(x => x.Value).ToListAsync()).Order().ToArray());
     }
 
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>

@@ -83,7 +83,9 @@ public sealed partial class SalesCrmController(
         [FromQuery] Guid? ownerUserId,
         [FromQuery] Guid? clientId,
         CancellationToken cancellationToken,
-        [FromQuery] Guid? pipelineId = null)
+        [FromQuery] Guid? pipelineId = null,
+        [FromQuery] string? field = null,
+        [FromQuery] string? fieldValue = null)
     {
         EnsureCanView();
         var pipelines = await PipelinesAsync(cancellationToken);
@@ -103,6 +105,7 @@ public sealed partial class SalesCrmController(
             query = query.Where(x => x.OwnerUserId == scope);
         if (clientId.HasValue)
             query = query.Where(x => x.ClientId == clientId.Value);
+        query = await ApplyFieldFilterAsync(query, field, fieldValue, cancellationToken);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim().ToLower();
@@ -355,6 +358,8 @@ public sealed partial class SalesCrmController(
             ?? throw new BusinessRuleException($"'{request.Stage}' is not a stage of the {pipeline.Name} pipeline.");
         if (stage.IsClosed)
             throw new BusinessRuleException("Create the opportunity first, then mark it won or lost.");
+        SalesStageRules.EnsureCanEnter(opportunity, pipeline, stage,
+            await SalesStageRules.LoadFactsAsync(dbContext, TenantId, opportunity.Id, cancellationToken));
         opportunity.Stage = stage.Key;
         opportunity.Probability = request.Probability ?? stage.Probability;
 
@@ -419,6 +424,8 @@ public sealed partial class SalesCrmController(
 
         if (stage == SalesStages.Lost && string.IsNullOrWhiteSpace(request.LostReason))
             throw new BusinessRuleException("Give a reason when marking an opportunity as lost.");
+        SalesStageRules.EnsureCanEnter(opportunity, pipeline, target,
+            await SalesStageRules.LoadFactsAsync(dbContext, TenantId, opportunity.Id, cancellationToken));
 
         var previous = pipeline.Find(opportunity.Stage)?.Name ?? opportunity.Stage;
         opportunity.Stage = stage;
@@ -868,6 +875,9 @@ public sealed partial class SalesCrmController(
         opportunity.ExpectedCloseDate = request.ExpectedCloseDate.HasValue
             ? DateTime.SpecifyKind(request.ExpectedCloseDate.Value, DateTimeKind.Utc)
             : null;
+        if (request.CustomFields is { Count: > 0 })
+            await SalesCustomFields.ApplyAsync(dbContext, TenantId, opportunity, request.CustomFields,
+                await SalesCustomFields.LoadAsync(dbContext, TenantId, cancellationToken), cancellationToken);
     }
 
     private async Task<string?> ResolveUserNameAsync(Guid userId, CancellationToken cancellationToken) =>
@@ -961,7 +971,22 @@ public sealed partial class SalesCrmController(
             opportunity.Client?.IsProspect ?? false,
             contacts.Select(ClientContacts.Map).ToList(),
             dealPipeline.Id,
-            dealPipeline.Name);
+            dealPipeline.Name,
+            await DealFieldValuesAsync(id, dealPipeline.Id, cancellationToken),
+            await StageBlockersAsync(opportunity, dealPipeline, cancellationToken));
+    }
+
+    /// <summary>For each stage the deal could move to, what it is still missing (stages with nothing missing are left out).</summary>
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> StageBlockersAsync(SalesOpportunity opportunity, SalesPipelineView pipeline, CancellationToken cancellationToken)
+    {
+        if (pipeline.Stages.All(x => x.Required.Count == 0))
+            return new Dictionary<string, IReadOnlyList<string>>();
+        var facts = await SalesStageRules.LoadFactsAsync(dbContext, TenantId, opportunity.Id, cancellationToken);
+        return pipeline.Stages
+            .Where(x => x.Key != SalesStages.Lost)
+            .Select(x => (x.Key, Missing: SalesStageRules.Missing(opportunity, pipeline.Id, SalesStageRules.RequiredFor(pipeline, x.Key), facts)))
+            .Where(x => x.Missing.Count > 0)
+            .ToDictionary(x => x.Key, x => x.Missing);
     }
 
     private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt, SalesCurrencyConverter converter, int stalledAfterDays)
@@ -1042,7 +1067,8 @@ public sealed record UpsertSalesOpportunityRequest(
     DateTime? ExpectedCloseDate,
     Guid? OwnerUserId,
     [StringLength(40)] string? Stage = null,
-    Guid? PipelineId = null);
+    Guid? PipelineId = null,
+    IReadOnlyDictionary<string, string?>? CustomFields = null);
 
 public sealed record ChangeSalesStageRequest([StringLength(40)] string Stage, [StringLength(500)] string? LostReason);
 
@@ -1082,7 +1108,9 @@ public sealed record SalesOpportunityDetailResponse(
     bool ClientIsProspect = false,
     IReadOnlyCollection<ClientContactResponse>? Contacts = null,
     Guid? PipelineId = null,
-    string? PipelineName = null);
+    string? PipelineName = null,
+    IReadOnlyList<SalesDealFieldValue>? CustomFields = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? StageBlockers = null);
 
 public sealed record AddDealContactRequest(
     Guid? ContactId,

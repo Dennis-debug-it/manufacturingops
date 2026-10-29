@@ -58,6 +58,7 @@ public sealed class SalesOpportunity : AuditableEntity, ITenantEntity
     public ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
     public ICollection<TenantQuotation> Quotations { get; set; } = new List<TenantQuotation>();
     public ICollection<SalesTender> Tenders { get; set; } = new List<SalesTender>();
+    public ICollection<SalesCustomFieldValue> CustomFieldValues { get; set; } = new List<SalesCustomFieldValue>();
 }
 
 /// <summary>A call, email, meeting, site visit, note or follow-up logged against an opportunity.</summary>
@@ -241,6 +242,55 @@ public sealed class SalesPipelineStage : ITenantEntity
     public int SortOrder { get; set; }
     /// <summary>The probability a deal takes on when it moves into this stage.</summary>
     public int Probability { get; set; }
+    /// <summary>
+    /// Comma-separated things a deal needs before it can enter this stage or any later one: a built-in
+    /// key (see SalesStageRules) or "cf:" plus a custom field's key.
+    /// </summary>
+    public string? RequiredFields { get; set; }
 
     public SalesPipeline? Pipeline { get; set; }
+}
+
+/// <summary>
+/// A field the workspace adds to its deals (e.g. "Building size", "Decision maker"). Shown on the deal
+/// form and page, in exports and imports, and can be made required from a stage onwards.
+/// </summary>
+public sealed class SalesCustomField : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    /// <summary>Stable identifier used in imports, filters and stage rules; set from the first label and never changed.</summary>
+    public string Key { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public string FieldType { get; set; } = SalesCustomFieldTypes.Text;
+    /// <summary>Dropdown choices, one per line.</summary>
+    public string? Options { get; set; }
+    public string? HelpText { get; set; }
+    /// <summary>Only on deals in this pipeline; null for every pipeline.</summary>
+    public Guid? PipelineId { get; set; }
+    public bool IsActive { get; set; } = true;
+    public int SortOrder { get; set; }
+}
+
+public static class SalesCustomFieldTypes
+{
+    public const string Text = "Text";
+    public const string Number = "Number";
+    public const string Date = "Date";
+    public const string Dropdown = "Dropdown";
+    public const string Checkbox = "Checkbox";
+
+    public static readonly string[] All = [Text, Number, Date, Dropdown, Checkbox];
+}
+
+/// <summary>A deal's value for one custom field. Empty values are not stored.</summary>
+public sealed class SalesCustomFieldValue : ITenantEntity
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid TenantId { get; set; }
+    public Guid OpportunityId { get; set; }
+    public Guid FieldId { get; set; }
+    public string Value { get; set; } = string.Empty;
+
+    public SalesOpportunity? Opportunity { get; set; }
+    public SalesCustomField? Field { get; set; }
 }

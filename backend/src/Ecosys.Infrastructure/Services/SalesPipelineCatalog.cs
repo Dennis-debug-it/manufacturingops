@@ -4,9 +4,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Infrastructure.Services;
 
-public sealed record SalesPipelineStageView(string Key, string Name, int SortOrder, int Probability)
+public sealed record SalesPipelineStageView(string Key, string Name, int SortOrder, int Probability, IReadOnlyList<string>? RequiredFields = null)
 {
     public bool IsClosed => Key is SalesPipelineCatalog.WonKey or SalesPipelineCatalog.LostKey;
+
+    /// <summary>What a deal needs before entering this stage (see <see cref="SalesStageRules"/>).</summary>
+    public IReadOnlyList<string> Required => RequiredFields ?? [];
 }
 
 /// <summary>A pipeline with its stages in order; Won and Lost are always the last two.</summary>
@@ -72,7 +75,7 @@ public static class SalesPipelineCatalog
 
     public static SalesPipelineView Map(SalesPipeline pipeline) =>
         new(pipeline.Id, pipeline.Name, pipeline.SortOrder, pipeline.Module, pipeline.IsDefault, pipeline.IsActive,
-            pipeline.Stages.OrderBy(x => x.SortOrder).Select(x => new SalesPipelineStageView(x.Key, x.Name, x.SortOrder, x.Probability)).ToList());
+            pipeline.Stages.OrderBy(x => x.SortOrder).Select(x => new SalesPipelineStageView(x.Key, x.Name, x.SortOrder, x.Probability, SalesStageRules.Parse(x.RequiredFields))).ToList());
 
     private static async Task<SalesPipeline> CreateDefaultAsync(AppDbContext dbContext, Guid tenantId, CancellationToken cancellationToken)
     {

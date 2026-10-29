@@ -36,7 +36,8 @@ public sealed partial class SalesCrmController
                 x.Pipeline.Id, x.Pipeline.Name, x.Pipeline.SortOrder, x.Pipeline.Module, x.Pipeline.IsDefault, x.Pipeline.IsActive, x.Available,
                 x.Pipeline.Stages.Select(s => new SalesPipelineStageResponse(
                     s.Key, s.Name, s.Probability, s.IsClosed,
-                    counts.Where(c => c.Pipeline == x.Pipeline.Id && c.Stage == s.Key).Sum(c => c.Count))).ToList()))
+                    counts.Where(c => c.Pipeline == x.Pipeline.Id && c.Stage == s.Key).Sum(c => c.Count),
+                    s.Required)).ToList()))
             .ToList());
     }
 
@@ -46,7 +47,7 @@ public sealed partial class SalesCrmController
         userAccessService.EnsureAdmin();
         var existing = await PipelinesAsync(cancellationToken);
         var pipeline = new SalesPipeline { TenantId = TenantId, SortOrder = existing.Max(x => x.SortOrder) + 10 };
-        ApplyPipeline(pipeline, request, inUse: new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        ApplyPipeline(pipeline, request, inUse: new HashSet<string>(StringComparer.OrdinalIgnoreCase), await SalesCustomFields.LoadAsync(dbContext, TenantId, cancellationToken));
         dbContext.SalesPipelines.Add(pipeline);
         await SetDefaultAsync(pipeline, request.IsDefault, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -66,7 +67,7 @@ public sealed partial class SalesCrmController
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (pipeline.IsDefault && !request.IsActive)
             throw new BusinessRuleException("The default pipeline cannot be switched off; make another one the default first.");
-        ApplyPipeline(pipeline, request, inUse);
+        ApplyPipeline(pipeline, request, inUse, await SalesCustomFields.LoadAsync(dbContext, TenantId, cancellationToken));
         if (request.SortOrder.HasValue) pipeline.SortOrder = request.SortOrder.Value;
         await SetDefaultAsync(pipeline, request.IsDefault, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -91,7 +92,7 @@ public sealed partial class SalesCrmController
     }
 
     /// <summary>Sets name, module and stages. Open stages come from the request in order; Won and Lost are kept at the end.</summary>
-    private void ApplyPipeline(SalesPipeline pipeline, UpsertSalesPipelineRequest request, HashSet<string> inUse)
+    private void ApplyPipeline(SalesPipeline pipeline, UpsertSalesPipelineRequest request, HashSet<string> inUse, IReadOnlyList<SalesCustomField> fields)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
             throw new BusinessRuleException("Give the pipeline a name.");
@@ -136,6 +137,7 @@ public sealed partial class SalesCrmController
             }
             stage.Name = item.Name.Trim();
             stage.Probability = item.Probability;
+            stage.RequiredFields = SalesStageRules.Format(item.RequiredFields, fields);
             stage.SortOrder = order += 10;
         }
         foreach (var (key, probability) in new[] { (SalesPipelineCatalog.WonKey, 100), (SalesPipelineCatalog.LostKey, 0) })
@@ -147,6 +149,8 @@ public sealed partial class SalesCrmController
                 pipeline.Stages.Add(stage);
             }
             stage.SortOrder = order += 10;
+            if (key == SalesPipelineCatalog.WonKey)
+                stage.RequiredFields = SalesStageRules.Format(request.WonRequiredFields, fields);
         }
     }
 
@@ -179,12 +183,12 @@ public sealed partial class SalesCrmController
     }
 }
 
-public sealed record SalesPipelineStageResponse(string Key, string Name, int Probability, bool IsClosed, int DealCount);
+public sealed record SalesPipelineStageResponse(string Key, string Name, int Probability, bool IsClosed, int DealCount, IReadOnlyList<string> RequiredFields);
 
 public sealed record SalesPipelineResponse(
     Guid Id, string Name, int SortOrder, string? Module, bool IsDefault, bool IsActive, bool Available, IReadOnlyList<SalesPipelineStageResponse> Stages);
 
-public sealed record UpsertSalesPipelineStageRequest([StringLength(40)] string? Key, [StringLength(60)] string Name, int Probability);
+public sealed record UpsertSalesPipelineStageRequest([StringLength(40)] string? Key, [StringLength(60)] string Name, int Probability, IReadOnlyList<string>? RequiredFields = null);
 
 public sealed record UpsertSalesPipelineRequest(
     [StringLength(80)] string Name,
@@ -192,4 +196,5 @@ public sealed record UpsertSalesPipelineRequest(
     bool IsActive,
     bool IsDefault,
     IReadOnlyList<UpsertSalesPipelineStageRequest>? Stages,
-    int? SortOrder = null);
+    int? SortOrder = null,
+    IReadOnlyList<string>? WonRequiredFields = null);

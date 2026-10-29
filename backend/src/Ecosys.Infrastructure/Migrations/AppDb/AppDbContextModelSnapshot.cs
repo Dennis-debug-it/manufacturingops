@@ -8659,6 +8659,95 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("sales_assignment_rules", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesCustomField", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FieldType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("HelpText")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Options")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<Guid?>("PipelineId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PipelineId");
+
+                    b.HasIndex("TenantId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("sales_custom_fields", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesCustomFieldValue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FieldId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OpportunityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FieldId");
+
+                    b.HasIndex("OpportunityId", "FieldId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "FieldId", "Value");
+
+                    b.ToTable("sales_custom_field_values", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesOpportunity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8884,6 +8973,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<int>("Probability")
                         .HasColumnType("integer");
+
+                    b.Property<string>("RequiredFields")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer");
@@ -16591,6 +16684,33 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Opportunity");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesCustomField", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.SalesPipeline", null)
+                        .WithMany()
+                        .HasForeignKey("PipelineId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SalesCustomFieldValue", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.SalesCustomField", "Field")
+                        .WithMany()
+                        .HasForeignKey("FieldId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.SalesOpportunity", "Opportunity")
+                        .WithMany("CustomFieldValues")
+                        .HasForeignKey("OpportunityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Field");
+
+                    b.Navigation("Opportunity");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesOpportunity", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Client", "Client")
@@ -18675,6 +18795,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
             modelBuilder.Entity("Ecosys.Domain.Entities.SalesOpportunity", b =>
                 {
                     b.Navigation("Activities");
+
+                    b.Navigation("CustomFieldValues");
 
                     b.Navigation("Quotations");
 
