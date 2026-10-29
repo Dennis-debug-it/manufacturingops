@@ -1279,7 +1279,7 @@ public sealed class ImportController(
         return records;
     }
 
-    private static List<string> ParseCsvLine(string line)
+    internal static List<string> ParseCsvLine(string line)
     {
         var values = new List<string>();
         var current = new StringBuilder();

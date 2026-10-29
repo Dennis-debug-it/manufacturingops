@@ -275,8 +275,10 @@ internal static class ProspectClients
     {
         if (!clientId.HasValue)
             return false;
-        var client = await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == clientId && x.IsProspect, cancellationToken);
-        if (client is null)
+        // The prospect may have been added in this same request and not saved yet.
+        var client = dbContext.Clients.Local.FirstOrDefault(x => x.Id == clientId)
+            ?? await dbContext.Clients.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == clientId, cancellationToken);
+        if (client is null || client.TenantId != tenantId || !client.IsProspect)
             return false;
         client.IsProspect = false;
         return true;

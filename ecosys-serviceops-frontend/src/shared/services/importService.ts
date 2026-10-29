@@ -21,6 +21,21 @@ function triggerDownload(blob: Blob, fileName: string) {
 }
 
 export const importService = {
+  async downloadDealTemplate() {
+    const response = await apiClient.get(endpoints.crm.dealImportTemplate, { responseType: 'blob' })
+    triggerDownload(response.data as Blob, 'deals_import_template.csv')
+  },
+  previewDeals(file: File) {
+    return apiClient.post<ImportPreviewResponse>(endpoints.crm.previewDealImport, buildFormData(file)).then((response) => response.data)
+  },
+  commitDeals(file: File) {
+    return apiClient.post<ImportCommitResponse>(endpoints.crm.commitDealImport, buildFormData(file)).then((response) => response.data)
+  },
+  /** Deals (optionally one stage or owner) or contacts, as the person may see them. */
+  async exportSales(kind: 'deals' | 'contacts', params?: { stage?: string | undefined; ownerUserId?: string | undefined }) {
+    const response = await apiClient.get(kind === 'deals' ? endpoints.crm.exportDeals : endpoints.crm.exportContacts, { params, responseType: 'blob' })
+    triggerDownload(response.data as Blob, `${kind}.csv`)
+  },
   async downloadMaterialTemplate() {
     const response = await apiClient.get(endpoints.imports.materialTemplate, {
       responseType: 'blob',

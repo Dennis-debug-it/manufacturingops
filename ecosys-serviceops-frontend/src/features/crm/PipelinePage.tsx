@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, CalendarClock, ClipboardList, Coins, FileText, LayoutGrid, List, Plus, Search } from 'lucide-react'
+import { AlertTriangle, CalendarClock, ClipboardList, Coins, Download, FileText, LayoutGrid, List, Plus, Search, Upload } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatCard } from '../../shared/components/StatCard'
@@ -15,6 +15,8 @@ import { useChangeStage, useOpportunities, usePipelineSummary } from './api'
 import { OpportunityFormDrawer } from './components/OpportunityFormDrawer'
 import { CrmNav } from './components/CrmNav'
 import { ExchangeRatesDrawer } from './components/ExchangeRatesDrawer'
+import { DealImportDrawer } from './components/DealImportDrawer'
+import { importService } from '../../shared/services/importService'
 import { OwnerSelect } from './components/OwnerSelect'
 import { OPEN_STAGES, SALES_STAGES, opportunityParty, stageLabels, type SalesOpportunityListItem, type SalesStage } from './types'
 
@@ -27,6 +29,7 @@ export function PipelinePage() {
   const [stageFilter, setStageFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [showRates, setShowRates] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [ownerFilter, setOwnerFilter] = useState('')
   const { user } = useAuth()
   const debouncedSearch = useDebounce(search, 300)
@@ -148,6 +151,20 @@ export function PipelinePage() {
         <button type="button" onClick={() => setShowRates(true)} className="inline-flex h-10 items-center gap-1.5 self-start rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:self-auto">
           <Coins className="h-4 w-4" />Rates
         </button>
+        {canManage ? (
+          <button type="button" onClick={() => setShowImport(true)} className="inline-flex h-10 items-center gap-1.5 self-start rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 sm:self-auto">
+            <Upload className="h-4 w-4" />Import
+          </button>
+        ) : null}
+        <details className="relative self-start sm:self-auto">
+          <summary className="inline-flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
+            <Download className="h-4 w-4" />Export
+          </summary>
+          <div className="absolute right-0 z-20 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+            <button type="button" onClick={() => void importService.exportSales('deals', { stage: view === 'list' ? stageFilter || undefined : undefined, ownerUserId: ownerFilter || undefined })} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Deals (as filtered)</button>
+            <button type="button" onClick={() => void importService.exportSales('contacts')} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Contacts</button>
+          </div>
+        </details>
         <div className="inline-flex self-start rounded-lg border border-slate-200 p-1 sm:self-auto">
           {([['board', LayoutGrid, 'Board'], ['list', List, 'List']] as const).map(([key, Icon, label]) => (
             <button
@@ -210,6 +227,7 @@ export function PipelinePage() {
 
       <OpportunityFormDrawer open={showForm} onClose={() => setShowForm(false)} />
       <ExchangeRatesDrawer open={showRates} onClose={() => setShowRates(false)} canManage={canManage} />
+      <DealImportDrawer open={showImport} onClose={() => setShowImport(false)} />
     </div>
   )
 }

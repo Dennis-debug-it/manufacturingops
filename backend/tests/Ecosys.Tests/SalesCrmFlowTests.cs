@@ -772,6 +772,50 @@ public sealed class SalesCrmFlowTests
         Assert.Single(await dbContext.ClientContacts.Where(x => x.ClientId == real.Id).ToListAsync());
     }
 
+    [Fact]
+    public async Task DealsImportFromCsv_PreviewFirst_AndReRunningIsSafe()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        dbContext.Clients.Add(new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel Ltd", IsActive = true });
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        // Columns in any order, header names in any case; an unknown column is ignored.
+        var csv = string.Join("\n",
+            "company,TITLE,Stage,Estimated Value,Owner,ContactName,ContactEmail,Notes,ExpectedCloseDate,LostReason",
+            "Kilele Hotel,Chiller replacement,Proposal,\"480,000\",Sales Admin,Amina,amina@kilele.test,x,2026-12-31,",
+            "Baraka Logistics,Rooftop solar,Won,1250000,,Wanjiru,,y,2026-09-30,",
+            "Nyali Mall,Lift AMC,Lost,90000,,,,,,Went with incumbent",
+            ",No company,Lead,10,,,,,,",
+            "Acme,Bad stage,Maybe,10,,,,,,",
+            "Acme,Bad owner,Lead,10,Somebody Else,,,,,");
+        IFormFile File() => new FormFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(csv)), 0, csv.Length, "file", "deals.csv");
+
+        var preview = Ok<ImportPreviewResponse>(await crm.PreviewDealImport(new CsvUploadRequest(File()), CancellationToken.None));
+        Assert.Equal(6, preview.TotalRows);
+        Assert.Equal(3, preview.Rows.Count(x => x.IsValid));
+        Assert.Equal("Existing client: Kilele Hotel Ltd", preview.Rows.First().RawValues["Result"]);
+        Assert.Empty(await dbContext.SalesOpportunities.ToListAsync());
+
+        var result = Ok<ImportCommitResponse>(await crm.CommitDealImport(new CsvUploadRequest(File()), CancellationToken.None));
+        Assert.Equal((3, 3), (result.SuccessfulRows, result.FailedRows));
+        var chiller = await dbContext.SalesOpportunities.Include(x => x.Client).SingleAsync(x => x.Title == "Chiller replacement");
+        Assert.Equal(("Kilele Hotel Ltd", 480_000m, SalesStages.Proposal), (chiller.Client!.ClientName, chiller.EstimatedValue, chiller.Stage));
+        var won = await dbContext.SalesOpportunities.Include(x => x.Client).SingleAsync(x => x.Title == "Rooftop solar");
+        Assert.False(won.Client!.IsProspect);
+        Assert.Equal(new DateTime(2026, 9, 30), won.WonAt!.Value.Date);
+        Assert.Equal("Went with incumbent", (await dbContext.SalesOpportunities.SingleAsync(x => x.Title == "Lift AMC")).LostReason);
+
+        // Running the same file again adds nothing.
+        Assert.Equal(0, Ok<ImportCommitResponse>(await crm.CommitDealImport(new CsvUploadRequest(File()), CancellationToken.None)).SuccessfulRows);
+
+        var export = Assert.IsType<FileContentResult>(await crm.ExportDeals(null, null, CancellationToken.None));
+        var text = System.Text.Encoding.UTF8.GetString(export.FileContents);
+        Assert.Contains("\"Chiller replacement\",\"Kilele Hotel Ltd\",\"No\"", text);
+        var contacts = System.Text.Encoding.UTF8.GetString(Assert.IsType<FileContentResult>(await crm.ExportContacts(CancellationToken.None)).FileContents);
+        Assert.Contains("amina@kilele.test", contacts);
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 

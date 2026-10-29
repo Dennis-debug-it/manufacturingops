@@ -19,7 +19,7 @@ namespace Ecosys.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/crm")]
-public sealed class SalesCrmController(
+public sealed partial class SalesCrmController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     IDocumentNumberingService documentNumberingService,
