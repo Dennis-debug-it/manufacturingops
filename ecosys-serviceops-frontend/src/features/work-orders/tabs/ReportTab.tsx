@@ -220,6 +220,39 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
         </dl>
       </Section>
 
+      <Section title={`Equipment on Site (${report.siteEquipment?.length ?? 0})`}>
+        {!report.siteEquipment?.length ? (
+          <p className="text-sm text-slate-500">No equipment is registered at this site.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-slate-500">
+                  <th className="py-2 pr-3 font-medium">Equipment</th>
+                  <th className="py-2 pr-3 font-medium">Make / model</th>
+                  <th className="py-2 pr-3 font-medium">Serial no.</th>
+                  <th className="py-2 font-medium">Location</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.siteEquipment.map((item, index) => (
+                  <tr key={`${item.code ?? item.name}-${index}`} className={item.onThisJob ? 'border-t border-slate-100 bg-slate-50' : 'border-t border-slate-100'}>
+                    <td className="py-2 pr-3 text-slate-900">
+                      <span className="font-medium">{item.name}</span>
+                      {item.onThisJob ? <span className="ml-2 text-xs text-slate-500">serviced on this job</span> : null}
+                      {item.code ? <span className="block text-xs text-slate-500">{item.code}</span> : null}
+                    </td>
+                    <td className="py-2 pr-3 text-slate-700">{item.description ?? '—'}</td>
+                    <td className="py-2 pr-3 text-slate-700">{item.serialNumber ?? '—'}</td>
+                    <td className="py-2 text-slate-700">{item.location ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Section>
+
       <Section title="Technician Team & Timestamps">
         <p className="text-sm text-slate-700">{report.technicianTeam ?? '—'}</p>
         <ul className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">

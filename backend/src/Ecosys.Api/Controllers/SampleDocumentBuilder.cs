@@ -165,7 +165,13 @@ internal static class SampleDocumentBuilder
             checklist, materials,
             new List<WorkOrderReportPdfPhotoGroup>(),
             signatures,
-            config);
+            config,
+            new List<WorkOrderReportPdfEquipment>
+            {
+                new("AHU-03", "AST-0103", "Carrier 39HQ", "CA39-77120", "Roof, Block B", true),
+                new("AHU-04", "AST-0104", "Carrier 39HQ", "CA39-77121", "Roof, Block B", false),
+                new("Chiller 1", "AST-0110", "Trane CGAM 080", "U18K40213", "Plant room", false),
+            });
     }
 
     private static string? ComposeBankDetails(ReportTemplateConfig config)

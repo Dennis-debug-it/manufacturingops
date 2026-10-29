@@ -15,11 +15,15 @@ export interface TechFinishProps {
   workOrderId: string
   workOrderNumber: string
   editable: boolean
+  /** The fault as the job was raised: the description, or the title when there is none. */
+  reportedProblem: string
+  findings: string
+  onFindingsChange: (value: string) => void
   workDone: string
   onWorkDoneChange: (value: string) => void
 }
 
-export function TechFinish({ workOrderId, workOrderNumber, editable, workDone, onWorkDoneChange }: TechFinishProps) {
+export function TechFinish({ workOrderId, workOrderNumber, editable, reportedProblem, findings, onFindingsChange, workDone, onWorkDoneChange }: TechFinishProps) {
   const { user } = useAuth()
   const { data: bundle } = useTechBundle(workOrderId)
   const actions = useTechActions()
@@ -66,18 +70,36 @@ export function TechFinish({ workOrderId, workOrderNumber, editable, workDone, o
 
   return (
     <div className="space-y-3">
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <label htmlFor="tech-work-done" className="mb-2 block text-sm font-semibold text-slate-900">Work done <span className="font-normal text-rose-600">*</span></label>
-        <textarea
-          id="tech-work-done"
-          value={workDone}
-          disabled={!editable}
-          onChange={(event) => onWorkDoneChange(event.target.value)}
-          rows={4}
-          placeholder="What was the fault and what did you do?"
-          className={cn(inputClass, 'py-2')}
-        />
-        <p className="mt-1 text-xs text-slate-500">Goes on the service report. Required to complete the job.</p>
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Problem reported</h2>
+          <p className="mt-1 whitespace-pre-line text-sm text-slate-700">{reportedProblem}</p>
+        </div>
+        <div>
+          <label htmlFor="tech-findings" className="mb-2 block text-sm font-semibold text-slate-900">Findings <span className="font-normal text-rose-600">*</span></label>
+          <textarea
+            id="tech-findings"
+            value={findings}
+            disabled={!editable}
+            onChange={(event) => onFindingsChange(event.target.value)}
+            rows={3}
+            placeholder="What did you find? The cause of the fault, readings, condition of the equipment."
+            className={cn(inputClass, 'py-2')}
+          />
+        </div>
+        <div>
+          <label htmlFor="tech-work-done" className="mb-2 block text-sm font-semibold text-slate-900">Work done <span className="font-normal text-rose-600">*</span></label>
+          <textarea
+            id="tech-work-done"
+            value={workDone}
+            disabled={!editable}
+            onChange={(event) => onWorkDoneChange(event.target.value)}
+            rows={4}
+            placeholder="What did you do to fix it?"
+            className={cn(inputClass, 'py-2')}
+          />
+        </div>
+        <p className="text-xs text-slate-500">These go on the service report. Findings and work done are required to complete the job.</p>
       </section>
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -145,7 +167,7 @@ export function TechFinish({ workOrderId, workOrderNumber, editable, workDone, o
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-900">Service report</h2>
-        <p className="mt-1 text-xs text-slate-500">Work done, checklist, materials, photos and signatures as the client will see them.</p>
+        <p className="mt-1 text-xs text-slate-500">Problem, findings, work done, equipment on site, checklist, materials, photos and signatures as the client will see them.</p>
         <button type="button" onClick={() => void download()} disabled={downloading} className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-800 disabled:opacity-60">
           <FileDown className="h-4 w-4" />{downloading ? 'Preparing PDF…' : 'Download service report (PDF)'}
         </button>
