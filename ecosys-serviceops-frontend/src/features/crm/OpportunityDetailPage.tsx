@@ -23,13 +23,14 @@ import {
   useConvertToQuotation,
   useDeleteOpportunity,
   useOpportunity,
+  usePipelines,
   useReassignOpportunityOwner,
 } from './api'
 import { DealPeople } from './components/DealPeople'
 import { ConvertToWorkOrderDrawer } from './components/ConvertToWorkOrderDrawer'
 import { OpportunityFormDrawer } from './components/OpportunityFormDrawer'
 import { OwnerSelect } from './components/OwnerSelect'
-import { OPEN_STAGES, activityTypeOptions, opportunityParty, stageLabels, tenderStatusLabels, type SalesStage } from './types'
+import { activityTypeOptions, openStagesOf, opportunityParty, pipelineFor, stageName, tenderStatusLabels, type SalesStage } from './types'
 
 const outlineButton = 'inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60'
 const primaryButton = 'inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60'
@@ -50,6 +51,7 @@ export function OpportunityDetailPage() {
   const addActivity = useAddActivity(id)
   const completeActivity = useCompleteActivity()
   const reassignOwner = useReassignOpportunityOwner(id)
+  const { data: pipelines } = usePipelines()
 
   const [showEdit, setShowEdit] = useState(false)
   const [showWorkOrder, setShowWorkOrder] = useState(false)
@@ -66,11 +68,14 @@ export function OpportunityDetailPage() {
 
   const isWon = opportunity.stage === 'Won'
   const isClosed = isWon || opportunity.stage === 'Lost'
+  const pipeline = pipelineFor(pipelines, opportunity.pipelineId)
+  const openStages = openStagesOf(pipeline)
+  const nameOf = (stage: SalesStage) => stageName(stage, pipelines, opportunity.pipelineId)
 
   const moveTo = async (stage: SalesStage, reason?: string) => {
     try {
       await changeStage.mutateAsync({ id, stage, lostReason: reason ?? null })
-      toast.success(stage === 'Won' ? 'Deal won 🎉 — create the work order when you are ready' : `Moved to ${stageLabels[stage]}`)
+      toast.success(stage === 'Won' ? 'Deal won 🎉 — create the work order when you are ready' : `Moved to ${nameOf(stage)}`)
       return true
     } catch {
       return false
@@ -113,9 +118,9 @@ export function OpportunityDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={opportunity.title}
-        subtitle={opportunityParty(opportunity)}
+        subtitle={pipelines && pipelines.length > 1 && opportunity.pipelineName ? `${opportunityParty(opportunity)} · ${opportunity.pipelineName} pipeline` : opportunityParty(opportunity)}
         breadcrumbs={[{ label: 'Sales Pipeline', to: '/crm' }, { label: opportunity.title }]}
-        secondaryActions={<StatusBadge status={stageLabels[opportunity.stage]} />}
+        secondaryActions={<StatusBadge status={nameOf(opportunity.stage)} />}
         primaryAction={
           canManage ? (
             <div className="flex flex-wrap gap-2">
@@ -128,7 +133,7 @@ export function OpportunityDetailPage() {
                   <button type="button" onClick={() => setShowLost(true)} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-white px-4 text-sm font-medium text-rose-600 transition hover:bg-rose-50">Mark Lost</button>
                 </>
               ) : (
-                <button type="button" disabled={changeStage.isPending} onClick={() => void moveTo('Negotiation')} className={outlineButton}>Reopen</button>
+                <button type="button" disabled={changeStage.isPending} onClick={() => void moveTo(openStages[openStages.length - 1]?.key ?? 'Negotiation')} className={outlineButton}>Reopen</button>
               )}
               {opportunity.stage !== 'Lost' && hasModule('finance') && canQuote ? (
                 <button type="button" disabled={convertToQuotation.isPending} onClick={() => void createQuote()} className={outlineButton}>Create Quote</button>
@@ -145,18 +150,18 @@ export function OpportunityDetailPage() {
 
       {!isClosed && canManage ? (
         <div className="flex flex-wrap gap-2" role="group" aria-label="Pipeline stage">
-          {OPEN_STAGES.map((stage) => (
+          {openStages.map((stage) => (
             <button
-              key={stage}
+              key={stage.key}
               type="button"
               disabled={changeStage.isPending}
-              onClick={() => void moveTo(stage)}
+              onClick={() => void moveTo(stage.key)}
               className={cn(
                 'h-9 rounded-full border px-4 text-sm font-medium transition',
-                stage === opportunity.stage ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                stage.key === opportunity.stage ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
               )}
             >
-              {stageLabels[stage]}
+              {stage.name}
             </button>
           ))}
         </div>

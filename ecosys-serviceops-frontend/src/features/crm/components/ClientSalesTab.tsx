@@ -7,8 +7,8 @@ import { SummarySection } from '../../../shared/pages/ModulePage'
 import { usePermission } from '../../../shared/hooks/usePermission'
 import { formatDate } from '../../../shared/utils/dates'
 import { formatCurrency } from '../../../shared/utils/format'
-import { useOpportunities, useTenders } from '../api'
-import { OPEN_STAGES, stageLabels, tenderStatusLabels, type SalesOpportunityListItem, type SalesTenderListItem } from '../types'
+import { useOpportunities, usePipelines, useTenders } from '../api'
+import { isClosedStage, stageName, tenderStatusLabels, type SalesOpportunityListItem, type SalesTenderListItem } from '../types'
 import { OpportunityFormDrawer } from './OpportunityFormDrawer'
 
 /** A client's deals and RFPs/RFQs, so the account's sales history sits next to its sites and work orders. */
@@ -17,14 +17,15 @@ export function ClientSalesTab({ clientId }: { clientId: string }) {
   const [showForm, setShowForm] = useState(false)
   const { data: deals, isLoading: dealsLoading } = useOpportunities({ clientId })
   const { data: tenders, isLoading: tendersLoading } = useTenders({ clientId })
+  const { data: pipelines } = usePipelines()
 
-  const open = (deals ?? []).filter((deal) => OPEN_STAGES.includes(deal.stage))
+  const open = (deals ?? []).filter((deal) => !isClosedStage(deal.stage))
   const openValue = open.reduce((sum, deal) => sum + (deal.convertedValue ?? 0), 0)
   const won = (deals ?? []).filter((deal) => deal.stage === 'Won')
 
   const dealColumns: DataTableColumn<SalesOpportunityListItem>[] = [
     { key: 'title', header: 'Deal', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/crm/opportunities/${row.id}`}>{row.title}</Link> },
-    { key: 'stage', header: 'Stage', cell: (row) => <StatusBadge status={stageLabels[row.stage]} /> },
+    { key: 'stage', header: 'Stage', cell: (row) => <StatusBadge status={stageName(row.stage, pipelines, row.pipelineId)} /> },
     { key: 'value', header: 'Value', cell: (row) => formatCurrency(row.estimatedValue, row.currency) },
     { key: 'close', header: 'Expected close', cell: (row) => (row.expectedCloseDate ? formatDate(row.expectedCloseDate) : '—') },
     { key: 'owner', header: 'Owner', cell: (row) => row.ownerName ?? '—' },

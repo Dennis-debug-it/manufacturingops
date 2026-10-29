@@ -520,6 +520,8 @@ export const endpoints = {
     quotesAwaitingAnswer: '/api/crm/quotes-awaiting-answer',
     reports: '/api/crm/reports',
     settings: '/api/crm/settings',
+    pipelines: '/api/crm/pipelines',
+    pipeline: (id: string) => `/api/crm/pipelines/${id}`,
     assignmentRules: '/api/crm/assignment-rules',
     targets: '/api/crm/targets',
     assignmentRule: (id: string) => `/api/crm/assignment-rules/${id}`,

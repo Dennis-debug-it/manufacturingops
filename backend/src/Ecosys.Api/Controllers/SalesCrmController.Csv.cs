@@ -23,23 +23,26 @@ public sealed partial class SalesCrmController
     ];
 
     [HttpGet("export/deals")]
-    public async Task<IActionResult> ExportDeals([FromQuery] string? stage, [FromQuery] Guid? ownerUserId, CancellationToken cancellationToken)
+    public async Task<IActionResult> ExportDeals([FromQuery] string? stage, [FromQuery] Guid? ownerUserId, CancellationToken cancellationToken, [FromQuery] Guid? pipelineId = null)
     {
         EnsureCanView();
+        var pipelines = await PipelinesAsync(cancellationToken);
         var scope = await OwnerScopeAsync(cancellationToken);
         var query = dbContext.SalesOpportunities.AsNoTracking().Include(x => x.Client)
             .Where(x => x.TenantId == TenantId && (scope == null || x.OwnerUserId == scope));
         if (ownerUserId.HasValue) query = query.Where(x => x.OwnerUserId == ownerUserId);
+        if (pipelineId.HasValue) query = InPipeline(query, SalesPipelineCatalog.For(pipelines, pipelineId));
         query = await ApplyStageFilterAsync(query, stage, cancellationToken);
         var deals = await query.OrderBy(x => x.CreatedAt).ToListAsync(cancellationToken);
 
         return CsvFile("deals.csv",
-            "Title,Company,Prospect,Contact,Email,Phone,Stage,Value,Currency,Probability,Expected Close,Owner,Source,Service Type,Location,Created,Won,Lost,Lost Reason",
+            "Title,Company,Prospect,Contact,Email,Phone,Stage,Value,Currency,Probability,Expected Close,Owner,Source,Service Type,Location,Created,Won,Lost,Lost Reason,Pipeline",
             deals.Select(x => new object?[]
             {
                 x.Title, x.Client?.ClientName ?? x.CompanyName, x.Client?.IsProspect == true ? "Yes" : "No", x.ContactName, x.ContactEmail, x.ContactPhone,
-                x.Stage, x.EstimatedValue.ToString(CultureInfo.InvariantCulture), x.Currency, x.Probability, Day(x.ExpectedCloseDate), x.OwnerName,
+                SalesPipelineCatalog.For(pipelines, x.PipelineId).Find(x.Stage)?.Name ?? x.Stage, x.EstimatedValue.ToString(CultureInfo.InvariantCulture), x.Currency, x.Probability, Day(x.ExpectedCloseDate), x.OwnerName,
                 x.Source, x.ServiceType, x.Location, Day(x.CreatedAt), Day(x.WonAt), Day(x.LostAt), x.LostReason,
+                SalesPipelineCatalog.For(pipelines, x.PipelineId).Name,
             }));
     }
 

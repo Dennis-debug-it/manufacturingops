@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, CalendarClock, ClipboardList, Coins, Download, FileText, LayoutGrid, List, Plus, Search, Upload } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
@@ -11,14 +11,14 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { formatDate, isPast } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { cn } from '../../shared/utils/cn'
-import { useChangeStage, useOpportunities, usePipelineSummary } from './api'
+import { useChangeStage, useOpportunities, usePipelines, usePipelineSummary } from './api'
 import { OpportunityFormDrawer } from './components/OpportunityFormDrawer'
 import { CrmNav } from './components/CrmNav'
 import { ExchangeRatesDrawer } from './components/ExchangeRatesDrawer'
 import { DealImportDrawer } from './components/DealImportDrawer'
 import { importService } from '../../shared/services/importService'
 import { OwnerSelect } from './components/OwnerSelect'
-import { OPEN_STAGES, SALES_STAGES, opportunityParty, stageLabels, type SalesOpportunityListItem, type SalesStage } from './types'
+import { SALES_STAGES, isClosedStage, opportunityParty, openStagesOf, pipelineFor, stageLabels, type SalesOpportunityListItem, type SalesStage } from './types'
 
 type View = 'board' | 'list'
 
@@ -33,26 +33,43 @@ export function PipelinePage() {
   const [ownerFilter, setOwnerFilter] = useState('')
   const { user } = useAuth()
   const debouncedSearch = useDebounce(search, 300)
-  const { data: summary } = usePipelineSummary()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { data: pipelines } = usePipelines()
+  const usable = useMemo(() => (pipelines ?? []).filter((p) => p.isActive && p.available), [pipelines])
+  const pipeline = pipelineFor(usable, searchParams.get('pipeline'))
+  // With one pipeline there is nothing to narrow, so the first load does not wait for the pipeline list.
+  const pipelineId = usable.length > 1 ? pipeline?.id : undefined
+  const choosePipeline = (id: string) => {
+    setStageFilter('')
+    setSearchParams((params) => { params.set('pipeline', id); return params }, { replace: true })
+  }
+  const { data: summary } = usePipelineSummary(pipelineId)
   const { data, isLoading, isError } = useOpportunities({
     search: debouncedSearch,
     stage: view === 'list' ? stageFilter || undefined : undefined,
     ownerUserId: ownerFilter || undefined,
+    pipelineId,
   })
+  const boardStages = useMemo(
+    () => pipeline?.stages.map((s) => ({ key: s.key, name: s.name })) ?? SALES_STAGES.map((key) => ({ key, name: stageLabels[key] ?? key })),
+    [pipeline],
+  )
+  const openStages = useMemo(() => openStagesOf(pipeline), [pipeline])
+  const nameOf = (stage: SalesStage) => boardStages.find((s) => s.key === stage)?.name ?? stageLabels[stage] ?? stage
   const reporting = summary?.reportingCurrency
   const changeStage = useChangeStage()
   const rows = useMemo(() => data ?? [], [data])
 
   const byStage = useMemo(() => {
-    const groups = new Map<SalesStage, SalesOpportunityListItem[]>(SALES_STAGES.map((stage) => [stage, []]))
+    const groups = new Map<SalesStage, SalesOpportunityListItem[]>(boardStages.map((stage) => [stage.key, []]))
     rows.forEach((row) => groups.get(row.stage)?.push(row))
     return groups
-  }, [rows])
+  }, [rows, boardStages])
 
   const columns: DataTableColumn<SalesOpportunityListItem>[] = [
     { key: 'title', header: 'Opportunity', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/crm/opportunities/${row.id}`}>{row.title}</Link> },
     { key: 'party', header: 'Customer', cell: (row) => opportunityParty(row) },
-    { key: 'stage', header: 'Stage', cell: (row) => <StatusBadge status={stageLabels[row.stage]} /> },
+    { key: 'stage', header: 'Stage', cell: (row) => <StatusBadge status={nameOf(row.stage)} /> },
     { key: 'estimatedValue', header: 'Value', cell: (row) => <DealValue item={row} reportingCurrency={reporting} /> },
     { key: 'probability', header: 'Prob.', cell: (row) => `${row.probability}%` },
     { key: 'expectedCloseDate', header: 'Expected close', cell: (row) => (row.expectedCloseDate ? formatDate(row.expectedCloseDate) : '—') },
@@ -75,6 +92,23 @@ export function PipelinePage() {
       />
 
       <CrmNav />
+
+      {usable.length > 1 ? (
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Pipelines">
+          {usable.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={item.id === pipeline?.id}
+              onClick={() => choosePipeline(item.id)}
+              className={cn('inline-flex h-9 items-center rounded-full border px-4 text-sm font-medium transition', item.id === pipeline?.id ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50')}
+            >
+              {item.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard label="Open pipeline" value={summary ? formatCurrency(summary.openValue, reporting) : '—'} />
@@ -141,8 +175,8 @@ export function PipelinePage() {
             <option value="">All stages</option>
             <option value="Open">Open deals</option>
             <option value="Stalled">Stalled deals</option>
-            {SALES_STAGES.map((stage) => (
-              <option key={stage} value={stage}>{stageLabels[stage]}</option>
+            {boardStages.map((stage) => (
+              <option key={stage.key} value={stage.key}>{stage.name}</option>
             ))}
           </select>
         ) : null}
@@ -171,7 +205,7 @@ export function PipelinePage() {
             <Download className="h-4 w-4" />Export
           </summary>
           <div className="absolute right-0 z-20 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
-            <button type="button" onClick={() => void importService.exportSales('deals', { stage: view === 'list' ? stageFilter || undefined : undefined, ownerUserId: ownerFilter || undefined })} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Deals (as filtered)</button>
+            <button type="button" onClick={() => void importService.exportSales('deals', { stage: view === 'list' ? stageFilter || undefined : undefined, ownerUserId: ownerFilter || undefined, pipelineId })} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Deals (as filtered)</button>
             <button type="button" onClick={() => void importService.exportSales('contacts')} className="block w-full rounded-md px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Contacts</button>
           </div>
         </details>
@@ -200,7 +234,7 @@ export function PipelinePage() {
       ) : (
         <div className="-mx-1 overflow-x-auto pb-2">
           <div className="flex min-w-max gap-3 px-1">
-            {SALES_STAGES.map((stage) => {
+            {boardStages.map(({ key: stage, name }) => {
               const items = byStage.get(stage) ?? []
               const total = items.reduce((sum, item) => sum + (item.convertedValue ?? 0), 0)
               const hasUnconverted = items.some((item) => item.convertedValue === null)
@@ -208,7 +242,7 @@ export function PipelinePage() {
                 <section key={stage} className="flex w-72 shrink-0 flex-col rounded-[var(--radius-card)] border border-slate-200 bg-slate-50/70">
                   <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2.5">
                     <div className="text-sm font-semibold text-slate-900">
-                      {stageLabels[stage]} <span className="font-normal text-slate-500">({items.length})</span>
+                      {name} <span className="font-normal text-slate-500">({items.length})</span>
                     </div>
                     <div className="text-xs text-slate-500" title={hasUnconverted ? 'Some deals here have no exchange rate and are not counted' : undefined}>
                       {formatCurrency(total, reporting)}{hasUnconverted ? ' *' : ''}
@@ -223,6 +257,7 @@ export function PipelinePage() {
                         item={item}
                         canManage={canManage}
                         reportingCurrency={reporting}
+                        openStages={openStages}
                         moving={changeStage.isPending && changeStage.variables?.id === item.id}
                         onMove={(next) => changeStage.mutate({ id: item.id, stage: next })}
                       />
@@ -235,7 +270,7 @@ export function PipelinePage() {
         </div>
       )}
 
-      <OpportunityFormDrawer open={showForm} onClose={() => setShowForm(false)} />
+      <OpportunityFormDrawer open={showForm} onClose={() => setShowForm(false)} defaultPipelineId={pipeline?.id} />
       <ExchangeRatesDrawer open={showRates} onClose={() => setShowRates(false)} canManage={canManage} />
       <DealImportDrawer open={showImport} onClose={() => setShowImport(false)} />
     </div>
@@ -257,7 +292,7 @@ function DealValue({ item, reportingCurrency }: { item: SalesOpportunityListItem
   )
 }
 
-function OpportunityCard({ item, canManage, reportingCurrency, moving, onMove }: { item: SalesOpportunityListItem; canManage: boolean; reportingCurrency: string | undefined; moving: boolean; onMove: (stage: SalesStage) => void }) {
+function OpportunityCard({ item, canManage, reportingCurrency, openStages, moving, onMove }: { item: SalesOpportunityListItem; canManage: boolean; reportingCurrency: string | undefined; openStages: Array<{ key: string; name: string }>; moving: boolean; onMove: (stage: SalesStage) => void }) {
   const followUpOverdue = item.nextFollowUpAt ? isPast(item.nextFollowUpAt) : false
   return (
     <article className={cn('rounded-xl border border-slate-200 bg-white p-3 shadow-sm', moving && 'opacity-60')}>
@@ -286,16 +321,16 @@ function OpportunityCard({ item, canManage, reportingCurrency, moving, onMove }:
         ) : null}
       </div>
       {/* Won and Lost need the deal page (lost reason, hand-off), so the quick move only covers open stages. */}
-      {canManage && OPEN_STAGES.includes(item.stage) ? (
+      {canManage && !isClosedStage(item.stage) ? (
         <select
           aria-label={`Move ${item.title} to stage`}
           value={item.stage}
           disabled={moving}
-          onChange={(event) => onMove(event.target.value as SalesStage)}
+          onChange={(event) => onMove(event.target.value)}
           className="mt-2 h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-600 outline-none focus:border-[var(--app-primary)]"
         >
-          {OPEN_STAGES.map((stage) => (
-            <option key={stage} value={stage}>{stageLabels[stage]}</option>
+          {openStages.map((stage) => (
+            <option key={stage.key} value={stage.key}>{stage.name}</option>
           ))}
         </select>
       ) : null}

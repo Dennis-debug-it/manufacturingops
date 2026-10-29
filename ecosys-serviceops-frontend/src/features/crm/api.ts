@@ -22,28 +22,56 @@ import type {
   UpsertAssignmentRulePayload,
   SalesSettings,
   SalesStage,
+  SalesPipeline,
+  UpsertPipelinePayload,
   UpsertOpportunityPayload,
 } from './types'
 
 const crmKey = ['crm'] as const
 
-export function usePipelineSummary() {
-  return useQuery({ queryKey: [...crmKey, 'summary'], queryFn: () => api.get<SalesPipelineSummary>(endpoints.crm.summary), staleTime: 30_000 })
-}
-
-export function useOpportunities(params?: { stage?: string | undefined; search?: string | undefined; clientId?: string | undefined; ownerUserId?: string | undefined }) {
+export function usePipelineSummary(pipelineId?: string | undefined) {
   return useQuery({
-    queryKey: [...crmKey, 'opportunities', params ?? {}],
-    queryFn: () => api.get<SalesOpportunityListItem[]>(endpoints.crm.opportunities, { stage: params?.stage, search: params?.search, clientId: params?.clientId, ownerUserId: params?.ownerUserId }),
+    queryKey: [...crmKey, 'summary', pipelineId ?? null],
+    queryFn: () => api.get<SalesPipelineSummary>(endpoints.crm.summary, { pipelineId }),
     staleTime: 30_000,
   })
 }
 
-export function useSalesReport(params: { from: string; to: string; ownerUserId?: string | undefined }, options?: { enabled?: boolean }) {
+export function useOpportunities(params?: { stage?: string | undefined; search?: string | undefined; clientId?: string | undefined; ownerUserId?: string | undefined; pipelineId?: string | undefined }) {
+  return useQuery({
+    queryKey: [...crmKey, 'opportunities', params ?? {}],
+    queryFn: () => api.get<SalesOpportunityListItem[]>(endpoints.crm.opportunities, { stage: params?.stage, search: params?.search, clientId: params?.clientId, ownerUserId: params?.ownerUserId, pipelineId: params?.pipelineId }),
+    staleTime: 30_000,
+  })
+}
+
+/** Active pipelines the plan includes (admins get every pipeline, with `available` and `isActive` to tell them apart). */
+export function usePipelines() {
+  return useQuery({ queryKey: [...crmKey, 'pipelines'], queryFn: () => api.get<SalesPipeline[]>(endpoints.crm.pipelines), staleTime: 5 * 60_000 })
+}
+
+export function useSavePipeline() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id?: string | undefined; payload: UpsertPipelinePayload }) =>
+      id ? api.put<SalesPipeline[]>(endpoints.crm.pipeline(id), payload) : api.post<SalesPipeline[]>(endpoints.crm.pipelines, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeletePipeline() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (id: string) => api.delete<SalesPipeline[]>(endpoints.crm.pipeline(id)),
+    onSuccess: invalidate,
+  })
+}
+
+export function useSalesReport(params: { from: string; to: string; ownerUserId?: string | undefined; pipelineId?: string | undefined }, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: [...crmKey, 'report', params],
     enabled: options?.enabled ?? true,
-    queryFn: () => api.get<SalesReport>(endpoints.crm.reports, { from: params.from, to: params.to, ownerUserId: params.ownerUserId }),
+    queryFn: () => api.get<SalesReport>(endpoints.crm.reports, { from: params.from, to: params.to, ownerUserId: params.ownerUserId, pipelineId: params.pipelineId }),
     staleTime: 60_000,
   })
 }

@@ -12,12 +12,12 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { cn } from '../../shared/utils/cn'
-import { useChangeTenderStatus, useCreateOpportunityFromTender, useDeleteTender, useReassignTenderOwner, useTender } from './api'
+import { useChangeTenderStatus, useCreateOpportunityFromTender, useDeleteTender, useReassignTenderOwner, usePipelines, useTender } from './api'
 import { OwnerSelect } from './components/OwnerSelect'
 import { TenderDocuments } from './components/TenderDocuments'
 import { TenderFormDrawer } from './components/TenderFormDrawer'
 import { DeadlineBadge } from './TendersPage'
-import { TENDER_REASON_STATUSES, stageLabels, tenderStatusLabels, type TenderStatus } from './types'
+import { TENDER_REASON_STATUSES, stageName, tenderStatusLabels, type TenderStatus } from './types'
 
 const outlineButton = 'inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60'
 const primaryButton = 'inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60'
@@ -40,6 +40,7 @@ export function TenderDetailPage() {
   const createOpportunity = useCreateOpportunityFromTender(id)
   const reassignOwner = useReassignTenderOwner(id)
   const deleteTender = useDeleteTender()
+  const { data: pipelines } = usePipelines()
   const [showEdit, setShowEdit] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [pending, setPending] = useState<TenderStatus | null>(null)
@@ -168,7 +169,7 @@ export function TenderDetailPage() {
             ['Decided', tender.decidedAt ? formatDate(tender.decidedAt) : '—'],
             ['Opportunity', tender.opportunityId ? (
               <Link key="o" to={`/crm/opportunities/${tender.opportunityId}`} className="underline decoration-slate-300 underline-offset-4">
-                {tender.opportunityTitle}{tender.opportunityStage ? ` (${stageLabels[tender.opportunityStage]})` : ''}
+                {tender.opportunityTitle}{tender.opportunityStage ? ` (${stageName(tender.opportunityStage, pipelines)})` : ''}
               </Link>
             ) : 'None yet'],
             ['Owner', canManage ? (

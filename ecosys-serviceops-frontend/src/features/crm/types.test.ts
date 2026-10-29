@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { daysUntilDeadline, opportunityParty } from './types'
+import { daysUntilDeadline, openStagesOf, opportunityParty, pipelineFor, stageName, type SalesPipeline } from './types'
 
 describe('daysUntilDeadline', () => {
   const now = new Date(2026, 9, 20, 15, 30)
@@ -20,5 +20,30 @@ describe('opportunityParty', () => {
     expect(opportunityParty({ clientName: 'Kilele Hotel', companyName: 'Old name', contactName: 'Amina' })).toBe('Kilele Hotel')
     expect(opportunityParty({ clientName: null, companyName: 'Baraka Logistics', contactName: 'Amina' })).toBe('Baraka Logistics')
     expect(opportunityParty({ clientName: null, companyName: null, contactName: 'Amina' })).toBe('Amina')
+  })
+})
+
+describe('pipeline stages', () => {
+  const stage = (key: string, name: string, isClosed = false) => ({ key, name, probability: 0, isClosed, dealCount: 0 })
+  const pipeline = (id: string, isDefault: boolean, stages: SalesPipeline['stages']): SalesPipeline =>
+    ({ id, name: id, sortOrder: 0, module: null, isDefault, isActive: true, available: true, stages })
+  const sales = pipeline('sales', true, [stage('Lead', 'Lead'), stage('SiteSurvey', 'Site visit'), stage('Won', 'Won', true), stage('Lost', 'Lost', true)])
+  const amc = pipeline('amc', false, [stage('Scoping', 'Scoping'), stage('Won', 'Won', true), stage('Lost', 'Lost', true)])
+
+  it('falls back to the default pipeline for deals without one', () => {
+    expect(pipelineFor([amc, sales], null)?.id).toBe('sales')
+    expect(pipelineFor([amc, sales], 'amc')?.id).toBe('amc')
+  })
+
+  it('names stages from the deal pipeline, then any pipeline, then the built-in labels', () => {
+    expect(stageName('SiteSurvey', [sales, amc], 'sales')).toBe('Site visit')
+    expect(stageName('Scoping', [sales, amc])).toBe('Scoping')
+    expect(stageName('Negotiation')).toBe('Negotiation')
+    expect(stageName('Unknown')).toBe('Unknown')
+  })
+
+  it('lists only open stages, or the built-in ones while pipelines load', () => {
+    expect(openStagesOf(amc).map((s) => s.key)).toEqual(['Scoping'])
+    expect(openStagesOf(undefined).map((s) => s.key)).toEqual(['Lead', 'Qualified', 'SiteSurvey', 'Proposal', 'Negotiation'])
   })
 })

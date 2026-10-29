@@ -1,12 +1,15 @@
 import type { ClientContact } from '../clients/types'
 
+/** The stages of the built-in Sales pipeline; workspaces can add pipelines with their own (Settings › Sales). */
 export const SALES_STAGES = ['Lead', 'Qualified', 'SiteSurvey', 'Proposal', 'Negotiation', 'Won', 'Lost'] as const
-export type SalesStage = (typeof SALES_STAGES)[number]
 
-/** The stages a deal moves through before it is closed; Won and Lost are set from the deal itself. */
+/** A stage key. Each pipeline has its own open stages; every pipeline ends in Won and Lost. */
+export type SalesStage = string
+
+/** The open stages of the built-in Sales pipeline. */
 export const OPEN_STAGES: SalesStage[] = ['Lead', 'Qualified', 'SiteSurvey', 'Proposal', 'Negotiation']
 
-export const stageLabels: Record<SalesStage, string> = {
+export const stageLabels: Record<string, string> = {
   Lead: 'Lead',
   Qualified: 'Qualified',
   SiteSurvey: 'Site Survey',
@@ -14,6 +17,62 @@ export const stageLabels: Record<SalesStage, string> = {
   Negotiation: 'Negotiation',
   Won: 'Won',
   Lost: 'Lost',
+}
+
+export function isClosedStage(stage: SalesStage) {
+  return stage === 'Won' || stage === 'Lost'
+}
+
+export interface SalesPipelineStage {
+  key: string
+  name: string
+  probability: number
+  isClosed: boolean
+  /** Deals in this stage right now. */
+  dealCount: number
+}
+
+export interface SalesPipeline {
+  id: string
+  name: string
+  sortOrder: number
+  /** Only shown when the workspace's plan includes this module; null for every plan. */
+  module: string | null
+  isDefault: boolean
+  isActive: boolean
+  /** False when the workspace's plan does not include `module`. */
+  available: boolean
+  stages: SalesPipelineStage[]
+}
+
+export interface UpsertPipelinePayload {
+  name: string
+  module: string | null
+  isActive: boolean
+  isDefault: boolean
+  /** Open stages in order; Won and Lost are added after them. Omit `key` for a new stage. */
+  stages: Array<{ key?: string | null; name: string; probability: number }>
+  sortOrder?: number
+}
+
+/** The pipeline a deal belongs to: the one named, else the default. */
+export function pipelineFor(pipelines: SalesPipeline[] | undefined, pipelineId: string | null | undefined) {
+  const list = pipelines ?? []
+  return list.find((p) => p.id === pipelineId) ?? list.find((p) => p.isDefault) ?? list[0]
+}
+
+/** A stage's display name, looked up in the deal's pipeline (or any pipeline) before falling back to the key. */
+export function stageName(stage: SalesStage, pipelines?: SalesPipeline[], pipelineId?: string | null) {
+  const own = pipelineFor(pipelines, pipelineId)?.stages.find((s) => s.key === stage)
+  const any = own ?? pipelines?.flatMap((p) => p.stages).find((s) => s.key === stage)
+  return any?.name ?? stageLabels[stage] ?? stage
+}
+
+/** Open stages of a pipeline in order; the built-in ones while pipelines load. */
+export function openStagesOf(pipeline: SalesPipeline | undefined): Array<{ key: string; name: string }> {
+  return pipeline
+    ? pipeline.stages.filter((s) => !s.isClosed).map((s) => ({ key: s.key, name: s.name }))
+    : OPEN_STAGES.map((key) => ({ key, name: stageLabels[key] ?? key }))
 }
 
 export const sourceOptions = ['Referral', 'Website', 'Walk-in', 'Cold call', 'Tender', 'Existing client', 'Contract renewal', 'Technician', 'Other'] as const
@@ -56,6 +115,7 @@ export interface SalesOpportunityListItem {
   isStalled?: boolean
   /** When the deal entered its current stage. */
   stageChangedAt?: string | null
+  pipelineId?: string | null
 }
 
 export interface SalesActivity {
@@ -142,6 +202,8 @@ export interface SalesOpportunityDetail {
   clientIsProspect?: boolean
   /** People at the client involved in this deal. */
   contacts?: ClientContact[]
+  pipelineId?: string | null
+  pipelineName?: string | null
 }
 
 /** Every value is in `reportingCurrency`; deals in a currency with no rate are listed in `unconvertedCurrencies` instead. */
@@ -196,6 +258,7 @@ export interface SalesStageFunnelRow {
   averageDaysInStage: number | null
   nowInStage: number
   averageDaysNowInStage: number | null
+  stageName?: string | null
 }
 
 export interface SalesTargetRow {
@@ -249,6 +312,8 @@ export interface SalesReport {
   funnel?: SalesStageFunnelRow[]
   /** Target for the period; null when none is set. */
   targetValue?: number | null
+  pipelineId?: string | null
+  pipelineName?: string | null
 }
 
 export type DealVisibility = 'All' | 'Own'
@@ -327,6 +392,8 @@ export interface UpsertOpportunityPayload {
   expectedCloseDate: string | null
   ownerUserId: string | null
   stage?: SalesStage
+  /** Omit for the default pipeline (new deals) or to keep the current one. */
+  pipelineId?: string | null
 }
 
 /** Display name for whoever the deal is with: the linked client, else the prospect. */

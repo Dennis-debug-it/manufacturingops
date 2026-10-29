@@ -6,6 +6,7 @@ import { cn } from '../../shared/utils/cn'
 import { useSalesSettings, useUpdateSalesSettings } from '../crm/api'
 import { OwnerSelect } from '../crm/components/OwnerSelect'
 import { AssignmentRulesSection } from './components/AssignmentRulesSection'
+import { PipelinesSection } from './components/PipelinesSection'
 import type { DealVisibility, SalesSettings } from '../crm/types'
 
 const visibilityOptions: Array<{ value: DealVisibility; title: string; description: string }> = [
@@ -45,7 +46,7 @@ export function SalesSettingsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Sales Settings" subtitle="Who sees which deals, and who owns the deals the system opens for you." />
+      <PageHeader title="Sales Settings" subtitle="Pipelines and stages, who sees which deals, and who owns the deals the system opens for you." />
 
       <section className="space-y-3 rounded-[var(--radius-card)] border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-900">Deal visibility</h2>
@@ -133,6 +134,8 @@ export function SalesSettingsPage() {
           Save
         </button>
       </div>
+
+      <PipelinesSection />
 
       <AssignmentRulesSection />
     </div>

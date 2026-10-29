@@ -846,6 +846,7 @@ public sealed class SalesCrmFlowTests
         var export = Assert.IsType<FileContentResult>(await crm.ExportDeals(null, null, CancellationToken.None));
         var text = System.Text.Encoding.UTF8.GetString(export.FileContents);
         Assert.Contains("\"Chiller replacement\",\"Kilele Hotel Ltd\",\"No\"", text);
+        Assert.EndsWith(",\"Sales\"", text.Split('\n', StringSplitOptions.RemoveEmptyEntries)[1].TrimEnd('\r'));
         var contacts = System.Text.Encoding.UTF8.GetString(Assert.IsType<FileContentResult>(await crm.ExportContacts(CancellationToken.None)).FileContents);
         Assert.Contains("amina@kilele.test", contacts);
     }

@@ -8,10 +8,10 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
 import { formatCurrency } from '../../shared/utils/format'
-import { useCompleteActivity, useFollowUps, useQuotesAwaitingAnswer } from './api'
+import { useCompleteActivity, useFollowUps, usePipelines, useQuotesAwaitingAnswer } from './api'
 import { CrmNav } from './components/CrmNav'
 import { OwnerSelect } from './components/OwnerSelect'
-import { activityTypeOptions, daysUntilDeadline, stageLabels, type SalesFollowUpItem, type SalesQuoteAwaitingAnswer } from './types'
+import { activityTypeOptions, daysUntilDeadline, stageName, type SalesFollowUpItem, type SalesQuoteAwaitingAnswer } from './types'
 
 type Bucket = 'overdue' | 'today' | 'week' | 'later'
 
@@ -37,6 +37,7 @@ export function FollowUpsPage() {
   const [ownerFilter, setOwnerFilter] = useState('')
   const { data, isLoading, isError } = useFollowUps({ ownerUserId: ownerFilter || undefined })
   const completeActivity = useCompleteActivity()
+  const { data: pipelines } = usePipelines()
   const { data: quotes } = useQuotesAwaitingAnswer({ ownerUserId: ownerFilter || undefined })
 
   const grouped = useMemo(() => {
@@ -111,7 +112,7 @@ export function FollowUpsPage() {
                           <Link to={`/crm/opportunities/${item.opportunityId}`} className="font-medium text-slate-700 underline decoration-slate-300 underline-offset-4">
                             {item.opportunityTitle}
                           </Link>
-                          {item.partyName ? ` · ${item.partyName}` : ''} · {stageLabels[item.opportunityStage] ?? item.opportunityStage}
+                          {item.partyName ? ` · ${item.partyName}` : ''} · {stageName(item.opportunityStage, pipelines)}
                           {item.ownerName ? ` · Owner: ${item.ownerName}` : ''}
                         </div>
                       </div>

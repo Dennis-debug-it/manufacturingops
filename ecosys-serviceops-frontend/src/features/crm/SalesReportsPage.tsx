@@ -7,7 +7,7 @@ import { StatCard } from '../../shared/components/StatCard'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { formatCurrency, formatPercent } from '../../shared/utils/format'
 import { cn } from '../../shared/utils/cn'
-import { useSalesReport } from './api'
+import { usePipelines, useSalesReport } from './api'
 import { CrmNav } from './components/CrmNav'
 import { OwnerSelect } from './components/OwnerSelect'
 import { TargetsDrawer } from './components/TargetsDrawer'
@@ -59,9 +59,12 @@ export function SalesReportsPage() {
   const [preset, setPreset] = useState<Preset>('90d')
   const [custom, setCustom] = useState(() => presetRange('90d'))
   const [ownerFilter, setOwnerFilter] = useState('')
+  const [pipelineFilter, setPipelineFilter] = useState('')
+  const { data: pipelines } = usePipelines()
+  const usablePipelines = (pipelines ?? []).filter((p) => p.isActive && p.available)
   const range = useMemo(() => (preset === 'custom' ? custom : presetRange(preset)), [preset, custom])
   const customInvalid = preset === 'custom' && (!custom.from || !custom.to || custom.from > custom.to)
-  const { data: report, isLoading, isError } = useSalesReport({ ...range, ownerUserId: ownerFilter || undefined }, { enabled: !customInvalid })
+  const { data: report, isLoading, isError } = useSalesReport({ ...range, ownerUserId: ownerFilter || undefined, pipelineId: pipelineFilter || undefined }, { enabled: !customInvalid })
   const currency = report?.reportingCurrency
   const money = (value: number) => formatCurrency(value, currency)
 
@@ -113,6 +116,14 @@ export function SalesReportsPage() {
             <span>to</span>
             <input type="date" aria-label="To" value={custom.to} min={custom.from || undefined} onChange={(event) => setCustom((current) => ({ ...current, to: event.target.value }))} className={selectClass} />
           </div>
+        ) : null}
+        {usablePipelines.length > 1 ? (
+          <select aria-label="Filter by pipeline" value={pipelineFilter} onChange={(event) => setPipelineFilter(event.target.value)} className={selectClass}>
+            <option value="">All pipelines</option>
+            {usablePipelines.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
         ) : null}
         <OwnerSelect aria-label="Filter by owner" value={ownerFilter} onChange={setOwnerFilter} emptyLabel="All owners" className={selectClass} />
         {user && ownerFilter !== user.userId ? (
@@ -183,7 +194,7 @@ export function SalesReportsPage() {
 
           {report.funnel && report.funnel.some((row) => row.entered > 0 || row.nowInStage > 0) ? (
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold text-slate-900">Stage by stage</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Stage by stage{usablePipelines.length > 1 && report.pipelineName ? ` · ${report.pipelineName} pipeline` : ''}</h2>
               <div className="overflow-x-auto rounded-[var(--radius-card)] border border-slate-200 bg-white">
                 <table className="min-w-full text-sm">
                   <thead className="bg-slate-50 text-xs text-slate-500">
@@ -199,7 +210,7 @@ export function SalesReportsPage() {
                   <tbody className="divide-y divide-slate-100">
                     {report.funnel.map((row) => (
                       <tr key={row.stage}>
-                        <td className="px-3 py-2 font-medium text-slate-800">{stageLabels[row.stage] ?? row.stage}</td>
+                        <td className="px-3 py-2 font-medium text-slate-800">{row.stageName ?? stageLabels[row.stage] ?? row.stage}</td>
                         <td className="px-3 py-2 text-right">{row.entered || '—'}</td>
                         <td className="px-3 py-2 text-right">{row.entered ? `${row.movedOn} · ${rate(row.movedOnRate)}` : '—'}</td>
                         <td className="px-3 py-2 text-right">{row.entered ? `${row.won} · ${rate(row.winRateFromHere)}` : '—'}</td>
