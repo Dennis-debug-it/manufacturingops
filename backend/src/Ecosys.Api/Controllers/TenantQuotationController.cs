@@ -162,6 +162,7 @@ public sealed class TenantQuotationController(
         var quote = await LoadQuoteAsync(id, cancellationToken);
         if (quote.Status != "Sent") throw new BusinessRuleException("Only Sent quotations can be accepted.");
         quote.Status = "Accepted";
+        await SalesQuotationSync.OnAnsweredAsync(dbContext, quote, accepted: true, null, UserId, await ActorNameAsync(cancellationToken), "(recorded by staff)", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapDetail(quote));
     }
@@ -176,9 +177,13 @@ public sealed class TenantQuotationController(
         var quote = await LoadQuoteAsync(id, cancellationToken);
         quote.Status = "Rejected";
         quote.RejectionReason = request.Reason?.Trim();
+        await SalesQuotationSync.OnAnsweredAsync(dbContext, quote, accepted: false, quote.RejectionReason, UserId, await ActorNameAsync(cancellationToken), "(recorded by staff)", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapDetail(quote));
     }
+
+    private async Task<string?> ActorNameAsync(CancellationToken cancellationToken) =>
+        await dbContext.Users.Where(x => x.TenantId == TenantId && x.Id == UserId).Select(x => x.FullName).FirstOrDefaultAsync(cancellationToken);
 
     // ── Convert to Invoice ────────────────────────────────────────────────────
 

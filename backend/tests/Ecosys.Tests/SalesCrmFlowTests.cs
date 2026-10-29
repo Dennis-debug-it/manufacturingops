@@ -368,6 +368,50 @@ public sealed class SalesCrmFlowTests
         Assert.Equal(0, Ok<SalesReport>(await reports.Get(now.AddDays(-30), now, Guid.NewGuid(), CancellationToken.None)).OpenCount);
     }
 
+    [Fact]
+    public async Task AnsweringAQuotation_WinsTheDeal_OrSetsAFollowUp()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        dbContext.Clients.Add(new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" });
+        await dbContext.SaveChangesAsync();
+        var clientId = (await dbContext.Clients.SingleAsync()).Id;
+
+        async Task<(Guid Deal, Guid Quote)> DealWithSentQuote(string title, decimal total)
+        {
+            var created = await crm.CreateOpportunity(Deal(title, 10_000m, "KES") with { ClientId = clientId, CompanyName = null }, CancellationToken.None);
+            var id = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+            await crm.ConvertToQuotation(id, CancellationToken.None);
+            var quote = await dbContext.TenantQuotations.SingleAsync(x => x.SalesOpportunityId == id);
+            quote.Status = "Sent";
+            quote.TotalAmount = total;
+            await dbContext.SaveChangesAsync();
+            return (id, quote.Id);
+        }
+
+        var quotes = new TenantQuotationController(
+            dbContext, new FakeTenantContext(tenant.Id, actor.Id, actor.Email), new NoOpDocumentNumberingService(), null!,
+            new AuditLogService(dbContext, new HttpContextAccessor()), new NoOpUserAccessService(), null!, null!, null!, null!, null!)
+        {
+            ControllerContext = CreateControllerContext(actor)
+        };
+
+        var accepted = await DealWithSentQuote("Chiller replacement", 480_000m);
+        await quotes.AcceptQuotation(accepted.Quote, CancellationToken.None);
+        var won = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == accepted.Deal);
+        Assert.Equal((SalesStages.Won, 480_000m, 100), (won.Stage, won.EstimatedValue, won.Probability));
+        Assert.NotNull(won.WonAt);
+
+        var declined = await DealWithSentQuote("Lift modernisation", 900_000m);
+        await quotes.RejectQuotation(declined.Quote, new RejectQuotationRequest("Over budget"), CancellationToken.None);
+        var stillOpen = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == declined.Deal);
+        Assert.Equal(SalesStages.Proposal, stillOpen.Stage);
+        var followUp = Assert.Single(await dbContext.SalesActivities.Where(x => x.OpportunityId == declined.Deal && x.DueAt != null).ToListAsync());
+        Assert.Contains("declined", followUp.Summary);
+        Assert.Contains(await dbContext.SalesActivities.Where(x => x.OpportunityId == declined.Deal).ToListAsync(), x => x.Summary.Contains("Over budget"));
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 

@@ -1,3 +1,4 @@
+using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
@@ -155,3 +156,70 @@ internal sealed class SalesCurrencyConverter
 
 /// <summary>How many units of the reporting currency one unit of <see cref="Currency"/> is worth.</summary>
 public sealed record SalesCurrencyRate(string Currency, decimal RateToReporting, DateTime EffectiveFrom, DateTime EnteredAt, string UpdatedByName);
+
+/// <summary>
+/// Keeps a deal in step with the quotations raised from it, whether the client answers in the
+/// portal or staff record the answer. Accepting a quotation wins the deal at the quoted amount; a
+/// declined one leaves the deal open (a revised quote may still win it) with a follow-up to find
+/// out why. A deal already closed is never reopened or flipped; the answer is only logged on it.
+/// Changes are added to the context; the caller saves.
+/// </summary>
+internal static class SalesQuotationSync
+{
+    public static async Task OnAnsweredAsync(
+        AppDbContext dbContext, TenantQuotation quote, bool accepted, string? reason, Guid? actorUserId, string? actorName, string via,
+        CancellationToken cancellationToken)
+    {
+        if (!quote.SalesOpportunityId.HasValue) return;
+        var opportunity = await dbContext.SalesOpportunities
+            .SingleOrDefaultAsync(x => x.TenantId == quote.TenantId && x.Id == quote.SalesOpportunityId.Value, cancellationToken);
+        if (opportunity is null) return;
+
+        var now = DateTime.UtcNow;
+        var amount = $"{quote.Currency} {quote.TotalAmount:N2}";
+        string summary;
+        if (accepted)
+        {
+            summary = $"Quotation {quote.QuoteNumber} ({amount}) accepted {via}.";
+            if (!SalesStages.IsClosed(opportunity.Stage))
+            {
+                opportunity.Stage = SalesStages.Won;
+                opportunity.Probability = SalesStages.DefaultProbability(SalesStages.Won);
+                opportunity.WonAt = now;
+                opportunity.EstimatedValue = quote.TotalAmount;
+                opportunity.Currency = quote.Currency;
+                summary += " Deal marked Won.";
+            }
+        }
+        else
+        {
+            summary = $"Quotation {quote.QuoteNumber} ({amount}) declined {via}" + (string.IsNullOrWhiteSpace(reason) ? "." : $": {reason.Trim()}");
+            if (!SalesStages.IsClosed(opportunity.Stage))
+            {
+                dbContext.SalesActivities.Add(new SalesActivity
+                {
+                    TenantId = opportunity.TenantId,
+                    OpportunityId = opportunity.Id,
+                    Type = "FollowUp",
+                    Summary = $"Quotation {quote.QuoteNumber} was declined: find out why, and whether a revised quote would win it.",
+                    OccurredAt = now,
+                    DueAt = now.AddDays(1),
+                    LoggedByUserId = actorUserId,
+                    LoggedByName = actorName,
+                });
+            }
+        }
+
+        dbContext.SalesActivities.Add(new SalesActivity
+        {
+            TenantId = opportunity.TenantId,
+            OpportunityId = opportunity.Id,
+            Type = SalesActivityTypes.System,
+            Summary = summary,
+            OccurredAt = now,
+            LoggedByUserId = actorUserId,
+            LoggedByName = actorName,
+        });
+        opportunity.LastActivityAt = now;
+    }
+}
