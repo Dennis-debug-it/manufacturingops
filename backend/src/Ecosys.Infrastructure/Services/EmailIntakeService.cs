@@ -645,12 +645,20 @@ internal sealed partial class EmailIntakeService(
 }
 
 /// <summary>Checks the connected mailboxes every minute.</summary>
-public sealed class EmailIntakeWorker(IServiceScopeFactory serviceScopeFactory, ILogger<EmailIntakeWorker> logger) : BackgroundService
+public sealed class EmailIntakeWorker(
+    IServiceScopeFactory serviceScopeFactory,
+    ILogger<EmailIntakeWorker> logger,
+    Microsoft.Extensions.Options.IOptions<PlatformFeatureOptions>? features = null) : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(60);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (features?.Value.EmailIntake == false)
+        {
+            logger.LogInformation("Email intake is switched off (Features:EmailIntake); no mailboxes are read.");
+            return;
+        }
         logger.LogInformation("Email intake worker started.");
         while (!stoppingToken.IsCancellationRequested)
         {

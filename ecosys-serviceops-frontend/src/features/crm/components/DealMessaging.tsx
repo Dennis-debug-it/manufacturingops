@@ -7,6 +7,7 @@ import { formatDateTime } from '../../../shared/utils/dates'
 import { cn } from '../../../shared/utils/cn'
 import { useAddActivity, useDealWhatsApp, useSendDealEmail } from '../api'
 import { whatsAppLink, type SalesOpportunityDetail } from '../types'
+import { EMAIL_INTAKE_ENABLED, WHATSAPP_ENABLED } from '../../../shared/config/features'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -39,7 +40,7 @@ export function DealMessageButtons({ opportunity }: { opportunity: SalesOpportun
   return (
     <>
       <button type="button" onClick={() => setMode('email')} className={outlineButton}><Mail className="h-4 w-4" />Email</button>
-      <button type="button" onClick={() => setMode('whatsapp')} className={outlineButton}><MessageCircle className="h-4 w-4" />WhatsApp</button>
+      {WHATSAPP_ENABLED ? <button type="button" onClick={() => setMode('whatsapp')} className={outlineButton}><MessageCircle className="h-4 w-4" />WhatsApp</button> : null}
       {mode === 'email' ? <EmailDrawer opportunity={opportunity} people={people} onClose={() => setMode(null)} /> : null}
       {mode === 'whatsapp' ? <WhatsAppDrawer opportunity={opportunity} people={people} onClose={() => setMode(null)} /> : null}
     </>
@@ -107,8 +108,9 @@ function EmailDrawer({ opportunity, people, onClose }: { opportunity: SalesOppor
           <textarea id="deal-email-body" value={body} onChange={(event) => setBody(event.target.value)} rows={10} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]" />
         </div>
         <p className="text-xs text-slate-500">
-          Sent from your workspace's address with your name, and logged on this deal. The subject carries the deal's reference, so when the
-          workspace's intake mailbox is set up, the client's reply comes back onto this deal.
+          {EMAIL_INTAKE_ENABLED
+            ? "Sent from your workspace's address with your name, and logged on this deal. The subject carries the deal's reference, so when the workspace's intake mailbox is set up, the client's reply comes back onto this deal."
+            : "Sent from your workspace's address with your name, and logged on this deal. The client's reply comes to your own email."}
         </p>
       </div>
     </FormDrawer>
@@ -168,6 +170,10 @@ function WhatsAppDrawer({ opportunity, people, onClose }: { opportunity: SalesOp
 
 /** Messages in the workspace's WhatsApp inbox with the deal's people; hidden when there are none. */
 export function DealWhatsAppHistory({ opportunityId }: { opportunityId: string }) {
+  return WHATSAPP_ENABLED ? <WhatsAppHistory opportunityId={opportunityId} /> : null
+}
+
+function WhatsAppHistory({ opportunityId }: { opportunityId: string }) {
   const { data } = useDealWhatsApp(opportunityId)
   if (!data || data.length === 0) return null
   return (

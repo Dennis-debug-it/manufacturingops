@@ -1,6 +1,7 @@
 import toast from 'react-hot-toast'
 import { Copy } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { EMAIL_INTAKE_ENABLED } from '../../../shared/config/features'
 
 /** The public address of the website enquiry form for a key. */
 export function leadFormUrl(key: string, origin = window.location.origin) {
@@ -32,6 +33,7 @@ export function LeadCaptureSection({ leadEmailAddress, webFormEnabled, webFormKe
         </p>
       </div>
 
+      {EMAIL_INTAKE_ENABLED ? (
       <div className="space-y-1.5">
         <label className="block text-sm font-medium text-slate-700" htmlFor="lead-email">Sales email address</label>
         <input
@@ -48,6 +50,7 @@ export function LeadCaptureSection({ leadEmailAddress, webFormEnabled, webFormKe
             : <>Needs the intake mailbox, which is off. Set it up in <Link to="/settings/email-intake" className="underline">Email intake</Link>, then add this address to it as an alias or forward.</>}
         </p>
       </div>
+      ) : null}
 
       <div className="space-y-2">
         <label className="flex items-start gap-3 text-sm">

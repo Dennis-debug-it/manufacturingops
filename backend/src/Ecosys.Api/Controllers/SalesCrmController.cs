@@ -28,7 +28,8 @@ public sealed partial class SalesCrmController(
     ILicenseGuardService licenseGuardService,
     IRolePermissionService rolePermissionService,
     ISalesOwnerResolver salesOwnerResolver,
-    IEmailOutboxService? emailOutbox = null) : TenantAwareControllerBase(tenantContext)
+    IEmailOutboxService? emailOutbox = null,
+    Microsoft.Extensions.Options.IOptions<PlatformFeatureOptions>? platformFeatures = null) : TenantAwareControllerBase(tenantContext)
 {
     private const string FallbackCurrency = "KES";
     private Guid? _ownerScope;
@@ -293,7 +294,7 @@ public sealed partial class SalesCrmController(
         var settings = await dbContext.TenantSalesSettings.AsNoTracking().SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken)
             ?? new TenantSalesSettings { TenantId = TenantId };
         var ownerName = settings.DefaultOwnerUserId is null ? null : await ResolveUserNameAsync(settings.DefaultOwnerUserId.Value, cancellationToken);
-        var intakeAddress = await dbContext.EmailIntakeSettings.AsNoTracking()
+        var intakeAddress = platformFeatures?.Value.EmailIntake == false ? null : await dbContext.EmailIntakeSettings.AsNoTracking()
             .Where(x => x.TenantId == TenantId && x.IsEnabled)
             .Select(x => x.IntakeEmailAddress)
             .FirstOrDefaultAsync(cancellationToken);

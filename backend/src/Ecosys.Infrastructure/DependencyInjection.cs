@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.SectionName));
         services.Configure<WebPushOptions>(configuration.GetSection(WebPushOptions.SectionName));
         services.Configure<WhatsAppOptions>(configuration.GetSection(WhatsAppOptions.SectionName));
+        services.Configure<PlatformFeatureOptions>(configuration.GetSection(PlatformFeatureOptions.SectionName));
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<IFileStorageService, LocalFileStorageService>();
 

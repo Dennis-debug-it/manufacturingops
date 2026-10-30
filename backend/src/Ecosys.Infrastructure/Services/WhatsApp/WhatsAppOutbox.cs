@@ -106,10 +106,13 @@ public interface IWhatsAppOutbox
     Task<int> CountThisMonthAsync(Guid tenantId, DateTime utcNow, CancellationToken cancellationToken = default);
 }
 
-internal sealed class WhatsAppOutbox(AppDbContext dbContext, IOptions<WhatsAppOptions> options, ILogger<WhatsAppOutbox> logger) : IWhatsAppOutbox
+internal sealed class WhatsAppOutbox(AppDbContext dbContext, IOptions<WhatsAppOptions> options, ILogger<WhatsAppOutbox> logger, IOptions<PlatformFeatureOptions>? features = null) : IWhatsAppOutbox
 {
     public async Task<WhatsAppQueueResult> QueueAsync(WhatsAppQueueRequest request, CancellationToken cancellationToken = default)
     {
+        // Switched off for the whole platform (Features:WhatsApp): nothing is queued, for any workspace.
+        if (features?.Value.WhatsApp == false)
+            return new(WhatsAppQueueOutcome.FeatureOff);
         var template = WhatsAppTemplateCatalogue.Find(request.Key);
         if (template is null)
             return new(WhatsAppQueueOutcome.NoTemplate);
@@ -344,12 +347,17 @@ internal sealed class WhatsAppOutboxProcessor(
 }
 
 /// <summary>Sends the WhatsApp outbox every 10 seconds. Leased: one instance sends.</summary>
-public sealed class WhatsAppOutboxWorker(IServiceScopeFactory serviceScopeFactory, ILogger<WhatsAppOutboxWorker> logger) : BackgroundService
+public sealed class WhatsAppOutboxWorker(IServiceScopeFactory serviceScopeFactory, ILogger<WhatsAppOutboxWorker> logger, IOptions<PlatformFeatureOptions>? features = null) : BackgroundService
 {
     private const int BatchSize = 20;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (features?.Value.WhatsApp == false)
+        {
+            logger.LogInformation("WhatsApp is switched off (Features:WhatsApp); nothing is sent.");
+            return;
+        }
         logger.LogInformation("WhatsApp outbox worker started.");
         while (!stoppingToken.IsCancellationRequested)
         {

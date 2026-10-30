@@ -23,6 +23,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import type { AppRole } from '../../shared/types/auth'
+import { EMAIL_INTAKE_ENABLED } from '../../shared/config/features'
 
 export interface GuideSection {
   title: string
@@ -345,7 +346,7 @@ const workOrders: Guide = {
         'Enter the Title, Type, Priority, Due Date and a Description of the problem.',
         'Click Create Work Order. The SLA clock starts from the priority and the client’s SLA policy.',
       ],
-      tip: 'Emails to your intake address can create work orders automatically; see the Email intake guide. On Suite, a won sales deal becomes a work order with one click; see the Sales pipeline guide.',
+      tip: `${EMAIL_INTAKE_ENABLED ? 'Emails to your intake address can create work orders automatically; see the Email intake guide. ' : ''}On Suite, a won sales deal becomes a work order with one click; see the Sales pipeline guide.`,
     },
     {
       title: 'Move a job along',
@@ -893,7 +894,7 @@ export const guides: Guide[] = [
   clientPortal,
   technicianApp,
   maintenanceTemplates,
-  emailIntake,
+  ...(EMAIL_INTAKE_ENABLED ? [emailIntake] : []),
   usersAccess,
   settings,
 ]

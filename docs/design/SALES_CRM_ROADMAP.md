@@ -83,6 +83,11 @@ Sizes are rough, for one developer: **S** ≈ 1 day, **M** ≈ 2–4 days, **L**
     at its current total, and changing the total afterwards asks again.
 
 ### Phase 5: Communication and lead capture (done)
+> **Switched off for now (October 2026):** WhatsApp and email intake are disabled platform-wide
+> (`Features:WhatsApp` / `Features:EmailIntake` in the API's appsettings, and `WHATSAPP_ENABLED` /
+> `EMAIL_INTAKE_ENABLED` in the frontend's `shared/config/features.ts`). Deal emails still go out; replies
+> go to the sender's own email. The website enquiry form is unaffected.
+
 - [x] **5.1 Email and WhatsApp on deals.**
   - Email is written on the deal, sent from the workspace's address with the sender's name, and logged.
     Its subject carries the deal's tag ("[Deal D-1A2B3C4D]"). With the intake mailbox on, replies are

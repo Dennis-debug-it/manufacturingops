@@ -268,6 +268,20 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// Features switched off for the whole platform (Features section) refuse changes through their APIs.
+app.Use(async (context, next) =>
+{
+    var refusal = context.RequestServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<PlatformFeatureOptions>>().Value
+        .RefusalFor(context.Request.Method, context.Request.Path.Value ?? string.Empty);
+    if (refusal is not null)
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        await context.Response.WriteAsJsonAsync(new { message = refusal, errorCode = "FEATURE_OFF" });
+        return;
+    }
+    await next();
+});
+
 app.Use(async (context, next) =>
 {
     try

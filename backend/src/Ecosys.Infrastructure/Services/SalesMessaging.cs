@@ -49,13 +49,15 @@ public static class SalesActivityKinds
 public static class SalesDealEmail
 {
     /// <summary>
-    /// Replies go to the intake mailbox when the workspace has one, so they land back on the deal (see
+    /// Replies go to the intake mailbox when the workspace has one (and email intake is on for the
+    /// platform, <paramref name="useIntakeMailbox"/>), so they land back on the deal (see
     /// <see cref="SalesDealTags"/>); otherwise straight to the sender.
     /// </summary>
     public static async Task<SalesActivity> QueueAsync(
         AppDbContext dbContext, IEmailOutboxService outbox, SalesOpportunity opportunity,
         string to, string? toName, IReadOnlyCollection<string>? cc, string subject, string body,
-        Guid? senderUserId, string? senderName, bool automatic, Guid? sequenceEnrollmentId, CancellationToken cancellationToken)
+        Guid? senderUserId, string? senderName, bool automatic, Guid? sequenceEnrollmentId, CancellationToken cancellationToken,
+        bool useIntakeMailbox = true)
     {
         var recipient = to.Trim();
         if (!System.Net.Mail.MailAddress.TryCreate(recipient, out _))
@@ -67,7 +69,7 @@ public static class SalesDealEmail
             throw new BusinessRuleException("One of the copy addresses is not an email address.");
 
         var tenantId = opportunity.TenantId;
-        var intake = await dbContext.EmailIntakeSettings.IgnoreQueryFilters().AsNoTracking()
+        var intake = !useIntakeMailbox ? null : await dbContext.EmailIntakeSettings.IgnoreQueryFilters().AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.IsEnabled && x.IntakeEmailAddress != null)
             .Select(x => x.IntakeEmailAddress)
             .FirstOrDefaultAsync(cancellationToken);

@@ -27,7 +27,8 @@ public sealed partial class SalesCrmController
             throw new BusinessRuleException("Email is not available.");
         var opportunity = await LoadAsync(id, cancellationToken);
         var activity = await SalesDealEmail.QueueAsync(dbContext, emailOutbox, opportunity, request.To, request.ToName, request.Cc,
-            request.Subject, request.Body, UserId, await ResolveUserNameAsync(UserId, cancellationToken), automatic: false, null, cancellationToken);
+            request.Subject, request.Body, UserId, await ResolveUserNameAsync(UserId, cancellationToken), automatic: false, null, cancellationToken,
+            useIntakeMailbox: platformFeatures?.Value.EmailIntake != false);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "crm.opportunity.emailed", nameof(SalesOpportunity), id.ToString(), $"Emailed {request.To} about '{opportunity.Title}'.", cancellationToken);
         return Ok(MapActivity(activity));
@@ -131,7 +132,8 @@ public sealed partial class SalesCrmController
         await dbContext.SaveChangesAsync(cancellationToken);
         // The first step may be due at once; run it now rather than at the next hourly run.
         if (enrollment.NextDueAt <= DateTime.UtcNow && emailOutbox is not null)
-            await SalesSequences.RunDueAsync(dbContext, emailOutbox, new HashSet<Guid> { TenantId }, DateTime.UtcNow, cancellationToken);
+            await SalesSequences.RunDueAsync(dbContext, emailOutbox, new HashSet<Guid> { TenantId }, DateTime.UtcNow, cancellationToken,
+                useIntakeMailbox: platformFeatures?.Value.EmailIntake != false);
         return Ok(await LoadDetailAsync(id, cancellationToken));
     }
 

@@ -1,4 +1,5 @@
 import type { ClientContact } from '../clients/types'
+import { WHATSAPP_ENABLED } from '../../shared/config/features'
 
 /** The stages of the built-in Sales pipeline; workspaces can add pipelines with their own (Settings › Sales). */
 export const SALES_STAGES = ['Lead', 'Qualified', 'SiteSurvey', 'Proposal', 'Negotiation', 'Won', 'Lost'] as const
@@ -137,7 +138,7 @@ export const sourceOptions = ['Referral', 'Website', 'Walk-in', 'Cold call', 'Te
 export const activityTypeOptions = [
   { value: 'Call', label: 'Call' },
   { value: 'Email', label: 'Email' },
-  { value: 'WhatsApp', label: 'WhatsApp' },
+  ...(WHATSAPP_ENABLED ? [{ value: 'WhatsApp', label: 'WhatsApp' } as const] : []),
   { value: 'Meeting', label: 'Meeting' },
   { value: 'SiteVisit', label: 'Site visit' },
   { value: 'Note', label: 'Note' },

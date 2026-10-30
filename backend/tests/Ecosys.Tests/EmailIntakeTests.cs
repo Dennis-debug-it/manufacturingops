@@ -259,16 +259,31 @@ public sealed class EmailIntakeFlowTests : IAsyncLifetime
         return result.GetProperty("handled").GetInt32();
     }
 
+    [Fact]
+    public async Task SwitchedOff_TheSettingsCannotBeChanged_ButStillRead()
+    {
+        await using var factory = CreateFactory(emailIntakeOn: false);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", await SignUpAsync(client));
+
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/settings/email-intake")).StatusCode);
+        var refused = await client.PostAsJsonAsync("/api/settings/email-intake/check-now", new { });
+        Assert.Equal(HttpStatusCode.NotFound, refused.StatusCode);
+        Assert.Equal("FEATURE_OFF", (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+    }
+
     private static async Task<List<JsonElement>> MessagesAsync(HttpClient client) =>
         (await client.GetFromJsonAsync<List<JsonElement>>("/api/settings/email-intake/messages"))!;
 
     private AppDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(databaseConnection).Options);
 
-    private WebApplicationFactory<Program> CreateFactory() =>
+    private WebApplicationFactory<Program> CreateFactory(bool emailIntakeOn = true) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Production");
+            // Off by default in appsettings (Features:EmailIntake); these tests drive it end to end.
+            builder.UseSetting("Features:EmailIntake", emailIntakeOn ? "true" : "false");
             builder.ConfigureLogging(logging => logging.ClearProviders());
             builder.UseSetting("ConnectionStrings:DefaultConnection", databaseConnection);
             builder.UseSetting("Jwt:Issuer", "ecosys-tests");

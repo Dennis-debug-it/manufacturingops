@@ -65,7 +65,8 @@ public static class SalesSequences
         StopAsync(dbContext, tenantId, opportunityId, "The client replied.", now, cancellationToken, onlyStopOnReply: true);
 
     /// <summary>Runs every step that has come due for these tenants. Returns how many steps ran.</summary>
-    public static async Task<int> RunDueAsync(AppDbContext dbContext, IEmailOutboxService outbox, IReadOnlySet<Guid> tenants, DateTime now, CancellationToken cancellationToken)
+    public static async Task<int> RunDueAsync(AppDbContext dbContext, IEmailOutboxService outbox, IReadOnlySet<Guid> tenants, DateTime now, CancellationToken cancellationToken,
+        bool useIntakeMailbox = true)
     {
         var due = await dbContext.SalesSequenceEnrollments.IgnoreQueryFilters()
             .Include(x => x.Sequence).ThenInclude(x => x!.Steps)
@@ -91,7 +92,7 @@ public static class SalesSequences
             }
 
             var step = steps[enrollment.NextStep];
-            await RunStepAsync(dbContext, outbox, enrollment, step, deal, now, cancellationToken);
+            await RunStepAsync(dbContext, outbox, enrollment, step, deal, now, cancellationToken, useIntakeMailbox);
             ran++;
             enrollment.NextStep++;
             if (enrollment.NextStep >= steps.Count)
@@ -112,7 +113,7 @@ public static class SalesSequences
     }
 
     private static async Task RunStepAsync(AppDbContext dbContext, IEmailOutboxService outbox, SalesSequenceEnrollment enrollment, SalesSequenceStep step,
-        SalesOpportunity deal, DateTime now, CancellationToken cancellationToken)
+        SalesOpportunity deal, DateTime now, CancellationToken cancellationToken, bool useIntakeMailbox)
     {
         var contact = await PrimaryContactAsync(dbContext, deal, cancellationToken);
         var body = Fill(step.Body, deal, contact.Name);
@@ -120,7 +121,7 @@ public static class SalesSequences
         if (step.Action == SalesSequenceActions.Email && contact.Email is not null)
         {
             await SalesDealEmail.QueueAsync(dbContext, outbox, deal, contact.Email, contact.Name, null,
-                Fill(step.Subject ?? deal.Title, deal, contact.Name), body, deal.OwnerUserId, deal.OwnerName, automatic: true, enrollment.Id, cancellationToken);
+                Fill(step.Subject ?? deal.Title, deal, contact.Name), body, deal.OwnerUserId, deal.OwnerName, automatic: true, enrollment.Id, cancellationToken, useIntakeMailbox);
             return;
         }
 

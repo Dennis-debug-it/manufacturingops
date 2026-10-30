@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo } from 'react'
-import { WHATSAPP_ENABLED } from '../shared/config/features'
+import { EMAIL_INTAKE_ENABLED, WHATSAPP_ENABLED } from '../shared/config/features'
 import {
   Navigate,
   Outlet,
@@ -503,8 +503,9 @@ export function AppRouter() {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={tenantRoles}><TenantShellRoute /></ProtectedRoute>}>
-          {/* WHATSAPP_ENABLED hides the inbound chat inbox and its old account page; WhatsApp reminders (shared number) are always routed. */}
-          {tenantRouteComponents.filter(([path]) => WHATSAPP_ENABLED || !(path.startsWith('/whatsapp') || path === '/settings/whatsapp')).map(([path, Component]) => (
+          {/* Features switched off in shared/config/features.ts have no routes. */}
+          {tenantRouteComponents.filter(([path]) => (WHATSAPP_ENABLED || !(path.startsWith('/whatsapp') || path.startsWith('/settings/whatsapp')))
+            && (EMAIL_INTAKE_ENABLED || path !== '/settings/email-intake')).map(([path, Component]) => (
             <Route key={path} path={path} element={<Component />} />
           ))}
         </Route>

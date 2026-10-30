@@ -5,6 +5,7 @@ import { resolveErrorMessage } from '../../shared/api/apiError'
 import { cn } from '../../shared/utils/cn'
 import { cleanVerificationCode, codeTimeLeft, formatWhatsAppNumber, normalizeWhatsAppNumber, optInCardState } from './reminderLogic'
 import { useWhatsAppMyStatus, useWhatsAppOptInMutations, type WhatsAppOptInApi } from './remindersApi'
+import { WHATSAPP_ENABLED } from '../../shared/config/features'
 
 const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 const primaryButton = 'inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60'
@@ -28,6 +29,10 @@ function useNow(active: boolean) {
  * short note while the shared number isn't live.
  */
 export function WhatsAppOptInCard({ source, audience }: { source: WhatsAppOptInApi; audience: 'staff' | 'client' }) {
+  return WHATSAPP_ENABLED ? <OptInCard source={source} audience={audience} /> : null
+}
+
+function OptInCard({ source, audience }: { source: WhatsAppOptInApi; audience: 'staff' | 'client' }) {
   const { data: status, isLoading, isError } = useWhatsAppMyStatus(source)
   const { start, verify, optIn, optOut } = useWhatsAppOptInMutations(source)
   const [editing, setEditing] = useState(false)

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
-import { WHATSAPP_ENABLED } from '../../shared/config/features'
+import { EMAIL_INTAKE_ENABLED, WHATSAPP_ENABLED } from '../../shared/config/features'
 
 interface SettingsGroup {
   title: string
@@ -27,7 +27,7 @@ const groups: SettingsGroup[] = [
     title: 'Email',
     items: [
       { to: '/settings/email', label: 'Email', description: 'Who your emails come from and where replies go.', icon: Mail },
-      { to: '/settings/email-intake', label: 'Email Intake & Parsing', description: 'Auto-create work orders from incoming email.', icon: Inbox },
+      ...(EMAIL_INTAKE_ENABLED ? [{ to: '/settings/email-intake', label: 'Email Intake & Parsing', description: 'Auto-create work orders from incoming email.', icon: Inbox }] : []),
       { to: '/settings/email-templates', label: 'Email Templates', description: 'Transactional email content.', icon: Mail },
       { to: '/settings/email/delivery-logs', label: 'Delivery Logs', description: 'Queued, sent, failed, and retried email deliveries.', icon: ScrollText },
     ],
@@ -74,8 +74,8 @@ const groups: SettingsGroup[] = [
     title: 'Access & Notifications',
     items: [
       { to: '/settings/portal', label: 'Portal', description: 'Client portal visibility controls.', icon: Users },
-      { to: '/settings/notifications', label: 'My Notifications', description: 'How you hear about each event: bell, push, email or WhatsApp.', icon: Bell },
-      { to: '/settings/whatsapp-reminders', label: 'WhatsApp Reminders', description: 'Which notifications may go on WhatsApp, usage and message log.', icon: MessageCircle },
+      { to: '/settings/notifications', label: 'My Notifications', description: WHATSAPP_ENABLED ? 'How you hear about each event: bell, push, email or WhatsApp.' : 'How you hear about each event: bell, push or email.', icon: Bell },
+      ...(WHATSAPP_ENABLED ? [{ to: '/settings/whatsapp-reminders', label: 'WhatsApp Reminders', description: 'Which notifications may go on WhatsApp, usage and message log.', icon: MessageCircle }] : []),
       { to: '/settings/workspace-notifications', label: 'Workspace Notifications', description: 'Event notification matrix.', icon: Bell },
       { to: '/settings/notification-templates', label: 'Notification Templates', description: 'Client ETA emails for job milestones.', icon: MapPin },
       { to: '/settings/security', label: 'Security', description: 'Session and authentication policy.', icon: ShieldCheck },

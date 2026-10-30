@@ -71,7 +71,8 @@ internal sealed class SalesReminderService(
     ISalesOwnerResolver salesOwnerResolver,
     IRolePermissionService rolePermissionService,
     IDynamicAccessService dynamicAccessService,
-    ILogger<SalesReminderService> logger) : ISalesReminderService
+    ILogger<SalesReminderService> logger,
+    IOptions<PlatformFeatureOptions>? features = null) : ISalesReminderService
 {
     public static readonly TimeSpan FollowUpRepeatInterval = TimeSpan.FromHours(24);
     public const int MaxFollowUpReminders = 3;
@@ -115,7 +116,8 @@ internal sealed class SalesReminderService(
         foreach (var tenantId in tenantIds)
             if (await CrmEnabledAsync(tenantId, cancellationToken))
                 enabled.Add(tenantId);
-        return enabled.Count == 0 ? 0 : await SalesSequences.RunDueAsync(dbContext, emailOutboxService, enabled, now, cancellationToken);
+        return enabled.Count == 0 ? 0 : await SalesSequences.RunDueAsync(dbContext, emailOutboxService, enabled, now, cancellationToken,
+            useIntakeMailbox: features?.Value.EmailIntake != false);
     }
 
     private async Task<int> RemindFollowUpsAsync(DateTime now, CancellationToken cancellationToken)

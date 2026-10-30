@@ -1,5 +1,6 @@
 import type { InfiniteData } from '@tanstack/react-query'
 import type { InboxNotification, NotificationChannel, NotificationPage, NotificationPreference } from './types'
+import { WHATSAPP_ENABLED } from '../../shared/config/features'
 
 /** The bell's badge: nothing at zero, capped at "99+". */
 export function formatUnreadBadge(count: number): string | null {
@@ -77,5 +78,5 @@ export const CHANNEL_FIELDS: Array<{ channel: NotificationChannel; field: 'inApp
   { channel: 'InApp', field: 'inAppEnabled', label: 'Bell' },
   { channel: 'Push', field: 'pushEnabled', label: 'Push' },
   { channel: 'Email', field: 'emailEnabled', label: 'Email' },
-  { channel: 'WhatsApp', field: 'whatsAppEnabled', label: 'WhatsApp' },
+  ...(WHATSAPP_ENABLED ? [{ channel: 'WhatsApp' as const, field: 'whatsAppEnabled' as const, label: 'WhatsApp' }] : []),
 ]
