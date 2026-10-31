@@ -21,7 +21,6 @@ import {
   type SupplierDetail,
   type SupplierListItem,
 } from './purchaseOrdersApi'
-import { InventoryTabNav } from './components/InventoryTabNav'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -164,7 +163,6 @@ export function SuppliersPage() {
           ) : undefined
         }
       />
-      <InventoryTabNav />
       {inactiveCount > 0 ? (
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
@@ -284,21 +282,21 @@ export function SupplierDetailPage() {
         <EmptyState title="Supplier not found" description="This supplier may have been removed." />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-2 rounded-[var(--radius-card)] border border-slate-200 bg-white px-4 py-3 text-sm sm:grid-cols-[10rem_1fr_10rem_1fr]">
             {[
-              ['Contact Person', data.contactPerson ?? '—'],
+              ['Contact person', data.contactPerson ?? '—'],
               ['Phone', data.phone ?? '—'],
               ['Email', data.email ?? '—'],
-              ['On-Time Delivery', `${data.onTimeDeliveryPercent}%`],
-              ['Lead Time', data.leadTimeDays != null ? `${data.leadTimeDays} days` : 'Workspace default'],
+              ['On-time delivery', `${data.onTimeDeliveryPercent}%`],
+              ['Lead time', data.leadTimeDays != null ? `${data.leadTimeDays} days` : 'Workspace default'],
               ['Address', data.address ?? '—'],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
-                <div className="mt-2 text-sm text-slate-900">{value}</div>
+              <div key={label} className="contents">
+                <dt className="text-slate-500">{label}</dt>
+                <dd className="text-slate-900">{value}</dd>
               </div>
             ))}
-          </div>
+          </dl>
           {data.notes ? <p className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">{data.notes}</p> : null}
 
           <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">

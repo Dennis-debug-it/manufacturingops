@@ -3251,6 +3251,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.Status });
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Van).WithMany().HasForeignKey(x => x.VanId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(x => x.IsBlind).HasDefaultValue(false);
             entity.HasOne(x => x.StartedByUser).WithMany().HasForeignKey(x => x.StartedByUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PostedByUser).WithMany().HasForeignKey(x => x.PostedByUserId).OnDelete(DeleteBehavior.SetNull);
             entity.HasMany(x => x.Lines).WithOne(x => x.StockCount).HasForeignKey(x => x.StockCountId).OnDelete(DeleteBehavior.Cascade);
@@ -3261,6 +3263,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("stock_count_lines");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.NeedsRecount).HasDefaultValue(false);
             entity.Property(x => x.ExpectedQuantity).HasPrecision(18, 2);
             entity.Property(x => x.CountedQuantity).HasPrecision(18, 2);
             entity.Property(x => x.UnitCost).HasPrecision(18, 2);

@@ -14,7 +14,6 @@ import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import { getActiveCurrency } from '../../shared/utils/currency'
 import { formatDate } from '../../shared/utils/dates'
 import { useBranches } from './api'
-import { InventoryTabNav } from './components/InventoryTabNav'
 import { MaterialAutocomplete } from './components/MaterialAutocomplete'
 import { purchaseOrderChoice, purchaseOrderFiltersFor, purchaseOrderListFilterSpec, purchaseOrderStatuses, type PurchaseOrderChoice } from './listFilters'
 import {
@@ -105,7 +104,6 @@ export function PurchaseOrdersPage() {
           ) : undefined
         }
       />
-      <InventoryTabNav />
       <div className="flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-3 shadow-sm">
         {choices.map((option) => (
           <button

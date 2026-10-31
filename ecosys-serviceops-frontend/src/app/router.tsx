@@ -55,10 +55,10 @@ import { LocationDetailPage } from '../features/inventory/LocationDetailPage'
 import { MovementsPage } from '../features/inventory/MovementsPage'
 import { PurchaseOrdersPage, PurchaseOrderDetailPage } from '../features/inventory/PurchaseOrdersPage'
 import { SuppliersPage, SupplierDetailPage } from '../features/inventory/SuppliersPage'
-import { RestockRequestsPage } from '../features/inventory/RestockRequestsPage'
-import { PartsRequestsPage } from '../features/inventory/PartsRequestsPage'
+import { RequestsPage as InventoryRequestsPage } from '../features/inventory/RequestsPage'
+import { OverviewPage as InventoryOverviewPage } from '../features/inventory/OverviewPage'
+import { InventoryShell } from '../features/inventory/components/InventoryShell'
 import { PartsReturnsPage } from '../features/inventory/PartsReturnsPage'
-import { MaterialIssuesPage } from '../features/inventory/MaterialIssuesPage'
 import { VansPage } from '../features/inventory/VansPage'
 import { StockCountDetailPage, StockCountsPage } from '../features/inventory/StockCountsPage'
 import { ToolDetailPage, ToolsPage } from '../features/inventory/ToolsPage'
@@ -183,8 +183,6 @@ const InventoryPurchaseOrdersPage = PurchaseOrdersPage
 const InventoryPurchaseOrderDetailPage = PurchaseOrderDetailPage
 const InventorySuppliersPage = SuppliersPage
 const InventorySupplierDetailPage = SupplierDetailPage
-const InventoryRestockRequestsPage = RestockRequestsPage
-const InventoryPartsRequestsPage = PartsRequestsPage
 const InventoryAlertsPage = InventoryAlertsPageReal
 const InventoryReportsPage = InventoryReportsPageReal
 
@@ -260,9 +258,27 @@ function TenantShellRoute() {
   }
   return (
     <AppShell>
-      <Outlet />
+      {/* Inventory pages share a grouped side menu instead of each repeating a row of tabs. */}
+      {location.pathname === '/inventory' || location.pathname.startsWith('/inventory/') ? (
+        <InventoryShell>
+          <Outlet />
+        </InventoryShell>
+      ) : (
+        <Outlet />
+      )}
     </AppShell>
   )
+}
+
+/**
+ * Issue slips, job parts requests and restock requests became one queue. Old links (bookmarks,
+ * notifications) land on it, keeping an issue-slip status filter as the matching stage.
+ */
+function InventoryRequestsRedirect() {
+  const location = useLocation()
+  const status = new URLSearchParams(location.search).get('status')
+  const stage = status === 'pending_approval' || status === 'draft' ? 'Requested' : status === 'approved' ? 'Approved' : status === 'issued' ? 'Issued' : null
+  return <Navigate to={stage ? `/inventory/requests?stage=${stage}` : '/inventory/requests'} replace />
 }
 
 function DashboardRoute() {
@@ -322,7 +338,7 @@ export function AppRouter() {
       ['/sites/:id/assets/new', SiteAssetsNewRedirect],
       ['/assets', AssetsPage],
       ['/assets/:id', AssetDetailPage],
-      ['/inventory', InventoryStockPage],
+      ['/inventory', InventoryOverviewPage],
       ['/inventory/parts', InventoryPartsPage],
       ['/inventory/parts/new', InventoryPartsPage],
       ['/inventory/parts/:id', InventoryPartDetailPage],
@@ -337,10 +353,11 @@ export function AppRouter() {
       ['/inventory/purchase-orders/:id', InventoryPurchaseOrderDetailPage],
       ['/inventory/suppliers', InventorySuppliersPage],
       ['/inventory/suppliers/:id', InventorySupplierDetailPage],
-      ['/inventory/restock-requests', InventoryRestockRequestsPage],
-      ['/inventory/parts-requests', InventoryPartsRequestsPage],
+      ['/inventory/requests', InventoryRequestsPage],
+      ['/inventory/restock-requests', InventoryRequestsRedirect],
+      ['/inventory/parts-requests', InventoryRequestsRedirect],
       ['/inventory/parts-returns', PartsReturnsPage],
-      ['/inventory/issues', MaterialIssuesPage],
+      ['/inventory/issues', InventoryRequestsRedirect],
       ['/inventory/alerts', InventoryAlertsPage],
       ['/inventory/stock-counts', StockCountsPage],
       ['/inventory/stock-counts/:id', StockCountDetailPage],

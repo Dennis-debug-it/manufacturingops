@@ -5,7 +5,6 @@ import { Plus, Wrench } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
-import { StatCard } from '../../shared/components/StatCard'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { ErrorState } from '../../shared/components/ErrorState'
@@ -17,6 +16,7 @@ import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { useTechnicians } from '../team/api'
 import { useBranches } from './api'
+import { SummaryStrip } from './components/SummaryStrip'
 import {
   toolConditions,
   toolStatusLabels,
@@ -35,7 +35,6 @@ import {
   type ToolListItem,
   type ToolStatus,
 } from './toolsApi'
-import { InventoryTabNav } from './components/InventoryTabNav'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -116,11 +115,13 @@ export function ToolsPage() {
   const { data: summary } = useToolSummary()
 
   const setFilter = (next: Record<string, string>) => setParams(next, { replace: true })
-  const attentionCard = (label: string, value: number | undefined, key: NonNullable<ToolFilters['attention']>, tone: 'danger' | 'warning') => (
-    <button type="button" aria-pressed={attention === key} onClick={() => setFilter(attention === key ? {} : { attention: key })} className={cn('block h-full w-full text-left', attention === key && 'rounded-[var(--radius-card)] ring-2 ring-[var(--app-primary)]')}>
-      <StatCard label={label} value={value ?? '—'} tone={value ? tone : 'default'} className="h-full" />
-    </button>
-  )
+  const attentionFigure = (label: string, value: number | undefined, key: NonNullable<ToolFilters['attention']>, tone: 'danger' | 'warning') => ({
+    label,
+    value: value ?? '—',
+    tone: value ? tone : ('default' as const),
+    active: attention === key,
+    onClick: () => setFilter(attention === key ? {} : { attention: key }),
+  })
 
   return (
     <div className="space-y-4">
@@ -135,15 +136,16 @@ export function ToolsPage() {
           ) : undefined
         }
       />
-      <InventoryTabNav />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <StatCard label="Checked Out" value={summary ? `${summary.checkedOut} of ${summary.total}` : '—'} />
-        {attentionCard('Calibration Overdue', summary?.calibrationOverdue, 'calibration', 'danger')}
-        {attentionCard('Due Back (Overdue)', summary?.returnOverdue, 'overdue-return', 'danger')}
-        {attentionCard('Awaiting Confirmation', summary?.awaitingAcknowledgement, 'unacknowledged', 'warning')}
-        <StatCard label="Value Out With Technicians" value={summary ? formatCurrency(summary.valueCheckedOut) : '—'} />
-      </div>
+      <SummaryStrip
+        figures={[
+          { label: 'Checked out', value: summary ? `${summary.checkedOut} of ${summary.total}` : '—' },
+          attentionFigure('Calibration overdue', summary?.calibrationOverdue, 'calibration', 'danger'),
+          attentionFigure('Due back (overdue)', summary?.returnOverdue, 'overdue-return', 'danger'),
+          attentionFigure('Awaiting confirmation', summary?.awaitingAcknowledgement, 'unacknowledged', 'warning'),
+          { label: 'Value out with technicians', value: summary ? formatCurrency(summary.valueCheckedOut) : '—' },
+        ]}
+      />
       {summary && summary.calibrationDueSoon > 0 ? (
         <p className="text-sm text-amber-700">{summary.calibrationDueSoon} tool{summary.calibrationDueSoon === 1 ? '' : 's'} due for calibration in the next 14 days (included under Calibration).</p>
       ) : null}

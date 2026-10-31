@@ -431,9 +431,10 @@ const inventory: Guide = {
     {
       title: 'Parts and stock',
       steps: [
-        'Under Parts, click New Part (or Bulk Import from a spreadsheet). Set the reorder level so you are warned before you run out, and optionally a barcode, preferred supplier and reorder quantity.',
-        'On a part, Replenish Stock adds stock you received and Adjust Stock corrects a count (a reason is required). Both ask which branch, and can record batch or serial numbers.',
-        'Stock shows what you hold; Locations shows each branch’s totals; a part’s Stock by Location tab shows every branch and van holding it.',
+        'Inventory opens on Overview: one list of what needs doing (requests to approve or issue, low stock, late deliveries, returns, counts in progress) and the stock at each branch and van.',
+        'On Stock levels or Parts catalogue, click New Part, or Bulk Import a spreadsheet with opening quantities and the branch each goes into. Set the reorder level so you are warned before you run out.',
+        'Buy stock with a purchase order. On a part, Manual receipt is for stock that arrives any other way (a reason is required); Adjust Stock corrects a count. Both ask which branch, and can record batch or serial numbers.',
+        'Stock levels shows each part by branch and van, or each location by part; filter by location, category or low stock. A part’s Stock by Location tab shows every branch and van holding it.',
         'Movements lists every receipt, issue, return, adjustment, transfer and van move, filterable by type, branch, dates and search (including serial numbers).',
       ],
     },
@@ -447,21 +448,20 @@ const inventory: Guide = {
     {
       title: 'Stock counts',
       steps: [
-        'Under Stock Counts, click New Count and choose the branch (and a category to count part of the store).',
-        'Enter what is on the shelf for each part and save as you go. Use the Not counted and Variances filters to finish.',
-        'Post Count adjusts each counted part by the difference from what the books said when the count opened. Parts you did not count are left alone.',
+        'Under Stock counts, click New count and choose a branch or a van (and a category to count part of the store). Tick Only parts held here to skip parts never stocked there, and Blind count to hide book quantities from counters.',
+        'Count on screen, with Quick entry (scan or type a code and quantity), or on paper: download or print the count sheet, fill in the Counted column and import it back. Add part covers anything found that the count did not list.',
+        'Tick Recount on a line to have it checked again; posting waits until it is. Use the Not counted, Variances and Recount filters to finish, and save as you go.',
+        'Post count adjusts each counted part by the difference from what the books said when the count opened. Parts you did not count are left alone. If the differences are worth more than the approval limit in Settings → Inventory, someone who approves materials must post it.',
       ],
     },
     {
-      title: 'Issue parts to a job',
+      title: 'Requests: one queue for stores',
       steps: [
-        'Under Issues, click New Issue, choose the work order and parts, and click Create Issue.',
-        'Approve it, then Issue Stock. Unused parts can be sent back with Return. Issues worth more than the limit in Settings → Inventory wait for approval.',
+        'Requests lists every ask for parts in one place: technicians’ parts requests from a work order’s Parts tab, and issue slips raised by stores. Each moves Requested → Approved → Issued → Completed.',
+        'Click a request to act on it. Approve can approve less than asked on a technician’s request; Reject asks for a reason the requester sees; Issue stock (or Dispatch) lets you hand over less than asked. Dispatching books the parts as used on the job.',
+        'Click New issue slip to hand parts out yourself, against a work order, a project or neither. Slips worth more than the limit in Settings → Inventory wait for approval.',
+        'Under Returns, Receive or Reject parts coming back from jobs, or click Record return when a technician hands parts in at the counter.',
       ],
-    },
-    {
-      title: 'Technician requests and returns',
-      text: 'Parts Requests come from technicians in the field: Approve, then Dispatch (Pending → Approved → Dispatched → Delivered). Dispatching takes the parts out of stock and books them on the job. Parts Returns are parts technicians bring back: Receive or Reject them. Restock Requests ask for stock to be topped up; with Auto-Deduct on in Settings → Inventory, completing the job books issued requests as used.',
     },
     {
       title: 'Buying stock',

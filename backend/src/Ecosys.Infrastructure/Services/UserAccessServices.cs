@@ -272,6 +272,13 @@ public interface IStockLedgerService
     Task RecordVanLoadAsync(MaterialItem material, Guid fromBranchId, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default);
     /// <summary>Return stock from a van back to a branch: van issue + branch receipt (tenant total unchanged).</summary>
     Task RecordVanReturnAsync(MaterialItem material, Guid vanId, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Correct a van's balance (a stock count found more or less on the van): changes the van balance
+    /// and the tenant total by the same amount. Implemented by <see cref="StockLedgerService"/>.
+    /// </summary>
+    Task<StockMovement> RecordVanAdjustmentAsync(MaterialItem material, Guid vanId, decimal quantityChange, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This stock ledger cannot adjust van stock.");
+
     /// <summary>Consume stock from a van (used on a job): decrements van balance and tenant total.</summary>
     Task<StockMovement> RecordVanConsumeAsync(MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default);
 
@@ -522,6 +529,12 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
         // Stock leaves the system entirely: decrement van balance and tenant total.
         var allowNegativeStock = await TenantAllowsNegativeStockAsync(material.TenantId, cancellationToken);
         return await RecordVanMovementAsync(material, vanId, "VanConsume", -quantity, createdByUserId, reason, referenceNumber, workOrderId, allowNegativeStock, cancellationToken);
+    }
+
+    public async Task<StockMovement> RecordVanAdjustmentAsync(MaterialItem material, Guid vanId, decimal quantityChange, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default)
+    {
+        var allowNegativeStock = await TenantAllowsNegativeStockAsync(material.TenantId, cancellationToken);
+        return await RecordVanMovementAsync(material, vanId, "Adjustment", quantityChange, createdByUserId, reason, referenceNumber, null, allowNegativeStock, cancellationToken);
     }
 
     private async Task<StockMovement> RecordVanMovementAsync(

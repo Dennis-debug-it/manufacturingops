@@ -9166,6 +9166,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsBlind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -9190,6 +9195,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("VanId")
+                        .HasColumnType("uuid");
+
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId");
@@ -9197,6 +9205,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("PostedByUserId");
 
                     b.HasIndex("StartedByUserId");
+
+                    b.HasIndex("VanId");
 
                     b.HasIndex("TenantId", "CountNumber")
                         .IsUnique();
@@ -9231,6 +9241,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<Guid>("MaterialItemId")
                         .HasColumnType("uuid");
+
+                    b.Property<bool>("NeedsRecount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
@@ -16402,6 +16417,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Ecosys.Domain.Entities.Van", "Van")
+                        .WithMany()
+                        .HasForeignKey("VanId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Branch");
 
                     b.Navigation("PostedByUser");
@@ -16409,6 +16429,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("StartedByUser");
 
                     b.Navigation("Tenant");
+
+                    b.Navigation("Van");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.StockCountLine", b =>

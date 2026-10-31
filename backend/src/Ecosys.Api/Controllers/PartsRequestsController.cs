@@ -249,8 +249,15 @@ public sealed class PartsRequestsController(
     /// through a parts return. Free-text items (no catalogue part) move no stock.
     /// </summary>
     [HttpPatch("{id:guid}/dispatch")]
-    public async Task<ActionResult<PartsRequestResponse>> Dispatch(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<PartsRequestResponse>> Dispatch(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] DispatchPartsRequestRequest? request,
+        CancellationToken cancellationToken)
     {
+        // Parts normally leave the job's branch; stores can send them from another branch it can reach.
+        var sourceBranchId = request?.SourceBranchId is Guid requestedBranch
+            ? await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, requestedBranch, cancellationToken)
+            : null;
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanIssueMaterials);
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
 
@@ -279,7 +286,7 @@ public sealed class PartsRequestsController(
                     continue;
 
                 await stockLedgerService.RecordIssueAsync(
-                    material, partsRequest.BranchId, quantity, UserId,
+                    material, sourceBranchId ?? partsRequest.BranchId, quantity, UserId,
                     $"Parts request dispatched for work order {workOrderNumber}", workOrderNumber,
                     partsRequest.WorkOrderId, cancellationToken: ct);
                 dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
@@ -396,6 +403,8 @@ public sealed record ApprovePartsRequestRequest(IReadOnlyCollection<ApproveParts
 public sealed record ApprovePartsRequestItemRequest(Guid PartsRequestItemId, decimal QuantityApproved);
 
 public sealed record RejectPartsRequestRequest(string Reason);
+/// <summary>Optional branch the parts leave from; the request's own branch when omitted.</summary>
+public sealed record DispatchPartsRequestRequest(Guid? SourceBranchId);
 
 public sealed record PartsRequestResponse(
     Guid Id,
