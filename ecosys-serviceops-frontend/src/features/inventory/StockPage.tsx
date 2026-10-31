@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Truck } from 'lucide-react'
+import { Plus, Truck, Upload } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatCard } from '../../shared/components/StatCard'
@@ -9,13 +9,21 @@ import { Spinner } from '../../shared/components/Spinner'
 import { ErrorState } from '../../shared/components/ErrorState'
 import { cn } from '../../shared/utils/cn'
 import { formatCurrency } from '../../shared/utils/format'
+import { usePermission } from '../../shared/hooks/usePermission'
 import { useMaterials } from './api'
 import { useVans } from './vansApi'
 import type { Material } from './types'
 import { InventoryTabNav } from './components/InventoryTabNav'
+import { MaterialBulkImportDrawer } from './components/MaterialBulkImportDrawer'
+import { PartFormDrawer } from './components/PartFormDrawer'
 
 export function StockPage() {
   const [view, setView] = useState<'all' | 'by-branch'>('all')
+  // Stock is the page Inventory opens on, so adding parts and bulk-loading opening stock live here
+  // too — not only on the Parts tab, where they were easy to miss.
+  const canManage = usePermission('inventory.materials.manage')
+  const [showForm, setShowForm] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const { data, isLoading, isError, refetch } = useMaterials({ status: 'active' })
   const { data: vans, isError: vansError, refetch: refetchVans } = useVans()
 
@@ -72,8 +80,20 @@ export function StockPage() {
       <PageHeader
         title="Stock Levels"
         subtitle="Stock overview across all branches."
+        primaryAction={
+          canManage ? (
+            <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
+              <Plus className="h-4 w-4" />New Part
+            </button>
+          ) : undefined
+        }
         secondaryActions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {canManage ? (
+              <button type="button" onClick={() => setShowImport(true)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
+                <Upload className="h-4 w-4" />Bulk Import
+              </button>
+            ) : null}
             {(['all', 'by-branch'] as const).map((option) => (
               <button
                 key={option}
@@ -114,7 +134,7 @@ export function StockPage() {
       </div>
 
       {view === 'all' ? (
-        <DataTable columns={columns} data={materials} emptyTitle="No stock records" emptyDescription="Active parts will appear here." virtualise={materials.length > 100} />
+        <DataTable columns={columns} data={materials} emptyTitle="No stock records" emptyDescription={canManage ? 'Add a part or bulk import your stock list from a CSV.' : 'Active parts will appear here.'} virtualise={materials.length > 100} />
       ) : (
         <div className="space-y-4">
           {byBranch.map(([branch, items]) => (
@@ -125,6 +145,9 @@ export function StockPage() {
           ))}
         </div>
       )}
+
+      <PartFormDrawer open={showForm} onClose={() => setShowForm(false)} />
+      <MaterialBulkImportDrawer open={showImport} onClose={() => setShowImport(false)} />
     </div>
   )
 }

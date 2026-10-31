@@ -1717,6 +1717,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.SuspensionReason).HasMaxLength(30);
             entity.Property(x => x.IsPerpetual).HasDefaultValue(false);
             entity.Property(x => x.WhatsAppAddOn).HasMaxLength(50);
+            entity.Property(x => x.OfficeSeatPriceOverride).HasPrecision(18, 2);
+            entity.Property(x => x.FieldSeatPriceOverride).HasPrecision(18, 2);
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.TenantLicenses)

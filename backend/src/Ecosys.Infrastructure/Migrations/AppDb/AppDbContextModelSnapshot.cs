@@ -10223,6 +10223,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("FieldSeatPriceOverride")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<int>("FieldSeats")
                         .HasColumnType("integer");
 
@@ -10249,6 +10253,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal?>("OfficeSeatPriceOverride")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<int>("OfficeSeats")
                         .HasColumnType("integer");
