@@ -253,14 +253,17 @@ export function SchedulingBoardPage() {
           onDragEnd={handleDragEnd}
           onDragCancel={resetDragState}
         >
-          <div className="flex min-h-0 flex-1 gap-4">
-            <div className="w-full max-w-xs shrink-0">
+          {/* The app shell does not bound page height, so the board sets its own. Without this the
+              unassigned list and technician rows stretched the page to fit every card, turning the
+              board into one endless scroll. Each column now scrolls inside the viewport instead. */}
+          <div className="flex h-[calc(100dvh-13rem)] min-h-[28rem] flex-col gap-4 lg:flex-row">
+            <div className="h-64 w-full shrink-0 lg:h-full lg:max-w-xs">
               <UnassignedPanel workOrders={unassigned} isDraggingAssigned={Boolean(activeDrag?.sourceTechnicianId)} />
             </div>
 
-            <div className="min-w-0 flex-1 overflow-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
+            <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">
               <div style={{ width: 224 + SLOT_COUNT * SLOT_WIDTH }}>
-                <div className="flex border-b border-slate-200 bg-slate-50">
+                <div className="sticky top-0 z-30 flex border-b border-slate-200 bg-slate-50">
                   <div className="sticky left-0 z-20 w-56 shrink-0 border-r border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Technician
                   </div>

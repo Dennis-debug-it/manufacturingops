@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api } from '../../shared/api/apiClient'
+import { api, apiClient } from '../../shared/api/apiClient'
 
 export type PurchaseOrderStatus = 'Draft' | 'Sent' | 'PartiallyReceived' | 'Received' | 'Cancelled'
 
@@ -205,4 +205,45 @@ export function useCreateOrdersFromSuggestions() {
       void queryClient.invalidateQueries({ queryKey: ['inventory', 'reorder-suggestions'] })
     },
   })
+}
+
+/** Edits a draft purchase order (lines are replaced as a whole). A changed total restarts approval. */
+export function useUpdatePurchaseOrder(poId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreatePurchaseOrderPayload) => api.put<PurchaseOrderDetail>(`/api/purchase-orders/${poId}`, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] }),
+  })
+}
+
+export interface PurchaseOrderEmailPayload {
+  /** Defaults to the supplier's email. */
+  to?: string | null
+  cc?: string[]
+  message?: string | null
+  /** Marks a draft Sent once queued (default true). */
+  markSent?: boolean
+}
+
+/** Emails the PDF to the supplier; a draft is marked Sent. */
+export function useEmailPurchaseOrder(poId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: PurchaseOrderEmailPayload) =>
+      api.post<{ to: string; cc: string[]; status: string }>(`/api/purchase-orders/${poId}/email`, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['inventory', 'purchase-orders'] }),
+  })
+}
+
+/** Downloads the purchase order PDF in the workspace's purchase-order design. */
+export async function downloadPurchaseOrderPdf(poId: string, poNumber: string) {
+  const response = await apiClient.get(`/api/purchase-orders/${poId}/pdf`, { responseType: 'blob' })
+  const url = URL.createObjectURL(response.data as Blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${poNumber}.pdf`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }

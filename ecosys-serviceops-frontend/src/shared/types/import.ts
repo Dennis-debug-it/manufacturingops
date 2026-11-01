@@ -1,4 +1,6 @@
 export interface ImportPreviewRow {
+  /** Materials only: Create (new part) or Update (the code is already in the catalogue). */
+  action?: 'Create' | 'Update' | null
   rowNumber: number
   rawValues: Record<string, string | null>
   isValid: boolean

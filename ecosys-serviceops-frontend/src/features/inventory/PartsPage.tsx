@@ -10,8 +10,8 @@ import { formatCurrency } from '../../shared/utils/format'
 import { useMaterials } from './api'
 import { MaterialBulkImportDrawer } from './components/MaterialBulkImportDrawer'
 import { PartFormDrawer } from './components/PartFormDrawer'
+import { ManageAccessHint } from './components/ManageAccessHint'
 import type { Material } from './types'
-import { InventoryTabNav } from './components/InventoryTabNav'
 
 export function PartsPage() {
   const canManage = usePermission('inventory.materials.manage')
@@ -27,7 +27,6 @@ export function PartsPage() {
     { key: 'itemName', header: 'Part', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/inventory/parts/${row.id}`}>{row.itemName}</Link> },
     { key: 'itemCode', header: 'Code', cell: (row) => <span className="font-mono text-xs text-slate-600">{row.itemCode}</span> },
     { key: 'category', header: 'Category', cell: (row) => row.category ?? '—' },
-    { key: 'branchName', header: 'Branch', cell: (row) => row.branchName ?? 'All Branches' },
     { key: 'quantityOnHand', header: 'On Hand', cell: (row) => `${row.quantityOnHand} ${row.unitOfMeasure}` },
     { key: 'unitCost', header: 'Unit Cost', cell: (row) => (row.unitCost != null ? formatCurrency(row.unitCost) : '—') },
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isLowStock ? 'Low Stock' : row.isActive ? 'Active' : 'Inactive'} /> },
@@ -53,7 +52,8 @@ export function PartsPage() {
           ) : undefined
         }
       />
-      <InventoryTabNav />
+
+      {canManage ? null : <ManageAccessHint what="parts" />}
 
       <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">

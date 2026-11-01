@@ -22,7 +22,6 @@ import {
   useStockTransfers,
 } from './api'
 import type { StockLedgerEntry, StockTransfer } from './types'
-import { InventoryTabNav } from './components/InventoryTabNav'
 
 const movementTypes = ['Receipt', 'Issue', 'Return', 'Adjustment', 'TransferIn', 'TransferOut', 'VanLoad', 'VanReturn', 'VanConsume']
 const typeLabels: Record<string, string> = {
@@ -56,7 +55,6 @@ export function MovementsPage() {
           </div>
         }
       />
-      <InventoryTabNav />
       {view === 'ledger' ? <LedgerView /> : <TransfersView />}
     </div>
   )

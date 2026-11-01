@@ -3,10 +3,9 @@ import { readUrlFilters } from '../../shared/utils/urlFilters'
 import { contractListFilterSpec, filterContracts } from '../contracts/listFilters'
 import { invoiceListFilterSpec, invoiceListParams } from '../finance/invoiceListFilters'
 import { filterReceipts, receiptListFilterSpec } from '../finance/receiptListFilters'
-import { filterMaterialIssues, materialIssueListFilterSpec, purchaseOrderChoice, purchaseOrderFiltersFor, purchaseOrderListFilterSpec } from '../inventory/listFilters'
+import { matchesRequestStage, requestStageFromParam, purchaseOrderChoice, purchaseOrderFiltersFor, purchaseOrderListFilterSpec } from '../inventory/listFilters'
 import { filterProjects, projectListFilterSpec, stageCategoryFor, stageParamFor } from '../projects/listFilters'
 import type { ContractListItem } from '../contracts/types'
-import type { MaterialIssue } from '../inventory/types'
 import type { ProjectListItem } from '../projects/types'
 
 /** Each dashboard link (RoleDashboardQueries.cs) read back by the list page it opens. */
@@ -28,12 +27,12 @@ describe('dashboard links open filtered lists', () => {
     expect(purchaseOrderFiltersFor('open')).toEqual({ state: 'open', status: '' })
   })
 
-  it('material issues: by status', () => {
-    const issue = (id: string, issueStatus: MaterialIssue['issueStatus']) => ({ id, issueStatus }) as MaterialIssue
-    const rows = [issue('a', 'pending_approval'), issue('b', 'approved'), issue('c', 'issued')]
-    const { status } = read('/inventory/issues?status=pending_approval', materialIssueListFilterSpec)
-    expect(filterMaterialIssues(rows, status).map((x) => x.id)).toEqual(['a'])
-    expect(filterMaterialIssues(rows, '')).toHaveLength(3)
+  it('inventory requests: by stage', () => {
+    const rows = [{ id: 'a', stage: 'Requested' }, { id: 'b', stage: 'Approved' }, { id: 'c', stage: 'Issued' }] as const
+    const stage = requestStageFromParam(new URL('/inventory/requests?stage=Requested', 'https://app.test').searchParams.get('stage'))
+    expect(rows.filter((row) => matchesRequestStage(row, stage)).map((x) => x.id)).toEqual(['a'])
+    expect(rows.filter((row) => matchesRequestStage(row, requestStageFromParam(null))).map((x) => x.id)).toEqual(['a', 'b'])
+    expect(requestStageFromParam('pending_approval')).toBe('open')
   })
 
   it('projects: stage default, behind schedule and id lists', () => {

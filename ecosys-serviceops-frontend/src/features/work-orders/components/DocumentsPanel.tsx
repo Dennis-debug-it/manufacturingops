@@ -13,7 +13,7 @@ const documentMeta: Record<WorkOrderDocument['documentType'], { label: string; i
   Quote: { label: 'Quote', icon: FileText, openTo: (doc) => `/finance/quotes/${doc.id}` },
   ServiceReport: { label: 'Service Report', icon: FileText, openTo: (_doc, workOrderId) => `/work-orders/${workOrderId}?tab=report` },
   Invoice: { label: 'Invoice', icon: Receipt, openTo: (doc) => `/finance/invoices/${doc.id}` },
-  MaterialRequest: { label: 'Material Request', icon: Package, openTo: () => '/inventory/parts-requests' },
+  MaterialRequest: { label: 'Material Request', icon: Package, openTo: () => '/inventory/requests' },
 }
 
 export function DocumentsPanel({ workOrderId }: { workOrderId: string }) {

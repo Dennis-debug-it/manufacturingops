@@ -260,13 +260,13 @@ internal sealed class RoleDashboardQueries(
         // Same rule as the existing dashboard: per-branch stock once branches exist, else the item totals.
         var rows = viewer.Scope.HasConfiguredBranches
             ? await dbContext.BranchMaterialStocks.AsNoTracking()
-                .Where(x => x.TenantId == viewer.TenantId && x.QuantityOnHand <= x.ReorderLevel)
+                .Where(x => x.TenantId == viewer.TenantId && x.QuantityOnHand <= x.ReorderLevel && (x.QuantityOnHand != 0 || x.ReorderLevel > 0))
                 .WhereAccessible(viewer.Scope, x => (Guid?)x.BranchId)
                 .OrderBy(x => x.QuantityOnHand - x.ReorderLevel)
                 .Select(x => new { x.MaterialId, Name = x.Material!.ItemName, x.QuantityOnHand, x.ReorderLevel, Where = (string?)x.Branch!.Name })
                 .ToListAsync(ct)
             : await dbContext.MaterialItems.AsNoTracking()
-                .Where(x => x.TenantId == viewer.TenantId && x.IsActive && x.QuantityOnHand <= x.ReorderLevel)
+                .Where(x => x.TenantId == viewer.TenantId && x.IsActive && x.QuantityOnHand <= x.ReorderLevel && (x.QuantityOnHand != 0 || x.ReorderLevel > 0))
                 .OrderBy(x => x.QuantityOnHand - x.ReorderLevel)
                 .Select(x => new { MaterialId = x.Id, Name = x.ItemName, x.QuantityOnHand, x.ReorderLevel, Where = (string?)null })
                 .ToListAsync(ct);
@@ -289,8 +289,8 @@ internal sealed class RoleDashboardQueries(
             .Select(x => new { x.IssueNumber, x.IssueStatus, x.TotalEstimatedCost })
             .ToListAsync(ct);
         return new Result(
-            [Count("Awaiting approval", awaitingApproval, "/inventory/issues?status=pending_approval", "warning"), Count("Approved, not issued", awaitingIssue, "/inventory/issues?status=approved")],
-            [.. oldest.Select(x => new DashboardListItem(x.IssueNumber, x.IssueStatus == "approved" ? "Approved, not issued" : "Awaiting approval", null, null, null, $"/inventory/issues?status={x.IssueStatus}"))]);
+            [Count("Awaiting approval", awaitingApproval, "/inventory/requests?stage=Requested", "warning"), Count("Approved, not issued", awaitingIssue, "/inventory/requests?stage=Approved")],
+            [.. oldest.Select(x => new DashboardListItem(x.IssueNumber, x.IssueStatus == "approved" ? "Approved, not issued" : "Awaiting approval", null, null, null, $"/inventory/requests?stage={(x.IssueStatus == "approved" ? "Approved" : "Requested")}&q={x.IssueNumber}"))]);
     }
 
     private async Task<Result> OpenPurchaseOrdersAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)

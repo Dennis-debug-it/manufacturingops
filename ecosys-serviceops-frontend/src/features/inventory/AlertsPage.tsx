@@ -5,77 +5,19 @@ import { ShoppingCart } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
-import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { cn } from '../../shared/utils/cn'
 import { formatCurrency } from '../../shared/utils/format'
-import { useBranches, useLowStockMaterials, useReplenishMaterial } from './api'
+import { useBranches, useLowStockMaterials } from './api'
+import { ManualReceiptDrawer } from './components/ManualReceiptDrawer'
 import { useCreateOrdersFromSuggestions, useReorderSuggestions, useSuppliers, type ReorderSuggestion } from './purchaseOrdersApi'
 import type { Material } from './types'
-import { InventoryTabNav } from './components/InventoryTabNav'
 
 // The critical cut-off is Settings → Inventory's threshold, applied by the server.
 function severity(material: Material): 'Critical' | 'Low' {
   return material.isCriticalStock ? 'Critical' : 'Low'
 }
 
-const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
-
-function ReplenishForm({ material, onClose }: { material: Material; onClose: () => void }) {
-  const [quantity, setQuantity] = useState(String(Math.max(material.reorderLevel - material.quantityOnHand, 1)))
-  const [branchId, setBranchId] = useState(material.branchId ?? '')
-  const { data: branches } = useBranches()
-  const activeBranches = (branches ?? []).filter((branch) => branch.isActive)
-  const replenish = useReplenishMaterial(material.id)
-
-  const submit = async () => {
-    const qty = Number(quantity)
-    if (!Number.isFinite(qty) || qty <= 0) {
-      toast.error('Enter a valid quantity')
-      return
-    }
-    try {
-      await replenish.mutateAsync({ quantity: qty, branchId: branchId || null, reason: 'Alert quick replenish' })
-      toast.success('Stock replenished')
-      onClose()
-    } catch {
-      // interceptor surfaces the error toast
-    }
-  }
-
-  return (
-    <FormDrawer
-      open
-      title={`Replenish ${material.itemName}`}
-      onClose={onClose}
-      footer={
-        <div className="flex items-center justify-end gap-2">
-          <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={submit} disabled={replenish.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
-            {replenish.isPending ? 'Saving…' : 'Replenish'}
-          </button>
-        </div>
-      }
-    >
-      <div className="space-y-4">
-        {activeBranches.length > 0 ? (
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="alert-branch">Branch</label>
-            <select id="alert-branch" value={branchId} onChange={(event) => setBranchId(event.target.value)} className={fieldClass}>
-              <option value="">My default branch</option>
-              {activeBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
-            </select>
-          </div>
-        ) : null}
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="alert-qty">Quantity to add</label>
-          <input id="alert-qty" type="number" min="0" step="0.01" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={fieldClass} />
-          <p className="mt-2 text-xs text-slate-500">Currently {material.quantityOnHand} {material.unitOfMeasure} on hand · reorder level {material.reorderLevel}. For stock you are buying, a purchase order keeps the supplier and cost on record.</p>
-        </div>
-      </div>
-    </FormDrawer>
-  )
-}
 
 interface ReorderDraft {
   selected: boolean
@@ -200,14 +142,14 @@ function LowStockView({ branchId }: { branchId: string }) {
     {
       key: 'action',
       header: '',
-      cell: (row) => (canManage ? <button type="button" onClick={() => setSelected(row)} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Replenish</button> : null),
+      cell: (row) => (canManage ? <button type="button" onClick={() => setSelected(row)} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Manual receipt</button> : null),
     },
   ]
 
   return (
     <>
       <DataTable columns={columns} data={rows} loading={isLoading} emptyTitle={isError ? 'Alerts unavailable' : 'No low stock items'} emptyDescription={isError ? 'Low-stock materials could not be loaded.' : 'All parts are above their reorder level.'} />
-      {selected ? <ReplenishForm material={selected} onClose={() => setSelected(null)} /> : null}
+      {selected ? <ManualReceiptDrawer part={selected} defaultQuantity={Math.max(selected.reorderLevel - selected.quantityOnHand, 1)} onClose={() => setSelected(null)} /> : null}
     </>
   )
 }
@@ -239,7 +181,6 @@ export function AlertsPage() {
           </div>
         }
       />
-      <InventoryTabNav />
       {view === 'reorder' ? <ReorderView branchId={branchId} /> : <LowStockView branchId={branchId} />}
     </div>
   )

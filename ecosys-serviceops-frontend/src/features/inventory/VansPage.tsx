@@ -11,7 +11,6 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { useTechnicians } from '../team/api'
 import { useBranches } from './api'
 import { useCreateVan, useVans, type Van } from './vansApi'
-import { InventoryTabNav } from './components/InventoryTabNav'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -69,7 +68,6 @@ export function VansPage() {
           </button>
         ) : undefined}
       />
-      <InventoryTabNav />
 
       <DataTable
         columns={columns}

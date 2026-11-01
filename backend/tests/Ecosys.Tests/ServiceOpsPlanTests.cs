@@ -147,4 +147,26 @@ public sealed class ServiceOpsPlanTests
         license.BillingCycle = BillingCycles.Annual;
         Assert.Equal(decimal.Round(3 * 20000m / 12m + 5 * 800m + 12000m / 12m, 2), LicensePricing.MonthlyValue(license, [addOn]));
     }
+
+    [Fact]
+    public void MonthlyValue_UsesThePriceAgreedWithTheTenant_AndFallsBackToTheEditionPerSeatType()
+    {
+        var plan = new LicensePlan { PlanCode = "professional", OfficeSeatMonthlyPrice = 2000m, FieldSeatMonthlyPrice = 800m };
+        var license = new TenantLicense { LicensePlan = plan, OfficeSeats = 3, FieldSeats = 5, BillingCycle = BillingCycles.Monthly };
+
+        // Only the office seat has an agreed price; field seats stay on the edition's price.
+        license.OfficeSeatPriceOverride = 1500m;
+        Assert.Equal(1500m, LicensePricing.OfficeSeatPrice(license));
+        Assert.Equal(800m, LicensePricing.FieldSeatPrice(license));
+        Assert.Equal(2000m, LicensePricing.EditionOfficeSeatPrice(license));
+        Assert.Equal(3 * 1500m + 5 * 800m, LicensePricing.MonthlyValue(license, []));
+
+        // An agreed price of zero is a free seat, not "unset".
+        license.FieldSeatPriceOverride = 0m;
+        Assert.Equal(3 * 1500m, LicensePricing.MonthlyValue(license, []));
+
+        license.OfficeSeatPriceOverride = null;
+        license.FieldSeatPriceOverride = null;
+        Assert.Equal(3 * 2000m + 5 * 800m, LicensePricing.MonthlyValue(license, []));
+    }
 }

@@ -213,6 +213,23 @@ public sealed class PartsReturnsController(
                 await stockLedgerService.RecordReturnAsync(material, partsReturn.BranchId, line.Quantity, UserId,
                     $"Unused part returned from work order {workOrder.WorkOrderNumber}", partsReturn.ReturnNumber, workOrder.Id, null, cancellationToken);
             }
+            else if (line.Condition == PartsReturnConditions.Faulty)
+            {
+                // Off the job and not restocked: held in stores until it goes back to the supplier,
+                // is written off, or is found sound and restocked (Inventory → Faulty parts).
+                dbContext.HeldParts.Add(new HeldPart
+                {
+                    TenantId = TenantId,
+                    MaterialItemId = line.MaterialItemId,
+                    BranchId = partsReturn.BranchId,
+                    Quantity = line.Quantity,
+                    UnitCost = usage.UnitCost ?? line.MaterialItem?.UnitCost,
+                    SourceReference = partsReturn.ReturnNumber,
+                    PartsReturnId = partsReturn.Id,
+                    WorkOrderId = workOrder.Id,
+                    Notes = line.Notes,
+                });
+            }
         }
 
         partsReturn.Status = PartsReturnStatuses.Received;

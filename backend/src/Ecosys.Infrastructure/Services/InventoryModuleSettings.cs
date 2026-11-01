@@ -115,3 +115,15 @@ public sealed record InventoryModuleSettings(
         return false;
     }
 }
+
+/// <summary>
+/// The one low-stock rule. A part is low when it is at or below its reorder level — except a part
+/// with nothing on hand and no reorder level, which was simply never stocked there. Counting those
+/// flagged every untouched catalogue part as "low". EF queries spell the same condition out inline.
+/// </summary>
+public static class StockRules
+{
+    public static bool IsLow(decimal quantityOnHand, decimal reorderLevel) =>
+        quantityOnHand <= reorderLevel && (quantityOnHand != 0 || reorderLevel > 0);
+}
+

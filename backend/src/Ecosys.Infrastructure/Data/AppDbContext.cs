@@ -65,6 +65,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<ToolAssignment> ToolAssignments => Set<ToolAssignment>();
     public DbSet<ToolCalibration> ToolCalibrations => Set<ToolCalibration>();
     public DbSet<StockCountLine> StockCountLines => Set<StockCountLine>();
+    public DbSet<HeldPart> HeldParts => Set<HeldPart>();
+    public DbSet<DirectPurchase> DirectPurchases => Set<DirectPurchase>();
     public DbSet<MaterialRequest> MaterialRequests => Set<MaterialRequest>();
     public DbSet<MaterialRequestLine> MaterialRequestLines => Set<MaterialRequestLine>();
     public DbSet<PartsRequest> PartsRequests => Set<PartsRequest>();
@@ -1411,6 +1413,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.MeterInterval).HasPrecision(18, 4);
             entity.Property(x => x.MeterBuffer).HasPrecision(18, 4);
             entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.HoldReason).HasMaxLength(500);
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.PreventiveMaintenancePlans)
                 .HasForeignKey(x => x.TenantId)
@@ -1717,6 +1720,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.SuspensionReason).HasMaxLength(30);
             entity.Property(x => x.IsPerpetual).HasDefaultValue(false);
             entity.Property(x => x.WhatsAppAddOn).HasMaxLength(50);
+            entity.Property(x => x.OfficeSeatPriceOverride).HasPrecision(18, 2);
+            entity.Property(x => x.FieldSeatPriceOverride).HasPrecision(18, 2);
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.TenantLicenses)
@@ -3249,16 +3254,61 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.Status });
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Van).WithMany().HasForeignKey(x => x.VanId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(x => x.IsBlind).HasDefaultValue(false);
             entity.HasOne(x => x.StartedByUser).WithMany().HasForeignKey(x => x.StartedByUserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PostedByUser).WithMany().HasForeignKey(x => x.PostedByUserId).OnDelete(DeleteBehavior.SetNull);
             entity.HasMany(x => x.Lines).WithOne(x => x.StockCount).HasForeignKey(x => x.StockCountId).OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<StockCount>(modelBuilder);
 
+        modelBuilder.Entity<HeldPart>(entity =>
+        {
+            entity.ToTable("held_parts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.SourceReference).HasMaxLength(60);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.ResolutionReference).HasMaxLength(100);
+            entity.Property(x => x.ResolutionNote).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.ResolvedByUser).WithMany().HasForeignKey(x => x.ResolvedByUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<HeldPart>(modelBuilder);
+
+        modelBuilder.Entity<DirectPurchase>(entity =>
+        {
+            entity.ToTable("direct_purchases");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.SupplierName).HasMaxLength(200);
+            entity.Property(x => x.SupplierReference).HasMaxLength(100);
+            entity.Property(x => x.InvoiceReference).HasMaxLength(100);
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.PurchasedByUser).WithMany().HasForeignKey(x => x.PurchasedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReconciledByUser).WithMany().HasForeignKey(x => x.ReconciledByUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<DirectPurchase>(modelBuilder);
+
         modelBuilder.Entity<StockCountLine>(entity =>
         {
             entity.ToTable("stock_count_lines");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.NeedsRecount).HasDefaultValue(false);
             entity.Property(x => x.ExpectedQuantity).HasPrecision(18, 2);
             entity.Property(x => x.CountedQuantity).HasPrecision(18, 2);
             entity.Property(x => x.UnitCost).HasPrecision(18, 2);

@@ -14,7 +14,6 @@ import { formatDate } from '../../shared/utils/dates'
 import { useBranches } from './api'
 import { usePurchaseOrders, type PurchaseOrderListItem } from './purchaseOrdersApi'
 import { downloadInventoryReport, useStockUsage, useStockValuation, type StockUsageRow, type StockValuationRow } from './reportsApi'
-import { InventoryTabNav } from './components/InventoryTabNav'
 
 const tabs = [
   { id: 'valuation', label: 'Stock Valuation' },
@@ -68,7 +67,6 @@ export function ReportsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Inventory Reports" subtitle="Stock valuation by location, parts used over a period, purchase orders and the movement ledger, with CSV export." />
-      <InventoryTabNav />
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-wrap gap-2">

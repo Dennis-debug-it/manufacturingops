@@ -71,6 +71,90 @@ public sealed class WorkOrderExecutionFlowTests
         Assert.Equal("Replaced failed contactor", stored.Notes);
     }
 
+    /// <summary>
+    /// A technician's logged part comes off their own van when it carries enough; before, every logged
+    /// part came out of the branch and van balances never went down from job use.
+    /// </summary>
+    [Fact]
+    public async Task MaterialUsage_ComesOffTheTechniciansVan_WhenItHoldsEnough_ElseTheBranch()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var van = new Van { TenantId = fixture.Tenant.Id, Name = "Van 7", TechnicianId = fixture.Technician.Id, HomeBranchId = fixture.Branch.Id };
+        dbContext.Vans.Add(van);
+        await dbContext.SaveChangesAsync();
+        var ledger = new StockLedgerService(dbContext);
+        await ledger.RecordReceiptAsync(fixture.Material, fixture.Branch.Id, 5, fixture.User.Id, "Opening", null);
+        await dbContext.SaveChangesAsync();
+        await ledger.RecordVanLoadAsync(fixture.Material, fixture.Branch.Id, van.Id, 3, fixture.User.Id, "Load", null);
+        await dbContext.SaveChangesAsync();
+        var controller = CreateExecutionController(dbContext, fixture, ledger: ledger);
+
+        Assert.IsType<OkObjectResult>((await controller.AddMaterialUsage(fixture.WorkOrder.Id,
+            new AddWorkOrderMaterialUsageRequest(fixture.Material.Id, null, 2, null, true, null, null), CancellationToken.None)).Result);
+        Assert.Equal(1m, (await dbContext.VanMaterialStocks.SingleAsync(x => x.VanId == van.Id)).QuantityOnHand);
+        Assert.Equal(2m, (await dbContext.BranchMaterialStocks.SingleAsync(x => x.BranchId == fixture.Branch.Id)).QuantityOnHand);
+        var consume = await dbContext.StockMovements.SingleAsync(x => x.MovementType == "VanConsume");
+        Assert.Equal(fixture.WorkOrder.Id, consume.WorkOrderId);
+
+        // The van holds 1, not 2: this one comes from the branch.
+        Assert.IsType<OkObjectResult>((await controller.AddMaterialUsage(fixture.WorkOrder.Id,
+            new AddWorkOrderMaterialUsageRequest(fixture.Material.Id, null, 2, null, true, null, null), CancellationToken.None)).Result);
+        Assert.Equal(1m, (await dbContext.VanMaterialStocks.SingleAsync(x => x.VanId == van.Id)).QuantityOnHand);
+        Assert.Equal(0m, (await dbContext.BranchMaterialStocks.SingleAsync(x => x.BranchId == fixture.Branch.Id)).QuantityOnHand);
+
+        // FromBranch skips the van even when it could cover the part.
+        await ledger.RecordReceiptAsync(fixture.Material, fixture.Branch.Id, 1, fixture.User.Id, "Top-up", null);
+        await dbContext.SaveChangesAsync();
+        Assert.IsType<OkObjectResult>((await controller.AddMaterialUsage(fixture.WorkOrder.Id,
+            new AddWorkOrderMaterialUsageRequest(fixture.Material.Id, null, 1, null, true, null, null, FromBranch: true), CancellationToken.None)).Result);
+        Assert.Equal(1m, (await dbContext.VanMaterialStocks.SingleAsync(x => x.VanId == van.Id)).QuantityOnHand);
+        Assert.Equal(3, await dbContext.WorkOrderMaterialUsages.CountAsync());
+    }
+
+    /// <summary>
+    /// A part bought at a supplier's counter for the job may take the branch below zero, even with
+    /// negative stock off; it waits as a direct purchase until stores reconciles the supplier invoice,
+    /// which books it back so the balance is right again.
+    /// </summary>
+    [Fact]
+    public async Task MaterialUsage_BoughtDirect_GoesNegative_AndReconcilingTheInvoiceBooksItBack()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var ledger = new StockLedgerService(dbContext);
+        await ledger.RecordReceiptAsync(fixture.Material, fixture.Branch.Id, 1, fixture.User.Id, "Opening", null);
+        await dbContext.SaveChangesAsync();
+        var controller = CreateExecutionController(dbContext, fixture, ledger: ledger);
+
+        // An ordinary use of 3 with only 1 in stores is refused.
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.AddMaterialUsage(fixture.WorkOrder.Id,
+            new AddWorkOrderMaterialUsageRequest(fixture.Material.Id, null, 3, null, true, null, null), CancellationToken.None));
+
+        Assert.IsType<OkObjectResult>((await controller.AddMaterialUsage(fixture.WorkOrder.Id,
+            new AddWorkOrderMaterialUsageRequest(fixture.Material.Id, null, 3, 180m, true, null, null,
+                BoughtDirect: true, SupplierName: "Kenya Electricals", SupplierReference: "CS-4471"), CancellationToken.None)).Result);
+        Assert.Equal(-2m, (await dbContext.BranchMaterialStocks.SingleAsync(x => x.BranchId == fixture.Branch.Id)).QuantityOnHand);
+        var purchase = await dbContext.DirectPurchases.SingleAsync();
+        Assert.Equal(DirectPurchaseStatuses.Pending, purchase.Status);
+        Assert.Equal("CS-4471", purchase.SupplierReference);
+        Assert.Equal(180m, (await dbContext.WorkOrderMaterialUsages.SingleAsync()).UnitCost);
+
+        var supplier = new Supplier { TenantId = fixture.Tenant.Id, SupplierName = "Kenya Electricals" };
+        dbContext.Suppliers.Add(supplier);
+        await dbContext.SaveChangesAsync();
+        var purchases = new DirectPurchasesController(dbContext, new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id), new FakeUserAccessService(),
+            new FakeBranchAccessService(), ledger, new AuditLogService(dbContext, new HttpContextAccessor()));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => purchases.Reconcile(new([purchase.Id], " "), CancellationToken.None));
+        var reconciled = Assert.Single(Assert.IsAssignableFrom<IReadOnlyCollection<DirectPurchaseResponse>>(Assert.IsType<OkObjectResult>(
+            (await purchases.Reconcile(new([purchase.Id], "INV-9001", new Dictionary<Guid, decimal> { [purchase.Id] = 175m }, supplier.Id), CancellationToken.None)).Result).Value));
+        Assert.Equal(DirectPurchaseStatuses.Reconciled, reconciled.Status);
+        Assert.Equal("Kenya Electricals", reconciled.SupplierName);
+        Assert.Equal(175m, reconciled.UnitCost);
+        Assert.Equal(1m, (await dbContext.BranchMaterialStocks.SingleAsync(x => x.BranchId == fixture.Branch.Id)).QuantityOnHand);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => purchases.Reconcile(new([purchase.Id], "INV-9002"), CancellationToken.None));
+    }
+
     [Fact]
     public async Task Signature_SaveLoadDelete_Works()
     {
@@ -389,6 +473,12 @@ public sealed class WorkOrderExecutionFlowTests
         var restock = Assert.Single(await dbContext.StockMovements.Where(x => x.MovementType == "Return").ToListAsync());
         Assert.Equal(2, restock.Quantity);
         Assert.All(await dbContext.PartsReturns.ToListAsync(), x => Assert.Equal(PartsReturnStatuses.Received, x.Status));
+
+        // The faulty one is not restocked but is held in stores until it is returned or written off.
+        var held = Assert.Single(await dbContext.HeldParts.ToListAsync());
+        Assert.Equal(HeldPartStatuses.Held, held.Status);
+        Assert.Equal(1, held.Quantity);
+        Assert.Equal(fixture.WorkOrder.Id, held.WorkOrderId);
     }
 
     [Fact]
@@ -883,7 +973,8 @@ public sealed class WorkOrderExecutionFlowTests
         FakeFileStorageService? fileStorage = null,
         FakePdfRenderer? pdfRenderer = null,
         FakeServiceReportDeliveryService? reportDelivery = null,
-        bool technicianOnly = false)
+        bool technicianOnly = false,
+        IStockLedgerService? ledger = null)
     {
         var controller = new WorkOrderExecutionController(
             dbContext,
@@ -892,7 +983,7 @@ public sealed class WorkOrderExecutionFlowTests
             new FakeBranchAccessService(),
             fileStorage ?? new FakeFileStorageService(),
             new AuditLogService(dbContext, new HttpContextAccessor()),
-            new FakeStockLedgerService(),
+            ledger ?? new FakeStockLedgerService(),
             new FakeAssignmentWorkflowService(),
             new FakeWorkOrderLifecycleService(dbContext),
             pdfRenderer ?? new FakePdfRenderer(),

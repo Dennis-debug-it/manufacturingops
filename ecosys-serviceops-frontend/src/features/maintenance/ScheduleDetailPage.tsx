@@ -12,7 +12,10 @@ import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
-import { useGenerateWorkOrderNow, usePmPlans } from './api'
+import { useGenerateWorkOrderNow, usePmPlans, useSetPmAutoSchedule } from './api'
+import { OnOffSwitch } from '../../shared/components/OnOffSwitch'
+import { ContractLapsePanel } from './components/ContractLapsePanel'
+import { PM_CONTRACT_LAPSED } from './types'
 
 type HistoryOutcome = 'Completed On Time' | 'Completed Late' | 'Missed' | 'In Progress'
 
@@ -22,6 +25,17 @@ export function ScheduleDetailPage() {
   const { data: plans, isLoading, isError } = usePmPlans()
   const { data: workOrders } = useWorkOrders()
   const generateNow = useGenerateWorkOrderNow(id ?? '')
+  const canManage = usePermission('maintenance.manage')
+  const setAutoSchedule = useSetPmAutoSchedule(id ?? '')
+
+  const changeAutoSchedule = async (enabled: boolean) => {
+    try {
+      await setAutoSchedule.mutateAsync(enabled)
+      toast.success(enabled ? 'Work orders will auto-generate on schedule' : 'Schedule set to manual trigger only')
+    } catch {
+      // interceptor surfaces the error toast
+    }
+  }
 
   const plan = useMemo(() => (plans ?? []).find((item) => item.id === id), [plans, id])
 
@@ -41,7 +55,7 @@ export function ScheduleDetailPage() {
 
   const triggerGenerate = async () => {
     try {
-      const wo = await generateNow.mutateAsync(undefined)
+      const wo = await generateNow.mutateAsync({})
       toast.success(`Work order ${wo.workOrderNumber} generated`)
     } catch {
       // interceptor surfaces the error toast
@@ -57,19 +71,23 @@ export function ScheduleDetailPage() {
   }
 
   const header = (
-    <PageHeader
-      title={plan.assetName ?? 'PM Schedule'}
-      subtitle={plan.clientName ?? undefined}
-      breadcrumbs={[{ label: 'PM Schedules', to: '/maintenance/schedules' }, { label: plan.assetName ?? 'Schedule' }]}
-      secondaryActions={<StatusBadge status={plan.status} />}
-      primaryAction={
-        canTrigger ? (
-          <button type="button" onClick={triggerGenerate} disabled={generateNow.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
-            {generateNow.isPending ? 'Generating…' : 'Generate Work Order Now'}
-          </button>
-        ) : undefined
-      }
-    />
+    <div className="space-y-4">
+      <PageHeader
+        title={plan.assetName ?? 'PM Schedule'}
+        subtitle={plan.clientName ?? undefined}
+        breadcrumbs={[{ label: 'PM Schedules', to: '/maintenance/schedules' }, { label: plan.assetName ?? 'Schedule' }]}
+        secondaryActions={<StatusBadge status={plan.status === PM_CONTRACT_LAPSED ? 'Contract Lapsed' : plan.status} />}
+        primaryAction={
+          // While on hold the panel below offers a chargeable visit instead.
+          canTrigger && plan.status !== PM_CONTRACT_LAPSED ? (
+            <button type="button" onClick={triggerGenerate} disabled={generateNow.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
+              {generateNow.isPending ? 'Generating…' : 'Generate Work Order Now'}
+            </button>
+          ) : undefined
+        }
+      />
+      <ContractLapsePanel plan={plan} />
+    </div>
   )
 
   const historyColumns: DataTableColumn<(typeof history)[number]>[] = [
@@ -121,7 +139,12 @@ export function ScheduleDetailPage() {
                 </div>
                 <div className="rounded-xl border border-slate-200 px-4 py-3">
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Auto-Schedule</div>
-                  <div className="mt-2 text-sm text-slate-900">{plan.autoSchedule ? 'Work orders auto-generate on schedule' : 'Manual trigger only'}</div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-900">
+                    {canManage && plan.status !== 'Inactive' ? (
+                      <OnOffSwitch checked={plan.autoSchedule} label="Auto-schedule this PM" disabled={setAutoSchedule.isPending} onChange={(next) => void changeAutoSchedule(next)} />
+                    ) : null}
+                    <span>{plan.autoSchedule ? 'Work orders auto-generate on schedule' : 'Manual trigger only'}</span>
+                  </div>
                 </div>
               </div>
             </SummarySection>

@@ -11,8 +11,15 @@ public sealed class StockCount : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
     public string CountNumber { get; set; } = string.Empty;
-    /// <summary>The branch counted; null in a workspace without branches.</summary>
+    /// <summary>The branch counted; null in a workspace without branches, and for a van count.</summary>
     public Guid? BranchId { get; set; }
+    /// <summary>The van counted, when the count is of a van's stock rather than a branch's.</summary>
+    public Guid? VanId { get; set; }
+    /// <summary>
+    /// A blind count: counters do not see the book quantity while counting, so they count what is
+    /// there rather than confirm what the system says. The expected figures show once it is posted.
+    /// </summary>
+    public bool IsBlind { get; set; }
     /// <summary>Limits the count to one category of parts; null counts every active part.</summary>
     public string? Category { get; set; }
     public string Status { get; set; } = StockCountStatuses.Open;
@@ -24,6 +31,7 @@ public sealed class StockCount : AuditableEntity, ITenantEntity
 
     public Tenant? Tenant { get; set; }
     public Branch? Branch { get; set; }
+    public Van? Van { get; set; }
     public User? StartedByUser { get; set; }
     public User? PostedByUser { get; set; }
     public ICollection<StockCountLine> Lines { get; set; } = new List<StockCountLine>();
@@ -40,6 +48,8 @@ public sealed class StockCountLine : AuditableEntity, ITenantEntity
     public decimal? CountedQuantity { get; set; }
     public decimal? UnitCost { get; set; }
     public string? Notes { get; set; }
+    /// <summary>Marked for a second count (a large or surprising variance); cleared when recounted.</summary>
+    public bool NeedsRecount { get; set; }
     public Guid? CountedByUserId { get; set; }
     public DateTime? CountedAt { get; set; }
 

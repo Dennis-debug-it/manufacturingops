@@ -34,8 +34,11 @@ public sealed class StockCountTests
         return (filter, belt);
     }
 
-    private StockCountsController Controller(AppDbContext db) => new(db, new FakeTenantContext(tenantId, userId), new NoOpUserAccessService(),
+    private StockCountsController Controller(AppDbContext db, ITenantContext? context = null) => new(db, context ?? new FakeTenantContext(tenantId, userId), new NoOpUserAccessService(),
         new NoOpBranchAccessService(), new StockLedgerService(db), new NoOpDocumentNumberingService(), new NoOpAuditLogService());
+
+    /// <summary>A storekeeper who counts and issues but does not approve or manage the catalogue.</summary>
+    private ITenantContext Counter() => new FakeTenantContext(tenantId, userId, false, PermissionNames.CanIssueMaterials);
 
     private static StockCountDetailResponse Created(ActionResult<StockCountDetailResponse> result) =>
         Assert.IsType<StockCountDetailResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
@@ -103,7 +106,91 @@ public sealed class StockCountTests
         await Assert.ThrowsAsync<BusinessRuleException>(() => controller.SaveLines(count.Id, new([new(Guid.NewGuid(), 1)]), default));
     }
 
-    private sealed class FakeTenantContext(Guid tenantId, Guid userId) : ITenantContext
+    [Fact]
+    public async Task AVanCountSnapshotsTheVanAndPostsAdjustmentsToTheVanNotTheBranch()
+    {
+        await using var db = Db();
+        var (filter, _) = await Seed(db);
+        var van = new Van { TenantId = tenantId, Name = "Van 2", HomeBranchId = branchId };
+        db.Vans.Add(van);
+        await db.SaveChangesAsync();
+        var ledger = new StockLedgerService(db);
+        await ledger.RecordVanLoadAsync(filter, branchId, van.Id, 3, userId, "Load", null);
+        await db.SaveChangesAsync();
+
+        var controller = Controller(db);
+        var count = Created(await controller.Create(new(null, VanId: van.Id, OnlyStocked: true), default));
+
+        // Only the filter is on the van; the belt was never loaded, so it is not listed.
+        var line = Assert.Single(count.Lines);
+        Assert.Equal(filter.Id, line.MaterialItemId);
+        Assert.Equal(3m, line.ExpectedQuantity);
+        Assert.Equal("Van 2", count.LocationName);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(new(null, VanId: van.Id), default));
+
+        Ok(await controller.SaveLines(count.Id, new([new(line.Id, 2)]), default));
+        Ok(await controller.Post(count.Id, default));
+
+        Assert.Equal(2m, (await db.VanMaterialStocks.SingleAsync(x => x.VanId == van.Id && x.MaterialId == filter.Id)).QuantityOnHand);
+        Assert.Equal(7m, (await db.BranchMaterialStocks.SingleAsync(x => x.BranchId == branchId && x.MaterialId == filter.Id)).QuantityOnHand);
+        var adjustment = await db.StockMovements.SingleAsync(x => x.MovementType == "Adjustment");
+        Assert.Equal(van.Id, adjustment.VanId);
+        Assert.Equal(-1m, adjustment.QuantityChange);
+    }
+
+    [Fact]
+    public async Task ABlindCountHidesBookQuantitiesFromCountersAndRecountMarksBlockPosting()
+    {
+        await using var db = Db();
+        var (filter, _) = await Seed(db);
+        var counter = Controller(db, Counter());
+        var count = Created(await counter.Create(new(branchId, Blind: true), default));
+
+        Assert.True(count.ExpectedHidden);
+        Assert.All(count.Lines, x => Assert.Null(x.ExpectedQuantity));
+        var line = count.Lines.Single(x => x.MaterialItemId == filter.Id);
+        var saved = Ok(await counter.SaveLines(count.Id, new([new(line.Id, 8, null, NeedsRecount: true)]), default));
+        Assert.All(saved.Lines, x => Assert.Null(x.Variance));
+        Assert.True(saved.Lines.Single(x => x.Id == line.Id).NeedsRecount);
+
+        // The supervisor who posts sees the book figures, and cannot post past a recount mark.
+        var supervisor = Controller(db);
+        var seen = Ok(await supervisor.Get(count.Id, default));
+        Assert.False(seen.ExpectedHidden);
+        Assert.Equal(-2m, seen.Lines.Single(x => x.Id == line.Id).Variance);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => supervisor.Post(count.Id, default));
+
+        // Recounting clears the mark.
+        var recounted = Ok(await counter.SaveLines(count.Id, new([new(line.Id, 9)]), default));
+        Assert.False(recounted.Lines.Single(x => x.Id == line.Id).NeedsRecount);
+        var posted = Ok(await supervisor.Post(count.Id, default));
+        Assert.Equal(-1m, posted.Lines.Single(x => x.Id == line.Id).Variance);
+    }
+
+    [Fact]
+    public async Task OnlyStockedLeavesOutPartsNeverHeldThere_AndAPartFoundOnTheShelfCanBeAdded()
+    {
+        await using var db = Db();
+        await Seed(db);
+        var spare = new MaterialItem { TenantId = tenantId, ItemCode = "S", ItemName = "Spare", UnitOfMeasure = "each", UnitCost = 5 };
+        db.MaterialItems.Add(spare);
+        await db.SaveChangesAsync();
+        var controller = Controller(db);
+
+        var count = Created(await controller.Create(new(branchId, OnlyStocked: true), default));
+        Assert.DoesNotContain(count.Lines, x => x.MaterialItemId == spare.Id);
+
+        var added = Ok(await controller.AddLine(count.Id, new(spare.Id, 2), default));
+        var line = added.Lines.Single(x => x.MaterialItemId == spare.Id);
+        Assert.Equal(0m, line.ExpectedQuantity);
+        Assert.Equal(2m, line.CountedQuantity);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.AddLine(count.Id, new(spare.Id), default));
+
+        Ok(await controller.Post(count.Id, default));
+        Assert.Equal(2m, (await db.BranchMaterialStocks.SingleAsync(x => x.MaterialId == spare.Id)).QuantityOnHand);
+    }
+
+    private sealed class FakeTenantContext(Guid tenantId, Guid userId, bool isAdmin = true, params string[] permissions) : ITenantContext
     {
         public Guid? TenantId => tenantId;
         public Guid? UserId => userId;
@@ -113,9 +200,9 @@ public sealed class StockCountTests
         public string? JobTitle => "Admin";
         public bool IsAuthenticated => true;
         public bool IsSuperAdmin => false;
-        public bool IsAdmin => true;
-        public bool HasRole(string role) => string.Equals(role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase);
-        public bool HasPermission(string permissionName) => true;
+        public bool IsAdmin => isAdmin;
+        public bool HasRole(string role) => isAdmin && string.Equals(role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase);
+        public bool HasPermission(string permissionName) => isAdmin || permissions.Contains(permissionName);
         public Guid GetRequiredTenantId() => tenantId;
         public Guid GetRequiredUserId() => userId;
         public Guid GetRequiredSessionId() => SessionId!.Value;

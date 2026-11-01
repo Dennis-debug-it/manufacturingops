@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { PagedResult } from '../../shared/types/pagination'
-import type { Asset, Client, ClientSummary, SiteDetail } from './types'
+import type { Asset, AssetContractOption, Client, ClientSummary, SiteDetail } from './types'
 
 export interface ClientListFilters {
   search?: string
@@ -238,6 +238,15 @@ function invalidateAssets(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: ['pm-plans'] })
 }
 
+/** Turns the asset's automatic PM on or off; this starts or stops its own PM schedule. */
+export function useSetAssetAutoSchedulePm(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) => api.post<Asset>(`/api/assets/${id}/auto-schedule-pm`, { enabled }),
+    onSuccess: () => invalidateAssets(queryClient),
+  })
+}
+
 export function useRetireAsset(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -369,3 +378,25 @@ export function useDeleteClientPermanent(id: string) {
     },
   })
 }
+
+export function useAssetContractOptions(assetId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['assets', assetId, 'contract-options'],
+    queryFn: () => api.get<AssetContractOption[]>(`/api/assets/${assetId}/contract-options`),
+    enabled: Boolean(assetId) && enabled,
+  })
+}
+
+/** Lists the asset on a contract that covers specific assets; its open work orders are re-checked for coverage. */
+export function useAddAssetToContract(assetId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (contractId: string) => api.post<AssetContractOption>(`/api/assets/${assetId}/contract-options/${contractId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assets'] })
+      void queryClient.invalidateQueries({ queryKey: ['contracts'] })
+      void queryClient.invalidateQueries({ queryKey: ['work-orders'] })
+    },
+  })
+}
+

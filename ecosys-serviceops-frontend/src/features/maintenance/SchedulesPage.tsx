@@ -9,11 +9,12 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { usePmPlans } from './api'
 import { NewScheduleWizard } from './components/NewScheduleWizard'
-import type { PmPlan } from './types'
+import { PM_CONTRACT_LAPSED, type PmPlan } from './types'
 import { MaintenanceTabNav } from './components/MaintenanceTabNav'
 import { ClientFilterSelect, useMaintenanceClientFilter } from './components/ClientFilter'
 
 function coverageBadge(plan: PmPlan) {
+  if (plan.status === PM_CONTRACT_LAPSED) return 'Contract Lapsed'
   if (plan.status !== 'Active') return 'Inactive'
   if (!plan.nextPmDate) return 'Unscheduled'
   const days = Math.floor((new Date(plan.nextPmDate).getTime() - Date.now()) / 86_400_000)

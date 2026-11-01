@@ -54,6 +54,16 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
     /// <summary>Field seats: active technicians. Zero or more (CK_tenant_licenses_FieldSeats_NonNegative).</summary>
     public int FieldSeats { get; set; } = DefaultFieldSeats;
     public int? MaxBranchesOverride { get; set; }
+
+    /// <summary>
+    /// A price agreed with this tenant for one office seat per month, replacing the edition's price.
+    /// Null means the edition's price applies. It is a monthly figure whatever the billing cycle, so
+    /// an annual tenant's agreed price is entered as its monthly equivalent.
+    /// </summary>
+    public decimal? OfficeSeatPriceOverride { get; set; }
+
+    /// <summary>As <see cref="OfficeSeatPriceOverride"/>, for one field seat per month.</summary>
+    public decimal? FieldSeatPriceOverride { get; set; }
     /// <summary>No longer read: email intake is included with the Operations module. Kept so existing data loads.</summary>
     public bool? EmailIngestionOverride { get; set; }
     public bool? MonitoringIntegrationOverride { get; set; }

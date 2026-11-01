@@ -10,7 +10,7 @@ import type { WorkOrder } from '../work-orders/types'
 
 const inputClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 
-/** Parts and consumables used on the job; logging one issues it from the branch's stock. */
+/** Parts and consumables used on the job; logging one takes it off the technician's van when the van holds enough, otherwise from the branch. */
 export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boolean }) {
   const { data: bundle } = useTechBundle(job.id)
   const actions = useTechActions()
@@ -20,19 +20,33 @@ export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boo
   const [materialId, setMaterialId] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [batchOrSerial, setBatchOrSerial] = useState('')
+  // Bought at a supplier's counter for this job instead of taken from stores or the van.
+  const [direct, setDirect] = useState(false)
+  const [supplierName, setSupplierName] = useState('')
+  const [supplierReference, setSupplierReference] = useState('')
+  const [pricePaid, setPricePaid] = useState('')
   const used = bundle?.materialUsages ?? []
   const selected = (options ?? []).find((option) => option.id === materialId)
   const qty = Number(quantity)
   const validQty = Number.isFinite(qty) && qty > 0
 
-  const log = async (materialItemId: string, quantityUsed: number, label: string, unitOfMeasure: string | null = null, serial: string | null = null) => {
+  const log = async (materialItemId: string, quantityUsed: number, label: string, unitOfMeasure: string | null = null, serial: string | null = null, bought = false) => {
+    const price = pricePaid.trim() === '' ? null : Number(pricePaid)
+    if (bought && price != null && (!Number.isFinite(price) || price < 0)) return void toast.error('Price paid must be a number')
     try {
-      const result = await actions.logMaterial(job, { materialItemId, quantityUsed, assetId: job.assetId, materialName: label, unitOfMeasure, batchOrSerial: serial })
+      const result = await actions.logMaterial(job, {
+        materialItemId, quantityUsed, assetId: job.assetId, materialName: label, unitOfMeasure, batchOrSerial: serial,
+        direct: bought ? { supplierName: supplierName.trim() || null, supplierReference: supplierReference.trim() || null, unitCost: price } : null,
+      })
       toast.success(savedMessage(`Logged ${quantityUsed} × ${label}`, result))
       setMaterialId('')
       setQuantity('1')
       setBatchOrSerial('')
       setSearch('')
+      setDirect(false)
+      setSupplierName('')
+      setSupplierReference('')
+      setPricePaid('')
     } catch {
       // interceptor surfaces the error toast (e.g. not enough stock)
     }
@@ -45,6 +59,7 @@ export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boo
   return (
     <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
       <h2 className="text-sm font-semibold text-slate-900">Materials used</h2>
+      {editable ? <p className="text-xs text-slate-500">Parts you log come off your van when it carries enough; otherwise from the branch.</p> : null}
 
       {used.length > 0 ? (
         <ul className="divide-y divide-slate-100 text-sm">
@@ -92,7 +107,7 @@ export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boo
             <button
               type="button"
               disabled={!selected || !validQty || actions.busy}
-              onClick={() => selected && void log(selected.id, qty, selected.itemName, selected.unitOfMeasure, batchOrSerial.trim() || null)}
+              onClick={() => selected && void log(selected.id, qty, selected.itemName, selected.unitOfMeasure, batchOrSerial.trim() || null, direct)}
               className="ml-auto inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-sm font-medium text-white disabled:opacity-50"
             >
               {actions.busy ? 'Logging…' : 'Log material'}
@@ -101,8 +116,21 @@ export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boo
           {selected ? (
             <input value={batchOrSerial} onChange={(event) => setBatchOrSerial(event.target.value)} placeholder="Serial / batch number (optional)" aria-label="Serial or batch number" className={inputClass} />
           ) : null}
-          {selected && validQty && qty > selected.quantityOnHand ? (
-            <p className="text-xs text-amber-700">Only {selected.quantityOnHand} {selected.unitOfMeasure} in stock at your branch.</p>
+          {selected ? (
+            <label className="flex items-start gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={direct} onChange={(event) => setDirect(event.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300" />
+              <span>I bought this directly from a supplier<span className="block text-xs text-slate-500">Stores reconciles it with the supplier's invoice later.</span></span>
+            </label>
+          ) : null}
+          {selected && direct ? (
+            <div className="grid grid-cols-2 gap-2">
+              <input value={supplierName} onChange={(event) => setSupplierName(event.target.value)} placeholder="Supplier" aria-label="Supplier" className={cn(inputClass, 'col-span-2')} />
+              <input value={supplierReference} onChange={(event) => setSupplierReference(event.target.value)} placeholder="Receipt no." aria-label="Supplier receipt number" className={inputClass} />
+              <input type="number" min={0} step="any" inputMode="decimal" value={pricePaid} onChange={(event) => setPricePaid(event.target.value)} placeholder="Price paid each" aria-label="Price paid each" className={inputClass} />
+            </div>
+          ) : null}
+          {selected && validQty && !direct && qty > selected.quantityOnHand ? (
+            <p className="text-xs text-amber-700">Only {selected.quantityOnHand} {selected.unitOfMeasure} in stock at your branch. If you bought it from a supplier, tick the box above.</p>
           ) : null}
         </div>
       ) : null}

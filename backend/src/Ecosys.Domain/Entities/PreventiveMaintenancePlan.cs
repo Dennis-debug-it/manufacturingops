@@ -32,6 +32,19 @@ public sealed class PreventiveMaintenancePlan : AuditableEntity, ITenantEntity
 
     public string Status { get; set; } = "Active";
 
+    /// <summary>
+    /// The client agreed to keep these visits going without a contract (paid per visit), so a
+    /// lapsed contract doesn't put the schedule on hold.
+    /// </summary>
+    public bool ContinueWithoutContract { get; set; }
+
+    /// <summary>Why the schedule is on hold (status ContractLapsed), and since when.</summary>
+    public string? HoldReason { get; set; }
+    public DateTime? HeldAt { get; set; }
+
+    /// <summary>The contract whose lapse put the schedule on hold.</summary>
+    public Guid? LapsedContractId { get; set; }
+
     public Tenant? Tenant { get; set; }
     public Branch? Branch { get; set; }
     public Asset? Asset { get; set; }

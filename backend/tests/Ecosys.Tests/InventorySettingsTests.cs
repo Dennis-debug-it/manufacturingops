@@ -105,7 +105,7 @@ public sealed class InventorySettingsTests
         var controller = new PartsRequestsController(db, new FakeTenantContext(tenantId, userId), new NoOpAuditLogService(),
             new NoOpUserAccessService(), new NoOpBranchAccessService(), new StockLedgerService(db));
 
-        await controller.Dispatch(request.Id, default);
+        await controller.Dispatch(request.Id, null, default);
 
         Assert.Equal("Dispatched", request.Status);
         Assert.Equal(7, part.QuantityOnHand);
@@ -113,7 +113,7 @@ public sealed class InventorySettingsTests
         Assert.Equal(3, usage.QuantityUsed);
         Assert.Equal(25, usage.UnitCost);
         Assert.Equal("WO-7", (await db.StockMovements.SingleAsync()).ReferenceNumber);
-        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Dispatch(request.Id, default));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Dispatch(request.Id, null, default));
         Assert.Equal(7, part.QuantityOnHand);
     }
 

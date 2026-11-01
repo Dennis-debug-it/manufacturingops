@@ -1,5 +1,5 @@
 import type { UrlFilterSpec } from '../../shared/utils/urlFilters'
-import type { MaterialIssue } from './types'
+import type { InventoryRequest, InventoryRequestStage } from './requestsApi'
 import type { PurchaseOrderStatus } from './purchaseOrdersApi'
 
 // ── Purchase orders ─────────────────────────────────────────────────────────
@@ -27,22 +27,29 @@ export function purchaseOrderFiltersFor(choice: PurchaseOrderChoice): { state: s
   return { state: '', status: choice === 'All' ? '' : choice }
 }
 
-// ── Material issues ─────────────────────────────────────────────────────────
+// ── Requests queue ──────────────────────────────────────────────────────────
 
-export const materialIssueStatusLabels: Record<string, string> = {
-  draft: 'Draft',
-  pending_approval: 'Awaiting approval',
-  approved: 'Approved, not issued',
-  issued: 'Issued',
-  returned: 'Returned',
-  rejected: 'Rejected',
-  cancelled: 'Cancelled',
+/** `open` (the default) is Requested + Approved: everything still waiting on stores. */
+export type RequestStageFilter = 'open' | InventoryRequestStage | 'all'
+
+export const requestStageFilters: Array<{ value: RequestStageFilter; label: string }> = [
+  { value: 'open', label: 'Needs action' },
+  { value: 'Requested', label: 'Requested' },
+  { value: 'Approved', label: 'Approved' },
+  { value: 'Issued', label: 'Issued' },
+  { value: 'Completed', label: 'Completed' },
+  { value: 'Rejected', label: 'Rejected' },
+  { value: 'Cancelled', label: 'Cancelled' },
+  { value: 'all', label: 'All' },
+]
+
+/** Reads `?stage=` from a link (the dashboard sends Requested / Approved); anything else is `open`. */
+export function requestStageFromParam(value: string | null): RequestStageFilter {
+  return requestStageFilters.find((option) => option.value === value)?.value ?? 'open'
 }
 
-export const materialIssueListFilterSpec: UrlFilterSpec<'status'> = {
-  status: { param: 'status', values: Object.keys(materialIssueStatusLabels) },
-}
-
-export function filterMaterialIssues(issues: MaterialIssue[], status: string): MaterialIssue[] {
-  return status ? issues.filter((issue) => issue.issueStatus === status) : issues
+export function matchesRequestStage(request: Pick<InventoryRequest, 'stage'>, stage: RequestStageFilter) {
+  if (stage === 'all') return true
+  if (stage === 'open') return request.stage === 'Requested' || request.stage === 'Approved'
+  return request.stage === stage
 }
