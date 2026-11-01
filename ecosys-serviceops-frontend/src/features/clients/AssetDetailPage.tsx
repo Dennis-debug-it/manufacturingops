@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { differenceInDays } from 'date-fns'
 import { Link, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -16,6 +16,7 @@ import { useWorkOrders } from '../work-orders/api'
 import { useAsset, useReactivateAsset, useRetireAsset, type RetireAssetPayload } from './api'
 import { AssetFormDrawer } from './components/AssetFormDrawer'
 import { RetireAssetDialog } from './components/RetireAssetDialog'
+import { AssetContractPanel, ContractCoverValue } from './components/AssetContractPanel'
 import type { Asset } from './types'
 
 function warrantyBadge(expiry: string | null) {
@@ -181,19 +182,20 @@ export function AssetDetailPage() {
               </div>
               <h3 className="mt-6 text-sm font-semibold text-slate-900">Warranty</h3>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                {[
+                {([
                   ['Under Warranty', asset.warrantyExpiryDate ? (asset.isUnderWarranty ? 'Yes' : 'No — expired') : 'No'],
-                  ['Contract Cover', asset.hasContractCover ? 'Yes' : 'No'],
+                  ['Contract Cover', <ContractCoverValue key="cover" asset={asset} />],
                   ['Warranty Period', asset.warrantyPeriodMonths ? `${asset.warrantyPeriodMonths} month${asset.warrantyPeriodMonths === 1 ? '' : 's'}` : '—'],
                   ['Warranty Start', asset.warrantyStartDate ? formatDate(asset.warrantyStartDate) : '—'],
                   ['Warranty Expiry', asset.warrantyExpiryDate ? formatDate(asset.warrantyExpiryDate) : '—'],
-                ].map(([label, value]) => (
+                ] as Array<[string, ReactNode]>).map(([label, value]) => (
                   <div key={label} className="rounded-xl border border-slate-200 px-4 py-3">
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
                     <div className="mt-2 text-sm text-slate-900">{value}</div>
                   </div>
                 ))}
               </div>
+              <AssetContractPanel asset={asset} />
               {(asset.customFieldValues ?? []).length > 0 ? (
                 <div className="mt-4" data-testid="asset-datasheet">
                   <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{asset.assetCategoryName ?? 'Category'} datasheet</div>

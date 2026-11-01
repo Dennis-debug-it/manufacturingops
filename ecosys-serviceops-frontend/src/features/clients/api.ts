@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { PagedResult } from '../../shared/types/pagination'
-import type { Asset, Client, ClientSummary, SiteDetail } from './types'
+import type { Asset, AssetContractOption, Client, ClientSummary, SiteDetail } from './types'
 
 export interface ClientListFilters {
   search?: string
@@ -369,3 +369,25 @@ export function useDeleteClientPermanent(id: string) {
     },
   })
 }
+
+export function useAssetContractOptions(assetId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['assets', assetId, 'contract-options'],
+    queryFn: () => api.get<AssetContractOption[]>(`/api/assets/${assetId}/contract-options`),
+    enabled: Boolean(assetId) && enabled,
+  })
+}
+
+/** Lists the asset on a contract that covers specific assets; its open work orders are re-checked for coverage. */
+export function useAddAssetToContract(assetId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (contractId: string) => api.post<AssetContractOption>(`/api/assets/${assetId}/contract-options/${contractId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assets'] })
+      void queryClient.invalidateQueries({ queryKey: ['contracts'] })
+      void queryClient.invalidateQueries({ queryKey: ['work-orders'] })
+    },
+  })
+}
+
