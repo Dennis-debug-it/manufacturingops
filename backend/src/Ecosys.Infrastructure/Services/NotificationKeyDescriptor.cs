@@ -66,7 +66,7 @@ public static class NotificationKeyDescriptor
         Inbox("action-item.due", "Action item due tomorrow", "Calendar & Activities", whatsApp: true),
         Inbox("inventory.request-raised", "Parts requested from stores", "Inventory"),
         Inbox("inventory.request-decided", "My parts request approved or rejected", "Inventory"),
-        Inbox("inventory.request-dispatched", "My parts are on the way", "Inventory", whatsApp: true),
+        Inbox("inventory.request-dispatched", "My parts are on the way", "Inventory"),
         Inbox("inventory.low-stock", "A part fell to its reorder level", "Inventory"),
         EmailOnly("invoice.sent",         "Invoice sent to client",            "Finance"),
         EmailOnly("quotation.sent",       "Quotation sent to client",          "Finance"),

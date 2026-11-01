@@ -430,6 +430,12 @@ public sealed class WorkOrderExecutionFlowTests
         var restock = Assert.Single(await dbContext.StockMovements.Where(x => x.MovementType == "Return").ToListAsync());
         Assert.Equal(2, restock.Quantity);
         Assert.All(await dbContext.PartsReturns.ToListAsync(), x => Assert.Equal(PartsReturnStatuses.Received, x.Status));
+
+        // The faulty one is not restocked but is held in stores until it is returned or written off.
+        var held = Assert.Single(await dbContext.HeldParts.ToListAsync());
+        Assert.Equal(HeldPartStatuses.Held, held.Status);
+        Assert.Equal(1, held.Quantity);
+        Assert.Equal(fixture.WorkOrder.Id, held.WorkOrderId);
     }
 
     [Fact]

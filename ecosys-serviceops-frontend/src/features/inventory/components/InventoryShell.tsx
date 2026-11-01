@@ -32,6 +32,7 @@ export const inventoryNav: NavGroup[] = [
     items: [
       { to: '/inventory/requests', label: 'Requests', match: ['/inventory/issues', '/inventory/parts-requests', '/inventory/restock-requests'] },
       { to: '/inventory/parts-returns', label: 'Returns' },
+      { to: '/inventory/faulty-parts', label: 'Faulty parts' },
     ],
   },
   {

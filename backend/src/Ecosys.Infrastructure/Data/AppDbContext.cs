@@ -65,6 +65,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<ToolAssignment> ToolAssignments => Set<ToolAssignment>();
     public DbSet<ToolCalibration> ToolCalibrations => Set<ToolCalibration>();
     public DbSet<StockCountLine> StockCountLines => Set<StockCountLine>();
+    public DbSet<HeldPart> HeldParts => Set<HeldPart>();
     public DbSet<MaterialRequest> MaterialRequests => Set<MaterialRequest>();
     public DbSet<MaterialRequestLine> MaterialRequestLines => Set<MaterialRequestLine>();
     public DbSet<PartsRequest> PartsRequests => Set<PartsRequest>();
@@ -3258,6 +3259,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasMany(x => x.Lines).WithOne(x => x.StockCount).HasForeignKey(x => x.StockCountId).OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<StockCount>(modelBuilder);
+
+        modelBuilder.Entity<HeldPart>(entity =>
+        {
+            entity.ToTable("held_parts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.SourceReference).HasMaxLength(60);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.ResolutionReference).HasMaxLength(100);
+            entity.Property(x => x.ResolutionNote).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.ResolvedByUser).WithMany().HasForeignKey(x => x.ResolvedByUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<HeldPart>(modelBuilder);
 
         modelBuilder.Entity<StockCountLine>(entity =>
         {

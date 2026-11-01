@@ -10,6 +10,7 @@ import { useStockByLocation } from './api'
 import { usePurchaseOrders } from './purchaseOrdersApi'
 import { requestReference, sourceLabels, useInventoryRequests } from './requestsApi'
 import { useStockCounts } from './stockCountsApi'
+import { useHeldParts } from './FaultyPartsPage'
 import { SummaryStrip } from './components/SummaryStrip'
 
 interface TodoRow {
@@ -47,6 +48,7 @@ export function OverviewPage() {
   const openPurchaseOrders = usePurchaseOrders('All', 'open')
   const openCounts = useStockCounts('Open')
   const pendingReturns = usePartsReturns('Pending')
+  const heldParts = useHeldParts('Held')
 
   const todo = useMemo(() => {
     const rows: TodoRow[] = []
@@ -99,6 +101,19 @@ export function OverviewPage() {
         sortAt: count.createdAt,
       })
     }
+    const held = heldParts.data ?? []
+    if (held.length > 0) {
+      rows.push({
+        id: 'held-parts',
+        kind: 'Faulty parts held',
+        item: `${held.length} faulty part${held.length === 1 ? '' : 's'} in stores`,
+        detail: held.slice(0, 3).map((part) => `${part.itemName ?? 'Part'} × ${part.quantity}`).join(', ') + (held.length > 3 ? '…' : ''),
+        to: '/inventory/faulty-parts',
+        action: 'Return or write off',
+        urgency: 'normal',
+        sortAt: held[held.length - 1]!.createdAt,
+      })
+    }
     const lowRows = (stock.data ?? []).filter((row) => row.isLowStock)
     if (lowRows.length > 0) {
       rows.push({
@@ -113,7 +128,7 @@ export function OverviewPage() {
       })
     }
     return rows.sort((a, b) => (a.urgency === b.urgency ? a.sortAt.localeCompare(b.sortAt) : a.urgency === 'high' ? -1 : 1))
-  }, [requests.data, latePurchaseOrders.data, pendingReturns.data, openCounts.data, stock.data])
+  }, [requests.data, latePurchaseOrders.data, pendingReturns.data, openCounts.data, stock.data, heldParts.data])
 
   const locations = useMemo(() => {
     const map = new Map<string, LocationRow>()

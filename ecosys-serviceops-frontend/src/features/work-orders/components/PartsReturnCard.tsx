@@ -9,7 +9,7 @@ import { useReceivePartsReturn, useRejectPartsReturn, type PartsReturn, type Par
 
 export const conditionLabels: Record<PartsReturnCondition, { label: string; hint: string; tone: string }> = {
   Unused: { label: 'Unused', hint: 'Back to stock, not billed', tone: 'bg-emerald-50 text-emerald-700' },
-  Faulty: { label: 'Faulty', hint: 'Not billed, not restocked', tone: 'bg-amber-50 text-amber-700' },
+  Faulty: { label: 'Faulty', hint: 'Not billed; held under Inventory → Faulty parts for supplier return or write-off', tone: 'bg-amber-50 text-amber-700' },
   Removed: { label: 'Removed old part', hint: 'Recorded only', tone: 'bg-slate-100 text-slate-600' },
 }
 

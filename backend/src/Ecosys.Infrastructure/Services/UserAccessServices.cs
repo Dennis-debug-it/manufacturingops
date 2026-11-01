@@ -307,8 +307,13 @@ public sealed class StockContentionException(string message)
     public string ErrorCode => "CONCURRENCY_CONFLICT";
 }
 
-internal sealed class StockLedgerService(AppDbContext dbContext, INotificationDispatcher? notificationDispatcher = null) : IStockLedgerService
+internal sealed class StockLedgerService(AppDbContext dbContext, INotificationDispatcher? notificationDispatcher) : IStockLedgerService
 {
+    /// <summary>A ledger that sends no low-stock alerts (tests, and callers created by reflection).</summary>
+    public StockLedgerService(AppDbContext dbContext) : this(dbContext, null)
+    {
+    }
+
     /// <summary>
     /// Parts that fell to or below their reorder level during this unit of work, sent to stores once
     /// it has saved (<see cref="FlushLowStockAsync"/>), so a rolled-back change never alerts anyone.

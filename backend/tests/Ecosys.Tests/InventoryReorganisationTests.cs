@@ -356,6 +356,35 @@ public sealed class InventoryReorganisationTests
     }
 
     [Fact]
+    public async Task HeldFaultyParts_CanGoBackToTheSupplier_BeWrittenOff_OrBeRestocked_InPart()
+    {
+        await using var db = Db();
+        var (filter, _, _, _) = await Seed(db);
+        var supplier = new Supplier { TenantId = tenantId, SupplierName = "Acme Parts" };
+        var held = new HeldPart { TenantId = tenantId, MaterialItemId = filter.Id, BranchId = branchId, Quantity = 5, UnitCost = 10, SourceReference = "PR-7" };
+        db.AddRange(supplier, held);
+        await db.SaveChangesAsync();
+        var controller = new HeldPartsController(db, new FakeTenantContext(tenantId, userId), new NoOpUserAccessService(), new BranchScope([branchId, otherBranchId]),
+            new StockLedgerService(db), new NoOpAuditLogService());
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Resolve(held.Id, new(HeldPartActions.ReturnToSupplier, 2), default));
+        var returned = Ok(await controller.Resolve(held.Id, new(HeldPartActions.ReturnToSupplier, 2, supplier.Id, "RMA-55"), default));
+        Assert.Equal(HeldPartStatuses.ReturnedToSupplier, returned.Status);
+        Assert.Equal("Acme Parts", returned.SupplierName);
+        Assert.Equal(3m, (await db.HeldParts.SingleAsync(x => x.Id == held.Id)).Quantity);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Resolve(held.Id, new(HeldPartActions.WriteOff, 1), default));
+        Ok(await controller.Resolve(held.Id, new(HeldPartActions.WriteOff, 1, Note: "Burnt out"), default));
+        var before = (await db.BranchMaterialStocks.SingleAsync(x => x.BranchId == branchId && x.MaterialId == filter.Id)).QuantityOnHand;
+        var restocked = Ok(await controller.Resolve(held.Id, new(HeldPartActions.Restock, Note: "Tested OK"), default));
+        Assert.Equal(HeldPartStatuses.Restocked, restocked.Status);
+        Assert.Equal(before + 2, (await db.BranchMaterialStocks.SingleAsync(x => x.BranchId == branchId && x.MaterialId == filter.Id)).QuantityOnHand);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Resolve(held.Id, new(HeldPartActions.WriteOff, Note: "again"), default));
+        Assert.Empty(Ok(await controller.List(HeldPartStatuses.Held, default)));
+        Assert.Equal(3, Ok(await controller.List(null, default)).Count);
+    }
+
+    [Fact]
     public void RestockRequests_AreRetired()
     {
         var controller = new MaterialRequestsController(Db(), new FakeTenantContext(tenantId, userId), new NoOpAuditLogService(),

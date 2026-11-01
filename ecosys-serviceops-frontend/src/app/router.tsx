@@ -58,6 +58,7 @@ import { SuppliersPage, SupplierDetailPage } from '../features/inventory/Supplie
 import { RequestsPage as InventoryRequestsPage } from '../features/inventory/RequestsPage'
 import { OverviewPage as InventoryOverviewPage } from '../features/inventory/OverviewPage'
 import { InventoryShell } from '../features/inventory/components/InventoryShell'
+import { FaultyPartsPage } from '../features/inventory/FaultyPartsPage'
 import { PartsReturnsPage } from '../features/inventory/PartsReturnsPage'
 import { VansPage } from '../features/inventory/VansPage'
 import { StockCountDetailPage, StockCountsPage } from '../features/inventory/StockCountsPage'
@@ -357,6 +358,7 @@ export function AppRouter() {
       ['/inventory/restock-requests', InventoryRequestsRedirect],
       ['/inventory/parts-requests', InventoryRequestsRedirect],
       ['/inventory/parts-returns', PartsReturnsPage],
+      ['/inventory/faulty-parts', FaultyPartsPage],
       ['/inventory/issues', InventoryRequestsRedirect],
       ['/inventory/alerts', InventoryAlertsPage],
       ['/inventory/stock-counts', StockCountsPage],
