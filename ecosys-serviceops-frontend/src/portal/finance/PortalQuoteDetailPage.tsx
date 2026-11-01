@@ -24,6 +24,10 @@ export function PortalQuoteDetailPage() {
   const canRespondInPortal = usePortalFeature(portalFeatures.quoteResponses)
   const [showReject, setShowReject] = useState(false)
   const [reason, setReason] = useState('')
+  const [showAccept, setShowAccept] = useState(false)
+  const [signedName, setSignedName] = useState('')
+  const [signerTitle, setSignerTitle] = useState('')
+  const [agreed, setAgreed] = useState(false)
 
   if (isLoading) {
     return <Spinner label="Loading quote" />
@@ -54,23 +58,22 @@ export function PortalQuoteDetailPage() {
               <button type="button" onClick={() => setShowReject(true)} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-white px-4 text-sm font-medium text-rose-600 hover:bg-rose-50">Decline</button>
               <button
                 type="button"
-                onClick={async () => {
-                  try {
-                    await accept.mutateAsync()
-                    toast.success('Quote accepted')
-                  } catch {
-                    // interceptor surfaces the error toast
-                  }
-                }}
-                disabled={accept.isPending}
+                onClick={() => setShowAccept(true)}
                 className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60"
               >
-                {accept.isPending ? 'Accepting…' : 'Accept Quote'}
+                Accept Quote
               </button>
             </div>
           ) : undefined
         }
       />
+
+      {data.acceptedByName && data.acceptedAt ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          Accepted and signed by <span className="font-semibold">{data.acceptedByName}</span>
+          {data.acceptedByTitle ? `, ${data.acceptedByTitle}` : ''} on {formatDate(data.acceptedAt)}.
+        </div>
+      ) : null}
 
       {data.rejectionReason ? (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">Declined: {data.rejectionReason}</div>
@@ -104,6 +107,41 @@ export function PortalQuoteDetailPage() {
           </tfoot>
         </table>
       </div>
+
+      <ConfirmDialog
+        open={showAccept}
+        title="Accept and sign"
+        message={`By typing your name you accept quotation ${data.quoteNumber} for ${money(data.totalAmount, data.currency)} on behalf of your organisation.`}
+        confirmLabel={accept.isPending ? 'Signing…' : 'Accept and sign'}
+        confirmDisabled={signedName.trim().length < 2 || !agreed || accept.isPending}
+        onCancel={() => setShowAccept(false)}
+        onConfirm={async () => {
+          try {
+            await accept.mutateAsync({ signedName: signedName.trim(), title: signerTitle.trim() || null, agreed })
+            toast.success('Quote accepted')
+            setShowAccept(false)
+          } catch {
+            // interceptor surfaces the error toast; keep the dialog open
+          }
+        }}
+      >
+        <div className="mt-4 space-y-3">
+          <div>
+            <label htmlFor="quote-sign-name" className="mb-1.5 block text-sm font-medium text-slate-700">Your full name *</label>
+            <input id="quote-sign-name" value={signedName} onChange={(event) => setSignedName(event.target.value)} maxLength={150} autoComplete="name"
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 font-serif text-lg italic outline-none focus:border-[var(--app-primary)]" />
+          </div>
+          <div>
+            <label htmlFor="quote-sign-title" className="mb-1.5 block text-sm font-medium text-slate-700">Your position (optional)</label>
+            <input id="quote-sign-title" value={signerTitle} onChange={(event) => setSignerTitle(event.target.value)} maxLength={120} placeholder="e.g. Facilities Manager"
+              className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
+          </div>
+          <label className="flex items-start gap-2 text-sm text-slate-700">
+            <input type="checkbox" className="mt-1" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
+            I accept this quotation and am authorised to do so. My typed name serves as my signature; the time and the network address are recorded.
+          </label>
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={showReject}

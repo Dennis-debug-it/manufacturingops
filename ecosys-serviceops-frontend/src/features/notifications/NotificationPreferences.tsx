@@ -9,6 +9,7 @@ import { CHANNEL_FIELDS, groupPreferences } from './logic'
 import type { NotificationPreference } from './types'
 import { WhatsAppOptInCard } from '../whatsapp/WhatsAppOptInCard'
 import { staffWhatsAppApi } from '../whatsapp/remindersApi'
+import { WHATSAPP_ENABLED } from '../../shared/config/features'
 
 type Field = (typeof CHANNEL_FIELDS)[number]['field']
 
@@ -135,7 +136,7 @@ function DevicePush() {
 export function MyNotificationSettingsPage() {
   return (
     <div className="space-y-4">
-      <PageHeader title="My notifications" subtitle="Choose how you hear about each event: in the bell, as a push notification, by email or on WhatsApp." />
+      <PageHeader title="My notifications" subtitle={WHATSAPP_ENABLED ? 'Choose how you hear about each event: in the bell, as a push notification, by email or on WhatsApp.' : 'Choose how you hear about each event: in the bell, as a push notification or by email.'} />
       <DevicePush />
       <WhatsAppOptInCard source={staffWhatsAppApi} audience="staff" />
       <NotificationPreferencesList />

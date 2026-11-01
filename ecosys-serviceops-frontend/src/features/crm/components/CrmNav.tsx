@@ -3,7 +3,9 @@ import { cn } from '../../../shared/utils/cn'
 
 const items = [
   { to: '/crm', label: 'Pipeline', end: true },
+  { to: '/crm/follow-ups', label: 'Follow-ups', end: false },
   { to: '/crm/tenders', label: 'RFPs & RFQs', end: false },
+  { to: '/crm/reports', label: 'Reports', end: false },
 ]
 
 /** Section tabs for the sales CRM; deal pages sit under Pipeline. */

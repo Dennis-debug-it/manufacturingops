@@ -19,16 +19,62 @@ namespace Ecosys.Api.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/crm")]
-public sealed class SalesCrmController(
+public sealed partial class SalesCrmController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     IDocumentNumberingService documentNumberingService,
     IAuditLogService auditLogService,
     IUserAccessService userAccessService,
     ILicenseGuardService licenseGuardService,
-    IRolePermissionService rolePermissionService) : TenantAwareControllerBase(tenantContext)
+    IRolePermissionService rolePermissionService,
+    ISalesOwnerResolver salesOwnerResolver,
+    IEmailOutboxService? emailOutbox = null,
+    Microsoft.Extensions.Options.IOptions<PlatformFeatureOptions>? platformFeatures = null) : TenantAwareControllerBase(tenantContext)
 {
     private const string FallbackCurrency = "KES";
+    private Guid? _ownerScope;
+    private bool _ownerScopeLoaded;
+
+    /// <summary>The user this caller is limited to when the workspace shows people only their own deals; null when they see all.</summary>
+    private async Task<Guid?> OwnerScopeAsync(CancellationToken cancellationToken)
+    {
+        if (!_ownerScopeLoaded)
+        {
+            _ownerScope = await SalesVisibility.OwnerScopeAsync(dbContext, tenantContext, TenantId, cancellationToken);
+            _ownerScopeLoaded = true;
+        }
+        return _ownerScope;
+    }
+
+    private async Task EnsureVisibleAsync(Guid? ownerUserId, CancellationToken cancellationToken)
+    {
+        var scope = await OwnerScopeAsync(cancellationToken);
+        if (scope.HasValue && ownerUserId != scope)
+            throw new NotFoundException("Opportunity not found.");
+    }
+
+    private IReadOnlyList<SalesPipelineView>? _pipelines;
+
+    /// <summary>The pipeline a deal is being put in: the one asked for (it must exist and be active), else the default.</summary>
+    private static SalesPipelineView PipelineForWrite(IReadOnlyList<SalesPipelineView> pipelines, Guid? pipelineId)
+    {
+        if (!pipelineId.HasValue)
+            return SalesPipelineCatalog.Default(pipelines);
+        var pipeline = pipelines.FirstOrDefault(x => x.Id == pipelineId) ?? throw new NotFoundException("Pipeline not found.");
+        if (!pipeline.IsActive)
+            throw new BusinessRuleException($"The {pipeline.Name} pipeline is switched off.");
+        return pipeline;
+    }
+
+    /// <summary>The workspace's pipelines (the default is created on first use). Load before making other changes.</summary>
+    private async Task<IReadOnlyList<SalesPipelineView>> PipelinesAsync(CancellationToken cancellationToken) =>
+        _pipelines ??= await SalesPipelineCatalog.LoadAsync(dbContext, TenantId, cancellationToken);
+
+    /// <summary>Deals in this pipeline; deals with no pipeline are in the default one.</summary>
+    private static IQueryable<SalesOpportunity> InPipeline(IQueryable<SalesOpportunity> query, SalesPipelineView pipeline) =>
+        pipeline.IsDefault
+            ? query.Where(x => x.PipelineId == pipeline.Id || x.PipelineId == null)
+            : query.Where(x => x.PipelineId == pipeline.Id);
 
     // ── Pipeline ─────────────────────────────────────────────────────────────
 
@@ -38,26 +84,30 @@ public sealed class SalesCrmController(
         [FromQuery] string? search,
         [FromQuery] Guid? ownerUserId,
         [FromQuery] Guid? clientId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromQuery] Guid? pipelineId = null,
+        [FromQuery] string? field = null,
+        [FromQuery] string? fieldValue = null)
     {
         EnsureCanView();
+        var pipelines = await PipelinesAsync(cancellationToken);
 
         var query = dbContext.SalesOpportunities
             .AsNoTracking()
             .Include(x => x.Client)
             .Where(x => x.TenantId == TenantId);
+        if (pipelineId.HasValue)
+            query = InPipeline(query, SalesPipelineCatalog.For(pipelines, pipelineId));
 
-        if (!string.IsNullOrWhiteSpace(stage))
-        {
-            if (string.Equals(stage, "Open", StringComparison.OrdinalIgnoreCase))
-                query = query.Where(x => x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost);
-            else
-                query = query.Where(x => x.Stage == SalesStages.Normalize(stage));
-        }
+        query = await ApplyStageFilterAsync(query, stage, cancellationToken);
         if (ownerUserId.HasValue)
             query = query.Where(x => x.OwnerUserId == ownerUserId.Value);
+        var scope = await OwnerScopeAsync(cancellationToken);
+        if (scope.HasValue)
+            query = query.Where(x => x.OwnerUserId == scope);
         if (clientId.HasValue)
             query = query.Where(x => x.ClientId == clientId.Value);
+        query = await ApplyFieldFilterAsync(query, field, fieldValue, cancellationToken);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var s = search.Trim().ToLower();
@@ -83,22 +133,34 @@ public sealed class SalesCrmController(
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(rows.Select(x => MapListItem(x.Opportunity, x.WorkOrderCount, x.NextFollowUpAt, converter)).ToList());
+        var stalledAfter = await SalesStalls.ThresholdDaysAsync(dbContext, TenantId, cancellationToken);
+        var defaultPipelineId = SalesPipelineCatalog.Default(pipelines).Id;
+        var scoring = await SalesScoring.LoadAsync(dbContext, TenantId, pipelines, cancellationToken);
+        var now = DateTime.UtcNow;
+        return Ok(rows.Select(x => MapListItem(x.Opportunity, x.WorkOrderCount, x.NextFollowUpAt, converter, stalledAfter) with
+        {
+            PipelineId = x.Opportunity.PipelineId ?? defaultPipelineId,
+            SuggestedProbability = scoring.Score(x.Opportunity, now)?.Probability,
+        }).ToList());
     }
 
     [HttpGet("summary")]
-    public async Task<ActionResult<SalesPipelineSummary>> GetSummary(CancellationToken cancellationToken)
+    public async Task<ActionResult<SalesPipelineSummary>> GetSummary(CancellationToken cancellationToken, [FromQuery] Guid? pipelineId = null)
     {
         EnsureCanView();
+        var pipelines = await PipelinesAsync(cancellationToken);
+        var pipeline = SalesPipelineCatalog.For(pipelines, pipelineId);
 
         var now = DateTime.UtcNow;
         var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var winRateWindowStart = now.AddDays(-90);
         var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
+        var scope = await OwnerScopeAsync(cancellationToken);
 
-        var opportunities = (await dbContext.SalesOpportunities
-            .AsNoTracking()
-            .Where(x => x.TenantId == TenantId)
+        var dealQuery = dbContext.SalesOpportunities.AsNoTracking().Where(x => x.TenantId == TenantId && (scope == null || x.OwnerUserId == scope));
+        if (pipelineId.HasValue)
+            dealQuery = InPipeline(dealQuery, pipeline);
+        var opportunities = (await dealQuery
             .Select(x => new { x.Stage, x.EstimatedValue, x.Currency, x.Probability, x.WonAt, x.LostAt })
             .ToListAsync(cancellationToken))
             .Select(x => new { x.Stage, x.EstimatedValue, x.Currency, x.Probability, x.WonAt, x.LostAt, Value = converter.Convert(x.EstimatedValue, x.Currency) })
@@ -109,22 +171,31 @@ public sealed class SalesCrmController(
         var lostRecently = opportunities.Count(x => x.Stage == SalesStages.Lost && x.LostAt >= winRateWindowStart);
         var wonThisMonth = opportunities.Where(x => x.Stage == SalesStages.Won && x.WonAt >= monthStart).ToList();
 
+        // Closing a deal stops its reminders, so its leftover follow-ups are not overdue work either.
         var overdueFollowUps = await dbContext.SalesActivities
             .AsNoTracking()
-            .CountAsync(x => x.TenantId == TenantId && x.DueAt != null && x.CompletedAt == null && x.DueAt < now, cancellationToken);
+            .CountAsync(x => x.TenantId == TenantId && x.DueAt != null && x.CompletedAt == null && x.DueAt < now
+                && x.Opportunity != null && x.Opportunity.Stage != SalesStages.Won && x.Opportunity.Stage != SalesStages.Lost
+                && (scope == null || x.Opportunity.OwnerUserId == scope), cancellationToken);
+
+        var stalledAfter = await SalesStalls.ThresholdDaysAsync(dbContext, TenantId, cancellationToken);
+        var stalledDeals = stalledAfter <= 0 ? 0 : await dbContext.SalesOpportunities.AsNoTracking()
+            .CountAsync(x => x.TenantId == TenantId && x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost
+                && (scope == null || x.OwnerUserId == scope)
+                && (x.LastActivityAt ?? x.CreatedAt) <= now.AddDays(-stalledAfter), cancellationToken);
 
         var weekAhead = now.AddDays(7);
         var openTenders = await dbContext.SalesTenders
             .AsNoTracking()
-            .Where(x => x.TenantId == TenantId && SalesTenderStatuses.OpenStatuses.Contains(x.Status))
+            .Where(x => x.TenantId == TenantId && SalesTenderStatuses.OpenStatuses.Contains(x.Status) && (scope == null || x.OwnerUserId == scope))
             .Select(x => x.SubmissionDeadline)
             .ToListAsync(cancellationToken);
 
-        var stages = SalesStages.All
+        var stages = pipeline.Stages
             .Select(stage =>
             {
-                var inStage = opportunities.Where(x => x.Stage == stage).ToList();
-                return new SalesStageSummary(stage, inStage.Count, inStage.Sum(x => x.Value ?? 0));
+                var inStage = opportunities.Where(x => x.Stage == stage.Key).ToList();
+                return new SalesStageSummary(stage.Key, inStage.Count, inStage.Sum(x => x.Value ?? 0));
             })
             .ToList();
 
@@ -149,7 +220,9 @@ public sealed class SalesCrmController(
             OpenTenders: openTenders.Count,
             TendersDueThisWeek: openTenders.Count(x => x >= now && x <= weekAhead),
             Stages: stages,
-            UnconvertedCurrencies: unconverted));
+            UnconvertedCurrencies: unconverted,
+            StalledDeals: stalledDeals,
+            StalledAfterDays: stalledAfter));
     }
 
     // ── Owners & currency ────────────────────────────────────────────────────
@@ -166,6 +239,69 @@ public sealed class SalesCrmController(
     /// The reporting currency, the rate in use for every other currency, and the currencies open
     /// deals or tenders use that still have no rate.
     /// </summary>
+    [HttpGet("settings")]
+    public async Task<ActionResult<SalesSettingsResponse>> GetSettings(CancellationToken cancellationToken)
+    {
+        EnsureCanView();
+        return Ok(await LoadSettingsResponseAsync(cancellationToken));
+    }
+
+    /// <summary>Workspace-wide sales settings; admin only, since deal visibility is an access rule.</summary>
+    [HttpPut("settings")]
+    public async Task<ActionResult<SalesSettingsResponse>> UpdateSettings([FromBody] UpdateSalesSettingsRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
+        if (request.DefaultOwnerUserId.HasValue)
+            await SalesCrmAccess.ResolveOwnerNameAsync(dbContext, rolePermissionService, TenantId, request.DefaultOwnerUserId.Value, cancellationToken);
+
+        var settings = await dbContext.TenantSalesSettings.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
+        if (settings is null)
+        {
+            settings = new TenantSalesSettings { TenantId = TenantId };
+            dbContext.TenantSalesSettings.Add(settings);
+        }
+        var previousVisibility = settings.DealVisibility;
+        settings.DefaultOwnerUserId = request.DefaultOwnerUserId;
+        settings.DealVisibility = SalesVisibility.Normalize(request.DealVisibility);
+        settings.CreateRenewalDeals = request.CreateRenewalDeals;
+        if (request.StalledAfterDays is < 0 or > 365)
+            throw new BusinessRuleException("Stalled after must be between 0 (off) and 365 days.");
+        settings.StalledAfterDays = request.StalledAfterDays ?? settings.StalledAfterDays;
+        settings.SendWeeklySummary = request.SendWeeklySummary ?? settings.SendWeeklySummary;
+        if (request.LeadEmailAddress is not null)
+        {
+            var leadAddress = request.LeadEmailAddress.Trim().ToLowerInvariant();
+            if (leadAddress.Length > 0 && !System.Net.Mail.MailAddress.TryCreate(leadAddress, out _))
+                throw new BusinessRuleException($"'{request.LeadEmailAddress}' is not an email address.");
+            settings.LeadEmailAddress = leadAddress.Length == 0 ? null : leadAddress;
+        }
+        if (request.WebFormEnabled.HasValue)
+        {
+            settings.WebFormEnabled = request.WebFormEnabled.Value;
+            if (settings.WebFormEnabled)
+                settings.WebFormKey ??= SalesLeadFormController.NewKey();
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "crm.settings.updated", nameof(TenantSalesSettings), settings.Id.ToString(),
+            $"Sales settings updated: deal visibility {settings.DealVisibility}" + (previousVisibility != settings.DealVisibility ? $" (was {previousVisibility})" : "") + $", renewal deals {(settings.CreateRenewalDeals ? "on" : "off")}.",
+            cancellationToken);
+        return Ok(await LoadSettingsResponseAsync(cancellationToken));
+    }
+
+    private async Task<SalesSettingsResponse> LoadSettingsResponseAsync(CancellationToken cancellationToken)
+    {
+        var settings = await dbContext.TenantSalesSettings.AsNoTracking().SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken)
+            ?? new TenantSalesSettings { TenantId = TenantId };
+        var ownerName = settings.DefaultOwnerUserId is null ? null : await ResolveUserNameAsync(settings.DefaultOwnerUserId.Value, cancellationToken);
+        var intakeAddress = platformFeatures?.Value.EmailIntake == false ? null : await dbContext.EmailIntakeSettings.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.IsEnabled)
+            .Select(x => x.IntakeEmailAddress)
+            .FirstOrDefaultAsync(cancellationToken);
+        return new SalesSettingsResponse(settings.DefaultOwnerUserId, ownerName, SalesVisibility.Normalize(settings.DealVisibility), settings.CreateRenewalDeals, settings.StalledAfterDays, settings.SendWeeklySummary,
+            settings.LeadEmailAddress, intakeAddress, settings.WebFormEnabled, settings.WebFormEnabled ? settings.WebFormKey : null);
+    }
+
     [HttpGet("currency")]
     public async Task<ActionResult<SalesCurrencySettings>> GetCurrencySettings(CancellationToken cancellationToken)
     {
@@ -233,25 +369,32 @@ public sealed class SalesCrmController(
         [FromBody] UpsertSalesOpportunityRequest request, CancellationToken cancellationToken)
     {
         await EnsureCanManageAsync(cancellationToken);
+        var pipeline = PipelineForWrite(await PipelinesAsync(cancellationToken), request.PipelineId);
 
-        var opportunity = new SalesOpportunity { TenantId = TenantId, Stage = SalesStages.Lead };
+        var opportunity = new SalesOpportunity { TenantId = TenantId, Stage = pipeline.FirstOpen.Key, PipelineId = pipeline.Id };
         await ApplyAsync(opportunity, request, cancellationToken);
+        await ProspectClients.LinkAsync(dbContext, opportunity, null, cancellationToken);
+        await LinkDealFieldsContactAsync(opportunity, cancellationToken);
         if (!request.OwnerUserId.HasValue)
         {
             opportunity.OwnerUserId = UserId;
             opportunity.OwnerName = await ResolveUserNameAsync(UserId, cancellationToken);
         }
-        opportunity.Stage = SalesStages.Normalize(request.Stage ?? SalesStages.Lead);
-        if (SalesStages.IsClosed(opportunity.Stage))
+        var stage = request.Stage is null ? pipeline.FirstOpen : pipeline.Find(request.Stage)
+            ?? throw new BusinessRuleException($"'{request.Stage}' is not a stage of the {pipeline.Name} pipeline.");
+        if (stage.IsClosed)
             throw new BusinessRuleException("Create the opportunity first, then mark it won or lost.");
-        opportunity.Probability = request.Probability ?? SalesStages.DefaultProbability(opportunity.Stage);
+        SalesStageRules.EnsureCanEnter(opportunity, pipeline, stage,
+            await SalesStageRules.LoadFactsAsync(dbContext, TenantId, opportunity.Id, cancellationToken));
+        opportunity.Stage = stage.Key;
+        opportunity.Probability = request.Probability ?? stage.Probability;
 
         dbContext.SalesOpportunities.Add(opportunity);
         await AddSystemActivityAsync(opportunity, "Opportunity created.", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "crm.opportunity.created", nameof(SalesOpportunity), opportunity.Id.ToString(), $"Created opportunity '{opportunity.Title}'.", cancellationToken);
 
-        return CreatedAtAction(nameof(GetOpportunity), new { id = opportunity.Id }, await LoadDetailAsync(opportunity.Id, cancellationToken));
+        return CreatedAtAction(nameof(GetOpportunity), new { id = opportunity.Id }, await LoadDetailAsync(opportunity.Id, cancellationToken, checkVisibility: false));
     }
 
     [HttpPut("opportunities/{id:guid}")]
@@ -262,15 +405,33 @@ public sealed class SalesCrmController(
         var opportunity = await LoadAsync(id, cancellationToken);
         var previousOwnerId = opportunity.OwnerUserId;
         var previousOwnerName = opportunity.OwnerName ?? "nobody";
+        var previousClientId = opportunity.ClientId;
+        var pipelines = await PipelinesAsync(cancellationToken);
+        var currentPipeline = SalesPipelineCatalog.For(pipelines, opportunity.PipelineId);
 
         await ApplyAsync(opportunity, request, cancellationToken);
+        if (request.PipelineId.HasValue && request.PipelineId != currentPipeline.Id)
+        {
+            // Moving pipelines keeps the stage where the new pipeline has it (Won and Lost always), else starts it at the first stage.
+            var target = PipelineForWrite(pipelines, request.PipelineId);
+            var stage = target.Find(opportunity.Stage) ?? target.FirstOpen;
+            opportunity.PipelineId = target.Id;
+            if (stage.Key != opportunity.Stage)
+            {
+                opportunity.Stage = stage.Key;
+                opportunity.Probability = stage.Probability;
+            }
+            await AddSystemActivityAsync(opportunity, $"Moved from the {currentPipeline.Name} pipeline to {target.Name} ({stage.Name}).", cancellationToken);
+        }
+        await ProspectClients.LinkAsync(dbContext, opportunity, previousClientId, cancellationToken);
+        await LinkDealFieldsContactAsync(opportunity, cancellationToken);
         if (opportunity.OwnerUserId != previousOwnerId)
             await AddSystemActivityAsync(opportunity, $"Owner changed from {previousOwnerName} to {opportunity.OwnerName}.", cancellationToken);
         if (request.Probability.HasValue)
             opportunity.Probability = request.Probability.Value;
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(await LoadDetailAsync(id, cancellationToken));
+        return Ok(await LoadDetailAsync(id, cancellationToken, checkVisibility: false));
     }
 
     [HttpPost("opportunities/{id:guid}/stage")]
@@ -280,23 +441,32 @@ public sealed class SalesCrmController(
         await EnsureCanManageAsync(cancellationToken);
         var opportunity = await LoadAsync(id, cancellationToken);
 
-        var stage = SalesStages.Normalize(request.Stage);
+        var pipeline = SalesPipelineCatalog.For(await PipelinesAsync(cancellationToken), opportunity.PipelineId);
+        var target = pipeline.Find(request.Stage)
+            ?? throw new BusinessRuleException($"'{request.Stage}' is not a stage of the {pipeline.Name} pipeline.");
+        var stage = target.Key;
         if (stage == opportunity.Stage)
             return Ok(await LoadDetailAsync(id, cancellationToken));
 
         if (stage == SalesStages.Lost && string.IsNullOrWhiteSpace(request.LostReason))
             throw new BusinessRuleException("Give a reason when marking an opportunity as lost.");
+        SalesStageRules.EnsureCanEnter(opportunity, pipeline, target,
+            await SalesStageRules.LoadFactsAsync(dbContext, TenantId, opportunity.Id, cancellationToken));
 
-        var previous = opportunity.Stage;
+        var previous = pipeline.Find(opportunity.Stage)?.Name ?? opportunity.Stage;
         opportunity.Stage = stage;
-        opportunity.Probability = SalesStages.DefaultProbability(stage);
+        opportunity.Probability = target.Probability;
         opportunity.WonAt = stage == SalesStages.Won ? DateTime.UtcNow : null;
         opportunity.LostAt = stage == SalesStages.Lost ? DateTime.UtcNow : null;
         opportunity.LostReason = stage == SalesStages.Lost ? request.LostReason!.Trim() : null;
 
         var note = stage == SalesStages.Lost
             ? $"Stage changed from {previous} to Lost: {opportunity.LostReason}"
-            : $"Stage changed from {previous} to {stage}.";
+            : $"Stage changed from {previous} to {target.Name}.";
+        if (stage == SalesStages.Won && await ProspectClients.PromoteAsync(dbContext, TenantId, opportunity.ClientId, cancellationToken))
+            note += " The prospect is now a client.";
+        if (target.IsClosed && await SalesSequences.StopAsync(dbContext, TenantId, opportunity.Id, $"The deal was {stage.ToLowerInvariant()}.", DateTime.UtcNow, cancellationToken) > 0)
+            note += " Its follow-up sequence stopped.";
         await AddSystemActivityAsync(opportunity, note, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "crm.opportunity.stage_changed", nameof(SalesOpportunity), opportunity.Id.ToString(), note, cancellationToken);
@@ -320,7 +490,7 @@ public sealed class SalesCrmController(
         await AddSystemActivityAsync(opportunity, note, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "crm.opportunity.owner_changed", nameof(SalesOpportunity), opportunity.Id.ToString(), note, cancellationToken);
-        return Ok(await LoadDetailAsync(id, cancellationToken));
+        return Ok(await LoadDetailAsync(id, cancellationToken, checkVisibility: false));
     }
 
     [HttpDelete("opportunities/{id:guid}")]
@@ -365,11 +535,154 @@ public sealed class SalesCrmController(
             LoggedByUserId = UserId,
             LoggedByName = await ResolveUserNameAsync(UserId, cancellationToken),
         };
+        if (request.Latitude.HasValue && request.Longitude.HasValue)
+        {
+            if (request.Latitude is < -90 or > 90 || request.Longitude is < -180 or > 180)
+                throw new BusinessRuleException("That location is not valid.");
+            activity.Latitude = Math.Round(request.Latitude.Value, 6);
+            activity.Longitude = Math.Round(request.Longitude.Value, 6);
+            activity.LocationAccuracyMeters = request.AccuracyMeters is > 0 ? Math.Round(request.AccuracyMeters.Value, 1) : null;
+        }
 
         dbContext.SalesActivities.Add(activity);
         opportunity.LastActivityAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapActivity(activity));
+    }
+
+    /// <summary>
+    /// Every open follow-up across the pipeline, soonest first: the sales to-do list. Follow-ups on
+    /// closed deals are left out, as they are by the reminders. <paramref name="ownerUserId"/> narrows
+    /// it to the deals one person owns, which is who the reminders go to.
+    /// </summary>
+    [HttpGet("follow-ups")]
+    public async Task<ActionResult<IReadOnlyCollection<SalesFollowUpItem>>> ListFollowUps(
+        [FromQuery] Guid? ownerUserId, CancellationToken cancellationToken)
+    {
+        EnsureCanView();
+
+        var query = dbContext.SalesActivities
+            .AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.DueAt != null && x.CompletedAt == null
+                && x.Opportunity != null && x.Opportunity.Stage != SalesStages.Won && x.Opportunity.Stage != SalesStages.Lost);
+        if (ownerUserId.HasValue)
+            query = query.Where(x => x.Opportunity!.OwnerUserId == ownerUserId.Value);
+        var scope = await OwnerScopeAsync(cancellationToken);
+        if (scope.HasValue)
+            query = query.Where(x => x.Opportunity!.OwnerUserId == scope);
+
+        var rows = await query
+            .OrderBy(x => x.DueAt)
+            .Take(500)
+            .Select(x => new SalesFollowUpItem(
+                x.Id, x.Type, x.Summary, x.DueAt!.Value, x.LoggedByName,
+                x.OpportunityId, x.Opportunity!.Title, x.Opportunity.Stage,
+                x.Opportunity.Client != null ? x.Opportunity.Client.ClientName : x.Opportunity.CompanyName ?? x.Opportunity.ContactName,
+                x.Opportunity.OwnerUserId, x.Opportunity.OwnerName))
+            .ToListAsync(cancellationToken);
+        return Ok(rows);
+    }
+
+    /// <summary>
+    /// Quotations sent and still waiting for the client's answer, longest-waiting first: the sales
+    /// chase list. Quotes raised from a deal are listed for anyone who can see the pipeline; other
+    /// quotes are finance documents, so they are listed only for people who can see finance.
+    /// <paramref name="ownerUserId"/> narrows it to the deal owner, or whoever sent a quote with no deal.
+    /// </summary>
+    [HttpGet("quotes-awaiting-answer")]
+    public async Task<ActionResult<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>> ListQuotesAwaitingAnswer(
+        [FromQuery] Guid? ownerUserId, CancellationToken cancellationToken)
+    {
+        EnsureCanView();
+        var includeUnlinked = tenantContext.IsAdmin || tenantContext.HasPermission(PermissionNames.FinanceView);
+
+        var query = dbContext.TenantQuotations
+            .AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.Status == "Sent" && (includeUnlinked || x.SalesOpportunityId != null));
+        var scope = await OwnerScopeAsync(cancellationToken);
+        foreach (var owner in new[] { ownerUserId, scope }.Where(x => x.HasValue))
+            query = query.Where(x => x.SalesOpportunity != null
+                ? x.SalesOpportunity.OwnerUserId == owner
+                : x.SentByUserId == owner);
+
+        var rows = await query
+            .OrderBy(x => x.SentAt ?? x.QuoteDate)
+            .Take(500)
+            .Select(x => new SalesQuoteAwaitingAnswer(
+                x.Id, x.QuoteNumber, x.Subject, x.Client != null ? x.Client.ClientName : null,
+                x.TotalAmount, x.Currency, x.SentAt ?? x.QuoteDate, x.ValidUntil,
+                x.SalesOpportunityId, x.SalesOpportunity != null ? x.SalesOpportunity.Title : null,
+                x.SalesOpportunity != null ? x.SalesOpportunity.OwnerUserId : x.SentByUserId,
+                x.SalesOpportunity != null
+                    ? x.SalesOpportunity.OwnerName
+                    : dbContext.Users.Where(u => u.Id == x.SentByUserId).Select(u => u.FullName).FirstOrDefault()))
+            .ToListAsync(cancellationToken);
+        return Ok(rows);
+    }
+
+    // ── People on the deal ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Adds a person to the deal: an existing contact of the deal's client, or a new one (matched to
+    /// an existing contact by email, then name, so nobody is entered twice).
+    /// </summary>
+    [HttpPost("opportunities/{id:guid}/contacts")]
+    public async Task<ActionResult<SalesOpportunityDetailResponse>> AddContact(Guid id, [FromBody] AddDealContactRequest request, CancellationToken cancellationToken)
+    {
+        await EnsureCanManageAsync(cancellationToken);
+        var opportunity = await LoadAsync(id, cancellationToken);
+        if (!opportunity.ClientId.HasValue)
+            throw new BusinessRuleException("Give the deal a client or prospect first.");
+
+        ClientContact contact;
+        if (request.ContactId.HasValue)
+        {
+            contact = await dbContext.ClientContacts.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.ContactId && x.ClientId == opportunity.ClientId && x.IsActive, cancellationToken)
+                ?? throw new NotFoundException("Contact not found for this client.");
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(request.FullName))
+                throw new BusinessRuleException("Pick a contact or enter a name.");
+            contact = await ClientContacts.FindOrAddAsync(dbContext, TenantId, opportunity.ClientId.Value, request.FullName, request.Email, request.Phone, cancellationToken);
+            contact.JobTitle ??= string.IsNullOrWhiteSpace(request.JobTitle) ? null : request.JobTitle.Trim();
+            if (!string.IsNullOrWhiteSpace(request.Role))
+                contact.Role = ClientContacts.NormalizeRole(request.Role);
+        }
+        if (await LinkContactAsync(opportunity, contact, cancellationToken))
+            await AddSystemActivityAsync(opportunity, $"{contact.FullName} added to the deal.", cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(await LoadDetailAsync(id, cancellationToken));
+    }
+
+    [HttpDelete("opportunities/{id:guid}/contacts/{contactId:guid}")]
+    public async Task<ActionResult<SalesOpportunityDetailResponse>> RemoveContact(Guid id, Guid contactId, CancellationToken cancellationToken)
+    {
+        await EnsureCanManageAsync(cancellationToken);
+        await LoadAsync(id, cancellationToken);
+        var links = await dbContext.SalesOpportunityContacts.Where(x => x.TenantId == TenantId && x.OpportunityId == id && x.ContactId == contactId).ToListAsync(cancellationToken);
+        dbContext.SalesOpportunityContacts.RemoveRange(links);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(await LoadDetailAsync(id, cancellationToken));
+    }
+
+    /// <summary>The contact typed on the deal form (name, email, phone) becomes a contact of its client, on the deal.</summary>
+    private async Task LinkDealFieldsContactAsync(SalesOpportunity opportunity, CancellationToken cancellationToken)
+    {
+        if (!opportunity.ClientId.HasValue || string.IsNullOrWhiteSpace(opportunity.ContactName))
+            return;
+        var contact = await ClientContacts.FindOrAddAsync(dbContext, TenantId, opportunity.ClientId.Value, opportunity.ContactName, opportunity.ContactEmail, opportunity.ContactPhone, cancellationToken);
+        await LinkContactAsync(opportunity, contact, cancellationToken);
+    }
+
+    private async Task<bool> LinkContactAsync(SalesOpportunity opportunity, ClientContact contact, CancellationToken cancellationToken)
+    {
+        var linked = dbContext.SalesOpportunityContacts.Local.Any(x => x.OpportunityId == opportunity.Id && x.ContactId == contact.Id)
+            || await dbContext.SalesOpportunityContacts.AnyAsync(x => x.OpportunityId == opportunity.Id && x.ContactId == contact.Id, cancellationToken);
+        if (linked)
+            return false;
+        dbContext.SalesOpportunityContacts.Add(new SalesOpportunityContact { TenantId = TenantId, OpportunityId = opportunity.Id, ContactId = contact.Id });
+        return true;
     }
 
     [HttpPost("activities/{activityId:guid}/complete")]
@@ -379,6 +692,10 @@ public sealed class SalesCrmController(
         var activity = await dbContext.SalesActivities
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == activityId, cancellationToken)
             ?? throw new NotFoundException("Activity not found.");
+        await EnsureVisibleAsync(await dbContext.SalesOpportunities
+            .Where(x => x.TenantId == TenantId && x.Id == activity.OpportunityId)
+            .Select(x => x.OwnerUserId)
+            .FirstOrDefaultAsync(cancellationToken), cancellationToken);
 
         activity.CompletedAt ??= DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -400,7 +717,15 @@ public sealed class SalesCrmController(
         var opportunity = await LoadAsync(id, cancellationToken);
 
         if (opportunity.ClientId.HasValue)
+        {
+            if (await ProspectClients.PromoteAsync(dbContext, TenantId, opportunity.ClientId, cancellationToken))
+            {
+                await AddSystemActivityAsync(opportunity, "The prospect is now a client.", cancellationToken);
+                await dbContext.SaveChangesAsync(cancellationToken);
+                await auditLogService.LogAsync(TenantId, UserId, "Client created", nameof(Client), opportunity.ClientId.Value.ToString(), $"Prospect from sales opportunity '{opportunity.Title}' made a client.", cancellationToken);
+            }
             return Ok(await LoadDetailAsync(id, cancellationToken));
+        }
 
         var name = opportunity.CompanyName?.Trim();
         if (string.IsNullOrWhiteSpace(name))
@@ -441,6 +766,7 @@ public sealed class SalesCrmController(
         await EnsureCanManageAsync(cancellationToken);
         userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceManageBillableWork);
         var opportunity = await LoadAsync(id, cancellationToken);
+        var dealPipeline = SalesPipelineCatalog.For(await PipelinesAsync(cancellationToken), opportunity.PipelineId);
 
         if (!opportunity.ClientId.HasValue)
             throw new BusinessRuleException("Link or create the client for this opportunity before quoting.");
@@ -478,10 +804,11 @@ public sealed class SalesCrmController(
         quote.TotalAmount = quote.Lines.Sum(x => x.GrandTotal);
 
         dbContext.TenantQuotations.Add(quote);
-        if (SalesStages.Rank(opportunity.Stage) < SalesStages.Rank(SalesStages.Proposal))
+        // Quoting moves an earlier deal to the pipeline's Proposal stage, where it has one.
+        if (dealPipeline.Find(SalesStages.Proposal) is { } proposal && dealPipeline.Rank(opportunity.Stage) < dealPipeline.Rank(proposal.Key) && !SalesStages.IsClosed(opportunity.Stage))
         {
-            opportunity.Stage = SalesStages.Proposal;
-            opportunity.Probability = SalesStages.DefaultProbability(SalesStages.Proposal);
+            opportunity.Stage = proposal.Key;
+            opportunity.Probability = proposal.Probability;
         }
         await AddSystemActivityAsync(opportunity, $"Draft quotation {quote.QuoteNumber} created.", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -508,10 +835,33 @@ public sealed class SalesCrmController(
         await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
     }
 
-    private async Task<SalesOpportunity> LoadAsync(Guid id, CancellationToken cancellationToken) =>
-        await dbContext.SalesOpportunities
+    /// <summary>A stage name, "Open" (not won or lost), or "Stalled" (open and quiet for the stall period).</summary>
+    private async Task<IQueryable<SalesOpportunity>> ApplyStageFilterAsync(IQueryable<SalesOpportunity> query, string? stage, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(stage))
+            return query;
+        if (string.Equals(stage, "Open", StringComparison.OrdinalIgnoreCase))
+            return query.Where(x => x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost);
+        if (string.Equals(stage, "Stalled", StringComparison.OrdinalIgnoreCase))
+        {
+            var days = await SalesStalls.ThresholdDaysAsync(dbContext, TenantId, cancellationToken);
+            var quietSince = DateTime.UtcNow.AddDays(-Math.Max(days, 0));
+            return days <= 0
+                ? query.Where(x => false)
+                : query.Where(x => x.Stage != SalesStages.Won && x.Stage != SalesStages.Lost && (x.LastActivityAt ?? x.CreatedAt) <= quietSince);
+        }
+        var key = stage.Trim();
+        return query.Where(x => x.Stage == key);
+    }
+
+    private async Task<SalesOpportunity> LoadAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var opportunity = await dbContext.SalesOpportunities
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
-        ?? throw new NotFoundException("Opportunity not found.");
+            ?? throw new NotFoundException("Opportunity not found.");
+        await EnsureVisibleAsync(opportunity.OwnerUserId, cancellationToken);
+        return opportunity;
+    }
 
     private async Task ApplyAsync(SalesOpportunity opportunity, UpsertSalesOpportunityRequest request, CancellationToken cancellationToken)
     {
@@ -561,6 +911,9 @@ public sealed class SalesCrmController(
         opportunity.ExpectedCloseDate = request.ExpectedCloseDate.HasValue
             ? DateTime.SpecifyKind(request.ExpectedCloseDate.Value, DateTimeKind.Utc)
             : null;
+        if (request.CustomFields is { Count: > 0 })
+            await SalesCustomFields.ApplyAsync(dbContext, TenantId, opportunity, request.CustomFields,
+                await SalesCustomFields.LoadAsync(dbContext, TenantId, cancellationToken), cancellationToken);
     }
 
     private async Task<string?> ResolveUserNameAsync(Guid userId, CancellationToken cancellationToken) =>
@@ -584,7 +937,8 @@ public sealed class SalesCrmController(
         opportunity.LastActivityAt = DateTime.UtcNow;
     }
 
-    private async Task<SalesOpportunityDetailResponse> LoadDetailAsync(Guid id, CancellationToken cancellationToken)
+    /// <param name="checkVisibility">False only straight after the caller created or handed over the deal, which they may now not own.</param>
+    private async Task<SalesOpportunityDetailResponse> LoadDetailAsync(Guid id, CancellationToken cancellationToken, bool checkVisibility = true)
     {
         var opportunity = await dbContext.SalesOpportunities
             .AsNoTracking()
@@ -593,6 +947,8 @@ public sealed class SalesCrmController(
             .Include(x => x.Activities)
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Opportunity not found.");
+        if (checkVisibility)
+            await EnsureVisibleAsync(opportunity.OwnerUserId, cancellationToken);
 
         var workOrders = await dbContext.WorkOrders
             .AsNoTracking()
@@ -616,6 +972,20 @@ public sealed class SalesCrmController(
             .ToListAsync(cancellationToken);
 
         var converter = await SalesCurrencyConverter.LoadAsync(dbContext, TenantId, cancellationToken);
+        var dealPipeline = SalesPipelineCatalog.For(await PipelinesAsync(cancellationToken), opportunity.PipelineId);
+        var contacts = await dbContext.SalesOpportunityContacts.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.OpportunityId == id && x.Contact!.IsActive)
+            .Select(x => x.Contact!)
+            .OrderByDescending(x => x.IsPrimary).ThenBy(x => x.FullName)
+            .ToListAsync(cancellationToken);
+        var renewalContractNumber = opportunity.RenewalOfContractId is null ? null : await dbContext.Contracts.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.Id == opportunity.RenewalOfContractId)
+            .Select(x => x.ContractNumber)
+            .FirstOrDefaultAsync(cancellationToken);
+        var sourceWorkOrderNumber = opportunity.SourceWorkOrderId is null ? null : await dbContext.WorkOrders.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.Id == opportunity.SourceWorkOrderId)
+            .Select(x => x.WorkOrderNumber)
+            .FirstOrDefaultAsync(cancellationToken);
 
         return new SalesOpportunityDetailResponse(
             opportunity.Id, opportunity.Title, opportunity.Stage,
@@ -631,17 +1001,45 @@ public sealed class SalesCrmController(
             quotations,
             tenders,
             converter.Convert(opportunity.EstimatedValue, opportunity.Currency),
-            converter.ReportingCurrency);
+            converter.ReportingCurrency,
+            opportunity.RenewalOfContractId, renewalContractNumber,
+            opportunity.SourceWorkOrderId, sourceWorkOrderNumber,
+            opportunity.Client?.IsProspect ?? false,
+            contacts.Select(ClientContacts.Map).ToList(),
+            dealPipeline.Id,
+            dealPipeline.Name,
+            await DealFieldValuesAsync(id, dealPipeline.Id, cancellationToken),
+            await StageBlockersAsync(opportunity, dealPipeline, cancellationToken),
+            await DealSequenceAsync(id, cancellationToken),
+            SalesStages.IsClosed(opportunity.Stage) ? null
+                : (await SalesScoring.LoadAsync(dbContext, TenantId, await PipelinesAsync(cancellationToken), cancellationToken)).Score(opportunity, DateTime.UtcNow));
     }
 
-    private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt, SalesCurrencyConverter converter) =>
-        new(x.Id, x.Title, x.Stage, x.ClientId, x.Client?.ClientName, x.CompanyName, x.ContactName,
+    /// <summary>For each stage the deal could move to, what it is still missing (stages with nothing missing are left out).</summary>
+    private async Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> StageBlockersAsync(SalesOpportunity opportunity, SalesPipelineView pipeline, CancellationToken cancellationToken)
+    {
+        if (pipeline.Stages.All(x => x.Required.Count == 0))
+            return new Dictionary<string, IReadOnlyList<string>>();
+        var facts = await SalesStageRules.LoadFactsAsync(dbContext, TenantId, opportunity.Id, cancellationToken);
+        return pipeline.Stages
+            .Where(x => x.Key != SalesStages.Lost)
+            .Select(x => (x.Key, Missing: SalesStageRules.Missing(opportunity, pipeline.Id, SalesStageRules.RequiredFor(pipeline, x.Key), facts)))
+            .Where(x => x.Missing.Count > 0)
+            .ToDictionary(x => x.Key, x => x.Missing);
+    }
+
+    private static SalesOpportunityListItem MapListItem(SalesOpportunity x, int workOrderCount, DateTime? nextFollowUpAt, SalesCurrencyConverter converter, int stalledAfterDays)
+    {
+        var idleDays = SalesStalls.IdleDays(x, DateTime.UtcNow);
+        return new(x.Id, x.Title, x.Stage, x.ClientId, x.Client?.ClientName, x.CompanyName, x.ContactName,
             x.EstimatedValue, x.Currency, x.Probability, x.ExpectedCloseDate, x.OwnerUserId, x.OwnerName,
             x.ServiceType, workOrderCount, nextFollowUpAt, x.LastActivityAt, x.CreatedAt,
-            converter.Convert(x.EstimatedValue, x.Currency));
+            converter.Convert(x.EstimatedValue, x.Currency), x.Client?.IsProspect ?? false,
+            idleDays, SalesStalls.IsStalled(x.Stage, idleDays, stalledAfterDays), x.StageChangedAt);
+    }
 
     private static SalesActivityResponse MapActivity(SalesActivity x) =>
-        new(x.Id, x.OpportunityId, x.Type, x.Summary, x.OccurredAt, x.DueAt, x.CompletedAt, x.LoggedByName);
+        new(x.Id, x.OpportunityId, x.Type, x.Summary, x.OccurredAt, x.DueAt, x.CompletedAt, x.LoggedByName, x.Latitude, x.Longitude, x.LocationAccuracyMeters);
 }
 
 public static class SalesStages
@@ -682,7 +1080,7 @@ public static class SalesActivityTypes
 {
     public const string System = "System";
 
-    private static readonly string[] UserTypes = ["Call", "Email", "Meeting", "SiteVisit", "Note", "FollowUp"];
+    private static readonly string[] UserTypes = ["Call", "Email", "WhatsApp", "Meeting", "SiteVisit", "Note", "FollowUp"];
 
     public static string Normalize(string? type) =>
         UserTypes.FirstOrDefault(x => string.Equals(x, type?.Trim(), StringComparison.OrdinalIgnoreCase)) ?? "Note";
@@ -707,15 +1105,21 @@ public sealed record UpsertSalesOpportunityRequest(
     int? Probability,
     DateTime? ExpectedCloseDate,
     Guid? OwnerUserId,
-    [StringLength(40)] string? Stage = null);
+    [StringLength(40)] string? Stage = null,
+    Guid? PipelineId = null,
+    IReadOnlyDictionary<string, string?>? CustomFields = null);
 
 public sealed record ChangeSalesStageRequest([StringLength(40)] string Stage, [StringLength(500)] string? LostReason);
 
+/// <param name="Latitude">With <paramref name="Longitude"/>: where a site visit was logged from.</param>
 public sealed record CreateSalesActivityRequest(
     [StringLength(40)] string? Type,
     [StringLength(2000)] string Summary,
     DateTime? OccurredAt,
-    DateTime? DueAt);
+    DateTime? DueAt,
+    double? Latitude = null,
+    double? Longitude = null,
+    double? AccuracyMeters = null);
 
 public sealed record SalesOpportunityListItem(
     Guid Id, string Title, string Stage, Guid? ClientId, string? ClientName,
@@ -723,7 +1127,9 @@ public sealed record SalesOpportunityListItem(
     decimal EstimatedValue, string Currency, int Probability, DateTime? ExpectedCloseDate,
     Guid? OwnerUserId, string? OwnerName, string? ServiceType,
     int WorkOrderCount, DateTime? NextFollowUpAt, DateTime? LastActivityAt, DateTime CreatedAt,
-    decimal? ConvertedValue);
+    decimal? ConvertedValue, bool ClientIsProspect = false,
+    int DaysIdle = 0, bool IsStalled = false, DateTime? StageChangedAt = null, Guid? PipelineId = null,
+    int? SuggestedProbability = null);
 
 public sealed record SalesOpportunityDetailResponse(
     Guid Id, string Title, string Stage,
@@ -738,11 +1144,44 @@ public sealed record SalesOpportunityDetailResponse(
     IReadOnlyCollection<SalesLinkedQuotation> Quotations,
     IReadOnlyCollection<SalesLinkedTender> Tenders,
     decimal? ConvertedValue,
-    string ReportingCurrency);
+    string ReportingCurrency,
+    Guid? RenewalOfContractId = null,
+    string? RenewalContractNumber = null,
+    Guid? SourceWorkOrderId = null,
+    string? SourceWorkOrderNumber = null,
+    bool ClientIsProspect = false,
+    IReadOnlyCollection<ClientContactResponse>? Contacts = null,
+    Guid? PipelineId = null,
+    string? PipelineName = null,
+    IReadOnlyList<SalesDealFieldValue>? CustomFields = null,
+    IReadOnlyDictionary<string, IReadOnlyList<string>>? StageBlockers = null,
+    SalesDealSequence? Sequence = null,
+    SalesDealScore? Score = null);
+
+public sealed record AddDealContactRequest(
+    Guid? ContactId,
+    [StringLength(150)] string? FullName,
+    [StringLength(256)] string? Email,
+    [StringLength(50)] string? Phone,
+    [StringLength(120)] string? JobTitle,
+    [StringLength(30)] string? Role);
 
 public sealed record SalesActivityResponse(
     Guid Id, Guid OpportunityId, string Type, string Summary,
-    DateTime OccurredAt, DateTime? DueAt, DateTime? CompletedAt, string? LoggedByName);
+    DateTime OccurredAt, DateTime? DueAt, DateTime? CompletedAt, string? LoggedByName,
+    double? Latitude = null, double? Longitude = null, double? AccuracyMeters = null);
+
+/// <summary>An open follow-up with enough of its deal to act on it from a list.</summary>
+public sealed record SalesFollowUpItem(
+    Guid Id, string Type, string Summary, DateTime DueAt, string? LoggedByName,
+    Guid OpportunityId, string OpportunityTitle, string OpportunityStage, string? PartyName,
+    Guid? OwnerUserId, string? OwnerName);
+
+/// <summary>A sent quotation still waiting for the client. <see cref="SentAt"/> falls back to the quote date for quotes sent before it was recorded.</summary>
+public sealed record SalesQuoteAwaitingAnswer(
+    Guid Id, string QuoteNumber, string? Subject, string? ClientName,
+    decimal TotalAmount, string Currency, DateTime SentAt, DateTime ValidUntil,
+    Guid? OpportunityId, string? OpportunityTitle, Guid? OwnerUserId, string? OwnerName);
 
 public sealed record SalesLinkedWorkOrder(Guid Id, string WorkOrderNumber, string Title, string Status, DateTime CreatedAt);
 
@@ -764,7 +1203,17 @@ public sealed record SalesPipelineSummary(
     decimal? WinRate, int OverdueFollowUps,
     int OpenTenders, int TendersDueThisWeek,
     IReadOnlyCollection<SalesStageSummary> Stages,
-    IReadOnlyCollection<SalesUnconvertedCurrency> UnconvertedCurrencies);
+    IReadOnlyCollection<SalesUnconvertedCurrency> UnconvertedCurrencies,
+    int StalledDeals = 0,
+    int StalledAfterDays = 0);
+
+/// <param name="IntakeEmailAddress">The workspace's intake mailbox (Settings › Email intake), when on: replies to deal emails come back through it.</param>
+public sealed record SalesSettingsResponse(Guid? DefaultOwnerUserId, string? DefaultOwnerName, string DealVisibility, bool CreateRenewalDeals, int StalledAfterDays = 14, bool SendWeeklySummary = true,
+    string? LeadEmailAddress = null, string? IntakeEmailAddress = null, bool WebFormEnabled = false, string? WebFormKey = null);
+
+/// <param name="LeadEmailAddress">Null leaves it; empty clears it.</param>
+public sealed record UpdateSalesSettingsRequest(Guid? DefaultOwnerUserId, [StringLength(20)] string? DealVisibility, bool CreateRenewalDeals = true, int? StalledAfterDays = null, bool? SendWeeklySummary = null,
+    [StringLength(256)] string? LeadEmailAddress = null, bool? WebFormEnabled = null);
 
 public sealed record SalesOwnerOption(Guid Id, string FullName, string Role);
 

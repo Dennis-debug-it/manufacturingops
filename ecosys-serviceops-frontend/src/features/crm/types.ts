@@ -1,10 +1,16 @@
-export const SALES_STAGES = ['Lead', 'Qualified', 'SiteSurvey', 'Proposal', 'Negotiation', 'Won', 'Lost'] as const
-export type SalesStage = (typeof SALES_STAGES)[number]
+import type { ClientContact } from '../clients/types'
+import { WHATSAPP_ENABLED } from '../../shared/config/features'
 
-/** The stages a deal moves through before it is closed; Won and Lost are set from the deal itself. */
+/** The stages of the built-in Sales pipeline; workspaces can add pipelines with their own (Settings › Sales). */
+export const SALES_STAGES = ['Lead', 'Qualified', 'SiteSurvey', 'Proposal', 'Negotiation', 'Won', 'Lost'] as const
+
+/** A stage key. Each pipeline has its own open stages; every pipeline ends in Won and Lost. */
+export type SalesStage = string
+
+/** The open stages of the built-in Sales pipeline. */
 export const OPEN_STAGES: SalesStage[] = ['Lead', 'Qualified', 'SiteSurvey', 'Proposal', 'Negotiation']
 
-export const stageLabels: Record<SalesStage, string> = {
+export const stageLabels: Record<string, string> = {
   Lead: 'Lead',
   Qualified: 'Qualified',
   SiteSurvey: 'Site Survey',
@@ -14,11 +20,125 @@ export const stageLabels: Record<SalesStage, string> = {
   Lost: 'Lost',
 }
 
-export const sourceOptions = ['Referral', 'Website', 'Walk-in', 'Cold call', 'Tender', 'Existing client', 'Other'] as const
+export function isClosedStage(stage: SalesStage) {
+  return stage === 'Won' || stage === 'Lost'
+}
+
+export interface SalesPipelineStage {
+  key: string
+  name: string
+  probability: number
+  isClosed: boolean
+  /** Deals in this stage right now. */
+  dealCount: number
+  /** What a deal needs before entering this stage (and every later one): built-in keys or `cf:<field key>`. */
+  requiredFields?: string[]
+}
+
+export interface SalesPipeline {
+  id: string
+  name: string
+  sortOrder: number
+  /** Only shown when the workspace's plan includes this module; null for every plan. */
+  module: string | null
+  isDefault: boolean
+  isActive: boolean
+  /** False when the workspace's plan does not include `module`. */
+  available: boolean
+  stages: SalesPipelineStage[]
+}
+
+export interface UpsertPipelinePayload {
+  name: string
+  module: string | null
+  isActive: boolean
+  isDefault: boolean
+  /** Open stages in order; Won and Lost are added after them. Omit `key` for a new stage. */
+  stages: Array<{ key?: string | null; name: string; probability: number; requiredFields?: string[] }>
+  sortOrder?: number
+  wonRequiredFields?: string[]
+}
+
+export const DEAL_FIELD_TYPES = ['Text', 'Number', 'Date', 'Dropdown', 'Checkbox'] as const
+export type DealFieldType = (typeof DEAL_FIELD_TYPES)[number]
+
+/** A field the workspace adds to its deals (Settings › Sales). */
+export interface DealField {
+  id: string
+  /** Stable; used in imports, filters and stage rules (as `cf:<key>`). */
+  key: string
+  label: string
+  fieldType: DealFieldType
+  options: string[]
+  helpText: string | null
+  /** Only on deals in this pipeline; null for all. */
+  pipelineId: string | null
+  isActive: boolean
+  sortOrder: number
+  /** Deals with a value for it. */
+  valueCount: number
+}
+
+export interface StageRequirement {
+  key: string
+  label: string
+}
+
+export interface DealFieldsResponse {
+  fields: DealField[]
+  /** Everything a stage can require: built-in checks, then active fields. */
+  requirements: StageRequirement[]
+}
+
+export interface UpsertDealFieldPayload {
+  label: string
+  fieldType: DealFieldType
+  options: string[] | null
+  helpText: string | null
+  pipelineId: string | null
+  isActive: boolean
+  sortOrder?: number
+}
+
+export interface DealFieldValue {
+  fieldId: string
+  key: string
+  label: string
+  fieldType: DealFieldType
+  value: string | null
+}
+
+/** Whether a field shows on deals in a pipeline. */
+export function fieldAppliesTo(field: DealField, pipelineId: string | null | undefined) {
+  return field.isActive && (field.pipelineId === null || field.pipelineId === pipelineId)
+}
+
+/** The pipeline a deal belongs to: the one named, else the default. */
+export function pipelineFor(pipelines: SalesPipeline[] | undefined, pipelineId: string | null | undefined) {
+  const list = pipelines ?? []
+  return list.find((p) => p.id === pipelineId) ?? list.find((p) => p.isDefault) ?? list[0]
+}
+
+/** A stage's display name, looked up in the deal's pipeline (or any pipeline) before falling back to the key. */
+export function stageName(stage: SalesStage, pipelines?: SalesPipeline[], pipelineId?: string | null) {
+  const own = pipelineFor(pipelines, pipelineId)?.stages.find((s) => s.key === stage)
+  const any = own ?? pipelines?.flatMap((p) => p.stages).find((s) => s.key === stage)
+  return any?.name ?? stageLabels[stage] ?? stage
+}
+
+/** Open stages of a pipeline in order; the built-in ones while pipelines load. */
+export function openStagesOf(pipeline: SalesPipeline | undefined): Array<{ key: string; name: string }> {
+  return pipeline
+    ? pipeline.stages.filter((s) => !s.isClosed).map((s) => ({ key: s.key, name: s.name }))
+    : OPEN_STAGES.map((key) => ({ key, name: stageLabels[key] ?? key }))
+}
+
+export const sourceOptions = ['Referral', 'Website', 'Walk-in', 'Cold call', 'Tender', 'Existing client', 'Contract renewal', 'Technician', 'Other'] as const
 
 export const activityTypeOptions = [
   { value: 'Call', label: 'Call' },
   { value: 'Email', label: 'Email' },
+  ...(WHATSAPP_ENABLED ? [{ value: 'WhatsApp', label: 'WhatsApp' } as const] : []),
   { value: 'Meeting', label: 'Meeting' },
   { value: 'SiteVisit', label: 'Site visit' },
   { value: 'Note', label: 'Note' },
@@ -46,6 +166,17 @@ export interface SalesOpportunityListItem {
   createdAt: string
   /** `estimatedValue` in the reporting currency; null when the deal's currency has no rate. */
   convertedValue: number | null
+  /** The deal's client is a prospect, not a customer yet. */
+  clientIsProspect?: boolean
+  /** Whole days since anything was logged on the deal. */
+  daysIdle?: number
+  /** Open and idle for the workspace's stall period (Sales settings). */
+  isStalled?: boolean
+  /** When the deal entered its current stage. */
+  stageChangedAt?: string | null
+  pipelineId?: string | null
+  /** Win chance from history (see DealScore); absent until there is enough of it. */
+  suggestedProbability?: number | null
 }
 
 export interface SalesActivity {
@@ -57,6 +188,120 @@ export interface SalesActivity {
   dueAt: string | null
   completedAt: string | null
   loggedByName: string | null
+  /** Where a site visit was logged from. */
+  latitude?: number | null
+  longitude?: number | null
+  accuracyMeters?: number | null
+}
+
+/** Activity types the system writes (not offered when logging). */
+export const activityTypeLabels: Record<string, string> = {
+  EmailReceived: 'Email received',
+  System: 'Update',
+  SiteVisit: 'Site visit',
+  FollowUp: 'Follow-up',
+}
+
+/** The deal's follow-up sequence (the latest one, running or not). */
+export interface DealSequence {
+  enrollmentId: string
+  sequenceId: string
+  name: string
+  status: 'Active' | 'Completed' | 'Stopped'
+  /** Steps run so far. */
+  nextStep: number
+  stepCount: number
+  nextDueAt: string | null
+  stoppedReason: string | null
+  finishedAt: string | null
+}
+
+/** Win chance from the workspace's own history; absent until there is enough of it. */
+export interface DealScore {
+  probability: number
+  reasons: string[]
+  basedOnDeals: number
+}
+
+export interface SalesSequenceStep {
+  delayDays: number
+  action: 'Task' | 'Email'
+  subject: string | null
+  body: string
+}
+
+export interface SalesSequence {
+  id: string
+  name: string
+  isActive: boolean
+  stopOnReply: boolean
+  runningDeals: number
+  steps: SalesSequenceStep[]
+}
+
+export interface UpsertSequencePayload {
+  name: string
+  isActive: boolean
+  stopOnReply: boolean
+  steps: SalesSequenceStep[]
+}
+
+export interface SalesSavedView {
+  id: string
+  name: string
+  /** The pipeline page's query string, without "?". */
+  query: string
+  isShared: boolean
+  isMine: boolean
+}
+
+export interface DealWhatsAppMessage {
+  id: string
+  conversationId: string
+  contactName: string
+  contactPhone: string
+  direction: 'Inbound' | 'Outbound'
+  body: string
+  sentAt: string
+  status: string
+}
+
+/** wa.me wants the number in international form, digits only; a Kenyan 07… number gets 254. */
+export function whatsAppLink(phone: string, text: string) {
+  let digits = phone.replace(/\D/g, '')
+  if (digits.startsWith('0')) digits = `254${digits.slice(1)}`
+  return `https://wa.me/${digits}?text=${encodeURIComponent(text)}`
+}
+
+/** An open follow-up on an open deal, as listed across the whole pipeline. */
+export interface SalesFollowUpItem {
+  id: string
+  type: string
+  summary: string
+  dueAt: string
+  loggedByName: string | null
+  opportunityId: string
+  opportunityTitle: string
+  opportunityStage: SalesStage
+  partyName: string | null
+  ownerUserId: string | null
+  ownerName: string | null
+}
+
+/** A sent quotation still waiting for the client; `sentAt` falls back to the quote date for older quotes. */
+export interface SalesQuoteAwaitingAnswer {
+  id: string
+  quoteNumber: string
+  subject: string | null
+  clientName: string | null
+  totalAmount: number
+  currency: string
+  sentAt: string
+  validUntil: string
+  opportunityId: string | null
+  opportunityTitle: string | null
+  ownerUserId: string | null
+  ownerName: string | null
 }
 
 export interface SalesOpportunityDetail {
@@ -92,6 +337,23 @@ export interface SalesOpportunityDetail {
   tenders: Array<{ id: string; type: TenderType; reference: string | null; title: string; status: TenderStatus; submissionDeadline: string }>
   convertedValue: number | null
   reportingCurrency: string
+  /** Set on a renewal deal: the contract it renews. */
+  renewalOfContractId?: string | null
+  renewalContractNumber?: string | null
+  /** Set on a lead a technician flagged from a job. */
+  sourceWorkOrderId?: string | null
+  sourceWorkOrderNumber?: string | null
+  clientIsProspect?: boolean
+  /** People at the client involved in this deal. */
+  contacts?: ClientContact[]
+  pipelineId?: string | null
+  pipelineName?: string | null
+  /** Values for the deal fields that show in its pipeline. */
+  customFields?: DealFieldValue[]
+  /** Stage key → what the deal still lacks to enter it; stages it can enter are left out. */
+  stageBlockers?: Record<string, string[]>
+  sequence?: DealSequence | null
+  score?: DealScore | null
 }
 
 /** Every value is in `reportingCurrency`; deals in a currency with no rate are listed in `unconvertedCurrencies` instead. */
@@ -108,6 +370,144 @@ export interface SalesPipelineSummary {
   tendersDueThisWeek: number
   stages: Array<{ stage: SalesStage; count: number; value: number }>
   unconvertedCurrencies: Array<{ currency: string; count: number; value: number }>
+  /** Open deals with nothing logged for `stalledAfterDays` (0 = stall alerts off). */
+  stalledDeals?: number
+  stalledAfterDays?: number
+}
+
+/** `key` is 'overdue', 'later', 'none' or the month as yyyy-MM. */
+export interface SalesForecastBucket {
+  key: string
+  month: string | null
+  count: number
+  value: number
+  weightedValue: number
+}
+
+export interface SalesOwnerPerformance {
+  ownerUserId: string | null
+  ownerName: string | null
+  openCount: number
+  openValue: number
+  weightedValue: number
+  wonCount: number
+  wonValue: number
+  lostCount: number
+  winRate: number | null
+  /** Target for the period (pro rata for part months); null when none is set. */
+  targetValue?: number | null
+}
+
+export interface SalesStageFunnelRow {
+  stage: SalesStage
+  entered: number
+  movedOn: number
+  won: number
+  movedOnRate: number | null
+  winRateFromHere: number | null
+  averageDaysInStage: number | null
+  nowInStage: number
+  averageDaysNowInStage: number | null
+  stageName?: string | null
+}
+
+export interface SalesTargetRow {
+  /** Null for the team's own target. */
+  ownerUserId: string | null
+  /** First day of the month. */
+  month: string
+  amount: number
+}
+
+export interface SalesTargets {
+  year: number
+  reportingCurrency: string
+  owners: SalesOwnerOption[]
+  targets: SalesTargetRow[]
+  canEdit: boolean
+}
+
+export interface SalesSourcePerformance {
+  source: string | null
+  newDeals: number
+  wonCount: number
+  wonValue: number
+  lostCount: number
+  winRate: number | null
+}
+
+/** Results over a period, every value in `reportingCurrency`; `from` and `to` are inclusive days. */
+export interface SalesReport {
+  reportingCurrency: string
+  from: string
+  to: string
+  newDeals: number
+  wonCount: number
+  wonValue: number
+  lostCount: number
+  lostValue: number
+  winRate: number | null
+  averageWonValue: number | null
+  averageDaysToWin: number | null
+  openCount: number
+  openValue: number
+  weightedValue: number
+  forecast: SalesForecastBucket[]
+  owners: SalesOwnerPerformance[]
+  sources: SalesSourcePerformance[]
+  lostReasons: Array<{ reason: string; count: number; value: number }>
+  tenders: { submitted: number; won: number; lost: number; noBid: number; cancelled: number; winRate: number | null }
+  /** Deals in the report with no exchange rate: counted, but left out of every value. */
+  unconvertedDeals: number
+  funnel?: SalesStageFunnelRow[]
+  /** Target for the period; null when none is set. */
+  targetValue?: number | null
+  pipelineId?: string | null
+  pipelineName?: string | null
+}
+
+export type DealVisibility = 'All' | 'Own'
+
+export interface SalesSettings {
+  /** Gets system-created deals when no better owner is found; null picks automatically. */
+  defaultOwnerUserId: string | null
+  defaultOwnerName: string | null
+  dealVisibility: DealVisibility
+  createRenewalDeals: boolean
+  /** An open deal with nothing logged for this many days is stalled; 0 turns it off. */
+  stalledAfterDays: number
+  /** Monday-morning email of each person's past week (and the team's for managers). */
+  sendWeeklySummary: boolean
+  /** Mail to this address (an alias of the intake mailbox) becomes a lead. */
+  leadEmailAddress?: string | null
+  /** The intake mailbox, when on: replies to deal emails come back through it. */
+  intakeEmailAddress?: string | null
+  webFormEnabled?: boolean
+  /** The key in the website form's public link; null while the form is off. */
+  webFormKey?: string | null
+}
+
+export interface SalesAssignmentRule {
+  id: string
+  name: string
+  sortOrder: number
+  isActive: boolean
+  source: string | null
+  serviceType: string | null
+  locationContains: string | null
+  method: 'Fixed' | 'RoundRobin'
+  owners: Array<{ id: string; fullName: string }>
+}
+
+export interface UpsertAssignmentRulePayload {
+  name: string
+  isActive: boolean
+  source: string | null
+  serviceType: string | null
+  locationContains: string | null
+  method: 'Fixed' | 'RoundRobin'
+  ownerUserIds: string[]
+  sortOrder?: number
 }
 
 export interface SalesOwnerOption {
@@ -149,6 +549,10 @@ export interface UpsertOpportunityPayload {
   expectedCloseDate: string | null
   ownerUserId: string | null
   stage?: SalesStage
+  /** Omit for the default pipeline (new deals) or to keep the current one. */
+  pipelineId?: string | null
+  /** By field key; an empty value clears it, a key left out keeps its value. */
+  customFields?: Record<string, string | null>
 }
 
 /** Display name for whoever the deal is with: the linked client, else the prospect. */

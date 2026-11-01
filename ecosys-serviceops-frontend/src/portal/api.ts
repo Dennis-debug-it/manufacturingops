@@ -247,6 +247,10 @@ export interface PortalQuotationDetail extends PortalQuotationListItem {
   taxAmount: number
   rejectionReason: string | null
   lines: PortalQuotationLine[]
+  /** The client's signed acceptance: the name typed as the signature, and when. */
+  acceptedByName?: string | null
+  acceptedByTitle?: string | null
+  acceptedAt?: string | null
 }
 
 export function usePortalQuotations() {
@@ -264,7 +268,8 @@ export function usePortalQuotation(id: string | undefined) {
 export function useAcceptPortalQuotation(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => portalApi.post<PortalQuotationDetail>(endpoints.portal.quotationAccept(id)),
+    mutationFn: (signature: { signedName: string; title: string | null; agreed: boolean }) =>
+      portalApi.post<PortalQuotationDetail>(endpoints.portal.quotationAccept(id), signature),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['portal', 'quotations'] })
       void queryClient.invalidateQueries({ queryKey: ['portal', 'dashboard'] })

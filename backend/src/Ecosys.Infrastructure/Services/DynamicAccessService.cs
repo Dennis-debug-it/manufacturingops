@@ -92,7 +92,7 @@ internal static class CapabilityRoleDefaults
     // Manager member; the capability alone opens nothing else.
     private static readonly string[] FieldSupervisors = [PermissionNames.ProjectsMusterMark];
 
-    public static IReadOnlyList<string> For(string? role) => [.. ProjectDefaults(role), .. ActivityDefaults(role)];
+    public static IReadOnlyList<string> For(string? role) => [.. ProjectDefaults(role), .. ActivityDefaults(role), .. CrmDefaults(role)];
 
     private static IReadOnlyList<string> ProjectDefaults(string? role)
     {
@@ -103,6 +103,13 @@ internal static class CapabilityRoleDefaults
         if (string.Equals(role, AppRoles.Technician, StringComparison.OrdinalIgnoreCase)) return FieldSupervisors;
         return [];
     }
+
+    /// <summary>
+    /// Sales managers see the whole pipeline even when the workspace limits reps to their own deals,
+    /// as in HubSpot's "all records" vs "owned only" access. Admin is granted everything elsewhere.
+    /// </summary>
+    private static IReadOnlyList<string> CrmDefaults(string? role) =>
+        string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase) ? [PermissionNames.CrmViewAll] : [];
 
     /// <summary>
     /// Every staff role sees meetings and action items and can organise its own; managers organise any

@@ -162,6 +162,19 @@ public sealed class WhatsAppNotificationTests
     }
 
     [Fact]
+    public async Task PlatformSwitchOff_QueuesNothing()
+    {
+        var harness = await Harness.CreateAsync();
+        await harness.OptInUserAsync(harness.Alice, AliceNumber);
+        var off = Microsoft.Extensions.Options.Options.Create(new PlatformFeatureOptions { WhatsApp = false });
+        var result = await new WhatsAppOutbox(harness.NewContext(), harness.Options, NullLogger<WhatsAppOutbox>.Instance, off)
+            .QueueAsync(new WhatsAppQueueRequest(harness.TenantId, "project.muster-missing", AliceNumber, "Alice",
+                new Dictionary<string, string?> { ["ProjectName"] = "Westlands Mall", ["WorkDate"] = "2026-10-21" }));
+        Assert.Equal(WhatsAppQueueOutcome.FeatureOff, result.Outcome);
+        Assert.Empty(await harness.NewContext().WhatsAppOutboxMessages.IgnoreQueryFilters().ToListAsync());
+    }
+
+    [Fact]
     public async Task Stop_OptsTheNumberOutForEveryTenant_AndStartRestoresIt()
     {
         var harness = await Harness.CreateAsync();

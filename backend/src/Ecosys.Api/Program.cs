@@ -54,6 +54,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<IServiceOpsNotifier, SignalRServiceOpsNotifier>();
+builder.Services.AddScoped<ISalesInboundEmailHandler, Ecosys.Api.Controllers.SalesInboundEmailHandler>();
 builder.Services.AddScoped<IInboxNotifier, SignalRInboxNotifier>();
 // Singleton: the per-tenant throttle that calls it lives for the whole process.
 builder.Services.AddSingleton<IDashboardNotifier, SignalRDashboardNotifier>();
@@ -264,6 +265,20 @@ app.Use(async (context, next) =>
     headers["X-Frame-Options"] = "DENY";
     headers["Referrer-Policy"] = "no-referrer";
     headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
+    await next();
+});
+
+// Features switched off for the whole platform (Features section) refuse changes through their APIs.
+app.Use(async (context, next) =>
+{
+    var refusal = context.RequestServices.GetRequiredService<Microsoft.Extensions.Options.IOptions<PlatformFeatureOptions>>().Value
+        .RefusalFor(context.Request.Method, context.Request.Path.Value ?? string.Empty);
+    if (refusal is not null)
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        await context.Response.WriteAsJsonAsync(new { message = refusal, errorCode = "FEATURE_OFF" });
+        return;
+    }
     await next();
 });
 

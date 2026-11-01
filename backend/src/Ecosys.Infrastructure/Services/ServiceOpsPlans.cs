@@ -34,6 +34,9 @@ public static class ServiceOpsPlans
 
     public static readonly IReadOnlyList<string> Editions = [Essentials, Professional, Enterprise];
 
+    /// <summary>Every module a sales pipeline can be tied to.</summary>
+    public static readonly IReadOnlyList<string> AllModules = [Operations, Finance, Maintenance, Inventory, Projects, Advanced, EnterpriseModule];
+
     public static bool IsEdition(string? code) => code is Essentials or Professional or Enterprise;
 
     public static string DisplayName(string code) => code switch
@@ -122,7 +125,7 @@ public static class ServiceOpsPlans
     public static readonly IReadOnlySet<string> SharedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "AccessControl", "ActionItems", "Activities", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "Calendar", "CalendarFeed", "ClientPortalContacts",
-        "Clients", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "Notifications", "PortalAuth", "PortalKnowledge",
+        "Clients", "ClientContacts", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "Notifications", "PortalAuth", "PortalKnowledge",
         "PublicWorkOrder", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
         // WhatsApp reminders (Release 3 design 6): every edition, gated by the WhatsApp add-on.
@@ -137,7 +140,7 @@ public static class ServiceOpsPlans
     /// </summary>
     public static readonly IReadOnlySet<string> CrmControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "SalesCrm", "SalesTenders"
+        "SalesCrm", "SalesTenders", "SalesReports", "TechnicianSalesLeads", "SalesLeadForm"
     };
 
     /// <summary>Controllers whose module requirement is decided per route inside <see cref="RequiredModules"/>.</summary>

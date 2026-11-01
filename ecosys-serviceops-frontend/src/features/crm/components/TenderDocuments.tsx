@@ -4,7 +4,7 @@ import { Download, FileText, Trash2, Upload } from 'lucide-react'
 import { apiClient } from '../../../shared/api/apiClient'
 import { useAuth } from '../../../shared/hooks/useAuth'
 import { formatDate } from '../../../shared/utils/dates'
-import { useDeleteTenderDocument, useTenderDocuments, useUploadTenderDocument } from '../api'
+import { useDeleteTenderDocument, useTenderDocuments, useUploadTenderDocument, type SalesDocumentOwner } from '../api'
 
 const ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png,.webp'
 
@@ -14,12 +14,15 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-/** The tender pack, clarifications and the bid as sent — stored with the shared attachments (5 MB each). */
-export function TenderDocuments({ tenderId, canManage }: { tenderId: string; canManage: boolean }) {
+/**
+ * Files on an RFP/RFQ (the tender pack, clarifications, the bid as sent) or on a deal (drawings,
+ * photos, specifications) — stored with the shared attachments (5 MB each).
+ */
+export function TenderDocuments({ tenderId, canManage, entityType = 'SalesTender', emptyText }: { tenderId: string; canManage: boolean; entityType?: SalesDocumentOwner; emptyText?: string }) {
   const { user } = useAuth()
-  const { data: documents, isLoading } = useTenderDocuments(tenderId)
-  const upload = useUploadTenderDocument(tenderId)
-  const remove = useDeleteTenderDocument(tenderId)
+  const { data: documents, isLoading } = useTenderDocuments(tenderId, entityType)
+  const upload = useUploadTenderDocument(tenderId, entityType)
+  const remove = useDeleteTenderDocument(tenderId, entityType)
   const inputRef = useRef<HTMLInputElement>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
@@ -63,7 +66,7 @@ export function TenderDocuments({ tenderId, canManage }: { tenderId: string; can
         </>
       ) : null}
       {isLoading ? <p className="text-sm text-slate-500">Loading…</p> : null}
-      {!isLoading && (documents ?? []).length === 0 ? <p className="text-sm text-slate-500">No documents yet. Upload the tender pack and your submission here.</p> : null}
+      {!isLoading && (documents ?? []).length === 0 ? <p className="text-sm text-slate-500">{emptyText ?? 'No documents yet. Upload the tender pack and your submission here.'}</p> : null}
       <ul className="divide-y divide-slate-100">
         {(documents ?? []).map((doc) => (
           <li key={doc.id} className="flex items-center gap-3 py-2.5 text-sm">

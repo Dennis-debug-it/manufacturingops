@@ -68,7 +68,7 @@ public sealed class PortalSettingsEnforcementTests
         await SaveSettingsAsync(db, new { allowQuoteResponses = false });
         var controller = CreateController(db);
 
-        await Assert.ThrowsAsync<ForbiddenException>(() => controller.AcceptQuotation(quote.Id, CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => controller.AcceptQuotation(quote.Id, new PortalAcceptQuotationRequest("Amina Otieno", null, true), CancellationToken.None));
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.RejectQuotation(quote.Id, new PortalRejectQuotationRequest("No"), CancellationToken.None));
         Assert.Equal("Sent", (await db.TenantQuotations.SingleAsync()).Status);
     }

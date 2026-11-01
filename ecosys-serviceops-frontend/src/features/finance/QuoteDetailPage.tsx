@@ -9,7 +9,7 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
-import { formatDate } from '../../shared/utils/dates'
+import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { apiClient } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
@@ -99,7 +99,7 @@ export function QuoteDetailPage() {
             {canManage ? (
             <>
               {quote.status === 'Draft' ? (
-                <button type="button" onClick={() => run('Quote sent', () => sendQuote.mutateAsync(undefined))} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Send</button>
+                <button type="button" onClick={() => void sendQuote.mutateAsync(undefined).then((result) => toast.success(result.approvalStatus === 'Pending' && result.status === 'Draft' ? 'Sent for approval. You can send it to the client once it is approved.' : 'Quote sent')).catch(() => undefined)} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Send</button>
               ) : null}
               {quote.status === 'Sent' ? (
                 <>
@@ -174,6 +174,26 @@ export function QuoteDetailPage() {
       />
 
       <FinanceWorkspaceNav />
+
+      {quote.acceptedByName && quote.acceptedAt ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          Accepted in the client portal and signed by <span className="font-semibold">{quote.acceptedByName}</span>
+          {quote.acceptedByTitle ? `, ${quote.acceptedByTitle}` : ''} on {formatDateTime(quote.acceptedAt)}
+          {quote.acceptedFromIp ? <span className="text-emerald-800/80"> from {quote.acceptedFromIp}</span> : null}.
+        </div>
+      ) : null}
+
+      {quote.status === 'Draft' && quote.approvalStatus ? (
+        <div className={`rounded-xl border px-4 py-3 text-sm ${quote.approvalStatus === 'Rejected' ? 'border-rose-200 bg-rose-50 text-rose-900' : quote.approvalStatus === 'Pending' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>
+          {quote.approvalStatus === 'Pending' ? 'Waiting for approval before it can be sent to the client.' : null}
+          {quote.approvalStatus === 'Rejected' ? 'Approval was declined. Revise the quote and send it again to ask for approval.' : null}
+          {quote.approvalStatus === 'Approved'
+            ? quote.approvedAmount != null && quote.approvedAmount !== quote.totalAmount
+              ? `Approved at ${formatCurrency(quote.approvedAmount, quote.currency)}; the total has changed since, so sending asks for approval again.`
+              : 'Approved. Ready to send to the client.'
+            : null}
+        </div>
+      ) : null}
 
       <SummarySection title="Quote Overview" description="Client, validity, and totals.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">

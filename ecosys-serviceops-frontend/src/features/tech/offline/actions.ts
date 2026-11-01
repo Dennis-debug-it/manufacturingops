@@ -95,6 +95,8 @@ export function useTechActions() {
           },
           meta: { materialName: usage.materialName, unitOfMeasure: usage.unitOfMeasure },
         }),
+      flagSalesLead: (job: Job, note: string) =>
+        onJob(job, 'sales-lead', 'Sales lead flagged', { method: 'POST', url: endpoints.technicianJobs.salesLead(job.id), body: { note } }),
       /** Optionally against a project site the technician is on (shown on their clock while it syncs). */
       clockIn: (site?: Site | null) =>
         run({

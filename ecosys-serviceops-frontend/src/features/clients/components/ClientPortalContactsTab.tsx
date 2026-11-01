@@ -11,6 +11,7 @@ import { formatDateTime } from '../../../shared/utils/dates'
 import { ContactWhatsAppDrawer } from '../../whatsapp/ContactWhatsAppDrawer'
 import { formatWhatsAppNumber } from '../../whatsapp/reminderLogic'
 import { staffWhatsAppApi, useWhatsAppMyStatus } from '../../whatsapp/remindersApi'
+import { WHATSAPP_ENABLED } from '../../../shared/config/features'
 import {
   portalLoginUrl,
   useClientPortalContacts,
@@ -237,7 +238,7 @@ export function ClientPortalContactsTab({ clientId }: { clientId: string }) {
   const { data, isLoading, isError } = useClientPortalContacts(clientId)
   const [showInvite, setShowInvite] = useState(false)
   // WhatsApp updates only when the workspace has the feature (Release 3 design 4.2).
-  const whatsApp = useWhatsAppMyStatus(staffWhatsAppApi).data?.featureEnabled ?? false
+  const whatsApp = (useWhatsAppMyStatus(staffWhatsAppApi).data?.featureEnabled ?? false) && WHATSAPP_ENABLED
   // Rendered outside the table: inside a row the drawer was clipped by the table's scroll container.
   const [whatsAppContact, setWhatsAppContact] = useState<ClientPortalContact | null>(null)
 

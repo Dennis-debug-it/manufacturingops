@@ -56,7 +56,8 @@ internal sealed partial class EmailIntakeService(
     IEmailTemplateService emailTemplateService,
     IEmailOutboxService emailOutboxService,
     IAuditLogService auditLogService,
-    ILogger<EmailIntakeService> logger) : IEmailIntakeService
+    ILogger<EmailIntakeService> logger,
+    ISalesInboundEmailHandler? salesInbound = null) : IEmailIntakeService
 {
     private const int MaxMessagesPerRead = 25;
     /// <summary>Automatic replies to one address per hour, so two auto-responders can't ping-pong.</summary>
@@ -217,6 +218,19 @@ internal sealed partial class EmailIntakeService(
         if (await IsOwnAddressAsync(settings, address, cancellationToken))
         {
             return await RecordAsync(settings, message, EmailIntakeOutcomes.Ignored, "Sent from this workspace's own address.", null, null, false, cancellationToken);
+        }
+
+        // Sales mail first: a reply on a deal, or mail to the workspace's lead address, is not a service request.
+        if (salesInbound is not null)
+        {
+            var sales = await salesInbound.TryHandleAsync(tenantId, new SalesInboundEmail(
+                address, from.Name,
+                message.To.Mailboxes.Concat(message.Cc.Mailboxes).Select(x => x.Address.Trim().ToLowerInvariant()).ToList(),
+                string.IsNullOrWhiteSpace(message.Subject) ? "(no subject)" : message.Subject.Trim(),
+                StripQuotedReply(BodyText(message)),
+                message.Date == DateTimeOffset.MinValue ? DateTime.UtcNow : message.Date.UtcDateTime), cancellationToken);
+            if (sales is not null)
+                return await RecordAsync(settings, message, sales.Outcome, sales.Detail, null, sales.ClientId, false, cancellationToken);
         }
 
         var canAutoReply = settings.AutoReplyEnabled
@@ -402,7 +416,7 @@ internal sealed partial class EmailIntakeService(
         if (portalContact.HasValue) return (portalContact, null);
 
         var client = await dbContext.Clients.IgnoreQueryFilters().AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.IsActive && x.Email != null && x.Email.ToLower() == address)
+            .Where(x => x.TenantId == tenantId && x.IsActive && !x.IsProspect && x.Email != null && x.Email.ToLower() == address)
             .Select(x => (Guid?)x.Id)
             .FirstOrDefaultAsync(cancellationToken);
         if (client.HasValue) return (client, null);
@@ -418,7 +432,7 @@ internal sealed partial class EmailIntakeService(
         if (string.IsNullOrWhiteSpace(domain) || FreeMailDomains.Contains(domain)) return (null, null);
         var suffix = "@" + domain;
         var byDomain = await dbContext.Clients.IgnoreQueryFilters().AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.IsActive && x.Email != null && x.Email.ToLower().EndsWith(suffix))
+            .Where(x => x.TenantId == tenantId && x.IsActive && !x.IsProspect && x.Email != null && x.Email.ToLower().EndsWith(suffix))
             .Select(x => x.Id)
             .Union(dbContext.ClientPortalUsers.IgnoreQueryFilters()
                 .Where(x => x.TenantId == tenantId && x.IsActive && x.Email.ToLower().EndsWith(suffix))
@@ -631,12 +645,20 @@ internal sealed partial class EmailIntakeService(
 }
 
 /// <summary>Checks the connected mailboxes every minute.</summary>
-public sealed class EmailIntakeWorker(IServiceScopeFactory serviceScopeFactory, ILogger<EmailIntakeWorker> logger) : BackgroundService
+public sealed class EmailIntakeWorker(
+    IServiceScopeFactory serviceScopeFactory,
+    ILogger<EmailIntakeWorker> logger,
+    Microsoft.Extensions.Options.IOptions<PlatformFeatureOptions>? features = null) : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(60);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (features?.Value.EmailIntake == false)
+        {
+            logger.LogInformation("Email intake is switched off (Features:EmailIntake); no mailboxes are read.");
+            return;
+        }
         logger.LogInformation("Email intake worker started.");
         while (!stoppingToken.IsCancellationRequested)
         {

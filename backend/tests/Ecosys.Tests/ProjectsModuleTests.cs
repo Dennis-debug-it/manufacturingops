@@ -170,7 +170,7 @@ public sealed partial class ProjectsModuleTests
     // ── Capabilities ──────────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData(AppRoles.Manager, "projects.view,projects.manage,projects.variations.submit,projects.variations.approve,projects.close,projects.muster.mark,projects.financials.view,projects.financials.manage,activities.view,activities.manage,calendar.team")]
+    [InlineData(AppRoles.Manager, "projects.view,projects.manage,projects.variations.submit,projects.variations.approve,projects.close,projects.muster.mark,projects.financials.view,projects.financials.manage,activities.view,activities.manage,calendar.team,crm.view_all")]
     [InlineData(AppRoles.Viewer, "projects.view,activities.view")]
     [InlineData(AppRoles.Dispatcher, "projects.view,activities.view,calendar.team")]
     [InlineData(AppRoles.FinanceUser, "projects.view,projects.financials.view,projects.financials.manage,activities.view")]

@@ -1,4 +1,5 @@
 using Ecosys.Domain.Entities;
+using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
@@ -132,6 +133,163 @@ public sealed class SalesReminderTests
     }
 
     [Fact]
+    public async Task UnansweredQuote_IsChasedAfterThreeDays_AndAgainBeforeItExpires()
+    {
+        await using var db = CreateDbContext();
+        var fixture = await SeedAsync(db);
+        var client = new Client { TenantId = fixture.Tenant.Id, ClientName = "Kilele Hotel" };
+        var sender = new User { TenantId = fixture.Tenant.Id, FullName = "Finance Clerk", Email = "clerk@acme.test", HasEmail = true, PasswordHash = "hash", Role = AppRoles.Finance, IsActive = true };
+        db.AddRange(client, sender);
+        TenantQuotation Quote(string number, double sentDaysAgo, double validForDays, Guid? dealId = null, string status = "Sent")
+        {
+            var quote = new TenantQuotation
+            {
+                TenantId = fixture.Tenant.Id, ClientId = client.Id, QuoteNumber = number, Status = status, TotalAmount = 250_000m, Currency = "KES",
+                QuoteDate = Now.AddDays(-sentDaysAgo), SentAt = Now.AddDays(-sentDaysAgo), ValidUntil = Now.AddDays(validForDays),
+                SalesOpportunityId = dealId, SentByUserId = sender.Id,
+            };
+            db.TenantQuotations.Add(quote);
+            return quote;
+        }
+        Quote("QT-1", sentDaysAgo: 4, validForDays: 20, dealId: fixture.Deal.Id);
+        Quote("QT-2", sentDaysAgo: 1, validForDays: 20);
+        Quote("QT-3", sentDaysAgo: 4, validForDays: 20, status: "Accepted");
+        await db.SaveChangesAsync();
+        var push = new RecordingPushQueue();
+
+        // Only the deal's quote has waited long enough; it goes to the deal owner, not the sender.
+        Assert.Equal(1, (await CreateService(db, push).RunAsync(Now)).QuoteReminders);
+        var first = Assert.Single(push.Sent);
+        Assert.Equal([fixture.Owner.Id], first.UserIds);
+        Assert.Contains("QT-1", first.Message.Title);
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddHours(1))).QuoteReminders);
+
+        // Two days before expiry each gets its final nudge; the quote with no deal goes to its sender.
+        Assert.Equal(2, (await CreateService(db, push).RunAsync(Now.AddDays(18.5))).QuoteReminders);
+        Assert.Contains(push.Sent, x => x.Message.Title.Contains("QT-2") && x.Message.Title.Contains("expires") && x.UserIds.Contains(sender.Id));
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddDays(19))).QuoteReminders);
+
+        var email = await db.EmailOutboxMessages.FirstAsync(x => x.EventKey == SalesReminderKeys.QuoteAwaitingAnswer);
+        Assert.Contains("Kilele Hotel", email.HtmlBody);
+    }
+
+    [Fact]
+    public async Task ContractInItsNoticePeriod_GetsARenewalDeal_ThatFollowsTheContract()
+    {
+        await using var db = CreateDbContext();
+        var fixture = await SeedAsync(db);
+        var client = new Client { TenantId = fixture.Tenant.Id, ClientName = "Kilele Hotel" };
+        db.Clients.Add(client);
+        Contract AddContract(string number, int endsInDays, int noticeDays = 60, ContractStatus status = ContractStatus.ExpiringSoon)
+        {
+            var contract = new Contract
+            {
+                TenantId = fixture.Tenant.Id, ClientId = client.Id, ContractNumber = number, Name = $"Chiller AMC {number}", Status = status,
+                StartDate = Now.AddYears(-1), EndDate = Now.Date.AddDays(endsInDays), RenewalNoticeDays = noticeDays,
+                ContractValue = 1_200_000m, Currency = "KES", RenewalOwnerUserId = fixture.Owner.Id,
+            };
+            db.Contracts.Add(contract);
+            return contract;
+        }
+        var due = AddContract("CT-1", endsInDays: 45);
+        AddContract("CT-2", endsInDays: 90);
+        AddContract("CT-3", endsInDays: 30, status: ContractStatus.Draft);
+        var lapsing = AddContract("CT-4", endsInDays: 10);
+        await db.SaveChangesAsync();
+        var push = new RecordingPushQueue();
+
+        var first = await CreateService(db, push).RunAsync(Now);
+        Assert.Equal(2, first.RenewalDealsOpened);
+        var deal = await db.SalesOpportunities.SingleAsync(x => x.RenewalOfContractId == due.Id);
+        Assert.Equal(("Renewal: Chiller AMC CT-1", fixture.Owner.Id, 1_200_000m, 60), (deal.Title, deal.OwnerUserId, deal.EstimatedValue, deal.Probability));
+        // The owner hears about it in the same run, through the follow-up it opens with.
+        Assert.Contains(push.Sent, x => x.Message.Url == $"/crm/opportunities/{deal.Id}");
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddHours(1))).RenewalDealsOpened);
+
+        due.Status = ContractStatus.Renewed;
+        lapsing.Status = ContractStatus.Expired;
+        await db.SaveChangesAsync();
+        Assert.Equal(2, (await CreateService(db, push).RunAsync(Now.AddDays(1))).RenewalDealsClosed);
+        Assert.Equal("Won", (await db.SalesOpportunities.SingleAsync(x => x.RenewalOfContractId == due.Id)).Stage);
+        var lost = await db.SalesOpportunities.SingleAsync(x => x.RenewalOfContractId == lapsing.Id);
+        Assert.Equal("Lost", lost.Stage);
+        Assert.Contains("expired without renewal", lost.LostReason);
+    }
+
+    [Fact]
+    public async Task RenewalDeals_CanBeTurnedOff()
+    {
+        await using var db = CreateDbContext();
+        var fixture = await SeedAsync(db);
+        db.TenantSalesSettings.Add(new TenantSalesSettings { TenantId = fixture.Tenant.Id, CreateRenewalDeals = false });
+        db.Contracts.Add(new Contract
+        {
+            TenantId = fixture.Tenant.Id, ClientId = Guid.NewGuid(), ContractNumber = "CT-9", Name = "Lift AMC", Status = ContractStatus.ExpiringSoon,
+            StartDate = Now.AddYears(-1), EndDate = Now.Date.AddDays(20), RenewalNoticeDays = 30,
+        });
+        await db.SaveChangesAsync();
+
+        Assert.Equal(0, (await CreateService(db, new RecordingPushQueue()).RunAsync(Now)).RenewalDealsOpened);
+    }
+
+    [Fact]
+    public async Task QuietDeal_IsFlaggedOncePerQuietSpell()
+    {
+        await using var db = CreateDbContext();
+        var fixture = await SeedAsync(db);
+        fixture.Deal.LastActivityAt = Now.AddDays(-15);
+        var fresh = new SalesOpportunity { TenantId = fixture.Tenant.Id, Title = "Fresh deal", Stage = "Lead", CompanyName = "X", OwnerUserId = fixture.Owner.Id, LastActivityAt = Now.AddDays(-2) };
+        db.SalesOpportunities.Add(fresh);
+        await db.SaveChangesAsync();
+        var push = new RecordingPushQueue();
+
+        Assert.Equal(1, (await CreateService(db, push).RunAsync(Now)).StalledReminders);
+        Assert.Contains("Gone quiet", Assert.Single(push.Sent).Message.Title);
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddDays(1))).StalledReminders);
+
+        // Someone logs a call; if it goes quiet again for the full period, the owner hears again.
+        fixture.Deal.LastActivityAt = Now.AddDays(2);
+        fresh.LastActivityAt = Now.AddDays(10);
+        await db.SaveChangesAsync();
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddDays(10))).StalledReminders);
+        Assert.Equal(1, (await CreateService(db, push).RunAsync(Now.AddDays(17))).StalledReminders);
+
+        // Turned off in Sales settings: nothing.
+        db.TenantSalesSettings.Add(new TenantSalesSettings { TenantId = fixture.Tenant.Id, StalledAfterDays = 0 });
+        fixture.Deal.LastActivityAt = Now.AddDays(18);
+        await db.SaveChangesAsync();
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(Now.AddDays(60))).StalledReminders);
+    }
+
+    [Fact]
+    public async Task WeeklySummary_GoesOutMondayMorningOnce_WithTeamFiguresForManagers()
+    {
+        await using var db = CreateDbContext();
+        var fixture = await SeedAsync(db); // owner is a Manager: sees the whole team
+        var rep = new User { TenantId = fixture.Tenant.Id, FullName = "Rep One", Email = "rep@acme.test", HasEmail = true, PasswordHash = "hash", Role = AppRoles.FinanceUser, IsActive = true };
+        db.Users.Add(rep);
+        var monday = new DateTime(2026, 10, 26, 5, 0, 0, DateTimeKind.Utc); // 08:00 in Nairobi
+        db.SalesOpportunities.Add(new SalesOpportunity { TenantId = fixture.Tenant.Id, Title = "Won deal", Stage = "Won", WonAt = monday.AddDays(-2), EstimatedValue = 250_000m, Currency = "KES", CompanyName = "X", OwnerUserId = rep.Id });
+        await db.SaveChangesAsync();
+        var push = new RecordingPushQueue();
+
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(monday.AddHours(-3))).WeeklySummaries); // 05:00 local: too early
+        Assert.Equal(2, (await CreateService(db, push).RunAsync(monday)).WeeklySummaries);
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(monday.AddHours(1))).WeeklySummaries);
+
+        var emails = await db.EmailOutboxMessages.Where(x => x.EventKey == SalesReminderKeys.WeeklySummary).ToListAsync();
+        var repEmail = Assert.Single(emails, x => x.RecipientEmail == "rep@acme.test");
+        Assert.Contains("1 won (KES 250,000)", repEmail.TextBody);
+        Assert.DoesNotContain("Whole team", repEmail.TextBody);
+        Assert.Contains("Whole team: 1 won", Assert.Single(emails, x => x.RecipientEmail == "grace@acme.test").TextBody);
+
+        // Turned off: the next Monday is quiet.
+        (await db.TenantSalesSettings.SingleAsync()).SendWeeklySummary = false;
+        await db.SaveChangesAsync();
+        Assert.Equal(0, (await CreateService(db, push).RunAsync(monday.AddDays(7))).WeeklySummaries);
+    }
+
+    [Fact]
     public async Task OwnerWithoutAMailbox_GetsThePushOnly()
     {
         await using var db = CreateDbContext();
@@ -195,7 +353,7 @@ public sealed class SalesReminderTests
     private static AppDbContext CreateDbContext() =>
         new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase($"ecosys-sales-reminders-{Guid.NewGuid():N}").Options);
 
-    private static SalesReminderService CreateService(AppDbContext db, RecordingPushQueue push, string[]? modules = null) =>
+    internal static SalesReminderService CreateService(AppDbContext db, RecordingPushQueue push, string[]? modules = null) =>
         new(
             db,
             new FixedLicenseGuard(modules ?? [ServiceOpsPlans.Operations, ServiceOpsPlans.Finance]),
@@ -205,15 +363,18 @@ public sealed class SalesReminderTests
             new EmailOutboxService(db, new EmailDeliveryLogService(db)),
             push,
             Options.Create(new PublicAppOptions { PublicUrl = "https://app.test/" }),
+            new SalesOwnerResolver(db, new RolePermissionService(db)),
+            new RolePermissionService(db),
+            new DynamicAccessService(db, new RolePermissionService(db)),
             NullLogger<SalesReminderService>.Instance);
 
-    private sealed class RecordingPushQueue : IPushNotificationQueue
+    internal sealed class RecordingPushQueue : IPushNotificationQueue
     {
         public List<(Guid TenantId, IReadOnlyCollection<Guid> UserIds, PushMessage Message)> Sent { get; } = [];
         public void Enqueue(Guid tenantId, IReadOnlyCollection<Guid> userIds, PushMessage message) => Sent.Add((tenantId, userIds, message));
     }
 
-    private sealed class FixedLicenseGuard(string[] modules) : ILicenseGuardService
+    internal sealed class FixedLicenseGuard(string[] modules) : ILicenseGuardService
     {
         public Task<TenantLicenseSnapshot> GetSnapshotAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
             Task.FromResult(new TenantLicenseSnapshot(tenantId, Guid.Empty, "essentials", "Essentials", "Active", Now.AddYears(-1), null, null, null,

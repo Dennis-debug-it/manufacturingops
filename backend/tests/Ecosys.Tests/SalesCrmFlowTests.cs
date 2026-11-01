@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Ecosys.Api.Controllers;
 using Ecosys.Domain.Entities;
+using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
@@ -8,6 +9,7 @@ using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Ecosys.Tests;
 
@@ -39,18 +41,17 @@ public sealed class SalesCrmFlowTests
         await Assert.ThrowsAsync<BusinessRuleException>(() => wo.CreateFromOpportunity(
             new CreateWorkOrderFromOpportunityRequest(opportunity.Id, null, null, null, null, null, null), CancellationToken.None));
 
+        // Entered with only a company name, the deal already has a client record: a prospect,
+        // kept out of client pickers until the deal is won.
+        var prospect = await dbContext.Clients.SingleAsync(x => x.Id == opportunity.ClientId);
+        Assert.True(prospect.IsProspect);
+        Assert.Equal("Baraka Logistics", prospect.ClientName);
+        Assert.Equal("Wanjiru Otieno", prospect.ContactPerson);
+
         await crm.ChangeStage(opportunity.Id, new ChangeSalesStageRequest(SalesStages.Won, null), CancellationToken.None);
-
-        // Won but still a prospect: the client has to exist first.
-        await Assert.ThrowsAsync<BusinessRuleException>(() => wo.CreateFromOpportunity(
-            new CreateWorkOrderFromOpportunityRequest(opportunity.Id, null, null, null, null, null, null), CancellationToken.None));
-
-        var converted = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<OkObjectResult>(
-            (await crm.ConvertToClient(opportunity.Id, CancellationToken.None)).Result).Value);
-        Assert.NotNull(converted.ClientId);
-        var client = await dbContext.Clients.SingleAsync(x => x.Id == converted.ClientId);
-        Assert.Equal("Baraka Logistics", client.ClientName);
-        Assert.Equal("Wanjiru Otieno", client.ContactPerson);
+        var client = await dbContext.Clients.SingleAsync(x => x.Id == opportunity.ClientId);
+        Assert.False(client.IsProspect);
+        Assert.Single(await dbContext.Clients.ToListAsync());
 
         var result = await wo.CreateFromOpportunity(
             new CreateWorkOrderFromOpportunityRequest(opportunity.Id, null, null, WorkOrderPriorities.High, null, null, null),
@@ -280,6 +281,1111 @@ public sealed class SalesCrmFlowTests
         Assert.Equal(0, (await dbContext.SalesTenders.SingleAsync(x => x.Id == created.Id)).DeadlineReminderStage);
     }
 
+    [Fact]
+    public async Task FollowUps_ListOpenOnesOnOpenDeals_SoonestFirst()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        var open = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(Deal("Chiller service", 50_000m, "KES"), CancellationToken.None)).Result).Value);
+        var closed = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(Deal("Lift AMC", 80_000m, "KES"), CancellationToken.None)).Result).Value);
+
+        var now = DateTime.UtcNow;
+        var later = Ok<SalesActivityResponse>(await crm.AddActivity(open.Id, new CreateSalesActivityRequest("FollowUp", "Send revised quote", null, now.AddDays(2)), CancellationToken.None));
+        var overdue = Ok<SalesActivityResponse>(await crm.AddActivity(open.Id, new CreateSalesActivityRequest("Call", "Call the facilities manager", null, now.AddDays(-1)), CancellationToken.None));
+        var done = Ok<SalesActivityResponse>(await crm.AddActivity(open.Id, new CreateSalesActivityRequest("FollowUp", "Book site survey", null, now.AddDays(-2)), CancellationToken.None));
+        await crm.CompleteActivity(done.Id, CancellationToken.None);
+        await crm.AddActivity(open.Id, new CreateSalesActivityRequest("Note", "Prefers email", null, null), CancellationToken.None);
+        await crm.AddActivity(closed.Id, new CreateSalesActivityRequest("FollowUp", "Chase decision", null, now.AddDays(-3)), CancellationToken.None);
+        await crm.ChangeStage(closed.Id, new ChangeSalesStageRequest(SalesStages.Lost, "Budget cut"), CancellationToken.None);
+
+        var list = Ok<IReadOnlyCollection<SalesFollowUpItem>>(await crm.ListFollowUps(null, CancellationToken.None));
+        Assert.Equal(new[] { overdue.Id, later.Id }, list.Select(x => x.Id));
+        Assert.All(list, x => Assert.Equal("Chiller service", x.OpportunityTitle));
+        Assert.Equal("Prospect Ltd", list.First().PartyName);
+
+        Assert.Empty(Ok<IReadOnlyCollection<SalesFollowUpItem>>(await crm.ListFollowUps(Guid.NewGuid(), CancellationToken.None)));
+        Assert.Equal(2, Ok<IReadOnlyCollection<SalesFollowUpItem>>(await crm.ListFollowUps(actor.Id, CancellationToken.None)).Count);
+
+        // The lost deal's follow-up is not overdue work.
+        Assert.Equal(1, Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None)).OverdueFollowUps);
+    }
+
+    [Fact]
+    public async Task Report_CountsResultsInThePeriod_AndForecastsOpenDealsByCloseMonth()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        async Task<Guid> Create(string title, decimal value, string? source = null)
+        {
+            var created = await crm.CreateOpportunity(Deal(title, value, "KES") with { Source = source }, CancellationToken.None);
+            return Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+        }
+
+        var wonId = await Create("Won deal", 100_000m, "Referral");
+        var oldWinId = await Create("Won long ago", 999_000m, "Referral");
+        var lostId = await Create("Lost on price", 40_000m, "Website");
+        var lost2Id = await Create("Also lost on price", 60_000m, "Website");
+        var openId = await Create("Open deal", 200_000m);
+        await Create("Open, no date", 50_000m);
+        await crm.ChangeStage(wonId, new ChangeSalesStageRequest(SalesStages.Won, null), CancellationToken.None);
+        await crm.ChangeStage(oldWinId, new ChangeSalesStageRequest(SalesStages.Won, null), CancellationToken.None);
+        await crm.ChangeStage(lostId, new ChangeSalesStageRequest(SalesStages.Lost, "Price"), CancellationToken.None);
+        await crm.ChangeStage(lost2Id, new ChangeSalesStageRequest(SalesStages.Lost, " price "), CancellationToken.None);
+
+        var now = DateTime.UtcNow;
+        var won = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == wonId);
+        won.CreatedAt = won.WonAt!.Value.AddDays(-10);
+        (await dbContext.SalesOpportunities.SingleAsync(x => x.Id == oldWinId)).WonAt = now.AddYears(-1);
+        (await dbContext.SalesOpportunities.SingleAsync(x => x.Id == openId)).ExpectedCloseDate = new DateTime(now.Year, now.Month, 15, 0, 0, 0, DateTimeKind.Utc).AddMonths(1);
+        await dbContext.SaveChangesAsync();
+
+        var reports = new SalesReportsController(dbContext, new FakeTenantContext(tenant.Id, actor.Id, actor.Email), new NoOpUserAccessService())
+        {
+            ControllerContext = CreateControllerContext(actor)
+        };
+        var report = Ok<SalesReport>(await reports.Get(now.AddDays(-30), now, null, CancellationToken.None));
+
+        Assert.Equal((1, 100_000m), (report.WonCount, report.WonValue));
+        Assert.Equal((2, 100_000m), (report.LostCount, report.LostValue));
+        Assert.Equal(33.3m, report.WinRate);
+        Assert.Equal(10m, report.AverageDaysToWin);
+        Assert.Equal((2, 250_000m), (report.OpenCount, report.OpenValue));
+
+        var reason = Assert.Single(report.LostReasons);
+        Assert.Equal((2, 100_000m), (reason.Count, reason.Value));
+
+        var referral = Assert.Single(report.Sources, x => x.Source == "Referral");
+        Assert.Equal((1, 100_000m, 0), (referral.WonCount, referral.WonValue, referral.LostCount));
+        Assert.Equal(0m, Assert.Single(report.Sources, x => x.Source == "Website").WinRate);
+
+        var nextMonth = report.Forecast.Single(x => x.Month == new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(1));
+        Assert.Equal((1, 200_000m), (nextMonth.Count, nextMonth.Value));
+        Assert.Equal(1, report.Forecast.Single(x => x.Key == "none").Count);
+        Assert.Equal(SalesReportsController.ForecastMonths + 3, report.Forecast.Count);
+
+        // Someone else's deals only.
+        Assert.Equal(0, Ok<SalesReport>(await reports.Get(now.AddDays(-30), now, Guid.NewGuid(), CancellationToken.None)).OpenCount);
+    }
+
+    [Fact]
+    public async Task AnsweringAQuotation_WinsTheDeal_OrSetsAFollowUp()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        dbContext.Clients.Add(new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" });
+        await dbContext.SaveChangesAsync();
+        var clientId = (await dbContext.Clients.SingleAsync()).Id;
+
+        async Task<(Guid Deal, Guid Quote)> DealWithSentQuote(string title, decimal total)
+        {
+            var created = await crm.CreateOpportunity(Deal(title, 10_000m, "KES") with { ClientId = clientId, CompanyName = null }, CancellationToken.None);
+            var id = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+            await crm.ConvertToQuotation(id, CancellationToken.None);
+            var quote = await dbContext.TenantQuotations.SingleAsync(x => x.SalesOpportunityId == id);
+            quote.Status = "Sent";
+            quote.TotalAmount = total;
+            await dbContext.SaveChangesAsync();
+            return (id, quote.Id);
+        }
+
+        var quotes = new TenantQuotationController(
+            dbContext, new FakeTenantContext(tenant.Id, actor.Id, actor.Email), new NoOpDocumentNumberingService(), null!,
+            new AuditLogService(dbContext, new HttpContextAccessor()), new NoOpUserAccessService(), null!, null!, null!, null!, null!)
+        {
+            ControllerContext = CreateControllerContext(actor)
+        };
+
+        var accepted = await DealWithSentQuote("Chiller replacement", 480_000m);
+        await quotes.AcceptQuotation(accepted.Quote, CancellationToken.None);
+        var won = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == accepted.Deal);
+        Assert.Equal((SalesStages.Won, 480_000m, 100), (won.Stage, won.EstimatedValue, won.Probability));
+        Assert.NotNull(won.WonAt);
+
+        var declined = await DealWithSentQuote("Lift modernisation", 900_000m);
+        await quotes.RejectQuotation(declined.Quote, new RejectQuotationRequest("Over budget"), CancellationToken.None);
+        var stillOpen = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == declined.Deal);
+        Assert.Equal(SalesStages.Proposal, stillOpen.Stage);
+        var followUp = Assert.Single(await dbContext.SalesActivities.Where(x => x.OpportunityId == declined.Deal && x.DueAt != null).ToListAsync());
+        Assert.Contains("declined", followUp.Summary);
+        Assert.Contains(await dbContext.SalesActivities.Where(x => x.OpportunityId == declined.Deal).ToListAsync(), x => x.Summary.Contains("Over budget"));
+    }
+
+    [Fact]
+    public async Task QuotationsInAnApprovalBand_AreApprovedBeforeSending()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        dbContext.Clients.Add(new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" });
+        dbContext.ApprovalMatrices.Add(new ApprovalMatrix
+        {
+            TenantId = tenant.Id, DocumentType = ApprovalDocumentTypes.Quotation,
+            Levels = [new ApprovalLevel { TenantId = tenant.Id, LevelOrder = 1, Name = "Sales manager", MinAmount = 500_000m, RequiredPermission = PermissionNames.CrmManage }],
+        });
+        await dbContext.SaveChangesAsync();
+        var clientId = (await dbContext.Clients.SingleAsync()).Id;
+        var tenantContext = new FakeTenantContext(tenant.Id, actor.Id, actor.Email);
+        var approvals = new ApprovalWorkflowService(dbContext, tenantContext, new AuditLogService(dbContext, new HttpContextAccessor()));
+        var quotes = new TenantQuotationController(
+            dbContext, tenantContext, new NoOpDocumentNumberingService(), null!,
+            new AuditLogService(dbContext, new HttpContextAccessor()), new NoOpUserAccessService(), null!, null!, null!, null!, null!, approvals)
+        {
+            ControllerContext = CreateControllerContext(actor)
+        };
+
+        async Task<Guid> DraftQuote(string title, decimal total)
+        {
+            var created = await crm.CreateOpportunity(Deal(title, total, "KES") with { ClientId = clientId, CompanyName = null }, CancellationToken.None);
+            var id = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+            await crm.ConvertToQuotation(id, CancellationToken.None);
+            var quote = await dbContext.TenantQuotations.SingleAsync(x => x.SalesOpportunityId == id);
+            quote.TotalAmount = total;
+            await dbContext.SaveChangesAsync();
+            return quote.Id;
+        }
+        TenantQuotationDetailResponse Sent(ActionResult<TenantQuotationDetailResponse> result) => Ok(result);
+
+        // Below every band: goes straight out.
+        Assert.Equal("Sent", Sent(await quotes.SendQuotation(await DraftQuote("Pump service", 80_000m), CancellationToken.None)).Status);
+
+        // In a band: held for approval, and cannot be sent while it waits.
+        var big = await DraftQuote("Chiller replacement", 900_000m);
+        var held = Sent(await quotes.SendQuotation(big, CancellationToken.None));
+        Assert.Equal(("Draft", "Pending"), (held.Status, held.ApprovalStatus));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => quotes.SendQuotation(big, CancellationToken.None));
+
+        // Approved at this total: it goes out. Changed after approval: asked again.
+        var request = await approvals.GetActiveForDocumentAsync(tenant.Id, ApprovalDocumentTypes.Quotation, big);
+        await approvals.DecideAsync(tenant.Id, request!.Id, approve: true, "Margin fine");
+        Assert.Equal(("Approved", 900_000m), (Ok(await quotes.GetQuotation(big, CancellationToken.None)).ApprovalStatus, Ok(await quotes.GetQuotation(big, CancellationToken.None)).ApprovedAmount));
+        (await dbContext.TenantQuotations.SingleAsync(x => x.Id == big)).TotalAmount = 950_000m;
+        await dbContext.SaveChangesAsync();
+        Assert.Equal("Pending", Sent(await quotes.SendQuotation(big, CancellationToken.None)).ApprovalStatus);
+        await approvals.DecideAsync(tenant.Id, (await approvals.GetActiveForDocumentAsync(tenant.Id, ApprovalDocumentTypes.Quotation, big))!.Id, approve: true, null);
+        Assert.Equal("Sent", Sent(await quotes.SendQuotation(big, CancellationToken.None)).Status);
+    }
+
+    [Fact]
+    public async Task QuotesAwaitingAnswer_ShowOtherQuotesOnlyToFinance()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, actor) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, actor);
+        var client = new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" };
+        dbContext.Clients.Add(client);
+        var created = await crm.CreateOpportunity(Deal("Chiller service", 50_000m, "KES"), CancellationToken.None);
+        var dealId = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+        TenantQuotation Quote(string number, Guid? deal, string status = "Sent", int sentDaysAgo = 1) => new()
+        {
+            TenantId = tenant.Id, ClientId = client.Id, QuoteNumber = number, Status = status, TotalAmount = 1_000m,
+            QuoteDate = DateTime.UtcNow.AddDays(-sentDaysAgo), SentAt = DateTime.UtcNow.AddDays(-sentDaysAgo), ValidUntil = DateTime.UtcNow.AddDays(30),
+            SalesOpportunityId = deal, SentByUserId = actor.Id,
+        };
+        dbContext.TenantQuotations.AddRange(Quote("QT-DEAL", dealId), Quote("QT-OTHER", null, sentDaysAgo: 5), Quote("QT-DRAFT", dealId, "Draft"));
+        await dbContext.SaveChangesAsync();
+
+        var all = Ok<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>(await crm.ListQuotesAwaitingAnswer(null, CancellationToken.None));
+        Assert.Equal(["QT-OTHER", "QT-DEAL"], all.Select(x => x.QuoteNumber).ToArray());
+        Assert.Equal("Chiller service", all.Last().OpportunityTitle);
+        Assert.Equal("Sales Admin", all.First().OwnerName);
+
+        var salesOnly = CreateCrmController(dbContext, tenant.Id, actor, new ScopedTenantContext(tenant.Id, actor.Id, AppRoles.Viewer, PermissionNames.CrmView));
+        Assert.Equal("QT-DEAL", Assert.Single(Ok<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>(await salesOnly.ListQuotesAwaitingAnswer(null, CancellationToken.None))).QuoteNumber);
+    }
+
+    [Fact]
+    public async Task OwnDealsOnly_HidesOtherPeoplesDeals_ButNotFromManagers()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var rep = new User { TenantId = tenant.Id, FullName = "Rep One", Email = "rep@acme.test", PasswordHash = "hash", Role = AppRoles.FinanceUser, IsActive = true };
+        dbContext.Users.Add(rep);
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        async Task<Guid> DealOwnedBy(string title, User owner)
+        {
+            var created = await crm.CreateOpportunity(Deal(title, 10_000m, "KES") with { OwnerUserId = owner.Id }, CancellationToken.None);
+            var id = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+            await crm.AddActivity(id, new CreateSalesActivityRequest("Call", $"Call about {title}", null, DateTime.UtcNow.AddDays(-1)), CancellationToken.None);
+            return id;
+        }
+        var mine = await DealOwnedBy("Rep's deal", rep);
+        var theirs = await DealOwnedBy("Admin's deal", admin);
+
+        SalesCrmController As(params string[] permissions) =>
+            CreateCrmController(dbContext, tenant.Id, rep, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.FinanceUser, permissions));
+        var repView = As(PermissionNames.CrmView, PermissionNames.CrmManage);
+
+        // Default: everyone sees the whole pipeline.
+        Assert.Equal(2, Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await repView.ListOpportunities(null, null, null, null, CancellationToken.None)).Count);
+
+        Ok<SalesSettingsResponse>(await crm.UpdateSettings(new UpdateSalesSettingsRequest(null, "own", true), CancellationToken.None));
+        repView = As(PermissionNames.CrmView, PermissionNames.CrmManage);
+
+        Assert.Equal(mine, Assert.Single(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await repView.ListOpportunities(null, null, null, null, CancellationToken.None))).Id);
+        Assert.Equal(mine, Assert.Single(Ok<IReadOnlyCollection<SalesFollowUpItem>>(await repView.ListFollowUps(null, CancellationToken.None))).OpportunityId);
+        Assert.Equal(1, Ok<SalesPipelineSummary>(await repView.GetSummary(CancellationToken.None)).OpenCount);
+        await Assert.ThrowsAsync<NotFoundException>(() => repView.GetOpportunity(theirs, CancellationToken.None));
+        await Assert.ThrowsAsync<NotFoundException>(() => repView.ChangeStage(theirs, new ChangeSalesStageRequest(SalesStages.Qualified, null), CancellationToken.None));
+        var repWorkOrders = CreateWorkOrdersController(dbContext, tenant.Id, rep, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.FinanceUser, PermissionNames.CrmView, PermissionNames.CanCreateWorkOrders));
+        await Assert.ThrowsAsync<NotFoundException>(() => repWorkOrders.CreateFromOpportunity(
+            new CreateWorkOrderFromOpportunityRequest(theirs, null, null, null, null, null, null), CancellationToken.None));
+
+        var repReports = new SalesReportsController(dbContext, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.FinanceUser, PermissionNames.CrmView), new NoOpUserAccessService());
+        Assert.Equal(1, Ok<SalesReport>(await repReports.Get(null, null, admin.Id, CancellationToken.None)).OpenCount);
+
+        // A sales manager still sees everything.
+        var manager = As(PermissionNames.CrmView, PermissionNames.CrmManage, PermissionNames.CrmViewAll);
+        Assert.Equal(2, Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await manager.ListOpportunities(null, null, null, null, CancellationToken.None)).Count);
+    }
+
+    [Fact]
+    public async Task SystemCreatedDeals_GoToTheBestAvailableOwner()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var accountManager = new User { TenantId = tenant.Id, FullName = "Account Manager", Email = "am@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+        var salesLead = new User { TenantId = tenant.Id, FullName = "Sales Lead", Email = "lead@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+        var leaver = new User { TenantId = tenant.Id, FullName = "Left the company", Email = "gone@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = false };
+        var client = new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" };
+        var otherClient = new Client { TenantId = tenant.Id, ClientName = "Nyali Mall" };
+        dbContext.AddRange(accountManager, salesLead, leaver, client, otherClient);
+        dbContext.Contracts.Add(new Contract
+        {
+            TenantId = tenant.Id, ClientId = client.Id, ContractNumber = "CT-1", Name = "Chiller AMC", Status = ContractStatus.Active,
+            StartDate = DateTime.UtcNow.AddMonths(-11), EndDate = DateTime.UtcNow.AddMonths(1), AccountManagerUserId = accountManager.Id,
+        });
+        await dbContext.SaveChangesAsync();
+        var resolver = new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext));
+
+        // An inactive preferred owner is skipped; the client's contract account manager is next.
+        Assert.Equal(accountManager.Id, (await resolver.ResolveAsync(tenant.Id, [leaver.Id], client.Id))!.Id);
+        // No client history: falls back to an admin until a default sales owner is set.
+        Assert.Equal(admin.Id, (await resolver.ResolveAsync(tenant.Id, [], otherClient.Id))!.Id);
+        dbContext.TenantSalesSettings.Add(new TenantSalesSettings { TenantId = tenant.Id, DefaultOwnerUserId = salesLead.Id });
+        await dbContext.SaveChangesAsync();
+        Assert.Equal(salesLead.Id, (await resolver.ResolveAsync(tenant.Id, [], otherClient.Id))!.Id);
+        // Whoever owns the client's live deal beats the default.
+        dbContext.SalesOpportunities.Add(new SalesOpportunity { TenantId = tenant.Id, Title = "Open deal", ClientId = otherClient.Id, Stage = SalesStages.Proposal, OwnerUserId = accountManager.Id });
+        await dbContext.SaveChangesAsync();
+        Assert.Equal(accountManager.Id, (await resolver.ResolveAsync(tenant.Id, [], otherClient.Id))!.Id);
+    }
+
+    [Fact]
+    public async Task Technician_FlagsALeadFromTheirJob_ForTheClientsSalesOwner()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var techUser = new User { TenantId = tenant.Id, FullName = "Juma Fundi", Email = "juma@acme.test", PasswordHash = "hash", Role = AppRoles.Technician, IsActive = true };
+        var technician = new Technician { TenantId = tenant.Id, UserId = techUser.Id, FullName = "Juma Fundi", Email = "juma@acme.test", IsActive = true };
+        var client = new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" };
+        var asset = new Asset { TenantId = tenant.Id, ClientId = client.Id, AssetName = "Chiller 2", AssetCode = "CH-2" };
+        var job = new WorkOrder { TenantId = tenant.Id, ClientId = client.Id, AssetId = asset.Id, WorkOrderNumber = "WO-0042", Title = "Chiller service", AssignedTechnicianId = technician.Id };
+        var otherJob = new WorkOrder { TenantId = tenant.Id, ClientId = client.Id, WorkOrderNumber = "WO-0043", Title = "Generator PM" };
+        dbContext.AddRange(techUser, technician, client, asset, job, otherJob);
+        await dbContext.SaveChangesAsync();
+
+        TechnicianSalesLeadsController Controller(string[] modules) => new(
+            dbContext, new ScopedTenantContext(tenant.Id, techUser.Id, AppRoles.Technician), new NoOpUserAccessService(),
+            new SalesReminderTests.FixedLicenseGuard(modules), new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)),
+            new AuditLogService(dbContext, new HttpContextAccessor()));
+        var withCrm = Controller([ServiceOpsPlans.Operations, ServiceOpsPlans.Finance]);
+
+        var flagged = Ok<TechnicianSalesLeadResponse>(await withCrm.Flag(job.Id, new FlagSalesLeadRequest("Compressor near end of life, quote a replacement"), CancellationToken.None));
+        Assert.Equal("Sales Admin", flagged.OwnerName);
+        var lead = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == flagged.Id);
+        Assert.Equal((SalesStages.Lead, client.Id, job.Id, "Technician"), (lead.Stage, lead.ClientId, lead.SourceWorkOrderId, lead.Source));
+        Assert.StartsWith("Chiller 2: Compressor", lead.Title);
+        Assert.Contains(await dbContext.SalesActivities.Where(x => x.OpportunityId == lead.Id).ToListAsync(), x => x.DueAt != null && x.CompletedAt == null);
+
+        // Only from their own jobs, only with something to say, only on a plan with the CRM.
+        await Assert.ThrowsAsync<ForbiddenException>(() => withCrm.Flag(otherJob.Id, new FlagSalesLeadRequest("Generator is old"), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => withCrm.Flag(job.Id, new FlagSalesLeadRequest("  "), CancellationToken.None));
+        await Assert.ThrowsAsync<ForbiddenException>(() => Controller([ServiceOpsPlans.Operations]).Flag(job.Id, new FlagSalesLeadRequest("New pump"), CancellationToken.None));
+    }
+
+    /// <summary>Every CRM query on Postgres, so a query EF can only run in memory fails here rather than in production.</summary>
+    [Fact]
+    public async Task Postgres_CrmQueriesTranslate()
+    {
+        await WithPostgresAsync(async connection =>
+        {
+            await using var dbContext = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
+            var (tenant, admin) = await SeedAsync(dbContext);
+            var rep = new User { TenantId = tenant.Id, FullName = "Rep One", Email = $"rep-{Guid.NewGuid():N}@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+            var techUser = new User { TenantId = tenant.Id, FullName = "Juma Fundi", Email = $"juma-{Guid.NewGuid():N}@acme.test", PasswordHash = "hash", Role = AppRoles.Technician, IsActive = true };
+            var technician = new Technician { TenantId = tenant.Id, UserId = techUser.Id, FullName = "Juma Fundi", Email = techUser.Email, IsActive = true };
+            var client = new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel" };
+            dbContext.AddRange(rep, techUser, technician, client);
+            await dbContext.SaveChangesAsync();
+            var job = new WorkOrder { TenantId = tenant.Id, ClientId = client.Id, WorkOrderNumber = "WO-0042", Title = "Chiller service", AssignedTechnicianId = technician.Id };
+            var contract = new Contract
+            {
+                TenantId = tenant.Id, ClientId = client.Id, ContractNumber = "CT-1", Name = "Chiller AMC", Status = ContractStatus.ExpiringSoon,
+                StartDate = DateTime.UtcNow.AddYears(-1), EndDate = DateTime.UtcNow.Date.AddDays(20), RenewalNoticeDays = 30, ContractValue = 900_000m, AccountManagerUserId = rep.Id,
+            };
+            dbContext.AddRange(job, contract);
+            await dbContext.SaveChangesAsync();
+
+            var crm = CreateCrmController(dbContext, tenant.Id, admin);
+            var created = await crm.CreateOpportunity(Deal("Lift modernisation", 500_000m, "KES") with { ClientId = client.Id, CompanyName = null, OwnerUserId = rep.Id }, CancellationToken.None);
+            var dealId = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(created.Result).Value).Id;
+            await crm.AddActivity(dealId, new CreateSalesActivityRequest("Call", "Call procurement", null, DateTime.UtcNow.AddDays(-1)), CancellationToken.None);
+            await crm.ConvertToQuotation(dealId, CancellationToken.None);
+            var quote = await dbContext.TenantQuotations.SingleAsync(x => x.SalesOpportunityId == dealId);
+            quote.Status = "Sent";
+            quote.ValidUntil = DateTime.UtcNow.AddDays(1);
+            dbContext.TenantQuotations.Add(new TenantQuotation
+            {
+                TenantId = tenant.Id, ClientId = client.Id, QuoteNumber = "QT-OTHER", Status = "Sent", QuoteDate = DateTime.UtcNow.AddDays(-5),
+                ValidUntil = DateTime.UtcNow.AddDays(10), SentByUserId = admin.Id,
+            });
+            await dbContext.SaveChangesAsync();
+
+            // Owners, renewals and reminders, then the technician's lead.
+            Assert.NotNull(await new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)).ResolveAsync(tenant.Id, [Guid.NewGuid()], client.Id));
+            var push = new SalesReminderTests.RecordingPushQueue();
+            var run = await SalesReminderTests.CreateService(dbContext, push).RunAsync(DateTime.UtcNow);
+            Assert.Equal(1, run.RenewalDealsOpened);
+            Assert.True(run.QuoteReminders >= 1);
+            contract.Status = ContractStatus.Renewed;
+            await dbContext.SaveChangesAsync();
+            Assert.Equal(1, (await SalesReminderTests.CreateService(dbContext, push).RunAsync(DateTime.UtcNow.AddHours(1))).RenewalDealsClosed);
+            var leads = new TechnicianSalesLeadsController(
+                dbContext, new ScopedTenantContext(tenant.Id, techUser.Id, AppRoles.Technician), new NoOpUserAccessService(),
+                new SalesReminderTests.FixedLicenseGuard([ServiceOpsPlans.Operations, ServiceOpsPlans.Finance]), new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)),
+                new AuditLogService(dbContext, new HttpContextAccessor()));
+            Ok<TechnicianSalesLeadResponse>(await leads.Flag(job.Id, new FlagSalesLeadRequest("Compressor is tired"), CancellationToken.None));
+
+            // Every list, both seeing everything and limited to one's own deals.
+            Ok<SalesSettingsResponse>(await crm.UpdateSettings(new UpdateSalesSettingsRequest(rep.Id, "Own", true), CancellationToken.None));
+            var repCrm = CreateCrmController(dbContext, tenant.Id, rep, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.Manager, PermissionNames.CrmView, PermissionNames.CrmManage));
+            foreach (var view in new[] { crm, repCrm })
+            {
+                Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await view.ListOpportunities("Open", "lift", null, client.Id, CancellationToken.None));
+                Ok<SalesPipelineSummary>(await view.GetSummary(CancellationToken.None));
+                Assert.NotEmpty(Ok<IReadOnlyCollection<SalesFollowUpItem>>(await view.ListFollowUps(rep.Id, CancellationToken.None)));
+                Ok<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>(await view.ListQuotesAwaitingAnswer(rep.Id, CancellationToken.None));
+                Ok<SalesOpportunityDetailResponse>(await view.GetOpportunity(dealId, CancellationToken.None));
+            }
+            Assert.Equal(2, Ok<IReadOnlyCollection<SalesQuoteAwaitingAnswer>>(await crm.ListQuotesAwaitingAnswer(null, CancellationToken.None)).Count);
+            var reports = new SalesReportsController(dbContext, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.Manager, PermissionNames.CrmView), new NoOpUserAccessService());
+            Ok<SalesReport>(await reports.Get(DateTime.UtcNow.AddDays(-30), DateTime.UtcNow, null, CancellationToken.None));
+            Ok<SalesSettingsResponse>(await crm.GetSettings(CancellationToken.None));
+
+            // Phase 2: prospects, contacts, duplicates, rules and CSV.
+            var prospectDeal = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(
+                Deal("Depot solar", 1_000m, "KES") with { CompanyName = "Baraka Logistics Ltd", ContactName = "Wanjiru", ContactEmail = "w@baraka.co.ke" }, CancellationToken.None)).Result).Value);
+            Assert.True(prospectDeal.ClientIsProspect);
+            Ok<SalesOpportunityDetailResponse>(await crm.AddContact(prospectDeal.Id, new AddDealContactRequest(null, "Peter", null, "0700000300", null, "Procurement"), CancellationToken.None));
+            Assert.NotEmpty(await ClientMatching.FindAsync(dbContext, tenant.Id, "baraka logistics", "x@baraka.co.ke", "+254700000300", null, CancellationToken.None));
+            Ok<IReadOnlyList<SalesAssignmentRuleResponse>>(await crm.CreateAssignmentRule(new UpsertSalesAssignmentRuleRequest("All", true, null, null, null, "RoundRobin", [rep.Id, admin.Id]), CancellationToken.None));
+            Assert.NotNull(await new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)).PickByRuleAsync(tenant.Id, new SalesLeadFacts("Website", null, "Nairobi")));
+            var csv = "Title,Company\nImported deal,Nyali Mall";
+            Ok<ImportCommitResponse>(await crm.CommitDealImport(new CsvUploadRequest(new FormFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(csv)), 0, csv.Length, "file", "d.csv")), CancellationToken.None));
+            Assert.IsType<FileContentResult>(await crm.ExportDeals("Open", null, CancellationToken.None));
+            Assert.IsType<FileContentResult>(await repCrm.ExportContacts(CancellationToken.None));
+            var clientsApi = new ClientsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService(), new AuditLogService(dbContext, new HttpContextAccessor()));
+            Assert.IsType<OkObjectResult>(await clientsApi.GetAll("baraka", "all", 1, 20, CancellationToken.None, "prospects"));
+            await ClientMatching.MergeProspectAsync(dbContext, tenant.Id, prospectDeal.ClientId!.Value, client.Id, CancellationToken.None);
+            await dbContext.SaveChangesAsync();
+
+            // Phase 3: stalled filter, targets, the funnel (in the scoped report above) and the Monday summary.
+            Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities("Stalled", null, null, null, CancellationToken.None));
+            Ok<SalesTargetsResponse>(await crm.SetTargets(new SetSalesTargetsRequest(2026, [new SalesTargetRow(null, new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc), 1_000m)]), CancellationToken.None));
+            Assert.NotNull(Ok<SalesReport>(await new SalesReportsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService())
+                .Get(new DateTime(2026, 10, 1), new DateTime(2026, 10, 31), null, CancellationToken.None)).Funnel);
+            await SalesReminderTests.CreateService(dbContext, push).RunAsync(new DateTime(2026, 11, 2, 9, 0, 0, DateTimeKind.Utc));
+            Assert.NotEmpty(await dbContext.SalesStageChanges.ToListAsync());
+
+            // Phase 4: pipelines.
+            var withSpares = Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.CreatePipeline(new UpsertSalesPipelineRequest("Spares", null, true, false, [new(null, "Enquiry", 20)]), CancellationToken.None));
+            var sparesId = withSpares.Single(x => x.Name == "Spares").Id;
+            Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, withSpares.Single(x => x.IsDefault).Id));
+            Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None, sparesId));
+            Ok<SalesReport>(await new SalesReportsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService())
+                .Get(null, null, null, CancellationToken.None, sparesId));
+            Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.UpdatePipeline(sparesId, new UpsertSalesPipelineRequest("Spares", null, true, true, [new("Enquiry", "Enquiry", 25)]), CancellationToken.None));
+            Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Roof type", "Dropdown", ["Flat", "Pitched"], null, null), CancellationToken.None));
+            Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Decision maker", "Text", null, null, null), CancellationToken.None));
+            Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.UpdatePipeline(sparesId, new UpsertSalesPipelineRequest("Spares", null, true, true,
+                [new("Enquiry", "Enquiry", 25, ["cf:roof_type", "contact"])], WonRequiredFields: ["quote"]), CancellationToken.None));
+            Ok<SalesOpportunityDetailResponse>(await crm.UpdateOpportunity(prospectDeal.Id, Deal("Depot solar", 1_000m, "KES") with
+            {
+                CompanyName = "Baraka Logistics Ltd", PipelineId = sparesId,
+                CustomFields = new Dictionary<string, string?> { ["roof_type"] = "Flat", ["decision_maker"] = "Peter" },
+            }, CancellationToken.None));
+            Assert.Single(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, null, "decision_maker", "pet")));
+            Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, null, "roof_type", "Flat"));
+            Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, null, "roof_type", null));
+            Assert.NotNull(Ok<SalesOpportunityDetailResponse>(await crm.GetOpportunity(prospectDeal.Id, CancellationToken.None)).StageBlockers);
+            Assert.IsType<FileContentResult>(await crm.ExportDeals(null, null, CancellationToken.None));
+
+            // Phases 5 and 6: inbound mail, sequences, scoring, views, the calendar and WhatsApp.
+            var inbound = InboundHandler(dbContext);
+            await inbound.TryHandleAsync(tenant.Id, Inbound("w@baraka.co.ke", $"Re: {SalesDealTags.For(prospectDeal.Id)}", "Yes please"));
+            Ok<SalesSettingsResponse>(await crm.UpdateSettings(new UpdateSalesSettingsRequest(rep.Id, "Own", true, LeadEmailAddress: "sales@acme.test", WebFormEnabled: true), CancellationToken.None));
+            Assert.NotNull(await inbound.TryHandleAsync(tenant.Id, Inbound("new@lead.co.ke", "Quote", "Need a quote", "sales@acme.test")));
+            var seq = Ok<IReadOnlyList<SalesSequenceResponse>>(await crm.CreateSequence(new UpsertSalesSequenceRequest("Chase", true, true, [new(0, "Task", null, "Call"), new(1, "Email", "Hi", "Hello {{ContactName}}")]), CancellationToken.None)).Single();
+            Ok<SalesOpportunityDetailResponse>(await crm.StartSequence(dealId, new StartSalesSequenceRequest(seq.Id), CancellationToken.None));
+            await SalesSequences.RunDueAsync(dbContext, new ActivitiesCalendarTests.RecordingOutbox(), new HashSet<Guid> { tenant.Id }, DateTime.UtcNow.AddDays(2), CancellationToken.None);
+            await SalesSequences.StopAsync(dbContext, tenant.Id, dealId, "test", DateTime.UtcNow, CancellationToken.None);
+            await dbContext.SaveChangesAsync();
+            Ok<IReadOnlyList<SalesSequenceResponse>>(await crm.ListSequences(CancellationToken.None));
+            Ok<IReadOnlyList<SalesSavedViewResponse>>(await crm.SaveView(new SaveSalesViewRequest("Mine", "view=list", true), CancellationToken.None));
+            Ok<IReadOnlyList<SalesSavedViewResponse>>(await repCrm.ListViews(CancellationToken.None));
+            Ok<IReadOnlyList<SalesWhatsAppMessage>>(await crm.DealWhatsApp(prospectDeal.Id, CancellationToken.None));
+            Assert.NotNull((await SalesScoring.LoadAsync(dbContext, tenant.Id, await SalesPipelineCatalog.LoadAsync(dbContext, tenant.Id, CancellationToken.None), CancellationToken.None)));
+            var calendar = new CalendarService(dbContext, new LinkedRecordService(dbContext, new ProjectSettingsService(dbContext)));
+            await calendar.GetItemsAsync(new AccessViewer(tenant.Id, rep.Id, false, _ => true, [ServiceOpsPlans.Operations, ServiceOpsPlans.Finance]),
+                DateTime.UtcNow.AddDays(-30), DateTime.UtcNow.AddDays(30), [CalendarSources.Sales], null, CancellationToken.None);
+
+            // Answering the quote wins the deal.
+            var quotes = new TenantQuotationController(
+                dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpDocumentNumberingService(), null!,
+                new AuditLogService(dbContext, new HttpContextAccessor()), new NoOpUserAccessService(), null!, null!, null!, null!, null!)
+            {
+                ControllerContext = CreateControllerContext(admin)
+            };
+            await quotes.AcceptQuotation(quote.Id, CancellationToken.None);
+            Assert.Equal(SalesStages.Won, (await dbContext.SalesOpportunities.AsNoTracking().SingleAsync(x => x.Id == dealId)).Stage);
+        });
+    }
+
+    private static async Task WithPostgresAsync(Func<string, Task> body)
+    {
+        var server = Environment.GetEnvironmentVariable("ECOSYS_TEST_DB_CONNECTION")
+            ?? "Host=localhost;Port=5432;Database=ecosys_test;Username=postgres;Password=postgres";
+        var databaseName = $"ecosys_sales_{Guid.NewGuid():N}";
+        var database = new NpgsqlConnectionStringBuilder(server) { Database = databaseName, Pooling = false }.ConnectionString;
+        var adminDb = new NpgsqlConnectionStringBuilder(server) { Database = "postgres", Pooling = false }.ConnectionString;
+
+        await ExecuteAdminAsync(adminDb, $"CREATE DATABASE \"{databaseName}\"");
+        try
+        {
+            await using (var setup = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(database).Options))
+                await setup.Database.MigrateAsync();
+            await body(database);
+        }
+        finally
+        {
+            await ExecuteAdminAsync(adminDb, $"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)");
+        }
+    }
+
+    private static async Task ExecuteAdminAsync(string connectionString, string sql)
+    {
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    [Fact]
+    public async Task ProspectDeals_ShareOneProspectClient_HiddenFromClientPickers()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        dbContext.Clients.Add(new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel", IsActive = true });
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        async Task<SalesOpportunityDetailResponse> Create(string title, string company) =>
+            Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+                (await crm.CreateOpportunity(Deal(title, 1_000m, "KES") with { CompanyName = company }, CancellationToken.None)).Result).Value);
+
+        var first = await Create("Solar", "Baraka Logistics");
+        var second = await Create("Solar phase 2", "  baraka   LOGISTICS ");
+        var existing = await Create("Chiller", "kilele hotel");
+        Assert.Equal(first.ClientId, second.ClientId);
+        Assert.True(first.ClientIsProspect);
+        Assert.False(existing.ClientIsProspect);
+
+        // A prospect shared with another deal is not renamed under it: the renamed deal gets its own.
+        await crm.UpdateOpportunity(second.Id, Deal("Solar phase 2", 1_000m, "KES") with { CompanyName = "Baraka Freight" }, CancellationToken.None);
+        Assert.Equal(3, await dbContext.Clients.CountAsync());
+        // Renaming it again renames that prospect in place, leaving nothing behind.
+        await crm.UpdateOpportunity(second.Id, Deal("Solar phase 2", 1_000m, "KES") with { CompanyName = "Baraka Group" }, CancellationToken.None);
+        Assert.Equal(3, await dbContext.Clients.CountAsync());
+
+        var clients = new ClientsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService(), new AuditLogService(dbContext, new HttpContextAccessor()));
+        IReadOnlyCollection<ClientResponse> List(string? kind) =>
+            Assert.IsAssignableFrom<IReadOnlyCollection<ClientResponse>>(Assert.IsType<OkObjectResult>(clients.GetAll(null, "all", null, null, CancellationToken.None, kind).Result).Value);
+        Assert.Equal(["Kilele Hotel"], List(null).Select(x => x.ClientName).ToArray());
+        Assert.All(List("prospects"), x => Assert.True(x.IsProspect));
+        Assert.Equal(2, List("prospects").Count);
+        Assert.Equal(3, List("all").Count);
+
+        // Making it a client (from the deal) promotes the prospect in place.
+        await crm.ConvertToClient(first.Id, CancellationToken.None);
+        Assert.Equal(2, List(null).Count);
+    }
+
+    [Fact]
+    public async Task DealContacts_BecomeClientContacts_WithoutDuplicates()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        async Task<SalesOpportunityDetailResponse> Create(string title, string contact, string? email) =>
+            Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+                (await crm.CreateOpportunity(Deal(title, 1_000m, "KES") with { CompanyName = "Baraka Logistics", ContactName = contact, ContactEmail = email }, CancellationToken.None)).Result).Value);
+
+        var first = await Create("Solar", "Wanjiru Otieno", "Wanjiru@Baraka.test");
+        // Same person, spelt differently: matched on email.
+        var second = await Create("Solar phase 2", "Wanjiru O.", "wanjiru@baraka.test");
+        var contact = Assert.Single(first.Contacts!);
+        Assert.Equal(contact.Id, Assert.Single(second.Contacts!).Id);
+        Assert.True(contact.IsPrimary);
+
+        var withBuyer = Ok<SalesOpportunityDetailResponse>(await crm.AddContact(first.Id, new AddDealContactRequest(null, "Peter Kamau", null, "+254700000300", "Procurement lead", "procurement"), CancellationToken.None));
+        Assert.Equal(2, withBuyer.Contacts!.Count);
+        Assert.Contains(withBuyer.Contacts!, x => x.FullName == "Peter Kamau" && x.Role == "Procurement" && !x.IsPrimary);
+
+        var contacts = new ClientContactsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService());
+        var list = Ok<IReadOnlyCollection<ClientContactResponse>>(await contacts.List(first.ClientId!.Value, CancellationToken.None));
+        Assert.Equal(["Wanjiru Otieno", "Peter Kamau"], list.Select(x => x.FullName).ToArray());
+
+        var afterRemove = Ok<SalesOpportunityDetailResponse>(await crm.RemoveContact(first.Id, contact.Id, CancellationToken.None));
+        Assert.Equal("Peter Kamau", Assert.Single(afterRemove.Contacts!).FullName);
+    }
+
+    [Theory]
+    [InlineData("Baraka Logistics Ltd.", "baraka logistics")]
+    [InlineData("The Kilele Hotel (Kenya) Limited", "kilele hotel")]
+    [InlineData("  ACME   Co ", "acme")]
+    public void CompanyNames_CompareWithoutCaseOrLegalSuffixes(string name, string key) =>
+        Assert.Equal(key, ClientMatching.NameKey(name));
+
+    [Fact]
+    public async Task PossibleDuplicates_AreFound_AndAProspectMergesIntoTheRealClient()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var real = new Client { TenantId = tenant.Id, ClientName = "Baraka Logistics Limited", Email = "accounts@baraka.co.ke", Phone = "+254 700 000 200", IsActive = true };
+        var other = new Client { TenantId = tenant.Id, ClientName = "Nyali Mall", IsActive = true };
+        dbContext.AddRange(real, other);
+        await dbContext.SaveChangesAsync();
+
+        Assert.Equal(real.Id, Assert.Single(await ClientMatching.FindAsync(dbContext, tenant.Id, "baraka logistics", null, null, null, CancellationToken.None)).Id);
+        Assert.Equal("Same email domain (baraka.co.ke)", Assert.Single(await ClientMatching.FindAsync(dbContext, tenant.Id, "BLL", "wanjiru@baraka.co.ke", null, null, CancellationToken.None)).Reason);
+        Assert.Equal(real.Id, Assert.Single(await ClientMatching.FindAsync(dbContext, tenant.Id, null, null, "0700000200", null, CancellationToken.None)).Id);
+        Assert.Empty(await ClientMatching.FindAsync(dbContext, tenant.Id, "Someone", "x@gmail.com", null, null, CancellationToken.None));
+
+        // A prospect entered under another name, with a deal and a contact, folds into the real client.
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        var deal = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+            (await crm.CreateOpportunity(Deal("Fleet depot solar", 1_000m, "KES") with { CompanyName = "BLL Group", ContactName = "Wanjiru Otieno" }, CancellationToken.None)).Result).Value);
+        var prospectId = deal.ClientId!.Value;
+        dbContext.ClientContacts.Add(new ClientContact { TenantId = tenant.Id, ClientId = real.Id, FullName = "wanjiru otieno", Phone = "0700" });
+        await dbContext.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => ClientMatching.MergeProspectAsync(dbContext, tenant.Id, real.Id, other.Id, CancellationToken.None));
+        await ClientMatching.MergeProspectAsync(dbContext, tenant.Id, prospectId, real.Id, CancellationToken.None);
+        await dbContext.SaveChangesAsync();
+
+        Assert.False(await dbContext.Clients.AnyAsync(x => x.Id == prospectId));
+        var merged = Ok<SalesOpportunityDetailResponse>(await crm.GetOpportunity(deal.Id, CancellationToken.None));
+        Assert.Equal(real.Id, merged.ClientId);
+        // The same person already at the client is reused, not duplicated.
+        Assert.Equal("wanjiru otieno", Assert.Single(merged.Contacts!).FullName);
+        Assert.Single(await dbContext.ClientContacts.Where(x => x.ClientId == real.Id).ToListAsync());
+    }
+
+    [Fact]
+    public async Task DealsImportFromCsv_PreviewFirst_AndReRunningIsSafe()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        dbContext.Clients.Add(new Client { TenantId = tenant.Id, ClientName = "Kilele Hotel Ltd", IsActive = true });
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        // Columns in any order, header names in any case; an unknown column is ignored.
+        var csv = string.Join("\n",
+            "company,TITLE,Stage,Estimated Value,Owner,ContactName,ContactEmail,Notes,ExpectedCloseDate,LostReason",
+            "Kilele Hotel,Chiller replacement,Proposal,\"480,000\",Sales Admin,Amina,amina@kilele.test,x,2026-12-31,",
+            "Baraka Logistics,Rooftop solar,Won,1250000,,Wanjiru,,y,2026-09-30,",
+            "Nyali Mall,Lift AMC,Lost,90000,,,,,,Went with incumbent",
+            ",No company,Lead,10,,,,,,",
+            "Acme,Bad stage,Maybe,10,,,,,,",
+            "Acme,Bad owner,Lead,10,Somebody Else,,,,,");
+        IFormFile File() => new FormFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(csv)), 0, csv.Length, "file", "deals.csv");
+
+        var preview = Ok<ImportPreviewResponse>(await crm.PreviewDealImport(new CsvUploadRequest(File()), CancellationToken.None));
+        Assert.Equal(6, preview.TotalRows);
+        Assert.Equal(3, preview.Rows.Count(x => x.IsValid));
+        Assert.Equal("Existing client: Kilele Hotel Ltd", preview.Rows.First().RawValues["Result"]);
+        Assert.Empty(await dbContext.SalesOpportunities.ToListAsync());
+
+        var result = Ok<ImportCommitResponse>(await crm.CommitDealImport(new CsvUploadRequest(File()), CancellationToken.None));
+        Assert.Equal((3, 3), (result.SuccessfulRows, result.FailedRows));
+        var chiller = await dbContext.SalesOpportunities.Include(x => x.Client).SingleAsync(x => x.Title == "Chiller replacement");
+        Assert.Equal(("Kilele Hotel Ltd", 480_000m, SalesStages.Proposal), (chiller.Client!.ClientName, chiller.EstimatedValue, chiller.Stage));
+        var won = await dbContext.SalesOpportunities.Include(x => x.Client).SingleAsync(x => x.Title == "Rooftop solar");
+        Assert.False(won.Client!.IsProspect);
+        Assert.Equal(new DateTime(2026, 9, 30), won.WonAt!.Value.Date);
+        Assert.Equal("Went with incumbent", (await dbContext.SalesOpportunities.SingleAsync(x => x.Title == "Lift AMC")).LostReason);
+
+        // Running the same file again adds nothing.
+        Assert.Equal(0, Ok<ImportCommitResponse>(await crm.CommitDealImport(new CsvUploadRequest(File()), CancellationToken.None)).SuccessfulRows);
+
+        var export = Assert.IsType<FileContentResult>(await crm.ExportDeals(null, null, CancellationToken.None));
+        var text = System.Text.Encoding.UTF8.GetString(export.FileContents);
+        Assert.Contains("\"Chiller replacement\",\"Kilele Hotel Ltd\",\"No\"", text);
+        Assert.EndsWith(",\"Sales\"", text.Split('\n', StringSplitOptions.RemoveEmptyEntries)[1].TrimEnd('\r'));
+        var contacts = System.Text.Encoding.UTF8.GetString(Assert.IsType<FileContentResult>(await crm.ExportContacts(CancellationToken.None)).FileContents);
+        Assert.Contains("amina@kilele.test", contacts);
+    }
+
+    [Fact]
+    public async Task AssignmentRules_RotateMatchingLeads_AndSkipPeopleWhoLeft()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        User Rep(string name) => new() { TenantId = tenant.Id, FullName = name, Email = $"{name.Replace(" ", "")}@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+        var (ann, ben, coast) = (Rep("Ann"), Rep("Ben"), Rep("Coast Rep"));
+        dbContext.AddRange(ann, ben, coast);
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+
+        Ok<IReadOnlyList<SalesAssignmentRuleResponse>>(await crm.CreateAssignmentRule(
+            new UpsertSalesAssignmentRuleRequest("Coast", true, null, null, "Mombasa", "Fixed", [coast.Id]), CancellationToken.None));
+        var rules = Ok<IReadOnlyList<SalesAssignmentRuleResponse>>(await crm.CreateAssignmentRule(
+            new UpsertSalesAssignmentRuleRequest("Technician leads", true, "Technician", null, null, "RoundRobin", [ann.Id, ben.Id]), CancellationToken.None));
+        Assert.Equal(["Coast", "Technician leads"], rules.Select(x => x.Name).ToArray());
+
+        var resolver = new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext));
+        async Task<string?> Next(string? source, string? location)
+        {
+            var owner = await resolver.PickByRuleAsync(tenant.Id, new SalesLeadFacts(source, null, location));
+            await dbContext.SaveChangesAsync();
+            return owner?.FullName;
+        }
+        Assert.Equal("Coast Rep", await Next("Technician", "Nyali, Mombasa"));
+        Assert.Equal("Ann,Ben,Ann", string.Join(',', await Next("Technician", "Nairobi"), await Next("Technician", "Nairobi"), await Next("Technician", "Nairobi")));
+        Assert.Null(await Next("Website", "Nairobi"));
+
+        // Someone who leaves is skipped, not handed leads.
+        ben.IsActive = false;
+        await dbContext.SaveChangesAsync();
+        Assert.Equal("Ann,Ann", string.Join(',', await Next("Technician", null), await Next("Technician", null)));
+
+        // An imported deal with no owner follows the rules too.
+        var csv = "Title,Company,Location\nGenerator AMC,Nyali Mall,Mombasa Road";
+        var file = new FormFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(csv)), 0, csv.Length, "file", "deals.csv");
+        Ok<ImportCommitResponse>(await crm.CommitDealImport(new CsvUploadRequest(file), CancellationToken.None));
+        Assert.Equal(coast.Id, (await dbContext.SalesOpportunities.SingleAsync()).OwnerUserId);
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.CreateAssignmentRule(
+            new UpsertSalesAssignmentRuleRequest("Broken", true, null, null, null, "Fixed", [ben.Id]), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task EveryStageMove_IsRecorded_WhateverMovedIt()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        var id = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+            (await crm.CreateOpportunity(Deal("Chiller", 1_000m, "KES"), CancellationToken.None)).Result).Value).Id;
+        await crm.ChangeStage(id, new ChangeSalesStageRequest(SalesStages.Proposal, null), CancellationToken.None);
+        await crm.ConvertToQuotation(id, CancellationToken.None); // already at Proposal: no move
+        await crm.ChangeStage(id, new ChangeSalesStageRequest(SalesStages.Won, null), CancellationToken.None);
+
+        var history = await dbContext.SalesStageChanges.Where(x => x.OpportunityId == id).OrderBy(x => x.ChangedAt).ToListAsync();
+        Assert.Equal(["-:Lead", "Lead:Proposal", "Proposal:Won"], history.Select(x => $"{x.FromStage ?? "-"}:{x.ToStage}").ToArray());
+        var deal = await dbContext.SalesOpportunities.SingleAsync(x => x.Id == id);
+        Assert.Equal(history.Last().ChangedAt, deal.StageChangedAt);
+
+        // Listing shows how long a deal has been idle and whether it has stalled.
+        deal.Stage = SalesStages.Negotiation;
+        deal.LastActivityAt = DateTime.UtcNow.AddDays(-20);
+        await dbContext.SaveChangesAsync();
+        var item = Assert.Single(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None)));
+        Assert.True(item.IsStalled);
+        Assert.Equal(20, item.DaysIdle);
+        Assert.Equal(1, Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None)).StalledDeals);
+    }
+
+    [Fact]
+    public void StageFunnel_CountsConversionAndTimeInStage_FromHistory()
+    {
+        var day = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        SalesReportsController.StageMove Move(Guid deal, string stage, int onDay) => new(deal, stage, day.AddDays(onDay));
+        var (a, b, c) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var moves = new[]
+        {
+            // A: Lead 4 days, Proposal 6 days, won.
+            Move(a, "Lead", 0), Move(a, "Proposal", 4), Move(a, "Won", 10),
+            // B: Lead 2 days, Proposal, lost.
+            Move(b, "Lead", 0), Move(b, "Proposal", 2), Move(b, "Lost", 3),
+            // C: Lead, still there.
+            Move(c, "Lead", 5),
+        };
+
+        var funnel = SalesReportsController.BuildStageFunnel(moves, day, day.AddDays(30), day.AddDays(15));
+        var lead = funnel.Single(x => x.Stage == "Lead");
+        Assert.Equal((3, 2, 1), (lead.Entered, lead.MovedOn, lead.Won));
+        Assert.Equal(66.7m, lead.MovedOnRate);
+        Assert.Equal(3m, lead.AverageDaysInStage);
+        Assert.Equal((1, 10m), (lead.NowInStage, lead.AverageDaysNowInStage!.Value));
+        var proposal = funnel.Single(x => x.Stage == "Proposal");
+        Assert.Equal((2, 1, 1), (proposal.Entered, proposal.MovedOn, proposal.Won));
+        Assert.Equal(3.5m, proposal.AverageDaysInStage);
+        Assert.Equal(0, funnel.Single(x => x.Stage == "Negotiation").Entered);
+    }
+
+    [Fact]
+    public async Task Targets_ProRataIntoTheReport_ForTeamAndOwners()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var rep = new User { TenantId = tenant.Id, FullName = "Rep One", Email = "rep1@acme.test", PasswordHash = "hash", Role = AppRoles.Manager, IsActive = true };
+        dbContext.Users.Add(rep);
+        await dbContext.SaveChangesAsync();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        var october = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var november = october.AddMonths(1);
+
+        var saved = Ok<SalesTargetsResponse>(await crm.SetTargets(new SetSalesTargetsRequest(2026,
+        [
+            new SalesTargetRow(null, october, 3_100_000m),
+            new SalesTargetRow(admin.Id, october, 1_000_000m),
+            new SalesTargetRow(rep.Id, october, 620_000m),
+            new SalesTargetRow(rep.Id, november, 0m),
+        ]), CancellationToken.None));
+        Assert.Equal(3, saved.Targets.Count);
+        Assert.True(saved.CanEdit);
+
+        // The first ten days of October: a third of a 31-day month... of each target.
+        var reports = new SalesReportsController(dbContext, new FakeTenantContext(tenant.Id, admin.Id, admin.Email), new NoOpUserAccessService());
+        var report = Ok<SalesReport>(await reports.Get(october, october.AddDays(9), null, CancellationToken.None));
+        Assert.Equal(1_000_000m, report.TargetValue);
+        Assert.Equal(200_000m, report.Owners.Single(x => x.OwnerUserId == rep.Id).TargetValue);
+
+        // Only managers and admins set targets.
+        var plainRep = CreateCrmController(dbContext, tenant.Id, rep, new ScopedTenantContext(tenant.Id, rep.Id, AppRoles.Manager, PermissionNames.CrmView, PermissionNames.CrmManage));
+        await Assert.ThrowsAsync<ForbiddenException>(() => plainRep.SetTargets(new SetSalesTargetsRequest(2026, []), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Pipelines_HaveTheirOwnStages_AndDealsMoveBetweenThem()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+
+        // A workspace starts with the default pipeline and the standard stages.
+        var start = Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.ListPipelines(CancellationToken.None));
+        var sales = Assert.Single(start);
+        Assert.Equal(["Lead", "Qualified", "SiteSurvey", "Proposal", "Negotiation", "Won", "Lost"], sales.Stages.Select(x => x.Key).ToArray());
+
+        var all = Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.CreatePipeline(new UpsertSalesPipelineRequest("Spares", null, true, false,
+            [new(null, "Enquiry", 20), new(null, "Quoted", 60)]), CancellationToken.None));
+        var spares = all.Single(x => x.Name == "Spares");
+        Assert.Equal(["Enquiry", "Quoted", "Won", "Lost"], spares.Stages.Select(x => x.Key).ToArray());
+        // Tied to a module the plan lacks: admins see it (marked unavailable), others do not.
+        Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.CreatePipeline(new UpsertSalesPipelineRequest("Maintenance contracts", "maintenance", true, false, [new(null, "Renewal due", 50)]), CancellationToken.None));
+        var rep = CreateCrmController(dbContext, tenant.Id, admin, new ScopedTenantContext(tenant.Id, admin.Id, AppRoles.Manager, PermissionNames.CrmView, PermissionNames.CrmManage));
+        Assert.DoesNotContain(Ok<IReadOnlyList<SalesPipelineResponse>>(await rep.ListPipelines(CancellationToken.None)), x => x.Name == "Maintenance contracts");
+
+        // A deal in Spares starts at its first stage and moves only between its stages.
+        var deal = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>(
+            (await crm.CreateOpportunity(Deal("Pump seals", 40_000m, "KES") with { PipelineId = spares.Id }, CancellationToken.None)).Result).Value);
+        Assert.Equal(("Enquiry", 20, "Spares"), (deal.Stage, deal.Probability, deal.PipelineName));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Proposal", null), CancellationToken.None));
+        var quoted = Ok<SalesOpportunityDetailResponse>(await crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("quoted", null), CancellationToken.None));
+        Assert.Equal(("Quoted", 60), (quoted.Stage, quoted.Probability));
+
+        // Board and summary per pipeline.
+        Assert.Single(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, spares.Id)));
+        Assert.Empty(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities(null, null, null, null, CancellationToken.None, sales.Id)));
+        Assert.Equal(1, Ok<SalesPipelineSummary>(await crm.GetSummary(CancellationToken.None, spares.Id)).Stages.Single(x => x.Stage == "Quoted").Count);
+
+        // Renaming keeps the key; a stage with deals cannot be removed.
+        var renamed = Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.UpdatePipeline(spares.Id, new UpsertSalesPipelineRequest("Spares", null, true, false,
+            [new("Enquiry", "Enquiry", 20), new("Quoted", "Quote sent", 65)]), CancellationToken.None)).Single(x => x.Id == spares.Id);
+        Assert.Equal("Quote sent", renamed.Stages.Single(x => x.Key == "Quoted").Name);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.UpdatePipeline(spares.Id, new UpsertSalesPipelineRequest("Spares", null, true, false,
+            [new("Enquiry", "Enquiry", 20)]), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.DeletePipeline(spares.Id, CancellationToken.None));
+
+        // Moving the deal to the default pipeline: no "Quoted" there, so it starts at Lead.
+        var moved = Ok<SalesOpportunityDetailResponse>(await crm.UpdateOpportunity(deal.Id, Deal("Pump seals", 40_000m, "KES") with { PipelineId = sales.Id }, CancellationToken.None));
+        Assert.Equal(("Lead", "Sales"), (moved.Stage, moved.PipelineName));
+        Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.DeletePipeline(spares.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task DealFields_AreFilledFiltered_AndRequiredByStages()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+
+        Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Building size (m²)", "Number", null, null, null), CancellationToken.None));
+        Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Decision maker", "Text", null, null, null), CancellationToken.None));
+        Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Roof type", "Dropdown", ["Flat", "Pitched"], null, null), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.CreateField(new UpsertSalesCustomFieldRequest("Colour", "Dropdown", [], null, null), CancellationToken.None));
+        var fields = Ok<SalesFieldsResponse>(await crm.CreateField(new UpsertSalesCustomFieldRequest("Spare", "Text", null, null, null), CancellationToken.None));
+        Assert.Equal(["building_size_m", "decision_maker", "roof_type", "spare"], fields.Fields.Select(x => x.Key).ToArray());
+        Assert.Contains(fields.Requirements, x => x.Key == "cf:building_size_m" && x.Label == "Building size (m²)");
+
+        // Proposal needs a value and the building size; Won needs a quotation.
+        var sales = Assert.Single(Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.ListPipelines(CancellationToken.None)));
+        var stages = sales.Stages.Where(x => !x.IsClosed)
+            .Select(x => new UpsertSalesPipelineStageRequest(x.Key, x.Name, x.Probability, x.Key == "Proposal" ? ["value", "cf:building_size_m", "cf:spare"] : null))
+            .ToList();
+        var updated = Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.UpdatePipeline(sales.Id,
+            new UpsertSalesPipelineRequest("Sales", null, true, true, stages, WonRequiredFields: ["quote"]), CancellationToken.None)).Single();
+        Assert.Equal(["value", "cf:building_size_m", "cf:spare"], updated.Stages.Single(x => x.Key == "Proposal").RequiredFields.ToArray());
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.UpdatePipeline(sales.Id,
+            new UpsertSalesPipelineRequest("Sales", null, true, true, stages, WonRequiredFields: ["cf:nonsense"]), CancellationToken.None));
+
+        var deal = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(
+            Deal("Warehouse roof", 0m, "KES") with { CustomFields = new Dictionary<string, string?> { ["roof_type"] = "flat", ["decision_maker"] = "Grace Wanjiku" } },
+            CancellationToken.None)).Result).Value);
+        Assert.Equal("Flat", deal.CustomFields!.Single(x => x.Key == "roof_type").Value);
+        Assert.Null(deal.CustomFields!.Single(x => x.Key == "building_size_m").Value);
+        Assert.Equal(["Proposal", "Negotiation", "Won"], deal.StageBlockers!.Keys.ToArray());
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.UpdateOpportunity(deal.Id,
+            Deal("Warehouse roof", 0m, "KES") with { CustomFields = new Dictionary<string, string?> { ["building_size_m"] = "big" } }, CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.UpdateOpportunity(deal.Id,
+            Deal("Warehouse roof", 0m, "KES") with { CustomFields = new Dictionary<string, string?> { ["no_such_field"] = "x" } }, CancellationToken.None));
+
+        var blocked = await Assert.ThrowsAsync<BusinessRuleException>(() => crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Proposal", null), CancellationToken.None));
+        Assert.Equal("Before moving to Proposal, fill in: Estimated value, Building size (m²), Spare.", blocked.Message);
+        // Skipping the stage does not skip its rules.
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Negotiation", null), CancellationToken.None));
+
+        // A switched-off field is no longer asked for.
+        var spare = fields.Fields.Single(x => x.Key == "spare");
+        Ok<SalesFieldsResponse>(await crm.UpdateField(spare.Id, new UpsertSalesCustomFieldRequest("Spare", "Text", null, null, null, IsActive: false), CancellationToken.None));
+        var filled = Ok<SalesOpportunityDetailResponse>(await crm.UpdateOpportunity(deal.Id,
+            Deal("Warehouse roof", 250_000m, "KES") with { CustomFields = new Dictionary<string, string?> { ["building_size_m"] = "1,200", ["decision_maker"] = "Grace Wanjiku" } }, CancellationToken.None));
+        Assert.Equal("1200", filled.CustomFields!.Single(x => x.Key == "building_size_m").Value);
+        Assert.Equal("Flat", filled.CustomFields!.Single(x => x.Key == "roof_type").Value);
+        Assert.Equal(["Won"], filled.StageBlockers!.Keys.ToArray());
+        Assert.Equal("Negotiation", Ok<SalesOpportunityDetailResponse>(await crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Negotiation", null), CancellationToken.None)).Stage);
+        Assert.Contains("A quotation", (await Assert.ThrowsAsync<BusinessRuleException>(() => crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Won", null), CancellationToken.None))).Message);
+        // Lost never has requirements.
+        Assert.Equal("Lost", Ok<SalesOpportunityDetailResponse>(await crm.ChangeStage(deal.Id, new ChangeSalesStageRequest("Lost", "Budget cut"), CancellationToken.None)).Stage);
+
+        // Filters: exact for choices, "contains" for text, "has any value" without a value.
+        IReadOnlyCollection<SalesOpportunityListItem> Filter(string field, string? value) =>
+            Ok<IReadOnlyCollection<SalesOpportunityListItem>>(crm.ListOpportunities(null, null, null, null, CancellationToken.None, null, field, value).GetAwaiter().GetResult());
+        Assert.Single(Filter("roof_type", "flat"));
+        Assert.Empty(Filter("roof_type", "Pitched"));
+        Assert.Single(Filter("decision_maker", "wanjiku"));
+        Assert.Single(Filter("building_size_m", null));
+
+        // The type of a field in use is fixed, and it cannot be deleted; an unused one can, leaving the stage rules.
+        var size = fields.Fields.Single(x => x.Key == "building_size_m");
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.UpdateField(size.Id, new UpsertSalesCustomFieldRequest("Size", "Text", null, null, null), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.DeleteField(size.Id, CancellationToken.None));
+        Ok<SalesFieldsResponse>(await crm.DeleteField(spare.Id, CancellationToken.None));
+        Assert.Equal(["value", "cf:building_size_m"],
+            Ok<IReadOnlyList<SalesPipelineResponse>>(await crm.ListPipelines(CancellationToken.None)).Single().Stages.Single(x => x.Key == "Proposal").RequiredFields.ToArray());
+
+        // CSV: a column per field out, and in by label.
+        var export = System.Text.Encoding.UTF8.GetString(Assert.IsType<FileContentResult>(await crm.ExportDeals(null, null, CancellationToken.None)).FileContents);
+        Assert.Contains("\"Building size (m²)\",\"Decision maker\",\"Roof type\"", export);
+        Assert.Contains("\"1200\",\"Grace Wanjiku\",\"Flat\"", export);
+        var csv = "Title,Company,Roof Type,Building size (m²)\nTank farm,Kisumu Oils,Pitched,80\nSilo,Kisumu Oils,Thatch,";
+        IFormFile File() => new FormFile(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(csv)), 0, System.Text.Encoding.UTF8.GetByteCount(csv), "file", "deals.csv");
+        var preview = Ok<ImportPreviewResponse>(await crm.PreviewDealImport(new CsvUploadRequest(File()), CancellationToken.None));
+        Assert.Contains("Roof type must be one of: Flat, Pitched.", preview.Rows.Last().Errors);
+        Assert.Equal(1, Ok<ImportCommitResponse>(await crm.CommitDealImport(new CsvUploadRequest(File()), CancellationToken.None)).SuccessfulRows);
+        var imported = await dbContext.SalesOpportunities.SingleAsync(x => x.Title == "Tank farm");
+        Assert.Equal(["80", "Pitched"], (await dbContext.SalesCustomFieldValues.Where(x => x.OpportunityId == imported.Id).Select(x => x.Value).ToListAsync()).Order().ToArray());
+    }
+
+    private static SalesInboundEmailHandler InboundHandler(AppDbContext dbContext, SalesReminderTests.RecordingPushQueue? push = null) =>
+        new(dbContext, new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)), push ?? new SalesReminderTests.RecordingPushQueue(), new NoOpLicenseGuardService());
+
+    private static SalesInboundEmail Inbound(string from, string subject, string body, params string[] to) =>
+        new(from, null, to.Length == 0 ? ["intake@acme.test"] : to, subject, body, DateTime.UtcNow);
+
+    [Fact]
+    public async Task DealEmail_IsTaggedAndLogged_AndClientRepliesComeBackOnTheDeal()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var outbox = new ActivitiesCalendarTests.RecordingOutbox();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin, outbox: outbox);
+        var deal = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(
+            Deal("Chiller service", 90_000m, "KES") with { CompanyName = "Kilele Hotel", ContactName = "Amina Otieno", ContactEmail = "amina@kilele.co.ke" },
+            CancellationToken.None)).Result).Value);
+
+        var logged = Ok<SalesActivityResponse>(await crm.EmailContact(deal.Id, new SendDealEmailRequest("amina@kilele.co.ke", "Amina Otieno", null, "Your quote", "Hi Amina,\nAttached."), CancellationToken.None));
+        var sent = Assert.Single(outbox.Queued);
+        Assert.Equal(SalesDealTags.WithTag("Your quote", deal.Id), sent.Subject);
+        Assert.Equal(admin.Email, sent.ReplyToEmail);
+        Assert.Equal(("Email", true), (logged.Type, logged.Summary.StartsWith("Emailed Amina Otieno <amina@kilele.co.ke>: Your quote", StringComparison.Ordinal)));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.EmailContact(deal.Id, new SendDealEmailRequest("not-an-address", null, null, "x", "y"), CancellationToken.None));
+
+        // With an intake mailbox, replies are sent there so they come back onto the deal.
+        dbContext.EmailIntakeSettings.Add(new EmailIntakeSetting { TenantId = tenant.Id, IsEnabled = true, IntakeEmailAddress = "intake@acme.test" });
+        await dbContext.SaveChangesAsync();
+        Ok<SalesActivityResponse>(await crm.EmailContact(deal.Id, new SendDealEmailRequest("amina@kilele.co.ke", null, ["gm@kilele.co.ke"], "Follow-up", "Any news?"), CancellationToken.None));
+        Assert.Equal("intake@acme.test", outbox.Queued[^1].ReplyToEmail);
+
+        var push = new SalesReminderTests.RecordingPushQueue();
+        var handler = InboundHandler(dbContext, push);
+        var reply = await handler.TryHandleAsync(tenant.Id, Inbound("amina@kilele.co.ke", $"RE: Your quote {SalesDealTags.For(deal.Id)}", "Looks good, send the contract."));
+        Assert.Equal((SalesInboundOutcomes.AddedToDeal, deal.Id), (reply!.Outcome, reply.OpportunityId));
+        Assert.Single(push.Sent);
+        // A colleague at the same company counts; a stranger who copies the tag does not.
+        Assert.NotNull(await handler.TryHandleAsync(tenant.Id, Inbound("gm@kilele.co.ke", $"Re: {SalesDealTags.For(deal.Id)}", "Approved.")));
+        Assert.Null(await handler.TryHandleAsync(tenant.Id, Inbound("someone@elsewhere.com", $"Re: {SalesDealTags.For(deal.Id)}", "Spam")));
+        Assert.Null(await handler.TryHandleAsync(tenant.Id, Inbound("amina@kilele.co.ke", "Chiller leaking again", "Please send someone.")));
+        var received = await dbContext.SalesActivities.Where(x => x.OpportunityId == deal.Id && x.Type == SalesActivityKinds.EmailReceived).ToListAsync();
+        Assert.Equal(2, received.Count);
+        Assert.Contains(received, x => x.Summary.Contains("send the contract"));
+
+        // WhatsApp: logged as an activity, and the workspace inbox's conversation with the contact is listed.
+        Ok<SalesActivityResponse>(await crm.AddActivity(deal.Id, new CreateSalesActivityRequest("WhatsApp", "Sent the site visit times", null, null), CancellationToken.None));
+        Assert.Equal("WhatsApp", (await dbContext.SalesActivities.OrderByDescending(x => x.CreatedAt).FirstAsync(x => x.OpportunityId == deal.Id && x.Summary == "Sent the site visit times")).Type);
+        Ok<SalesOpportunityDetailResponse>(await crm.UpdateOpportunity(deal.Id, Deal("Chiller service", 90_000m, "KES") with { CompanyName = "Kilele Hotel", ContactName = "Amina Otieno", ContactEmail = "amina@kilele.co.ke", ContactPhone = "0712 345 678" }, CancellationToken.None));
+        var conversation = new WhatsAppConversation { TenantId = tenant.Id, ContactName = "Amina", ContactPhone = "+254712345678" };
+        dbContext.WhatsAppConversations.Add(conversation);
+        dbContext.WhatsAppMessages.Add(new WhatsAppMessage { TenantId = tenant.Id, ConversationId = conversation.Id, Direction = "Inbound", Body = "On my way" });
+        await dbContext.SaveChangesAsync();
+        Assert.Equal("On my way", Assert.Single(Ok<IReadOnlyList<SalesWhatsAppMessage>>(await crm.DealWhatsApp(deal.Id, CancellationToken.None))).Body);
+    }
+
+    [Fact]
+    public async Task Leads_ComeInFromTheLeadAddressAndTheWebsiteForm()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        var settings = Ok<SalesSettingsResponse>(await crm.UpdateSettings(new UpdateSalesSettingsRequest(admin.Id, "All", true, LeadEmailAddress: " Sales@Acme.test ", WebFormEnabled: true), CancellationToken.None));
+        Assert.Equal("sales@acme.test", settings.LeadEmailAddress);
+        Assert.Matches("^[0-9a-f]{32}$", settings.WebFormKey!);
+
+        // Mail to the lead address becomes a lead with a follow-up; mail to other intake addresses is left alone.
+        var handler = InboundHandler(dbContext);
+        Assert.Null(await handler.TryHandleAsync(tenant.Id, Inbound("peter@baraka.co.ke", "Leaking roof", "Help", "support@acme.test")));
+        var lead = await handler.TryHandleAsync(tenant.Id, Inbound("peter@baraka.co.ke", "Solar for our depot", "We need 50 kW on the warehouse roof.", "sales@acme.test"));
+        Assert.Equal(SalesInboundOutcomes.LeadCreated, lead!.Outcome);
+        var deal = await dbContext.SalesOpportunities.Include(x => x.Client).SingleAsync(x => x.Id == lead.OpportunityId);
+        Assert.Equal(("Email", "peter@baraka.co.ke", true, admin.Id), (deal.Source, deal.ContactEmail, deal.Client!.IsProspect, deal.OwnerUserId));
+        Assert.Contains(await dbContext.SalesActivities.Where(x => x.OpportunityId == deal.Id).ToListAsync(), x => x.Type == "FollowUp" && x.DueAt != null);
+        // A second email from the same person within the week joins that lead.
+        Assert.Equal((SalesInboundOutcomes.AddedToDeal, deal.Id),
+            await handler.TryHandleAsync(tenant.Id, Inbound("peter@baraka.co.ke", "Also", "And a backup generator.", "sales@acme.test")) is { } again ? (again.Outcome, again.OpportunityId!.Value) : default);
+
+        // The website form.
+        var form = new SalesLeadFormController(dbContext, new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)), new SalesReminderTests.RecordingPushQueue(), new NoOpLicenseGuardService());
+        Assert.Equal("Acme Facilities", Ok<SalesLeadFormInfo>(await form.Get(settings.WebFormKey!, CancellationToken.None)).CompanyName);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => form.Submit(settings.WebFormKey!, new SalesLeadFormRequest("Grace", null, null, null, null, "Quote please"), CancellationToken.None));
+        Ok<SalesLeadFormReceipt>(await form.Submit(settings.WebFormKey!, new SalesLeadFormRequest("Grace Wanjiku", "Nyali Mall", "grace@nyalimall.co.ke", "0700 111 222", "Mombasa", "Annual AC maintenance for 40 units"), CancellationToken.None));
+        var web = await dbContext.SalesOpportunities.SingleAsync(x => x.Source == "Website");
+        Assert.Equal(("Nyali Mall", "Mombasa"), (web.Client is null ? (await dbContext.Clients.SingleAsync(x => x.Id == web.ClientId)).ClientName : web.Client.ClientName, web.Location));
+        Assert.Single(await dbContext.ClientContacts.Where(x => x.ClientId == web.ClientId && x.FullName == "Grace Wanjiku").ToListAsync());
+        // Bots fill the hidden field: thanked, nothing saved.
+        Ok<SalesLeadFormReceipt>(await form.Submit(settings.WebFormKey!, new SalesLeadFormRequest("Bot", null, "x@y.z", null, null, "Buy now", "http://spam"), CancellationToken.None));
+        Assert.Equal(1, await dbContext.SalesOpportunities.CountAsync(x => x.Source == "Website"));
+
+        // Off, or a wrong key: not found.
+        await Assert.ThrowsAsync<NotFoundException>(() => form.Get("0123456789abcdef0123456789abcdef", CancellationToken.None));
+        Ok<SalesSettingsResponse>(await crm.UpdateSettings(new UpdateSalesSettingsRequest(admin.Id, "All", true, WebFormEnabled: false), CancellationToken.None));
+        await Assert.ThrowsAsync<NotFoundException>(() => form.Get(settings.WebFormKey!, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Sequences_RunTheirSteps_AndStopOnReplyOrClose()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var outbox = new ActivitiesCalendarTests.RecordingOutbox();
+        var crm = CreateCrmController(dbContext, tenant.Id, admin, outbox: outbox);
+        var sequences = Ok<IReadOnlyList<SalesSequenceResponse>>(await crm.CreateSequence(new UpsertSalesSequenceRequest("New lead", true, true,
+        [
+            new(0, "Task", null, "Call {{ContactName}} at {{CompanyName}}"),
+            new(2, "Email", "Following up on {{DealTitle}}", "Hi {{ContactName}},\nAny questions?\n{{OwnerName}}"),
+            new(3, "Task", null, "Last call"),
+        ]), CancellationToken.None));
+        var sequence = Assert.Single(sequences);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.CreateSequence(new UpsertSalesSequenceRequest("Bad", true, true, [new(1, "Email", null, "No subject")]), CancellationToken.None));
+
+        async Task<Guid> NewDeal(string title) => Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(
+            Deal(title, 50_000m, "KES") with { CompanyName = "Baraka Logistics", ContactName = "Peter Mwangi", ContactEmail = "peter@baraka.co.ke" }, CancellationToken.None)).Result).Value).Id;
+        var dealId = await NewDeal("Depot solar");
+
+        // The first step is due at once.
+        var started = Ok<SalesOpportunityDetailResponse>(await crm.StartSequence(dealId, new StartSalesSequenceRequest(sequence.Id), CancellationToken.None));
+        Assert.Equal(("New lead", 1, 3), (started.Sequence!.Name, started.Sequence.NextStep, started.Sequence.StepCount));
+        Assert.Contains(started.Activities, x => x.Type == "FollowUp" && x.Summary == "Call Peter at Baraka Logistics (New lead)");
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.StartSequence(dealId, new StartSalesSequenceRequest(sequence.Id), CancellationToken.None));
+
+        // Two days on, the email goes out as the owner.
+        var tenantSet = new HashSet<Guid> { tenant.Id };
+        Assert.Equal(0, await SalesSequences.RunDueAsync(dbContext, outbox, tenantSet, DateTime.UtcNow.AddDays(1), CancellationToken.None));
+        Assert.Equal(1, await SalesSequences.RunDueAsync(dbContext, outbox, tenantSet, DateTime.UtcNow.AddDays(2).AddHours(1), CancellationToken.None));
+        var email = Assert.Single(outbox.Queued);
+        Assert.Equal(("peter@baraka.co.ke", SalesDealTags.WithTag("Following up on Depot solar", dealId)), (email.RecipientEmail, email.Subject));
+        Assert.Contains("Hi Peter,", email.TextBody);
+        Assert.Contains("Sales Admin", email.TextBody);
+
+        // The client replies: the sequence stops and its open task is closed.
+        await InboundHandler(dbContext).TryHandleAsync(tenant.Id, Inbound("peter@baraka.co.ke", $"Re: {SalesDealTags.For(dealId)}", "Let's meet Monday."));
+        var stopped = Ok<SalesOpportunityDetailResponse>(await crm.GetOpportunity(dealId, CancellationToken.None));
+        Assert.Equal((SalesSequenceStatuses.Stopped, "The client replied."), (stopped.Sequence!.Status, stopped.Sequence.StoppedReason));
+        Assert.DoesNotContain(stopped.Activities, x => x.Summary.EndsWith("(New lead)", StringComparison.Ordinal) && x.CompletedAt == null);
+
+        // Closing a deal stops its sequence too; a sequence in use cannot be deleted.
+        var other = await NewDeal("Office AC");
+        Ok<SalesOpportunityDetailResponse>(await crm.StartSequence(other, new StartSalesSequenceRequest(sequence.Id), CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.DeleteSequence(sequence.Id, CancellationToken.None));
+        var lost = Ok<SalesOpportunityDetailResponse>(await crm.ChangeStage(other, new ChangeSalesStageRequest("Lost", "Went quiet"), CancellationToken.None));
+        Assert.Equal(SalesSequenceStatuses.Stopped, lost.Sequence!.Status);
+        Ok<IReadOnlyList<SalesSequenceResponse>>(await crm.DeleteSequence(sequence.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Scoring_ViewsDocumentsAndVisits()
+    {
+        await using var dbContext = CreateDbContext();
+        var (tenant, admin) = await SeedAsync(dbContext);
+        var crm = CreateCrmController(dbContext, tenant.Id, admin);
+        var open = Assert.IsType<SalesOpportunityDetailResponse>(Assert.IsType<CreatedAtActionResult>((await crm.CreateOpportunity(Deal("Open deal", 1_000m, "KES") with { Source = "Referral" }, CancellationToken.None)).Result).Value);
+        Assert.Null(open.Score); // too little history
+
+        // A year's history: of 12 deals that reached Proposal, 9 were won.
+        var pipelineId = open.PipelineId!.Value;
+        for (var i = 0; i < 12; i++)
+        {
+            var won = i < 9;
+            var closed = new SalesOpportunity
+            {
+                TenantId = tenant.Id, Title = $"Old {i}", PipelineId = pipelineId, Source = "Referral", Stage = won ? "Won" : "Lost",
+                WonAt = won ? DateTime.UtcNow.AddDays(-30) : null, LostAt = won ? null : DateTime.UtcNow.AddDays(-30),
+            };
+            dbContext.SalesOpportunities.Add(closed);
+            dbContext.SalesStageChanges.Add(new SalesStageChange { TenantId = tenant.Id, OpportunityId = closed.Id, FromStage = "Lead", ToStage = "Proposal", ChangedAt = DateTime.UtcNow.AddDays(-40) });
+        }
+        await dbContext.SaveChangesAsync();
+        var proposal = Ok<SalesOpportunityDetailResponse>(await crm.ChangeStage(open.Id, new ChangeSalesStageRequest("Proposal", null), CancellationToken.None));
+        Assert.Equal(71, proposal.Score!.Probability); // (9 + 1) / (12 + 2)
+        Assert.Equal("9 of 12 deals that reached Proposal were won", proposal.Score.Reasons[0]);
+        Assert.Equal(71, Assert.Single(Ok<IReadOnlyCollection<SalesOpportunityListItem>>(await crm.ListOpportunities("Open", null, null, null, CancellationToken.None))).SuggestedProbability);
+
+        // Saved views: mine, and shared ones.
+        var views = Ok<IReadOnlyList<SalesSavedViewResponse>>(await crm.SaveView(new SaveSalesViewRequest("My hot deals", "?view=list&stage=Proposal", false), CancellationToken.None));
+        Assert.Equal(("My hot deals", "view=list&stage=Proposal", true), (views.Single().Name, views.Single().Query, views.Single().IsMine));
+        Assert.Single(Ok<IReadOnlyList<SalesSavedViewResponse>>(await crm.SaveView(new SaveSalesViewRequest("My hot deals", "view=board", true), CancellationToken.None)));
+        Assert.Empty(Ok<IReadOnlyList<SalesSavedViewResponse>>(await crm.DeleteView(views.Single().Id, CancellationToken.None)));
+
+        // A site visit logged with the phone's location.
+        var visit = Ok<SalesActivityResponse>(await crm.AddActivity(open.Id, new CreateSalesActivityRequest("SiteVisit", "Walked the plant room", null, null, -1.2921234567, 36.8219, 12.34), CancellationToken.None));
+        Assert.Equal((-1.292123, 36.8219, 12.3), (visit.Latitude!.Value, visit.Longitude!.Value, visit.AccuracyMeters!.Value));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => crm.AddActivity(open.Id, new CreateSalesActivityRequest("SiteVisit", "x", null, null, 120, 0), CancellationToken.None));
+    }
+
     private static UpsertSalesOpportunityRequest Deal(string title, decimal value, string currency) =>
         new(title, null, null, "Prospect Ltd", null, null, null, null, null, null, null, value, currency, null, null, null);
 
@@ -349,7 +1455,7 @@ public sealed class SalesCrmFlowTests
         }
     };
 
-    private static SalesCrmController CreateCrmController(AppDbContext dbContext, Guid tenantId, User actor, ITenantContext? tenantContext = null) =>
+    private static SalesCrmController CreateCrmController(AppDbContext dbContext, Guid tenantId, User actor, ITenantContext? tenantContext = null, IEmailOutboxService? outbox = null) =>
         new(
             dbContext,
             tenantContext ?? new FakeTenantContext(tenantId, actor.Id, actor.Email),
@@ -357,15 +1463,17 @@ public sealed class SalesCrmFlowTests
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpUserAccessService(),
             new NoOpLicenseGuardService(),
-            new RolePermissionService(dbContext))
+            new RolePermissionService(dbContext),
+            new SalesOwnerResolver(dbContext, new RolePermissionService(dbContext)),
+            outbox)
         {
             ControllerContext = CreateControllerContext(actor)
         };
 
-    private static WorkOrdersController CreateWorkOrdersController(AppDbContext dbContext, Guid tenantId, User actor) =>
+    private static WorkOrdersController CreateWorkOrdersController(AppDbContext dbContext, Guid tenantId, User actor, ITenantContext? tenantContext = null) =>
         new(
             dbContext,
-            new FakeTenantContext(tenantId, actor.Id, actor.Email),
+            tenantContext ?? new FakeTenantContext(tenantId, actor.Id, actor.Email),
             new NoOpDocumentNumberingService(),
             new AuditLogService(dbContext, new HttpContextAccessor()),
             new NoOpUserAccessService(),
@@ -461,7 +1569,10 @@ public sealed class SalesCrmFlowTests
 
     private sealed class NoOpLicenseGuardService : ILicenseGuardService
     {
-        public Task<TenantLicenseSnapshot> GetSnapshotAsync(Guid tenantId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        // An Essentials plan: Operations and Finance, no Maintenance.
+        public Task<TenantLicenseSnapshot> GetSnapshotAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new TenantLicenseSnapshot(tenantId, Guid.Empty, "essentials", "Essentials", "Active", DateTime.UtcNow.AddYears(-1), null, null, null,
+                false, false, false, 10, 10, null, false, false, null) { Modules = [ServiceOpsPlans.Operations, ServiceOpsPlans.Finance] });
         public Task<LicenseUsageSnapshot> GetUsageAsync(Guid tenantId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<IReadOnlyCollection<PlatformLicenseUsageSnapshot>> GetPlatformUsageAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<PlatformLicenseUsageSnapshot>>([]);
         public Task EnsureTenantCanMutateAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;

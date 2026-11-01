@@ -13,6 +13,7 @@ const documentTypeLabels: Record<string, string> = {
   PurchaseOrder: 'Purchase Order',
   Expense: 'Expense',
   ProjectVariation: 'Project Variation',
+  Quotation: 'Quotation',
 }
 
 function ApprovalCard({ request }: { request: ApprovalRequest }) {

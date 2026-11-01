@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Lock, MapPin } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
@@ -23,12 +23,18 @@ import {
   useConvertToQuotation,
   useDeleteOpportunity,
   useOpportunity,
+  usePipelines,
   useReassignOpportunityOwner,
 } from './api'
+import { DealPeople } from './components/DealPeople'
 import { ConvertToWorkOrderDrawer } from './components/ConvertToWorkOrderDrawer'
 import { OpportunityFormDrawer } from './components/OpportunityFormDrawer'
 import { OwnerSelect } from './components/OwnerSelect'
-import { OPEN_STAGES, activityTypeOptions, opportunityParty, stageLabels, tenderStatusLabels, type SalesStage } from './types'
+import { formatDealFieldValue } from './components/DealFieldInput'
+import { DealMessageButtons, DealWhatsAppHistory } from './components/DealMessaging'
+import { DealSequenceCard } from './components/DealSequenceCard'
+import { TenderDocuments } from './components/TenderDocuments'
+import { activityTypeLabels, activityTypeOptions, openStagesOf, opportunityParty, pipelineFor, stageName, tenderStatusLabels, type SalesStage } from './types'
 
 const outlineButton = 'inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60'
 const primaryButton = 'inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60'
@@ -49,6 +55,7 @@ export function OpportunityDetailPage() {
   const addActivity = useAddActivity(id)
   const completeActivity = useCompleteActivity()
   const reassignOwner = useReassignOpportunityOwner(id)
+  const { data: pipelines } = usePipelines()
 
   const [showEdit, setShowEdit] = useState(false)
   const [showWorkOrder, setShowWorkOrder] = useState(false)
@@ -59,17 +66,29 @@ export function OpportunityDetailPage() {
   const [activitySummary, setActivitySummary] = useState('')
   const [activityDue, setActivityDue] = useState('')
   const [activityDueTime, setActivityDueTime] = useState('09:00')
+  const [activityLocation, setActivityLocation] = useState<{ latitude: number; longitude: number; accuracyMeters: number } | null>(null)
+  const [locating, setLocating] = useState(false)
 
   if (isLoading) return <Spinner label="Loading opportunity" />
   if (isError || !opportunity) return <EmptyState title="Opportunity unavailable" description="This opportunity could not be loaded." />
 
   const isWon = opportunity.stage === 'Won'
   const isClosed = isWon || opportunity.stage === 'Lost'
+  const pipeline = pipelineFor(pipelines, opportunity.pipelineId)
+  const openStages = openStagesOf(pipeline)
+  const nameOf = (stage: SalesStage) => stageName(stage, pipelines, opportunity.pipelineId)
 
   const moveTo = async (stage: SalesStage, reason?: string) => {
+    // Stage rules (Settings › Sales): say what is missing and open the form to fill it in.
+    const missing = opportunity.stageBlockers?.[stage]
+    if (missing?.length) {
+      toast.error(`Before moving to ${nameOf(stage)}, fill in: ${missing.join(', ')}`)
+      if (!missing.every((item) => item === 'A quotation')) setShowEdit(true)
+      return false
+    }
     try {
       await changeStage.mutateAsync({ id, stage, lostReason: reason ?? null })
-      toast.success(stage === 'Won' ? 'Deal won 🎉 — create the work order when you are ready' : `Moved to ${stageLabels[stage]}`)
+      toast.success(stage === 'Won' ? 'Deal won 🎉 — create the work order when you are ready' : `Moved to ${nameOf(stage)}`)
       return true
     } catch {
       return false
@@ -97,7 +116,9 @@ export function OpportunityDetailPage() {
         type: activityType,
         summary: activitySummary.trim(),
         dueAt: activityDue ? new Date(`${activityDue}T${activityDueTime || '09:00'}`).toISOString() : null,
+        ...(activityType === 'SiteVisit' && activityLocation ? activityLocation : {}),
       })
+      setActivityLocation(null)
       setActivitySummary('')
       setActivityDue('')
       setActivityDueTime('09:00')
@@ -106,15 +127,32 @@ export function OpportunityDetailPage() {
     }
   }
 
+  // A visit report records where it was written: the phone's location, asked for only when the person taps for it.
+  const captureLocation = () => {
+    if (!('geolocation' in navigator)) return void toast.error('This device cannot share its location')
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setActivityLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy })
+        setLocating(false)
+      },
+      () => {
+        setLocating(false)
+        toast.error('Could not get your location. Check the browser allows it.')
+      },
+      { enableHighAccuracy: true, timeout: 15_000 },
+    )
+  }
+
   const workTypeLabel = workTypeOptions.find((option) => option.value === opportunity.serviceType)?.label
 
   return (
     <div className="space-y-4">
       <PageHeader
         title={opportunity.title}
-        subtitle={opportunityParty(opportunity)}
+        subtitle={pipelines && pipelines.length > 1 && opportunity.pipelineName ? `${opportunityParty(opportunity)} · ${opportunity.pipelineName} pipeline` : opportunityParty(opportunity)}
         breadcrumbs={[{ label: 'Sales Pipeline', to: '/crm' }, { label: opportunity.title }]}
-        secondaryActions={<StatusBadge status={stageLabels[opportunity.stage]} />}
+        secondaryActions={<StatusBadge status={nameOf(opportunity.stage)} />}
         primaryAction={
           canManage ? (
             <div className="flex flex-wrap gap-2">
@@ -127,14 +165,15 @@ export function OpportunityDetailPage() {
                   <button type="button" onClick={() => setShowLost(true)} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-white px-4 text-sm font-medium text-rose-600 transition hover:bg-rose-50">Mark Lost</button>
                 </>
               ) : (
-                <button type="button" disabled={changeStage.isPending} onClick={() => void moveTo('Negotiation')} className={outlineButton}>Reopen</button>
+                <button type="button" disabled={changeStage.isPending} onClick={() => void moveTo(openStages[openStages.length - 1]?.key ?? 'Negotiation')} className={outlineButton}>Reopen</button>
               )}
               {opportunity.stage !== 'Lost' && hasModule('finance') && canQuote ? (
                 <button type="button" disabled={convertToQuotation.isPending} onClick={() => void createQuote()} className={outlineButton}>Create Quote</button>
               ) : null}
-              {!opportunity.clientId ? (
-                <button type="button" disabled={convertToClient.isPending} onClick={() => convertToClient.mutateAsync().then(() => toast.success('Client created')).catch(() => undefined)} className={outlineButton}>Create Client</button>
+              {!opportunity.clientId || opportunity.clientIsProspect ? (
+                <button type="button" disabled={convertToClient.isPending} onClick={() => convertToClient.mutateAsync().then(() => toast.success(`${opportunityParty(opportunity)} is now a client`)).catch(() => undefined)} className={outlineButton}>Make Client</button>
               ) : null}
+              <DealMessageButtons opportunity={opportunity} />
               <button type="button" onClick={() => setShowEdit(true)} className={outlineButton}>Edit</button>
               <button type="button" onClick={() => setShowDelete(true)} className={outlineButton}>Delete</button>
             </div>
@@ -144,18 +183,20 @@ export function OpportunityDetailPage() {
 
       {!isClosed && canManage ? (
         <div className="flex flex-wrap gap-2" role="group" aria-label="Pipeline stage">
-          {OPEN_STAGES.map((stage) => (
+          {openStages.map((stage) => (
             <button
-              key={stage}
+              key={stage.key}
               type="button"
               disabled={changeStage.isPending}
-              onClick={() => void moveTo(stage)}
+              onClick={() => void moveTo(stage.key)}
+              title={opportunity.stageBlockers?.[stage.key] ? `Needs: ${opportunity.stageBlockers[stage.key]?.join(', ')}` : undefined}
               className={cn(
-                'h-9 rounded-full border px-4 text-sm font-medium transition',
-                stage === opportunity.stage ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                'inline-flex h-9 items-center gap-1.5 rounded-full border px-4 text-sm font-medium transition',
+                stage.key === opportunity.stage ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
               )}
             >
-              {stageLabels[stage]}
+              {stage.key !== opportunity.stage && opportunity.stageBlockers?.[stage.key] ? <Lock className="h-3 w-3" aria-label="Has requirements" /> : null}
+              {stage.name}
             </button>
           ))}
         </div>
@@ -166,6 +207,19 @@ export function OpportunityDetailPage() {
           This deal is won. Create a work order to hand it over to operations{opportunity.clientId ? '' : ' — the client record is created for you'}.
         </div>
       ) : null}
+      {opportunity.renewalOfContractId ? (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          Renewal of contract{' '}
+          <Link to={`/contracts/${opportunity.renewalOfContractId}`} className="font-medium underline underline-offset-4">{opportunity.renewalContractNumber ?? 'contract'}</Link>.
+          {' '}Renewing the contract wins this deal; letting it lapse marks it lost.
+        </div>
+      ) : null}
+      {opportunity.sourceWorkOrderId ? (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          Flagged by a technician on work order{' '}
+          <Link to={`/work-orders/${opportunity.sourceWorkOrderId}`} className="font-medium underline underline-offset-4">{opportunity.sourceWorkOrderNumber ?? 'work order'}</Link>.
+        </div>
+      ) : null}
       {opportunity.stage === 'Lost' && opportunity.lostReason ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">Lost: {opportunity.lostReason}</div>
       ) : null}
@@ -173,7 +227,7 @@ export function OpportunityDetailPage() {
       <SummarySection title="Deal Overview" description="Customer, value and expected close.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            ['Customer', opportunity.clientId ? <Link key="c" to={`/clients/${opportunity.clientId}`} className="underline decoration-slate-300 underline-offset-4">{opportunity.clientName}</Link> : `${opportunityParty(opportunity)} (prospect)`],
+            ['Customer', opportunity.clientId ? <span key="c"><Link to={`/clients/${opportunity.clientId}`} className="underline decoration-slate-300 underline-offset-4">{opportunity.clientName}</Link>{opportunity.clientIsProspect ? ' (prospect)' : ''}</span> : `${opportunityParty(opportunity)} (prospect)`],
             ['Site', opportunity.siteName ?? '—'],
             ['Contact', [opportunity.contactName, opportunity.contactPhone, opportunity.contactEmail].filter(Boolean).join(' · ') || '—'],
             ['Location', opportunity.location ?? '—'],
@@ -185,7 +239,12 @@ export function OpportunityDetailPage() {
                 </span>
               </span>
             )],
-            ['Probability', `${opportunity.probability}%`],
+            ['Probability', opportunity.score ? (
+              <span key="p" title={opportunity.score.reasons.join('\n')}>
+                {opportunity.probability}%
+                <span className="block text-xs text-slate-500">History suggests {opportunity.score.probability}% ({opportunity.score.reasons[0]?.toLowerCase()})</span>
+              </span>
+            ) : `${opportunity.probability}%`],
             ['Expected close', opportunity.expectedCloseDate ? formatDate(opportunity.expectedCloseDate) : '—'],
             ['Type of work', workTypeLabel ?? '—'],
             ['Source', opportunity.source ?? '—'],
@@ -205,6 +264,7 @@ export function OpportunityDetailPage() {
             ) : (opportunity.ownerName ?? '—')],
             ['Created', formatDate(opportunity.createdAt)],
             ['Won', opportunity.wonAt ? formatDate(opportunity.wonAt) : '—'],
+            ...(opportunity.customFields ?? []).map((field) => [field.label, formatDealFieldValue(field.fieldType, field.value)]),
           ].map(([label, value]) => (
             <div key={label as string} className="rounded-xl border border-slate-200 px-4 py-3">
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
@@ -236,7 +296,15 @@ export function OpportunityDetailPage() {
                       <input type="time" aria-label="Follow-up time" value={activityDueTime} onChange={(event) => setActivityDueTime(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
                     ) : null}
                   </label>
-                  <button type="button" disabled={addActivity.isPending} onClick={() => void logActivity()} className={primaryButton}>Log Activity</button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {activityType === 'SiteVisit' ? (
+                      <button type="button" disabled={locating} onClick={captureLocation} className={cn(outlineButton, activityLocation && 'border-emerald-300 text-emerald-700')}>
+                        <MapPin className="mr-1.5 h-4 w-4" />
+                        {locating ? 'Locating…' : activityLocation ? `Location added (±${Math.round(activityLocation.accuracyMeters)} m)` : 'Add my location'}
+                      </button>
+                    ) : null}
+                    <button type="button" disabled={addActivity.isPending} onClick={() => void logActivity()} className={primaryButton}>Log Activity</button>
+                  </div>
                 </div>
                 {activityDue ? (
                   <p className="text-xs text-slate-500">
@@ -255,10 +323,20 @@ export function OpportunityDetailPage() {
                     <div className="min-w-0">
                       <div className="text-sm text-slate-900">
                         <span className={cn('mr-2 text-xs font-semibold uppercase tracking-wide', activity.type === 'System' ? 'text-slate-400' : 'text-[var(--app-primary)]')}>
-                          {activityTypeOptions.find((option) => option.value === activity.type)?.label ?? activity.type}
+                          {activityTypeLabels[activity.type] ?? activityTypeOptions.find((option) => option.value === activity.type)?.label ?? activity.type}
                         </span>
-                        {activity.summary}
+                        <span className="whitespace-pre-wrap">{activity.summary}</span>
                       </div>
+                      {activity.latitude != null && activity.longitude != null ? (
+                        <a
+                          href={`https://www.google.com/maps?q=${activity.latitude},${activity.longitude}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-0.5 inline-flex items-center gap-1 text-xs text-slate-500 underline decoration-slate-300 underline-offset-2"
+                        >
+                          <MapPin className="h-3 w-3" />Logged on site{activity.accuracyMeters ? ` (±${Math.round(activity.accuracyMeters)} m)` : ''}
+                        </a>
+                      ) : null}
                       <div className="mt-0.5 text-xs text-slate-500">
                         {formatDateTime(activity.occurredAt)}{activity.loggedByName ? ` · ${activity.loggedByName}` : ''}
                         {activity.dueAt ? (
@@ -281,6 +359,12 @@ export function OpportunityDetailPage() {
         </div>
 
         <div className="space-y-4">
+          <DealPeople opportunity={opportunity} canManage={canManage} />
+          <DealSequenceCard opportunity={opportunity} canManage={canManage} />
+          <DealWhatsAppHistory opportunityId={opportunity.id} />
+          <SummarySection title="Documents" description="Drawings, photos, specifications and the like.">
+            <TenderDocuments tenderId={opportunity.id} entityType="SalesOpportunity" canManage={canManage} emptyText="No documents yet." />
+          </SummarySection>
           <SummarySection title="Work Orders" description="Jobs raised from this deal.">
             {opportunity.workOrders.length === 0 ? (
               <p className="text-sm text-slate-500">{isWon ? 'None yet.' : 'Win the deal to create work orders from it.'}</p>

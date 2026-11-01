@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo } from 'react'
-import { WHATSAPP_ENABLED } from '../shared/config/features'
+import { EMAIL_INTAKE_ENABLED, WHATSAPP_ENABLED } from '../shared/config/features'
 import {
   Navigate,
   Outlet,
@@ -37,6 +37,7 @@ import { SignupPage } from '../features/public/SignupPage'
 import { SignupVerifyPage } from '../features/public/SignupVerifyPage'
 import { DemoConfirmationPage } from '../features/public/DemoConfirmationPage'
 import { CsatSurveyPage } from '../features/public/CsatSurveyPage'
+import { EnquiryFormPage } from '../features/public/EnquiryFormPage'
 import { TrackJobPage } from '../features/portal/TrackJobPage'
 import { ForbiddenPage } from '../features/public/ForbiddenPage'
 import { NotFoundPage } from '../features/public/NotFoundPage'
@@ -94,6 +95,8 @@ import { QuotesPage } from '../features/finance/QuotesPage'
 import { PipelinePage } from '../features/crm/PipelinePage'
 import { OpportunityDetailPage } from '../features/crm/OpportunityDetailPage'
 import { TendersPage } from '../features/crm/TendersPage'
+import { FollowUpsPage } from '../features/crm/FollowUpsPage'
+import { SalesReportsPage } from '../features/crm/SalesReportsPage'
 import { TenderDetailPage } from '../features/crm/TenderDetailPage'
 import { QuoteDetailPage } from '../features/finance/QuoteDetailPage'
 import { AgingPage as FinanceAgingPageReal } from '../features/finance/AgingPage'
@@ -150,6 +153,7 @@ import { SlaPoliciesPage } from '../features/settings/SlaPoliciesPage'
 import { WorkflowsSettingsPage } from '../features/settings/WorkflowsSettingsPage'
 import { OperationalDefaultsSettingsPage } from '../features/settings/OperationalDefaultsSettingsPage'
 import { FinanceDefaultsSettingsPage } from '../features/settings/FinanceDefaultsSettingsPage'
+import { SalesSettingsPage } from '../features/settings/SalesSettingsPage'
 import { EscalationRulesSettingsPage } from '../features/settings/EscalationRulesSettingsPage'
 import { WOTemplatesSettingsPage } from '../features/settings/WOTemplatesSettingsPage'
 import { MyApprovalsPage } from '../features/approvals/MyApprovalsPage'
@@ -330,6 +334,8 @@ export function AppRouter() {
       ['/maintenance/engine', MaintenanceEnginePage],
       ['/crm', PipelinePage],
       ['/crm/opportunities/:id', OpportunityDetailPage],
+      ['/crm/follow-ups', FollowUpsPage],
+      ['/crm/reports', SalesReportsPage],
       ['/crm/tenders', TendersPage],
       ['/crm/tenders/:id', TenderDetailPage],
       ['/clients', ClientsPage],
@@ -460,6 +466,7 @@ export function AppRouter() {
       ['/settings/workflows', WorkflowsSettingsPage],
       ['/settings/operational-defaults', OperationalDefaultsSettingsPage],
       ['/settings/finance-defaults', FinanceDefaultsSettingsPage],
+      ['/settings/sales', SalesSettingsPage],
       ['/settings/escalation-rules', EscalationRulesSettingsPage],
       ['/settings/wo-templates', WOTemplatesSettingsPage],
       ['/approvals', MyApprovalsPage],
@@ -489,6 +496,7 @@ export function AppRouter() {
         <Route path="/signup/verify" element={<SignupVerifyPage />} />
         <Route path="/demo-confirmation" element={<DemoConfirmationPage />} />
         <Route path="/csat/:token" element={<CsatSurveyPage />} />
+        <Route path="/enquiry/:key" element={<EnquiryFormPage />} />
         <Route path="/track/:token" element={<TrackJobPage />} />
         <Route path="/403" element={<ForbiddenPage />} />
         <Route path="/404" element={<NotFoundPage />} />
@@ -516,8 +524,9 @@ export function AppRouter() {
         </Route>
 
         <Route element={<ProtectedRoute allowedRoles={tenantRoles}><TenantShellRoute /></ProtectedRoute>}>
-          {/* WHATSAPP_ENABLED hides the inbound chat inbox and its old account page; WhatsApp reminders (shared number) are always routed. */}
-          {tenantRouteComponents.filter(([path]) => WHATSAPP_ENABLED || !(path.startsWith('/whatsapp') || path === '/settings/whatsapp')).map(([path, Component]) => (
+          {/* Features switched off in shared/config/features.ts have no routes. */}
+          {tenantRouteComponents.filter(([path]) => (WHATSAPP_ENABLED || !(path.startsWith('/whatsapp') || path.startsWith('/settings/whatsapp')))
+            && (EMAIL_INTAKE_ENABLED || path !== '/settings/email-intake')).map(([path, Component]) => (
             <Route key={path} path={path} element={<Component />} />
           ))}
         </Route>

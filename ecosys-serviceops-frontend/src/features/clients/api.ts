@@ -2,17 +2,19 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { PagedResult } from '../../shared/types/pagination'
-import type { Asset, AssetContractOption, Client, ClientSummary, SiteDetail } from './types'
+import type { Asset, AssetContractOption, Client, ClientContact, ClientSummary, PossibleDuplicateClient, SiteDetail, UpsertClientContactPayload } from './types'
 
 export interface ClientListFilters {
   search?: string
   status?: 'active' | 'inactive' | 'all'
+  /** Prospects are left out unless asked for: 'prospects' lists only them, 'all' lists both. */
+  kind?: 'clients' | 'prospects' | 'all'
 }
 
 export function useClients(filters?: ClientListFilters) {
   return useQuery({
     queryKey: ['clients', filters ?? {}],
-    queryFn: () => api.get<Client[]>(endpoints.clients.list, { search: filters?.search, status: filters?.status }),
+    queryFn: () => api.get<Client[]>(endpoints.clients.list, { search: filters?.search, status: filters?.status, kind: filters?.kind }),
     staleTime: 30_000,
   })
 }
@@ -21,7 +23,7 @@ export function useClients(filters?: ClientListFilters) {
 export function useClientsPaged(filters: ClientListFilters, page: number, pageSize: number) {
   return useQuery({
     queryKey: ['clients', 'paged', filters, page, pageSize],
-    queryFn: () => api.get<PagedResult<Client>>(endpoints.clients.list, { search: filters.search, status: filters.status, page, pageSize }),
+    queryFn: () => api.get<PagedResult<Client>>(endpoints.clients.list, { search: filters.search, status: filters.status, kind: filters.kind, page, pageSize }),
     staleTime: 30_000,
     placeholderData: keepPreviousData,
   })
@@ -400,3 +402,56 @@ export function useAddAssetToContract(assetId: string) {
   })
 }
 
+export function useClientContacts(clientId: string | undefined) {
+  return useQuery({
+    queryKey: ['clients', clientId, 'contacts'],
+    queryFn: () => api.get<ClientContact[]>(endpoints.clients.contacts(clientId ?? '')),
+    enabled: Boolean(clientId),
+    staleTime: 30_000,
+  })
+}
+
+export function useSaveClientContact(clientId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...payload }: UpsertClientContactPayload & { id?: string }) =>
+      id ? api.put<ClientContact>(endpoints.clients.contact(clientId, id), payload) : api.post<ClientContact>(endpoints.clients.contacts(clientId), payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['clients', clientId, 'contacts'] })
+      void queryClient.invalidateQueries({ queryKey: ['crm'] })
+    },
+  })
+}
+
+export function useDeleteClientContact(clientId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (contactId: string) => api.delete<void>(endpoints.clients.contact(clientId, contactId)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['clients', clientId, 'contacts'] })
+      void queryClient.invalidateQueries({ queryKey: ['crm'] })
+    },
+  })
+}
+
+/** Clients and prospects that look like the company being typed (name, email domain or phone). */
+export function usePossibleDuplicates(params: { name?: string | undefined; email?: string | undefined; phone?: string | undefined; excludeId?: string | undefined }, enabled = true) {
+  const hasInput = Boolean(params.name?.trim() || params.email?.includes('@') || (params.phone?.replace(/\D/g, '').length ?? 0) >= 9)
+  return useQuery({
+    queryKey: ['clients', 'possible-duplicates', params],
+    queryFn: () => api.get<PossibleDuplicateClient[]>(endpoints.clients.possibleDuplicates, params),
+    enabled: enabled && hasInput,
+    staleTime: 30_000,
+  })
+}
+
+export function useMergeClient(sourceId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (targetId: string) => api.post<void>(endpoints.clients.mergeInto(sourceId, targetId)),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['clients'] })
+      void queryClient.invalidateQueries({ queryKey: ['crm'] })
+    },
+  })
+}

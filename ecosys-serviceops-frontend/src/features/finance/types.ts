@@ -161,6 +161,15 @@ export interface QuotationDetail extends QuotationListItem {
   notes: string | null
   rejectionReason: string | null
   lines: QuotationLine[]
+  /** The latest approval request's status, when the workspace approves quotes before sending (Settings › Approvals). */
+  approvalStatus?: 'Pending' | 'Approved' | 'Rejected' | 'Cancelled' | null
+  /** The total that was approved; changing the total asks for approval again. */
+  approvedAmount?: number | null
+  /** The client's signed acceptance in the portal (name typed as the signature, position, time, network address). */
+  acceptedByName?: string | null
+  acceptedByTitle?: string | null
+  acceptedAt?: string | null
+  acceptedFromIp?: string | null
 }
 
 export interface AgingRow {

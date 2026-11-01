@@ -5,6 +5,8 @@ import type { WorkOrder } from '../work-orders/types'
 import type {
   SalesActivity,
   SalesCurrencySettings,
+  SalesFollowUpItem,
+  SalesQuoteAwaitingAnswer,
   SalesOwnerOption,
   SalesTenderDetail,
   SalesTenderListItem,
@@ -13,21 +15,91 @@ import type {
   SalesOpportunityDetail,
   SalesOpportunityListItem,
   SalesPipelineSummary,
+  SalesReport,
+  SalesTargets,
+  SalesTargetRow,
+  SalesAssignmentRule,
+  UpsertAssignmentRulePayload,
+  SalesSettings,
   SalesStage,
+  SalesPipeline,
+  UpsertPipelinePayload,
+  DealWhatsAppMessage,
+  SalesSavedView,
+  SalesSequence,
+  UpsertSequencePayload,
+  DealFieldsResponse,
+  UpsertDealFieldPayload,
   UpsertOpportunityPayload,
 } from './types'
 
 const crmKey = ['crm'] as const
 
-export function usePipelineSummary() {
-  return useQuery({ queryKey: [...crmKey, 'summary'], queryFn: () => api.get<SalesPipelineSummary>(endpoints.crm.summary), staleTime: 30_000 })
+export function usePipelineSummary(pipelineId?: string | undefined) {
+  return useQuery({
+    queryKey: [...crmKey, 'summary', pipelineId ?? null],
+    queryFn: () => api.get<SalesPipelineSummary>(endpoints.crm.summary, { pipelineId }),
+    staleTime: 30_000,
+  })
 }
 
-export function useOpportunities(params?: { stage?: string | undefined; search?: string | undefined; clientId?: string | undefined; ownerUserId?: string | undefined }) {
+export function useOpportunities(params?: { stage?: string | undefined; search?: string | undefined; clientId?: string | undefined; ownerUserId?: string | undefined; pipelineId?: string | undefined; field?: string | undefined; fieldValue?: string | undefined }) {
   return useQuery({
     queryKey: [...crmKey, 'opportunities', params ?? {}],
-    queryFn: () => api.get<SalesOpportunityListItem[]>(endpoints.crm.opportunities, { stage: params?.stage, search: params?.search, clientId: params?.clientId, ownerUserId: params?.ownerUserId }),
+    queryFn: () => api.get<SalesOpportunityListItem[]>(endpoints.crm.opportunities, { stage: params?.stage, search: params?.search, clientId: params?.clientId, ownerUserId: params?.ownerUserId, pipelineId: params?.pipelineId, field: params?.field, fieldValue: params?.fieldValue }),
     staleTime: 30_000,
+  })
+}
+
+/** Active pipelines the plan includes (admins get every pipeline, with `available` and `isActive` to tell them apart). */
+export function usePipelines() {
+  return useQuery({ queryKey: [...crmKey, 'pipelines'], queryFn: () => api.get<SalesPipeline[]>(endpoints.crm.pipelines), staleTime: 5 * 60_000 })
+}
+
+export function useSavePipeline() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id?: string | undefined; payload: UpsertPipelinePayload }) =>
+      id ? api.put<SalesPipeline[]>(endpoints.crm.pipeline(id), payload) : api.post<SalesPipeline[]>(endpoints.crm.pipelines, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeletePipeline() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (id: string) => api.delete<SalesPipeline[]>(endpoints.crm.pipeline(id)),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDealFields() {
+  return useQuery({ queryKey: [...crmKey, 'fields'], queryFn: () => api.get<DealFieldsResponse>(endpoints.crm.fields), staleTime: 5 * 60_000 })
+}
+
+export function useSaveDealField() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id?: string | undefined; payload: UpsertDealFieldPayload }) =>
+      id ? api.put<DealFieldsResponse>(endpoints.crm.field(id), payload) : api.post<DealFieldsResponse>(endpoints.crm.fields, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteDealField() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (id: string) => api.delete<DealFieldsResponse>(endpoints.crm.field(id)),
+    onSuccess: invalidate,
+  })
+}
+
+export function useSalesReport(params: { from: string; to: string; ownerUserId?: string | undefined; pipelineId?: string | undefined }, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: [...crmKey, 'report', params],
+    enabled: options?.enabled ?? true,
+    queryFn: () => api.get<SalesReport>(endpoints.crm.reports, { from: params.from, to: params.to, ownerUserId: params.ownerUserId, pipelineId: params.pipelineId }),
+    staleTime: 60_000,
   })
 }
 
@@ -80,10 +152,109 @@ export function useDeleteOpportunity() {
 export function useAddActivity(opportunityId: string) {
   const invalidate = useInvalidateCrm()
   return useMutation({
-    mutationFn: (payload: { type: string; summary: string; dueAt?: string | null }) =>
+    mutationFn: (payload: { type: string; summary: string; dueAt?: string | null; latitude?: number; longitude?: number; accuracyMeters?: number }) =>
       api.post<SalesActivity>(endpoints.crm.activities(opportunityId), payload),
     onSuccess: invalidate,
   })
+}
+
+export function useFollowUps(params?: { ownerUserId?: string | undefined }) {
+  return useQuery({
+    queryKey: [...crmKey, 'follow-ups', params ?? {}],
+    queryFn: () => api.get<SalesFollowUpItem[]>(endpoints.crm.followUps, { ownerUserId: params?.ownerUserId }),
+    staleTime: 30_000,
+  })
+}
+
+export function useQuotesAwaitingAnswer(params?: { ownerUserId?: string | undefined }) {
+  return useQuery({
+    queryKey: [...crmKey, 'quotes-awaiting-answer', params ?? {}],
+    queryFn: () => api.get<SalesQuoteAwaitingAnswer[]>(endpoints.crm.quotesAwaitingAnswer, { ownerUserId: params?.ownerUserId }),
+    staleTime: 30_000,
+  })
+}
+
+export function useAddDealContact(opportunityId: string) {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (payload: { contactId?: string | null; fullName?: string | null; email?: string | null; phone?: string | null; jobTitle?: string | null; role?: string | null }) =>
+      api.post<SalesOpportunityDetail>(endpoints.crm.dealContacts(opportunityId), payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useRemoveDealContact(opportunityId: string) {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (contactId: string) => api.delete<SalesOpportunityDetail>(endpoints.crm.dealContact(opportunityId, contactId)),
+    onSuccess: invalidate,
+  })
+}
+
+export function useSendDealEmail(opportunityId: string) {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (payload: { to: string; toName: string | null; cc: string[] | null; subject: string; body: string }) =>
+      api.post<SalesActivity>(endpoints.crm.dealEmail(opportunityId), payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDealWhatsApp(opportunityId: string | undefined) {
+  return useQuery({
+    queryKey: [...crmKey, 'opportunity', opportunityId, 'whatsapp'],
+    queryFn: () => api.get<DealWhatsAppMessage[]>(endpoints.crm.dealWhatsApp(opportunityId ?? '')),
+    enabled: Boolean(opportunityId),
+    staleTime: 60_000,
+  })
+}
+
+export function useSequences() {
+  return useQuery({ queryKey: [...crmKey, 'sequences'], queryFn: () => api.get<SalesSequence[]>(endpoints.crm.sequences), staleTime: 5 * 60_000 })
+}
+
+export function useSaveSequence() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: ({ id, payload }: { id?: string | undefined; payload: UpsertSequencePayload }) =>
+      id ? api.put<SalesSequence[]>(endpoints.crm.sequence(id), payload) : api.post<SalesSequence[]>(endpoints.crm.sequences, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteSequence() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({ mutationFn: (id: string) => api.delete<SalesSequence[]>(endpoints.crm.sequence(id)), onSuccess: invalidate })
+}
+
+export function useStartSequence(opportunityId: string) {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (sequenceId: string) => api.post<SalesOpportunityDetail>(endpoints.crm.dealSequence(opportunityId), { sequenceId }),
+    onSuccess: invalidate,
+  })
+}
+
+export function useStopSequence(opportunityId: string) {
+  const invalidate = useInvalidateCrm()
+  return useMutation({ mutationFn: () => api.delete<SalesOpportunityDetail>(endpoints.crm.dealSequence(opportunityId)), onSuccess: invalidate })
+}
+
+export function useSavedViews() {
+  return useQuery({ queryKey: [...crmKey, 'views'], queryFn: () => api.get<SalesSavedView[]>(endpoints.crm.views), staleTime: 5 * 60_000 })
+}
+
+export function useSaveView() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (payload: { name: string; query: string; isShared: boolean }) => api.post<SalesSavedView[]>(endpoints.crm.views, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteView() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({ mutationFn: (id: string) => api.delete<SalesSavedView[]>(endpoints.crm.view(id)), onSuccess: invalidate })
 }
 
 export function useCompleteActivity() {
@@ -139,6 +310,52 @@ export function useCreateWorkOrderFromOpportunity() {
 
 // Owners
 
+export function useSalesSettings() {
+  return useQuery({ queryKey: [...crmKey, 'settings'], queryFn: () => api.get<SalesSettings>(endpoints.crm.settings), staleTime: 60_000 })
+}
+
+export function useUpdateSalesSettings() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (payload: Pick<SalesSettings, 'defaultOwnerUserId' | 'dealVisibility' | 'createRenewalDeals' | 'stalledAfterDays' | 'sendWeeklySummary'> & { leadEmailAddress?: string; webFormEnabled?: boolean }) =>
+      api.put<SalesSettings>(endpoints.crm.settings, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useAssignmentRules() {
+  return useQuery({ queryKey: [...crmKey, 'assignment-rules'], queryFn: () => api.get<SalesAssignmentRule[]>(endpoints.crm.assignmentRules) })
+}
+
+export function useSaveAssignmentRule() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: ({ id, ...payload }: UpsertAssignmentRulePayload & { id?: string }) =>
+      id ? api.put<SalesAssignmentRule[]>(endpoints.crm.assignmentRule(id), payload) : api.post<SalesAssignmentRule[]>(endpoints.crm.assignmentRules, payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteAssignmentRule() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (id: string) => api.delete<SalesAssignmentRule[]>(endpoints.crm.assignmentRule(id)),
+    onSuccess: invalidate,
+  })
+}
+
+export function useSalesTargets(year: number, enabled = true) {
+  return useQuery({ queryKey: [...crmKey, 'targets', year], queryFn: () => api.get<SalesTargets>(endpoints.crm.targets, { year }), enabled })
+}
+
+export function useSaveSalesTargets() {
+  const invalidate = useInvalidateCrm()
+  return useMutation({
+    mutationFn: (payload: { year: number; targets: SalesTargetRow[] }) => api.put<SalesTargets>(endpoints.crm.targets, payload),
+    onSuccess: invalidate,
+  })
+}
+
 export function useSalesOwners() {
   return useQuery({ queryKey: [...crmKey, 'owners'], queryFn: () => api.get<SalesOwnerOption[]>(endpoints.crm.owners), staleTime: 60_000 })
 }
@@ -171,10 +388,10 @@ export function useSetSalesExchangeRate() {
 
 // RFPs & RFQs
 
-export function useTenders(params?: { type?: string | undefined; status?: string | undefined; search?: string | undefined; ownerUserId?: string | undefined }) {
+export function useTenders(params?: { type?: string | undefined; status?: string | undefined; search?: string | undefined; ownerUserId?: string | undefined; clientId?: string | undefined }) {
   return useQuery({
     queryKey: [...crmKey, 'tenders', params ?? {}],
-    queryFn: () => api.get<SalesTenderListItem[]>(endpoints.crm.tenders, { type: params?.type, status: params?.status, search: params?.search, ownerUserId: params?.ownerUserId }),
+    queryFn: () => api.get<SalesTenderListItem[]>(endpoints.crm.tenders, { type: params?.type, status: params?.status, search: params?.search, ownerUserId: params?.ownerUserId, clientId: params?.clientId }),
     staleTime: 30_000,
   })
 }
@@ -248,34 +465,37 @@ export interface TenderDocument {
   createdAt: string
 }
 
-const tenderDocumentsKey = (tenderId: string) => ['attachments', 'SalesTender', tenderId] as const
+/** Files kept with an RFP/RFQ or a deal (the shared attachments). */
+export type SalesDocumentOwner = 'SalesTender' | 'SalesOpportunity'
 
-export function useTenderDocuments(tenderId: string) {
+const tenderDocumentsKey = (tenderId: string, entityType: SalesDocumentOwner = 'SalesTender') => ['attachments', entityType, tenderId] as const
+
+export function useTenderDocuments(tenderId: string, entityType: SalesDocumentOwner = 'SalesTender') {
   return useQuery({
-    queryKey: tenderDocumentsKey(tenderId),
-    queryFn: () => api.get<TenderDocument[]>(endpoints.crm.documents(tenderId)),
+    queryKey: tenderDocumentsKey(tenderId, entityType),
+    queryFn: () => api.get<TenderDocument[]>(entityType === 'SalesTender' ? endpoints.crm.documents(tenderId) : endpoints.crm.dealDocuments(tenderId)),
     enabled: Boolean(tenderId),
   })
 }
 
-export function useUploadTenderDocument(tenderId: string) {
+export function useUploadTenderDocument(tenderId: string, entityType: SalesDocumentOwner = 'SalesTender') {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (file: File) => {
       const form = new FormData()
-      form.append('entityType', 'SalesTender')
+      form.append('entityType', entityType)
       form.append('entityId', tenderId)
       form.append('file', file)
       return api.post<TenderDocument>(endpoints.crm.uploadDocument, form)
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: tenderDocumentsKey(tenderId) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: tenderDocumentsKey(tenderId, entityType) }),
   })
 }
 
-export function useDeleteTenderDocument(tenderId: string) {
+export function useDeleteTenderDocument(tenderId: string, entityType: SalesDocumentOwner = 'SalesTender') {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (attachmentId: string) => api.delete<void>(endpoints.crm.deleteDocument(attachmentId)),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: tenderDocumentsKey(tenderId) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: tenderDocumentsKey(tenderId, entityType) }),
   })
 }

@@ -26,7 +26,8 @@ public sealed class TenantQuotationController(
     IEmailTemplateService emailTemplateService,
     IEmailSubjectRuleService emailSubjectRuleService,
     ILogger<TenantQuotationController> logger,
-    IWebHostEnvironment environment) : TenantAwareControllerBase(tenantContext)
+    IWebHostEnvironment environment,
+    IApprovalWorkflowService? approvalWorkflowService = null) : TenantAwareControllerBase(tenantContext)
 {
     // No platform-wide currency to inherit here: the tenant's own configured currency (derived from
     // its country, same as the frontend's getActiveCurrency()) is what the create/edit forms send
@@ -73,7 +74,8 @@ public sealed class TenantQuotationController(
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceView);
         var quote = await LoadQuoteAsync(id, cancellationToken);
-        return Ok(MapDetail(quote));
+        var approval = await LatestApprovalAsync(quote.Id, cancellationToken);
+        return Ok(MapDetail(quote) with { ApprovalStatus = approval?.Status, ApprovedAmount = approval?.Status == ApprovalStatuses.Approved ? approval.Amount : null });
     }
 
     // ── Create ───────────────────────────────────────────────────────────────
@@ -147,11 +149,40 @@ public sealed class TenantQuotationController(
         userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceManageBillableWork);
         var quote = await LoadQuoteAsync(id, cancellationToken);
         if (quote.Status != "Draft") throw new BusinessRuleException("Only Draft quotations can be sent.");
+
+        // With a quotation approval matrix (Settings › Approvals), a quote in an approval band is
+        // approved at its current total before it goes out; editing the total after approval asks again.
+        if (approvalWorkflowService is not null)
+        {
+            var latest = await LatestApprovalAsync(quote.Id, cancellationToken);
+            if (latest?.Status == ApprovalStatuses.Pending)
+                throw new BusinessRuleException("This quotation is awaiting approval and cannot be sent yet.");
+            var approvedAsIs = latest?.Status == ApprovalStatuses.Approved && latest.Amount == quote.TotalAmount
+                && string.Equals(latest.Currency, quote.Currency, StringComparison.OrdinalIgnoreCase);
+            if (!approvedAsIs)
+            {
+                var started = await approvalWorkflowService.StartAsync(
+                    TenantId, ApprovalDocumentTypes.Quotation, quote.Id, quote.QuoteNumber, quote.TotalAmount, quote.Currency, UserId, cancellationToken);
+                if (started is not null)
+                    return Ok(MapDetail(quote) with { ApprovalStatus = ApprovalStatuses.Pending });
+            }
+        }
+
         quote.Status = "Sent";
+        quote.SentAt = DateTime.UtcNow;
+        quote.SentByUserId = UserId;
+        quote.ChaseReminderStage = 0;
         await dbContext.SaveChangesAsync(cancellationToken);
         await TryQueueQuotationSentEmailAsync(quote, cancellationToken);
         return Ok(MapDetail(quote));
     }
+
+    /// <summary>The quote's most recent approval request, if any.</summary>
+    private Task<ApprovalRequest?> LatestApprovalAsync(Guid quoteId, CancellationToken cancellationToken) =>
+        dbContext.ApprovalRequests.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.DocumentType == ApprovalDocumentTypes.Quotation && x.DocumentId == quoteId)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
     // ── Accept ───────────────────────────────────────────────────────────────
 
@@ -162,6 +193,8 @@ public sealed class TenantQuotationController(
         var quote = await LoadQuoteAsync(id, cancellationToken);
         if (quote.Status != "Sent") throw new BusinessRuleException("Only Sent quotations can be accepted.");
         quote.Status = "Accepted";
+        quote.AcceptedAt = DateTime.UtcNow;
+        await SalesQuotationSync.OnAnsweredAsync(dbContext, quote, accepted: true, null, UserId, await ActorNameAsync(cancellationToken), "(recorded by staff)", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapDetail(quote));
     }
@@ -176,9 +209,13 @@ public sealed class TenantQuotationController(
         var quote = await LoadQuoteAsync(id, cancellationToken);
         quote.Status = "Rejected";
         quote.RejectionReason = request.Reason?.Trim();
+        await SalesQuotationSync.OnAnsweredAsync(dbContext, quote, accepted: false, quote.RejectionReason, UserId, await ActorNameAsync(cancellationToken), "(recorded by staff)", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapDetail(quote));
     }
+
+    private async Task<string?> ActorNameAsync(CancellationToken cancellationToken) =>
+        await dbContext.Users.Where(x => x.TenantId == TenantId && x.Id == UserId).Select(x => x.FullName).FirstOrDefaultAsync(cancellationToken);
 
     // ── Convert to Invoice ────────────────────────────────────────────────────
 
@@ -435,7 +472,8 @@ public sealed class TenantQuotationController(
             q.SiteId, q.QuoteNumber, q.Status, q.Subject, q.QuoteDate, q.ValidUntil,
             q.Notes, q.Subtotal, q.TaxAmount, q.TotalAmount, q.Currency,
             q.ConvertedToInvoiceId, q.ConvertedToWorkOrderId, q.RejectionReason, q.CreatedAt,
-            q.Lines.Select(MapQLine).ToList());
+            q.Lines.Select(MapQLine).ToList(),
+            AcceptedByName: q.AcceptedByName, AcceptedByTitle: q.AcceptedByTitle, AcceptedAt: q.AcceptedAt, AcceptedFromIp: q.AcceptedFromIp);
 
     private static TenantQuotationLineResponse MapQLine(TenantQuotationLine l) =>
         new(l.Id, l.QuotationId, l.RateCardId, l.Description, l.ItemType,
@@ -469,7 +507,13 @@ public sealed record TenantQuotationDetailResponse(
     decimal Subtotal, decimal TaxAmount, decimal TotalAmount, string Currency,
     Guid? ConvertedToInvoiceId, Guid? ConvertedToWorkOrderId,
     string? RejectionReason, DateTime CreatedAt,
-    IReadOnlyCollection<TenantQuotationLineResponse> Lines);
+    IReadOnlyCollection<TenantQuotationLineResponse> Lines,
+    string? ApprovalStatus = null,
+    decimal? ApprovedAmount = null,
+    string? AcceptedByName = null,
+    string? AcceptedByTitle = null,
+    DateTime? AcceptedAt = null,
+    string? AcceptedFromIp = null);
 
 public sealed record TenantQuotationLineResponse(
     Guid Id, Guid QuotationId, Guid? RateCardId,

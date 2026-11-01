@@ -1462,6 +1462,10 @@ public sealed class WorkOrdersController(
         var opportunity = await dbContext.SalesOpportunities
             .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.OpportunityId, cancellationToken)
             ?? throw new NotFoundException("Opportunity was not found.");
+        // Someone limited to their own deals (Sales settings) cannot reach anyone else's this way either.
+        var ownerScope = await SalesVisibility.OwnerScopeAsync(dbContext, tenantContext, TenantId, cancellationToken);
+        if (ownerScope.HasValue && opportunity.OwnerUserId != ownerScope)
+            throw new NotFoundException("Opportunity was not found.");
 
         if (!string.Equals(opportunity.Stage, SalesStages.Won, StringComparison.OrdinalIgnoreCase))
         {
@@ -1472,6 +1476,8 @@ public sealed class WorkOrdersController(
         {
             throw new BusinessRuleException("Create or link the client for this opportunity first.");
         }
+        // Work for a prospect makes them a client (saved with the work order below).
+        await ProspectClients.PromoteAsync(dbContext, TenantId, opportunity.ClientId, cancellationToken);
 
         var siteId = request.SiteId ?? opportunity.SiteId;
         if (siteId.HasValue)

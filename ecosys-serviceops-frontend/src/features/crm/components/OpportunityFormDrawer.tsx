@@ -4,11 +4,13 @@ import { useNavigate } from 'react-router-dom'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { getActiveCurrency } from '../../../shared/utils/currency'
 import { useClients, useSites } from '../../clients/api'
+import { PossibleDuplicates } from '../../clients/components/PossibleDuplicates'
 import { workTypeOptions } from '../../work-orders/schemas'
 import { useAuth } from '../../../shared/hooks/useAuth'
-import { useCreateOpportunity, useUpdateOpportunity } from '../api'
+import { useCreateOpportunity, useDealFields, usePipelines, useUpdateOpportunity } from '../api'
 import { OwnerSelect } from './OwnerSelect'
-import { sourceOptions, type SalesOpportunityDetail } from '../types'
+import { fieldAppliesTo, pipelineFor, sourceOptions, type SalesOpportunityDetail } from '../types'
+import { DealFieldInput } from './DealFieldInput'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -30,13 +32,18 @@ interface FormState {
   currency: string
   expectedCloseDate: string
   ownerUserId: string
+  pipelineId: string
+  /** Custom field values by key. */
+  custom: Record<string, string>
 }
 
-function toForm(opportunity: SalesOpportunityDetail | null | undefined, currentUserId: string): FormState {
+function toForm(opportunity: SalesOpportunityDetail | null | undefined, currentUserId: string, defaultClientId?: string, defaultPipelineId?: string): FormState {
+  const clientId = opportunity ? (opportunity.clientId ?? '') : (defaultClientId ?? '')
   return {
     title: opportunity?.title ?? '',
-    partyMode: opportunity?.clientId ? 'client' : 'prospect',
-    clientId: opportunity?.clientId ?? '',
+    // A prospect's details are edited as text; its client record follows (see ProspectClients on the server).
+    partyMode: clientId && !opportunity?.clientIsProspect ? 'client' : 'prospect',
+    clientId,
     siteId: opportunity?.siteId ?? '',
     companyName: opportunity?.companyName ?? '',
     contactName: opportunity?.contactName ?? '',
@@ -50,26 +57,39 @@ function toForm(opportunity: SalesOpportunityDetail | null | undefined, currentU
     currency: opportunity?.currency ?? getActiveCurrency(),
     expectedCloseDate: opportunity?.expectedCloseDate ? opportunity.expectedCloseDate.slice(0, 10) : '',
     ownerUserId: opportunity ? (opportunity.ownerUserId ?? '') : currentUserId,
+    pipelineId: opportunity ? (opportunity.pipelineId ?? '') : (defaultPipelineId ?? ''),
+    custom: Object.fromEntries((opportunity?.customFields ?? []).map((field) => [field.key, field.value ?? ''])),
   }
 }
 
 const orNull = (value: string) => (value.trim() ? value.trim() : null)
 
-export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: boolean; onClose: () => void; opportunity?: SalesOpportunityDetail | null }) {
+export function OpportunityFormDrawer({ open, onClose, opportunity, defaultClientId, defaultPipelineId }: { open: boolean; onClose: () => void; opportunity?: SalesOpportunityDetail | null; defaultClientId?: string; defaultPipelineId?: string | undefined }) {
   const navigate = useNavigate()
   const isEdit = Boolean(opportunity)
   const { user } = useAuth()
   const currentUserId = user?.userId ?? ''
-  const [form, setForm] = useState<FormState>(() => toForm(opportunity, currentUserId))
+  const [form, setForm] = useState<FormState>(() => toForm(opportunity, currentUserId, defaultClientId, defaultPipelineId))
   const { data: clients } = useClients()
   const { data: sites } = useSites(form.partyMode === 'client' && form.clientId ? form.clientId : undefined)
   const create = useCreateOpportunity()
   const update = useUpdateOpportunity(opportunity?.id ?? '')
   const saving = create.isPending || update.isPending
+  const { data: pipelines } = usePipelines()
+  const { data: dealFields } = useDealFields()
+  const usablePipelines = (pipelines ?? []).filter((p) => p.isActive && p.available)
+  const currentPipeline = pipelineFor(pipelines, opportunity?.pipelineId)
+  const movingTo = isEdit && form.pipelineId && form.pipelineId !== currentPipeline?.id ? usablePipelines.find((p) => p.id === form.pipelineId) : undefined
+  // Mirrors the server: the stage is kept where the new pipeline has it, else the deal starts at its first stage.
+  const landsIn = movingTo && opportunity
+    ? (movingTo.stages.find((s) => s.key === opportunity.stage) ?? movingTo.stages.find((s) => !s.isClosed))?.name
+    : undefined
+
+  const shownFields = (dealFields?.fields ?? []).filter((field) => fieldAppliesTo(field, form.pipelineId || currentPipeline?.id))
 
   useEffect(() => {
-    if (open) setForm(toForm(opportunity, currentUserId))
-  }, [open, opportunity, currentUserId])
+    if (open) setForm(toForm(opportunity, currentUserId, defaultClientId, defaultPipelineId))
+  }, [open, opportunity, currentUserId, defaultClientId, defaultPipelineId])
 
   const set = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }))
 
@@ -103,6 +123,9 @@ export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: bo
       probability: null,
       expectedCloseDate: form.expectedCloseDate ? new Date(form.expectedCloseDate).toISOString() : null,
       ownerUserId: form.ownerUserId || null,
+      pipelineId: form.pipelineId || null,
+      // Only the fields on the form are sent, so values for fields that are switched off are kept.
+      customFields: Object.fromEntries(shownFields.map((field) => [field.key, form.custom[field.key]?.trim() || null])),
     }
     try {
       if (isEdit) {
@@ -139,6 +162,18 @@ export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: bo
           <label className={labelClass} htmlFor="opp-title">Title</label>
           <input id="opp-title" value={form.title} onChange={(event) => set({ title: event.target.value })} className={fieldClass} placeholder="e.g. Standby generator supply and install" />
         </div>
+
+        {usablePipelines.length > 1 ? (
+          <div>
+            <label className={labelClass} htmlFor="opp-pipeline">Pipeline</label>
+            <select id="opp-pipeline" value={form.pipelineId || (currentPipeline?.id ?? '')} onChange={(event) => set({ pipelineId: event.target.value })} className={fieldClass}>
+              {usablePipelines.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            {movingTo && landsIn ? <p className="mt-1 text-xs text-slate-500">The deal moves to {movingTo.name} and lands in {landsIn}.</p> : null}
+          </div>
+        ) : null}
 
         <div>
           <span className={labelClass}>Who is this deal with?</span>
@@ -204,6 +239,16 @@ export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: bo
             <input id="opp-phone" value={form.contactPhone} onChange={(event) => set({ contactPhone: event.target.value })} className={fieldClass} />
           </div>
         </div>
+        {form.partyMode === 'prospect' ? (
+          <PossibleDuplicates
+            name={form.companyName || form.contactName}
+            email={form.contactEmail}
+            phone={form.contactPhone}
+            excludeId={opportunity?.clientIsProspect ? (opportunity.clientId ?? undefined) : undefined}
+            // A real client is picked outright; a prospect is joined by taking its exact name.
+            onUse={(match) => (match.isProspect ? set({ companyName: match.clientName }) : set({ partyMode: 'client', clientId: match.id, siteId: '' }))}
+          />
+        ) : null}
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
@@ -244,6 +289,18 @@ export function OpportunityFormDrawer({ open, onClose, opportunity }: { open: bo
             </select>
           </div>
         </div>
+
+        {shownFields.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {shownFields.map((field) => (
+              <div key={field.id}>
+                {field.fieldType === 'Checkbox' ? <span className={`${labelClass} invisible`} aria-hidden="true">{field.label}</span> : <label className={labelClass} htmlFor={`deal-field-${field.key}`}>{field.label}</label>}
+                <DealFieldInput field={field} value={form.custom[field.key] ?? ''} onChange={(value) => set({ custom: { ...form.custom, [field.key]: value } })} className={fieldClass} />
+                {field.helpText ? <p className="mt-1 text-xs text-slate-500">{field.helpText}</p> : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <div>
           <label className={labelClass} htmlFor="opp-description">Scope / notes</label>
