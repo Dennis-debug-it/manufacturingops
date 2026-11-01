@@ -17,6 +17,7 @@ import { formatCurrency } from '../../shared/utils/format'
 import { useTechnicians } from '../team/api'
 import { useBranches } from './api'
 import { SummaryStrip } from './components/SummaryStrip'
+import { ManageAccessHint } from './components/ManageAccessHint'
 import {
   toolConditions,
   toolStatusLabels,
@@ -137,6 +138,8 @@ export function ToolsPage() {
         }
       />
 
+      {canManage ? null : <ManageAccessHint what="tools" orIssue />}
+
       <SummaryStrip
         figures={[
           { label: 'Checked out', value: summary ? `${summary.checkedOut} of ${summary.total}` : '—' },
@@ -174,9 +177,9 @@ export function ToolsPage() {
         data={data ?? []}
         loading={isLoading}
         emptyTitle={isError ? 'Tools unavailable' : attention ? 'Nothing needs attention here' : 'No tools'}
-        emptyDescription={isError ? 'The tool register could not be loaded.' : 'Add tools with New Tool to track who has them.'}
-        emptyActionLabel={isError ? 'Retry' : undefined}
-        onEmptyAction={isError ? () => void refetch() : undefined}
+        emptyDescription={isError ? 'The tool register could not be loaded.' : canManage ? 'Add your first tool to track who has it, when it is due back and when it needs calibration.' : 'No tools have been added yet.'}
+        emptyActionLabel={isError ? 'Retry' : canManage && !attention && !status ? 'New Tool' : undefined}
+        onEmptyAction={isError ? () => void refetch() : canManage && !attention && !status ? () => setShowNew(true) : undefined}
       />
       {showNew ? <ToolFormDrawer onClose={() => setShowNew(false)} /> : null}
     </div>

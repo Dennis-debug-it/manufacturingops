@@ -10,6 +10,7 @@ import { formatCurrency } from '../../shared/utils/format'
 import { useMaterials } from './api'
 import { MaterialBulkImportDrawer } from './components/MaterialBulkImportDrawer'
 import { PartFormDrawer } from './components/PartFormDrawer'
+import { ManageAccessHint } from './components/ManageAccessHint'
 import type { Material } from './types'
 
 export function PartsPage() {
@@ -51,6 +52,8 @@ export function PartsPage() {
           ) : undefined
         }
       />
+
+      {canManage ? null : <ManageAccessHint what="parts" />}
 
       <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <label className="flex items-center gap-2 text-sm text-slate-600">

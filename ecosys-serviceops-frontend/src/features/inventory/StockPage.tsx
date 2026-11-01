@@ -11,6 +11,7 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { useStockByLocation, type StockLocationRow } from './api'
 import { MaterialBulkImportDrawer } from './components/MaterialBulkImportDrawer'
 import { PartFormDrawer } from './components/PartFormDrawer'
+import { ManageAccessHint } from './components/ManageAccessHint'
 import { SummaryStrip } from './components/SummaryStrip'
 
 const fieldClass = 'h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[var(--app-primary)]'
@@ -156,6 +157,8 @@ export function StockPage() {
           ) : undefined
         }
       />
+
+      {canManage ? null : <ManageAccessHint what="parts" />}
 
       {isError ? (
         // Zero totals after a failed request would be indistinguishable from an empty store.
