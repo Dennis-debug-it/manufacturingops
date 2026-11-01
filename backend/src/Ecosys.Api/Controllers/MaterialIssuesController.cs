@@ -20,7 +20,8 @@ public sealed class MaterialIssuesController(
     IBranchAccessService branchAccessService,
     IDocumentNumberingService documentNumberingService,
     IStockLedgerService stockLedgerService,
-    IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
+    IAuditLogService auditLogService,
+    INotificationDispatcher? notificationDispatcher = null) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<MaterialIssueResponse>>> List([FromQuery] Guid? branchId, CancellationToken cancellationToken)
@@ -121,6 +122,11 @@ public sealed class MaterialIssuesController(
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.created", nameof(MaterialIssue), issue.Id.ToString(), $"Created material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        // A slip that was issued straight away needs nobody; one waiting on approval or issue does.
+        if (persisted.IssueStatus is "pending_approval" or "draft")
+            await InventoryNotifications.NotifyRequestRaisedAsync(notificationDispatcher, dbContext, TenantId, UserId,
+                persisted.IssueNumber, persisted.WorkOrder?.WorkOrderNumber, persisted.RequestedByUser?.FullName, persisted.Lines.Count,
+                persisted.IssueStatus == "pending_approval", cancellationToken);
         return CreatedAtAction(nameof(List), new { id = issue.Id }, Map(persisted));
     }
 
@@ -142,6 +148,8 @@ public sealed class MaterialIssuesController(
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.approved", nameof(MaterialIssue), issue.Id.ToString(), $"Approved material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        await InventoryNotifications.NotifyRequestDecidedAsync(notificationDispatcher, TenantId, persisted.RequestedByUserId, UserId,
+            persisted.IssueNumber, persisted.WorkOrder?.WorkOrderNumber, persisted.WorkOrderId, true, null, cancellationToken);
         return Ok(Map(persisted));
     }
 
@@ -165,6 +173,8 @@ public sealed class MaterialIssuesController(
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.rejected", nameof(MaterialIssue), issue.Id.ToString(), $"Rejected material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        await InventoryNotifications.NotifyRequestDecidedAsync(notificationDispatcher, TenantId, persisted.RequestedByUserId, UserId,
+            persisted.IssueNumber, persisted.WorkOrder?.WorkOrderNumber, persisted.WorkOrderId, false, persisted.RejectionReason, cancellationToken);
         return Ok(Map(persisted));
     }
 
@@ -203,6 +213,8 @@ public sealed class MaterialIssuesController(
         await IssueInternalAsync(issue, false, cancellationToken, quantities);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        await InventoryNotifications.NotifyRequestDispatchedAsync(notificationDispatcher, TenantId, persisted.RequestedByUserId, UserId,
+            persisted.IssueNumber, persisted.WorkOrder?.WorkOrderNumber, persisted.WorkOrderId, persisted.Branch?.Name, cancellationToken);
         return Ok(Map(persisted));
     }
 

@@ -274,6 +274,86 @@ public sealed class PurchaseOrdersController(
         return order;
     }
 
+    /// <summary>
+    /// Edits a draft: supplier, expected date, notes and the lines (replaced as a whole). Only a draft
+    /// can change — once sent, the supplier has it. A draft waiting on approval can't be edited until
+    /// decided, and an edit that changes the total starts approval again, so an approved order can't
+    /// be enlarged afterwards.
+    /// </summary>
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<PurchaseOrderDetailResponse>> UpdatePurchaseOrder(
+        Guid id, [FromBody] CreatePurchaseOrderRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageMaterials);
+        var order = await LoadOrderAsync(id, cancellationToken);
+        if (order.Status != "Draft")
+            throw new BusinessRuleException($"Only a draft purchase order can be edited; {order.PoNumber} is {order.Status.ToLowerInvariant()}.");
+        if (await approvalWorkflowService.GetActiveForDocumentAsync(TenantId, ApprovalDocumentTypes.PurchaseOrder, order.Id, cancellationToken) is not null)
+            throw new BusinessRuleException("This purchase order is waiting for approval. Edit it after the approver decides.");
+        if (request.Lines.Count == 0)
+            throw new BusinessRuleException("A purchase order needs at least one line.");
+
+        var supplier = await dbContext.Suppliers.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.SupplierId, cancellationToken)
+            ?? throw new NotFoundException("Supplier not found.");
+        if (!supplier.IsActive && supplier.Id != order.SupplierId)
+            throw new BusinessRuleException($"{supplier.SupplierName} is inactive. Pick another supplier.");
+
+        var materialIds = request.Lines.Where(x => x.MaterialItemId.HasValue).Select(x => x.MaterialItemId!.Value).Distinct().ToList();
+        var materials = await dbContext.MaterialItems
+            .Where(x => x.TenantId == TenantId && x.IsActive && materialIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        var lines = new List<PurchaseOrderLine>();
+        foreach (var line in request.Lines)
+        {
+            MaterialItem? material = null;
+            if (line.MaterialItemId is { } materialId && !materials.TryGetValue(materialId, out material))
+                throw new BusinessRuleException("A line refers to a part that does not exist or is inactive.");
+            var itemName = string.IsNullOrWhiteSpace(line.ItemName) ? material?.ItemName : line.ItemName.Trim();
+            if (string.IsNullOrWhiteSpace(itemName))
+                throw new BusinessRuleException("Line item name is required.");
+            if (line.QuantityOrdered <= 0)
+                throw new BusinessRuleException("Line quantity must be greater than zero.");
+            if (line.UnitCost < 0)
+                throw new BusinessRuleException("Line unit cost cannot be negative.");
+            lines.Add(new PurchaseOrderLine
+            {
+                TenantId = TenantId,
+                PurchaseOrderId = order.Id,
+                MaterialItemId = material?.Id,
+                ItemName = itemName,
+                QuantityOrdered = line.QuantityOrdered,
+                UnitCost = line.UnitCost,
+                LineTotal = Math.Round(line.QuantityOrdered * line.UnitCost, 2),
+            });
+        }
+
+        var previousTotal = order.TotalAmount;
+        dbContext.PurchaseOrderLines.RemoveRange(order.Lines);
+        order.Lines.Clear();
+        dbContext.PurchaseOrderLines.AddRange(lines);
+        order.SupplierId = supplier.Id;
+        order.Supplier = supplier;
+        order.ExpectedAt = request.ExpectedAt is null ? order.ExpectedAt : DateTime.SpecifyKind(request.ExpectedAt.Value, DateTimeKind.Utc);
+        order.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+        if (!string.IsNullOrWhiteSpace(request.Currency))
+            order.Currency = await CurrencyConverter.ResolveAsync(dbContext, TenantId, request.Currency, cancellationToken);
+        order.TotalAmount = lines.Sum(x => x.LineTotal);
+        order.UpdatedAt = DateTime.UtcNow;
+        await ProjectFinanceRules.EnsureCostCurrencyAsync(dbContext, TenantId, order.ProjectId, order.Currency, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "inventory.po.updated", nameof(PurchaseOrder), order.Id.ToString(),
+            $"Purchase order {order.PoNumber} edited ({lines.Count} lines, total {previousTotal:N2} → {order.TotalAmount:N2}).", cancellationToken);
+
+        if (order.TotalAmount != previousTotal)
+        {
+            await approvalWorkflowService.StartAsync(
+                TenantId, ApprovalDocumentTypes.PurchaseOrder, order.Id, order.PoNumber,
+                order.TotalAmount, order.Currency, UserId, cancellationToken);
+        }
+
+        return Ok(MapDetail(await LoadOrderAsync(order.Id, cancellationToken)));
+    }
+
     [HttpPost("{id:guid}/status")]
     public async Task<IActionResult> SetStatus(
         Guid id, [FromBody] PurchaseOrderStatusRequest request, CancellationToken cancellationToken)

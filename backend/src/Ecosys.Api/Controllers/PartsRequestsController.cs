@@ -18,7 +18,8 @@ public sealed class PartsRequestsController(
     IAuditLogService auditLogService,
     IUserAccessService userAccessService,
     IBranchAccessService branchAccessService,
-    IStockLedgerService stockLedgerService) : TenantAwareControllerBase(tenantContext)
+    IStockLedgerService stockLedgerService,
+    INotificationDispatcher? notificationDispatcher = null) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet("/api/workorders/{workOrderId:guid}/parts-requests")]
     public async Task<ActionResult<IReadOnlyCollection<PartsRequestResponse>>> GetForWorkOrder(Guid workOrderId, CancellationToken cancellationToken)
@@ -104,6 +105,10 @@ public sealed class PartsRequestsController(
             partsRequest.Id.ToString(),
             $"Requested parts for work order '{workOrder.WorkOrderNumber}'.",
             cancellationToken);
+
+        var requesterName = await dbContext.Users.Where(x => x.Id == UserId).Select(x => x.FullName).SingleOrDefaultAsync(cancellationToken);
+        await InventoryNotifications.NotifyRequestRaisedAsync(notificationDispatcher, dbContext, TenantId, UserId,
+            $"Parts · {workOrder.WorkOrderNumber}", workOrder.WorkOrderNumber, requesterName, partsRequest.Items.Count, true, cancellationToken);
 
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, partsRequest.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == partsRequest.Id, cancellationToken);
@@ -198,6 +203,10 @@ public sealed class PartsRequestsController(
             "Approved parts request.",
             cancellationToken);
 
+        var approvedWorkOrderNumber = await dbContext.WorkOrders.Where(x => x.Id == partsRequest.WorkOrderId).Select(x => x.WorkOrderNumber).SingleOrDefaultAsync(cancellationToken);
+        await InventoryNotifications.NotifyRequestDecidedAsync(notificationDispatcher, TenantId, partsRequest.TechnicianId, UserId,
+            $"Parts · {approvedWorkOrderNumber}", approvedWorkOrderNumber, partsRequest.WorkOrderId, true, null, cancellationToken);
+
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, partsRequest.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == partsRequest.Id, cancellationToken);
         return Ok(Map(persisted));
@@ -237,6 +246,10 @@ public sealed class PartsRequestsController(
             partsRequest.Id.ToString(),
             $"Rejected parts request: {partsRequest.RejectionReason}",
             cancellationToken);
+
+        var rejectedWorkOrderNumber = await dbContext.WorkOrders.Where(x => x.Id == partsRequest.WorkOrderId).Select(x => x.WorkOrderNumber).SingleOrDefaultAsync(cancellationToken);
+        await InventoryNotifications.NotifyRequestDecidedAsync(notificationDispatcher, TenantId, partsRequest.TechnicianId, UserId,
+            $"Parts · {rejectedWorkOrderNumber}", rejectedWorkOrderNumber, partsRequest.WorkOrderId, false, partsRequest.RejectionReason, cancellationToken);
 
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, partsRequest.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == partsRequest.Id, cancellationToken);
@@ -315,6 +328,10 @@ public sealed class PartsRequestsController(
             partsRequest.Id.ToString(),
             "Dispatched parts request from stores.",
             cancellationToken);
+
+        var sourceBranchName = await dbContext.Branches.Where(x => x.Id == (sourceBranchId ?? partsRequest.BranchId)).Select(x => x.Name).SingleOrDefaultAsync(cancellationToken);
+        await InventoryNotifications.NotifyRequestDispatchedAsync(notificationDispatcher, TenantId, partsRequest.TechnicianId, UserId,
+            $"Parts · {partsRequest.WorkOrder?.WorkOrderNumber}", partsRequest.WorkOrder?.WorkOrderNumber, partsRequest.WorkOrderId, sourceBranchName, cancellationToken);
 
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, partsRequest.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == partsRequest.Id, cancellationToken);

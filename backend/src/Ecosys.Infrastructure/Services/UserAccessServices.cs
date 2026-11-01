@@ -307,8 +307,14 @@ public sealed class StockContentionException(string message)
     public string ErrorCode => "CONCURRENCY_CONFLICT";
 }
 
-internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerService
+internal sealed class StockLedgerService(AppDbContext dbContext, INotificationDispatcher? notificationDispatcher = null) : IStockLedgerService
 {
+    /// <summary>
+    /// Parts that fell to or below their reorder level during this unit of work, sent to stores once
+    /// it has saved (<see cref="FlushLowStockAsync"/>), so a rolled-back change never alerts anyone.
+    /// </summary>
+    private readonly List<(Guid TenantId, Guid MaterialId, string PartName, Guid? BranchId, decimal After, decimal ReorderLevel)> pendingLowStock = [];
+
     private static readonly HashSet<string> AllowedMovementTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "Receipt",
@@ -371,8 +377,14 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
         }
         catch (Exception ex) when (IsConcurrencyConflict(ex))
         {
+            pendingLowStock.Clear();
             throw new StockContentionException(
                 "Another user changed this stock balance at the same moment. Nothing was saved — please reload and try again.");
+        }
+        catch
+        {
+            pendingLowStock.Clear();
+            throw;
         }
         finally
         {
@@ -380,6 +392,34 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
             {
                 await transaction.DisposeAsync();
             }
+        }
+
+        await FlushLowStockAsync(cancellationToken);
+    }
+
+    private async Task FlushLowStockAsync(CancellationToken cancellationToken)
+    {
+        if (pendingLowStock.Count == 0 || notificationDispatcher is null)
+        {
+            pendingLowStock.Clear();
+            return;
+        }
+
+        var pending = pendingLowStock.ToList();
+        pendingLowStock.Clear();
+        var branchIds = pending.Where(x => x.BranchId.HasValue).Select(x => x.BranchId!.Value).Distinct().ToList();
+        var branchNames = await dbContext.Branches.AsNoTracking()
+            .Where(x => branchIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+        foreach (var tenant in pending.GroupBy(x => x.TenantId))
+        {
+            var crossings = tenant
+                .GroupBy(x => (x.MaterialId, x.BranchId))
+                .Select(g => g.Last())
+                .Select(x => new LowStockCrossing(x.MaterialId, x.PartName,
+                    x.BranchId is Guid id && branchNames.TryGetValue(id, out var name) ? name : "stores", x.After, x.ReorderLevel))
+                .ToList();
+            await InventoryNotifications.NotifyLowStockAsync(notificationDispatcher, dbContext, tenant.Key, crossings, cancellationToken);
         }
     }
 
@@ -615,6 +655,13 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
         return stock;
     }
 
+    /// <summary>Notes a part that has just gone from above its reorder level to at or below it.</summary>
+    private void NoteLowStock(MaterialItem material, Guid? branchId, decimal before, decimal after, decimal reorderLevel)
+    {
+        if (reorderLevel > 0 && before > reorderLevel && after <= reorderLevel)
+            pendingLowStock.Add((material.TenantId, material.Id, material.ItemName, branchId, after, reorderLevel));
+    }
+
     private async Task<StockMovement> RecordAsync(
         MaterialItem material,
         Guid? branchId,
@@ -648,6 +695,7 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
                 throw new BusinessRuleException("Stock update would reduce stock below zero.");
             }
 
+            var before = stock.QuantityOnHand;
             stock.QuantityOnHand = nextBalance;
             if (material.UnitCost.HasValue && !stock.UnitCost.HasValue)
             {
@@ -655,6 +703,7 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
             }
 
             balanceAfter = stock.QuantityOnHand;
+            NoteLowStock(material, branchId, before, balanceAfter, stock.ReorderLevel);
         }
         else
         {
@@ -665,6 +714,7 @@ internal sealed class StockLedgerService(AppDbContext dbContext) : IStockLedgerS
             }
 
             balanceAfter = nextBalance;
+            NoteLowStock(material, null, material.QuantityOnHand, nextBalance, material.ReorderLevel);
         }
 
         material.QuantityOnHand += quantityDelta;
