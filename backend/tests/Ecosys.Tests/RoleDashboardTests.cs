@@ -547,7 +547,7 @@ public sealed class RoleDashboardTests
         Assert.Equal("/finance/invoices?status=Draft", await Link(DashboardWidgetCatalog.FinanceInvoicesToSend, "Drafts"));
         Assert.StartsWith("/finance/receipts?status=Confirmed&from=", await Link(DashboardWidgetCatalog.FinanceCashReceived, "Receipts"));
         Assert.Equal("/inventory/purchase-orders?state=late", await Link(DashboardWidgetCatalog.PurchaseOrdersOpen, "Past expected date"));
-        Assert.Equal("/inventory/issues?status=pending_approval", await Link(DashboardWidgetCatalog.MaterialsPendingIssues, "Awaiting approval"));
+        Assert.Equal("/inventory/requests?stage=Requested", await Link(DashboardWidgetCatalog.MaterialsPendingIssues, "Awaiting approval"));
         Assert.Equal("/contracts?expiring=30", await Link(DashboardWidgetCatalog.ContractsExpiring, "Within 30 days"));
         Assert.Equal("/projects?health=behind", await Link(DashboardWidgetCatalog.ProjectsBehindSchedule, "Behind schedule"));
         Assert.Equal($"/projects/{project.Id}?tab=variations", await Link(DashboardWidgetCatalog.ProjectsPendingVariations, "Awaiting decision"));

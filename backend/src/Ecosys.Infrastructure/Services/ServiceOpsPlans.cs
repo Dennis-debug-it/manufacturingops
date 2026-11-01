@@ -76,13 +76,14 @@ public static class ServiceOpsPlans
     };
     private static readonly HashSet<string> MaintenanceControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Assets", "AssetCategories", "Contracts", "EscalationRules", "PreventiveMaintenance", "PmTemplates",
+        "Assets", "AssetCategories", "AssetContracts", "Contracts", "EscalationRules", "PreventiveMaintenance", "PmTemplates",
         "SlaDefinitions", "SlaPolicies", "Systems"
     };
     private static readonly HashSet<string> InventoryControllers = new(StringComparer.OrdinalIgnoreCase)
     {
         "MaterialIssues", "MaterialRequests", "Materials", "PartsRequests", "PartsReturns", "PurchaseOrders",
-        "StockCounts", "StockMovements", "StockTransfers", "Vans", "InventoryReports", "Tools"
+        "StockCounts", "StockMovements", "StockTransfers", "Vans", "InventoryReports", "Tools", "InventoryRequests",
+        "PurchaseOrderDocuments", "HeldParts", "DirectPurchases"
     };
     private static readonly HashSet<string> AdvancedControllers = new(StringComparer.OrdinalIgnoreCase)
     {

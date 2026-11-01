@@ -47,58 +47,15 @@ public sealed class MaterialRequestsController(
         return Ok(Map(request));
     }
 
+    /// <summary>
+    /// Restock requests are retired: stores work from one queue of job parts requests and issue slips
+    /// (Inventory → Requests). Requests already open can still be approved, issued and closed below.
+    /// </summary>
     [HttpPost]
-    public async Task<ActionResult<MaterialRequestResponse>> Create([FromBody] CreateMaterialRequestRequest request, CancellationToken cancellationToken)
+    public ActionResult<MaterialRequestResponse> Create([FromBody] CreateMaterialRequestRequest request)
     {
         userAccessService.EnsureTenantOperationalAccess();
-
-        if (request.Lines.Count == 0)
-        {
-            throw new BusinessRuleException("At least one material line is required.");
-        }
-
-        var workOrderScope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
-        var workOrder = await dbContext.WorkOrders
-            .Where(x => x.TenantId == TenantId && x.Id == request.WorkOrderId)
-            .WhereAccessible(workOrderScope, x => x.BranchId)
-            .SingleOrDefaultAsync(cancellationToken)
-            ?? throw new BusinessRuleException("Work order was not found for this tenant.");
-
-        var materialRequest = new MaterialRequest
-        {
-            TenantId = TenantId,
-            BranchId = workOrder.BranchId,
-            WorkOrderId = request.WorkOrderId,
-            RequestedByUserId = UserId,
-            RequestNumber = await documentNumberingService.GenerateAsync(TenantId, workOrder.BranchId, DocumentTypes.MaterialRequest, cancellationToken),
-            Status = "Pending",
-            Lines = new List<MaterialRequestLine>()
-        };
-
-        foreach (var line in request.Lines)
-        {
-            var materialItem = await dbContext.MaterialItems.SingleOrDefaultAsync(
-                x => x.TenantId == TenantId && x.Id == line.MaterialItemId,
-                cancellationToken) ?? throw new BusinessRuleException("Material item was not found for this tenant.");
-
-            if (line.QuantityRequested <= 0)
-            {
-                throw new BusinessRuleException("Quantity requested must be greater than zero.");
-            }
-
-            materialRequest.Lines.Add(new MaterialRequestLine
-            {
-                MaterialItemId = materialItem.Id,
-                QuantityRequested = line.QuantityRequested
-            });
-        }
-
-        dbContext.MaterialRequests.Add(materialRequest);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, materialRequest.BranchId, cancellationToken))
-            .SingleAsync(x => x.Id == materialRequest.Id, cancellationToken);
-        return CreatedAtAction(nameof(Get), new { id = materialRequest.Id }, Map(persisted));
+        throw new BusinessRuleException("Restock requests have been retired. Raise a parts request on the work order, or a stores issue slip under Inventory → Requests.");
     }
 
     [HttpPost("{id:guid}/approve")]

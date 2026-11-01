@@ -77,11 +77,22 @@ export function useTechActions() {
         onJob(job, 'signature', `${signature.signatureType === 'Client' ? 'Client' : 'Your'} signature`, {
           method: 'POST', url: endpoints.workOrders.signatures(job.id), body: signature,
         }),
-      logMaterial: (job: Job, usage: { materialItemId: string; quantityUsed: number; assetId?: string | null; materialName: string; unitOfMeasure: string | null; batchOrSerial?: string | null }) =>
-        onJob(job, 'material', `Used ${usage.quantityUsed} × ${usage.materialName}`, {
+      /**
+       * `direct` marks a part bought straight from a supplier for this job: it may take stores below
+       * zero and waits for stores to reconcile it with the supplier's invoice.
+       */
+      logMaterial: (job: Job, usage: {
+        materialItemId: string; quantityUsed: number; assetId?: string | null; materialName: string; unitOfMeasure: string | null; batchOrSerial?: string | null
+        direct?: { supplierName: string | null; supplierReference: string | null; unitCost: number | null } | null
+      }) =>
+        onJob(job, 'material', usage.direct ? `Bought ${usage.quantityUsed} × ${usage.materialName}` : `Used ${usage.quantityUsed} × ${usage.materialName}`, {
           method: 'POST',
           url: endpoints.workOrders.materialsUsed(job.id),
-          body: { materialItemId: usage.materialItemId, assetId: usage.assetId ?? null, quantityUsed: usage.quantityUsed, unitCost: null, chargeable: true, notes: null, usedAt: null, batchOrSerial: usage.batchOrSerial ?? null },
+          body: {
+            materialItemId: usage.materialItemId, assetId: usage.assetId ?? null, quantityUsed: usage.quantityUsed,
+            unitCost: usage.direct?.unitCost ?? null, chargeable: true, notes: null, usedAt: null, batchOrSerial: usage.batchOrSerial ?? null,
+            ...(usage.direct ? { boughtDirect: true, supplierName: usage.direct.supplierName, supplierReference: usage.direct.supplierReference } : {}),
+          },
           meta: { materialName: usage.materialName, unitOfMeasure: usage.unitOfMeasure },
         }),
       flagSalesLead: (job: Job, note: string) =>

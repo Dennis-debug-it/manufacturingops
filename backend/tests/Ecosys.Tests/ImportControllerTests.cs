@@ -149,6 +149,80 @@ public sealed class ImportControllerTests
         Assert.Empty(deliveryService.Requests);
     }
 
+    /// <summary>
+    /// A bulk-imported opening quantity used to be written straight onto the part's total, so it had
+    /// no branch balance and no ledger entry; it must land on the named branch as an initial receipt.
+    /// </summary>
+    [Fact]
+    public async Task CommitMaterials_PostsOpeningQuantityToTheNamedBranchThroughTheLedger()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var controller = CreateController(dbContext, fixture, new RecordingCredentialDeliveryService(), new QueueTemporaryPasswordService());
+
+        var result = await controller.CommitMaterials(
+            new CsvUploadRequest(CreateCsvFile(
+                """
+                Material Name,Material Code,Category,Unit,Opening Quantity,Reorder Level,Unit Cost,Branch
+                Generator Oil,MAT-001,Consumables,Litres,20,5,1200,Head Office
+                Air Filter,MAT-002,Filters,Pieces,0,2,800,
+                """)),
+            CancellationToken.None);
+
+        var ok = Assert.IsType<OkObjectResult>(result.Result);
+        var response = Assert.IsType<ImportCommitResponse>(ok.Value);
+        Assert.Equal(2, response.SuccessfulRows);
+        Assert.Equal(0, response.FailedRows);
+
+        var oil = await dbContext.MaterialItems.Include(x => x.BranchStocks).SingleAsync(x => x.ItemCode == "MAT-001");
+        Assert.Equal(20m, oil.QuantityOnHand);
+        var branchStock = Assert.Single(oil.BranchStocks);
+        Assert.Equal(fixture.Branch.Id, branchStock.BranchId);
+        Assert.Equal(20m, branchStock.QuantityOnHand);
+
+        var movement = await dbContext.StockMovements.SingleAsync(x => x.MaterialId == oil.Id);
+        Assert.Equal(fixture.Branch.Id, movement.BranchId);
+        Assert.Equal(20m, movement.Quantity);
+
+        var filter = await dbContext.MaterialItems.SingleAsync(x => x.ItemCode == "MAT-002");
+        Assert.Equal(0m, filter.QuantityOnHand);
+        Assert.False(await dbContext.StockMovements.AnyAsync(x => x.MaterialId == filter.Id));
+    }
+
+    /// <summary>Re-uploading a stock list updates parts already in the catalogue instead of rejecting them.</summary>
+    [Fact]
+    public async Task CommitMaterials_UpdatesExistingPartsByCode_AndSetsTheirBranchStock()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var controller = CreateController(dbContext, fixture, new RecordingCredentialDeliveryService(), new QueueTemporaryPasswordService());
+        const string header = "Material Name,Material Code,Category,Unit,Opening Quantity,Reorder Level,Unit Cost,Branch\n";
+        await controller.CommitMaterials(new CsvUploadRequest(CreateCsvFile(header + "Generator Oil,MAT-001,Consumables,Litres,20,5,1200,Head Office\nBelt,MAT-002,Belts,Pieces,4,1,300,Head Office\n")), CancellationToken.None);
+
+        var preview = Assert.IsType<ImportPreviewResponse>(Assert.IsType<OkObjectResult>((await controller.PreviewMaterials(
+            new CsvUploadRequest(CreateCsvFile(header + "Generator Oil 15W-40,mat-001,Consumables,Litres,12,8,1350,Head Office\nBelt B-52,MAT-002,Belts,Pieces,,2,,Head Office\nNew Filter,MAT-003,Filters,Pieces,,,,\n")), CancellationToken.None)).Result).Value);
+        Assert.Equal(["Update", "Update", "Create"], preview.Rows.Select(x => x.Action));
+        Assert.False(preview.Rows.Last().IsValid); // a new part still needs its quantity
+
+        var result = await controller.CommitMaterials(new CsvUploadRequest(CreateCsvFile(header + "Generator Oil 15W-40,mat-001,Consumables,Litres,12,8,1350,Head Office\nBelt B-52,MAT-002,Belts,Pieces,,2,,Head Office\n")), CancellationToken.None);
+        var response = Assert.IsType<ImportCommitResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
+        Assert.Equal(2, response.SuccessfulRows);
+
+        var oil = await dbContext.MaterialItems.Include(x => x.BranchStocks).SingleAsync(x => x.ItemCode == "MAT-001");
+        Assert.Equal("Generator Oil 15W-40", oil.ItemName);
+        Assert.Equal(1350m, oil.UnitCost);
+        Assert.Equal(12m, Assert.Single(oil.BranchStocks).QuantityOnHand);
+        var adjustment = await dbContext.StockMovements.SingleAsync(x => x.MaterialId == oil.Id && x.MovementType == "Adjustment");
+        Assert.Equal(-8m, adjustment.QuantityChange);
+
+        // A blank quantity leaves stock alone; a blank cost leaves the cost.
+        var belt = await dbContext.MaterialItems.Include(x => x.BranchStocks).SingleAsync(x => x.ItemCode == "MAT-002");
+        Assert.Equal("Belt B-52", belt.ItemName);
+        Assert.Equal(4m, Assert.Single(belt.BranchStocks).QuantityOnHand);
+        Assert.Equal(300m, belt.UnitCost);
+        Assert.Equal(2, await dbContext.MaterialItems.CountAsync());
+    }
+
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -214,7 +288,9 @@ public sealed class ImportControllerTests
             deliveryService,
             passwordService,
             new FakeDocumentNumberingService(),
-            new LicenseGuardService(dbContext));
+            new LicenseGuardService(dbContext),
+            new StockLedgerService(dbContext),
+            new PassThroughBranchAccessService());
 
     private static IFormFile CreateCsvFile(string csv)
     {
@@ -225,6 +301,21 @@ public sealed class ImportControllerTests
             Headers = new HeaderDictionary(),
             ContentType = "text/csv"
         };
+    }
+
+    private sealed class PassThroughBranchAccessService : IBranchAccessService
+    {
+        public Task<BranchQueryScope> GetQueryScopeAsync(Guid tenantId, Guid? requestedBranchId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new BranchQueryScope(false, requestedBranchId, [], true));
+
+        public Task<Guid?> ResolveBranchIdForWriteAsync(Guid tenantId, Guid? requestedBranchId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(requestedBranchId);
+
+        public Task EnsureCanAccessBranchAsync(Guid tenantId, Guid branchId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyCollection<Guid>> GetAccessibleBranchIdsAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyCollection<Guid>>([]);
     }
 
     private sealed record FixtureData(Tenant Tenant, Branch Branch, User Actor);

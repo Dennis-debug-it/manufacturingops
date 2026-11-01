@@ -125,13 +125,14 @@ public sealed class DashboardController(
                 .AsNoTracking()
                 .Where(x => x.TenantId == tenantId)
                 .WhereAccessible(scope, x => (Guid?)x.BranchId)
-                .CountAsync(x => x.QuantityOnHand <= x.ReorderLevel, cancellationToken)
+                .CountAsync(x => x.QuantityOnHand <= x.ReorderLevel && (x.QuantityOnHand != 0 || x.ReorderLevel > 0), cancellationToken)
             : await dbContext.MaterialItems
                 .AsNoTracking()
                 .CountAsync(
                     x => x.TenantId == tenantId
                         && x.IsActive
-                        && x.QuantityOnHand <= x.ReorderLevel,
+                        && x.QuantityOnHand <= x.ReorderLevel
+                        && (x.QuantityOnHand != 0 || x.ReorderLevel > 0),
                     cancellationToken);
 
         var accessibleWorkOrderIds = await workOrders

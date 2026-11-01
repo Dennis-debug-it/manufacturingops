@@ -23,7 +23,8 @@ public sealed class PreventiveMaintenanceController(
     IBranchAccessService branchAccessService,
     IPmWorkOrderChecklistService pmWorkOrderChecklistService,
     ITenantTimeZoneService tenantTimeZoneService,
-    ILogger<PreventiveMaintenanceController> logger) : TenantAwareControllerBase(tenantContext)
+    ILogger<PreventiveMaintenanceController> logger,
+    IContractOperationalService? contractOperationalService = null) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<PreventiveMaintenancePlanResponse>>> GetAll([FromQuery] Guid? branchId, CancellationToken cancellationToken)
@@ -113,6 +114,13 @@ public sealed class PreventiveMaintenanceController(
         plan.LastPmDate = lastPmDate;
         plan.NextPmDate = nextPmDate ?? CalculateNextPmDate(lastPmDate, serviceIntervalMonths);
         plan.Status = string.IsNullOrWhiteSpace(request.Status) ? plan.Status : request.Status.Trim();
+        if (plan.Status != PmContractGuard.HeldStatus)
+        {
+            // Taken off hold by hand: the scheduler checks the contract again before the next visit.
+            plan.HoldReason = null;
+            plan.HeldAt = null;
+            plan.LapsedContractId = null;
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -120,8 +128,13 @@ public sealed class PreventiveMaintenanceController(
         return Ok(Map(persisted));
     }
 
+    /// <summary>
+    /// Raises the plan's next PM work order now. If the asset's contract has lapsed the visit is not
+    /// free: it is refused unless <paramref name="chargeable"/> is set, and then raised as a chargeable
+    /// visit priced at the client's standard rates.
+    /// </summary>
     [HttpPost("{id:guid}/generate-workorder")]
-    public async Task<ActionResult<WorkOrderResponse>> GenerateWorkOrder(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<WorkOrderResponse>> GenerateWorkOrder(Guid id, CancellationToken cancellationToken, [FromQuery] bool chargeable = false)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
         var plan = await Query().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
@@ -145,6 +158,17 @@ public sealed class PreventiveMaintenanceController(
             throw new BusinessRuleException("An open preventive-maintenance work order already exists for this plan. Complete or cancel it before generating another.");
         }
 
+        var today = DateTime.UtcNow;
+        var coverDate = plan.NextPmDate is { } due && due.Date > today.Date ? due : today;
+        var cover = await PmContractGuard.CheckAsync(dbContext, plan, coverDate, cancellationToken);
+        var lapsed = cover.Outcome == PmContractOutcome.Lapsed;
+        if (lapsed && !chargeable)
+        {
+            throw new BusinessRuleException(
+                $"{PmContractGuard.LapseText(cover.Contract!)}, so this asset is not under contract. Renew the contract, raise this as a chargeable visit, or set the schedule to continue without a contract.");
+        }
+        var notUnderContract = lapsed || cover.Outcome == PmContractOutcome.ContinuingWithoutContract;
+
         var workOrder = new WorkOrder
         {
             TenantId = TenantId,
@@ -154,14 +178,24 @@ public sealed class PreventiveMaintenanceController(
             PreventiveMaintenancePlanId = plan.Id,
             PmTemplateId = plan.PmTemplateId,
             WorkOrderNumber = await documentNumberingService.GenerateAsync(TenantId, plan.BranchId, DocumentTypes.WorkOrder, cancellationToken),
-            Title = $"PM - {plan.Asset.AssetName} - {plan.Frequency}",
-            Description = $"Preventive maintenance for asset '{plan.Asset.AssetName}' on {plan.Frequency} cycle.",
+            Title = notUnderContract
+                ? $"PM (chargeable) - {plan.Asset.AssetName} - {plan.Frequency}"
+                : $"PM - {plan.Asset.AssetName} - {plan.Frequency}",
+            Description = notUnderContract
+                ? $"Preventive maintenance for asset '{plan.Asset.AssetName}' on {plan.Frequency} cycle. Not under contract (contract {cover.Contract!.ContractNumber} has lapsed): chargeable at the client's standard rates."
+                : $"Preventive maintenance for asset '{plan.Asset.AssetName}' on {plan.Frequency} cycle.",
             Priority = "Medium",
             Status = "Open",
             WorkType = WorkOrderTypes.PreventiveMaintenance,
             DueDate = plan.NextPmDate,
             IsPreventiveMaintenance = true
         };
+
+        if (notUnderContract && contractOperationalService is not null)
+        {
+            // Stamps the cover and pricing on the job, so a visit off contract is priced as chargeable.
+            await contractOperationalService.ApplyOperationalSnapshotAsync(workOrder, cancellationToken);
+        }
 
         dbContext.WorkOrders.Add(workOrder);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -205,7 +239,9 @@ public sealed class PreventiveMaintenanceController(
             "Work order created",
             nameof(WorkOrder),
             workOrder.Id.ToString(),
-            $"Generated PM work order '{workOrder.WorkOrderNumber}' from plan '{plan.Id}'.",
+            notUnderContract
+                ? $"Generated chargeable PM work order '{workOrder.WorkOrderNumber}' from plan '{plan.Id}' (contract {cover.Contract!.ContractNumber} lapsed)."
+                : $"Generated PM work order '{workOrder.WorkOrderNumber}' from plan '{plan.Id}'.",
             cancellationToken);
 
         logger.LogInformation(
@@ -307,6 +343,66 @@ public sealed class PreventiveMaintenanceController(
             PmTemplateVersion: persisted.PmTemplateVersionSnapshot));
     }
 
+    /// <summary>
+    /// Auto-schedule on: the scheduler raises each visit ahead of its due date. Off: manual trigger
+    /// only. For the asset's own schedule (the one its maintenance settings create), the asset's
+    /// auto-schedule setting follows, so editing the asset later doesn't undo this.
+    /// </summary>
+    [HttpPost("{id:guid}/auto-schedule")]
+    public async Task<ActionResult<PreventiveMaintenancePlanResponse>> SetAutoSchedule(Guid id, [FromBody] SetAutoScheduleRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+        var plan = await Query().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Preventive maintenance plan was not found.");
+        if (request.Enabled && !plan.NextPmDate.HasValue)
+            throw new BusinessRuleException("This schedule has no next due date, so it can't run automatically.");
+        if (request.Enabled && plan.Status == "Inactive")
+            throw new BusinessRuleException("This schedule is inactive.");
+
+        if (plan.AutoSchedule != request.Enabled)
+        {
+            plan.AutoSchedule = request.Enabled;
+            if (plan.PmTemplateId is null && plan.Asset is { } asset)
+                asset.AutoSchedulePm = request.Enabled;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await auditLogService.LogAsync(TenantId, UserId, request.Enabled ? "pm.auto-schedule.on" : "pm.auto-schedule.off",
+                nameof(PreventiveMaintenancePlan), plan.Id.ToString(),
+                $"PM schedule set to {(request.Enabled ? "auto-generate work orders" : "manual trigger only")}.", cancellationToken);
+        }
+
+        return Ok(Map(plan));
+    }
+
+    /// <summary>
+    /// The client will pay per visit after their contract lapsed: the schedule keeps raising visits
+    /// (marked chargeable) instead of holding. Takes a held schedule off hold.
+    /// </summary>
+    [HttpPost("{id:guid}/continue-without-contract")]
+    public Task<ActionResult<PreventiveMaintenancePlanResponse>> ContinueWithoutContract(Guid id, CancellationToken cancellationToken) =>
+        SetContinueWithoutContractAsync(id, true, cancellationToken);
+
+    /// <summary>Back to the default: the schedule holds whenever the asset's contract lapses.</summary>
+    [HttpDelete("{id:guid}/continue-without-contract")]
+    public Task<ActionResult<PreventiveMaintenancePlanResponse>> StopContinuingWithoutContract(Guid id, CancellationToken cancellationToken) =>
+        SetContinueWithoutContractAsync(id, false, cancellationToken);
+
+    private async Task<ActionResult<PreventiveMaintenancePlanResponse>> SetContinueWithoutContractAsync(Guid id, bool enabled, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+        var plan = await dbContext.PreventiveMaintenancePlans.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Preventive maintenance plan was not found.");
+        plan.ContinueWithoutContract = enabled;
+        if (enabled && plan.Status == PmContractGuard.HeldStatus)
+            PmContractGuard.Resume(plan, DateTime.UtcNow);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, enabled ? "pm.continue-without-contract" : "pm.hold-on-contract-lapse",
+            nameof(PreventiveMaintenancePlan), plan.Id.ToString(),
+            enabled ? "PM schedule set to continue without a contract (visits chargeable)." : "PM schedule set to hold when the asset's contract lapses.",
+            cancellationToken);
+        var persisted = await Query().SingleAsync(x => x.Id == plan.Id, cancellationToken);
+        return Ok(Map(persisted));
+    }
+
     private IQueryable<PreventiveMaintenancePlan> Query() =>
         dbContext.PreventiveMaintenancePlans
             .Include(x => x.Asset)
@@ -344,7 +440,13 @@ public sealed class PreventiveMaintenanceController(
             plan.LastPmDate,
             plan.NextPmDate,
             plan.Status,
-            plan.CreatedAt);
+            plan.CreatedAt)
+        {
+            ContinueWithoutContract = plan.ContinueWithoutContract,
+            HoldReason = plan.HoldReason,
+            HeldAt = plan.HeldAt,
+            LapsedContractId = plan.LapsedContractId,
+        };
 
     private async Task<PmTemplate> RequireTemplateAsync(Guid? pmTemplateId, CancellationToken cancellationToken)
     {
@@ -458,4 +560,12 @@ public sealed record PreventiveMaintenancePlanResponse(
     DateTime? LastPmDate,
     DateTime? NextPmDate,
     string Status,
-    DateTime CreatedAt);
+    DateTime CreatedAt)
+{
+    /// <summary>Visits continue (chargeable) after the asset's contract lapses, instead of holding.</summary>
+    public bool ContinueWithoutContract { get; init; }
+    /// <summary>Set while Status is ContractLapsed: why, since when, and which contract.</summary>
+    public string? HoldReason { get; init; }
+    public DateTime? HeldAt { get; init; }
+    public Guid? LapsedContractId { get; init; }
+}

@@ -67,7 +67,7 @@ public sealed class MaterialInventoryClosureTests
     {
         await using var db = Db();
         var (issue, item) = await SeedIssue(db, status);
-        await Assert.ThrowsAsync<BusinessRuleException>(() => Issues(db).Issue(issue.Id, default));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Issues(db).Issue(issue.Id, null, default));
         Assert.Equal(20, item.QuantityOnHand);
         Assert.Empty(db.StockMovements);
     }
@@ -78,8 +78,8 @@ public sealed class MaterialInventoryClosureTests
         await using var db = Db();
         var (issue, item) = await SeedIssue(db, workOrder: true);
         var controller = Issues(db);
-        await controller.Issue(issue.Id, default);
-        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Issue(issue.Id, default));
+        await controller.Issue(issue.Id, null, default);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Issue(issue.Id, null, default));
         Assert.Equal(15, item.QuantityOnHand);
         var line = issue.Lines.Single();
         var firstReturn = new ReturnMaterialIssueRequest([new(line.Id, 2, 0)]);
@@ -102,7 +102,7 @@ public sealed class MaterialInventoryClosureTests
         await using var db = Db();
         var (issue, item) = await SeedIssue(db);
         var controller = Issues(db);
-        await controller.Issue(issue.Id, default);
+        await controller.Issue(issue.Id, null, default);
         var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Return(issue.Id,
             new([new(issue.Lines.Single().Id, 1)]), default));
         Assert.Contains("version", error.Message);
@@ -119,7 +119,7 @@ public sealed class MaterialInventoryClosureTests
         var controller = Issues(db, new DeniedBranches());
         await Assert.ThrowsAsync<NotFoundException>(() => controller.Approve(issue.Id, default));
         await Assert.ThrowsAsync<NotFoundException>(() => controller.Reject(issue.Id, new("reason"), default));
-        await Assert.ThrowsAsync<NotFoundException>(() => controller.Issue(issue.Id, default));
+        await Assert.ThrowsAsync<NotFoundException>(() => controller.Issue(issue.Id, null, default));
         await Assert.ThrowsAsync<NotFoundException>(() => controller.Return(issue.Id, new([]), default));
         await Assert.ThrowsAsync<NotFoundException>(() => controller.Cancel(issue.Id, default));
         Assert.Equal("pending_approval", issue.IssueStatus);

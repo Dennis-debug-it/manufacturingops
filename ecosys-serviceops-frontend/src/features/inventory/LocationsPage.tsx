@@ -6,7 +6,6 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { formatCurrency } from '../../shared/utils/format'
 import { useBranchStockSummary, useBranches } from './api'
 import type { Branch } from './types'
-import { InventoryTabNav } from './components/InventoryTabNav'
 
 export function LocationsPage() {
   const { data: branches, isLoading, isError } = useBranches()
@@ -39,7 +38,6 @@ export function LocationsPage() {
         title="Locations"
         subtitle="Branches that hold stock. Mobile stock on vehicles is under Vans."
       />
-      <InventoryTabNav />
       <DataTable columns={columns} data={rows} loading={isLoading} emptyTitle={isError ? 'Locations unavailable' : 'No locations'} emptyDescription={isError ? 'Branches could not be loaded.' : 'No branches configured yet.'} />
     </div>
   )

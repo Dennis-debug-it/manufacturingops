@@ -311,6 +311,38 @@ public sealed class PlatformTenantsController(
         return Ok(await BuildDetailResponseAsync(tenant, cancellationToken));
     }
 
+    /// <summary>
+    /// Sets the price agreed with this tenant per office seat and per field seat (monthly). A null price
+    /// puts that seat back on the edition's price. It changes what the tenant is billed and the MRR
+    /// figures from the next calculation; it never changes seats, dates or access.
+    /// </summary>
+    [HttpPut("{tenantId:guid}/license/pricing")]
+    [Authorize(Policy = "PlatformAdminAccess")]
+    public async Task<ActionResult<PlatformTenantDetailResponse>> UpdatePricing(Guid tenantId, [FromBody] UpdateTenantPricingRequest request, CancellationToken cancellationToken)
+    {
+        if (request.OfficeSeatPrice is < 0 || request.FieldSeatPrice is < 0)
+        {
+            throw new BusinessRuleException("Seat prices cannot be negative.");
+        }
+
+        var tenant = await LoadManagedTenantAsync(tenantId, cancellationToken);
+        var license = await licenseGuardService.GetOrCreateTenantLicenseAsync(tenant.Id, cancellationToken);
+        var (officeBefore, fieldBefore) = (license.OfficeSeatPriceOverride, license.FieldSeatPriceOverride);
+        license.OfficeSeatPriceOverride = request.OfficeSeatPrice is { } office ? decimal.Round(office, 2) : null;
+        license.FieldSeatPriceOverride = request.FieldSeatPrice is { } field ? decimal.Round(field, 2) : null;
+        tenant.UpdatedByUserId = tenantContext.GetRequiredUserId();
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        static string Describe(decimal? price) => price is { } value ? value.ToString("N2", System.Globalization.CultureInfo.InvariantCulture) : "edition price";
+        await WriteAuditAsync(
+            tenant,
+            "platform.tenant.license.pricing.updated",
+            $"Office seat price {Describe(officeBefore)} → {Describe(license.OfficeSeatPriceOverride)}; field seat price {Describe(fieldBefore)} → {Describe(license.FieldSeatPriceOverride)} (per seat per month).",
+            cancellationToken);
+
+        return Ok(await BuildDetailResponseAsync(tenant, cancellationToken));
+    }
+
     [HttpPost("{tenantId:guid}/license/reactivate")]
     [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantDetailResponse>> ReactivateLicense(Guid tenantId, CancellationToken cancellationToken)
@@ -1360,6 +1392,17 @@ public sealed class PlatformTenantsController(
             LicenseExpiresAt = license?.ExpiresAt,
             IsPerpetual = license?.IsPerpetual ?? false,
             SuspensionReason = license is not null && TenantLifecycleState.IsSuspended(license) ? license.SuspensionReason : null,
+            Pricing = license?.LicensePlan is null
+                ? null
+                : new PlatformTenantPricingResponse(
+                    license.BillingCycle,
+                    LicensePricing.EditionOfficeSeatPrice(license),
+                    LicensePricing.EditionFieldSeatPrice(license),
+                    license.OfficeSeatPriceOverride,
+                    license.FieldSeatPriceOverride,
+                    LicensePricing.OfficeSeatPrice(license),
+                    LicensePricing.FieldSeatPrice(license),
+                    LicensePricing.MonthlyValue(license, await dbContext.LicenseAddOns.AsNoTracking().ToListAsync(cancellationToken))),
         };
     }
 
@@ -1905,6 +1948,9 @@ public sealed record ExtendTenantLicenseRequest(DateTime NewExpiresAt);
 
 public sealed record UpdateTenantSeatsRequest(int OfficeSeats, int FieldSeats);
 
+/// <summary>Per-seat monthly prices agreed with a tenant; null puts that seat back on the edition's price.</summary>
+public sealed record UpdateTenantPricingRequest(decimal? OfficeSeatPrice, decimal? FieldSeatPrice);
+
 public sealed record PlatformTenantListResponse(
     Guid TenantId,
     string Name,
@@ -1993,7 +2039,24 @@ public sealed record PlatformTenantDetailResponse(
 
     /// <summary>Manual or NonPayment while suspended; null otherwise.</summary>
     public string? SuspensionReason { get; init; }
+
+    /// <summary>What this tenant pays: edition prices, any price agreed with it, and the monthly total.</summary>
+    public PlatformTenantPricingResponse? Pricing { get; init; }
 }
+
+/// <summary>
+/// Seat prices are per seat per month on the license's billing cycle. The override fields are null when
+/// the tenant pays the edition's price; the effective fields are what it is actually billed.
+/// </summary>
+public sealed record PlatformTenantPricingResponse(
+    string BillingCycle,
+    decimal EditionOfficeSeatPrice,
+    decimal EditionFieldSeatPrice,
+    decimal? OfficeSeatPriceOverride,
+    decimal? FieldSeatPriceOverride,
+    decimal OfficeSeatPrice,
+    decimal FieldSeatPrice,
+    decimal MonthlyValue);
 
 public sealed record PlatformTenantSummaryResponse(
     Guid TenantId,

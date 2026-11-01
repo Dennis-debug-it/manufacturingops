@@ -186,6 +186,43 @@ public sealed class AssetsController(
         return Ok(await MapWithCoverageAsync(asset, cancellationToken));
     }
 
+    /// <summary>
+    /// Turns the asset's automatic preventive maintenance on or off without editing the whole asset.
+    /// On needs a maintenance frequency and a next due date; it starts (or restarts) the asset's own
+    /// PM schedule. Off stops it.
+    /// </summary>
+    [HttpPost("{id:guid}/auto-schedule-pm")]
+    public async Task<ActionResult<AssetResponse>> SetAutoSchedulePm(Guid id, [FromBody] SetAutoScheduleRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        var asset = await LoadAssetForResponse()
+            .Where(x => x.TenantId == TenantId && x.Id == id)
+            .WhereAccessible(scope, x => x.BranchId)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Asset was not found.");
+
+        if (request.Enabled)
+        {
+            if (string.Equals(asset.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
+                throw new BusinessRuleException("A retired asset can't be scheduled. Reactivate it first.");
+            if (string.IsNullOrWhiteSpace(asset.RecommendedPmFrequency) || !asset.NextPmDate.HasValue)
+                throw new BusinessRuleException("Set a maintenance frequency and a last maintenance or installation date on the asset first (Edit), so the next due date is known.");
+        }
+
+        if (asset.AutoSchedulePm != request.Enabled)
+        {
+            asset.AutoSchedulePm = request.Enabled;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await preventiveMaintenancePlanService.SyncForAssetAsync(asset, cancellationToken);
+            await auditLogService.LogAsync(TenantId, UserId, request.Enabled ? "asset.auto-schedule-pm.on" : "asset.auto-schedule-pm.off",
+                nameof(Asset), asset.Id.ToString(),
+                $"Automatic PM turned {(request.Enabled ? "on" : "off")} for asset '{asset.AssetName}'.", cancellationToken);
+        }
+
+        return Ok(await MapWithCoverageAsync(asset, cancellationToken));
+    }
+
     /// <summary>Retires several assets at once, e.g. everything the "out of support" view lists.</summary>
     [HttpPost("retire")]
     public async Task<ActionResult<BulkRetireAssetsResponse>> RetireMany([FromBody] BulkRetireAssetsRequest request, CancellationToken cancellationToken)
@@ -329,51 +366,26 @@ public sealed class AssetsController(
                     || x.Status == ContractStatus.Expired))
             .ToListAsync(cancellationToken);
 
-        return contracts
-            .Where(x =>
-            {
-                var withinTerm = x.StartDate.Date <= today && x.EndDate.Date >= today;
-                var withinGrace = x.EndDate.Date < today && x.GracePeriodDays > 0 && x.EndDate.Date.AddDays(x.GracePeriodDays) >= today;
-                return x.Status == ContractStatus.Expired ? withinGrace : withinTerm || withinGrace;
-            })
-            .ToList();
+        return contracts.Where(x => ContractAssetScope.IsInForce(x, today)).ToList();
     }
 
-    private static bool IsCoveredByContract(Asset asset, IReadOnlyCollection<Contract> contracts)
-    {
-        var category = asset.AssetCategory?.Name ?? asset.AssetType;
-        return contracts.Any(contract =>
-        {
-            if (contract.ClientId != asset.ClientId)
-            {
-                return false;
-            }
+    private static bool IsCoveredByContract(Asset asset, IReadOnlyCollection<Contract> contracts) =>
+        FindCoveringContract(asset, contracts) is not null;
 
-            if (contract.Assets.Count > 0)
-            {
-                return contract.Assets.Any(x => x.AssetId == asset.Id);
-            }
-
-            if (contract.AssetCategories.Count > 0)
-            {
-                return !string.IsNullOrWhiteSpace(category) && contract.AssetCategories.Any(x =>
-                    string.Equals(x.AssetCategory?.Name, category, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(x.AssetCategoryName, category, StringComparison.OrdinalIgnoreCase));
-            }
-
-            if (contract.Sites.Count > 0)
-            {
-                return asset.SiteId.HasValue && contract.Sites.Any(x => x.SiteId == asset.SiteId.Value);
-            }
-
-            return true;
-        });
-    }
+    /// <summary>The contract covering this asset; see <see cref="ContractAssetScope.FindCovering"/>.</summary>
+    public static (Contract Contract, string Scope)? FindCoveringContract(Asset asset, IReadOnlyCollection<Contract> contracts) =>
+        ContractAssetScope.FindCovering(asset, contracts);
 
     private async Task<AssetResponse> MapWithCoverageAsync(Asset asset, CancellationToken cancellationToken)
     {
         var contracts = await LoadSupportingContractsAsync([asset.ClientId], cancellationToken);
-        return Map(asset, IsCoveredByContract(asset, contracts));
+        var cover = FindCoveringContract(asset, contracts);
+        return Map(asset, cover is not null) with
+        {
+            CoveredBy = cover is { } found
+                ? new AssetContractCoverResponse(found.Contract.Id, found.Contract.ContractNumber, found.Contract.Name, found.Contract.Status.ToString(), found.Contract.EndDate, found.Scope)
+                : null,
+        };
     }
 
     private static bool NormalizeSupportFilter(string? support)
@@ -1095,7 +1107,16 @@ public sealed record AssetResponse(
     bool HasContractCover,
     // "Under Warranty", "Under Contract", "Out of Support", or "Retired".
     string SupportStatus,
-    IReadOnlyCollection<AssetCustomFieldValueResponse> CustomFieldValues);
+    IReadOnlyCollection<AssetCustomFieldValueResponse> CustomFieldValues)
+{
+    /// <summary>The contract covering this asset (detail views only; lists leave it null).</summary>
+    public AssetContractCoverResponse? CoveredBy { get; init; }
+}
+
+/// <param name="Scope">How the contract reaches the asset: Asset (listed by name), Category, Site, or Client (all the client's assets).</param>
+public sealed record AssetContractCoverResponse(Guid ContractId, string ContractNumber, string ContractName, string Status, DateTime EndDate, string Scope);
+
+public sealed record SetAutoScheduleRequest(bool Enabled);
 
 public sealed record RetireAssetRequest(
     DateTime? DecommissionDate,

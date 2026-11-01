@@ -10,6 +10,10 @@ function resolveVariant(status: string): BadgeTone {
   if (normalized === 'out of support') return 'danger'
   if (normalized === 'under contract') return 'success'
   if (normalized === 'retired') return 'neutral'
+  if (normalized === 'negative') return 'danger'
+  if (normalized === 'low stock') return 'warning'
+  if (normalized === 'reconciled') return 'success'
+  if (normalized === 'contractlapsed' || normalized === 'contract lapsed') return 'warning'
   if (normalized.includes('warranty')) {
     if (normalized.includes('expired')) return 'danger'
     if (normalized.includes('expiring')) return 'warning'

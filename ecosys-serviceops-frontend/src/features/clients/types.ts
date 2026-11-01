@@ -184,8 +184,35 @@ export interface Asset {
   decommissionDate?: string | null
   decommissionReason?: string | null
   hasContractCover?: boolean
+  /** The contract covering this asset (detail only). Scope: Asset (listed), Category, Site or Client (everything). */
+  coveredBy?: AssetContractCover | null
   /** 'Under Warranty' | 'Under Contract' | 'Out of Support' | 'Retired' */
   supportStatus?: string
   /** Datasheet values for the asset's category (labels come with the value). */
   customFieldValues?: { fieldDefinitionId: string; value: string; fieldLabel?: string; fieldType?: string; unit?: string | null }[]
 }
+
+export interface AssetContractCover {
+  contractId: string
+  contractNumber: string
+  contractName: string
+  status: string
+  endDate: string
+  scope: 'Asset' | 'Category' | 'Site' | 'Client'
+}
+
+/** One of the client's open contracts, seen from an asset: does it cover it, and can the asset be added. */
+export interface AssetContractOption {
+  contractId: string
+  contractNumber: string
+  contractName: string
+  status: string
+  startDate: string
+  endDate: string
+  scope: 'Asset' | 'Category' | 'Site' | 'Client'
+  scopeLabel: string
+  scopeCoversAsset: boolean
+  canAdd: boolean
+  reason: string | null
+}
+

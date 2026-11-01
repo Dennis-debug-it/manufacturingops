@@ -177,7 +177,12 @@ export function useCreateMaterialIssue() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (payload: CreateMaterialIssuePayload) => api.post<MaterialIssue>(endpoints.materialIssues.create, payload),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['material-issues'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['material-issues'] })
+      void queryClient.invalidateQueries({ queryKey: ['inventory-requests'] })
+      // A slip raised by someone who can issue is issued at once, which moves stock.
+      void queryClient.invalidateQueries({ queryKey: ['materials'] })
+    },
   })
 }
 
@@ -270,5 +275,30 @@ export function useBranches(options: { enabled?: boolean } = {}) {
     queryFn: () => api.get<Branch[]>(endpoints.branches.list),
     staleTime: 60_000,
     enabled: options.enabled ?? true,
+  })
+}
+
+/** One part at one location: a branch, a van, or "Main stores" for a tenant without branches. */
+export interface StockLocationRow {
+  materialId: string
+  itemCode: string
+  itemName: string
+  category: string | null
+  unitOfMeasure: string
+  locationType: 'Branch' | 'Van' | 'Stores'
+  /** The branch or van; null for "Main stores". */
+  locationId: string | null
+  locationName: string
+  quantityOnHand: number
+  reorderLevel: number
+  unitCost: number | null
+  isLowStock: boolean
+}
+
+export function useStockByLocation() {
+  return useQuery({
+    queryKey: ['materials', 'stock-by-location'],
+    queryFn: () => api.get<StockLocationRow[]>('/api/materials/stock-by-location'),
+    staleTime: 30_000,
   })
 }

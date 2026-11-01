@@ -26,7 +26,9 @@ public sealed class ImportController(
     IUserCredentialDeliveryService credentialDeliveryService,
     ITemporaryPasswordService temporaryPasswordService,
     IDocumentNumberingService documentNumberingService,
-    ILicenseGuardService licenseGuardService) : TenantAwareControllerBase(tenantContext)
+    ILicenseGuardService licenseGuardService,
+    IStockLedgerService stockLedgerService,
+    IBranchAccessService branchAccessService) : TenantAwareControllerBase(tenantContext)
 {
     private static readonly string[] ClientHeaders =
     [
@@ -730,44 +732,68 @@ public sealed class ImportController(
         var successful = 0;
         var failed = 0;
 
-        foreach (var row in rows)
+        // Opening quantities go through the stock ledger, like a part created by hand: that gives the
+        // branch a stock balance and the part an INITIAL-STOCK receipt. Writing QuantityOnHand directly
+        // left the stock with no branch and no movement, so it never showed per branch or in the ledger.
+        await stockLedgerService.ExecuteAsync(async ct =>
         {
-            if (!row.IsValid)
+            foreach (var row in rows)
             {
-                failed++;
-                continue;
+                if (!row.IsValid)
+                {
+                    failed++;
+                    continue;
+                }
+
+                if (row.Action == "Update")
+                {
+                    await UpdateImportedMaterialAsync(row, branchLookup, ct);
+                    successful++;
+                    continue;
+                }
+
+                var item = new MaterialItem
+                {
+                    TenantId = TenantId,
+                    ItemName = row.RawValues["Material Name"]!.Trim(),
+                    ItemCode = row.RawValues["Material Code"]!.Trim(),
+                    Category = string.IsNullOrWhiteSpace(row.RawValues["Category"]) ? null : row.RawValues["Category"]!.Trim(),
+                    UnitOfMeasure = row.RawValues["Unit"]!.Trim(),
+                    QuantityOnHand = 0,
+                    ReorderLevel = ParseDecimal(row.RawValues["Reorder Level"]) ?? 0,
+                    UnitCost = ParseDecimal(row.RawValues["Unit Cost"]),
+                    IsActive = true
+                };
+
+                dbContext.MaterialItems.Add(item);
+
+                var openingQuantity = ParseDecimal(row.RawValues["Opening Quantity"]) ?? 0;
+                if (openingQuantity > 0)
+                {
+                    var branchName = GetValue(row.RawValues, "Branch");
+                    Guid? requestedBranchId = !string.IsNullOrWhiteSpace(branchName) && branchLookup.TryGetValue(branchName.Trim().ToLowerInvariant(), out var foundBranchId)
+                        ? foundBranchId
+                        : null;
+                    var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, requestedBranchId, ct);
+                    await stockLedgerService.RecordReceiptAsync(item, branchId, openingQuantity, UserId, "Initial stock balance (import)", "INITIAL-STOCK", cancellationToken: ct);
+                }
+
+                successful++;
             }
 
-            var item = new MaterialItem
+            dbContext.ImportBatches.Add(new ImportBatch
             {
                 TenantId = TenantId,
-                ItemName = row.RawValues["Material Name"]!,
-                ItemCode = row.RawValues["Material Code"]!,
-                Category = row.RawValues["Category"],
-                UnitOfMeasure = row.RawValues["Unit"]!,
-                QuantityOnHand = ParseDecimal(row.RawValues["Opening Quantity"]) ?? 0,
-                ReorderLevel = ParseDecimal(row.RawValues["Reorder Level"]) ?? 0,
-                UnitCost = ParseDecimal(row.RawValues["Unit Cost"]),
-                IsActive = true
-            };
+                ImportType = "Materials",
+                FileName = request.File.FileName,
+                TotalRows = rows.Count,
+                SuccessfulRows = successful,
+                FailedRows = failed,
+                Status = failed == 0 ? "Completed" : "CompletedWithErrors"
+            });
 
-            dbContext.MaterialItems.Add(item);
-            successful++;
-        }
-
-        var skipped = failed;
-        dbContext.ImportBatches.Add(new ImportBatch
-        {
-            TenantId = TenantId,
-            ImportType = "Materials",
-            FileName = request.File.FileName,
-            TotalRows = rows.Count,
-            SuccessfulRows = successful,
-            FailedRows = failed,
-            Status = failed == 0 ? "Completed" : "CompletedWithErrors"
-        });
-
-        await dbContext.SaveChangesAsync(cancellationToken);
+            await dbContext.SaveChangesAsync(ct);
+        }, cancellationToken);
 
         await auditLogService.LogAsync(
             TenantId,
@@ -778,7 +804,42 @@ public sealed class ImportController(
             $"Completed material import with {successful} successful rows and {failed} failed rows.",
             cancellationToken);
 
-        return Ok(new ImportCommitResponse(rows.Count, successful, failed, skipped));
+        return Ok(new ImportCommitResponse(rows.Count, successful, failed, failed));
+    }
+
+    /// <summary>
+    /// A materials row whose code is already in the catalogue: refreshes the part's details, and when a
+    /// quantity is given sets the stock held at the row's branch to it with one adjustment.
+    /// </summary>
+    private async Task UpdateImportedMaterialAsync(ImportPreviewRowResponse row, IReadOnlyDictionary<string, Guid> branchLookup, CancellationToken ct)
+    {
+        var code = row.RawValues["Material Code"]!.Trim();
+        var item = await dbContext.MaterialItems
+            .Include(x => x.BranchStocks)
+            .SingleAsync(x => x.TenantId == TenantId && x.IsActive && x.ItemCode.ToLower() == code.ToLower(), ct);
+        item.ItemName = row.RawValues["Material Name"]!.Trim();
+        if (!string.IsNullOrWhiteSpace(row.RawValues["Category"])) item.Category = row.RawValues["Category"]!.Trim();
+        item.UnitOfMeasure = row.RawValues["Unit"]!.Trim();
+        if (ParseDecimal(row.RawValues["Unit Cost"]) is { } cost) item.UnitCost = cost;
+
+        var branchName = GetValue(row.RawValues, "Branch");
+        Guid? requestedBranchId = !string.IsNullOrWhiteSpace(branchName) && branchLookup.TryGetValue(branchName.ToLowerInvariant(), out var found) ? found : null;
+        if (ParseDecimal(row.RawValues["Reorder Level"]) is { } reorder)
+        {
+            item.ReorderLevel = reorder;
+            if (requestedBranchId is Guid branchForLevel && item.BranchStocks.SingleOrDefault(x => x.BranchId == branchForLevel) is { } levelStock)
+                levelStock.ReorderLevel = reorder;
+        }
+
+        if (ParseDecimal(row.RawValues["Opening Quantity"]) is not { } target)
+            return;
+        var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, requestedBranchId, ct);
+        var current = branchId is Guid id
+            ? item.BranchStocks.SingleOrDefault(x => x.BranchId == id)?.QuantityOnHand ?? 0
+            : item.QuantityOnHand;
+        var delta = target - current;
+        if (delta != 0)
+            await stockLedgerService.RecordAdjustmentAsync(item, branchId, delta, UserId, "Bulk import stock update", "IMPORT", cancellationToken: ct);
     }
 
     private async Task<List<ImportPreviewRowResponse>> BuildClientPreviewAsync(IFormFile file, CancellationToken cancellationToken)
@@ -1158,16 +1219,20 @@ public sealed class ImportController(
     private async Task<List<ImportPreviewRowResponse>> BuildMaterialPreviewAsync(IFormFile file, CancellationToken cancellationToken)
     {
         var records = await ReadCsvAsync(file, MaterialHeaders.Length, cancellationToken);
-        var existingCodes = await dbContext.MaterialItems
-            .Where(x => x.TenantId == TenantId && x.IsActive)
-            .Select(x => x.ItemCode.ToLower())
+        // A code already in the catalogue updates that part (re-uploading a stock list with new prices
+        // or quantities); before, every such row was rejected as a duplicate.
+        var existing = await dbContext.MaterialItems
+            .Where(x => x.TenantId == TenantId)
+            .Select(x => new { Code = x.ItemCode.ToLower(), x.IsActive })
             .ToListAsync(cancellationToken);
+        var activeCodes = existing.Where(x => x.IsActive).Select(x => x.Code).ToHashSet();
+        var inactiveCodes = existing.Where(x => !x.IsActive).Select(x => x.Code).ToHashSet();
         var branchNames = await dbContext.Branches
             .Where(x => x.TenantId == TenantId && x.IsActive)
             .Select(x => x.Name.ToLower())
             .ToListAsync(cancellationToken);
 
-        var codeLookup = new HashSet<string>(existingCodes);
+        var seenInFile = new HashSet<string>();
         var branchLookup = new HashSet<string>(branchNames);
         var results = new List<ImportPreviewRowResponse>();
 
@@ -1179,6 +1244,7 @@ public sealed class ImportController(
             var itemCode = GetValue(rawValues, "Material Code");
             var unit = GetValue(rawValues, "Unit");
             var branchName = GetValue(rawValues, "Branch");
+            var isUpdate = !string.IsNullOrWhiteSpace(itemCode) && activeCodes.Contains(itemCode.ToLowerInvariant());
 
             if (string.IsNullOrWhiteSpace(itemName))
             {
@@ -1189,9 +1255,13 @@ public sealed class ImportController(
             {
                 errors.Add("Material Code is required.");
             }
-            else if (!codeLookup.Add(itemCode.ToLowerInvariant()))
+            else if (!seenInFile.Add(itemCode.ToLowerInvariant()))
             {
-                errors.Add("Material Code must be unique per tenant.");
+                errors.Add("Material Code appears more than once in this file.");
+            }
+            else if (inactiveCodes.Contains(itemCode.ToLowerInvariant()))
+            {
+                errors.Add("Material Code belongs to a deactivated part; use a different code.");
             }
 
             if (string.IsNullOrWhiteSpace(unit))
@@ -1204,12 +1274,14 @@ public sealed class ImportController(
                 errors.Add("Branch must exist when provided.");
             }
 
-            if (!TryParseDecimal(rawValues["Opening Quantity"], out _))
+            // For an existing part a blank quantity leaves its stock alone; a number sets the stock held
+            // at the row's branch to that figure (booked as an adjustment).
+            if (!TryParseDecimal(rawValues["Opening Quantity"], out var quantity, isUpdate) || quantity < 0)
             {
-                errors.Add("Opening Quantity must be numeric.");
+                errors.Add(isUpdate ? "Opening Quantity must be a number of 0 or more, or blank to leave stock as it is." : "Opening Quantity must be a number of 0 or more.");
             }
 
-            if (!TryParseDecimal(rawValues["Reorder Level"], out _))
+            if (!TryParseDecimal(rawValues["Reorder Level"], out _, isUpdate))
             {
                 errors.Add("Reorder Level must be numeric.");
             }
@@ -1219,7 +1291,7 @@ public sealed class ImportController(
                 errors.Add("Unit Cost must be numeric.");
             }
 
-            results.Add(new ImportPreviewRowResponse(record.RowNumber, rawValues, errors.Count == 0, errors));
+            results.Add(new ImportPreviewRowResponse(record.RowNumber, rawValues, errors.Count == 0, errors) { Action = isUpdate ? "Update" : "Create" });
         }
 
         return results;
@@ -1577,7 +1649,11 @@ public sealed record CsvUploadRequest(IFormFile File);
 
 public sealed record ImportPreviewResponse(string ImportType, int TotalRows, IReadOnlyCollection<ImportPreviewRowResponse> Rows);
 
-public sealed record ImportPreviewRowResponse(int RowNumber, IReadOnlyDictionary<string, string?> RawValues, bool IsValid, IReadOnlyCollection<string> Errors);
+public sealed record ImportPreviewRowResponse(int RowNumber, IReadOnlyDictionary<string, string?> RawValues, bool IsValid, IReadOnlyCollection<string> Errors)
+{
+    /// <summary>Materials only: Create (a new part) or Update (the code is already in the catalogue).</summary>
+    public string? Action { get; init; }
+}
 
 public sealed record ImportCommitResponse(int TotalRows, int SuccessfulRows, int FailedRows, int SkippedRows, IReadOnlyCollection<ImportCommitRowErrorResponse>? RowErrors = null);
 public sealed record ImportCommitRowErrorResponse(int RowNumber, IReadOnlyCollection<string> Errors);

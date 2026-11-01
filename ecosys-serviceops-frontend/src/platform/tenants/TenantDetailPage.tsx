@@ -34,6 +34,7 @@ import {
   useResetTenantUserPassword,
   useDeactivateTenant,
   useUpdateTenantSeats,
+  useUpdateTenantPricing,
 } from '../api'
 import { SectionTitle, licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
 import { NewWorkspaceUserDrawer } from './NewWorkspaceUserDrawer'
@@ -69,6 +70,19 @@ function formatSeats(used: number, limit: number | null | undefined) {
   return limit != null ? `${used} / ${limit}` : `${used} / —`
 }
 
+/** Platform prices are entered without a currency on Editions & Pricing, so they are shown the same way. */
+function formatPrice(value: number) {
+  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/** A blank price field means "use the edition's price" (null); otherwise a number of 0 or more. */
+function parsePriceInput(input: string): { ok: true; value: number | null } | { ok: false } {
+  const trimmed = input.trim()
+  if (!trimmed) return { ok: true, value: null }
+  const value = Number(trimmed)
+  return Number.isFinite(value) && value >= 0 ? { ok: true, value } : { ok: false }
+}
+
 function parseFieldSeats(input: string): number | null {
   const value = Number(input.trim() || '0')
   return Number.isInteger(value) && value >= 0 ? value : null
@@ -102,6 +116,7 @@ export function TenantDetailPage() {
   const extendTrial = useExtendTenantTrial(id ?? '')
   const impersonate = useImpersonateTenant(id ?? '')
   const updateSeats = useUpdateTenantSeats(id ?? '')
+  const updatePricing = useUpdateTenantPricing(id ?? '')
   const resendInvitation = useResendTenantUserInvitation(id)
   const resetPassword = useResetTenantUserPassword(id)
   const [showAddWorkspaceUser, setShowAddWorkspaceUser] = useState(false)
@@ -118,6 +133,9 @@ export function TenantDetailPage() {
   const [showSeatsDialog, setShowSeatsDialog] = useState(false)
   const [seatsInput, setSeatsInput] = useState('')
   const [fieldSeatsInput, setFieldSeatsInput] = useState('')
+  const [showPricingDialog, setShowPricingDialog] = useState(false)
+  const [officePriceInput, setOfficePriceInput] = useState('')
+  const [fieldPriceInput, setFieldPriceInput] = useState('')
   const [showImpersonate, setShowImpersonate] = useState(false)
   const [impersonateReason, setImpersonateReason] = useState('')
   const [testRecipient, setTestRecipient] = useState('')
@@ -224,6 +242,24 @@ export function TenantDetailPage() {
     setFieldSeatsInput(String(tenant.fieldSeats ?? fieldSeats.current))
     setShowSeatsDialog(true)
   }
+
+  const pricing = tenant.pricing ?? null
+  const openPricingDialog = () => {
+    setOfficePriceInput(pricing?.officeSeatPriceOverride != null ? String(pricing.officeSeatPriceOverride) : '')
+    setFieldPriceInput(pricing?.fieldSeatPriceOverride != null ? String(pricing.fieldSeatPriceOverride) : '')
+    setShowPricingDialog(true)
+  }
+  const officePriceParse = parsePriceInput(officePriceInput)
+  const fieldPriceParse = parsePriceInput(fieldPriceInput)
+  const pricingValid = officePriceParse.ok && fieldPriceParse.ok
+  // Preview of the monthly total with the prices being typed, using the same seat counts as the server.
+  const previewMonthlySeats = pricing && pricingValid
+    ? (tenant.officeSeats ?? 0) * (officePriceParse.value ?? pricing.editionOfficeSeatPrice)
+      + (tenant.fieldSeats ?? 0) * (fieldPriceParse.value ?? pricing.editionFieldSeatPrice)
+    : null
+  const currentMonthlySeats = pricing
+    ? (tenant.officeSeats ?? 0) * pricing.officeSeatPrice + (tenant.fieldSeats ?? 0) * pricing.fieldSeatPrice
+    : 0
 
   const seatsParse = parseLicensedUsers(seatsInput)
   const parsedFieldSeats = parseFieldSeats(fieldSeatsInput)
@@ -477,6 +513,46 @@ export function TenantDetailPage() {
               <InfoCard label="Field seats" value={formatSeats(fieldSeats.current, fieldSeats.licensed)} />
               <InfoCard label="Edition" value={tenant.planName ?? 'No edition'} />
             </div>
+          </section>
+          <section className={panelClass}>
+            <SectionTitle
+              title="Pricing"
+              description="What this tenant is billed per seat each month. Leave a price on the edition's rate, or set one agreed with this tenant. Edition rates are set under Settings → Editions & Pricing."
+            />
+            {pricing ? (
+              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <InfoCard
+                  label="Office seat / month"
+                  value={
+                    <span>
+                      {formatPrice(pricing.officeSeatPrice)}
+                      <span className="ml-2 text-xs font-normal text-slate-500">
+                        {pricing.officeSeatPriceOverride != null ? `Agreed price · edition ${formatPrice(pricing.editionOfficeSeatPrice)}` : 'Edition price'}
+                      </span>
+                    </span>
+                  }
+                />
+                <InfoCard
+                  label="Field seat / month"
+                  value={
+                    <span>
+                      {formatPrice(pricing.fieldSeatPrice)}
+                      <span className="ml-2 text-xs font-normal text-slate-500">
+                        {pricing.fieldSeatPriceOverride != null ? `Agreed price · edition ${formatPrice(pricing.editionFieldSeatPrice)}` : 'Edition price'}
+                      </span>
+                    </span>
+                  }
+                />
+                <InfoCard label={`Monthly value (${pricing.billingCycle === 'SemiAnnual' ? 'Semi-Annual' : pricing.billingCycle} billing)`} value={formatPrice(pricing.monthlyValue)} />
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-500">This tenant has no edition yet. Activate it first, then set its pricing.</p>
+            )}
+            {pricing ? (
+              <div className="mt-4">
+                <button type="button" className={secondaryButton} onClick={openPricingDialog}>Set pricing</button>
+              </div>
+            ) : null}
           </section>
           <div className="flex flex-wrap gap-2" data-testid="tenant-lifecycle-actions">
             {isTrial || isInactive ? <button type="button" className={primaryButton} onClick={() => setShowActivateDialog(true)}>Activate</button> : null}
@@ -829,6 +905,66 @@ export function TenantDetailPage() {
             <p className="mt-2 text-sm text-amber-700">This is below the users already active. Nobody is deactivated; new additions in that pool stay blocked until usage falls.</p>
           ) : null}
           <p className="mt-2 text-xs text-slate-500">The edition's minimum number of office seats applies.</p>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={showPricingDialog}
+        title="Pricing"
+        message={`Price per seat per month for ${tenant.name}. Leave a field blank to use the edition's price. This changes what the tenant is billed from now on; seats, dates and access are not affected.`}
+        confirmLabel="Save"
+        confirmDisabled={!pricingValid || updatePricing.isPending}
+        onCancel={() => setShowPricingDialog(false)}
+        onConfirm={() => {
+          if (!officePriceParse.ok || !fieldPriceParse.ok) return
+          void updatePricing.mutateAsync({ officeSeatPrice: officePriceParse.value, fieldSeatPrice: fieldPriceParse.value })
+            .then(() => toast.success('Pricing updated'))
+            .then(() => setShowPricingDialog(false))
+            .catch(() => undefined)
+        }}
+      >
+        <div className="mt-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="tenant-office-price-input" className="mb-1.5 block text-sm font-medium text-slate-700">Office seat / month</label>
+              <input
+                id="tenant-office-price-input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={officePriceInput}
+                placeholder={pricing ? `Edition: ${formatPrice(pricing.editionOfficeSeatPrice)}` : undefined}
+                onChange={(event) => setOfficePriceInput(event.target.value)}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label htmlFor="tenant-field-price-input" className="mb-1.5 block text-sm font-medium text-slate-700">Field seat / month</label>
+              <input
+                id="tenant-field-price-input"
+                type="number"
+                min={0}
+                step="0.01"
+                value={fieldPriceInput}
+                placeholder={pricing ? `Edition: ${formatPrice(pricing.editionFieldSeatPrice)}` : undefined}
+                onChange={(event) => setFieldPriceInput(event.target.value)}
+                className={inputClass}
+              />
+            </div>
+          </div>
+          {!pricingValid ? (
+            <p className="mt-2 text-sm text-rose-700">Prices must be numbers of 0 or more, or blank for the edition's price.</p>
+          ) : previewMonthlySeats != null ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Seats per month: {formatPrice(currentMonthlySeats)} → <span className="font-medium text-slate-700">{formatPrice(previewMonthlySeats)}</span>
+              {' '}({tenant.officeSeats ?? 0} office, {tenant.fieldSeats ?? 0} field). Any WhatsApp add-on is billed on top.
+            </p>
+          ) : null}
+          {(officePriceInput || fieldPriceInput) ? (
+            <button type="button" onClick={() => { setOfficePriceInput(''); setFieldPriceInput('') }} className="mt-3 text-xs font-medium text-slate-600 underline underline-offset-2 hover:text-slate-900">
+              Use edition prices
+            </button>
+          ) : null}
         </div>
       </ConfirmDialog>
 

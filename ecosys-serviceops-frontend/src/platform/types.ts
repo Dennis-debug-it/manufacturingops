@@ -87,6 +87,8 @@ export interface PlatformTenantDetail extends PlatformTenantListItem {
   isPerpetual?: boolean
   /** 'Manual' (operator) or 'NonPayment' (subscription lapsed) while suspended. */
   suspensionReason?: string | null
+  /** What the tenant pays; null until it has a license on an edition. */
+  pricing?: PlatformTenantPricing | null
   serviceOpsEmail?: string | null
   timeZoneId?: string | null
   currency?: string | null
@@ -110,6 +112,21 @@ export interface PlatformTenantDetail extends PlatformTenantListItem {
   lastActivityAt: string | null
   initialAdminInvitationSent: boolean | null
   initialAdminInvitationMessage: string | null
+}
+
+/**
+ * Seat prices are per seat per month on the license's billing cycle. The override fields are null
+ * while the tenant pays the edition's price; the plain fields are what it is actually billed.
+ */
+export interface PlatformTenantPricing {
+  billingCycle: string
+  editionOfficeSeatPrice: number
+  editionFieldSeatPrice: number
+  officeSeatPriceOverride: number | null
+  fieldSeatPriceOverride: number | null
+  officeSeatPrice: number
+  fieldSeatPrice: number
+  monthlyValue: number
 }
 
 export interface PlatformTenantAuditLog {

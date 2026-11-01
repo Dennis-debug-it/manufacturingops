@@ -73,23 +73,46 @@ public static class LicenseFeatures
 }
 
 /// <summary>
-/// What a license is worth per month: office seats and field seats at the edition's prices, plus the
-/// WhatsApp add-on. An annual license counts its annual price spread over twelve months; a price left at
-/// zero for the annual cycle falls back to the monthly price.
+/// What a license is worth per month: office seats and field seats at the edition's prices (or the
+/// price agreed with that tenant, when one is set), plus the WhatsApp add-on. An annual license counts
+/// its annual price spread over twelve months; a price left at zero for the annual cycle falls back to
+/// the monthly price.
 /// </summary>
 public static class LicensePricing
 {
-    public static decimal MonthlyValue(TenantLicense license, IReadOnlyCollection<LicenseAddOn> addOns)
+    /// <summary>The edition's price for one office seat per month on this license's billing cycle.</summary>
+    public static decimal EditionOfficeSeatPrice(TenantLicense license)
     {
         var plan = license.LicensePlan ?? throw new InvalidOperationException("Tenant license plan was not loaded.");
-        var annual = string.Equals(license.BillingCycle, BillingCycles.Annual, StringComparison.OrdinalIgnoreCase);
-        decimal PerMonth(decimal monthly, decimal yearly) => annual && yearly > 0 ? yearly / 12m : monthly;
+        return PerMonth(license, plan.OfficeSeatMonthlyPrice, plan.OfficeSeatAnnualPrice);
+    }
 
-        var value = license.OfficeSeats * PerMonth(plan.OfficeSeatMonthlyPrice, plan.OfficeSeatAnnualPrice)
-            + license.FieldSeats * PerMonth(plan.FieldSeatMonthlyPrice, plan.FieldSeatAnnualPrice);
+    /// <summary>The edition's price for one field seat per month on this license's billing cycle.</summary>
+    public static decimal EditionFieldSeatPrice(TenantLicense license)
+    {
+        var plan = license.LicensePlan ?? throw new InvalidOperationException("Tenant license plan was not loaded.");
+        return PerMonth(license, plan.FieldSeatMonthlyPrice, plan.FieldSeatAnnualPrice);
+    }
+
+    /// <summary>What this tenant pays for one office seat per month: its agreed price, else the edition's.</summary>
+    public static decimal OfficeSeatPrice(TenantLicense license) => license.OfficeSeatPriceOverride ?? EditionOfficeSeatPrice(license);
+
+    /// <summary>What this tenant pays for one field seat per month: its agreed price, else the edition's.</summary>
+    public static decimal FieldSeatPrice(TenantLicense license) => license.FieldSeatPriceOverride ?? EditionFieldSeatPrice(license);
+
+    private static decimal PerMonth(TenantLicense license, decimal monthly, decimal yearly)
+    {
+        var annual = string.Equals(license.BillingCycle, BillingCycles.Annual, StringComparison.OrdinalIgnoreCase);
+        return annual && yearly > 0 ? yearly / 12m : monthly;
+    }
+
+    public static decimal MonthlyValue(TenantLicense license, IReadOnlyCollection<LicenseAddOn> addOns)
+    {
+        var value = license.OfficeSeats * OfficeSeatPrice(license)
+            + license.FieldSeats * FieldSeatPrice(license);
         if (addOns.FirstOrDefault(x => x.Code == license.WhatsAppAddOn) is { } addOn)
         {
-            value += PerMonth(addOn.MonthlyPrice, addOn.AnnualPrice);
+            value += PerMonth(license, addOn.MonthlyPrice, addOn.AnnualPrice);
         }
 
         return decimal.Round(value, 2);

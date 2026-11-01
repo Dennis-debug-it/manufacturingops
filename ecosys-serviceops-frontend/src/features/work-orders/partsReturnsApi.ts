@@ -63,6 +63,8 @@ export interface CreatePartsReturnPayload {
 
 function invalidateReturns(queryClient: ReturnType<typeof useQueryClient>, workOrderId?: string) {
   void queryClient.invalidateQueries({ queryKey: ['parts-returns'] })
+  // Receiving puts unused parts back on the shelf.
+  void queryClient.invalidateQueries({ queryKey: ['materials'] })
   if (workOrderId) {
     // Receiving changes the job's material usage (and so billing and the execution bundle).
     void queryClient.invalidateQueries({ queryKey: ['work-orders', workOrderId] })

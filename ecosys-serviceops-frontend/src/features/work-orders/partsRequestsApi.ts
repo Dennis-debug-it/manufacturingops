@@ -46,6 +46,10 @@ export interface CreatePartsRequestPayload {
 
 function invalidatePartsRequests(queryClient: ReturnType<typeof useQueryClient>, workOrderId?: string) {
   void queryClient.invalidateQueries({ queryKey: ['parts-requests'] })
+  // The stores queue (and its menu badge) lists these too.
+  void queryClient.invalidateQueries({ queryKey: ['inventory-requests'] })
+  // Dispatching moves stock.
+  void queryClient.invalidateQueries({ queryKey: ['materials'] })
   if (workOrderId) {
     void queryClient.invalidateQueries({ queryKey: ['work-orders', workOrderId, 'parts-requests'] })
   }

@@ -66,7 +66,7 @@ public sealed class MaterialsController(
             .WhereAccessible(scope, x => (Guid?)x.BranchId)
             .OrderBy(x => x.Branch!.Name)
             .Select(x => new MaterialBranchStockResponse(
-                x.BranchId, x.Branch!.Name, x.QuantityOnHand, x.ReorderLevel, x.UnitCost, x.QuantityOnHand <= x.ReorderLevel))
+                x.BranchId, x.Branch!.Name, x.QuantityOnHand, x.ReorderLevel, x.UnitCost, x.QuantityOnHand <= x.ReorderLevel && (x.QuantityOnHand != 0 || x.ReorderLevel > 0)))
             .ToListAsync(cancellationToken);
         var vans = await dbContext.VanMaterialStocks.AsNoTracking()
             .Where(x => x.TenantId == TenantId && x.MaterialId == id && x.QuantityOnHand != 0)
@@ -85,6 +85,68 @@ public sealed class MaterialsController(
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         var items = await LoadVisibleMaterialResponsesAsync(scope, "active", null, cancellationToken);
         return Ok(items.Where(x => x.IsLowStock).ToList());
+    }
+
+    /// <summary>
+    /// Every place stock sits, one row per part per location: each visible branch's balance and each
+    /// van carrying it. Van rows carry no reorder level and are never low stock. A tenant without branches has one "Main stores" location holding the part
+    /// totals. Branch rows with nothing on hand and no reorder level are left out (never stocked there).
+    /// </summary>
+    [HttpGet("stock-by-location")]
+    public async Task<ActionResult<IReadOnlyCollection<StockLocationRowResponse>>> GetStockByLocation(CancellationToken cancellationToken)
+    {
+        EnsureMaterialsViewAccess();
+        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
+        var rows = new List<StockLocationRowResponse>();
+
+        if (scope.HasConfiguredBranches)
+        {
+            rows.AddRange(await dbContext.BranchMaterialStocks.AsNoTracking()
+                .Where(x => x.TenantId == TenantId && x.Material!.IsActive && (x.QuantityOnHand != 0 || x.ReorderLevel > 0))
+                .WhereAccessible(scope, x => (Guid?)x.BranchId)
+                .Select(x => new StockLocationRowResponse(
+                    x.MaterialId, x.Material!.ItemCode, x.Material.ItemName, x.Material.Category, x.Material.UnitOfMeasure,
+                    StockLocationTypes.Branch, x.BranchId, x.Branch!.Name,
+                    x.QuantityOnHand, x.ReorderLevel, x.UnitCost ?? x.Material.UnitCost,
+                    x.QuantityOnHand <= x.ReorderLevel && (x.QuantityOnHand != 0 || x.ReorderLevel > 0)))
+                .ToListAsync(cancellationToken));
+        }
+        else
+        {
+            // Without branches the part total is the stores balance; van stock is part of that total,
+            // so it is taken back out here and shown against each van below.
+            var vanTotals = await dbContext.VanMaterialStocks.AsNoTracking()
+                .Where(x => x.TenantId == TenantId)
+                .GroupBy(x => x.MaterialId)
+                .Select(g => new { MaterialId = g.Key, Quantity = g.Sum(x => x.QuantityOnHand) })
+                .ToDictionaryAsync(x => x.MaterialId, x => x.Quantity, cancellationToken);
+            var items = await dbContext.MaterialItems.AsNoTracking()
+                .Where(x => x.TenantId == TenantId && x.IsActive)
+                .ToListAsync(cancellationToken);
+            foreach (var item in items)
+            {
+                var stores = item.QuantityOnHand - vanTotals.GetValueOrDefault(item.Id);
+                if (stores == 0 && item.ReorderLevel <= 0) continue;
+                rows.Add(new StockLocationRowResponse(
+                    item.Id, item.ItemCode, item.ItemName, item.Category, item.UnitOfMeasure,
+                    StockLocationTypes.Stores, null, "Main stores",
+                    stores, item.ReorderLevel, item.UnitCost, StockRules.IsLow(stores, item.ReorderLevel)));
+            }
+        }
+
+        rows.AddRange(await dbContext.VanMaterialStocks.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.QuantityOnHand != 0 && x.Material!.IsActive && x.Van!.IsActive)
+            .WhereAccessible(scope, x => x.Van!.HomeBranchId)
+            .Select(x => new StockLocationRowResponse(
+                x.MaterialId, x.Material!.ItemCode, x.Material.ItemName, x.Material.Category, x.Material.UnitOfMeasure,
+                StockLocationTypes.Van, x.VanId, x.Van!.Name,
+                x.QuantityOnHand, 0, x.UnitCost ?? x.Material.UnitCost,
+                // Vans have no reorder levels of their own (a van row copies the catalogue's when
+                // created, and nothing edits it), so a van is never "low"; the part page agrees.
+                false))
+            .ToListAsync(cancellationToken));
+
+        return Ok(rows.OrderBy(x => x.ItemName).ThenBy(x => x.LocationType).ThenBy(x => x.LocationName).ToList());
     }
 
     /// <summary>Per-branch stock totals for the branches the user can see: parts held, low stock and value.</summary>
@@ -232,6 +294,12 @@ public sealed class MaterialsController(
             throw new BusinessRuleException("Replenishment quantity must be greater than zero.");
         }
 
+        // This is a receipt with no purchase order behind it, so the ledger needs the why.
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            throw new BusinessRuleException("Give a reason for receiving stock without a purchase order.");
+        }
+
         var item = await dbContext.MaterialItems
             .Include(x => x.PreferredSupplier)
             .Include(x => x.BranchStocks)
@@ -261,10 +329,10 @@ public sealed class MaterialsController(
         await auditLogService.LogAsync(
             TenantId,
             UserId,
-            "Material replenished",
+            "Material received manually",
             nameof(MaterialItem),
             item.Id.ToString(),
-            $"Replenished '{item.ItemName}' by {request.Quantity} {item.UnitOfMeasure}.",
+            $"Manual receipt of {request.Quantity} {item.UnitOfMeasure} of '{item.ItemName}' (no purchase order): {request.Reason!.Trim()}.",
             cancellationToken);
 
         return Ok(Map(item, await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken), await SettingsAsync(cancellationToken)));
@@ -356,6 +424,30 @@ public sealed class MaterialsController(
 
         var item = await dbContext.MaterialItems.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material item was not found.");
+
+        // An inactive part drops out of every stock view, so deactivating one that still has stock or
+        // is still being asked for would make that stock and those requests vanish from sight.
+        var blockers = new List<string>();
+        var branchStock = await dbContext.BranchMaterialStocks.Where(x => x.TenantId == TenantId && x.MaterialId == id).SumAsync(x => x.QuantityOnHand, cancellationToken);
+        var vanStock = await dbContext.VanMaterialStocks.Where(x => x.TenantId == TenantId && x.MaterialId == id).SumAsync(x => x.QuantityOnHand, cancellationToken);
+        if (branchStock != 0 || vanStock != 0 || item.QuantityOnHand != 0)
+            blockers.Add($"{(branchStock != 0 || vanStock != 0 ? branchStock + vanStock : item.QuantityOnHand):0.##} {item.UnitOfMeasure} still in stock{(vanStock != 0 ? $" ({vanStock:0.##} on vans)" : string.Empty)} — issue, transfer or adjust it to zero first");
+        var openRequests =
+            await dbContext.PartsRequestItems.CountAsync(x => x.InventoryItemId == id && x.PartsRequest!.TenantId == TenantId && (x.PartsRequest.Status == "Pending" || x.PartsRequest.Status == "Approved"), cancellationToken)
+            + await dbContext.MaterialIssueLines.CountAsync(x => x.TenantId == TenantId && x.MaterialItemId == id && (x.MaterialIssue!.IssueStatus == "draft" || x.MaterialIssue.IssueStatus == "pending_approval" || x.MaterialIssue.IssueStatus == "approved"), cancellationToken)
+            + await dbContext.MaterialRequestLines.CountAsync(x => x.MaterialItemId == id && x.MaterialRequest!.TenantId == TenantId && (x.MaterialRequest.Status == "Pending" || x.MaterialRequest.Status == "Approved"), cancellationToken);
+        if (openRequests > 0)
+            blockers.Add($"{openRequests} open request{(openRequests == 1 ? "" : "s")} for it under Inventory → Requests");
+        var openOrders = await dbContext.PurchaseOrderLines.CountAsync(x => x.TenantId == TenantId && x.MaterialItemId == id
+            && x.QuantityReceived < x.QuantityOrdered
+            && (x.PurchaseOrder!.Status == "Draft" || x.PurchaseOrder.Status == "Sent" || x.PurchaseOrder.Status == "PartiallyReceived"), cancellationToken);
+        if (openOrders > 0)
+            blockers.Add($"{openOrders} purchase order line{(openOrders == 1 ? "" : "s")} still to be received");
+        var openCounts = await dbContext.StockCountLines.CountAsync(x => x.TenantId == TenantId && x.MaterialItemId == id && x.StockCount!.Status == StockCountStatuses.Open, cancellationToken);
+        if (openCounts > 0)
+            blockers.Add("an open stock count that lists it");
+        if (blockers.Count > 0)
+            throw new BusinessRuleException($"{item.ItemName} can't be deactivated yet: {string.Join("; ", blockers)}.");
 
         item.IsActive = false;
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -469,7 +561,7 @@ public sealed class MaterialsController(
             quantityOnHand = item.QuantityOnHand;
             reorderLevel = item.ReorderLevel;
             unitCost = item.UnitCost;
-            isLowStock = quantityOnHand <= reorderLevel;
+            isLowStock = StockRules.IsLow(quantityOnHand, reorderLevel);
             isCritical = settings.IsCritical(quantityOnHand, reorderLevel);
         }
         else if (scope.RequestedBranchId.HasValue)
@@ -478,7 +570,7 @@ public sealed class MaterialsController(
             quantityOnHand = stock?.QuantityOnHand ?? 0;
             reorderLevel = stock?.ReorderLevel ?? item.ReorderLevel;
             unitCost = stock?.UnitCost ?? item.UnitCost;
-            isLowStock = quantityOnHand <= reorderLevel;
+            isLowStock = StockRules.IsLow(quantityOnHand, reorderLevel);
             isCritical = settings.IsCritical(quantityOnHand, reorderLevel);
             branchId = scope.RequestedBranchId;
             branchName = stock?.Branch?.Name;
@@ -494,7 +586,7 @@ public sealed class MaterialsController(
                 quantityOnHand = item.QuantityOnHand;
                 reorderLevel = item.ReorderLevel;
                 unitCost = item.UnitCost;
-                isLowStock = quantityOnHand <= reorderLevel;
+                isLowStock = StockRules.IsLow(quantityOnHand, reorderLevel);
                 isCritical = settings.IsCritical(quantityOnHand, reorderLevel);
             }
             else
@@ -502,7 +594,7 @@ public sealed class MaterialsController(
                 quantityOnHand = visibleStocks.Sum(x => x.QuantityOnHand);
                 reorderLevel = visibleStocks.Sum(x => x.ReorderLevel);
                 unitCost = item.UnitCost;
-                isLowStock = visibleStocks.Any(x => x.QuantityOnHand <= x.ReorderLevel);
+                isLowStock = visibleStocks.Any(x => StockRules.IsLow(x.QuantityOnHand, x.ReorderLevel));
                 isCritical = visibleStocks.Any(x => settings.IsCritical(x.QuantityOnHand, x.ReorderLevel));
             }
         }
@@ -635,6 +727,29 @@ public sealed record StockMovementResponse(
     string? BatchOrSerial = null);
 
 /// <param name="LowStockParts">Parts at or below their reorder level here (ignoring parts never stocked here with no reorder level).</param>
+public static class StockLocationTypes
+{
+    public const string Branch = "Branch";
+    public const string Van = "Van";
+    /// <summary>The single location of a tenant that has no branches.</summary>
+    public const string Stores = "Stores";
+}
+
+/// <summary>One part at one location. LocationId is the branch or van; null for "Main stores".</summary>
+public sealed record StockLocationRowResponse(
+    Guid MaterialId,
+    string ItemCode,
+    string ItemName,
+    string? Category,
+    string UnitOfMeasure,
+    string LocationType,
+    Guid? LocationId,
+    string LocationName,
+    decimal QuantityOnHand,
+    decimal ReorderLevel,
+    decimal? UnitCost,
+    bool IsLowStock);
+
 public sealed record MaterialBranchStockResponse(Guid BranchId, string BranchName, decimal QuantityOnHand, decimal ReorderLevel, decimal? UnitCost, bool IsLowStock);
 
 public sealed record MaterialVanStockResponse(Guid VanId, string VanName, decimal QuantityOnHand);

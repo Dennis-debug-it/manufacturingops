@@ -686,6 +686,7 @@ export const endpoints = {
     tenantLicenseRenew: (id: string) => `/api/platform/tenants/${id}/license/renew`,
     tenantLicenseExtend: (id: string) => `/api/platform/tenants/${id}/license/extend`,
     tenantLicenseSeats: (id: string) => `/api/platform/tenants/${id}/license/seats`,
+    tenantLicensePricing: (id: string) => `/api/platform/tenants/${id}/license/pricing`,
     tenantLicenseReactivate: (id: string) => `/api/platform/tenants/${id}/license/reactivate`,
     tenantSummary: (id: string) => `/api/platform/tenants/${id}/summary`,
     tenantAuditLogs: (id: string) => `/api/platform/tenants/${id}/audit-logs`,

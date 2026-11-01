@@ -14,10 +14,11 @@ import { useUrlFilters } from '../../shared/hooks/useUrlFilters'
 import { getActiveCurrency } from '../../shared/utils/currency'
 import { formatDate } from '../../shared/utils/dates'
 import { useBranches } from './api'
-import { InventoryTabNav } from './components/InventoryTabNav'
 import { MaterialAutocomplete } from './components/MaterialAutocomplete'
 import { purchaseOrderChoice, purchaseOrderFiltersFor, purchaseOrderListFilterSpec, purchaseOrderStatuses, type PurchaseOrderChoice } from './listFilters'
+import { EditPurchaseOrderDrawer, EmailPurchaseOrderDrawer } from './components/PurchaseOrderDrawers'
 import {
+  downloadPurchaseOrderPdf,
   useCreatePurchaseOrder,
   usePurchaseOrder,
   usePurchaseOrders,
@@ -105,7 +106,6 @@ export function PurchaseOrdersPage() {
           ) : undefined
         }
       />
-      <InventoryTabNav />
       <div className="flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-3 shadow-sm">
         {choices.map((option) => (
           <button
@@ -232,6 +232,19 @@ export function PurchaseOrderDetailPage() {
   const { data, isLoading, isError, refetch } = usePurchaseOrder(id)
   const setStatus = useSetPurchaseOrderStatus(id ?? '')
   const [receiving, setReceiving] = useState<PurchaseOrderLine | null>(null)
+  const [drawer, setDrawer] = useState<'edit' | 'email' | null>(null)
+  const [downloading, setDownloading] = useState(false)
+  const download = async () => {
+    if (!data) return
+    setDownloading(true)
+    try {
+      await downloadPurchaseOrderPdf(data.id, data.poNumber)
+    } catch {
+      // interceptor surfaces the error toast
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   const changeStatus = async (status: 'Sent' | 'Cancelled') => {
     await setStatus.mutateAsync(status)
@@ -250,6 +263,13 @@ export function PurchaseOrderDetailPage() {
           data ? (
             <div className="flex items-center gap-2">
               <StatusBadge status={data.status} />
+              <button type="button" disabled={downloading} onClick={() => void download()} className="rounded-lg bg-[var(--app-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">{downloading ? 'Preparing…' : 'Download PDF'}</button>
+              {canEdit && data.status !== 'Cancelled' ? (
+                <button type="button" onClick={() => setDrawer('email')} className="rounded-lg bg-[var(--app-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">Email to supplier</button>
+              ) : null}
+              {canEdit && data.status === 'Draft' ? (
+                <button type="button" onClick={() => setDrawer('edit')} className="rounded-lg bg-[var(--app-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">Edit</button>
+              ) : null}
               {canEdit && canTransition && data.status === 'Draft' ? (
                 <button type="button" disabled={setStatus.isPending} onClick={() => void changeStatus('Sent')} className="rounded-lg bg-[var(--app-primary)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--app-secondary)] disabled:opacity-60">Mark Sent</button>
               ) : null}
@@ -330,6 +350,8 @@ export function PurchaseOrderDetailPage() {
         </>
       )}
       {receiving && id ? <ReceiveLineDrawer poId={id} line={receiving} onClose={() => setReceiving(null)} /> : null}
+      {drawer === 'edit' && data ? <EditPurchaseOrderDrawer order={data} onClose={() => setDrawer(null)} /> : null}
+      {drawer === 'email' && data ? <EmailPurchaseOrderDrawer order={data} onClose={() => setDrawer(null)} /> : null}
     </div>
   )
 }

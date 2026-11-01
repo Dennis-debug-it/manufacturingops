@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { differenceInDays } from 'date-fns'
 import { Link, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -13,9 +13,11 @@ import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
-import { useAsset, useReactivateAsset, useRetireAsset, type RetireAssetPayload } from './api'
+import { useAsset, useReactivateAsset, useRetireAsset, useSetAssetAutoSchedulePm, type RetireAssetPayload } from './api'
+import { OnOffSwitch } from '../../shared/components/OnOffSwitch'
 import { AssetFormDrawer } from './components/AssetFormDrawer'
 import { RetireAssetDialog } from './components/RetireAssetDialog'
+import { AssetContractPanel, ContractCoverValue } from './components/AssetContractPanel'
 import type { Asset } from './types'
 
 function warrantyBadge(expiry: string | null) {
@@ -167,12 +169,12 @@ export function AssetDetailPage() {
               </div>
               <h3 className="mt-6 text-sm font-semibold text-slate-900">Maintenance</h3>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {[
+                {([
                   ['Maintenance Frequency', maintenanceFrequencyLabel(asset)],
                   ['Last Maintenance', asset.lastPmDate ? formatDate(asset.lastPmDate) : 'Not recorded'],
                   ['Next Maintenance Due', nextPmLabel(asset.nextPmDate)],
-                  ['Auto-Schedule PM', asset.autoSchedulePm ? 'On' : 'Off'],
-                ].map(([label, value]) => (
+                  ['Auto-Schedule PM', <AutoSchedulePmValue key="auto" asset={asset} canChange={canManageAssets && !isRetired} />],
+                ] as Array<[string, ReactNode]>).map(([label, value]) => (
                   <div key={label} className="rounded-xl border border-slate-200 px-4 py-3">
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
                     <div className="mt-2 text-sm text-slate-900">{value}</div>
@@ -181,19 +183,20 @@ export function AssetDetailPage() {
               </div>
               <h3 className="mt-6 text-sm font-semibold text-slate-900">Warranty</h3>
               <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                {[
+                {([
                   ['Under Warranty', asset.warrantyExpiryDate ? (asset.isUnderWarranty ? 'Yes' : 'No — expired') : 'No'],
-                  ['Contract Cover', asset.hasContractCover ? 'Yes' : 'No'],
+                  ['Contract Cover', <ContractCoverValue key="cover" asset={asset} />],
                   ['Warranty Period', asset.warrantyPeriodMonths ? `${asset.warrantyPeriodMonths} month${asset.warrantyPeriodMonths === 1 ? '' : 's'}` : '—'],
                   ['Warranty Start', asset.warrantyStartDate ? formatDate(asset.warrantyStartDate) : '—'],
                   ['Warranty Expiry', asset.warrantyExpiryDate ? formatDate(asset.warrantyExpiryDate) : '—'],
-                ].map(([label, value]) => (
+                ] as Array<[string, ReactNode]>).map(([label, value]) => (
                   <div key={label} className="rounded-xl border border-slate-200 px-4 py-3">
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
                     <div className="mt-2 text-sm text-slate-900">{value}</div>
                   </div>
                 ))}
               </div>
+              <AssetContractPanel asset={asset} />
               {(asset.customFieldValues ?? []).length > 0 ? (
                 <div className="mt-4" data-testid="asset-datasheet">
                   <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{asset.assetCategoryName ?? 'Category'} datasheet</div>
@@ -271,5 +274,25 @@ export function AssetDetailPage() {
       onConfirm={(payload) => void retire(payload)}
     />
     </>
+  )
+}
+
+/** The asset's automatic PM: a switch for people who manage assets, else On/Off. */
+function AutoSchedulePmValue({ asset, canChange }: { asset: Asset; canChange: boolean }) {
+  const setAutoSchedule = useSetAssetAutoSchedulePm(asset.id)
+  if (!canChange) return <span>{asset.autoSchedulePm ? 'On' : 'Off'}</span>
+  const change = async (enabled: boolean) => {
+    try {
+      await setAutoSchedule.mutateAsync(enabled)
+      toast.success(enabled ? 'Automatic PM on: work orders will be raised ahead of each due date' : 'Automatic PM off')
+    } catch {
+      // interceptor surfaces the error toast
+    }
+  }
+  return (
+    <span className="flex items-center gap-2">
+      <OnOffSwitch checked={asset.autoSchedulePm} label="Auto-schedule preventive maintenance" disabled={setAutoSchedule.isPending} onChange={(next) => void change(next)} />
+      <span className="text-xs text-slate-500">{asset.autoSchedulePm ? 'Raised automatically' : 'Not raised automatically'}</span>
+    </span>
   )
 }

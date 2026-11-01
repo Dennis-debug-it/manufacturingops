@@ -92,7 +92,7 @@ export function LiveMapPage() {
             </MapContainer>
           </div>
 
-          <aside className="flex w-full flex-col rounded-app border border-slate-200 bg-white shadow-card lg:w-80">
+          <aside className="flex max-h-[28rem] w-full flex-col rounded-app border border-slate-200 bg-white shadow-card lg:h-[calc(100vh-260px)] lg:max-h-none lg:min-h-[480px] lg:w-80">
             <div className="border-b border-slate-100 px-4 py-3">
               <h2 className="text-sm font-semibold text-slate-900">Technicians ({technicians?.length ?? 0})</h2>
               <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
@@ -105,7 +105,7 @@ export function LiveMapPage() {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto">
+            <div className="min-h-0 flex-1 overflow-y-auto">
               {!technicians || technicians.length === 0 ? (
                 <EmptyState title="No technicians found" description="Active technicians will appear here once available." />
               ) : (

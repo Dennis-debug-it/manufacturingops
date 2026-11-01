@@ -24,6 +24,7 @@ export function MaterialBulkImportDrawer({ open, onClose }: MaterialBulkImportDr
   const rowKeys = useMemo(() => Object.keys(preview?.rows[0]?.rawValues ?? {}), [preview])
   const validRows = preview?.rows.filter((row) => row.isValid).length ?? 0
   const errorRows = (preview?.rows.length ?? 0) - validRows
+  const updates = preview?.rows.filter((row) => row.isValid && row.action === 'Update').length ?? 0
 
   function reset() {
     setFile(null)
@@ -87,7 +88,7 @@ export function MaterialBulkImportDrawer({ open, onClose }: MaterialBulkImportDr
       const response = await importService.commitMaterials(file)
       setSummary(response)
       await queryClient.invalidateQueries({ queryKey: ['materials'] })
-      toast.success(`Imported ${response.successfulRows} materials`)
+      toast.success(`Saved ${response.successfulRows} parts`)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Could not complete this import.')
     } finally {
@@ -128,6 +129,7 @@ export function MaterialBulkImportDrawer({ open, onClose }: MaterialBulkImportDr
       <div className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
           Upload a materials CSV, preview the rows, then confirm the import. Branch names must already exist in the workspace.
+          <span className="mt-2 block">A code that is already in your catalogue <strong className="font-medium text-slate-800">updates</strong> that part: name, category, unit, reorder level and cost are replaced, and a quantity sets the stock at that branch to the new figure (recorded as an adjustment). Leave the quantity blank to keep stock as it is.</span>
         </div>
 
         <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-8 text-center transition hover:border-slate-400 hover:bg-slate-50">
@@ -190,7 +192,7 @@ export function MaterialBulkImportDrawer({ open, onClose }: MaterialBulkImportDr
                       <td className="px-4 py-3 text-slate-700">{row.rowNumber}</td>
                       <td className="px-4 py-3">
                         <span className={row.isValid ? 'font-medium text-emerald-700' : 'font-medium text-amber-700'}>
-                          {row.isValid ? 'Valid' : 'Needs Review'}
+                          {row.isValid ? (row.action === 'Update' ? 'Updates existing' : 'New part') : 'Needs Review'}
                         </span>
                       </td>
                       {rowKeys.map((key) => (
@@ -208,7 +210,7 @@ export function MaterialBulkImportDrawer({ open, onClose }: MaterialBulkImportDr
         {summary ? (
           <div className="space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-              Imported {summary.successfulRows} of {summary.totalRows} rows. Failed {summary.failedRows}. Skipped {summary.skippedRows}.
+              Saved {summary.successfulRows} of {summary.totalRows} rows{updates > 0 ? ` (${updates} updated existing parts)` : ''}. Failed {summary.failedRows}. Skipped {summary.skippedRows}.
             </div>
             {summary.rowErrors && summary.rowErrors.length > 0 ? (
               <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] shadow-sm">

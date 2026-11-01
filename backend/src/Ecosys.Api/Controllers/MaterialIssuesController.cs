@@ -20,7 +20,8 @@ public sealed class MaterialIssuesController(
     IBranchAccessService branchAccessService,
     IDocumentNumberingService documentNumberingService,
     IStockLedgerService stockLedgerService,
-    IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
+    IAuditLogService auditLogService,
+    INotificationDispatcher? notificationDispatcher = null) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<MaterialIssueResponse>>> List([FromQuery] Guid? branchId, CancellationToken cancellationToken)
@@ -121,6 +122,11 @@ public sealed class MaterialIssuesController(
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.created", nameof(MaterialIssue), issue.Id.ToString(), $"Created material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        // A slip that was issued straight away needs nobody; one waiting on approval or issue does.
+        if (persisted.IssueStatus is "pending_approval" or "draft")
+            await InventoryNotifications.NotifyRequestRaisedAsync(notificationDispatcher, dbContext, TenantId, UserId,
+                persisted.IssueNumber, persisted.WorkOrder?.WorkOrderNumber, persisted.RequestedByUser?.FullName, persisted.Lines.Count,
+                persisted.IssueStatus == "pending_approval", cancellationToken);
         return CreatedAtAction(nameof(List), new { id = issue.Id }, Map(persisted));
     }
 
@@ -142,6 +148,8 @@ public sealed class MaterialIssuesController(
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.approved", nameof(MaterialIssue), issue.Id.ToString(), $"Approved material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        await InventoryNotifications.NotifyRequestDecidedAsync(notificationDispatcher, TenantId, persisted.RequestedByUserId, UserId,
+            persisted.IssueNumber, persisted.WorkOrder?.WorkOrderNumber, persisted.WorkOrderId, true, null, cancellationToken);
         return Ok(Map(persisted));
     }
 
@@ -165,11 +173,16 @@ public sealed class MaterialIssuesController(
         await auditLogService.LogAsync(TenantId, UserId, "material_issue.rejected", nameof(MaterialIssue), issue.Id.ToString(), $"Rejected material issue '{issue.IssueNumber}'.", cancellationToken);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        await InventoryNotifications.NotifyRequestDecidedAsync(notificationDispatcher, TenantId, persisted.RequestedByUserId, UserId,
+            persisted.IssueNumber, persisted.WorkOrder?.WorkOrderNumber, persisted.WorkOrderId, false, persisted.RejectionReason, cancellationToken);
         return Ok(Map(persisted));
     }
 
     [HttpPost("{id:guid}/issue")]
-    public async Task<ActionResult<MaterialIssueResponse>> Issue(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<MaterialIssueResponse>> Issue(
+        Guid id,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] IssueMaterialIssueRequest? request,
+        CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanIssueMaterials);
         await using var transaction = dbContext.Database.IsRelational()
@@ -177,9 +190,31 @@ public sealed class MaterialIssuesController(
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
         var issue = await Query(scope).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material issue was not found.");
-        await IssueInternalAsync(issue, false, cancellationToken);
+
+        // Stores may hand over less than was asked for (short stock, part of the job first). A line
+        // left out of the request issues its full quantity; zero leaves that line unissued.
+        Dictionary<Guid, decimal>? quantities = null;
+        if (request?.Lines is { Count: > 0 } lines)
+        {
+            quantities = [];
+            foreach (var line in lines)
+            {
+                var issueLine = issue.Lines.SingleOrDefault(x => x.Id == line.MaterialIssueLineId)
+                    ?? throw new BusinessRuleException("Material issue line was not found.");
+                if (line.QuantityIssued < 0 || line.QuantityIssued > issueLine.QuantityRequested)
+                    throw new BusinessRuleException("Quantity issued must be between zero and the quantity requested.");
+                quantities[issueLine.Id] = line.QuantityIssued;
+            }
+
+            if (issue.Lines.All(x => quantities.TryGetValue(x.Id, out var quantity) && quantity == 0))
+                throw new BusinessRuleException("Issue at least one line, or reject the request instead.");
+        }
+
+        await IssueInternalAsync(issue, false, cancellationToken, quantities);
         var persisted = await Query(await branchAccessService.GetQueryScopeAsync(TenantId, issue.BranchId, cancellationToken)).SingleAsync(x => x.Id == issue.Id, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        await InventoryNotifications.NotifyRequestDispatchedAsync(notificationDispatcher, TenantId, persisted.RequestedByUserId, UserId,
+            persisted.IssueNumber, persisted.WorkOrder?.WorkOrderNumber, persisted.WorkOrderId, persisted.Branch?.Name, cancellationToken);
         return Ok(Map(persisted));
     }
 
@@ -255,7 +290,7 @@ public sealed class MaterialIssuesController(
         return Ok(Map(persisted));
     }
 
-    private async Task IssueInternalAsync(MaterialIssue issue, bool autoIssue, CancellationToken cancellationToken)
+    private async Task IssueInternalAsync(MaterialIssue issue, bool autoIssue, CancellationToken cancellationToken, IReadOnlyDictionary<Guid, decimal>? quantities = null)
     {
         if (!autoIssue && issue.IssueStatus != "approved")
         {
@@ -272,9 +307,12 @@ public sealed class MaterialIssuesController(
                 throw new BusinessRuleException("Material item was not found for this tenant.");
             }
 
-            var quantityToIssue = line.QuantityIssued > 0 ? line.QuantityIssued : line.QuantityRequested;
+            var quantityToIssue = quantities is not null && quantities.TryGetValue(line.Id, out var chosen)
+                ? chosen
+                : line.QuantityIssued > 0 ? line.QuantityIssued : line.QuantityRequested;
             if (quantityToIssue <= 0)
             {
+                line.QuantityIssued = 0;
                 continue;
             }
 
@@ -401,6 +439,9 @@ public sealed record CreateMaterialIssueRequest(
 
 public sealed record CreateMaterialIssueLineRequest(Guid MaterialItemId, decimal QuantityRequested, decimal? QuantityIssued, string? Notes);
 public sealed record RejectMaterialIssueRequest(string? Reason);
+/// <summary>Per-line quantities to hand over; omitted lines issue in full.</summary>
+public sealed record IssueMaterialIssueRequest(IReadOnlyCollection<IssueMaterialIssueLineRequest>? Lines);
+public sealed record IssueMaterialIssueLineRequest(Guid MaterialIssueLineId, decimal QuantityIssued);
 public sealed record ReturnMaterialIssueRequest(IReadOnlyCollection<ReturnMaterialIssueLineRequest> Lines);
 public sealed record ReturnMaterialIssueLineRequest(Guid MaterialIssueLineId, decimal QuantityReturned, decimal? ExpectedQuantityReturned = null);
 

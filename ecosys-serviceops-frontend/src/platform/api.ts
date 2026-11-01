@@ -387,6 +387,22 @@ export function useUpdateTenantSeats(id: string) {
   })
 }
 
+/**
+ * Sets the per-seat monthly prices agreed with this tenant. Null puts that seat back on the edition's
+ * price. Changes billing and MRR only; seats, dates and access are untouched.
+ */
+export function useUpdateTenantPricing(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (pricing: { officeSeatPrice: number | null; fieldSeatPrice: number | null }) =>
+      api.put<PlatformTenantDetail>(endpoints.platform.tenantLicensePricing(id), pricing),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants'] })
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'tenants', id] })
+    },
+  })
+}
+
 export function useTenantCommunicationSettings(id: string | undefined) {
   return useQuery({
     queryKey: ['platform', 'tenants', id, 'communication'],

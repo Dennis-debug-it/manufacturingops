@@ -13,8 +13,9 @@ import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDateTime } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
-import { useAdjustMaterial, useBranches, useCatalogueSuggestions, useDeleteMaterial, useMaterial, useMaterialMovements, useMaterialStockLocations, useReplenishMaterial, useUpdateMaterial } from './api'
+import { useAdjustMaterial, useBranches, useCatalogueSuggestions, useDeleteMaterial, useMaterial, useMaterialMovements, useMaterialStockLocations, useUpdateMaterial } from './api'
 import { useSuppliers } from './purchaseOrdersApi'
+import { ManualReceiptDrawer } from './components/ManualReceiptDrawer'
 import type { Material, StockMovement } from './types'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
@@ -138,7 +139,7 @@ function EditPartDrawer({ open, material, onClose }: { open: boolean; material: 
               .map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.supplierName}{supplier.status === 'Active' ? '' : ' (inactive)'}</option>)}
           </select>
         </div>
-        <p className="text-xs text-slate-500">Stock on hand is not edited here — use Replenish for receipts or Adjust for corrections so the movement ledger stays accurate.</p>
+        <p className="text-xs text-slate-500">Stock on hand is not edited here — use Manual receipt for stock arriving without a purchase order, or Adjust for corrections so the movement ledger stays accurate.</p>
       </div>
     </FormDrawer>
   )
@@ -153,7 +154,6 @@ export function PartDetailPage() {
   const { data: branches } = useBranches()
   const activeBranches = (branches ?? []).filter((branch) => branch.isActive)
   const { data: movements, isLoading: movementsLoading } = useMaterialMovements(id)
-  const replenish = useReplenishMaterial(id ?? '')
   const adjust = useAdjustMaterial(id ?? '')
   const deleteMaterial = useDeleteMaterial()
 
@@ -161,8 +161,6 @@ export function PartDetailPage() {
   const [showAdjust, setShowAdjust] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [confirmDeactivate, setConfirmDeactivate] = useState(false)
-  const [quantity, setQuantity] = useState('1')
-  const [reason, setReason] = useState('')
   const [adjustDirection, setAdjustDirection] = useState<'increase' | 'decrease'>('decrease')
   const [adjustQuantity, setAdjustQuantity] = useState('1')
   const [adjustReason, setAdjustReason] = useState('')
@@ -176,7 +174,7 @@ export function PartDetailPage() {
     ],
     [locations],
   )
-  // Where Replenish/Adjust act; blank lets the server use the user's default branch.
+  // Where Manual receipt/Adjust act; blank lets the server use the user's default branch.
   const stockAtBranch = (locations?.branches ?? []).find((row) => row.branchId === stockBranchId)
   const branchPicker = activeBranches.length > 0 ? (
     <div>
@@ -194,24 +192,6 @@ export function PartDetailPage() {
       <input id="stock-batch" value={batchOrSerial} onChange={(event) => setBatchOrSerial(event.target.value)} placeholder="e.g. LOT-2291 or SN1001, SN1002" className={fieldClass} />
     </div>
   )
-
-  const submitReplenish = async () => {
-    const qty = Number(quantity)
-    if (!Number.isFinite(qty) || qty <= 0) {
-      toast.error('Enter a valid quantity')
-      return
-    }
-    try {
-      await replenish.mutateAsync({ quantity: qty, reason: reason.trim() || null, branchId: stockBranchId || null, batchOrSerial: batchOrSerial.trim() || null })
-      toast.success('Stock replenished')
-      setShowReplenish(false)
-      setQuantity('1')
-      setReason('')
-      setBatchOrSerial('')
-    } catch {
-      // interceptor surfaces the error toast
-    }
-  }
 
   const submitAdjust = async () => {
     const qty = Number(adjustQuantity)
@@ -275,7 +255,7 @@ export function PartDetailPage() {
               Adjust Stock
             </button>
             <button type="button" onClick={() => setShowReplenish(true)} className="inline-flex h-11 items-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
-              Replenish Stock
+              Manual receipt
             </button>
             <button type="button" onClick={() => setConfirmDeactivate(true)} className="inline-flex h-11 items-center rounded-lg border border-rose-200 bg-white px-4 text-sm font-medium text-rose-600 transition hover:bg-rose-50">
               Deactivate
@@ -411,32 +391,7 @@ export function PartDetailPage() {
         </div>
       </FormDrawer>
 
-      <FormDrawer
-        open={showReplenish}
-        title="Replenish Stock"
-        onClose={() => setShowReplenish(false)}
-        footer={
-          <div className="flex items-center justify-end gap-2">
-            <button type="button" onClick={() => setShowReplenish(false)} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">Cancel</button>
-            <button type="button" onClick={submitReplenish} disabled={replenish.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
-              {replenish.isPending ? 'Saving…' : 'Replenish'}
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          {branchPicker}
-          <div>
-            <label className={labelClass} htmlFor="replenish-qty">Quantity</label>
-            <input id="replenish-qty" type="number" min="0" step="0.01" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={fieldClass} />
-          </div>
-          <div>
-            <label className={labelClass} htmlFor="replenish-reason">Reason / Reference</label>
-            <input id="replenish-reason" value={reason} onChange={(event) => setReason(event.target.value)} className={fieldClass} />
-          </div>
-          {batchField}
-        </div>
-      </FormDrawer>
+      {showReplenish && material ? <ManualReceiptDrawer part={{ ...material, branchId: stockBranchId || material.branchId }} onClose={() => setShowReplenish(false)} /> : null}
     </>
   )
 }
