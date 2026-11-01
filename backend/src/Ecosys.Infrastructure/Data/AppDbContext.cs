@@ -1413,6 +1413,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.MeterInterval).HasPrecision(18, 4);
             entity.Property(x => x.MeterBuffer).HasPrecision(18, 4);
             entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.HoldReason).HasMaxLength(500);
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.PreventiveMaintenancePlans)
                 .HasForeignKey(x => x.TenantId)

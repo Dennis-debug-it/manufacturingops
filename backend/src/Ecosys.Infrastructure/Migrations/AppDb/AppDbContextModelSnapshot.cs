@@ -7067,6 +7067,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("ContinueWithoutContract")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -7088,6 +7091,16 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("HeldAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("HoldReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<Guid?>("LapsedContractId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("LastGeneratedAt")
                         .HasColumnType("timestamp with time zone");

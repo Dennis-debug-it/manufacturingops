@@ -45,6 +45,7 @@ public static class NotificationKeyDescriptor
         EmailOnly("work-order.cancelled", "Work order cancelled",              "Work Orders"),
         EmailOnly("pm.due",               "Preventive maintenance due",        "Preventive Maintenance"),
         EmailOnly("pm.overdue",           "Preventive maintenance overdue",    "Preventive Maintenance"),
+        Inbox("pm.contract-lapsed", "PM schedule on hold: contract lapsed", "Preventive Maintenance"),
         EmailOnly("service-report.sent",  "Service report sent to client",     "Work Orders"),
         Inbox("project.member-added",        "Added to a project team",        "Projects"),
         Inbox("project.task-assigned",       "Project task assigned to me",    "Projects"),

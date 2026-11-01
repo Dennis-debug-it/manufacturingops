@@ -49,6 +49,7 @@ public sealed class Phase2GovernanceTests
                 "platform.subscription.extended",
                 "platform.subscription.grace-warning",
                 "platform.subscription.suspended",
+                "pm.contract-lapsed",
                 "project.end-date-approaching",
                 "project.member-added",
                 "project.milestone-due",

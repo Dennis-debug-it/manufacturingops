@@ -329,60 +329,15 @@ public sealed class AssetsController(
                     || x.Status == ContractStatus.Expired))
             .ToListAsync(cancellationToken);
 
-        return contracts
-            .Where(x =>
-            {
-                var withinTerm = x.StartDate.Date <= today && x.EndDate.Date >= today;
-                var withinGrace = x.EndDate.Date < today && x.GracePeriodDays > 0 && x.EndDate.Date.AddDays(x.GracePeriodDays) >= today;
-                return x.Status == ContractStatus.Expired ? withinGrace : withinTerm || withinGrace;
-            })
-            .ToList();
+        return contracts.Where(x => ContractAssetScope.IsInForce(x, today)).ToList();
     }
 
     private static bool IsCoveredByContract(Asset asset, IReadOnlyCollection<Contract> contracts) =>
         FindCoveringContract(asset, contracts) is not null;
 
-    /// <summary>
-    /// The contract covering this asset, by the same rules as work-order coverage: a contract that
-    /// lists assets covers only those; else one listing categories covers assets in them; else one
-    /// listing sites covers assets there; a contract listing none covers all the client's assets.
-    /// Where several apply, the most specific wins, then the one running longest.
-    /// </summary>
-    public static (Contract Contract, string Scope)? FindCoveringContract(Asset asset, IReadOnlyCollection<Contract> contracts)
-    {
-        var category = asset.AssetCategory?.Name ?? asset.AssetType;
-        return contracts
-            .Where(contract => contract.ClientId == asset.ClientId)
-            .Select(contract => (Contract: contract, Scope: CoverageScopeFor(contract, asset, category)))
-            .Where(x => x.Scope is not null)
-            .OrderBy(x => ScopeRank(x.Scope!))
-            .ThenByDescending(x => x.Contract.EndDate)
-            .Select(x => ((Contract, string)?)(x.Contract, x.Scope!))
-            .FirstOrDefault();
-    }
-
-    /// <summary>How <paramref name="contract"/> covers the asset (Asset, Category, Site or Client), or null if it doesn't.</summary>
-    private static string? CoverageScopeFor(Contract contract, Asset asset, string? category)
-    {
-        if (contract.Assets.Count > 0)
-            return contract.Assets.Any(x => x.AssetId == asset.Id) ? ContractCoverScopes.Asset : null;
-        if (contract.AssetCategories.Count > 0)
-            return !string.IsNullOrWhiteSpace(category) && contract.AssetCategories.Any(x =>
-                string.Equals(x.AssetCategory?.Name, category, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(x.AssetCategoryName, category, StringComparison.OrdinalIgnoreCase))
-                ? ContractCoverScopes.Category : null;
-        if (contract.Sites.Count > 0)
-            return asset.SiteId.HasValue && contract.Sites.Any(x => x.SiteId == asset.SiteId.Value) ? ContractCoverScopes.Site : null;
-        return ContractCoverScopes.Client;
-    }
-
-    private static int ScopeRank(string scope) => scope switch
-    {
-        ContractCoverScopes.Asset => 0,
-        ContractCoverScopes.Category => 1,
-        ContractCoverScopes.Site => 2,
-        _ => 3,
-    };
+    /// <summary>The contract covering this asset; see <see cref="ContractAssetScope.FindCovering"/>.</summary>
+    public static (Contract Contract, string Scope)? FindCoveringContract(Asset asset, IReadOnlyCollection<Contract> contracts) =>
+        ContractAssetScope.FindCovering(asset, contracts);
 
     private async Task<AssetResponse> MapWithCoverageAsync(Asset asset, CancellationToken cancellationToken)
     {
@@ -1123,14 +1078,6 @@ public sealed record AssetResponse(
 
 /// <param name="Scope">How the contract reaches the asset: Asset (listed by name), Category, Site, or Client (all the client's assets).</param>
 public sealed record AssetContractCoverResponse(Guid ContractId, string ContractNumber, string ContractName, string Status, DateTime EndDate, string Scope);
-
-public static class ContractCoverScopes
-{
-    public const string Asset = "Asset";
-    public const string Category = "Category";
-    public const string Site = "Site";
-    public const string Client = "Client";
-}
 
 public sealed record RetireAssetRequest(
     DateTime? DecommissionDate,

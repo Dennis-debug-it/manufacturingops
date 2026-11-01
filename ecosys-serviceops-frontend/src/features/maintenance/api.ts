@@ -52,10 +52,26 @@ export function useUpdatePmPlan(id: string) {
 export function useGenerateWorkOrderNow(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => api.post<WorkOrder>(endpoints.preventiveMaintenance.generateWorkOrder(id)),
+    // chargeable: raise the visit even though the asset's contract has lapsed, priced at standard rates.
+    mutationFn: (options?: { chargeable?: boolean }) =>
+      api.post<WorkOrder>(`${endpoints.preventiveMaintenance.generateWorkOrder(id)}${options?.chargeable ? '?chargeable=true' : ''}`),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['pm-plans'] })
       void queryClient.invalidateQueries({ queryKey: ['work-orders'] })
+    },
+  })
+}
+
+/** Keep the schedule raising (chargeable) visits after the asset's contract lapses, or go back to holding. */
+export function useContinueWithoutContract(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      enabled
+        ? api.post<PmPlan>(`/api/preventive-maintenance/${id}/continue-without-contract`)
+        : api.delete<PmPlan>(`/api/preventive-maintenance/${id}/continue-without-contract`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['pm-plans'] })
     },
   })
 }

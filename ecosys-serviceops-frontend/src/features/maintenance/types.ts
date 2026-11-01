@@ -15,7 +15,15 @@ export interface PmPlan {
   nextPmDate: string | null
   status: string
   createdAt: string
+  /** Visits continue (chargeable) after the asset's contract lapses, instead of the schedule holding. */
+  continueWithoutContract?: boolean
+  /** Set while status is ContractLapsed. */
+  holdReason?: string | null
+  heldAt?: string | null
+  lapsedContractId?: string | null
 }
+
+export const PM_CONTRACT_LAPSED = 'ContractLapsed'
 
 export interface PmTemplateChecklistItem {
   id: string
