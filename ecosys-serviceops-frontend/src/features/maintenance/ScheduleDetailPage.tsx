@@ -12,7 +12,8 @@ import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
-import { useGenerateWorkOrderNow, usePmPlans } from './api'
+import { useGenerateWorkOrderNow, usePmPlans, useSetPmAutoSchedule } from './api'
+import { OnOffSwitch } from '../../shared/components/OnOffSwitch'
 import { ContractLapsePanel } from './components/ContractLapsePanel'
 import { PM_CONTRACT_LAPSED } from './types'
 
@@ -24,6 +25,17 @@ export function ScheduleDetailPage() {
   const { data: plans, isLoading, isError } = usePmPlans()
   const { data: workOrders } = useWorkOrders()
   const generateNow = useGenerateWorkOrderNow(id ?? '')
+  const canManage = usePermission('maintenance.manage')
+  const setAutoSchedule = useSetPmAutoSchedule(id ?? '')
+
+  const changeAutoSchedule = async (enabled: boolean) => {
+    try {
+      await setAutoSchedule.mutateAsync(enabled)
+      toast.success(enabled ? 'Work orders will auto-generate on schedule' : 'Schedule set to manual trigger only')
+    } catch {
+      // interceptor surfaces the error toast
+    }
+  }
 
   const plan = useMemo(() => (plans ?? []).find((item) => item.id === id), [plans, id])
 
@@ -127,7 +139,12 @@ export function ScheduleDetailPage() {
                 </div>
                 <div className="rounded-xl border border-slate-200 px-4 py-3">
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Auto-Schedule</div>
-                  <div className="mt-2 text-sm text-slate-900">{plan.autoSchedule ? 'Work orders auto-generate on schedule' : 'Manual trigger only'}</div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-900">
+                    {canManage && plan.status !== 'Inactive' ? (
+                      <OnOffSwitch checked={plan.autoSchedule} label="Auto-schedule this PM" disabled={setAutoSchedule.isPending} onChange={(next) => void changeAutoSchedule(next)} />
+                    ) : null}
+                    <span>{plan.autoSchedule ? 'Work orders auto-generate on schedule' : 'Manual trigger only'}</span>
+                  </div>
                 </div>
               </div>
             </SummarySection>

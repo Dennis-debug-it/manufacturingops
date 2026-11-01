@@ -238,6 +238,15 @@ function invalidateAssets(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: ['pm-plans'] })
 }
 
+/** Turns the asset's automatic PM on or off; this starts or stops its own PM schedule. */
+export function useSetAssetAutoSchedulePm(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) => api.post<Asset>(`/api/assets/${id}/auto-schedule-pm`, { enabled }),
+    onSuccess: () => invalidateAssets(queryClient),
+  })
+}
+
 export function useRetireAsset(id: string) {
   const queryClient = useQueryClient()
   return useMutation({

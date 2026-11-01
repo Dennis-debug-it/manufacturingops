@@ -344,6 +344,36 @@ public sealed class PreventiveMaintenanceController(
     }
 
     /// <summary>
+    /// Auto-schedule on: the scheduler raises each visit ahead of its due date. Off: manual trigger
+    /// only. For the asset's own schedule (the one its maintenance settings create), the asset's
+    /// auto-schedule setting follows, so editing the asset later doesn't undo this.
+    /// </summary>
+    [HttpPost("{id:guid}/auto-schedule")]
+    public async Task<ActionResult<PreventiveMaintenancePlanResponse>> SetAutoSchedule(Guid id, [FromBody] SetAutoScheduleRequest request, CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageSettings);
+        var plan = await Query().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Preventive maintenance plan was not found.");
+        if (request.Enabled && !plan.NextPmDate.HasValue)
+            throw new BusinessRuleException("This schedule has no next due date, so it can't run automatically.");
+        if (request.Enabled && plan.Status == "Inactive")
+            throw new BusinessRuleException("This schedule is inactive.");
+
+        if (plan.AutoSchedule != request.Enabled)
+        {
+            plan.AutoSchedule = request.Enabled;
+            if (plan.PmTemplateId is null && plan.Asset is { } asset)
+                asset.AutoSchedulePm = request.Enabled;
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await auditLogService.LogAsync(TenantId, UserId, request.Enabled ? "pm.auto-schedule.on" : "pm.auto-schedule.off",
+                nameof(PreventiveMaintenancePlan), plan.Id.ToString(),
+                $"PM schedule set to {(request.Enabled ? "auto-generate work orders" : "manual trigger only")}.", cancellationToken);
+        }
+
+        return Ok(Map(plan));
+    }
+
+    /// <summary>
     /// The client will pay per visit after their contract lapsed: the schedule keeps raising visits
     /// (marked chargeable) instead of holding. Takes a held schedule off hold.
     /// </summary>

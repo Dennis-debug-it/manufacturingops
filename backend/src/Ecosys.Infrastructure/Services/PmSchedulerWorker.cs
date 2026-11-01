@@ -94,7 +94,8 @@ public sealed class PmSchedulerWorker(
                     logger.LogInformation("PM plan {PlanId} resumed: the asset is under contract again.", plan.Id);
                 }
 
-                if (!ShouldGenerate(plan, now))
+                // Auto-schedule off means "manual trigger only": nothing is raised by the scheduler.
+                if (!plan.AutoSchedule || !ShouldGenerate(plan, now))
                     continue;
 
                 var check = await PmContractGuard.CheckAsync(db, plan, plan.NextPmDate!.Value, ct);

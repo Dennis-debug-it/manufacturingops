@@ -62,6 +62,19 @@ export function useGenerateWorkOrderNow(id: string) {
   })
 }
 
+/** Auto-schedule on: the scheduler raises each visit. Off: manual trigger only. */
+export function useSetPmAutoSchedule(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (enabled: boolean) => api.post<PmPlan>(`/api/preventive-maintenance/${id}/auto-schedule`, { enabled }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['pm-plans'] })
+      // The asset's own schedule carries the asset's auto-schedule setting with it.
+      void queryClient.invalidateQueries({ queryKey: ['assets'] })
+    },
+  })
+}
+
 /** Keep the schedule raising (chargeable) visits after the asset's contract lapses, or go back to holding. */
 export function useContinueWithoutContract(id: string) {
   const queryClient = useQueryClient()
