@@ -2,7 +2,7 @@ import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { applyApiFieldErrors } from '../../../shared/api/apiError'
-import { useCatalogueSuggestions, useCreateMaterial } from '../api'
+import { useBranches, useCatalogueSuggestions, useCreateMaterial } from '../api'
 import { useSuppliers } from '../purchaseOrdersApi'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
@@ -20,6 +20,7 @@ interface FormValues {
   barcode: string
   preferredSupplierId: string
   reorderQuantity: string
+  branchId: string
 }
 
 /**
@@ -37,15 +38,21 @@ const FORM_FIELDS = [
   'barcode',
   'preferredSupplierId',
   'reorderQuantity',
+  'branchId',
 ] as const satisfies readonly (keyof FormValues)[]
 
 export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { register, handleSubmit, reset, setError, formState: { errors, isSubmitting } } = useForm<FormValues>({
-    defaultValues: { itemCode: '', itemName: '', category: '', unitOfMeasure: 'unit', quantityOnHand: '0', reorderLevel: '0', unitCost: '', barcode: '', preferredSupplierId: '', reorderQuantity: '' },
+  const { register, handleSubmit, reset, setError, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
+    defaultValues: { itemCode: '', itemName: '', category: '', unitOfMeasure: 'unit', quantityOnHand: '0', reorderLevel: '0', unitCost: '', barcode: '', preferredSupplierId: '', reorderQuantity: '', branchId: '' },
   })
   const createMaterial = useCreateMaterial()
   const { categories, units } = useCatalogueSuggestions()
   const { data: suppliers } = useSuppliers()
+  const { data: branches } = useBranches()
+  const activeBranches = (branches ?? []).filter((branch) => branch.isActive)
+  // Opening stock lands in a branch; with several, the user picks which instead of it going silently
+  // to their default branch.
+  const hasOpeningStock = Number(watch('quantityOnHand')) > 0
 
   const close = () => { reset(); onClose() }
 
@@ -54,8 +61,13 @@ export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () =
       toast.error('Item code and name are required')
       return
     }
+    if (hasOpeningStock && activeBranches.length > 1 && !values.branchId) {
+      setError('branchId', { message: 'Choose the branch this opening stock is in' })
+      return
+    }
     try {
       const created = await createMaterial.mutateAsync({
+        branchId: values.branchId || null,
         itemCode: values.itemCode.trim(),
         itemName: values.itemName.trim(),
         category: values.category.trim() || null,
@@ -118,7 +130,7 @@ export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () =
         </div>
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className={labelClass} htmlFor="part-qty">Initial Qty</label>
+            <label className={labelClass} htmlFor="part-qty">Opening Qty</label>
             <input id="part-qty" type="number" step="0.01" {...register('quantityOnHand')} className={fieldClass} />
             {errors.quantityOnHand?.message ? <p className={errorClass}>{errors.quantityOnHand.message}</p> : null}
           </div>
@@ -133,6 +145,16 @@ export function PartFormDrawer({ open, onClose }: { open: boolean; onClose: () =
             {errors.unitCost?.message ? <p className={errorClass}>{errors.unitCost.message}</p> : null}
           </div>
         </div>
+        {hasOpeningStock && activeBranches.length > 0 ? (
+          <div>
+            <label className={labelClass} htmlFor="part-branch">Opening stock is at</label>
+            <select id="part-branch" {...register('branchId')} className={fieldClass}>
+              <option value="">{activeBranches.length > 1 ? 'Select a branch…' : activeBranches[0]!.name}</option>
+              {activeBranches.length > 1 ? activeBranches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>) : null}
+            </select>
+            {errors.branchId?.message ? <p className={errorClass}>{errors.branchId.message}</p> : null}
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelClass} htmlFor="part-barcode">Barcode / MPN</label>

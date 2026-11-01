@@ -10,7 +10,7 @@ import type { WorkOrder } from '../work-orders/types'
 
 const inputClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 
-/** Parts and consumables used on the job; logging one issues it from the branch's stock. */
+/** Parts and consumables used on the job; logging one takes it off the technician's van when the van holds enough, otherwise from the branch. */
 export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boolean }) {
   const { data: bundle } = useTechBundle(job.id)
   const actions = useTechActions()
@@ -45,6 +45,7 @@ export function TechMaterials({ job, editable }: { job: WorkOrder; editable: boo
   return (
     <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
       <h2 className="text-sm font-semibold text-slate-900">Materials used</h2>
+      {editable ? <p className="text-xs text-slate-500">Parts you log come off your van when it carries enough; otherwise from the branch.</p> : null}
 
       {used.length > 0 ? (
         <ul className="divide-y divide-slate-100 text-sm">

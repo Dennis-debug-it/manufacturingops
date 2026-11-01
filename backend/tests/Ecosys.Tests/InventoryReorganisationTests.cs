@@ -178,6 +178,30 @@ public sealed class InventoryReorganisationTests
     }
 
     [Fact]
+    public async Task APartWithStockOrOpenWorkCannotBeDeactivated()
+    {
+        await using var db = Db();
+        var (filter, _, untouched, _) = await Seed(db);
+        var controller = Materials(db);
+
+        var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Delete(filter.Id, default));
+        Assert.Contains("on vans", error.Message);
+
+        db.MaterialIssues.Add(new MaterialIssue
+        {
+            TenantId = tenantId, BranchId = branchId, IssueNumber = "MI-9", IssueStatus = "pending_approval", RequestedByUserId = userId,
+            Lines = { new MaterialIssueLine { TenantId = tenantId, MaterialItemId = untouched.Id, QuantityRequested = 1, Unit = "each" } },
+        });
+        await db.SaveChangesAsync();
+        Assert.Contains("open request", (await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Delete(untouched.Id, default))).Message);
+
+        (await db.MaterialIssues.SingleAsync(x => x.IssueNumber == "MI-9")).IssueStatus = "cancelled";
+        await db.SaveChangesAsync();
+        Assert.IsType<NoContentResult>(await controller.Delete(untouched.Id, default));
+        Assert.False((await db.MaterialItems.SingleAsync(x => x.Id == untouched.Id)).IsActive);
+    }
+
+    [Fact]
     public void RestockRequests_AreRetired()
     {
         var controller = new MaterialRequestsController(Db(), new FakeTenantContext(tenantId, userId), new NoOpAuditLogService(),

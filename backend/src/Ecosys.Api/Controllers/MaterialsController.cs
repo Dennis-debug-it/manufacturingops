@@ -425,6 +425,30 @@ public sealed class MaterialsController(
         var item = await dbContext.MaterialItems.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("Material item was not found.");
 
+        // An inactive part drops out of every stock view, so deactivating one that still has stock or
+        // is still being asked for would make that stock and those requests vanish from sight.
+        var blockers = new List<string>();
+        var branchStock = await dbContext.BranchMaterialStocks.Where(x => x.TenantId == TenantId && x.MaterialId == id).SumAsync(x => x.QuantityOnHand, cancellationToken);
+        var vanStock = await dbContext.VanMaterialStocks.Where(x => x.TenantId == TenantId && x.MaterialId == id).SumAsync(x => x.QuantityOnHand, cancellationToken);
+        if (branchStock != 0 || vanStock != 0 || item.QuantityOnHand != 0)
+            blockers.Add($"{(branchStock != 0 || vanStock != 0 ? branchStock + vanStock : item.QuantityOnHand):0.##} {item.UnitOfMeasure} still in stock{(vanStock != 0 ? $" ({vanStock:0.##} on vans)" : string.Empty)} — issue, transfer or adjust it to zero first");
+        var openRequests =
+            await dbContext.PartsRequestItems.CountAsync(x => x.InventoryItemId == id && x.PartsRequest!.TenantId == TenantId && (x.PartsRequest.Status == "Pending" || x.PartsRequest.Status == "Approved"), cancellationToken)
+            + await dbContext.MaterialIssueLines.CountAsync(x => x.TenantId == TenantId && x.MaterialItemId == id && (x.MaterialIssue!.IssueStatus == "draft" || x.MaterialIssue.IssueStatus == "pending_approval" || x.MaterialIssue.IssueStatus == "approved"), cancellationToken)
+            + await dbContext.MaterialRequestLines.CountAsync(x => x.MaterialItemId == id && x.MaterialRequest!.TenantId == TenantId && (x.MaterialRequest.Status == "Pending" || x.MaterialRequest.Status == "Approved"), cancellationToken);
+        if (openRequests > 0)
+            blockers.Add($"{openRequests} open request{(openRequests == 1 ? "" : "s")} for it under Inventory → Requests");
+        var openOrders = await dbContext.PurchaseOrderLines.CountAsync(x => x.TenantId == TenantId && x.MaterialItemId == id
+            && x.QuantityReceived < x.QuantityOrdered
+            && (x.PurchaseOrder!.Status == "Draft" || x.PurchaseOrder.Status == "Sent" || x.PurchaseOrder.Status == "PartiallyReceived"), cancellationToken);
+        if (openOrders > 0)
+            blockers.Add($"{openOrders} purchase order line{(openOrders == 1 ? "" : "s")} still to be received");
+        var openCounts = await dbContext.StockCountLines.CountAsync(x => x.TenantId == TenantId && x.MaterialItemId == id && x.StockCount!.Status == StockCountStatuses.Open, cancellationToken);
+        if (openCounts > 0)
+            blockers.Add("an open stock count that lists it");
+        if (blockers.Count > 0)
+            throw new BusinessRuleException($"{item.ItemName} can't be deactivated yet: {string.Join("; ", blockers)}.");
+
         item.IsActive = false;
         await dbContext.SaveChangesAsync(cancellationToken);
         return NoContent();
