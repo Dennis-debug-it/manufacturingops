@@ -466,6 +466,7 @@ const inventory: Guide = {
         'Parts received as Faulty are held under Faulty parts. Click Deal with it to record them as returned to the supplier (with the RMA number), written off, or back into stock.',
         'Stores is notified of new requests and of parts falling to their reorder level; the person who asked is notified when their request is approved, rejected or dispatched. Each person can change this under their notification preferences.',
         'Parts a technician logs on a job come off their van when it carries enough, otherwise from the branch.',
+        'If a technician buys a part at a supplier\'s counter, they tick "I bought this directly from a supplier" when logging it. Stock may go below zero; the purchase waits under Purchasing → Direct purchases. When the supplier\'s invoice arrives, tick the purchases on it and click Reconcile — they are booked back in and the balance is right again. Stores can also record a direct purchase from a handed-in receipt.',
       ],
     },
     {

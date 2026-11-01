@@ -112,6 +112,49 @@ public sealed class WorkOrderExecutionFlowTests
         Assert.Equal(3, await dbContext.WorkOrderMaterialUsages.CountAsync());
     }
 
+    /// <summary>
+    /// A part bought at a supplier's counter for the job may take the branch below zero, even with
+    /// negative stock off; it waits as a direct purchase until stores reconciles the supplier invoice,
+    /// which books it back so the balance is right again.
+    /// </summary>
+    [Fact]
+    public async Task MaterialUsage_BoughtDirect_GoesNegative_AndReconcilingTheInvoiceBooksItBack()
+    {
+        await using var dbContext = CreateDbContext();
+        var fixture = await SeedFixtureAsync(dbContext);
+        var ledger = new StockLedgerService(dbContext);
+        await ledger.RecordReceiptAsync(fixture.Material, fixture.Branch.Id, 1, fixture.User.Id, "Opening", null);
+        await dbContext.SaveChangesAsync();
+        var controller = CreateExecutionController(dbContext, fixture, ledger: ledger);
+
+        // An ordinary use of 3 with only 1 in stores is refused.
+        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.AddMaterialUsage(fixture.WorkOrder.Id,
+            new AddWorkOrderMaterialUsageRequest(fixture.Material.Id, null, 3, null, true, null, null), CancellationToken.None));
+
+        Assert.IsType<OkObjectResult>((await controller.AddMaterialUsage(fixture.WorkOrder.Id,
+            new AddWorkOrderMaterialUsageRequest(fixture.Material.Id, null, 3, 180m, true, null, null,
+                BoughtDirect: true, SupplierName: "Kenya Electricals", SupplierReference: "CS-4471"), CancellationToken.None)).Result);
+        Assert.Equal(-2m, (await dbContext.BranchMaterialStocks.SingleAsync(x => x.BranchId == fixture.Branch.Id)).QuantityOnHand);
+        var purchase = await dbContext.DirectPurchases.SingleAsync();
+        Assert.Equal(DirectPurchaseStatuses.Pending, purchase.Status);
+        Assert.Equal("CS-4471", purchase.SupplierReference);
+        Assert.Equal(180m, (await dbContext.WorkOrderMaterialUsages.SingleAsync()).UnitCost);
+
+        var supplier = new Supplier { TenantId = fixture.Tenant.Id, SupplierName = "Kenya Electricals" };
+        dbContext.Suppliers.Add(supplier);
+        await dbContext.SaveChangesAsync();
+        var purchases = new DirectPurchasesController(dbContext, new FakeTenantContext(fixture.Tenant.Id, fixture.User.Id), new FakeUserAccessService(),
+            new FakeBranchAccessService(), ledger, new AuditLogService(dbContext, new HttpContextAccessor()));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => purchases.Reconcile(new([purchase.Id], " "), CancellationToken.None));
+        var reconciled = Assert.Single(Assert.IsAssignableFrom<IReadOnlyCollection<DirectPurchaseResponse>>(Assert.IsType<OkObjectResult>(
+            (await purchases.Reconcile(new([purchase.Id], "INV-9001", new Dictionary<Guid, decimal> { [purchase.Id] = 175m }, supplier.Id), CancellationToken.None)).Result).Value));
+        Assert.Equal(DirectPurchaseStatuses.Reconciled, reconciled.Status);
+        Assert.Equal("Kenya Electricals", reconciled.SupplierName);
+        Assert.Equal(175m, reconciled.UnitCost);
+        Assert.Equal(1m, (await dbContext.BranchMaterialStocks.SingleAsync(x => x.BranchId == fixture.Branch.Id)).QuantityOnHand);
+        await Assert.ThrowsAsync<BusinessRuleException>(() => purchases.Reconcile(new([purchase.Id], "INV-9002"), CancellationToken.None));
+    }
+
     [Fact]
     public async Task Signature_SaveLoadDelete_Works()
     {

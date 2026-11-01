@@ -66,6 +66,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<ToolCalibration> ToolCalibrations => Set<ToolCalibration>();
     public DbSet<StockCountLine> StockCountLines => Set<StockCountLine>();
     public DbSet<HeldPart> HeldParts => Set<HeldPart>();
+    public DbSet<DirectPurchase> DirectPurchases => Set<DirectPurchase>();
     public DbSet<MaterialRequest> MaterialRequests => Set<MaterialRequest>();
     public DbSet<MaterialRequestLine> MaterialRequestLines => Set<MaterialRequestLine>();
     public DbSet<PartsRequest> PartsRequests => Set<PartsRequest>();
@@ -3280,6 +3281,27 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.ResolvedByUser).WithMany().HasForeignKey(x => x.ResolvedByUserId).OnDelete(DeleteBehavior.SetNull);
         });
         ApplyTenantFilter<HeldPart>(modelBuilder);
+
+        modelBuilder.Entity<DirectPurchase>(entity =>
+        {
+            entity.ToTable("direct_purchases");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.SupplierName).HasMaxLength(200);
+            entity.Property(x => x.SupplierReference).HasMaxLength(100);
+            entity.Property(x => x.InvoiceReference).HasMaxLength(100);
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.PurchasedByUser).WithMany().HasForeignKey(x => x.PurchasedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReconciledByUser).WithMany().HasForeignKey(x => x.ReconciledByUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+        ApplyTenantFilter<DirectPurchase>(modelBuilder);
 
         modelBuilder.Entity<StockCountLine>(entity =>
         {

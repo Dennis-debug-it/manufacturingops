@@ -11,6 +11,7 @@ import { usePurchaseOrders } from './purchaseOrdersApi'
 import { requestReference, sourceLabels, useInventoryRequests } from './requestsApi'
 import { useStockCounts } from './stockCountsApi'
 import { useHeldParts } from './FaultyPartsPage'
+import { useDirectPurchases } from './DirectPurchasesPage'
 import { SummaryStrip } from './components/SummaryStrip'
 
 interface TodoRow {
@@ -49,6 +50,7 @@ export function OverviewPage() {
   const openCounts = useStockCounts('Open')
   const pendingReturns = usePartsReturns('Pending')
   const heldParts = useHeldParts('Held')
+  const directPurchases = useDirectPurchases('Pending')
 
   const todo = useMemo(() => {
     const rows: TodoRow[] = []
@@ -101,6 +103,32 @@ export function OverviewPage() {
         sortAt: count.createdAt,
       })
     }
+    const direct = directPurchases.data ?? []
+    if (direct.length > 0) {
+      rows.push({
+        id: 'direct-purchases',
+        kind: 'Direct purchases to reconcile',
+        item: `${direct.length} part${direct.length === 1 ? '' : 's'} bought from suppliers for jobs`,
+        detail: direct.slice(0, 3).map((row) => `${row.itemName ?? 'Part'} × ${row.quantity}${row.supplierName ? ` (${row.supplierName})` : ''}`).join(', ') + (direct.length > 3 ? '…' : ''),
+        to: '/inventory/direct-purchases',
+        action: 'Reconcile',
+        urgency: 'high',
+        sortAt: direct[direct.length - 1]!.createdAt,
+      })
+    }
+    const negative = (stock.data ?? []).filter((row) => row.quantityOnHand < 0)
+    if (negative.length > 0) {
+      rows.push({
+        id: 'negative-stock',
+        kind: 'Below zero',
+        item: `${negative.length} part${negative.length === 1 ? '' : 's'} with negative stock`,
+        detail: negative.slice(0, 3).map((row) => `${row.itemName} (${row.locationName}: ${row.quantityOnHand})`).join(', ') + (negative.length > 3 ? '…' : ''),
+        to: '/inventory/stock?view=location&negative=1',
+        action: 'Review',
+        urgency: 'high',
+        sortAt: '',
+      })
+    }
     const held = heldParts.data ?? []
     if (held.length > 0) {
       rows.push({
@@ -128,7 +156,7 @@ export function OverviewPage() {
       })
     }
     return rows.sort((a, b) => (a.urgency === b.urgency ? a.sortAt.localeCompare(b.sortAt) : a.urgency === 'high' ? -1 : 1))
-  }, [requests.data, latePurchaseOrders.data, pendingReturns.data, openCounts.data, stock.data, heldParts.data])
+  }, [requests.data, latePurchaseOrders.data, pendingReturns.data, openCounts.data, stock.data, heldParts.data, directPurchases.data])
 
   const locations = useMemo(() => {
     const map = new Map<string, LocationRow>()
@@ -172,7 +200,7 @@ export function OverviewPage() {
       key: 'action',
       header: '',
       cell: (row) => (
-        <Link to={row.to} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
+        <Link to={row.to} className="inline-block whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
           {row.action}
         </Link>
       ),

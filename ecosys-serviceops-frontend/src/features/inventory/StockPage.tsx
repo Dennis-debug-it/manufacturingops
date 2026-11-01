@@ -47,6 +47,9 @@ export function StockPage() {
   const location = params.get('location') ?? ''
   const category = params.get('category') ?? ''
   const lowOnly = params.get('low') === '1'
+  // Below zero: parts used before stores had them (bought direct from a supplier, or negative stock
+  // allowed), waiting for a receipt to catch up.
+  const negativeOnly = params.get('negative') === '1'
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -92,12 +95,14 @@ export function StockPage() {
       totals.set(row.materialId, entry)
     }
     const list = Array.from(totals.values())
-    return lowOnly ? list.filter((part) => part.lowAt.length > 0) : list
-  }, [filtered, lowOnly])
+    return list.filter((part) => (!lowOnly || part.lowAt.length > 0) && (!negativeOnly || part.total < 0 || part.inStores < 0))
+  }, [filtered, lowOnly, negativeOnly])
 
   const byLocation = useMemo(
-    () => (lowOnly ? filtered.filter((row) => row.isLowStock) : filtered).map((row) => ({ ...row, id: `${row.materialId}:${locationKey(row)}` })),
-    [filtered, lowOnly],
+    () => filtered
+      .filter((row) => (!lowOnly || row.isLowStock) && (!negativeOnly || row.quantityOnHand < 0))
+      .map((row) => ({ ...row, id: `${row.materialId}:${locationKey(row)}` })),
+    [filtered, lowOnly, negativeOnly],
   )
 
   const summary = useMemo(() => ({
@@ -122,7 +127,7 @@ export function StockPage() {
     {
       key: 'status',
       header: 'Status',
-      cell: (row) => (row.lowAt.length > 0 ? <span title={`Low at ${row.lowAt.join(', ')}`}><StatusBadge status="Low Stock" /></span> : <StatusBadge status="OK" />),
+      cell: (row) => (row.inStores < 0 ? <StatusBadge status="Negative" /> : row.lowAt.length > 0 ? <span title={`Low at ${row.lowAt.join(', ')}`}><StatusBadge status="Low Stock" /></span> : <StatusBadge status="OK" />),
       sortValue: (row) => row.lowAt.length,
     },
   ]
@@ -134,7 +139,7 @@ export function StockPage() {
     { key: 'quantityOnHand', header: 'On hand', cell: (row) => <span className="tabular-nums">{row.quantityOnHand} {row.unitOfMeasure}</span>, sortValue: (row) => row.quantityOnHand },
     { key: 'reorderLevel', header: 'Reorder level', cell: (row) => (row.reorderLevel > 0 ? row.reorderLevel : '—'), sortValue: (row) => row.reorderLevel },
     { key: 'value', header: 'Value', cell: (row) => formatCurrency(row.quantityOnHand * (row.unitCost ?? 0)), sortValue: (row) => row.quantityOnHand * (row.unitCost ?? 0) },
-    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isLowStock ? 'Low Stock' : 'OK'} />, sortValue: (row) => (row.isLowStock ? 1 : 0) },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.quantityOnHand < 0 ? 'Negative' : row.isLowStock ? 'Low Stock' : 'OK'} />, sortValue: (row) => (row.quantityOnHand < 0 ? 2 : row.isLowStock ? 1 : 0) },
   ]
 
   return (
@@ -192,6 +197,10 @@ export function StockPage() {
             <label className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700">
               <input type="checkbox" checked={lowOnly} onChange={(event) => setParam('low', event.target.checked ? '1' : '')} className="h-4 w-4 rounded border-slate-300" />
               Low stock only
+            </label>
+            <label className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700">
+              <input type="checkbox" checked={negativeOnly} onChange={(event) => setParam('negative', event.target.checked ? '1' : '')} className="h-4 w-4 rounded border-slate-300" />
+              Below zero
             </label>
             <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5" role="group" aria-label="View">
               {(['part', 'location'] as const).map((option) => (

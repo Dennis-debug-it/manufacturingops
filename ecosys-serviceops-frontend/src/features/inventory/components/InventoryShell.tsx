@@ -40,6 +40,7 @@ export const inventoryNav: NavGroup[] = [
     items: [
       { to: '/inventory/alerts', label: 'Reorder' },
       { to: '/inventory/purchase-orders', label: 'Purchase orders' },
+      { to: '/inventory/direct-purchases', label: 'Direct purchases' },
       { to: '/inventory/suppliers', label: 'Suppliers' },
     ],
   },
