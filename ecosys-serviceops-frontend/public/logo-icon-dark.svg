@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-labelledby="title desc">
+  <title id="title">Ecosys icon</title>
+  <desc id="desc">A teal connected-system mark with a light central node, for dark backgrounds.</desc>
+  <path fill="#2DD4BF" d="M48 160C48 98 98 48 160 48c38 0 72 19 92 48l-43 31a60 60 0 1 0 0 66l43 31c-20 29-54 48-92 48-62 0-112-50-112-112Zm112-38a38 38 0 1 0 0 76 38 38 0 0 0 0-76Zm69 38 75-51v102l-75-51Z"/>
+  <circle cx="160" cy="160" r="20" fill="#FFFFFF"/>
+</svg>

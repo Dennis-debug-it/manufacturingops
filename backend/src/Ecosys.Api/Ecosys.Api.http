@@ -1,0 +1,6 @@
+@Ecosys.Api_HostAddress = http://localhost:5072
+
+GET {{Ecosys.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

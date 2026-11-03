@@ -1,0 +1,118 @@
+namespace Ecosys.Shared.Auth;
+
+public static class PermissionNames
+{
+    public const string CanViewWorkOrders = "can_view_workorders";
+    public const string CanCreateWorkOrders = "can_create_workorders";
+    public const string CanAssignWorkOrders = "can_assign_workorders";
+    public const string CanCompleteWorkOrders = "can_complete_workorders";
+    public const string CanViewKnowledge = "can_view_knowledge";
+    public const string CanManageKnowledge = "can_manage_knowledge";
+    public const string CanViewMaterials = "can_view_materials";
+    public const string CanRequestMaterials = "can_request_materials";
+    public const string CanManageMaterials = "can_manage_materials";
+    public const string CanApproveMaterials = "can_approve_materials";
+    public const string CanIssueMaterials = "can_issue_materials";
+    public const string CanManageAssets = "can_manage_assets";
+    public const string CanManageSettings = "can_manage_settings";
+    public const string CanViewReports = "can_view_reports";
+    public const string FinanceView = "finance.view";
+    public const string FinanceManage = "finance.manage";
+    public const string FinanceViewRates = "finance.view_rates";
+    public const string FinanceManageRates = "finance.manage_rates";
+    public const string FinanceViewApprovals = "finance.view_approvals";
+    public const string FinanceManageApprovals = "finance.manage_approvals";
+    public const string FinanceViewBillableWork = "finance.view_billable_work";
+    public const string FinanceManageBillableWork = "finance.manage_billable_work";
+    public const string MaterialsOverrideStock = "materials.override_stock";
+    public const string AttendanceView = "attendance.view";
+    public const string AttendanceManage = "attendance.manage";
+    public const string ProjectsView = "projects.view";
+    public const string ProjectsManage = "projects.manage";
+    public const string ProjectsVariationsSubmit = "projects.variations.submit";
+    public const string ProjectsVariationsApprove = "projects.variations.approve";
+    public const string ProjectsClose = "projects.close";
+    public const string ProjectsSettings = "projects.settings";
+    public const string ProjectsMusterMark = "projects.muster.mark";
+    public const string ProjectsFinancialsView = "projects.financials.view";
+    public const string ProjectsFinancialsManage = "projects.financials.manage";
+    /// <summary>See meetings and action items, and organise your own (Release 3 design 3.6).</summary>
+    public const string ActivitiesView = "activities.view";
+    /// <summary>Organise and change any meeting, not only your own.</summary>
+    public const string ActivitiesManage = "activities.manage";
+    /// <summary>The team view of the calendar (other people's items).</summary>
+    public const string CalendarTeam = "calendar.team";
+
+    /// <summary>
+    /// Capabilities with no column in the legacy role/user permission tables. Their baseline comes
+    /// from role defaults in code; permission groups and per-user overrides adjust them, and login
+    /// carries the granted ones in the token as ordinary permission claims.
+    /// </summary>
+    public static readonly string[] CapabilityOnly =
+    [
+        ProjectsView,
+        ProjectsManage,
+        ProjectsVariationsSubmit,
+        ProjectsVariationsApprove,
+        ProjectsClose,
+        ProjectsSettings,
+        ProjectsMusterMark,
+        ProjectsFinancialsView,
+        ProjectsFinancialsManage,
+        ActivitiesView,
+        ActivitiesManage,
+        CalendarTeam,
+        CrmViewAll
+    ];
+    public const string CrmView = "crm.view";
+    public const string CrmManage = "crm.manage";
+    /// <summary>
+    /// Sees every deal, RFP/RFQ and follow-up when the workspace limits people to their own deals
+    /// (Sales settings). Without it, and with that limit on, people see what they own.
+    /// </summary>
+    public const string CrmViewAll = "crm.view_all";
+
+    public static readonly string[] All =
+    [
+        CanViewWorkOrders,
+        CanCreateWorkOrders,
+        CanAssignWorkOrders,
+        CanCompleteWorkOrders,
+        CanViewKnowledge,
+        CanManageKnowledge,
+        CanViewMaterials,
+        CanRequestMaterials,
+        CanManageMaterials,
+        CanApproveMaterials,
+        CanIssueMaterials,
+        CanManageAssets,
+        CanManageSettings,
+        CanViewReports,
+        FinanceView,
+        FinanceManage,
+        FinanceViewRates,
+        FinanceManageRates,
+        FinanceViewApprovals,
+        FinanceManageApprovals,
+        FinanceViewBillableWork,
+        FinanceManageBillableWork,
+        MaterialsOverrideStock,
+        AttendanceView,
+        AttendanceManage,
+        ProjectsView,
+        ProjectsManage,
+        ProjectsVariationsSubmit,
+        ProjectsVariationsApprove,
+        ProjectsClose,
+        ProjectsSettings,
+        ProjectsMusterMark,
+        ProjectsFinancialsView,
+        ProjectsFinancialsManage,
+        ActivitiesView,
+        ActivitiesManage,
+        CalendarTeam,
+        CrmView,
+        CrmManage,
+        CrmViewAll
+    ];
+}

@@ -1,0 +1,92 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-bg: #eef3f2;
+  --app-surface: #ffffff;
+  --app-panel: #ffffff;
+  --app-card: rgba(255, 255, 255, 0.65);
+  --app-border: #d7e3e1;
+  --app-border-strong: #9fb4b1;
+  --app-text: #0f2a2c;
+  --app-muted: #4c6664;
+  --app-secondary: #0b6665;
+  --app-primary: #073f43;
+  --app-primary-soft: #e3edec;
+  --app-lime: #79c900;
+  --app-lime-soft: #b7e26d;
+  --app-gold: #f39c12;
+  --app-success: #27ae60;
+  --app-warning: #f39c12;
+  --app-danger: #e74c3c;
+
+  /* Crystal / glass surface system */
+  --crystal-teal: rgba(7, 63, 67, 0.04);
+  --glass-white: rgba(255, 255, 255, 0.65);
+  --glass-white-strong: rgba(255, 255, 255, 0.8);
+  --glass-lime: rgba(121, 201, 0, 0.08);
+  --glass-border: rgba(7, 63, 67, 0.08);
+  --glass-blur-lg: 20px;
+  --glass-blur-md: 12px;
+  --glass-blur-sm: 6px;
+
+  --radius-app: 1rem;
+  --radius-card: 0.875rem;
+  --radius-control: 0.75rem;
+  --shadow-app: 0 1px 2px rgba(7, 63, 67, 0.03), 0 10px 24px rgba(7, 63, 67, 0.05);
+  --shadow-card: 0 1px 2px rgba(7, 63, 67, 0.04), 0 8px 20px rgba(7, 63, 67, 0.05);
+  --shadow-elevated: 0 18px 48px rgba(7, 63, 67, 0.14);
+  --content-max: 92rem;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html,
+body {
+  /* Keep scroll contained to the app: stops Chrome-for-Android pull-to-refresh and scroll-chaining
+     from hijacking the gesture, which reads as "scrolling fights me" in the installed PWA. */
+  overscroll-behavior-y: contain;
+}
+
+body {
+  @apply antialiased;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Form controls render at 16px on phones. Below 16px, mobile browsers auto-zoom the page when a
+   field is focused (and don't cleanly zoom back) — the main "zoom keeps fighting me" symptom. */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.font-mono {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}

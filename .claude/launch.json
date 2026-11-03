@@ -1,0 +1,66 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "ecosys-serviceops-frontend", "run", "dev"],
+      "port": 5173,
+      "autoPort": false
+    },
+    {
+      "name": "frontend-preview",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "ecosys-serviceops-frontend", "run", "preview"],
+      "port": 4173,
+      "autoPort": false
+    },
+    {
+      "name": "frontend-dev-verify",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "ecosys-serviceops-frontend", "run", "dev", "--", "--port", "5175"],
+      "port": 5175,
+      "autoPort": false
+    },
+    {
+      "name": "ecosys-digital-site",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:\\Users\\useruuuserrv jjjjAAA\\Downloads\\ecosys-digital-site\\node_modules\\vite\\bin\\vite.js",
+        "--host",
+        "--config",
+        "C:\\Users\\useruuuserrv jjjjAAA\\Downloads\\ecosys-digital-site\\vite.config.ts"
+      ],
+      "port": 3000,
+      "autoPort": false
+    },
+    {
+      "name": "backend-api",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/src/Ecosys.Api", "--urls", "http://localhost:5072"],
+      "port": 5072,
+      "autoPort": false,
+      "env": {
+        "ConnectionStrings__DefaultConnection": "Host=localhost;Port=5432;Database=ecosys_serviceops;Username=postgres;Password=postgres",
+        "Jwt__SigningKey": "local-dev-only-signing-key-not-for-production-use-32chars",
+        "PlatformAdmin__Email": "platform.owner@ecosys.test",
+        "PlatformAdmin__Password": "PlatformAdmin123!",
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    {
+      "name": "backend-api-portal-verify",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "backend/src/Ecosys.Api", "--urls", "http://localhost:5072"],
+      "port": 5072,
+      "autoPort": false,
+      "env": {
+        "ConnectionStrings__DefaultConnection": "Host=localhost;Port=5432;Database=ecosys_portal_verify;Username=postgres;Password=postgres",
+        "Jwt__SigningKey": "local-dev-only-signing-key-not-for-production-use-32chars",
+        "PlatformAdmin__Email": "platform.owner@ecosys.test",
+        "PlatformAdmin__Password": "PlatformAdmin123!",
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  ]
+}

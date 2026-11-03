@@ -1,0 +1,266 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api } from '../../shared/api/apiClient'
+import { endpoints } from '../../shared/api/endpoints'
+import type { AssignmentGroup, CertificationDefinition, PermissionSetFields, TeamManagementOverview, TeamUser, TenantUserRole, Technician } from './types'
+
+export function useTeamUsers() {
+  return useQuery({
+    queryKey: ['team-users'],
+    queryFn: () => api.get<TeamUser[]>(endpoints.users.list),
+    staleTime: 30_000,
+  })
+}
+
+export function useTeamUser(id: string | undefined) {
+  return useQuery({
+    queryKey: ['team-users', id],
+    queryFn: () => api.get<TeamUser>(endpoints.users.detail(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export interface CreateUserPayload {
+  fullName: string
+  /** Omit (or leave blank) for a user with no email address — they sign in with `username` instead. */
+  email?: string | null
+  /** Auto-generated from `fullName` when omitted. Unique within the tenant. */
+  username?: string | null
+  phoneNumber?: string | null
+  /** Set an initial password directly instead of emailing an invite link — required when there's no email. */
+  password?: string | null
+  role: TenantUserRole
+  jobTitle?: string | null
+  department?: string | null
+  isActive: boolean
+  credentialDeliveryMethod?: string
+  permissions?: PermissionSetFields | null
+}
+
+export interface CreatedUserResponse extends TeamUser {
+  credentialDelivery?: { success: boolean; status: string; message: string | null; temporaryPassword?: string | null } | null
+}
+
+export function useCreateTeamUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: CreateUserPayload) => api.post<CreatedUserResponse>(endpoints.users.create, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team-users'] }),
+  })
+}
+
+export interface UpdateUserPayload {
+  fullName: string
+  email?: string | null
+  username?: string | null
+  phoneNumber?: string | null
+  password?: string | null
+  role: TenantUserRole
+  jobTitle?: string | null
+  department?: string | null
+  isActive: boolean
+  permissions?: PermissionSetFields | null
+  branchIds?: string[]
+  defaultBranchId?: string | null
+  hasAllBranchAccess: boolean
+  assignmentGroupIds?: string[]
+}
+
+export function useUpdateTeamUser(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpdateUserPayload) => api.put<TeamUser>(endpoints.users.update(id), payload),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['team-users', id], data)
+      void queryClient.invalidateQueries({ queryKey: ['team-users'] })
+      // Effective permissions may be the current user's own — refresh the session.
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
+    },
+  })
+}
+
+export function useSetUserStatus(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (isActive: boolean) => api.patch<TeamUser>(endpoints.users.status(id), { isActive }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team-users'] }),
+  })
+}
+
+export function useResendCredentials(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team-users'] }),
+    mutationFn: () => api.post<{ success: boolean; message: string | null }>(endpoints.users.resendCredentials(id)),
+  })
+}
+
+export interface ResetPasswordPayload {
+  /** Admin types the new password directly. */
+  newPassword?: string
+  /** Server generates one and hands it back once in the response — nothing is emailed either way. */
+  generateAndReveal?: boolean
+}
+
+export interface ResetPasswordResult {
+  success: boolean
+  message: string | null
+  /** Only present when `generateAndReveal` was requested — shown once, never stored. */
+  temporaryPassword?: string | null
+}
+
+export function useResetUserPassword(id: string) {
+  return useMutation({
+    mutationFn: (payload?: ResetPasswordPayload) => api.post<ResetPasswordResult>(endpoints.users.resetPassword(id), payload ?? null),
+  })
+}
+
+// Technicians
+export function useTechnicians(branchId?: string) {
+  return useQuery({
+    queryKey: ['technicians', branchId ?? ''],
+    queryFn: () => api.get<Technician[]>(endpoints.technicians.list, { branchId }),
+    staleTime: 30_000,
+  })
+}
+
+export function useTechnician(id: string | undefined) {
+  return useQuery({
+    queryKey: ['technicians', id],
+    queryFn: () => api.get<Technician>(endpoints.technicians.detail(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export interface UpsertTechnicianPayload {
+  branchId?: string | null
+  fullName: string
+  email: string
+  phone?: string | null
+  skillCategory?: string | null
+  assignmentGroup?: string | null
+}
+
+export function useCreateTechnician() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpsertTechnicianPayload) => api.post<Technician>(endpoints.technicians.list, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['technicians'] }),
+  })
+}
+
+// Team Management overview (availability, certifications, readiness)
+export function useTeamManagementOverview() {
+  return useQuery({
+    queryKey: ['team-management', 'overview'],
+    queryFn: () => api.get<TeamManagementOverview>(endpoints.teamManagement.overview),
+    staleTime: 30_000,
+  })
+}
+
+export interface UpsertCertificationPayload {
+  name: string
+  issuer?: string | null
+  description?: string | null
+  renewalPeriodMonths?: number | null
+  isActive: boolean
+}
+
+export function useCreateCertification() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpsertCertificationPayload) => api.post<CertificationDefinition>(endpoints.teamManagement.certifications, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team-management'] }),
+  })
+}
+
+export function useUpdateCertification(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpsertCertificationPayload) => api.put<CertificationDefinition>(endpoints.teamManagement.certification(id), payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team-management'] }),
+  })
+}
+
+export function useDeleteCertification() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.delete<void>(endpoints.teamManagement.certification(id)),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['team-management'] }),
+  })
+}
+
+// Assignment Groups
+export function useAssignmentGroups() {
+  return useQuery({
+    queryKey: ['assignment-groups'],
+    queryFn: () => api.get<AssignmentGroup[]>(endpoints.assignmentGroups.list),
+    staleTime: 30_000,
+  })
+}
+
+export function useAssignmentGroup(id: string | undefined) {
+  return useQuery({
+    queryKey: ['assignment-groups', id],
+    queryFn: () => api.get<AssignmentGroup>(endpoints.assignmentGroups.detail(id ?? '')),
+    enabled: Boolean(id),
+  })
+}
+
+export interface UpsertAssignmentGroupPayload {
+  name: string
+  description?: string | null
+  skillArea?: string | null
+  branchId?: string | null
+  isActive: boolean
+}
+
+export function useCreateAssignmentGroup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpsertAssignmentGroupPayload) => api.post<AssignmentGroup>(endpoints.assignmentGroups.list, payload),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['assignment-groups'] }),
+  })
+}
+
+export function useUpdateAssignmentGroup(id: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: UpsertAssignmentGroupPayload) => api.put<AssignmentGroup>(endpoints.assignmentGroups.detail(id), payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment-groups'] })
+      void queryClient.invalidateQueries({ queryKey: ['assignment-groups', id] })
+    },
+  })
+}
+
+export function useDeleteAssignmentGroup() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.delete(endpoints.assignmentGroups.detail(id)),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['assignment-groups'] }),
+  })
+}
+
+export function useAddAssignmentGroupMember(groupId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { userId?: string | null; technicianId?: string | null; isLead: boolean }) =>
+      api.post(endpoints.assignmentGroups.members(groupId), payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment-groups'] })
+      void queryClient.invalidateQueries({ queryKey: ['assignment-groups', groupId] })
+    },
+  })
+}
+
+export function useRemoveAssignmentGroupMember(groupId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (memberUserOrTechnicianId: string) =>
+      api.delete(`${endpoints.assignmentGroups.members(groupId)}/${memberUserOrTechnicianId}`),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['assignment-groups'] })
+      void queryClient.invalidateQueries({ queryKey: ['assignment-groups', groupId] })
+    },
+  })
+}

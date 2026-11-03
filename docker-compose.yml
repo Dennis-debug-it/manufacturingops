@@ -1,0 +1,143 @@
+# Ecosys ServiceOps — production-shaped Docker stack.
+#   1. cp .env.example .env   and fill in the secrets
+#   2. docker compose build
+#   3. docker compose up -d
+# Migrations run automatically at API startup; the API aborts if they fail.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ecosys}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ecosys}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ecosys} -d ${POSTGRES_DB:-ecosys}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5000
+      # Composed from the Postgres vars above — points at the `db` service.
+      ECOSYS_DB_CONNECTION: "Host=db;Port=5432;Database=${POSTGRES_DB:-ecosys};Username=${POSTGRES_USER:-ecosys};Password=${POSTGRES_PASSWORD}"
+      # Secrets — the API refuses to boot if these are missing/weak/known-defaults.
+      ECOSYS_JWT_SIGNING_KEY: ${ECOSYS_JWT_SIGNING_KEY:?set ECOSYS_JWT_SIGNING_KEY in .env}
+      ECOSYS_PLATFORM_ADMIN_EMAIL: ${ECOSYS_PLATFORM_ADMIN_EMAIL:?set ECOSYS_PLATFORM_ADMIN_EMAIL in .env}
+      ECOSYS_PLATFORM_ADMIN_PASSWORD: ${ECOSYS_PLATFORM_ADMIN_PASSWORD:?set ECOSYS_PLATFORM_ADMIN_PASSWORD in .env}
+      ECOSYS_PLATFORM_ADMIN_FULL_NAME: ${ECOSYS_PLATFORM_ADMIN_FULL_NAME:-Platform Admin}
+      ECOSYS_CORS_ALLOWED_ORIGINS: ${ECOSYS_CORS_ALLOWED_ORIGINS}
+      # Comma-separated proxy IPs for accurate rate-limit/audit client IPs (see note below).
+      ECOSYS_KNOWN_PROXIES: ${ECOSYS_KNOWN_PROXIES:-}
+      # Outbound email (optional).
+      ECOSYS_SMTP_HOST: ${ECOSYS_SMTP_HOST:-}
+      ECOSYS_SMTP_PORT: ${ECOSYS_SMTP_PORT:-}
+      ECOSYS_SMTP_USE_SSL: ${ECOSYS_SMTP_USE_SSL:-}
+      ECOSYS_SMTP_USERNAME: ${ECOSYS_SMTP_USERNAME:-}
+      ECOSYS_SMTP_PASSWORD: ${ECOSYS_SMTP_PASSWORD:-}
+      # Public "Start free trial" sign-up (needs SMTP and ECOSYS_PUBLIC_URL). false = demo requests only.
+      AuthSecurity__EmailVerifiedSignupEnabled: ${ECOSYS_SELF_SIGNUP_ENABLED:-true}
+      # Fallback workspace time zone, used when neither the tenant nor the platform sets one.
+      Time__DefaultTimeZone: ${ECOSYS_DEFAULT_TIME_ZONE:-Africa/Nairobi}
+      # Origin the API puts in password-reset / account-setup / ETA links it emails out.
+      # appsettings.json only carries a localhost placeholder, so this MUST be set for any
+      # real deployment or every emailed link points at the wrong host (EC-P1-06c).
+      App__PublicUrl: ${ECOSYS_PUBLIC_URL:?set ECOSYS_PUBLIC_URL in .env}
+      # WhatsApp reminders from the shared Ecosys number (optional; see docs/WHATSAPP_SETUP.md).
+      WhatsApp__Enabled: ${ECOSYS_WHATSAPP_ENABLED:-false}
+      WhatsApp__PhoneNumberId: ${ECOSYS_WHATSAPP_PHONE_NUMBER_ID:-}
+      WhatsApp__BusinessAccountId: ${ECOSYS_WHATSAPP_BUSINESS_ACCOUNT_ID:-}
+      WhatsApp__AccessToken: ${ECOSYS_WHATSAPP_ACCESS_TOKEN:-}
+      WhatsApp__AppSecret: ${ECOSYS_WHATSAPP_APP_SECRET:-}
+      WhatsApp__WebhookVerifyToken: ${ECOSYS_WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      WhatsApp__DisplayPhoneNumber: ${ECOSYS_WHATSAPP_DISPLAY_NUMBER:-}
+      WhatsApp__MonthlyCapPerTenant: ${ECOSYS_WHATSAPP_MONTHLY_CAP:-1000}
+      # File storage inside the container (mapped to the `uploads` volume).
+      Storage__LocalBasePath: /app/storage/uploads
+      Storage__BaseUrl: ${ECOSYS_PUBLIC_URL}/files
+    volumes:
+      - uploads:/app/storage/uploads
+      - data-protection-keys:/home/app/.aspnet/DataProtection-Keys
+      # Tenant branding logos, written by TenantController to {WebRootPath}/uploads/logos
+      # (EC-P2-12). Mounted at the logos subdirectory *only* - mounting all of /app/wwwroot
+      # would shadow the app's own static assets. The Dockerfile creates and chowns this
+      # path at build time, so a fresh volume comes up owned by the non-root `app` user.
+      - tenant-logos:/app/wwwroot/uploads/logos
+    healthcheck:
+      # /health/ready is the database-backed readiness check; /health/live only proves the
+      # process is up. depends_on here waits for readiness, so /health/ready is the right one.
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # Opt-in one-shot database backup. It is behind the `backup` profile, so a plain
+  # `docker compose up` never starts it; it only runs when you ask for it:
+  #
+  #     docker compose --profile backup run --rm db-backup
+  #
+  # This container is NOT a scheduler - it takes one dump and exits. Schedule it from the
+  # host (cron / systemd timer / Windows Task Scheduler); see "Backup and restore" in
+  # docs/DEPLOYMENT.md. A looping sleep container would have no retry, no alerting and no
+  # missed-run catch-up, which is worse than an honest cron line.
+  #
+  # The image must match the `db` service above: pg_dump refuses to dump a server newer
+  # than itself. Bump both together.
+  db-backup:
+    profiles: ["backup"]
+    image: postgres:16-alpine
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-ecosys}
+      PGDATABASE: ${POSTGRES_DB:-ecosys}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${ECOSYS_BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - ./scripts:/scripts:ro
+      # Host path, deliberately: a named volume would be deleted by the same
+      # `docker compose down -v` the backups exist to survive.
+      - ${ECOSYS_BACKUP_DIR:-./backups}:/backups
+    entrypoint: ["/bin/sh", "/scripts/backup-db.sh"]
+
+  web:
+    build:
+      context: ./ecosys-serviceops-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${ECOSYS_PUBLIC_URL}
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      # Extra origins appended to the SPA's CSP connect-src at container start, for the
+      # API/SignalR host when it is not the same origin as the SPA (EC-P3-05b). Empty by
+      # default, which leaves the policy at `connect-src 'self'`. Space-separated.
+      ECOSYS_CSP_CONNECT_SRC: ${ECOSYS_CSP_CONNECT_SRC:-}
+    ports:
+      # Host:container. Put a TLS-terminating reverse proxy in front of this.
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  pgdata:
+  uploads:
+  tenant-logos:
+  data-protection-keys:

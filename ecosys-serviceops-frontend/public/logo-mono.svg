@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-labelledby="title desc">
+  <title id="title">Ecosys field service management logo</title>
+  <desc id="desc">Single-colour white version of the connected-system mark, wordmark, and tagline.</desc>
+  <path fill="#FFFFFF" d="M70 160c0-58 47-105 105-105 35 0 66 17 85 43l-39 29a57 57 0 1 0 0 66l39 29c-19 26-50 43-85 43-58 0-105-47-105-105Zm105-36a36 36 0 1 0 0 72 36 36 0 0 0 0-72Zm65 36 82-56v112l-82-56Z"/>
+  <circle cx="175" cy="160" r="18" fill="#FFFFFF"/>
+  <text x="390" y="158" fill="#FFFFFF" font-family="'Helvetica Neue',Arial,sans-serif" font-size="104" font-weight="700" letter-spacing="-4">Ecosys</text>
+  <text x="396" y="226" fill="#FFFFFF" font-family="'Helvetica Neue',Arial,sans-serif" font-size="58" font-weight="600" letter-spacing="5">automate.rely.scale</text>
+</svg>
