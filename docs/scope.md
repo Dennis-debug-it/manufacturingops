@@ -67,13 +67,20 @@ Clients, client portal, contracts-as-sold, quotations, invoices, credit notes, p
 
 ### 1.4 How the code is shared
 
-**Recommendation: start this repository as a curated copy of ServiceOps' platform layer, then build the factory domain on it. Extract a shared `Ecosys.Platform` package later, once both products are stable.**
+**Decision: fork ServiceOps with its full git history, then prune what factories do not need, keeping the build and tests green after every removal. Extract a shared `Ecosys.Platform` package after Phase 6, once both products are stable.**
 
-- A full fork would drag in ~150 entities of field-service domain and billing that factories do not use, and every ServiceOps migration would conflict.
+- ServiceOps is tightly coupled (`Asset` requires a `ClientId`; `Branch` links to vans, stock and numbering; `AppDbContext` is ~5,000 lines). A selective copy would not compile until those links were cut by hand, without a working app to test against. Pruning a working, tested app is mechanical and safer.
+- The shared history means platform fixes can be ported with `git cherry-pick` (in either direction) until the shared package exists. The fork point and every ported fix are recorded in `docs/serviceops-provenance.md`.
 - Extracting a shared package now would block both products on refactoring ServiceOps first.
-- A curated copy gets us running in weeks. Each copied area is recorded in `docs/serviceops-provenance.md` (source commit + path) so fixes can be ported in either direction until extraction.
 
-A fresh migration history starts in this repo; no ServiceOps migrations are copied.
+Fork rules:
+
+1. Fork point: ServiceOps `main` @ `248e221` (2026-11-01). ServiceOps history is merged into this repository's history.
+2. Prune one module per commit; each commit builds and passes the remaining tests.
+3. Removing every out-of-scope module (§1.3) is a Phase 0 exit criterion, not optional clean-up.
+4. Rename to the factory model as we go (branch → factory, site → section, assets lose client ownership).
+5. Once pruning is done, the ~290 ServiceOps migrations are squashed into one fresh baseline migration.
+6. Port platform fixes from ServiceOps at least every two weeks while the codebases are still close.
 
 ---
 
@@ -135,16 +142,18 @@ Phases follow requirements §9: Phases 1–6 are the sellable core; 7–8 are ex
 
 Sizes are indicative for a small team (2 developers plus part-time QA/design) and will be re-estimated after Phase 0.
 
-### Phase 0 — Platform foundation (≈3–4 weeks)
+### Phase 0 — Platform foundation (≈2–3 weeks)
 
-- Copy and trim the ServiceOps platform layer (§1.1) into this repo; record provenance
-- Fresh EF Core migration baseline; tenant, user, role, permission, audit, notification, file, import, PDF, scheduled reports, webhooks, API keys
+- Fork ServiceOps into this repo with history (§1.4); record the fork point
+- Prune out-of-scope modules one at a time, green after each: finance (quotations, invoices, credit notes, payments, withholding, expenses), Sales CRM and platform CRM/leads, client portal, projects, vans and dispatch, CSAT, Kip AI and knowledge, legacy `Ecosys.ServiceOps` and `Ecosys.Platform` projects
+- Rename to the factory model: branch → factory (with group as parent), site → section; assets lose client ownership
+- Squash migrations into a fresh baseline; keep tenant, user, role, permission, audit, notification, file, import, PDF, scheduled reports, webhooks, API keys
 - `OrgNode` hierarchy (group → factory → section → sub-section) and permission scoping down to factory and section
 - PWA shell, login, offline cache and outbox wired up; shared-device mode
 - CI (build, unit tests, e2e smoke), Docker Compose deployment, backups
 - Tenant settings: production unit (kg made tea), currency, time zone, maintenance window defaults
 
-**Exit:** a tenant with two factories and their sections can be created; users scoped to one factory cannot see the other; the PWA installs and works offline for the shell.
+**Exit:** no out-of-scope module remains; build, tests and Docker deployment pass; a tenant with two factories and their sections can be created; users scoped to one factory cannot see the other; the PWA installs and works offline for the shell.
 
 ### Phase 1 — Assets, tags and meters (≈5–6 weeks)
 
@@ -262,7 +271,7 @@ Sizes are indicative for a small team (2 developers plus part-time QA/design) an
 
 | Phase | Weeks | Cumulative |
 |---|---|---|
-| 0 Foundation | 3–4 | ~1 month |
+| 0 Foundation (fork and prune) | 2–3 | ~0.75 month |
 | 1 Assets, tags, meters | 5–6 | ~2.5 months |
 | 2 Work orders, mobile | 6–7 | ~4 months |
 | 3 PM, window, overhaul, statutory | 7–8 | ~6 months |
@@ -305,7 +314,8 @@ The pilot factory can start using the product at the end of Phase 1 (asset onboa
 | Offline sync conflicts corrupt job data | Server-arbitrated status changes, idempotent outbox (proven in ServiceOps), conflict log, offline e2e tests from Phase 0 |
 | Pilot asset data is incomplete or messy | Survey mode and import templates in Phase 1; budget implementation time for data collection |
 | Scope is large for a small team | Strict phase exits; Phases 7–8 only after the core is in paying use |
-| ServiceOps and this product drift apart | Provenance log; shared package extraction after Phase 6 |
+| ServiceOps and this product drift apart | Shared history allows cherry-picking fixes; port at least fortnightly; shared package extraction after Phase 6 |
+| Pruning stalls and unused code lingers | Full removal is a Phase 0 exit criterion |
 | Hosting cost/residency decided late | Hosting-neutral rule (§2 rule 7) means the choice does not change the code |
 | Low-end phones struggle with camera scanning | Test on target devices in Phase 1; fallback scanner library; manual asset number entry |
 
