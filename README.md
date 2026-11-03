@@ -17,7 +17,8 @@ It moves factories from reactive, paper-based maintenance to planned, traceable,
 ## Documentation
 
 - [Requirements](docs/requirements.md)
+- [Scope of work](docs/scope.md)
 
 ## Status
 
-Requirements stage. Tech stack, hosting and mobile approach are still open decisions (see §10 of the requirements).
+Scoping. Stack: .NET 10 + PostgreSQL + React PWA, built on the Ecosys ServiceOps platform layer. See the scope document for phases and open decisions.
