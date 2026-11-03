@@ -174,9 +174,11 @@ Sizes are indicative for a small team (2 developers plus part-time QA/design) an
 - Labour hours and parts used captured on the job (costing comes in Phase 6)
 - Offline execution of all the above; conflict handling
 - Notifications: in-app, email, WhatsApp, and SMS gateway added (Africa's Talking or equivalent, behind an interface)
-- Basic factory dashboard: open jobs, overdue, breakdowns, top failing assets
+- **Checklist and form builder:** pass/fail, readings with limits, photos, signatures; versioned templates per asset class; a failed item raises a work order (or a "fix in window" defect); readings feed the asset's meters
+- **Running checks (daily / per shift):** operator and artisan checklists scheduled per shift or per day, by section or as a route; done by scanning the asset or walking the route, fully offline; missed checks are flagged to the shift supervisor; tea templates seeded (withering fan, CTC, dryer, boiler shift log, compressor, generator)
+- Basic factory dashboard: open jobs, overdue, breakdowns, top failing assets, running-check completion per shift
 
-**Exit:** the pilot runs all breakdown and corrective work through the system for at least two weeks, including from the floor offline.
+**Exit:** the pilot runs all breakdown and corrective work, and its daily running checks, through the system for at least two weeks, including from the floor offline.
 
 ### Phase 3 — Planned maintenance: PM, weekly window, overhaul, statutory (≈7–8 weeks)
 
@@ -184,9 +186,9 @@ Sizes are indicative for a small team (2 developers plus part-time QA/design) an
 - Fixed vs floating schedules; compliance window (±%); defer/skip with mandatory reason; "defer until low crop" with risk flag on A-class assets
 - PM scheduler that advances due dates correctly (fixes the known ServiceOps gap)
 - Route-based PM (lubrication and inspection rounds)
-- Checklist and form builder (pass/fail, readings, photos, signatures); failed item raises a work order; readings feed meters
+- PM work orders use the Phase 2 checklist builder for their task lists
 - Workload forecast and levelling across weeks
-- **Weekly window:** per-factory window setting (Monday default, movable/skippable); "needs line stop" jobs auto-queue; operators log "fix in window" defects; window job pack generated ahead (jobs, technicians, reserved spares, permits, contractors) and downloaded offline; capacity check; standard weekly routine templates; handback start-up checklist and sign-off; carryover with escalation and move to overhaul list
+- **Weekly window:** per-factory window setting (Monday default, movable/skippable); "needs line stop" jobs auto-queue; operators log "fix in window" defects; window job pack generated ahead (jobs, technicians, reserved spares, permits, contractors) and downloaded offline; capacity check; standard weekly routine checklists (lubrication, belt and chain tension, CTC segment inspection, dryer and fluid bed cleaning, fan checks, panel inspections, boiler checks) generated into each window; handback start-up checklist and sign-off; carryover with escalation and move to overhaul list
 - **Annual overhaul:** overhaul list built through the season (deferred, carryover, condition findings); scope, budget, spares and contractor planning; progress tracking during shutdown; recommissioning checklists
 - **Statutory reminders:** boilers, pressure vessels, lifting equipment (OSHA 2007 / DOSH), calibration (instruments, weighbridges, scales, metal detectors), fire equipment: due dates, certificates, expiry alerts, owner, escalation when overdue
 - Compliance item model (owner, due date, evidence, escalation) — first part of the compliance framework
