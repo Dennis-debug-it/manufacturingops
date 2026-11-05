@@ -21,7 +21,8 @@ public sealed class MetersController(
     IOrgScopeService orgScopeService,
     IFactorySettingsService factorySettingsService,
     IMeterReadingService meterReadingService,
-    IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
+    IAuditLogService auditLogService,
+    INotificationDispatcher? notificationDispatcher = null) : TenantAwareControllerBase(tenantContext)
 {
     private const int MaxReadingsPage = 1000;
 
@@ -158,6 +159,7 @@ public sealed class MetersController(
             UserId,
             UserDisplayName), cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await AssetAlerts.NotifyMeterOutOfRangeAsync(notificationDispatcher, dbContext, meter, meter.Asset!, reading, cancellationToken);
         return Ok(Map(reading));
     }
 

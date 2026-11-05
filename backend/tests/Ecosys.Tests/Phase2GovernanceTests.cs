@@ -30,6 +30,8 @@ public sealed class Phase2GovernanceTests
                 "activity.reminder",
                 "activity.scheduled",
                 "activity.updated",
+                "asset.meter-out-of-range",
+                "asset.warranty-expiring",
                 "auth.password-reset.requested",
                 "auth.signup.verify-email",
                 "crm.deal.email",
