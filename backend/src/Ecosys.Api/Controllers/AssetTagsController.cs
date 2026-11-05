@@ -300,6 +300,56 @@ public sealed class AssetTagsController(
             history));
     }
 
+    /// <summary>
+    /// A compact copy of every asset the user can see, keyed by its tag numbers (old ones too) and
+    /// asset code, for the phone to keep so scanning works with no signal. Refreshed when online.
+    /// </summary>
+    [HttpGet("api/scan/offline-index")]
+    public async Task<ActionResult<IReadOnlyCollection<OfflineScanEntry>>> OfflineIndex(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureTenantOperationalAccess();
+        var scope = await orgScopeService.GetScopeAsync(TenantId, UserId, cancellationToken);
+        var assets = (await dbContext.Assets.AsNoTracking()
+                .Where(x => x.TenantId == TenantId && x.Status != "Inactive")
+                .Select(x => new { x.Id, x.AssetCode, x.AssetName, x.OrgNodeId, x.ParentAssetId, x.Criticality, x.OperationalStatus, x.Manufacturer, x.Model, x.SerialNumber })
+                .ToListAsync(cancellationToken))
+            .Where(x => scope.Allows(x.OrgNodeId))
+            .ToList();
+        var ids = assets.Select(x => x.Id).ToHashSet();
+        var codes = assets.ToDictionary(x => x.Id, x => x.AssetCode);
+        var tags = (await dbContext.AssetTags.AsNoTracking()
+                .Where(x => x.TenantId == TenantId)
+                .Select(x => new { x.AssetId, x.TagNumber, x.Status })
+                .ToListAsync(cancellationToken))
+            .Where(x => ids.Contains(x.AssetId))
+            .ToLookup(x => x.AssetId);
+        var meters = (await dbContext.Meters.AsNoTracking()
+                .Where(x => x.TenantId == TenantId && x.IsActive)
+                .Select(x => new { x.AssetId, x.Id, x.Name, x.Unit, x.CurrentValue, x.LastReadingAt, x.IsCumulative })
+                .ToListAsync(cancellationToken))
+            .Where(x => ids.Contains(x.AssetId))
+            .ToLookup(x => x.AssetId);
+        var paths = await LocationPathsAsync(cancellationToken);
+
+        return Ok(assets
+            .OrderBy(x => x.AssetCode)
+            .Select(x => new OfflineScanEntry(
+                x.Id,
+                x.AssetCode,
+                x.AssetName,
+                x.OrgNodeId.HasValue ? paths.GetValueOrDefault(x.OrgNodeId.Value) : null,
+                x.ParentAssetId.HasValue ? codes.GetValueOrDefault(x.ParentAssetId.Value) : null,
+                x.Criticality,
+                x.OperationalStatus,
+                x.Manufacturer,
+                x.Model,
+                x.SerialNumber,
+                tags[x.Id].FirstOrDefault(t => t.Status == AssetTagStatuses.Active)?.TagNumber,
+                tags[x.Id].Where(t => t.Status != AssetTagStatuses.Active).Select(t => t.TagNumber).ToList(),
+                meters[x.Id].Select(m => new OfflineScanMeter(m.Id, m.Name, m.Unit, m.IsCumulative, m.CurrentValue, m.LastReadingAt)).ToList()))
+            .ToList());
+    }
+
     private void EnsureCanManage() => userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
 
     private static void EnsureTaggable(Asset asset)
@@ -483,3 +533,20 @@ public sealed record ScanResultResponse(
     IReadOnlyCollection<ScanMeter> Meters,
     IReadOnlyCollection<ScanWorkOrder> OpenWorkOrders,
     IReadOnlyCollection<ScanHistoryItem> RecentHistory);
+
+public sealed record OfflineScanMeter(Guid Id, string Name, string Unit, bool IsCumulative, decimal? CurrentValue, DateTime? LastReadingAt);
+
+public sealed record OfflineScanEntry(
+    Guid AssetId,
+    string AssetCode,
+    string AssetName,
+    string? Location,
+    string? ParentAssetCode,
+    string? Criticality,
+    string OperationalStatus,
+    string? Manufacturer,
+    string? Model,
+    string? SerialNumber,
+    string? TagNumber,
+    IReadOnlyCollection<string> OldTagNumbers,
+    IReadOnlyCollection<OfflineScanMeter> Meters);

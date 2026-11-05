@@ -47,6 +47,9 @@ export function techPathFor(pathname: string): string {
   if (articleId) return `/tech/guides/${articleId}`
   if (pathname.startsWith('/knowledge')) return '/tech/guides'
   if (pathname.startsWith('/help')) return '/tech/help'
+  if (pathname === '/scan' || pathname.startsWith('/scan/')) return `/tech${pathname}`
+  const assetId = pathname.match(/^\/assets\/([^/]+)/)?.[1]
+  if (assetId) return `/tech/assets/${assetId}`
   if (pathname === '/notifications') return '/tech/notifications'
   if (pathname === '/me' || pathname.startsWith('/settings/account') || pathname.startsWith('/settings/notifications') || pathname.startsWith('/inventory/vans')) return '/tech/account'
   return '/tech'

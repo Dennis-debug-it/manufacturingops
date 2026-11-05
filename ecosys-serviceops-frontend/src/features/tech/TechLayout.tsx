@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, CalendarClock, ClipboardList, HardHat, LogOut, UserRound } from 'lucide-react'
+import { BookOpen, CalendarClock, ClipboardList, HardHat, LogOut, UserRound, ScanLine } from 'lucide-react'
 import { Logo } from '../../shared/components/Logo'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
@@ -11,6 +11,7 @@ import { cn } from '../../shared/utils/cn'
 import { usePendingActions } from './offline/hooks'
 import { OfflineStatus } from './offline/OfflineStatus'
 import { startOfflinePersistence } from './offline/persist'
+import { useOfflineScanIndex } from '../factory/api'
 import { NotificationBell } from '../notifications/NotificationBell'
 import { JobAlertsPrompt } from './JobAlerts'
 import { LocationPrompt } from './LocationPrompt'
@@ -18,6 +19,7 @@ import { disablePush, resyncPush } from './push'
 
 const SECTIONS = [
   { to: '/tech', label: 'Jobs', icon: ClipboardList, match: (path: string) => path === '/tech' || path.startsWith('/tech/jobs') },
+  { to: '/tech/scan', label: 'Scan', icon: ScanLine, match: (path: string) => path.startsWith('/tech/scan') || path.startsWith('/tech/assets') },
   { to: '/tech/site', label: 'Site', icon: HardHat, match: (path: string) => path.startsWith('/tech/site') },
   { to: '/tech/time', label: 'Time & Leave', icon: CalendarClock, match: (path: string) => path.startsWith('/tech/time') },
   { to: '/tech/guides', label: 'Guides', icon: BookOpen, match: (path: string) => path.startsWith('/tech/guides') },
@@ -39,6 +41,8 @@ export function TechLayout() {
 
   // Keep this technician's jobs on the phone so the app works without a signal.
   useEffect(() => (userId ? startOfflinePersistence(queryClient, userId) : undefined), [queryClient, userId])
+  // Keep the asset register on the phone so tags can be scanned with no signal.
+  useOfflineScanIndex()
   // Job alerts follow whoever is signed in on this phone.
   useEffect(() => { if (userId) void resyncPush().catch(() => undefined) }, [userId])
 

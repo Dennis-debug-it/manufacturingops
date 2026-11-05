@@ -70,6 +70,8 @@ export function isOfflineQueryKey(key: QueryKey): boolean {
   if (scope === 'picker') return second === 'materials' && third === ''
   // A supervisor's sites, each site's roster and the muster days they opened, so the roll can be marked offline.
   if (scope === 'projects') return second === 'my-sites' || third === 'workers' || third === 'muster'
+  // The asset register copy that lets a tag be scanned with no signal, and the factory tree.
+  if (scope === 'factory') return second === 'scan-index' || second === 'org-nodes'
   return false
 }
 

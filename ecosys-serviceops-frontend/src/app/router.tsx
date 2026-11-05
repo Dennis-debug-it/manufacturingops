@@ -115,10 +115,13 @@ import { ReportsPage as ReportsPageReal } from '../features/reports/ReportsPage'
 import { OnboardingPage as OnboardingPageReal } from '../features/onboarding/OnboardingPage'
 import { ClientsPage } from '../features/clients/ClientsPage'
 import { SitesPage } from '../features/clients/SitesPage'
-import { AssetsPage } from '../features/clients/AssetsPage'
+// Factory pages load on first use so they don't grow the main bundle.
+const FactoryAssetsPage = lazy(async () => ({ default: (await import('../features/factory/FactoryAssetsPage')).FactoryAssetsPage }))
+const FactoryAssetDetailPage = lazy(async () => ({ default: (await import('../features/factory/FactoryAssetDetailPage')).FactoryAssetDetailPage }))
+const ScanPage = lazy(async () => ({ default: (await import('../features/factory/ScanPage')).ScanPage }))
+const OrganisationSettingsPage = lazy(async () => ({ default: (await import('../features/factory/OrganisationSettingsPage')).OrganisationSettingsPage }))
 import { ClientDetailPage } from '../features/clients/ClientDetailPage'
 import { SiteDetailPage } from '../features/clients/SiteDetailPage'
-import { AssetDetailPage } from '../features/clients/AssetDetailPage'
 import { CompanySettingsPage as SettingsCompanyPageReal } from '../features/settings/CompanySettingsPage'
 import { BrandingSettingsPage as SettingsBrandingPageReal } from '../features/settings/BrandingSettingsPage'
 import { SecuritySettingsPage as SettingsSecurityPageReal } from '../features/settings/SecuritySettingsPage'
@@ -344,8 +347,10 @@ export function AppRouter() {
       ['/sites', SitesPage],
       ['/sites/:id', SiteDetailPage],
       ['/sites/:id/assets/new', SiteAssetsNewRedirect],
-      ['/assets', AssetsPage],
-      ['/assets/:id', AssetDetailPage],
+      ['/assets', FactoryAssetsPage],
+      ['/assets/:id', FactoryAssetDetailPage],
+      ['/scan', ScanPage],
+      ['/scan/:code', ScanPage],
       ['/inventory', InventoryOverviewPage],
       ['/inventory/parts', InventoryPartsPage],
       ['/inventory/parts/new', InventoryPartsPage],
@@ -442,6 +447,7 @@ export function AppRouter() {
       ['/settings/numbering', SettingsNumberingPage],
       ['/settings/pm-templates', SettingsPmTemplatesPage],
       ['/settings/asset-categories', AssetCategoriesSettingsPage],
+      ['/settings/organisation', OrganisationSettingsPage],
       ['/settings/pm-templates/:id', SettingsPmTemplatesPage],
       ['/settings/inventory', SettingsInventoryPage],
       ['/settings/time-attendance', SettingsTimeAttendancePage],
@@ -516,6 +522,9 @@ export function AppRouter() {
           <Route path="jobs/:id/:section" element={<TechJobPage />} />
           <Route path="time" element={<MyTimePage />} />
           <Route path="site" element={<TechSitePage />} />
+          <Route path="scan" element={<ScanPage />} />
+          <Route path="scan/:code" element={<ScanPage />} />
+          <Route path="assets/:id" element={<FactoryAssetDetailPage />} />
           <Route path="guides" element={<TechGuidesPage />} />
           <Route path="guides/:id" element={<TechGuidePage />} />
           <Route path="help" element={<TechHelpPage />} />

@@ -41,6 +41,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
         // Shows "new job assigned" push notifications and opens the job when one is tapped.
         importScripts: ['push-sw.js'],
+        // The main bundle is over Workbox's 2 MiB default; without it in the precache the installed
+        // app cannot open offline at all, which technicians on the factory floor rely on.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
       },
     }),
   ],

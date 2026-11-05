@@ -137,6 +137,29 @@ public sealed class AssetTagTests
     }
 
     [Fact]
+    public async Task OfflineIndex_HoldsWhatScanningNeeds_IncludingReplacedTagNumbers()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        var tags = Controller(db, site.Context);
+        var old = Ok(await tags.Issue(site.Dryer.Id, new IssueAssetTagRequest(), CancellationToken.None));
+        var current = Ok(await tags.Replace(old.Id, new ReplaceAssetTagRequest("Faded"), CancellationToken.None));
+        site.Retired.Status = "Inactive";
+        db.Meters.Add(new Meter { TenantId = site.TenantId, AssetId = site.Dryer.Id, Name = "Run hours", Unit = "h", CurrentValue = 100m });
+        await db.SaveChangesAsync();
+
+        var index = Ok(await tags.OfflineIndex(CancellationToken.None));
+
+        Assert.DoesNotContain(index, x => x.AssetCode == "PMP-OLD");
+        var dryer = Assert.Single(index, x => x.AssetId == site.Dryer.Id);
+        Assert.Equal(current.TagNumber, dryer.TagNumber);
+        Assert.Equal([old.TagNumber], dryer.OldTagNumbers);
+        Assert.Equal("Chelal › Drying", dryer.Location);
+        Assert.Equal(100m, Assert.Single(dryer.Meters).CurrentValue);
+        Assert.Equal("FBD-01", Assert.Single(index, x => x.AssetId == site.Motor.Id).ParentAssetCode);
+    }
+
+    [Fact]
     public async Task TagNumbers_StayUniqueWhenReservedTogether()
     {
         await using var db = FactoryTestSupport.CreateDbContext();
