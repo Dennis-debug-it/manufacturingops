@@ -75,6 +75,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<MaintenanceWindowHandbackItem> MaintenanceWindowHandbackItems => Set<MaintenanceWindowHandbackItem>();
     public DbSet<OverhaulPlan> OverhaulPlans => Set<OverhaulPlan>();
     public DbSet<OverhaulItem> OverhaulItems => Set<OverhaulItem>();
+    public DbSet<ComplianceItem> ComplianceItems => Set<ComplianceItem>();
+    public DbSet<ComplianceRecord> ComplianceRecords => Set<ComplianceRecord>();
     public DbSet<JobPlan> JobPlans => Set<JobPlan>();
     public DbSet<JobPlanStep> JobPlanSteps => Set<JobPlanStep>();
     public DbSet<JobPlanResource> JobPlanResources => Set<JobPlanResource>();
@@ -1886,6 +1888,39 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.Status });
             entity.HasIndex(x => new { x.TenantId, x.WorkOrderId });
+        });
+
+        modelBuilder.Entity<ComplianceItem>(entity =>
+        {
+            entity.ToTable("compliance_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Kind).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Regulation).HasMaxLength(200);
+            entity.Property(x => x.Provider).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.TemplateKey).HasMaxLength(100);
+            entity.HasOne(x => x.OrgNode).WithMany().HasForeignKey(x => x.OrgNodeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Owner).WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.OpenWorkOrder).WithMany().HasForeignKey(x => x.OpenWorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.OrgNodeId, x.DueDate });
+            entity.HasIndex(x => new { x.TenantId, x.IsActive, x.DueDate });
+        });
+
+        modelBuilder.Entity<ComplianceRecord>(entity =>
+        {
+            entity.ToTable("compliance_records");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Result).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.CertificateNumber).HasMaxLength(100);
+            entity.Property(x => x.Examiner).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.RecordedByName).HasMaxLength(200);
+            entity.HasOne(x => x.Item).WithMany(x => x.Records).HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.CertificateAttachment).WithMany().HasForeignKey(x => x.CertificateAttachmentId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<WorkOrder>().WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.ItemId, x.DoneAt });
         });
 
         modelBuilder.Entity<PmPlanEvent>(entity =>
