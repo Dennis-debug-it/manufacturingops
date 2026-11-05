@@ -167,7 +167,10 @@ internal sealed class ContractorService(AppDbContext dbContext, IFactoryWorkOrde
                 DueDate: due, Source: FactoryRequestSources.Preventive, RequestedByName: agreement.Contractor.Name), cancellationToken);
             job.ContractorId = agreement.ContractorId;
             job.MaintenanceAgreementId = agreement.Id;
-            agreement.NextVisitDue = due.AddMonths(agreement.VisitEveryMonths!.Value);
+            // One job for the visit; missed past dates are not raised again, the schedule moves on.
+            var next = due.AddMonths(agreement.VisitEveryMonths!.Value);
+            while (next.Date <= today) next = next.AddMonths(agreement.VisitEveryMonths.Value);
+            agreement.NextVisitDue = next;
             await dbContext.SaveChangesAsync(cancellationToken);
             visits++;
         }

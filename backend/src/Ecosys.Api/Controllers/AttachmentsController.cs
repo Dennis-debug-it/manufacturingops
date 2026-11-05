@@ -22,6 +22,9 @@ public sealed class AttachmentsController(
     {
         "WorkOrder",
         "Asset",
+        "MaterialItem",
+        "Contractor",
+        "ContractorInvoice",
         "Site",
         "Client",
         "Contract",
@@ -164,6 +167,9 @@ public sealed class AttachmentsController(
         {
             "WorkOrder" => await dbContext.WorkOrders.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
             "Asset" => await dbContext.Assets.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
+            "MaterialItem" => await dbContext.MaterialItems.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
+            "Contractor" => await dbContext.Contractors.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
+            "ContractorInvoice" => await dbContext.ContractorInvoices.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
             "Site" => await dbContext.Sites.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
             "Client" => await dbContext.Clients.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
             "Contract" => await dbContext.Contracts.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),

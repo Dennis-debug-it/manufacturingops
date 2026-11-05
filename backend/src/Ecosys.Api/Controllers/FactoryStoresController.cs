@@ -368,7 +368,7 @@ public sealed class FactoryStoresController(
     {
         EnsureCanIssue();
         var unit = await LoadUnitAsync(id, cancellationToken);
-        await sparesService.SendForRepairAsync(unit, request.SupplierId, Clean(request.Reference), request.ExpectedBackAt, Actor, cancellationToken);
+        await sparesService.SendForRepairAsync(unit, request.SupplierId, Clean(request.Reference), Utc(request.ExpectedBackAt), Actor, cancellationToken);
         return Ok(await UnitsQuery(x => x.Id == id).SingleAsync(cancellationToken));
     }
 
@@ -846,8 +846,8 @@ public sealed class FactoryStoresController(
     public async Task<ActionResult<IReadOnlyCollection<LubricantLogRow>>> LubricantLog([FromQuery] DateTime? from, [FromQuery] DateTime? to, CancellationToken cancellationToken)
     {
         EnsureCanView();
-        var start = (from ?? DateTime.UtcNow.AddDays(-90)).Date;
-        var end = (to ?? DateTime.UtcNow).Date.AddDays(1);
+        var start = Utc(from ?? DateTime.UtcNow.AddDays(-90))!.Value;
+        var end = Utc(to ?? DateTime.UtcNow)!.Value.AddDays(1);
         var stores = await StoresInScopeAsync(cancellationToken);
         var rows = await dbContext.StockMovements
             .Where(x => x.TenantId == TenantId && x.StoreId != null && stores.Contains(x.StoreId.Value) && x.MovementType == StoreMovementTypes.Issue
@@ -978,7 +978,7 @@ public sealed class FactoryStoresController(
 
         requisition.StoreId = request.StoreId;
         requisition.Reason = Clean(request.Reason);
-        requisition.NeededBy = request.NeededBy;
+        requisition.NeededBy = Utc(request.NeededBy);
         if (request.Lines.Count == 0) throw new BusinessRuleException("Add at least one line.");
         var tenantCurrency = await dbContext.Tenants.Where(x => x.Id == TenantId).Select(x => x.Currency).SingleAsync(cancellationToken);
         foreach (var line in request.Lines)
@@ -1015,7 +1015,7 @@ public sealed class FactoryStoresController(
         item.Currency = currency;
         item.LeadTimeDays = request.LeadTimeDays;
         item.MinOrderQuantity = request.MinOrderQuantity;
-        item.ValidUntil = request.ValidUntil;
+        item.ValidUntil = Utc(request.ValidUntil);
         item.IsPreferred = request.IsPreferred;
         if (request.IsPreferred)
         {
@@ -1054,7 +1054,7 @@ public sealed class FactoryStoresController(
         if (request.SdsAttachmentId is { } sds && !await dbContext.Attachments.AnyAsync(x => x.TenantId == TenantId && x.Id == sds, cancellationToken))
             throw new BusinessRuleException("Safety data sheet file was not found.");
         part.SdsAttachmentId = request.IsChemical ? request.SdsAttachmentId : null;
-        part.SdsIssuedOn = request.IsChemical ? request.SdsIssuedOn : null;
+        part.SdsIssuedOn = request.IsChemical ? Utc(request.SdsIssuedOn) : null;
     }
 
     private async Task ApplyStoreAsync(Store store, SaveStoreRequest request, CancellationToken cancellationToken)
@@ -1232,6 +1232,9 @@ public sealed class FactoryStoresController(
     private static string Required(string? value, string label) => string.IsNullOrWhiteSpace(value) ? throw new BusinessRuleException($"{label} is required.") : value.Trim();
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>Dates arrive without a kind; PostgreSQL stores UTC.</summary>
+    private static DateTime? Utc(DateTime? value) => value is { } v ? DateTime.SpecifyKind(v.Date, DateTimeKind.Utc) : null;
 }
 
 public sealed record StoreSummary(Guid Id, Guid FactoryId, string FactoryName, string Code, string Name, string? Location, bool IsMain, bool IsActive, int PartsInStock, decimal StockValue, int ToReorder, int CriticalOut);

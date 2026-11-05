@@ -397,7 +397,11 @@ public sealed class ContractorsController(
         var lines = await dbContext.ContractorInvoiceLines.Where(x => x.InvoiceId == id).OrderBy(x => x.CreatedAt)
             .Select(x => new ContractorInvoiceLineDto(x.Id, x.WorkOrderId, x.WorkOrder != null ? x.WorkOrder.WorkOrderNumber : null, x.WorkOrder != null ? x.WorkOrder.Title : null,
                 x.WorkOrder != null ? x.WorkOrder.Status : null, x.Description, x.Amount)).ToListAsync(cancellationToken);
-        return new ContractorInvoiceDetail(summary, invoice.MatchIssues?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? [], invoice.DecisionNote, invoice.AttachmentId, lines);
+        // A copy uploaded after the invoice was recorded is attached to it by id.
+        var attachmentId = invoice.AttachmentId ?? await dbContext.Attachments
+            .Where(x => x.TenantId == TenantId && x.EntityType == "ContractorInvoice" && x.EntityId == id)
+            .OrderByDescending(x => x.CreatedAt).Select(x => (Guid?)x.Id).FirstOrDefaultAsync(cancellationToken);
+        return new ContractorInvoiceDetail(summary, invoice.MatchIssues?.Split('\n', StringSplitOptions.RemoveEmptyEntries) ?? [], invoice.DecisionNote, attachmentId, lines);
     }
 
     private IQueryable<AgreementSummary> AgreementRows(IQueryable<MaintenanceAgreement> query) =>
@@ -443,8 +447,8 @@ public sealed class ContractorsController(
         if (request.IssuedOn is { } issued && request.ExpiresOn is { } expires && expires < issued) throw new BusinessRuleException("It can't expire before it was issued.");
         if (request.AttachmentId is { } attachmentId && !await dbContext.Attachments.AnyAsync(x => x.TenantId == TenantId && x.Id == attachmentId, cancellationToken)) throw new BusinessRuleException("File was not found.");
         document.Reference = Clean(request.Reference);
-        document.IssuedOn = request.IssuedOn;
-        document.ExpiresOn = request.ExpiresOn;
+        document.IssuedOn = Utc(request.IssuedOn);
+        document.ExpiresOn = Utc(request.ExpiresOn);
         document.AttachmentId = request.AttachmentId;
         document.Notes = Clean(request.Notes);
     }
@@ -476,7 +480,9 @@ public sealed class ContractorsController(
         agreement.RepairHours = request.RepairHours;
         if (agreement.VisitEveryMonths != request.VisitEveryMonths || request.FirstVisitDue is not null)
         {
-            agreement.NextVisitDue = request.VisitEveryMonths is null ? null : DateTime.SpecifyKind((request.FirstVisitDue ?? request.StartDate).Date, DateTimeKind.Utc);
+            // With no first visit given it is the start date, or today for an agreement already running.
+            var first = request.FirstVisitDue?.Date ?? (request.StartDate.Date < DateTime.UtcNow.Date ? DateTime.UtcNow.Date : request.StartDate.Date);
+            agreement.NextVisitDue = request.VisitEveryMonths is null ? null : DateTime.SpecifyKind(first, DateTimeKind.Utc);
         }
 
         agreement.VisitEveryMonths = request.VisitEveryMonths;
@@ -518,6 +524,9 @@ public sealed class ContractorsController(
     private static string Required(string? value, string label) => string.IsNullOrWhiteSpace(value) ? throw new BusinessRuleException($"{label} is required.") : value.Trim();
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>Dates arrive without a kind; PostgreSQL stores UTC.</summary>
+    private static DateTime? Utc(DateTime? value) => value is { } v ? DateTime.SpecifyKind(v.Date, DateTimeKind.Utc) : null;
 }
 
 public sealed record ContractorSummary(Guid Id, string Name, string? Services, string? ContactPerson, string? Phone, string? Email, string Status, bool IsActive,

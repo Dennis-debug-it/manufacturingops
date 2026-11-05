@@ -96,7 +96,7 @@ public sealed class SparesPostgresTests
             Assert.NotEmpty(Ok(await stores.Reorder(factory.Id, default)));
             Ok(await stores.Catalogue(null, null, "a", default));
             Assert.NotEmpty(Ok(await stores.Chemicals(default)));
-            Assert.NotEmpty(Ok(await stores.LubricantLog(null, null, default)));
+            Assert.NotEmpty(Ok(await stores.LubricantLog(DateTime.SpecifyKind(DateTime.UtcNow.AddDays(-5), DateTimeKind.Unspecified), null, default)));
 
             var transfer = Ok(await stores.RequestTransfer(new TransferRequest(main.Id, far.Id, oil.Id, 5), default));
             Ok(await stores.Dispatch(transfer.Id, null, default));
@@ -108,7 +108,7 @@ public sealed class SparesPostgresTests
             Ok(await stores.PostCount(count.Count.Id, default));
             Ok(await stores.Counts(null, default));
 
-            var requisition = Ok(await stores.CreateRequisition(new SaveRequisitionRequest(factory.Id, [new SaveRequisitionLine(belt.Id, 4, SupplierId: supplier.Id)], main.Id), default));
+            var requisition = Ok(await stores.CreateRequisition(new SaveRequisitionRequest(factory.Id, [new SaveRequisitionLine(belt.Id, 4, SupplierId: supplier.Id)], main.Id, NeededBy: DateTime.SpecifyKind(DateTime.UtcNow.AddDays(7), DateTimeKind.Unspecified)), default));
             Ok(await stores.RequisitionAction(requisition.Requisition.Id, "submit", null, default));
             Ok(await stores.RequisitionAction(requisition.Requisition.Id, "approve", null, default));
             Ok(await stores.Reorder(null, default));
@@ -121,7 +121,9 @@ public sealed class SparesPostgresTests
 
             // Contractors.
             var firm = Ok(await contractors.Create(new SaveContractorRequest("Rift Boilers"), default));
-            Ok(await contractors.AddDocument(firm.Id, new SaveContractorDocumentRequest("Insurance", null, null, DateTime.UtcNow.AddDays(10)), default));
+            // Dates from JSON have no kind; they must still save to PostgreSQL.
+            static DateTime Plain(DateTime d) => DateTime.SpecifyKind(d, DateTimeKind.Unspecified);
+            Ok(await contractors.AddDocument(firm.Id, new SaveContractorDocumentRequest("Insurance", null, Plain(DateTime.UtcNow.AddYears(-1)), Plain(DateTime.UtcNow.AddDays(10))), default));
             Ok(await contractors.AddDocument(firm.Id, new SaveContractorDocumentRequest("Tax compliance", null, null, DateTime.UtcNow.AddYears(1)), default));
             var agreement = Ok(await contractors.CreateAgreement(new SaveAgreementRequest(firm.Id, "AMC", DateTime.UtcNow.AddMonths(-1), DateTime.UtcNow.AddDays(20),
                 FactoryId: factory.Id, ResponseHours: 4, RepairHours: 24, VisitEveryMonths: 1, FirstVisitDue: DateTime.UtcNow.Date, AssetIds: [asset.Id]), default));
