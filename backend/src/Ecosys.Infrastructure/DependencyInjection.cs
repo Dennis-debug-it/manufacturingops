@@ -78,6 +78,7 @@ public static class DependencyInjection
         services.AddScoped<Services.Factory.IFailureCodeService, Services.Factory.FailureCodeService>();
         services.AddScoped<Services.Factory.IFactoryWorkOrderService, Services.Factory.FactoryWorkOrderService>();
         services.AddScoped<Services.Factory.IFactorySlaService, Services.Factory.FactorySlaService>();
+        services.AddScoped<Services.Factory.IOperatorReportService, Services.Factory.OperatorReportService>();
         services.AddSingleton<Services.Factory.IAssetLabelPdfRenderer, Services.Factory.AssetLabelPdfRenderer>();
         services.AddScoped<IStockLedgerService, StockLedgerService>();
         services.AddScoped<IUserSessionService, UserSessionService>();

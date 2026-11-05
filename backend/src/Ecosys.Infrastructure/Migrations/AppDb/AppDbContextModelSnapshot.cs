@@ -4199,6 +4199,15 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("integer")
                         .HasDefaultValue(1);
 
+                    b.Property<string>("OperatorReportKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("OperatorReportingEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("ProductionUnit")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -4251,6 +4260,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("time without time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OperatorReportKey")
+                        .IsUnique();
 
                     b.HasIndex("TenantId")
                         .IsUnique();

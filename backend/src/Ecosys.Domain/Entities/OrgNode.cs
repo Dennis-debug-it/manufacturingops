@@ -111,5 +111,10 @@ public sealed class FactorySettings : AuditableEntity, ITenantEntity
     /// <summary>The same fault on the same asset within this many days is flagged as rework.</summary>
     public int ReworkWindowDays { get; set; } = 30;
 
+    /// <summary>Operators can report faults from an asset's QR label without logging in.</summary>
+    public bool OperatorReportingEnabled { get; set; } = true;
+    /// <summary>Secret in the label link that authorises an operator report; tag numbers alone are guessable.</summary>
+    public string? OperatorReportKey { get; set; }
+
     public Tenant? Tenant { get; set; }
 }

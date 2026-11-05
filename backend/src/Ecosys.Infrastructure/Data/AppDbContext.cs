@@ -400,6 +400,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.RequireWorkOrderApproval).HasDefaultValue(true);
             entity.Property(x => x.AutoApproveBreakdowns).HasDefaultValue(true);
             entity.Property(x => x.ReworkWindowDays).HasDefaultValue(30);
+            entity.Property(x => x.OperatorReportingEnabled).HasDefaultValue(true);
+            entity.Property(x => x.OperatorReportKey).HasMaxLength(64);
+            entity.HasIndex(x => x.OperatorReportKey).IsUnique();
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany()

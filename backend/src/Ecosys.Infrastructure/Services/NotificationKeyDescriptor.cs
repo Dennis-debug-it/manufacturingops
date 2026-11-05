@@ -69,6 +69,7 @@ public static class NotificationKeyDescriptor
         Inbox("inventory.request-decided", "My parts request approved or rejected", "Inventory"),
         Inbox("inventory.request-dispatched", "My parts are on the way", "Inventory"),
         Inbox("inventory.low-stock", "A part fell to its reorder level", "Inventory"),
+        Inbox("factory-job.reported", "An operator reported a fault", "Work Orders"),
         Inbox("asset.warranty-expiring", "An asset's warranty is about to expire", "Assets"),
         Inbox("asset.meter-out-of-range", "A meter reading is outside its limits", "Assets"),
         EmailOnly("invoice.sent",         "Invoice sent to client",            "Finance"),

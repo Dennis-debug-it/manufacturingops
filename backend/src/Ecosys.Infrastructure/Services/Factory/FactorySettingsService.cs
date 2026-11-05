@@ -10,13 +10,19 @@ public interface IFactorySettingsService
     Task<FactorySettings> GetOrCreateAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }
 
-internal sealed class FactorySettingsService(AppDbContext dbContext) : IFactorySettingsService
+public sealed class FactorySettingsService(AppDbContext dbContext) : IFactorySettingsService
 {
     public async Task<FactorySettings> GetOrCreateAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
         var settings = await dbContext.FactorySettings.SingleOrDefaultAsync(x => x.TenantId == tenantId, cancellationToken);
         if (settings is not null)
         {
+            if (settings.OperatorReportKey is null)
+            {
+                settings.OperatorReportKey = NewReportKey();
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+
             return settings;
         }
 
@@ -26,7 +32,8 @@ internal sealed class FactorySettingsService(AppDbContext dbContext) : IFactoryS
             TenantId = tenantId,
             IndustryTemplate = template.Key,
             ProductionUnit = template.ProductionUnit,
-            ProductionUnitShort = template.ProductionUnitShort
+            ProductionUnitShort = template.ProductionUnitShort,
+            OperatorReportKey = NewReportKey()
         };
 
         dbContext.FactorySettings.Add(settings);
@@ -43,4 +50,8 @@ internal sealed class FactorySettingsService(AppDbContext dbContext) : IFactoryS
 
         return settings;
     }
+
+    /// <summary>A URL-safe random key; 18 bytes is 144 bits, far beyond guessing.</summary>
+    public static string NewReportKey() =>
+        Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(18)).Replace('+', '-').Replace('/', '_');
 }

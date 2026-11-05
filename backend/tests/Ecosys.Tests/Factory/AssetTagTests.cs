@@ -23,7 +23,7 @@ public sealed class AssetTagTests
 
         Assert.Equal("TAG-000001", first.TagNumber);
         Assert.Equal("TAG-000002", second.TagNumber);
-        Assert.Equal("https://factory.test/scan/TAG-000001", first.ScanUrl);
+        Assert.Equal("https://factory.test/t/TAG-000001", first.ScanUrl);
         await Assert.ThrowsAsync<BusinessRuleException>(() => tags.Issue(site.Dryer.Id, new IssueAssetTagRequest(), CancellationToken.None));
         Assert.Contains(await db.AssetLifecycleEvents.Where(x => x.AssetId == site.Dryer.Id).ToListAsync(),
             x => x.EventType == AssetLifecycleEventTypes.Tagged && x.ToValue == "TAG-000001");
@@ -171,7 +171,7 @@ public sealed class AssetTagTests
 
         Assert.Equal(["TAG-000001", "TAG-000002", "TAG-000003"], batch);
         Assert.Equal("TAG-000004", Assert.Single(next));
-        Assert.Equal("TAG-000007", service.NormalizeCode("https://factory.test/scan/tag-000007"));
+        Assert.Equal("TAG-000007", service.NormalizeCode("https://factory.test/t/tag-000007?r=abc"));
     }
 
     private sealed record Seeded(Guid TenantId, FactoryTenantContext Context, Guid Factory, Asset Dryer, Asset Motor, Asset Boiler, Asset Retired);
@@ -206,6 +206,7 @@ public sealed class AssetTagTests
             new AssetLabelPdfRenderer(),
             new AssetLifecycleService(db, scope),
             FactoryTestSupport.Audit(db),
-            Microsoft.Extensions.Options.Options.Create(new PublicAppOptions { PublicUrl = "https://factory.test/" })));
+            Microsoft.Extensions.Options.Options.Create(new PublicAppOptions { PublicUrl = "https://factory.test/" }),
+            FactoryTestSupport.Settings(db)));
     }
 }

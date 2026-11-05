@@ -28,7 +28,8 @@ public sealed class AssetTagsController(
     IAssetLabelPdfRenderer labelRenderer,
     IAssetLifecycleService assetLifecycleService,
     IAuditLogService auditLogService,
-    IOptions<PublicAppOptions> publicAppOptions) : TenantAwareControllerBase(tenantContext)
+    IOptions<PublicAppOptions> publicAppOptions,
+    IFactorySettingsService factorySettingsService) : TenantAwareControllerBase(tenantContext)
 {
     private const int MaxBatch = 500;
 
@@ -186,9 +187,10 @@ public sealed class AssetTagsController(
 
         var paths = await LocationPathsAsync(cancellationToken);
         var company = await dbContext.Tenants.Where(x => x.Id == TenantId).Select(x => x.CompanyName).SingleOrDefaultAsync(cancellationToken) ?? string.Empty;
+        var settings = await factorySettingsService.GetOrCreateAsync(TenantId, cancellationToken);
         var labels = tags.Select(x => new AssetLabel(
                 x.TagNumber,
-                ScanUrl(x.TagNumber),
+                ScanUrl(x.TagNumber, settings),
                 x.Asset!.AssetName,
                 x.Asset.AssetCode,
                 x.Asset.OrgNodeId.HasValue ? paths.GetValueOrDefault(x.Asset.OrgNodeId.Value) : null,
@@ -444,7 +446,15 @@ public sealed class AssetTagsController(
         });
     }
 
-    private string ScanUrl(string tagNumber) => $"{publicAppOptions.Value.PublicUrl.TrimEnd('/')}/scan/{Uri.EscapeDataString(tagNumber)}";
+    /// <summary>
+    /// The link in a label's QR code. Staff who scan it open the asset; with operator reporting on,
+    /// the key lets someone without a login report a fault from the same label.
+    /// </summary>
+    private string ScanUrl(string tagNumber, FactorySettings? settings = null)
+    {
+        var url = $"{publicAppOptions.Value.PublicUrl.TrimEnd('/')}/t/{Uri.EscapeDataString(tagNumber)}";
+        return settings is { OperatorReportingEnabled: true, OperatorReportKey: { } key } ? $"{url}?r={Uri.EscapeDataString(key)}" : url;
+    }
 
     private async Task<Asset> LoadAssetAsync(Guid assetId, CancellationToken cancellationToken)
     {

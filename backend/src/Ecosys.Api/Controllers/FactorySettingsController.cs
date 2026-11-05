@@ -92,6 +92,7 @@ public sealed class FactorySettingsController(
         settings.RequireWorkOrderApproval = request.RequireWorkOrderApproval ?? settings.RequireWorkOrderApproval;
         settings.AutoApproveBreakdowns = request.AutoApproveBreakdowns ?? settings.AutoApproveBreakdowns;
         settings.ReworkWindowDays = request.ReworkWindowDays ?? settings.ReworkWindowDays;
+        settings.OperatorReportingEnabled = request.OperatorReportingEnabled ?? settings.OperatorReportingEnabled;
         if (!string.IsNullOrWhiteSpace(request.TagPrefix))
         {
             var prefix = request.TagPrefix.Trim().ToUpperInvariant();
@@ -107,6 +108,22 @@ public sealed class FactorySettingsController(
         await auditLogService.LogAsync(TenantId, UserId, "factory-settings.updated", nameof(FactorySettings), settings.Id.ToString(),
             "Factory settings updated.", cancellationToken);
 
+        return Ok(Map(settings));
+    }
+
+    /// <summary>
+    /// Issues a new operator report key, for when a label link has leaked. Labels printed before
+    /// stop accepting reports until they are reprinted; staff scanning still works.
+    /// </summary>
+    [HttpPost("operator-report-key")]
+    public async Task<ActionResult<FactorySettingsResponse>> RegenerateReportKey(CancellationToken cancellationToken)
+    {
+        userAccessService.EnsureAdmin();
+        var settings = await factorySettingsService.GetOrCreateAsync(TenantId, cancellationToken);
+        settings.OperatorReportKey = FactorySettingsService.NewReportKey();
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "factory-settings.report-key-regenerated", nameof(FactorySettings), settings.Id.ToString(),
+            "Operator report key regenerated; earlier labels no longer accept fault reports.", cancellationToken);
         return Ok(Map(settings));
     }
 
@@ -169,7 +186,7 @@ public sealed class FactorySettingsController(
         }
     }
 
-    private static FactorySettingsResponse Map(FactorySettings settings) => new(
+    private FactorySettingsResponse Map(FactorySettings settings) => new(
         settings.IndustryTemplate,
         settings.ProductionUnit,
         settings.ProductionUnitShort,
@@ -185,7 +202,10 @@ public sealed class FactorySettingsController(
         settings.NextTagNumber,
         settings.RequireWorkOrderApproval,
         settings.AutoApproveBreakdowns,
-        settings.ReworkWindowDays);
+        settings.ReworkWindowDays,
+        settings.OperatorReportingEnabled,
+        // The key authorises anonymous reports, so only admins see it.
+        IsAdmin ? settings.OperatorReportKey : null);
 }
 
 public sealed record FactorySettingsResponse(
@@ -204,7 +224,9 @@ public sealed record FactorySettingsResponse(
     int NextTagNumber,
     bool RequireWorkOrderApproval,
     bool AutoApproveBreakdowns,
-    int ReworkWindowDays);
+    int ReworkWindowDays,
+    bool OperatorReportingEnabled,
+    string? OperatorReportKey);
 
 public sealed record UpdateFactorySettingsRequest(
     string IndustryTemplate,
@@ -221,7 +243,8 @@ public sealed record UpdateFactorySettingsRequest(
     string? TagPrefix = null,
     bool? RequireWorkOrderApproval = null,
     bool? AutoApproveBreakdowns = null,
-    int? ReworkWindowDays = null);
+    int? ReworkWindowDays = null,
+    bool? OperatorReportingEnabled = null);
 
 public sealed record SetUserOrgScopeRequest(IReadOnlyCollection<Guid>? OrgNodeIds);
 

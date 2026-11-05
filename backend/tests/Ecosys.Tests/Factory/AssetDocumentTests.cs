@@ -108,22 +108,4 @@ public sealed class AssetDocumentTests
     private static AssetDocumentsController Controller(AppDbContext db, FactoryTenantContext context, IFileStorageService storage) =>
         FactoryAssetRegisterTests.WithHttp(new AssetDocumentsController(db, context, FactoryTestSupport.Access(context),
             FactoryTestSupport.Scope(db, context), storage, FactoryTestSupport.Audit(db)));
-
-    private sealed class MemoryStorage : IFileStorageService
-    {
-        private readonly Dictionary<string, byte[]> files = [];
-
-        public async Task<UploadResult> UploadAsync(Stream stream, string fileName, string mimeType, Guid tenantId, CancellationToken ct)
-        {
-            using var copy = new MemoryStream();
-            await stream.CopyToAsync(copy, ct);
-            var path = $"{tenantId}/{Guid.NewGuid():N}/{fileName}";
-            files[path] = copy.ToArray();
-            return new UploadResult(path, path, copy.Length);
-        }
-
-        public Task<Stream> DownloadAsync(string storagePath, CancellationToken ct) => Task.FromResult<Stream>(new MemoryStream(files[storagePath]));
-        public Task DeleteAsync(string storagePath, CancellationToken ct) => Task.FromResult(files.Remove(storagePath));
-        public string GetPublicUrl(string storagePath) => storagePath;
-    }
 }
