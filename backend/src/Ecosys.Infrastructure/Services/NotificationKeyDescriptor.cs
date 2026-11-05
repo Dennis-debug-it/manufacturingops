@@ -70,7 +70,7 @@ public static class NotificationKeyDescriptor
         Inbox("inventory.request-dispatched", "My parts are on the way", "Inventory"),
         Inbox("inventory.low-stock", "A part fell to its reorder level", "Inventory"),
         Inbox("asset.warranty-expiring", "An asset's warranty is about to expire", "Assets"),
-        Inbox("asset.meter-out-of-range", "A meter reading is outside its limits", "Assets", whatsApp: true),
+        Inbox("asset.meter-out-of-range", "A meter reading is outside its limits", "Assets"),
         EmailOnly("invoice.sent",         "Invoice sent to client",            "Finance"),
         EmailOnly("quotation.sent",       "Quotation sent to client",          "Finance"),
         EmailOnly(SalesReminderKeys.FollowUpDue,     "Follow-up due on my deal",          "Sales CRM"),
