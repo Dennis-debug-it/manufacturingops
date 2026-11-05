@@ -131,6 +131,9 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public Guid? RequiredCertificationId { get; set; }
     /// <summary>Permit types needed before work starts, comma-separated (HotWork, ConfinedSpace, Electrical, WorkingAtHeights).</summary>
     public string? RequiredPermitTypes { get; set; }
+    /// <summary>The outside contractor doing the job, and the maintenance agreement it falls under.</summary>
+    public Guid? ContractorId { get; set; }
+    public Guid? MaintenanceAgreementId { get; set; }
     public Guid? FailureProblemCodeId { get; set; }
     public Guid? FailureCauseCodeId { get; set; }
     public Guid? FailureRemedyCodeId { get; set; }

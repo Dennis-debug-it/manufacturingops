@@ -84,6 +84,8 @@ public static class DependencyInjection
         services.AddScoped<Services.Factory.FactoryPmProgress>();
         services.AddScoped<Services.Factory.FactoryJobGuards>();
         services.AddScoped<Services.Factory.IPeopleService, Services.Factory.PeopleService>();
+        services.AddScoped<Services.Factory.ISparesService, Services.Factory.SparesService>();
+        services.AddScoped<Services.Factory.IContractorService, Services.Factory.ContractorService>();
         services.AddScoped<Services.Factory.IFactoryPmService, Services.Factory.FactoryPmService>();
         services.AddScoped<Services.Factory.IFactoryPmRunner, Services.Factory.FactoryPmRunner>();
         services.AddScoped<Services.Factory.IMaintenanceWindowService, Services.Factory.MaintenanceWindowService>();
@@ -215,6 +217,7 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<Services.Factory.FactoryPmWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.ComplianceWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.PeopleWorker>();
+        services.AddSingleInstanceHostedService<Services.Factory.ContractorWorker>();
         services.AddSingleInstanceHostedService<WhatsAppOutboxWorker>();
 
         return services;

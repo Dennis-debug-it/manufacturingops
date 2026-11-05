@@ -7,6 +7,10 @@ public sealed class StockMovement : AuditableEntity, ITenantEntity
     public Guid TenantId { get; set; }
     public Guid? BranchId { get; set; }
     public Guid? VanId { get; set; }
+    /// <summary>The factory store the movement was in (factory stores; branches and vans are ServiceOps).</summary>
+    public Guid? StoreId { get; set; }
+    /// <summary>Cost per unit at the time of the movement (tenant currency), for valuation and job costing.</summary>
+    public decimal? UnitCost { get; set; }
     public Guid MaterialId { get; set; }
     public Guid? WorkOrderId { get; set; }
     public Guid? MaterialRequestId { get; set; }

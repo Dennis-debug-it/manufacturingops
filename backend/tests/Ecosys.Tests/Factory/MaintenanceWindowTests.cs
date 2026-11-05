@@ -180,22 +180,22 @@ public sealed class MaintenanceWindowTests
         return created.Id;
     }
 
-    private static FactoryPmRunner Runner(AppDbContext db)
+    internal static FactoryPmRunner Runner(AppDbContext db)
     {
         var context = new FactoryTenantContext(Guid.Empty, Guid.Empty, true);
         return new FactoryPmRunner(db, Pm(db, context), Windows(db), Microsoft.Extensions.Logging.Abstractions.NullLogger<FactoryPmRunner>.Instance);
     }
 
-    private static FactoryPmService Pm(AppDbContext db, FactoryTenantContext context)
+    internal static FactoryPmService Pm(AppDbContext db, FactoryTenantContext context)
     {
         var scope = FactoryTestSupport.Scope(db, context);
         var workOrders = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db), new FactoryPmProgress(db), new FactoryJobGuards(db));
         return new FactoryPmService(db, workOrders, FactoryTestSupport.Settings(db));
     }
 
-    private static MaintenanceWindowService Windows(AppDbContext db) => new(db, FactoryTestSupport.Settings(db));
+    internal static MaintenanceWindowService Windows(AppDbContext db) => new(db, FactoryTestSupport.Settings(db));
 
-    private static MaintenanceWindowsController Controller(AppDbContext db, FactoryTenantContext context) =>
+    internal static MaintenanceWindowsController Controller(AppDbContext db, FactoryTenantContext context) =>
         FactoryAssetRegisterTests.WithHttp(new MaintenanceWindowsController(db, context, FactoryTestSupport.Access(context), FactoryTestSupport.Scope(db, context),
             Windows(db), Pm(db, context), FactoryTestSupport.Settings(db)));
 

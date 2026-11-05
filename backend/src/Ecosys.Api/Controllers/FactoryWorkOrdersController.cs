@@ -28,7 +28,8 @@ public sealed class FactoryWorkOrdersController(
     IFactoryWorkOrderService workOrderService,
     IFailureCodeService failureCodeService,
     IFactorySlaService slaService,
-    IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
+    IAuditLogService auditLogService,
+    ISparesService sparesService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<FactoryWorkOrderSummary>>> List(
@@ -209,6 +210,12 @@ public sealed class FactoryWorkOrdersController(
             request.DowntimeEndedAt,
             request.SignatureDataUrl,
             request.SignerName), cancellationToken);
+        // Parts held for a job that won't use them go back on the shelf.
+        if (workOrder.Status is WorkOrderStatuses.Closed or WorkOrderStatuses.Cancelled or WorkOrderStatuses.Rejected)
+        {
+            await sparesService.ReleaseForJobAsync(workOrder.Id, cancellationToken);
+        }
+
         return Ok(await MapDetailAsync(await LoadAsync(id, cancellationToken), cancellationToken));
     }
 
@@ -302,23 +309,47 @@ public sealed class FactoryWorkOrdersController(
         return Ok(await MapDetailAsync(workOrder, cancellationToken));
     }
 
-    /// <summary>Records a part used. Stock is not moved yet: factory stores arrive with Phase 5.</summary>
+    /// <summary>
+    /// Issues a part to the job from a store (the factory's main store unless another is chosen):
+    /// stock goes down, the job's reservation is used first, and the part is costed at the store's
+    /// average cost. Every part used on a job comes out of a store.
+    /// </summary>
     [HttpPost("{id:guid}/parts")]
     public async Task<ActionResult<FactoryWorkOrderDetail>> Parts(Guid id, [FromBody] PartUsedRequest request, CancellationToken cancellationToken)
     {
         var workOrder = await LoadAsync(id, cancellationToken);
         await EnsureCanActAsync(workOrder, FactoryWorkOrderActions.Start, cancellationToken, anyOpenStatus: true);
-        if (request.Quantity <= 0) throw new BusinessRuleException("Quantity must be more than zero.");
-        if (!await dbContext.MaterialItems.AnyAsync(x => x.TenantId == TenantId && x.Id == request.MaterialItemId, cancellationToken))
-            throw new BusinessRuleException("Part was not found.");
-        dbContext.WorkOrderMaterialUsages.Add(new WorkOrderMaterialUsage
+        var part = await dbContext.MaterialItems.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.MaterialItemId, cancellationToken)
+            ?? throw new BusinessRuleException("Part was not found.");
+        Store store;
+        if (request.StoreId is { } storeId)
         {
-            TenantId = TenantId, WorkOrderId = id, MaterialItemId = request.MaterialItemId, AssetId = workOrder.AssetId,
-            QuantityUsed = request.Quantity, Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-            UsedByUserId = UserId, UsedAt = Ecosys.Infrastructure.Services.OccurredAt.UtcNow
-        });
-        await dbContext.SaveChangesAsync(cancellationToken);
+            store = await dbContext.Stores.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == storeId, cancellationToken)
+                ?? throw new BusinessRuleException("Store was not found.");
+            await orgScopeService.EnsureCanAccessAsync(TenantId, UserId, store.FactoryId, cancellationToken);
+        }
+        else
+        {
+            var factory = workOrder.OrgNodeId is { } node ? await FactoryOfAsync(node, cancellationToken) : null;
+            store = (factory is { } f ? await sparesService.DefaultStoreAsync(TenantId, f, cancellationToken) : null)
+                ?? throw new BusinessRuleException("The job's factory has no store to issue from. Set one up under Stores first.");
+        }
+
+        await sparesService.IssueAsync(store, part, request.Quantity, workOrder, request.SerialNumber, request.Notes, Actor, cancellationToken);
         return Ok(await MapDetailAsync(workOrder, cancellationToken));
+    }
+
+    private async Task<Guid?> FactoryOfAsync(Guid orgNodeId, CancellationToken cancellationToken)
+    {
+        var nodes = await dbContext.OrgNodes.Where(x => x.TenantId == TenantId).Select(x => new { x.Id, x.ParentId, x.Level }).ToDictionaryAsync(x => x.Id, cancellationToken);
+        Guid? current = orgNodeId;
+        for (var depth = 0; current is { } c && depth < 10 && nodes.TryGetValue(c, out var node); depth++)
+        {
+            if (node.Level == OrgNodeLevels.Factory) return node.Id;
+            current = node.ParentId;
+        }
+
+        return null;
     }
 
     [HttpGet("/api/failure-codes")]
@@ -447,7 +478,9 @@ public sealed class FactoryWorkOrdersController(
             ? await dbContext.CertificationDefinitions.Where(c => c.Id == certId).Select(c => c.Name).SingleOrDefaultAsync(cancellationToken)
             : null;
         var parts = await dbContext.WorkOrderMaterialUsages.Where(p => p.WorkOrderId == x.Id).OrderBy(p => p.UsedAt)
-            .Select(p => new FactoryPartUsed(p.Id, p.MaterialItemId, p.MaterialItem != null ? p.MaterialItem.ItemName : string.Empty, p.QuantityUsed, p.Notes, p.UsedAt)).ToListAsync(cancellationToken);
+            .Select(p => new FactoryPartUsed(p.Id, p.MaterialItemId, p.MaterialItem != null ? p.MaterialItem.ItemName : string.Empty, p.QuantityUsed, p.Notes, p.UsedAt, p.UnitCost)).ToListAsync(cancellationToken);
+        var contractor = x.ContractorId is { } contractorId ? await dbContext.Contractors.Where(c => c.Id == contractorId).Select(c => c.Name).SingleOrDefaultAsync(cancellationToken) : null;
+        var agreement = x.MaintenanceAgreementId is { } agreementId ? await dbContext.MaintenanceAgreements.Where(a => a.Id == agreementId).Select(a => a.AgreementNumber).SingleOrDefaultAsync(cancellationToken) : null;
         var children = await dbContext.WorkOrders.Where(c => c.ParentWorkOrderId == x.Id)
             .Select(c => new FactoryJobLink(c.Id, c.WorkOrderNumber, c.Title, c.Status)).ToListAsync(cancellationToken);
         var links = await dbContext.WorkOrders.Where(w => w.Id == x.ParentWorkOrderId || w.Id == x.ReworkOfWorkOrderId)
@@ -496,6 +529,11 @@ public sealed class FactoryWorkOrdersController(
             Permits = permits,
             Locks = locks,
             LabourCost = labour.Sum(l => l.Cost ?? 0),
+            PartsCost = Math.Round(parts.Sum(p => p.Quantity * (p.UnitCost ?? 0)), 2),
+            ContractorId = x.ContractorId,
+            ContractorName = contractor,
+            AgreementId = x.MaintenanceAgreementId,
+            AgreementNumber = agreement,
         };
     }
 
@@ -525,7 +563,7 @@ public sealed record FactoryWorkOrderSummary(
 
 public sealed record FactoryJobTechnician(Guid TechnicianId, string Name, bool IsLead);
 public sealed record FactoryLabourEntry(Guid Id, string? TechnicianName, DateTime StartedAt, int Minutes, string? Notes, bool Overtime = false, decimal? Cost = null);
-public sealed record FactoryPartUsed(Guid Id, Guid MaterialItemId, string PartName, decimal Quantity, string? Notes, DateTime UsedAt);
+public sealed record FactoryPartUsed(Guid Id, Guid MaterialItemId, string PartName, decimal Quantity, string? Notes, DateTime UsedAt, decimal? UnitCost = null);
 public sealed record FactoryJobLink(Guid Id, string WorkOrderNumber, string Title, string Status);
 public sealed record FactorySignature(string SignerName, DateTime CapturedAt, string DataUrl);
 public sealed record FactoryJobEvent(string Type, DateTime OccurredAt, string Message, string? By, string? FromStatus, string? ToStatus);
@@ -565,6 +603,11 @@ public sealed record FactoryWorkOrderDetail(
     public IReadOnlyCollection<FactoryJobPermit> Permits { get; init; } = [];
     public IReadOnlyCollection<FactoryJobLock> Locks { get; init; } = [];
     public decimal LabourCost { get; init; }
+    public decimal PartsCost { get; init; }
+    public Guid? ContractorId { get; init; }
+    public string? ContractorName { get; init; }
+    public Guid? AgreementId { get; init; }
+    public string? AgreementNumber { get; init; }
 }
 
 public sealed record FactoryJobPermit(Guid Id, string PermitNumber, string PermitType, string Status, DateTime ValidFrom, DateTime ValidTo);
@@ -624,5 +667,5 @@ public sealed record CreateChildWorkOrderRequest(
 
 public sealed record HandoverNoteRequest([StringLength(2000)] string Note);
 public sealed record LabourEntryRequest(int Minutes, DateTime? StartedAt = null, Guid? TechnicianId = null, [StringLength(1000)] string? Notes = null);
-public sealed record PartUsedRequest(Guid MaterialItemId, decimal Quantity, [StringLength(1000)] string? Notes = null);
+public sealed record PartUsedRequest(Guid MaterialItemId, decimal Quantity, [StringLength(1000)] string? Notes = null, Guid? StoreId = null, [StringLength(100)] string? SerialNumber = null);
 public sealed record UpsertFailureCodeRequest(string Kind, [StringLength(30)] string Code, [StringLength(150)] string Name, [StringLength(500)] string? Description = null, Guid? AssetCategoryId = null, bool? IsActive = null);

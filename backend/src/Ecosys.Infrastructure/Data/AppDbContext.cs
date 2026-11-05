@@ -87,6 +87,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<Incident> Incidents => Set<Incident>();
     public DbSet<TrainingRecord> TrainingRecords => Set<TrainingRecord>();
     public DbSet<PpeIssue> PpeIssues => Set<PpeIssue>();
+    public DbSet<Store> Stores => Set<Store>();
+    public DbSet<StoreBin> StoreBins => Set<StoreBin>();
+    public DbSet<StoreStock> StoreStocks => Set<StoreStock>();
+    public DbSet<AssetPart> AssetParts => Set<AssetPart>();
+    public DbSet<StockReservation> StockReservations => Set<StockReservation>();
+    public DbSet<SpareUnit> SpareUnits => Set<SpareUnit>();
+    public DbSet<SpareUnitEvent> SpareUnitEvents => Set<SpareUnitEvent>();
+    public DbSet<StoreTransfer> StoreTransfers => Set<StoreTransfer>();
+    public DbSet<StoreCount> StoreCounts => Set<StoreCount>();
+    public DbSet<StoreCountLine> StoreCountLines => Set<StoreCountLine>();
+    public DbSet<PurchaseRequisition> PurchaseRequisitions => Set<PurchaseRequisition>();
+    public DbSet<PurchaseRequisitionLine> PurchaseRequisitionLines => Set<PurchaseRequisitionLine>();
+    public DbSet<VendorCatalogueItem> VendorCatalogueItems => Set<VendorCatalogueItem>();
+    public DbSet<Contractor> Contractors => Set<Contractor>();
+    public DbSet<ContractorDocument> ContractorDocuments => Set<ContractorDocument>();
+    public DbSet<MaintenanceAgreement> MaintenanceAgreements => Set<MaintenanceAgreement>();
+    public DbSet<MaintenanceAgreementAsset> MaintenanceAgreementAssets => Set<MaintenanceAgreementAsset>();
+    public DbSet<ContractorInvoice> ContractorInvoices => Set<ContractorInvoice>();
+    public DbSet<ContractorInvoiceLine> ContractorInvoiceLines => Set<ContractorInvoiceLine>();
     public DbSet<JobPlan> JobPlans => Set<JobPlan>();
     public DbSet<JobPlanStep> JobPlanSteps => Set<JobPlanStep>();
     public DbSet<JobPlanResource> JobPlanResources => Set<JobPlanResource>();
@@ -1093,6 +1112,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.VerificationNotes).HasMaxLength(2000);
             entity.Property(x => x.RequiredPermitTypes).HasMaxLength(200);
             entity.HasOne<CertificationDefinition>().WithMany().HasForeignKey(x => x.RequiredCertificationId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<Contractor>().WithMany().HasForeignKey(x => x.ContractorId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<MaintenanceAgreement>().WithMany().HasForeignKey(x => x.MaintenanceAgreementId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.OrgNode).WithMany().HasForeignKey(x => x.OrgNodeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.FailureProblemCode).WithMany().HasForeignKey(x => x.FailureProblemCodeId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.FailureCauseCode).WithMany().HasForeignKey(x => x.FailureCauseCodeId).OnDelete(DeleteBehavior.SetNull);
@@ -1465,6 +1486,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.UnitCost).HasPrecision(18, 2);
             entity.Property(x => x.Barcode).HasMaxLength(100);
             entity.Property(x => x.ReorderQuantity).HasPrecision(18, 2);
+            entity.Property(x => x.PurchaseUnitOfMeasure).HasMaxLength(50);
+            entity.Property(x => x.PurchaseUnitFactor).HasPrecision(18, 4).HasDefaultValue(1m);
+            entity.Property(x => x.ExternalId).HasMaxLength(100);
+            entity.Property(x => x.ExternalSystem).HasMaxLength(50);
+            entity.Property(x => x.ChemicalKind).HasMaxLength(50);
+            entity.Property(x => x.HazardClass).HasMaxLength(200);
+            entity.Property(x => x.FoodGradeClass).HasMaxLength(10);
+            entity.HasOne<Attachment>().WithMany().HasForeignKey(x => x.SdsAttachmentId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(x => new { x.TenantId, x.ItemCode }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.Barcode });
             entity.HasOne(x => x.PreferredSupplier)
@@ -1553,6 +1582,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.BalanceAfter).HasPrecision(18, 2);
             entity.Property(x => x.Reason).HasMaxLength(500);
             entity.Property(x => x.ReferenceNumber).HasMaxLength(100);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 4);
+            entity.HasOne<Store>().WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.TenantId, x.StoreId, x.CreatedAt });
             entity.HasIndex(x => new { x.TenantId, x.MaterialId, x.CreatedAt });
             entity.HasOne(x => x.Tenant)
                 .WithMany(x => x.StockMovements)
@@ -2079,6 +2111,282 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.HasOne(x => x.Technician).WithMany().HasForeignKey(x => x.TechnicianId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(x => new { x.TenantId, x.IssuedOn });
+        });
+
+        modelBuilder.Entity<Store>(entity =>
+        {
+            entity.ToTable("stores");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Location).HasMaxLength(200);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId });
+        });
+
+        modelBuilder.Entity<StoreBin>(entity =>
+        {
+            entity.ToTable("store_bins");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(200);
+            entity.HasOne(x => x.Store).WithMany(x => x.Bins).HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.StoreId, x.Code }).IsUnique();
+        });
+
+        modelBuilder.Entity<StoreStock>(entity =>
+        {
+            entity.ToTable("store_stocks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OnHand).HasPrecision(18, 2);
+            entity.Property(x => x.Reserved).HasPrecision(18, 2);
+            entity.Property(x => x.MinLevel).HasPrecision(18, 2);
+            entity.Property(x => x.ReorderPoint).HasPrecision(18, 2);
+            entity.Property(x => x.MaxLevel).HasPrecision(18, 2);
+            entity.Property(x => x.AverageCost).HasPrecision(18, 4);
+            entity.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Bin).WithMany().HasForeignKey(x => x.BinId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.StoreId, x.MaterialItemId }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.MaterialItemId });
+        });
+
+        modelBuilder.Entity<AssetPart>(entity =>
+        {
+            entity.ToTable("asset_parts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.QuantityFitted).HasPrecision(18, 2);
+            entity.Property(x => x.Position).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.AssetId, x.MaterialItemId, x.Position }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.MaterialItemId });
+        });
+
+        modelBuilder.Entity<StockReservation>(entity =>
+        {
+            entity.ToTable("stock_reservations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.IssuedQuantity).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ReservedByName).HasMaxLength(200);
+            entity.Property(x => x.KittedByName).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.TenantId, x.WorkOrderId });
+            entity.HasIndex(x => new { x.StoreId, x.MaterialItemId, x.Status });
+        });
+
+        modelBuilder.Entity<SpareUnit>(entity =>
+        {
+            entity.ToTable("spare_units");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SerialNumber).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.RepairReference).HasMaxLength(100);
+            entity.Property(x => x.TotalRepairCost).HasPrecision(18, 2);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 2);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.RepairSupplier).WithMany().HasForeignKey(x => x.RepairSupplierId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.MaterialItemId, x.SerialNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+        });
+
+        modelBuilder.Entity<SpareUnitEvent>(entity =>
+        {
+            entity.ToTable("spare_unit_events");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EventType).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ByName).HasMaxLength(200);
+            entity.Property(x => x.Cost).HasPrecision(18, 2);
+            entity.Property(x => x.Note).HasMaxLength(1000);
+            entity.HasOne(x => x.SpareUnit).WithMany(x => x.Events).HasForeignKey(x => x.SpareUnitId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.SpareUnitId, x.OccurredAt });
+        });
+
+        modelBuilder.Entity<StoreTransfer>(entity =>
+        {
+            entity.ToTable("store_transfers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TransferNumber).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 4);
+            entity.Property(x => x.SerialNumbers).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(500);
+            entity.Property(x => x.RequestedByName).HasMaxLength(200);
+            entity.Property(x => x.DispatchedByName).HasMaxLength(200);
+            entity.Property(x => x.ReceivedByName).HasMaxLength(200);
+            entity.Property(x => x.RejectReason).HasMaxLength(500);
+            entity.HasOne(x => x.FromStore).WithMany().HasForeignKey(x => x.FromStoreId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ToStore).WithMany().HasForeignKey(x => x.ToStoreId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<WorkOrder>().WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.TransferNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+        });
+
+        modelBuilder.Entity<StoreCount>(entity =>
+        {
+            entity.ToTable("store_counts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CountNumber).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.StartedByName).HasMaxLength(200);
+            entity.Property(x => x.PostedByName).HasMaxLength(200);
+            entity.Property(x => x.VarianceValue).HasPrecision(18, 2);
+            entity.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<StoreBin>().WithMany().HasForeignKey(x => x.BinId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.CountNumber }).IsUnique();
+        });
+
+        modelBuilder.Entity<StoreCountLine>(entity =>
+        {
+            entity.ToTable("store_count_lines");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ExpectedQuantity).HasPrecision(18, 2);
+            entity.Property(x => x.CountedQuantity).HasPrecision(18, 2);
+            entity.Property(x => x.UnitCost).HasPrecision(18, 4);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.HasOne(x => x.StoreCount).WithMany(x => x.Lines).HasForeignKey(x => x.StoreCountId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.StoreCountId, x.MaterialItemId }).IsUnique();
+        });
+
+        modelBuilder.Entity<PurchaseRequisition>(entity =>
+        {
+            entity.ToTable("purchase_requisitions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RequisitionNumber).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(1000);
+            entity.Property(x => x.RequestedByName).HasMaxLength(200);
+            entity.Property(x => x.DecidedByName).HasMaxLength(200);
+            entity.Property(x => x.RejectReason).HasMaxLength(500);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Store).WithMany().HasForeignKey(x => x.StoreId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.RequisitionNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+        });
+
+        modelBuilder.Entity<PurchaseRequisitionLine>(entity =>
+        {
+            entity.ToTable("purchase_requisition_lines");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Description).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Quantity).HasPrecision(18, 2);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 4);
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.HasOne(x => x.Requisition).WithMany(x => x.Lines).HasForeignKey(x => x.RequisitionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<WorkOrder>().WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<PurchaseOrder>().WithMany().HasForeignKey(x => x.PurchaseOrderId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<VendorCatalogueItem>(entity =>
+        {
+            entity.ToTable("vendor_catalogue_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.VendorPartNumber).HasMaxLength(100);
+            entity.Property(x => x.UnitPrice).HasPrecision(18, 4);
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.MinOrderQuantity).HasPrecision(18, 2);
+            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.SupplierId, x.MaterialItemId }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.MaterialItemId });
+        });
+
+        modelBuilder.Entity<Contractor>(entity =>
+        {
+            entity.ToTable("contractors");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Services).HasMaxLength(500);
+            entity.Property(x => x.ContactPerson).HasMaxLength(200);
+            entity.Property(x => x.Phone).HasMaxLength(50);
+            entity.Property(x => x.Email).HasMaxLength(256);
+            entity.Property(x => x.RegistrationNumber).HasMaxLength(100);
+            entity.Property(x => x.TaxPin).HasMaxLength(50);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.ExternalId).HasMaxLength(100);
+            entity.Property(x => x.ExternalSystem).HasMaxLength(50);
+            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+        });
+
+        modelBuilder.Entity<ContractorDocument>(entity =>
+        {
+            entity.ToTable("contractor_documents");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DocumentType).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Reference).HasMaxLength(100);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasOne(x => x.Contractor).WithMany(x => x.Documents).HasForeignKey(x => x.ContractorId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<Attachment>().WithMany().HasForeignKey(x => x.AttachmentId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.ExpiresOn });
+        });
+
+        modelBuilder.Entity<MaintenanceAgreement>(entity =>
+        {
+            entity.ToTable("maintenance_agreements");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.AgreementNumber).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Scope).HasMaxLength(4000);
+            entity.Property(x => x.Value).HasPrecision(18, 2);
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.HasOne(x => x.Contractor).WithMany().HasForeignKey(x => x.ContractorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.AgreementNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status, x.EndDate });
+        });
+
+        modelBuilder.Entity<MaintenanceAgreementAsset>(entity =>
+        {
+            entity.ToTable("maintenance_agreement_assets");
+            entity.HasKey(x => x.Id);
+            entity.HasOne(x => x.Agreement).WithMany(x => x.Assets).HasForeignKey(x => x.AgreementId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.AgreementId, x.AssetId }).IsUnique();
+        });
+
+        modelBuilder.Entity<ContractorInvoice>(entity =>
+        {
+            entity.ToTable("contractor_invoices");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.InvoiceNumber).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.MatchIssues).HasMaxLength(4000);
+            entity.Property(x => x.DecidedByName).HasMaxLength(200);
+            entity.Property(x => x.DecisionNote).HasMaxLength(1000);
+            entity.HasOne(x => x.Contractor).WithMany().HasForeignKey(x => x.ContractorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Attachment>().WithMany().HasForeignKey(x => x.AttachmentId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.ContractorId, x.InvoiceNumber }).IsUnique();
+        });
+
+        modelBuilder.Entity<ContractorInvoiceLine>(entity =>
+        {
+            entity.ToTable("contractor_invoice_lines");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Description).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.HasOne(x => x.Invoice).WithMany(x => x.Lines).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.WorkOrderId });
         });
 
         modelBuilder.Entity<PmPlanEvent>(entity =>

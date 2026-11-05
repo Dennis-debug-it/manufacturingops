@@ -176,10 +176,31 @@ public sealed class MaintenanceWindowsController(
             .GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.Select(x => x.Resource).ToList());
         var descriptions = await dbContext.WorkOrders.Where(x => ids.Contains(x.Id))
             .Select(x => new { x.Id, x.Description, Location = x.OrgNode != null ? x.OrgNode.Name : null }).ToDictionaryAsync(x => x.Id, cancellationToken);
-        var jobs = detail.Jobs.Select(job => new WindowPackJob(job, descriptions.GetValueOrDefault(job.WorkOrderId)?.Description, descriptions.GetValueOrDefault(job.WorkOrderId)?.Location,
-            steps.GetValueOrDefault(job.WorkOrderId) ?? [], resources.GetValueOrDefault(job.WorkOrderId) ?? [],
-            // Every line-stop job is done under isolation: the pack says so on each job.
-            "Isolate and lock out before work; confirm zero energy.")).ToList();
+        // Spares held for each job: reserved, kitted (picked and set aside) or already issued.
+        var held = await dbContext.StockReservations.Where(x => ids.Contains(x.WorkOrderId) && x.Status != ReservationStatuses.Released)
+            .Select(x => new { x.Id, x.WorkOrderId, x.StoreId, x.MaterialItemId, x.MaterialItem!.ItemCode, x.MaterialItem.ItemName, x.MaterialItem.UnitOfMeasure, x.Quantity, x.IssuedQuantity, x.Status, Store = x.Store!.Name })
+            .ToListAsync(cancellationToken);
+        var heldStores = held.Select(x => x.StoreId).Distinct().ToList();
+        var bins = await dbContext.StoreStocks.Where(x => heldStores.Contains(x.StoreId) && x.Bin != null)
+            .Select(x => new { x.StoreId, x.MaterialItemId, Bin = x.Bin!.Code }).ToListAsync(cancellationToken);
+        var spares = held.GroupBy(x => x.WorkOrderId).ToDictionary(g => g.Key, g => g.Select(x => new WindowPackSpare(x.Id, x.MaterialItemId, x.ItemCode, x.ItemName, x.UnitOfMeasure,
+            x.Quantity, x.IssuedQuantity, x.Status, x.Store, bins.FirstOrDefault(b => b.StoreId == x.StoreId && b.MaterialItemId == x.MaterialItemId)?.Bin ?? x.Store)).ToList());
+        var planned = (await (from w in dbContext.WorkOrders
+                              where ids.Contains(w.Id) && w.JobPlanId != null
+                              from r in dbContext.JobPlanResources.Where(r => r.JobPlanId == w.JobPlanId && r.MaterialItemId != null)
+                              select new { w.Id, MaterialItemId = r.MaterialItemId!.Value, r.Description, r.Quantity }).ToListAsync(cancellationToken))
+            .GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.ToList());
+        var jobs = detail.Jobs.Select(job =>
+        {
+            var held = spares.GetValueOrDefault(job.WorkOrderId) ?? [];
+            var shortages = (planned.GetValueOrDefault(job.WorkOrderId) ?? [])
+                .Select(p => new WindowPackShortage(p.MaterialItemId, p.Description, p.Quantity - held.Where(h => h.MaterialItemId == p.MaterialItemId).Sum(h => h.Quantity)))
+                .Where(x => x.Short > 0).ToList();
+            return new WindowPackJob(job, descriptions.GetValueOrDefault(job.WorkOrderId)?.Description, descriptions.GetValueOrDefault(job.WorkOrderId)?.Location,
+                steps.GetValueOrDefault(job.WorkOrderId) ?? [], resources.GetValueOrDefault(job.WorkOrderId) ?? [],
+                // Every line-stop job is done under isolation: the pack says so on each job.
+                "Isolate and lock out before work; confirm zero energy.") { Spares = held, Shortages = shortages };
+        }).ToList();
         return Ok(new WindowPack(detail.Window, jobs, detail.HandbackItems, DateTime.UtcNow));
     }
 
@@ -324,7 +345,17 @@ public sealed record WindowPackStep(Guid Id, string? Section, string Instruction
 
 public sealed record WindowPackResource(string Kind, string Description, decimal Quantity);
 
-public sealed record WindowPackJob(WindowJob Job, string? Description, string? Location, IReadOnlyCollection<WindowPackStep> Steps, IReadOnlyCollection<WindowPackResource> Resources, string Isolation);
+public sealed record WindowPackJob(WindowJob Job, string? Description, string? Location, IReadOnlyCollection<WindowPackStep> Steps, IReadOnlyCollection<WindowPackResource> Resources, string Isolation)
+{
+    public IReadOnlyCollection<WindowPackSpare> Spares { get; init; } = [];
+    public IReadOnlyCollection<WindowPackShortage> Shortages { get; init; } = [];
+}
+
+/// <summary>A spare held for a window job, and where to collect it (store / bin).</summary>
+public sealed record WindowPackSpare(Guid ReservationId, Guid MaterialItemId, string ItemCode, string ItemName, string UnitOfMeasure, decimal Quantity, decimal IssuedQuantity, string Status, string StoreName, string Location);
+
+/// <summary>A planned part not (fully) reserved for the job: short in stores.</summary>
+public sealed record WindowPackShortage(Guid MaterialItemId, string Description, decimal Short);
 
 public sealed record WindowPack(WindowSummary Window, IReadOnlyCollection<WindowPackJob> Jobs, IReadOnlyCollection<WindowHandbackItemDto> HandbackItems, DateTime GeneratedAt);
 
