@@ -4457,6 +4457,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<decimal>("PmHoursPerTechnicianWeek")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(6, 1)
+                        .HasColumnType("numeric(6,1)")
+                        .HasDefaultValue(30m);
+
                     b.Property<string>("ProductionUnit")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -7863,6 +7869,100 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("platform_settings", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.PmPlanEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("DueMeterValue")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool?>("OnTime")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("WorkOrderId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlanId");
+
+                    b.HasIndex("WorkOrderId");
+
+                    b.HasIndex("TenantId", "Kind", "OccurredAt");
+
+                    b.HasIndex("TenantId", "PlanId", "OccurredAt");
+
+                    b.ToTable("pm_plan_events", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.PmPlanRouteAsset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("PlanId", "AssetId")
+                        .IsUnique();
+
+                    b.ToTable("pm_plan_route_assets", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.PmReport", b =>
                 {
                     b.Property<Guid>("Id")
@@ -8181,6 +8281,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("AutoSchedule")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("Basis")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
 
@@ -8195,6 +8299,20 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<Guid?>("DefaultAssignmentGroupId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("DeferReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("DeferRisk")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("DeferredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("EstimatedHours")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
 
                     b.Property<string>("Frequency")
                         .IsRequired()
@@ -8216,11 +8334,18 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<bool>("IsRoute")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid?>("LapsedContractId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("LastGeneratedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("LastMeterValue")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
 
                     b.Property<DateTime?>("LastPmDate")
                         .HasColumnType("timestamp with time zone");
@@ -8232,7 +8357,21 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)");
 
+                    b.Property<Guid?>("MeterId")
+                        .HasColumnType("uuid");
+
                     b.Property<decimal?>("MeterInterval")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("NeedsLineStop")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("NextMeterDue")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)");
 
@@ -8242,6 +8381,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("NotifyOnGeneration")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("OrgNodeId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("PmTemplateId")
                         .HasColumnType("uuid");
 
@@ -8250,6 +8392,20 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<int?>("PreferredDayOfWeek")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Medium");
+
+                    b.Property<string>("ScheduleMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Floating");
 
                     b.Property<Guid?>("SiteId")
                         .HasColumnType("uuid");
@@ -8261,6 +8417,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
+
+                    b.Property<int>("TolerancePercent")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(10);
 
                     b.Property<string>("TriggerType")
                         .IsRequired()
@@ -8278,11 +8439,15 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("DefaultAssignmentGroupId");
 
+                    b.HasIndex("MeterId");
+
+                    b.HasIndex("OrgNodeId");
+
                     b.HasIndex("PmTemplateId");
 
                     b.HasIndex("SiteId");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId", "OrgNodeId", "Status");
 
                     b.ToTable("preventive_maintenance_plans", (string)null);
                 });
@@ -18030,6 +18195,41 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Quotation");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.PmPlanEvent", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.PreventiveMaintenancePlan", "Plan")
+                        .WithMany("Events")
+                        .HasForeignKey("PlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.WorkOrder", null)
+                        .WithMany()
+                        .HasForeignKey("WorkOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Plan");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.PmPlanRouteAsset", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.PreventiveMaintenancePlan", "Plan")
+                        .WithMany("RouteAssets")
+                        .HasForeignKey("PlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Plan");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.PmReport", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.PmTemplate", "PmTemplate")
@@ -18138,6 +18338,16 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasForeignKey("DefaultAssignmentGroupId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Ecosys.Domain.Entities.Meter", "Meter")
+                        .WithMany()
+                        .HasForeignKey("MeterId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.OrgNode", "OrgNode")
+                        .WithMany()
+                        .HasForeignKey("OrgNodeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Ecosys.Domain.Entities.PmTemplate", "PmTemplate")
                         .WithMany("Plans")
                         .HasForeignKey("PmTemplateId")
@@ -18159,6 +18369,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Branch");
 
                     b.Navigation("DefaultAssignmentGroup");
+
+                    b.Navigation("Meter");
+
+                    b.Navigation("OrgNode");
 
                     b.Navigation("PmTemplate");
 
@@ -20950,6 +21164,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
             modelBuilder.Entity("Ecosys.Domain.Entities.PreventiveMaintenancePlan", b =>
                 {
+                    b.Navigation("Events");
+
+                    b.Navigation("RouteAssets");
+
                     b.Navigation("WorkOrders");
                 });
 

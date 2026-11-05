@@ -68,6 +68,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<CheckScheduleAsset> CheckScheduleAssets => Set<CheckScheduleAsset>();
     public DbSet<CheckRun> CheckRuns => Set<CheckRun>();
     public DbSet<CheckRunAnswer> CheckRunAnswers => Set<CheckRunAnswer>();
+    public DbSet<PmPlanRouteAsset> PmPlanRouteAssets => Set<PmPlanRouteAsset>();
+    public DbSet<PmPlanEvent> PmPlanEvents => Set<PmPlanEvent>();
     public DbSet<JobPlan> JobPlans => Set<JobPlan>();
     public DbSet<JobPlanStep> JobPlanSteps => Set<JobPlanStep>();
     public DbSet<JobPlanResource> JobPlanResources => Set<JobPlanResource>();
@@ -396,6 +398,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("factory_settings");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.PmHoursPerTechnicianWeek).HasPrecision(6, 1).HasDefaultValue(30m);
             entity.Property(x => x.IndustryTemplate).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ProductionUnit).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ProductionUnitShort).HasMaxLength(20).IsRequired();
@@ -1781,6 +1784,41 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany()
                 .HasForeignKey(x => x.DefaultAssignmentGroupId)
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.Property(x => x.Name).HasMaxLength(200);
+            entity.Property(x => x.ScheduleMode).HasMaxLength(20).IsRequired().HasDefaultValue(PmScheduleModes.Floating);
+            entity.Property(x => x.TolerancePercent).HasDefaultValue(10);
+            entity.Property(x => x.LastMeterValue).HasPrecision(18, 4);
+            entity.Property(x => x.NextMeterDue).HasPrecision(18, 4);
+            entity.Property(x => x.Priority).HasMaxLength(20).IsRequired().HasDefaultValue("Medium");
+            entity.Property(x => x.EstimatedHours).HasPrecision(10, 2);
+            entity.Property(x => x.Basis).HasMaxLength(100);
+            entity.Property(x => x.DeferReason).HasMaxLength(1000);
+            entity.HasOne(x => x.Meter).WithMany().HasForeignKey(x => x.MeterId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.OrgNode).WithMany().HasForeignKey(x => x.OrgNodeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.TenantId, x.OrgNodeId, x.Status });
+        });
+
+        modelBuilder.Entity<PmPlanRouteAsset>(entity =>
+        {
+            entity.ToTable("pm_plan_route_assets");
+            entity.HasKey(x => x.Id);
+            entity.HasOne(x => x.Plan).WithMany(x => x.RouteAssets).HasForeignKey(x => x.PlanId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.PlanId, x.AssetId }).IsUnique();
+        });
+
+        modelBuilder.Entity<PmPlanEvent>(entity =>
+        {
+            entity.ToTable("pm_plan_events");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.DueMeterValue).HasPrecision(18, 4);
+            entity.Property(x => x.Reason).HasMaxLength(1000);
+            entity.Property(x => x.ActorName).HasMaxLength(200);
+            entity.HasOne(x => x.Plan).WithMany(x => x.Events).HasForeignKey(x => x.PlanId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<WorkOrder>().WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.PlanId, x.OccurredAt });
+            entity.HasIndex(x => new { x.TenantId, x.Kind, x.OccurredAt });
         });
 
         modelBuilder.Entity<ImportBatch>(entity =>

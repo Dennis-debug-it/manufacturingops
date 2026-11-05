@@ -201,7 +201,7 @@ public sealed class FactoryWorkOrderTests
 
     // ── helpers ─────────────────────────────────────────────────────────────
 
-    private async Task RunToCompletionAsync(FactoryWorkOrdersController jobs, Guid id, Seeded site, string problem = "BRD")
+    internal static async Task RunToCompletionAsync(FactoryWorkOrdersController jobs, Guid id, Seeded site, string problem = "BRD")
     {
         var job = await Get(jobs, id);
         if (job.Status == WorkOrderStatuses.Requested) await Act(jobs, id, FactoryWorkOrderActions.Approve);
@@ -249,7 +249,7 @@ public sealed class FactoryWorkOrderTests
     internal static FactoryWorkOrdersController Controller(AppDbContext db, FactoryTenantContext context)
     {
         var scope = FactoryTestSupport.Scope(db, context);
-        var service = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db));
+        var service = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db), new FactoryPmProgress(db));
         return FactoryAssetRegisterTests.WithHttp(new FactoryWorkOrdersController(db, context, FactoryTestSupport.Access(context), scope, service,
             new FailureCodeService(db), new FactorySlaService(db), FactoryTestSupport.Audit(db)));
     }

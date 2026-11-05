@@ -192,7 +192,7 @@ public sealed class RunningCheckTests
         var anyone = new FactoryTenantContext(Guid.Empty, Guid.Empty);
         var scope = FactoryTestSupport.Scope(db, anyone);
         var timeZones = new TenantTimeZoneService(db, new MemoryCache(new MemoryCacheOptions()), Microsoft.Extensions.Options.Options.Create(new TimeZoneOptions { DefaultTimeZone = "Africa/Nairobi" }));
-        var workOrders = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db));
+        var workOrders = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db), new FactoryPmProgress(db));
         return new RunningCheckService(db, FactoryTestSupport.Settings(db), timeZones, new MeterReadingService(db), workOrders);
     }
 

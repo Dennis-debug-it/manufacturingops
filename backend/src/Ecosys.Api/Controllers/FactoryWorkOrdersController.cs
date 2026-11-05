@@ -230,8 +230,25 @@ public sealed class FactoryWorkOrdersController(
         await EnsureCanActAsync(workOrder, FactoryWorkOrderActions.Start, cancellationToken, anyOpenStatus: true);
         var step = await dbContext.WorkOrderChecklistItems.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.WorkOrderId == id && x.Id == stepId, cancellationToken)
             ?? throw new NotFoundException("Step was not found.");
-        step.ResponseValue = request.Done ? "Done" : null;
+        var value = string.IsNullOrWhiteSpace(request.Value) ? null : request.Value.Trim();
+        // A task or a tick box is answered by ticking it; other checklist items need their value.
+        var tick = step.QuestionType is "Task" or "checkbox";
+        if (!tick && request.Done && value is null)
+        {
+            throw new BusinessRuleException($"Enter a value for \"{step.QuestionText}\".");
+        }
+
+        if (request.Done && value is not null && step.QuestionType is "number" or "reading"
+            && !decimal.TryParse(value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out _))
+        {
+            throw new BusinessRuleException($"\"{step.QuestionText}\" must be a number.");
+        }
+
+        step.ResponseValue = !request.Done ? null : step.QuestionType == "Task" ? "Done" : tick ? "Yes" : value;
         step.Remarks = string.IsNullOrWhiteSpace(request.Remarks) ? null : request.Remarks.Trim();
+        step.IsCompleted = request.Done;
+        step.CompletedAt = request.Done ? Ecosys.Infrastructure.Services.OccurredAt.UtcNow : null;
+        step.CompletedByUserId = request.Done ? UserId : null;
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(await MapDetailAsync(workOrder, cancellationToken));
     }
@@ -417,8 +434,10 @@ public sealed class FactoryWorkOrdersController(
             .Select(w => new FactoryJobLink(w.Id, w.WorkOrderNumber, w.Title, w.Status)).ToListAsync(cancellationToken);
         var signature = await dbContext.WorkOrderSignatures.Where(s => s.WorkOrderId == x.Id).OrderByDescending(s => s.CapturedAt)
             .Select(s => new FactorySignature(s.SignerName, s.CapturedAt, s.SignatureDataUrl)).FirstOrDefaultAsync(cancellationToken);
-        var steps = await dbContext.WorkOrderChecklistItems.Where(s => s.WorkOrderId == x.Id && s.QuestionType == "Task").OrderBy(s => s.SortOrder)
-            .Select(s => new FactoryJobStep(s.Id, s.QuestionText, s.HelperText, s.ResponseValue == "Done", s.Remarks)).ToListAsync(cancellationToken);
+        // Job plan tasks and PM checklist items alike, in checklist order.
+        var steps = await dbContext.WorkOrderChecklistItems.Where(s => s.WorkOrderId == x.Id).OrderBy(s => s.SectionOrder).ThenBy(s => s.SortOrder)
+            .Select(s => new FactoryJobStep(s.Id, s.QuestionText, s.HelperText, s.IsCompleted || s.ResponseValue == "Done", s.Remarks,
+                s.SectionName, s.QuestionType, s.Unit, s.MinValue, s.MaxValue, s.QuestionType == "Task" || s.QuestionType == "checkbox" ? null : s.ResponseValue, s.IsRequired)).ToListAsync(cancellationToken);
         var plan = x.JobPlanId is { } planId
             ? await dbContext.JobPlans.Include(p => p.Steps).Include(p => p.Resources).Include(p => p.AssetCategory).SingleOrDefaultAsync(p => p.Id == planId, cancellationToken)
             : null;
@@ -516,8 +535,10 @@ public sealed record FactoryWorkOrderDetail(
     public bool RepairBreached { get; init; }
 }
 
-public sealed record FactoryJobStep(Guid Id, string Instruction, string? Hint, bool Done, string? Remarks);
-public sealed record StepUpdateRequest(bool Done, [StringLength(1000)] string? Remarks = null);
+public sealed record FactoryJobStep(
+    Guid Id, string Instruction, string? Hint, bool Done, string? Remarks,
+    string? Section = null, string Type = "Task", string? Unit = null, decimal? MinValue = null, decimal? MaxValue = null, string? Value = null, bool Required = true);
+public sealed record StepUpdateRequest(bool Done, [StringLength(1000)] string? Remarks = null, [StringLength(1000)] string? Value = null);
 
 public sealed record CreateFactoryWorkOrderRequest(
     [StringLength(250)] string Title,

@@ -119,5 +119,8 @@ public sealed class FactorySettings : AuditableEntity, ITenantEntity
     /// <summary>Shifts as JSON [{"name":"Day","start":"06:00","end":"18:00"}, …]; running checks are due once per shift.</summary>
     public string ShiftsJson { get; set; } = "[{\"name\":\"Day\",\"start\":\"06:00\",\"end\":\"18:00\"},{\"name\":\"Night\",\"start\":\"18:00\",\"end\":\"06:00\"}]";
 
+    /// <summary>Planning capacity: hours a technician has for planned work in a week (PM workload forecast).</summary>
+    public decimal PmHoursPerTechnicianWeek { get; set; } = 30;
+
     public Tenant? Tenant { get; set; }
 }

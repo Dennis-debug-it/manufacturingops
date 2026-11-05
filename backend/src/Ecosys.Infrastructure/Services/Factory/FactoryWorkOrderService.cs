@@ -156,7 +156,8 @@ internal sealed class FactoryWorkOrderService(
     IFactorySettingsService factorySettingsService,
     IAssetLifecycleService assetLifecycleService,
     IOrgScopeService orgScopeService,
-    IFactorySlaService slaService) : IFactoryWorkOrderService
+    IFactorySlaService slaService,
+    FactoryPmProgress pmProgress) : IFactoryWorkOrderService
 {
     public async Task<WorkOrder> CreateAsync(Guid tenantId, FactoryActor actor, CreateFactoryWorkOrder request, CancellationToken cancellationToken = default)
     {
@@ -366,6 +367,7 @@ internal sealed class FactoryWorkOrderService(
 
             case FactoryWorkOrderActions.Complete:
                 await CompleteAsync(workOrder, actor, transition, now, cancellationToken);
+                await pmProgress.OnJobFinishedAsync(workOrder, true, workOrder.CompletedAt ?? now, actor.Name, null, cancellationToken);
                 break;
 
             case FactoryWorkOrderActions.Verify:
@@ -389,6 +391,8 @@ internal sealed class FactoryWorkOrderService(
             case FactoryWorkOrderActions.Cancel:
                 SetStatus(workOrder, actor, WorkOrderStatuses.Cancelled, $"Cancelled: {RequireReason(transition.Reason, "Say why the job is cancelled.")}");
                 await EndDowntimeAsync(workOrder, actor, now, true, cancellationToken);
+                // A cancelled PM job is a skipped PM: the plan moves on to its next due.
+                await pmProgress.OnJobFinishedAsync(workOrder, false, now, actor.Name, transition.Reason, cancellationToken);
                 break;
 
             case FactoryWorkOrderActions.Reopen:
@@ -475,6 +479,13 @@ internal sealed class FactoryWorkOrderService(
         if (problemId is null && (workOrder.WorkType == FactoryWorkTypes.Corrective || workOrder.IsBreakdown))
         {
             throw new BusinessRuleException("Choose the problem found, so repeat faults can be tracked.");
+        }
+
+        var stepsLeft = await dbContext.WorkOrderChecklistItems
+            .CountAsync(x => x.WorkOrderId == workOrder.Id && x.IsRequired && !x.IsCompleted, cancellationToken);
+        if (stepsLeft > 0)
+        {
+            throw new BusinessRuleException($"Finish the required steps first ({stepsLeft} left).");
         }
 
         if (problemId is { } p) await EnsureCodeAsync(workOrder.TenantId, p, FailureCodeKinds.Problem, cancellationToken);
