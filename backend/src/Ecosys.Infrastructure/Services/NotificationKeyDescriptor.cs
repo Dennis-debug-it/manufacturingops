@@ -74,6 +74,9 @@ public static class NotificationKeyDescriptor
         // Urgent on the factory floor: also by SMS, on by default (sent only when an SMS gateway is set up).
         Urgent("factory-job.reported", "An operator reported a fault", "Work Orders"),
         Urgent("factory-check.missed", "Running checks missed in my section", "Work Orders"),
+        Urgent("compliance.overdue", "A statutory inspection or calibration is overdue", "Work Orders"),
+        Inbox("compliance.due", "A statutory inspection or calibration is due soon", "Work Orders"),
+        Inbox("factory-window.carryover", "Weekly window jobs carried over", "Work Orders"),
         Inbox("asset.warranty-expiring", "An asset's warranty is about to expire", "Assets"),
         Inbox("asset.meter-out-of-range", "A meter reading is outside its limits", "Assets"),
         EmailOnly("invoice.sent",         "Invoice sent to client",            "Finance"),

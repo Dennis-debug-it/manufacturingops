@@ -70,6 +70,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<CheckRunAnswer> CheckRunAnswers => Set<CheckRunAnswer>();
     public DbSet<PmPlanRouteAsset> PmPlanRouteAssets => Set<PmPlanRouteAsset>();
     public DbSet<PmPlanEvent> PmPlanEvents => Set<PmPlanEvent>();
+    public DbSet<MaintenanceWindow> MaintenanceWindows => Set<MaintenanceWindow>();
+    public DbSet<MaintenanceWindowJob> MaintenanceWindowJobs => Set<MaintenanceWindowJob>();
+    public DbSet<MaintenanceWindowHandbackItem> MaintenanceWindowHandbackItems => Set<MaintenanceWindowHandbackItem>();
+    public DbSet<OverhaulPlan> OverhaulPlans => Set<OverhaulPlan>();
+    public DbSet<OverhaulItem> OverhaulItems => Set<OverhaulItem>();
     public DbSet<JobPlan> JobPlans => Set<JobPlan>();
     public DbSet<JobPlanStep> JobPlanSteps => Set<JobPlanStep>();
     public DbSet<JobPlanResource> JobPlanResources => Set<JobPlanResource>();
@@ -399,6 +404,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.ToTable("factory_settings");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.PmHoursPerTechnicianWeek).HasPrecision(6, 1).HasDefaultValue(30m);
+            entity.Property(x => x.WindowCarryoverEscalateAt).HasDefaultValue(2);
+            entity.Property(x => x.WindowCarryoverToOverhaulAt).HasDefaultValue(3);
             entity.Property(x => x.IndustryTemplate).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ProductionUnit).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ProductionUnitShort).HasMaxLength(20).IsRequired();
@@ -1805,6 +1812,80 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Plan).WithMany(x => x.RouteAssets).HasForeignKey(x => x.PlanId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => new { x.PlanId, x.AssetId }).IsUnique();
+        });
+
+        modelBuilder.Entity<MaintenanceWindow>(entity =>
+        {
+            entity.ToTable("maintenance_windows");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.CapacityHours).HasPrecision(10, 1);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.SkipReason).HasMaxLength(1000);
+            entity.Property(x => x.PackedByName).HasMaxLength(200);
+            entity.Property(x => x.HandedBackByName).HasMaxLength(200);
+            entity.Property(x => x.HandbackNotes).HasMaxLength(2000);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.WindowDate }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status });
+        });
+
+        modelBuilder.Entity<MaintenanceWindowJob>(entity =>
+        {
+            entity.ToTable("maintenance_window_jobs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Outcome).HasMaxLength(20);
+            entity.HasOne(x => x.Window).WithMany(x => x.Jobs).HasForeignKey(x => x.WindowId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.WindowId, x.WorkOrderId }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.WorkOrderId });
+        });
+
+        modelBuilder.Entity<MaintenanceWindowHandbackItem>(entity =>
+        {
+            entity.ToTable("maintenance_window_handback_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Prompt).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Note).HasMaxLength(1000);
+            entity.Property(x => x.DoneByName).HasMaxLength(200);
+            entity.HasOne(x => x.Window).WithMany(x => x.HandbackItems).HasForeignKey(x => x.WindowId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OverhaulPlan>(entity =>
+        {
+            entity.ToTable("overhaul_plans");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Budget).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.PlannedStart });
+        });
+
+        modelBuilder.Entity<OverhaulItem>(entity =>
+        {
+            entity.ToTable("overhaul_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(4000);
+            entity.Property(x => x.Source).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Priority).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.EstimatedHours).HasPrecision(10, 2);
+            entity.Property(x => x.EstimatedCost).HasPrecision(18, 2);
+            entity.Property(x => x.ActualCost).HasPrecision(18, 2);
+            entity.Property(x => x.SparesNote).HasMaxLength(2000);
+            entity.Property(x => x.ContractorName).HasMaxLength(200);
+            entity.Property(x => x.RecommissionedByName).HasMaxLength(200);
+            entity.Property(x => x.RecommissioningNotes).HasMaxLength(2000);
+            entity.Property(x => x.AddedByName).HasMaxLength(200);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.OverhaulPlan).WithMany(x => x.Items).HasForeignKey(x => x.OverhaulPlanId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.Status });
+            entity.HasIndex(x => new { x.TenantId, x.WorkOrderId });
         });
 
         modelBuilder.Entity<PmPlanEvent>(entity =>

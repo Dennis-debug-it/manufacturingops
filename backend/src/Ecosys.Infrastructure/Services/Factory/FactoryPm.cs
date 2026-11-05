@@ -707,12 +707,13 @@ public interface IFactoryPmRunner
     Task<int> RunAsync(DateTime utcNow, CancellationToken cancellationToken = default);
 }
 
-internal sealed class FactoryPmRunner(AppDbContext dbContext, IFactoryPmService pmService, ILogger<FactoryPmRunner> logger) : IFactoryPmRunner
+internal sealed class FactoryPmRunner(AppDbContext dbContext, IFactoryPmService pmService, IMaintenanceWindowService windowService, ILogger<FactoryPmRunner> logger) : IFactoryPmRunner
 {
     public async Task<int> RunAsync(DateTime utcNow, CancellationToken cancellationToken = default)
     {
-        var tenants = await dbContext.PreventiveMaintenancePlans.AsNoTracking()
-            .Where(x => x.OrgNodeId != null && x.Status == "Active" && x.AutoSchedule && x.Tenant!.IsActive)
+        // Every tenant with a factory: PM first, so routine and line-stop jobs it raises are queued into the window.
+        var tenants = await dbContext.OrgNodes.AsNoTracking()
+            .Where(x => x.Level == OrgNodeLevels.Factory && x.IsActive && x.Tenant!.IsActive)
             .Select(x => x.TenantId).Distinct().ToListAsync(cancellationToken);
         var raised = 0;
         foreach (var tenantId in tenants)
@@ -720,10 +721,11 @@ internal sealed class FactoryPmRunner(AppDbContext dbContext, IFactoryPmService 
             try
             {
                 raised += await pmService.GenerateDueAsync(tenantId, utcNow, cancellationToken);
+                await windowService.EnsureUpcomingAsync(tenantId, utcNow, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogWarning(ex, "Factory PM generation for tenant {TenantId} failed.", tenantId);
+                logger.LogWarning(ex, "Factory PM and window planning for tenant {TenantId} failed.", tenantId);
                 dbContext.ChangeTracker.Clear();
             }
         }

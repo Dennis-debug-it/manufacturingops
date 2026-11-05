@@ -52,6 +52,10 @@ public sealed class OrgNode : AuditableEntity, ITenantEntity
     public string? ExternalId { get; set; }
     public string? ExternalSystem { get; set; }
 
+    /// <summary>Factory level only: this factory's own weekly window day and on/off, instead of the tenant default.</summary>
+    public DayOfWeek? WindowDay { get; set; }
+    public bool? WindowEnabled { get; set; }
+
     public Tenant? Tenant { get; set; }
     public OrgNode? Parent { get; set; }
     public ICollection<OrgNode> Children { get; set; } = new List<OrgNode>();
@@ -121,6 +125,11 @@ public sealed class FactorySettings : AuditableEntity, ITenantEntity
 
     /// <summary>Planning capacity: hours a technician has for planned work in a week (PM workload forecast).</summary>
     public decimal PmHoursPerTechnicianWeek { get; set; } = 30;
+
+    /// <summary>A job carried over this many windows is escalated to supervisors…</summary>
+    public int WindowCarryoverEscalateAt { get; set; } = 2;
+    /// <summary>…and at this many it moves to the overhaul list.</summary>
+    public int WindowCarryoverToOverhaulAt { get; set; } = 3;
 
     public Tenant? Tenant { get; set; }
 }

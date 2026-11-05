@@ -125,6 +125,8 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public DateTime? DowntimeEndedAt { get; set; }
     /// <summary>The job can only be done with the line stopped (queues for the weekly window in Phase 3).</summary>
     public bool NeedsLineStop { get; set; }
+    /// <summary>How many weekly windows this job has been carried over from unfinished.</summary>
+    public int WindowCarryoverCount { get; set; }
     public Guid? FailureProblemCodeId { get; set; }
     public Guid? FailureCauseCodeId { get; set; }
     public Guid? FailureRemedyCodeId { get; set; }
