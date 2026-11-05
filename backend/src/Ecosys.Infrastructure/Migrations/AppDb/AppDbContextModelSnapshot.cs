@@ -14628,13 +14628,13 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         {
                             t.HasCheckConstraint("CK_work_orders_assignment_type", "\"AssignmentType\" IN ('Unassigned', 'IndividualTechnician', 'MultipleTechnicians', 'AssignmentGroup')");
 
-                            t.HasCheckConstraint("CK_work_orders_hold_reason", "\"HoldReason\" IS NULL OR \"HoldReason\" IN ('Awaiting Materials', 'Awaiting Client', 'Awaiting Vendor', 'Awaiting Approval', 'Awaiting Site Access', 'Awaiting Spares', 'Other')");
+                            t.HasCheckConstraint("CK_work_orders_hold_reason", "\"HoldReason\" IS NULL OR \"HoldReason\" IN ('Awaiting Materials', 'Awaiting Client', 'Awaiting Vendor', 'Awaiting Approval', 'Awaiting Site Access', 'Awaiting Spares', 'Other', 'Waiting for Window', 'Waiting for Shutdown', 'Waiting for Contractor')");
 
                             t.HasCheckConstraint("CK_work_orders_priority", "\"Priority\" IN ('Low', 'Medium', 'High', 'Critical')");
 
-                            t.HasCheckConstraint("CK_work_orders_status", "\"Status\" IN ('New', 'Open', 'Assigned', 'Scheduled', 'In Progress', 'On Hold', 'Waiting on Parts', 'Waiting on Client', 'Completed', 'Client Accepted', 'Closed', 'Cancelled', 'Rejected', 'Reopened')");
+                            t.HasCheckConstraint("CK_work_orders_status", "\"Status\" IN ('New', 'Open', 'Assigned', 'Scheduled', 'In Progress', 'On Hold', 'Waiting on Parts', 'Waiting on Client', 'Completed', 'Client Accepted', 'Closed', 'Cancelled', 'Rejected', 'Reopened', 'Requested', 'Approved', 'Planned', 'Verified')");
 
-                            t.HasCheckConstraint("CK_work_orders_work_type", "\"WorkType\" IN ('NewInstallation', 'PreventiveMaintenance', 'CorrectiveMaintenance', 'InspectionAssessment')");
+                            t.HasCheckConstraint("CK_work_orders_work_type", "\"WorkType\" IN ('NewInstallation', 'PreventiveMaintenance', 'CorrectiveMaintenance', 'InspectionAssessment', 'Corrective', 'Preventive', 'Inspection', 'Statutory', 'Modification', 'Safety')");
                         });
                 });
 

@@ -40,6 +40,8 @@ public sealed class RunningCheckTests
 
         Assert.Throws<BusinessRuleException>(() => ShiftCalendar.Parse("""[{"name":"Day","start":"seven","end":"17:00"}]"""));
         Assert.Throws<BusinessRuleException>(() => ShiftCalendar.Parse("[]"));
+        // Settings rows saved before shifts existed hold a blank value: they get day and night.
+        Assert.Equal(["Day", "Night"], ShiftCalendar.Parse("").Select(x => x.Name));
     }
 
     [Fact]

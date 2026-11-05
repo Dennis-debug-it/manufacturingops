@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, CalendarClock, ClipboardList, HardHat, LogOut, UserRound, ScanLine } from 'lucide-react'
+import { BookOpen, CalendarClock, ClipboardCheck, ClipboardList, Factory, HardHat, LogOut, UserRound, ScanLine } from 'lucide-react'
 import { Logo } from '../../shared/components/Logo'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
@@ -19,6 +19,8 @@ import { disablePush, resyncPush } from './push'
 
 const SECTIONS = [
   { to: '/tech', label: 'Jobs', icon: ClipboardList, match: (path: string) => path === '/tech' || path.startsWith('/tech/jobs') },
+  { to: '/tech/maintenance/jobs', label: 'Factory', icon: Factory, match: (path: string) => path.startsWith('/tech/maintenance/jobs') },
+  { to: '/tech/maintenance/checks', label: 'Checks', icon: ClipboardCheck, match: (path: string) => path.startsWith('/tech/maintenance/checks') },
   { to: '/tech/scan', label: 'Scan', icon: ScanLine, match: (path: string) => path.startsWith('/tech/scan') || path.startsWith('/tech/assets') },
   { to: '/tech/site', label: 'Site', icon: HardHat, match: (path: string) => path.startsWith('/tech/site') },
   { to: '/tech/time', label: 'Time & Leave', icon: CalendarClock, match: (path: string) => path.startsWith('/tech/time') },
@@ -74,7 +76,7 @@ export function TechLayout() {
             </button>
           </div>
         </div>
-        <nav aria-label="Technician sections" className={cn('mx-auto grid max-w-xl gap-1 px-2 pb-2', sections.length > 4 ? 'grid-cols-5' : 'grid-cols-4')}>
+        <nav aria-label="Technician sections" className={cn('mx-auto grid max-w-xl gap-1 px-2 pb-2', sections.length === 5 ? 'grid-cols-5' : 'grid-cols-4')}>
           {sections.map(({ to, label, icon: Icon, match }) => {
             const active = match(pathname)
             return (

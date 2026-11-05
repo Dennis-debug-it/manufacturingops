@@ -24,12 +24,16 @@ public static class ShiftCalendar
 
     private sealed record ShiftJson(string? Name, string? Start, string? End);
 
+    /// <summary>Day 06:00–18:00 and night 18:00–06:00, used until the factory sets its own.</summary>
+    public const string DefaultJson = "[{\"name\":\"Day\",\"start\":\"06:00\",\"end\":\"18:00\"},{\"name\":\"Night\",\"start\":\"18:00\",\"end\":\"06:00\"}]";
+
+    /// <summary>Reads the shift list. Blank (settings saved before shifts existed) means the default day and night shifts.</summary>
     public static IReadOnlyList<ShiftDefinition> Parse(string? json)
     {
         List<ShiftJson>? items;
         try
         {
-            items = JsonSerializer.Deserialize<List<ShiftJson>>(string.IsNullOrWhiteSpace(json) ? "[]" : json, Json);
+            items = JsonSerializer.Deserialize<List<ShiftJson>>(string.IsNullOrWhiteSpace(json) ? DefaultJson : json, Json);
         }
         catch (JsonException)
         {

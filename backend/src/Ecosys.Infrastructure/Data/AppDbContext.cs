@@ -1075,9 +1075,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             {
                 tableBuilder.HasCheckConstraint("CK_work_orders_assignment_type", "\"AssignmentType\" IN ('Unassigned', 'IndividualTechnician', 'MultipleTechnicians', 'AssignmentGroup')");
                 tableBuilder.HasCheckConstraint("CK_work_orders_priority", "\"Priority\" IN ('Low', 'Medium', 'High', 'Critical')");
-                tableBuilder.HasCheckConstraint("CK_work_orders_status", "\"Status\" IN ('New', 'Open', 'Assigned', 'Scheduled', 'In Progress', 'On Hold', 'Waiting on Parts', 'Waiting on Client', 'Completed', 'Client Accepted', 'Closed', 'Cancelled', 'Rejected', 'Reopened')");
-                tableBuilder.HasCheckConstraint("CK_work_orders_work_type", "\"WorkType\" IN ('NewInstallation', 'PreventiveMaintenance', 'CorrectiveMaintenance', 'InspectionAssessment')");
-                tableBuilder.HasCheckConstraint("CK_work_orders_hold_reason", "\"HoldReason\" IS NULL OR \"HoldReason\" IN ('Awaiting Materials', 'Awaiting Client', 'Awaiting Vendor', 'Awaiting Approval', 'Awaiting Site Access', 'Awaiting Spares', 'Other')");
+                tableBuilder.HasCheckConstraint("CK_work_orders_status", "\"Status\" IN ('New', 'Open', 'Assigned', 'Scheduled', 'In Progress', 'On Hold', 'Waiting on Parts', 'Waiting on Client', 'Completed', 'Client Accepted', 'Closed', 'Cancelled', 'Rejected', 'Reopened', 'Requested', 'Approved', 'Planned', 'Verified')");
+                // The service work types, then the factory ones (FactoryWorkTypes).
+                tableBuilder.HasCheckConstraint("CK_work_orders_work_type", "\"WorkType\" IN ('NewInstallation', 'PreventiveMaintenance', 'CorrectiveMaintenance', 'InspectionAssessment', 'Corrective', 'Preventive', 'Inspection', 'Statutory', 'Modification', 'Safety')");
+                tableBuilder.HasCheckConstraint("CK_work_orders_hold_reason", "\"HoldReason\" IS NULL OR \"HoldReason\" IN ('Awaiting Materials', 'Awaiting Client', 'Awaiting Vendor', 'Awaiting Approval', 'Awaiting Site Access', 'Awaiting Spares', 'Other', 'Waiting for Window', 'Waiting for Shutdown', 'Waiting for Contractor')");
             });
             entity.HasKey(x => x.Id);
             entity.Property(x => x.AssignmentType).HasMaxLength(40).IsRequired();

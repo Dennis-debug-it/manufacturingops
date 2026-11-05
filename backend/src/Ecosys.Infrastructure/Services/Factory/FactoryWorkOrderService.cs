@@ -219,7 +219,7 @@ internal sealed class FactoryWorkOrderService(
         }
 
         var settings = await factorySettingsService.GetOrCreateAsync(tenantId, cancellationToken);
-        var now = DateTime.UtcNow;
+        var now = OccurredAt.UtcNow;
         var workOrder = new WorkOrder
         {
             TenantId = tenantId,
@@ -299,7 +299,7 @@ internal sealed class FactoryWorkOrderService(
             throw new BusinessRuleException($"A job that is {status.ToLowerInvariant()} can't be {Describe(action)}.");
         }
 
-        var now = DateTime.UtcNow;
+        var now = OccurredAt.UtcNow;
         switch (action)
         {
             case FactoryWorkOrderActions.Approve:
@@ -607,7 +607,7 @@ internal sealed class FactoryWorkOrderService(
             OldStatus = oldStatus,
             NewStatus = newStatus,
             Message = message,
-            OccurredAt = DateTime.UtcNow
+            OccurredAt = Services.OccurredAt.UtcNow
         });
 
     private static string RequireReason(string? reason, string message) =>

@@ -119,6 +119,13 @@ import { SitesPage } from '../features/clients/SitesPage'
 const FactoryAssetsPage = lazy(async () => ({ default: (await import('../features/factory/FactoryAssetsPage')).FactoryAssetsPage }))
 const FactoryAssetDetailPage = lazy(async () => ({ default: (await import('../features/factory/FactoryAssetDetailPage')).FactoryAssetDetailPage }))
 const ScanPage = lazy(async () => ({ default: (await import('../features/factory/ScanPage')).ScanPage }))
+const FactoryJobsPage = lazy(async () => ({ default: (await import('../features/factory/jobs/FactoryJobsPage')).FactoryJobsPage }))
+const FactoryJobDetailPage = lazy(async () => ({ default: (await import('../features/factory/jobs/FactoryJobDetailPage')).FactoryJobDetailPage }))
+const RunningChecksPage = lazy(async () => ({ default: (await import('../features/factory/checks/RunningChecksPage')).RunningChecksPage }))
+const CheckRunPage = lazy(async () => ({ default: (await import('../features/factory/checks/CheckRunPage')).CheckRunPage }))
+const CheckSchedulesSettingsPage = lazy(async () => ({ default: (await import('../features/factory/checks/CheckSchedulesSettingsPage')).CheckSchedulesSettingsPage }))
+const FactoryDashboardPage = lazy(async () => ({ default: (await import('../features/factory/FactoryDashboardPage')).FactoryDashboardPage }))
+const OperatorReportPage = lazy(async () => ({ default: (await import('../features/public/OperatorReportPage')).OperatorReportPage }))
 const OrganisationSettingsPage = lazy(async () => ({ default: (await import('../features/factory/OrganisationSettingsPage')).OrganisationSettingsPage }))
 import { ClientDetailPage } from '../features/clients/ClientDetailPage'
 import { SiteDetailPage } from '../features/clients/SiteDetailPage'
@@ -329,6 +336,11 @@ export function AppRouter() {
       ['/work-orders', WorkOrdersPage],
       ['/work-orders/:id', WorkOrderDetailPage],
       ['/dashboard/executive', ExecutiveDashboardPage],
+      ['/maintenance/overview', FactoryDashboardPage],
+      ['/maintenance/jobs', FactoryJobsPage],
+      ['/maintenance/jobs/:id', FactoryJobDetailPage],
+      ['/maintenance/checks', RunningChecksPage],
+      ['/maintenance/checks/:id', CheckRunPage],
       ['/maintenance/calendar', MaintenanceCalendarPage],
       ['/maintenance/schedules', MaintenanceSchedulesPage],
       ['/maintenance/schedules/new', MaintenanceSchedulesPage],
@@ -446,6 +458,7 @@ export function AppRouter() {
       ['/settings/email-templates/:id', SettingsEmailTemplatesPage],
       ['/settings/numbering', SettingsNumberingPage],
       ['/settings/pm-templates', SettingsPmTemplatesPage],
+      ['/settings/running-checks', CheckSchedulesSettingsPage],
       ['/settings/asset-categories', AssetCategoriesSettingsPage],
       ['/settings/organisation', OrganisationSettingsPage],
       ['/settings/pm-templates/:id', SettingsPmTemplatesPage],
@@ -504,6 +517,7 @@ export function AppRouter() {
         <Route path="/csat/:token" element={<CsatSurveyPage />} />
         <Route path="/enquiry/:key" element={<EnquiryFormPage />} />
         <Route path="/track/:token" element={<TrackJobPage />} />
+        <Route path="/t/:tag" element={<OperatorReportPage />} />
         <Route path="/403" element={<ForbiddenPage />} />
         <Route path="/404" element={<NotFoundPage />} />
 
@@ -525,6 +539,10 @@ export function AppRouter() {
           <Route path="scan" element={<ScanPage />} />
           <Route path="scan/:code" element={<ScanPage />} />
           <Route path="assets/:id" element={<FactoryAssetDetailPage />} />
+          <Route path="maintenance/jobs" element={<FactoryJobsPage />} />
+          <Route path="maintenance/jobs/:id" element={<FactoryJobDetailPage />} />
+          <Route path="maintenance/checks" element={<RunningChecksPage />} />
+          <Route path="maintenance/checks/:id" element={<CheckRunPage />} />
           <Route path="guides" element={<TechGuidesPage />} />
           <Route path="guides/:id" element={<TechGuidePage />} />
           <Route path="help" element={<TechHelpPage />} />

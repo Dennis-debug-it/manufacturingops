@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, BookOpen, Activity, Presentation, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, BookOpen, Activity, Presentation, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -15,9 +15,12 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Work Orders', to: '/work-orders', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], permission: 'work-orders.view', icon: ClipboardList },
   { label: 'Scheduling Board', to: '/dispatch/board', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: CalendarClock },
   { label: 'Live Map', to: '/dispatch/map', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: MapPin },
+  { label: 'Factory overview', to: '/maintenance/overview', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: Factory },
+  { label: 'Maintenance jobs', to: '/maintenance/jobs', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Wrench },
+  { label: 'Running checks', to: '/maintenance/checks', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: ClipboardCheck },
   { label: 'Assets', to: '/assets', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], icon: Boxes },
   { label: 'Scan', to: '/scan', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], icon: ScanLine },
-  { label: 'Maintenance', to: '/maintenance/calendar', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Wrench },
+  { label: 'Maintenance calendar', to: '/maintenance/calendar', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Wrench },
   // Any office role can be granted the CRM in the role matrix, so the capability (not the role) decides.
   { label: 'Sales', to: '/crm', roles: ['admin', 'manager', 'dispatcher', 'finance', 'viewer', 'materials_controller'], permission: 'crm.view', icon: Handshake },
   { label: 'Clients', to: '/clients', roles: ['admin', 'manager', 'dispatcher', 'finance', 'viewer'], permission: 'clients.view', icon: Building2 },

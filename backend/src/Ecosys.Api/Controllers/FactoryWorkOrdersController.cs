@@ -176,8 +176,9 @@ public sealed class FactoryWorkOrdersController(
     /// Moves the job on: approve, reject, plan, assign, start, hold, resume, complete, verify,
     /// return (send back after checking), close, cancel, reopen.
     /// </summary>
-    [HttpPost("{id:guid}/actions/{action}")]
-    public async Task<ActionResult<FactoryWorkOrderDetail>> Act(Guid id, string action, [FromBody] FactoryActionRequest request, CancellationToken cancellationToken)
+    // The segment is "verb": "action" is reserved by MVC routing and never binds.
+    [HttpPost("{id:guid}/actions/{verb}")]
+    public async Task<ActionResult<FactoryWorkOrderDetail>> Act(Guid id, [FromRoute(Name = "verb")] string action, [FromBody] FactoryActionRequest request, CancellationToken cancellationToken)
     {
         var workOrder = await LoadAsync(id, cancellationToken);
         await EnsureCanActAsync(workOrder, action, cancellationToken);
@@ -245,7 +246,7 @@ public sealed class FactoryWorkOrdersController(
         dbContext.WorkOrderEvents.Add(new WorkOrderEvent
         {
             TenantId = TenantId, WorkOrderId = id, ActorUserId = UserId, EventType = "Handover",
-            Status = workOrder.Status, Message = request.Note.Trim(), Note = UserDisplayName, OccurredAt = DateTime.UtcNow
+            Status = workOrder.Status, Message = request.Note.Trim(), Note = UserDisplayName, OccurredAt = Ecosys.Infrastructure.Services.OccurredAt.UtcNow
         });
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(await MapDetailAsync(workOrder, cancellationToken));
@@ -285,7 +286,7 @@ public sealed class FactoryWorkOrdersController(
         {
             TenantId = TenantId, WorkOrderId = id, MaterialItemId = request.MaterialItemId, AssetId = workOrder.AssetId,
             QuantityUsed = request.Quantity, Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-            UsedByUserId = UserId, UsedAt = DateTime.UtcNow
+            UsedByUserId = UserId, UsedAt = Ecosys.Infrastructure.Services.OccurredAt.UtcNow
         });
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(await MapDetailAsync(workOrder, cancellationToken));

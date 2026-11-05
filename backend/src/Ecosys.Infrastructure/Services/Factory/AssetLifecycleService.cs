@@ -13,7 +13,8 @@ public static class FactoryTime
     /// </summary>
     public static DateTime EffectiveAt(DateTime? occurredAt)
     {
-        var now = DateTime.UtcNow;
+        // An action synced from a phone's offline outbox is dated when it happened there.
+        var now = OccurredAt.UtcNow;
         return occurredAt is not { } at || (at.Date == now.Date && at.TimeOfDay == TimeSpan.Zero) ? now : at;
     }
 }

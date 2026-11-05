@@ -18,6 +18,10 @@ export type OutboxKind =
   | 'muster'
   /** New work the technician spotted on a job, passed to sales as a lead. */
   | 'sales-lead'
+  /** A step on a factory job (start, hold, complete…), a handover note, labour time or a ticked job-plan step. */
+  | 'factory-job'
+  /** A completed running check. */
+  | 'running-check'
 
 export interface OutboxFile {
   blob: Blob
