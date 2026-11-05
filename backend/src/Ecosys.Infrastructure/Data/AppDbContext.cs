@@ -21,6 +21,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<AssetLifecycleEvent> AssetLifecycleEvents => Set<AssetLifecycleEvent>();
     public DbSet<Meter> Meters => Set<Meter>();
     public DbSet<AssetTag> AssetTags => Set<AssetTag>();
+    public DbSet<AssetDocument> AssetDocuments => Set<AssetDocument>();
+    public DbSet<AssetDocumentVersion> AssetDocumentVersions => Set<AssetDocumentVersion>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
@@ -759,6 +761,31 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.Components)
                 .HasForeignKey(x => x.ParentAssetId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AssetDocument>(entity =>
+        {
+            entity.ToTable("asset_documents");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.DocumentType).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.AssetId });
+            entity.HasIndex(x => new { x.TenantId, x.UpdatedAt });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AssetDocumentVersion>(entity =>
+        {
+            entity.ToTable("asset_document_versions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.UploadedByName).HasMaxLength(200);
+            entity.HasIndex(x => new { x.TenantId, x.DocumentId, x.VersionNumber }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Document).WithMany(x => x.Versions).HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Attachment).WithMany().HasForeignKey(x => x.AttachmentId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<AssetTag>(entity =>

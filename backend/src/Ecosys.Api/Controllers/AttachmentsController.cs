@@ -1,3 +1,4 @@
+using Ecosys.Api.Common;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
@@ -30,31 +31,7 @@ public sealed class AttachmentsController(
         "SalesOpportunity"
     };
 
-    private static readonly HashSet<string> AllowedMimeTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "image/jpeg", "image/png", "image/webp",
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "text/csv"
-    };
-
     private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
-
-    private static readonly Dictionary<string, string[]> AllowedExtensionsByMimeType = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["image/jpeg"] = [".jpg", ".jpeg"],
-        ["image/png"] = [".png"],
-        ["image/webp"] = [".webp"],
-        ["application/pdf"] = [".pdf"],
-        ["application/msword"] = [".doc"],
-        ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] = [".docx"],
-        ["application/vnd.ms-excel"] = [".xls"],
-        ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] = [".xlsx"],
-        ["text/csv"] = [".csv"]
-    };
 
     [HttpPost("upload")]
     // Deliberately above MaxFileSizeBytes plus multipart framing: whichever limit is lower decides
@@ -77,33 +54,12 @@ public sealed class AttachmentsController(
         if (!Guid.TryParse(entityId, out var entityGuid))
             return BadRequest(new { message = "entityId must be a valid GUID.", errorCode = "VALIDATION_ERROR" });
 
-        if (file is null || file.Length == 0)
-            return BadRequest(new { message = "No file was provided.", errorCode = "VALIDATION_ERROR" });
+        // Same checks as every stored upload, in the same order; EC-029's content check runs before the
+        // entity lookup so a bad payload costs no database round trips and cannot probe which ids exist.
+        if (await UploadedFileRules.CheckAsync(file, MaxFileSizeBytes, cancellationToken) is { } problem)
+            return BadRequest(new { message = problem, errorCode = "VALIDATION_ERROR" });
 
-        if (file.Length > MaxFileSizeBytes)
-            return BadRequest(new { message = "File exceeds the 5 MB size limit.", errorCode = "VALIDATION_ERROR" });
-
-        var mimeType = file.ContentType ?? "application/octet-stream";
-        if (!AllowedMimeTypes.Contains(mimeType))
-            return BadRequest(new { message = $"File type '{mimeType}' is not permitted.", errorCode = "VALIDATION_ERROR" });
-
-        var fileExtension = Path.GetExtension(file.FileName);
-        if (string.IsNullOrWhiteSpace(fileExtension)
-            || !AllowedExtensionsByMimeType.TryGetValue(mimeType, out var allowedExtensions)
-            || !allowedExtensions.Contains(fileExtension, StringComparer.OrdinalIgnoreCase))
-        {
-            return BadRequest(new { message = $"File extension '{fileExtension}' does not match an allowed file type.", errorCode = "VALIDATION_ERROR" });
-        }
-
-        // EC-029: everything checked so far was declared by the client. Read the leading bytes and
-        // confirm they match the declared type, so a script payload named .jpg and posted as
-        // image/jpeg cannot be stored under a type it is not. Done before the entity lookup so a bad
-        // payload costs no database round trips and cannot probe which entity ids exist.
-        if (!await ContentMatchesDeclaredTypeAsync(file, mimeType, cancellationToken))
-        {
-            return BadRequest(new { message = $"File contents do not match the declared type '{mimeType}'.", errorCode = "VALIDATION_ERROR" });
-        }
-
+        var mimeType = file.ContentType!;
         var tenantId = TenantId;
         var userId = UserId;
         await EnsureEntityExistsAsync(entityType, entityGuid, tenantId, cancellationToken);
@@ -201,21 +157,6 @@ public sealed class AttachmentsController(
         a.CreatedAt);
 
     private static string BuildDownloadUrl(Guid attachmentId) => $"/api/attachments/{attachmentId}/download";
-
-    /// <summary>
-    /// Samples the head of the upload and asks <see cref="FileContentSignature"/> whether those
-    /// bytes are consistent with the declared type. A separate read stream is opened so the upload
-    /// itself still starts at byte zero, whatever the form buffered the body into.
-    /// </summary>
-    private static async Task<bool> ContentMatchesDeclaredTypeAsync(IFormFile file, string mimeType, CancellationToken cancellationToken)
-    {
-        var buffer = new byte[FileContentSignature.SampleSizeBytes];
-
-        await using var probe = file.OpenReadStream();
-        var read = await probe.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, cancellationToken);
-
-        return FileContentSignature.Matches(mimeType, buffer.AsSpan(0, read));
-    }
 
     private async Task EnsureEntityExistsAsync(string entityType, Guid entityId, Guid tenantId, CancellationToken cancellationToken)
     {
