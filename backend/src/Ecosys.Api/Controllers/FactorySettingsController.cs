@@ -93,6 +93,11 @@ public sealed class FactorySettingsController(
         settings.AutoApproveBreakdowns = request.AutoApproveBreakdowns ?? settings.AutoApproveBreakdowns;
         settings.ReworkWindowDays = request.ReworkWindowDays ?? settings.ReworkWindowDays;
         settings.OperatorReportingEnabled = request.OperatorReportingEnabled ?? settings.OperatorReportingEnabled;
+        if (request.Shifts is { } shifts)
+        {
+            var parsed = ShiftCalendar.Parse(System.Text.Json.JsonSerializer.Serialize(shifts.Select(x => new { name = x.Name, start = x.Start, end = x.End })));
+            settings.ShiftsJson = ShiftCalendar.Serialize(parsed);
+        }
         if (!string.IsNullOrWhiteSpace(request.TagPrefix))
         {
             var prefix = request.TagPrefix.Trim().ToUpperInvariant();
@@ -205,7 +210,8 @@ public sealed class FactorySettingsController(
         settings.ReworkWindowDays,
         settings.OperatorReportingEnabled,
         // The key authorises anonymous reports, so only admins see it.
-        IsAdmin ? settings.OperatorReportKey : null);
+        IsAdmin ? settings.OperatorReportKey : null,
+        ShiftCalendar.Parse(settings.ShiftsJson).Select(x => new ShiftDto(x.Name, x.Start.ToString("HH:mm"), x.End.ToString("HH:mm"))).ToList());
 }
 
 public sealed record FactorySettingsResponse(
@@ -226,7 +232,10 @@ public sealed record FactorySettingsResponse(
     bool AutoApproveBreakdowns,
     int ReworkWindowDays,
     bool OperatorReportingEnabled,
-    string? OperatorReportKey);
+    string? OperatorReportKey,
+    IReadOnlyCollection<ShiftDto> Shifts);
+
+public sealed record ShiftDto(string Name, string Start, string End);
 
 public sealed record UpdateFactorySettingsRequest(
     string IndustryTemplate,
@@ -244,7 +253,8 @@ public sealed record UpdateFactorySettingsRequest(
     bool? RequireWorkOrderApproval = null,
     bool? AutoApproveBreakdowns = null,
     int? ReworkWindowDays = null,
-    bool? OperatorReportingEnabled = null);
+    bool? OperatorReportingEnabled = null,
+    IReadOnlyCollection<ShiftDto>? Shifts = null);
 
 public sealed record SetUserOrgScopeRequest(IReadOnlyCollection<Guid>? OrgNodeIds);
 

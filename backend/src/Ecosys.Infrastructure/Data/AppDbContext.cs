@@ -64,6 +64,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<FailureCode> FailureCodes => Set<FailureCode>();
     public DbSet<SlaMatrixCell> SlaMatrixCells => Set<SlaMatrixCell>();
+    public DbSet<CheckSchedule> CheckSchedules => Set<CheckSchedule>();
+    public DbSet<CheckScheduleAsset> CheckScheduleAssets => Set<CheckScheduleAsset>();
+    public DbSet<CheckRun> CheckRuns => Set<CheckRun>();
+    public DbSet<CheckRunAnswer> CheckRunAnswers => Set<CheckRunAnswer>();
     public DbSet<JobPlan> JobPlans => Set<JobPlan>();
     public DbSet<JobPlanStep> JobPlanSteps => Set<JobPlanStep>();
     public DbSet<JobPlanResource> JobPlanResources => Set<JobPlanResource>();
@@ -403,6 +407,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.OperatorReportingEnabled).HasDefaultValue(true);
             entity.Property(x => x.OperatorReportKey).HasMaxLength(64);
             entity.HasIndex(x => x.OperatorReportKey).IsUnique();
+            entity.Property(x => x.ShiftsJson).HasMaxLength(2000).IsRequired();
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany()
@@ -772,6 +777,62 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.Components)
                 .HasForeignKey(x => x.ParentAssetId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CheckSchedule>(entity =>
+        {
+            entity.ToTable("check_schedules");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Frequency).HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.OrgNodeId });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.PmTemplate).WithMany().HasForeignKey(x => x.PmTemplateId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.OrgNode).WithMany().HasForeignKey(x => x.OrgNodeId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CheckScheduleAsset>(entity =>
+        {
+            entity.ToTable("check_schedule_assets");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.CheckScheduleId, x.AssetId }).IsUnique();
+            entity.HasOne(x => x.CheckSchedule).WithMany(x => x.Assets).HasForeignKey(x => x.CheckScheduleId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CheckRun>(entity =>
+        {
+            entity.ToTable("check_runs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PeriodKey).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ShiftName).HasMaxLength(40);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.CompletedByName).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            // One check per schedule, asset and shift, however many times the list is generated.
+            entity.HasIndex(x => new { x.CheckScheduleId, x.AssetId, x.PeriodKey }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Status, x.DueBy });
+            entity.HasIndex(x => new { x.TenantId, x.OrgNodeId, x.DueFrom });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.CheckSchedule).WithMany().HasForeignKey(x => x.CheckScheduleId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CheckRunAnswer>(entity =>
+        {
+            entity.ToTable("check_run_answers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SectionName).HasMaxLength(200);
+            entity.Property(x => x.Prompt).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.ResponseType).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(30);
+            entity.Property(x => x.Value).HasMaxLength(1000);
+            entity.Property(x => x.NumberValue).HasPrecision(18, 4);
+            entity.Property(x => x.MinValue).HasPrecision(18, 4);
+            entity.Property(x => x.MaxValue).HasPrecision(18, 4);
+            entity.Property(x => x.Note).HasMaxLength(1000);
+            entity.Property(x => x.FailAction).HasMaxLength(20).IsRequired();
+            entity.HasOne(x => x.CheckRun).WithMany(x => x.Answers).HasForeignKey(x => x.CheckRunId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SlaMatrixCell>(entity =>
@@ -2212,6 +2273,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("pm_template_questions");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.FailAction).HasMaxLength(20);
+            entity.Property(x => x.FeedsMeterType).HasMaxLength(30);
             entity.Property(x => x.SectionName).HasMaxLength(150);
             entity.Property(x => x.Prompt).HasMaxLength(500).IsRequired();
             entity.Property(x => x.HelperText).HasMaxLength(1000);

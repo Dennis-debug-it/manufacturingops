@@ -143,7 +143,15 @@ public sealed class PmTemplateServiceTests
     [Fact]
     public void NormalizeWorkType_InvalidType_Throws()
     {
-        Assert.Throws<BusinessRuleException>(() => PmTemplateService.NormalizeWorkType("Inspection"));
+        Assert.Throws<BusinessRuleException>(() => PmTemplateService.NormalizeWorkType("Installation"));
+    }
+
+    [Theory]
+    [InlineData("RunningCheck")]
+    [InlineData("Inspection")]
+    public void NormalizeWorkType_AcceptsFactoryChecklistTypes(string workType)
+    {
+        Assert.Equal(workType, PmTemplateService.NormalizeWorkType(workType));
     }
 
     [Fact]

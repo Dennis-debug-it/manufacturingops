@@ -22,6 +22,11 @@ public sealed class PmTemplateQuestion : AuditableEntity
     public int DisplayOrder { get; set; }
     public string? OptionsJson { get; set; }
 
+    /// <summary>What a failed answer does in a running check or inspection: None, WorkOrder or WindowDefect.</summary>
+    public string? FailAction { get; set; }
+    /// <summary>A reading that is also recorded on the asset's meter of this type (e.g. RunHours, Temperature).</summary>
+    public string? FeedsMeterType { get; set; }
+
     public PmTemplate? PmTemplate { get; set; }
     public PmTemplateSection? Section { get; set; }
 }

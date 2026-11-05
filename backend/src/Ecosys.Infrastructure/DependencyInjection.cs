@@ -79,6 +79,8 @@ public static class DependencyInjection
         services.AddScoped<Services.Factory.IFactoryWorkOrderService, Services.Factory.FactoryWorkOrderService>();
         services.AddScoped<Services.Factory.IFactorySlaService, Services.Factory.FactorySlaService>();
         services.AddScoped<Services.Factory.IOperatorReportService, Services.Factory.OperatorReportService>();
+        services.AddScoped<Services.Factory.IRunningCheckService, Services.Factory.RunningCheckService>();
+        services.AddScoped<Services.Factory.IRunningCheckRunner, Services.Factory.RunningCheckRunner>();
         services.AddSingleton<Services.Factory.IAssetLabelPdfRenderer, Services.Factory.AssetLabelPdfRenderer>();
         services.AddScoped<IStockLedgerService, StockLedgerService>();
         services.AddScoped<IUserSessionService, UserSessionService>();
@@ -194,6 +196,7 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<NotificationHousekeepingWorker>();
         services.AddSingleInstanceHostedService<ActivityReminderWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.AssetAlertWorker>();
+        services.AddSingleInstanceHostedService<Services.Factory.RunningCheckWorker>();
         services.AddSingleInstanceHostedService<WhatsAppOutboxWorker>();
 
         return services;

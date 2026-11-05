@@ -36,7 +36,9 @@ public sealed record PmTemplateChecklistItemCommand(
     bool? TechnicianRemarksAllowed,
     bool RequiresNoteOnFail,
     int Order,
-    IReadOnlyCollection<string>? Options);
+    IReadOnlyCollection<string>? Options,
+    string? FailAction = null,
+    string? FeedsMeterType = null);
 
 // ── Interface ─────────────────────────────────────────────────────────────────
 
@@ -506,7 +508,9 @@ public sealed class PmTemplateService(AppDbContext dbContext) : IPmTemplateServi
             OptionsJson = q.Options is { Count: > 0 }
                 ? JsonSerializer.Serialize(
                     q.Options.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).ToList())
-                : null
+                : null,
+            FailAction = q.FailAction is null ? null : CheckFailActions.Find(q.FailAction) ?? throw new BusinessRuleException("A failed answer can raise a WorkOrder, log a WindowDefect, or do None."),
+            FeedsMeterType = q.FeedsMeterType is null ? null : MeterTypes.Find(q.FeedsMeterType) ?? throw new BusinessRuleException($"Unknown meter type '{q.FeedsMeterType}'.")
         };
 
     public static string NormalizeCategory(string category) => category.Trim();
@@ -518,7 +522,10 @@ public sealed class PmTemplateService(AppDbContext dbContext) : IPmTemplateServi
         {
             "PreventiveMaintenance" => "PreventiveMaintenance",
             "BreakdownCorrective" => "BreakdownCorrective",
-            _ => throw new BusinessRuleException("Work type must be PreventiveMaintenance or BreakdownCorrective.")
+            // Factory checklists: shift and daily running checks, and inspections.
+            "RunningCheck" => "RunningCheck",
+            "Inspection" => "Inspection",
+            _ => throw new BusinessRuleException("Work type must be PreventiveMaintenance, BreakdownCorrective, RunningCheck or Inspection.")
         };
     }
 
@@ -537,7 +544,7 @@ public sealed class PmTemplateService(AppDbContext dbContext) : IPmTemplateServi
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static bool IsValidWorkType(string? workType) =>
-        workType is "PreventiveMaintenance" or "BreakdownCorrective"
+        workType is "PreventiveMaintenance" or "BreakdownCorrective" or "RunningCheck" or "Inspection"
         || string.IsNullOrWhiteSpace(workType); // null/empty defaults to PreventiveMaintenance
 
     private static bool IsOptionsRequired(string type) =>

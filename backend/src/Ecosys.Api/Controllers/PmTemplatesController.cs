@@ -90,7 +90,7 @@ public sealed class PmTemplatesController(
                 q.SectionName, q.SectionOrder, q.Question, q.HelperText, q.Type,
                 q.Unit, q.MinValue, q.MaxValue, q.DefaultValue,
                 q.Required, q.EvidenceRequired, q.TechnicianRemarksAllowed,
-                q.RequiresNoteOnFail, q.Order, q.Options)).ToList(),
+                q.RequiresNoteOnFail, q.Order, q.Options, q.FailAction, q.FeedsMeterType)).ToList(),
             r.IsActive, r.Code, r.WorkType, r.DefaultIntervalMonths);
 
     internal static TemplateResponse Map(PmTemplate t) =>
@@ -119,7 +119,7 @@ public sealed class PmTemplatesController(
                     PmTemplateService.NormalizeType(x.ResponseType),
                     x.Unit, x.MinValue, x.MaxValue, x.DefaultValue,
                     x.IsRequired, x.EvidenceRequired, x.TechnicianRemarksAllowed,
-                    x.RequiresNoteOnFail, x.DisplayOrder, ParseOptions(x.OptionsJson)))
+                    x.RequiresNoteOnFail, x.DisplayOrder, ParseOptions(x.OptionsJson)) { FailAction = x.FailAction, FeedsMeterType = x.FeedsMeterType })
                 .ToList(),
             t.IsActive);
 
@@ -159,7 +159,9 @@ public sealed record UpsertTemplateChecklistItemRequest(
     bool? TechnicianRemarksAllowed,
     bool RequiresNoteOnFail,
     int Order,
-    IReadOnlyCollection<string>? Options);
+    IReadOnlyCollection<string>? Options,
+    string? FailAction = null,
+    string? FeedsMeterType = null);
 
 public sealed record DuplicateTemplateRequest(string? Name);
 
@@ -198,4 +200,8 @@ public sealed record TemplateChecklistItemResponse(
     bool TechnicianRemarksAllowed,
     bool RequiresNoteOnFail,
     int Order,
-    IReadOnlyCollection<string> Options);
+    IReadOnlyCollection<string> Options)
+{
+    public string? FailAction { get; init; }
+    public string? FeedsMeterType { get; init; }
+}

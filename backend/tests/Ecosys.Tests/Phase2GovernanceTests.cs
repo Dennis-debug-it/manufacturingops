@@ -44,6 +44,7 @@ public sealed class Phase2GovernanceTests
                 "email-intake.email-intake-received",
                 "email-intake.email-intake-reply-added",
                 "email-intake.email-intake-unrecognised",
+                "factory-check.missed",
                 "factory-job.reported",
                 "inventory.low-stock",
                 "inventory.request-decided",

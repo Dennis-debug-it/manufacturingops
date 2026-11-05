@@ -212,21 +212,7 @@ internal sealed class OperatorReportService(
 
         try
         {
-            var grantedRoles = await dbContext.RolePermissions.AsNoTracking()
-                .Where(x => x.TenantId == workOrder.TenantId && x.CanAssignWorkOrders).Select(x => x.Role).ToListAsync(cancellationToken);
-            var roles = grantedRoles.Append(AppRoles.Admin).Distinct().ToList();
-            var candidates = await dbContext.Users.AsNoTracking()
-                .Where(x => x.TenantId == workOrder.TenantId && x.IsActive && roles.Contains(x.Role)).Select(x => x.Id).ToListAsync(cancellationToken);
-            var assignments = await dbContext.UserOrgNodeAssignments.AsNoTracking()
-                .Where(x => x.TenantId == workOrder.TenantId && candidates.Contains(x.UserId)).ToListAsync(cancellationToken);
-            var edges = (await dbContext.OrgNodes.AsNoTracking().Where(x => x.TenantId == workOrder.TenantId).Select(x => new { x.Id, x.ParentId }).ToListAsync(cancellationToken))
-                .Select(x => (x.Id, x.ParentId)).ToList();
-            // Supervisors limited to other factories don't hear about this one.
-            var recipients = candidates.Where(id =>
-            {
-                var mine = assignments.Where(a => a.UserId == id).Select(a => a.OrgNodeId).ToList();
-                return mine.Count == 0 || OrgScopeService.Descendants(edges, mine).Contains(workOrder.OrgNodeId ?? Guid.Empty);
-            }).ToList();
+            var recipients = await FactoryRecipients.SupervisorsAsync(dbContext, workOrder.TenantId, workOrder.OrgNodeId, cancellationToken);
             if (recipients.Count == 0)
             {
                 return;

@@ -116,5 +116,8 @@ public sealed class FactorySettings : AuditableEntity, ITenantEntity
     /// <summary>Secret in the label link that authorises an operator report; tag numbers alone are guessable.</summary>
     public string? OperatorReportKey { get; set; }
 
+    /// <summary>Shifts as JSON [{"name":"Day","start":"06:00","end":"18:00"}, …]; running checks are due once per shift.</summary>
+    public string ShiftsJson { get; set; } = "[{\"name\":\"Day\",\"start\":\"06:00\",\"end\":\"18:00\"},{\"name\":\"Night\",\"start\":\"18:00\",\"end\":\"06:00\"}]";
+
     public Tenant? Tenant { get; set; }
 }
