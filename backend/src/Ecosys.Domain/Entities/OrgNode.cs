@@ -1,0 +1,104 @@
+using Ecosys.Domain.Common;
+
+namespace Ecosys.Domain.Entities;
+
+/// <summary>
+/// Levels of the organisation tree, top to bottom. Assets hang off any node; the QR tag lives at
+/// asset level. Levels a customer does not use are hidden through <see cref="FactorySettings"/>
+/// rather than removed, so a single factory and a multi-factory group share one model.
+/// </summary>
+public static class OrgNodeLevels
+{
+    public const string Group = "Group";
+    public const string Factory = "Factory";
+    public const string Section = "Section";
+    public const string SubSection = "SubSection";
+
+    public static readonly IReadOnlyList<string> All = [Group, Factory, Section, SubSection];
+
+    public static int Rank(string level) => level switch
+    {
+        Group => 0,
+        Factory => 1,
+        Section => 2,
+        SubSection => 3,
+        _ => -1
+    };
+
+    public static string? Normalize(string? level) =>
+        All.FirstOrDefault(x => string.Equals(x, level?.Trim().Replace("-", string.Empty).Replace(" ", string.Empty), StringComparison.OrdinalIgnoreCase));
+}
+
+/// <summary>
+/// One node of the configurable group → factory → section → sub-section hierarchy
+/// (scope §2 design rule 2: hierarchy as data, not fixed columns).
+/// </summary>
+public sealed class OrgNode : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid? ParentId { get; set; }
+    public string Level { get; set; } = OrgNodeLevels.Factory;
+    public string Name { get; set; } = string.Empty;
+    public string Code { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? Location { get; set; }
+    public int DisplayOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    /// <summary>Key of the template the node was created from (e.g. "tea"), so defaults can be told apart from customer edits.</summary>
+    public string? TemplateKey { get; set; }
+
+    /// <summary>Stable external identifiers for ERP mapping (scope §2 design rule 1).</summary>
+    public string? ExternalId { get; set; }
+    public string? ExternalSystem { get; set; }
+
+    public Tenant? Tenant { get; set; }
+    public OrgNode? Parent { get; set; }
+    public ICollection<OrgNode> Children { get; set; } = new List<OrgNode>();
+    public ICollection<UserOrgNodeAssignment> UserAssignments { get; set; } = new List<UserOrgNodeAssignment>();
+}
+
+/// <summary>
+/// Grants a user access to an org node and everything beneath it. A user with no assignments
+/// sees the whole tenant (the default for admins and single-factory customers).
+/// </summary>
+public sealed class UserOrgNodeAssignment : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid UserId { get; set; }
+    public Guid OrgNodeId { get; set; }
+
+    public Tenant? Tenant { get; set; }
+    public User? User { get; set; }
+    public OrgNode? OrgNode { get; set; }
+}
+
+/// <summary>
+/// Tenant-wide factory maintenance settings (scope Phase 0: production unit, maintenance window
+/// defaults, which hierarchy levels are shown). Nothing here is tea-specific: the production unit
+/// is configurable so sugar, dairy or cement can use their own.
+/// </summary>
+public sealed class FactorySettings : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+
+    /// <summary>Industry template pack the tenant started from, e.g. "tea".</summary>
+    public string IndustryTemplate { get; set; } = "tea";
+    public string ProductionUnit { get; set; } = "kg made tea";
+    public string ProductionUnitShort { get; set; } = "kg MT";
+
+    public bool UseGroupLevel { get; set; } = true;
+    public bool UseSubSectionLevel { get; set; } = true;
+
+    /// <summary>Default weekly maintenance window; factories can override it (Phase 3).</summary>
+    public bool WeeklyWindowEnabled { get; set; } = true;
+    public DayOfWeek WeeklyWindowDay { get; set; } = DayOfWeek.Monday;
+    public TimeOnly WeeklyWindowStart { get; set; } = new(6, 0);
+    public TimeOnly WeeklyWindowEnd { get; set; } = new(18, 0);
+
+    /// <summary>Month numbers (1–12) of the usual low-crop overhaul season.</summary>
+    public int? LowCropStartMonth { get; set; }
+    public int? LowCropEndMonth { get; set; }
+
+    public Tenant? Tenant { get; set; }
+}

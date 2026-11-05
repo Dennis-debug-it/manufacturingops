@@ -15,6 +15,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public DbSet<Tenant> Tenants => Set<Tenant>();
     public DbSet<Branch> Branches => Set<Branch>();
+    public DbSet<OrgNode> OrgNodes => Set<OrgNode>();
+    public DbSet<UserOrgNodeAssignment> UserOrgNodeAssignments => Set<UserOrgNodeAssignment>();
+    public DbSet<FactorySettings> FactorySettings => Set<FactorySettings>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
@@ -327,6 +330,65 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.ChildBranches)
                 .HasForeignKey(x => x.ParentBranchId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OrgNode>(entity =>
+        {
+            entity.ToTable("org_nodes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Level).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Code).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.Location).HasMaxLength(250);
+            entity.Property(x => x.TemplateKey).HasMaxLength(50);
+            entity.Property(x => x.ExternalId).HasMaxLength(100);
+            entity.Property(x => x.ExternalSystem).HasMaxLength(50);
+            entity.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.ParentId, x.Name }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.Level });
+            entity.HasIndex(x => new { x.TenantId, x.UpdatedAt });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Parent)
+                .WithMany(x => x.Children)
+                .HasForeignKey(x => x.ParentId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<UserOrgNodeAssignment>(entity =>
+        {
+            entity.ToTable("user_org_node_assignments");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.TenantId, x.UserId, x.OrgNodeId }).IsUnique();
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.OrgNode)
+                .WithMany(x => x.UserAssignments)
+                .HasForeignKey(x => x.OrgNodeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FactorySettings>(entity =>
+        {
+            entity.ToTable("factory_settings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.IndustryTemplate).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.ProductionUnit).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.ProductionUnitShort).HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => x.TenantId).IsUnique();
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<User>(entity =>
@@ -674,6 +736,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany()
                 .HasForeignKey(x => x.DefaultAssignmentGroupId)
                 .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.OrgNode)
+                .WithMany()
+                .HasForeignKey(x => x.OrgNodeId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.TenantId, x.OrgNodeId });
         });
 
         modelBuilder.Entity<Technician>(entity =>

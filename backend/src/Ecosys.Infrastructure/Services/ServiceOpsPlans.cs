@@ -128,6 +128,8 @@ public static class ServiceOpsPlans
         "Clients", "ClientContacts", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "Notifications", "PortalAuth", "PortalKnowledge",
         "PublicWorkOrder", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
+        // Factory hierarchy and settings: the backbone every factory module hangs off.
+        "OrgNodes", "FactorySettings",
         // WhatsApp reminders (Release 3 design 6): every edition, gated by the WhatsApp add-on.
         // The two-way inbox (WhatsApp controller) needs the WhatsApp Business add-on.
         "MyWhatsApp", "WhatsAppNotifications", "ClientWhatsAppConsent", "PortalWhatsApp", "WhatsAppWebhook"

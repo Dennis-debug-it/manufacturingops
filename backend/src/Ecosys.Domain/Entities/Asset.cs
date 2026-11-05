@@ -10,6 +10,9 @@ public sealed class Asset : AuditableEntity, ITenantEntity
     public Guid? SiteId { get; set; }
     public Guid? SystemId { get; set; }
     public Guid? AssetCategoryId { get; set; }
+
+    /// <summary>Where the asset sits in the factory hierarchy (factory, section or sub-section).</summary>
+    public Guid? OrgNodeId { get; set; }
     public string AssetName { get; set; } = string.Empty;
     public string AssetCode { get; set; } = string.Empty;
     public string? AssetType { get; set; }
@@ -57,6 +60,7 @@ public sealed class Asset : AuditableEntity, ITenantEntity
     public Site? Site { get; set; }
     public OperationalSystem? System { get; set; }
     public AssetCategory? AssetCategory { get; set; }
+    public OrgNode? OrgNode { get; set; }
     public AssignmentGroup? DefaultAssignmentGroup { get; set; }
     public ICollection<AssetCustomFieldValue> CustomFieldValues { get; set; } = new List<AssetCustomFieldValue>();
     public ICollection<ContractAsset> ContractAssets { get; set; } = new List<ContractAsset>();
