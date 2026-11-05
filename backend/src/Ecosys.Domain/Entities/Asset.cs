@@ -6,7 +6,9 @@ public sealed class Asset : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
     public Guid? BranchId { get; set; }
-    public Guid ClientId { get; set; }
+
+    /// <summary>Owning client, kept only for ServiceOps modules still being pruned. Factory assets have none.</summary>
+    public Guid? ClientId { get; set; }
     public Guid? SiteId { get; set; }
     public Guid? SystemId { get; set; }
     public Guid? AssetCategoryId { get; set; }
@@ -53,6 +55,25 @@ public sealed class Asset : AuditableEntity, ITenantEntity
 
     public string? Notes { get; set; }
     public string Status { get; set; } = "Active";
+
+    // Factory register
+    /// <summary>Parent asset when this is a component (e.g. a motor within a withering fan).</summary>
+    public Guid? ParentAssetId { get; set; }
+    /// <summary>A, B or C: drives priority, spares stocking and PM frequency.</summary>
+    public string? Criticality { get; set; }
+    /// <summary>Running condition, separate from <see cref="Status"/> (whether it is on the register at all).</summary>
+    public string OperationalStatus { get; set; } = AssetOperationalStatuses.Operational;
+    /// <summary>Production lost per hour of downtime, in the tenant's production unit (e.g. kg made tea).</summary>
+    public decimal? LostProductionPerHour { get; set; }
+    public DateTime? DisposalDate { get; set; }
+    public string? DisposalMethod { get; set; }
+    /// <summary>Stable external identifiers for ERP mapping (scope §2 design rule 1).</summary>
+    public string? ExternalId { get; set; }
+    public string? ExternalSystem { get; set; }
+
+    public Asset? ParentAsset { get; set; }
+    public ICollection<Asset> Components { get; set; } = new List<Asset>();
+    public ICollection<AssetLifecycleEvent> LifecycleEvents { get; set; } = new List<AssetLifecycleEvent>();
 
     public Tenant? Tenant { get; set; }
     public Branch? Branch { get; set; }

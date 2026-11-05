@@ -4,6 +4,7 @@ using Ecosys.Domain.Entities;
 using Ecosys.Domain.Enums;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
+using Ecosys.Infrastructure.Services.Factory;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Authorization;
@@ -23,7 +24,9 @@ public sealed class AssetsController(
     IUserAccessService userAccessService,
     IBranchAccessService branchAccessService,
     IDocumentNumberingService documentNumberingService,
-    ILicenseGuardService licenseGuardService) : TenantAwareControllerBase(tenantContext)
+    ILicenseGuardService licenseGuardService,
+    IOrgScopeService orgScopeService,
+    IAssetLifecycleService assetLifecycleService) : TenantAwareControllerBase(tenantContext)
 {
     private static readonly HashSet<string> AllowedStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -43,7 +46,11 @@ public sealed class AssetsController(
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
         CancellationToken cancellationToken,
-        [FromQuery] string? support = null)
+        [FromQuery] string? support = null,
+        [FromQuery] Guid? orgNodeId = null,
+        [FromQuery] string? criticality = null,
+        [FromQuery] Guid? parentAssetId = null,
+        [FromQuery] bool topLevelOnly = false)
     {
         userAccessService.EnsureTenantOperationalAccess();
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
@@ -58,11 +65,36 @@ public sealed class AssetsController(
             .Include(x => x.Site)
             .Include(x => x.System)
             .Include(x => x.AssetCategory)
+            .Include(x => x.OrgNode)
+            .Include(x => x.ParentAsset)
             .Include(x => x.CustomFieldValues)
                 .ThenInclude(x => x.FieldDefinition)
             .Where(x => x.TenantId == TenantId)
             .WhereAccessible(scope, x => x.BranchId)
             .AsQueryable();
+        query = await ApplyOrgScopeAsync(query, cancellationToken);
+
+        if (orgNodeId.HasValue)
+        {
+            // A factory or section shows everything beneath it as well.
+            var subtree = (await orgScopeService.GetSubtreeAsync(TenantId, orgNodeId.Value, cancellationToken)).ToList();
+            query = query.Where(x => x.OrgNodeId.HasValue && subtree.Contains(x.OrgNodeId.Value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(criticality))
+        {
+            var level = NormalizeCriticality(criticality);
+            query = query.Where(x => x.Criticality == level);
+        }
+
+        if (parentAssetId.HasValue)
+        {
+            query = query.Where(x => x.ParentAssetId == parentAssetId.Value);
+        }
+        else if (topLevelOnly)
+        {
+            query = query.Where(x => x.ParentAssetId == null);
+        }
 
         if (clientId.HasValue)
         {
@@ -143,16 +175,9 @@ public sealed class AssetsController(
         userAccessService.EnsureTenantOperationalAccess();
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
 
-        var asset = await dbContext.Assets
-            .Include(x => x.Client)
-            .Include(x => x.Branch)
-            .Include(x => x.Site)
-            .Include(x => x.System)
-            .Include(x => x.AssetCategory)
-            .Include(x => x.CustomFieldValues)
-                .ThenInclude(x => x.FieldDefinition)
+        var asset = await (await ApplyOrgScopeAsync(LoadAssetForResponse()
             .Where(x => x.TenantId == TenantId && x.Id == id)
-            .WhereAccessible(scope, x => x.BranchId)
+            .WhereAccessible(scope, x => x.BranchId), cancellationToken))
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Asset was not found.");
 
@@ -272,9 +297,15 @@ public sealed class AssetsController(
             throw new BusinessRuleException("Asset is not retired.");
         }
 
+        if (asset.DisposalDate.HasValue)
+        {
+            throw new BusinessRuleException("A disposed asset cannot be reactivated.");
+        }
+
         asset.Status = "Active";
         asset.DecommissionDate = null;
         asset.DecommissionReason = null;
+        assetLifecycleService.Record(asset, AssetLifecycleEventTypes.Reactivated, UserId, UserDisplayName);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
@@ -313,6 +344,7 @@ public sealed class AssetsController(
         asset.DecommissionDate = decommissionDate ?? DateTime.UtcNow.Date;
         asset.DecommissionReason = reason;
         asset.AutoSchedulePm = false;
+        assetLifecycleService.Record(asset, AssetLifecycleEventTypes.Decommissioned, UserId, UserDisplayName, reason, asset.DecommissionDate);
         await dbContext.SaveChangesAsync(cancellationToken);
         await preventiveMaintenancePlanService.SyncForAssetAsync(asset, cancellationToken);
 
@@ -333,17 +365,87 @@ public sealed class AssetsController(
             .Include(x => x.Site)
             .Include(x => x.System)
             .Include(x => x.AssetCategory)
+            .Include(x => x.OrgNode)
+            .Include(x => x.ParentAsset)
             .Include(x => x.CustomFieldValues)
                 .ThenInclude(x => x.FieldDefinition);
+
+    /// <summary>Users limited to some factories or sections only see assets located there.</summary>
+    private async Task<IQueryable<Asset>> ApplyOrgScopeAsync(IQueryable<Asset> query, CancellationToken cancellationToken)
+    {
+        var orgScope = await orgScopeService.GetScopeAsync(TenantId, UserId, cancellationToken);
+        if (orgScope.Nodes is null)
+        {
+            return query;
+        }
+
+        var nodes = orgScope.Nodes.ToList();
+        return query.Where(x => x.OrgNodeId.HasValue && nodes.Contains(x.OrgNodeId.Value));
+    }
+
+    private static string? NormalizeCriticality(string? value)
+    {
+        try
+        {
+            return AssetCriticality.Normalize(value);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new BusinessRuleException(ex.Message);
+        }
+    }
+
+    private static string NormalizeOperationalStatus(string? value, string current) =>
+        string.IsNullOrWhiteSpace(value)
+            ? current
+            : AssetOperationalStatuses.Find(value)
+              ?? throw new BusinessRuleException($"Operational status must be one of: {string.Join(", ", AssetOperationalStatuses.All)}.");
+
+    /// <summary>
+    /// Checks the factory fields of a create or update and returns the location to use. A component
+    /// with no location of its own takes its parent's.
+    /// </summary>
+    private async Task<(OrgNode? Location, Asset? Parent)> ResolveFactoryPlacementAsync(Guid? assetId, UpsertAssetRequest request, CancellationToken cancellationToken)
+    {
+        if (request.LostProductionPerHour is < 0)
+        {
+            throw new BusinessRuleException("Lost production per hour cannot be negative.");
+        }
+
+        var parent = request.ParentAssetId.HasValue
+            ? await assetLifecycleService.EnsureParentAsync(TenantId, assetId, request.ParentAssetId.Value, cancellationToken)
+            : null;
+        var locationId = request.OrgNodeId ?? parent?.OrgNodeId;
+        var location = locationId.HasValue
+            ? await assetLifecycleService.EnsureLocationAsync(TenantId, UserId, locationId.Value, cancellationToken)
+            : null;
+
+        if (!request.ClientId.HasValue && location is null)
+        {
+            throw new BusinessRuleException("Choose where the asset is located (factory, section or sub-section).");
+        }
+
+        if (location is null)
+        {
+            // A client asset (ServiceOps) is visible only to users who see the whole organisation.
+            var orgScope = await orgScopeService.GetScopeAsync(TenantId, UserId, cancellationToken);
+            if (!orgScope.IsUnrestricted)
+            {
+                throw new BusinessRuleException("Choose where the asset is located (factory, section or sub-section).");
+            }
+        }
+
+        return (location, parent);
+    }
 
     /// <summary>
     /// Contracts that currently provide cover: in term (or within their grace period) and in a
     /// lifecycle state that allows service. Mirrors the contract coverage service's eligibility
     /// rules, without the work-order-type matching that only applies to a specific job.
     /// </summary>
-    private async Task<List<Contract>> LoadSupportingContractsAsync(IEnumerable<Guid> clientIds, CancellationToken cancellationToken)
+    private async Task<List<Contract>> LoadSupportingContractsAsync(IEnumerable<Guid?> clientIds, CancellationToken cancellationToken)
     {
-        var ids = clientIds.Distinct().ToList();
+        var ids = clientIds.Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
         if (ids.Count == 0)
         {
             return [];
@@ -409,14 +511,14 @@ public sealed class AssetsController(
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
         await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
         Validate(request);
-        await EnsureClientExistsAsync(request.ClientId, cancellationToken);
-        await EnsureSiteIsValidAsync(request.ClientId, request.SiteId, cancellationToken);
-        await EnsureSystemIsValidAsync(request.ClientId, request.SiteId, request.SystemId, cancellationToken);
+        await EnsureClientPlacementAsync(request, cancellationToken);
         await EnsureCategoryRequestIsValidAsync(request.AssetCategoryId, request.CustomFieldValues, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.AssetCode))
         {
             await EnsureUniqueAssetCodeAsync(request.AssetCode, null, cancellationToken);
         }
+
+        var (location, parent) = await ResolveFactoryPlacementAsync(null, request, cancellationToken);
 
         var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, cancellationToken);
         var (frequencyValue, frequencyUnit) = ResolvePmFrequency(request);
@@ -450,10 +552,32 @@ public sealed class AssetsController(
             LastPmDate = request.LastPmDate,
             NextPmDate = request.NextPmDate ?? CalculateNextPmDate(request.LastPmDate, request.InstallationDate, frequencyValue, frequencyUnit),
             Notes = request.Notes?.Trim(),
-            Status = string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status.Trim()
+            Status = string.IsNullOrWhiteSpace(request.Status) ? "Active" : request.Status.Trim(),
+            OrgNodeId = location?.Id,
+            ParentAssetId = parent?.Id,
+            Criticality = NormalizeCriticality(request.Criticality),
+            OperationalStatus = NormalizeOperationalStatus(request.OperationalStatus, AssetOperationalStatuses.Operational),
+            LostProductionPerHour = request.LostProductionPerHour,
+            CommissioningDate = request.CommissioningDate,
+            ExternalId = request.ExternalId?.Trim() is { Length: > 0 } externalId ? externalId : null,
+            ExternalSystem = request.ExternalSystem?.Trim() is { Length: > 0 } externalSystem ? externalSystem : null
         };
 
         dbContext.Assets.Add(asset);
+        var registered = assetLifecycleService.Record(asset, AssetLifecycleEventTypes.Registered, UserId, UserDisplayName,
+            location is null ? null : $"Registered at {location.Name}.");
+        registered.ToValue = location?.Name;
+        if (parent is not null)
+        {
+            var attached = assetLifecycleService.Record(asset, AssetLifecycleEventTypes.ComponentAttached, UserId, UserDisplayName, $"Component of {parent.AssetCode}.");
+            attached.ToValue = parent.AssetCode;
+        }
+
+        if (asset.CommissioningDate.HasValue)
+        {
+            assetLifecycleService.Record(asset, AssetLifecycleEventTypes.Commissioned, UserId, UserDisplayName, null, asset.CommissioningDate);
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
         await SaveCustomFieldValuesAsync(asset, request.CustomFieldValues, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -469,6 +593,14 @@ public sealed class AssetsController(
             cancellationToken);
 
         await dbContext.Entry(asset).Reference(x => x.Client).LoadAsync(cancellationToken);
+        if (asset.OrgNodeId.HasValue)
+        {
+            await dbContext.Entry(asset).Reference(x => x.OrgNode).LoadAsync(cancellationToken);
+        }
+        if (asset.ParentAssetId.HasValue)
+        {
+            await dbContext.Entry(asset).Reference(x => x.ParentAsset).LoadAsync(cancellationToken);
+        }
         if (asset.BranchId.HasValue)
         {
             await dbContext.Entry(asset).Reference(x => x.Branch).LoadAsync(cancellationToken);
@@ -495,24 +627,71 @@ public sealed class AssetsController(
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
         Validate(request);
-        var asset = await dbContext.Assets
+        var asset = await (await ApplyOrgScopeAsync(dbContext.Assets
             .Include(x => x.Client)
             .Include(x => x.Branch)
             .Include(x => x.Site)
             .Include(x => x.System)
             .Include(x => x.AssetCategory)
             .Include(x => x.CustomFieldValues)
-            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
+            .Where(x => x.TenantId == TenantId && x.Id == id), cancellationToken))
+            .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Asset was not found.");
 
-        await EnsureClientExistsAsync(request.ClientId, cancellationToken);
-        await EnsureSiteIsValidAsync(request.ClientId, request.SiteId, cancellationToken);
-        await EnsureSystemIsValidAsync(request.ClientId, request.SiteId, request.SystemId, cancellationToken);
+        await EnsureClientPlacementAsync(request, cancellationToken);
         await EnsureCategoryRequestIsValidAsync(request.AssetCategoryId, request.CustomFieldValues, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.AssetCode))
         {
             await EnsureUniqueAssetCodeAsync(request.AssetCode, asset.Id, cancellationToken);
         }
+
+        var (location, parent) = await ResolveFactoryPlacementAsync(asset.Id, request, cancellationToken);
+        var previousParent = asset.ParentAssetId;
+        var previousStatus = asset.OperationalStatus;
+        if (location is not null && location.Id != asset.OrgNodeId)
+        {
+            await assetLifecycleService.TransferAsync(asset, location, UserId, UserDisplayName, null, null, cancellationToken);
+        }
+        else if (location is null)
+        {
+            asset.OrgNodeId = null;
+        }
+
+        asset.ParentAssetId = parent?.Id;
+        if (previousParent != asset.ParentAssetId)
+        {
+            if (previousParent.HasValue)
+            {
+                var detached = assetLifecycleService.Record(asset, AssetLifecycleEventTypes.ComponentDetached, UserId, UserDisplayName);
+                detached.FromParentAssetId = previousParent;
+                detached.FromValue = await dbContext.Assets.Where(x => x.Id == previousParent).Select(x => x.AssetCode).SingleOrDefaultAsync(cancellationToken);
+            }
+
+            if (parent is not null)
+            {
+                var attached = assetLifecycleService.Record(asset, AssetLifecycleEventTypes.ComponentAttached, UserId, UserDisplayName, $"Component of {parent.AssetCode}.");
+                attached.ToValue = parent.AssetCode;
+            }
+        }
+
+        asset.Criticality = NormalizeCriticality(request.Criticality);
+        asset.OperationalStatus = NormalizeOperationalStatus(request.OperationalStatus, asset.OperationalStatus);
+        if (previousStatus != asset.OperationalStatus)
+        {
+            var changed = assetLifecycleService.Record(asset, AssetLifecycleEventTypes.StatusChanged, UserId, UserDisplayName);
+            changed.FromValue = previousStatus;
+            changed.ToValue = asset.OperationalStatus;
+        }
+
+        asset.LostProductionPerHour = request.LostProductionPerHour;
+        if (request.CommissioningDate.HasValue && asset.CommissioningDate != request.CommissioningDate)
+        {
+            assetLifecycleService.Record(asset, AssetLifecycleEventTypes.Commissioned, UserId, UserDisplayName, null, request.CommissioningDate);
+        }
+
+        asset.CommissioningDate = request.CommissioningDate ?? asset.CommissioningDate;
+        asset.ExternalId = request.ExternalId?.Trim() is { Length: > 0 } externalId ? externalId : null;
+        asset.ExternalSystem = request.ExternalSystem?.Trim() is { Length: > 0 } externalSystem ? externalSystem : null;
 
         var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId ?? asset.BranchId, cancellationToken);
 
@@ -557,6 +736,14 @@ public sealed class AssetsController(
             cancellationToken);
 
         await dbContext.Entry(asset).Reference(x => x.Client).LoadAsync(cancellationToken);
+        if (asset.OrgNodeId.HasValue)
+        {
+            await dbContext.Entry(asset).Reference(x => x.OrgNode).LoadAsync(cancellationToken);
+        }
+        if (asset.ParentAssetId.HasValue)
+        {
+            await dbContext.Entry(asset).Reference(x => x.ParentAsset).LoadAsync(cancellationToken);
+        }
         if (asset.BranchId.HasValue)
         {
             await dbContext.Entry(asset).Reference(x => x.Branch).LoadAsync(cancellationToken);
@@ -576,6 +763,24 @@ public sealed class AssetsController(
         await dbContext.Entry(asset).Collection(x => x.CustomFieldValues).Query().Include(x => x.FieldDefinition).LoadAsync(cancellationToken);
 
         return Ok(await MapWithCoverageAsync(asset, cancellationToken));
+    }
+
+    /// <summary>ServiceOps client placement (client, site, system). Factory assets have no client and no site or system.</summary>
+    private async Task EnsureClientPlacementAsync(UpsertAssetRequest request, CancellationToken cancellationToken)
+    {
+        if (request.ClientId is not { } clientId)
+        {
+            if (request.SiteId.HasValue || request.SystemId.HasValue)
+            {
+                throw new BusinessRuleException("Sites and systems belong to clients; factory assets use their factory location instead.");
+            }
+
+            return;
+        }
+
+        await EnsureClientExistsAsync(clientId, cancellationToken);
+        await EnsureSiteIsValidAsync(clientId, request.SiteId, cancellationToken);
+        await EnsureSystemIsValidAsync(clientId, request.SiteId, request.SystemId, cancellationToken);
     }
 
     private async Task EnsureSiteIsValidAsync(Guid clientId, Guid? siteId, CancellationToken cancellationToken)
@@ -651,7 +856,7 @@ public sealed class AssetsController(
     {
         if (request.ClientId == Guid.Empty)
         {
-            throw new BusinessRuleException("Client is required.");
+            throw new BusinessRuleException("Client is invalid.");
         }
 
         if (string.IsNullOrWhiteSpace(request.AssetName))
@@ -1016,7 +1221,23 @@ public sealed class AssetsController(
                     x.FieldDefinition?.FieldType ?? "Text",
                     x.FieldDefinition?.Unit,
                     x.Value))
-                .ToList());
+                .ToList())
+        {
+            OrgNodeId = asset.OrgNodeId,
+            OrgNodeName = asset.OrgNode?.Name,
+            OrgNodeLevel = asset.OrgNode?.Level,
+            ParentAssetId = asset.ParentAssetId,
+            ParentAssetCode = asset.ParentAsset?.AssetCode,
+            ParentAssetName = asset.ParentAsset?.AssetName,
+            Criticality = asset.Criticality,
+            OperationalStatus = asset.OperationalStatus,
+            LostProductionPerHour = asset.LostProductionPerHour,
+            CommissioningDate = asset.CommissioningDate,
+            DisposalDate = asset.DisposalDate,
+            DisposalMethod = asset.DisposalMethod,
+            ExternalId = asset.ExternalId,
+            ExternalSystem = asset.ExternalSystem
+        };
 
     private static string NormalizeStatusFilter(string? status)
     {
@@ -1039,7 +1260,7 @@ public sealed class AssetsController(
 }
 
 public sealed record UpsertAssetRequest(
-    Guid ClientId,
+    Guid? ClientId,
     Guid? BranchId,
     Guid? SiteId,
     Guid? SystemId,
@@ -1064,13 +1285,21 @@ public sealed record UpsertAssetRequest(
     [StringLength(50)] string? Status,
     IReadOnlyCollection<UpsertAssetCustomFieldValueRequest>? CustomFieldValues,
     DateTime? WarrantyStartDate = null,
-    int? WarrantyPeriodMonths = null);
+    int? WarrantyPeriodMonths = null,
+    Guid? OrgNodeId = null,
+    Guid? ParentAssetId = null,
+    [StringLength(1)] string? Criticality = null,
+    [StringLength(30)] string? OperationalStatus = null,
+    decimal? LostProductionPerHour = null,
+    DateTime? CommissioningDate = null,
+    [StringLength(100)] string? ExternalId = null,
+    [StringLength(50)] string? ExternalSystem = null);
 
 public sealed record AssetResponse(
     Guid Id,
     Guid? BranchId,
     string? BranchName,
-    Guid ClientId,
+    Guid? ClientId,
     string? ClientName,
     Guid? SiteId,
     string? SiteName,
@@ -1111,6 +1340,22 @@ public sealed record AssetResponse(
 {
     /// <summary>The contract covering this asset (detail views only; lists leave it null).</summary>
     public AssetContractCoverResponse? CoveredBy { get; init; }
+
+    // Factory register
+    public Guid? OrgNodeId { get; init; }
+    public string? OrgNodeName { get; init; }
+    public string? OrgNodeLevel { get; init; }
+    public Guid? ParentAssetId { get; init; }
+    public string? ParentAssetCode { get; init; }
+    public string? ParentAssetName { get; init; }
+    public string? Criticality { get; init; }
+    public string OperationalStatus { get; init; } = AssetOperationalStatuses.Operational;
+    public decimal? LostProductionPerHour { get; init; }
+    public DateTime? CommissioningDate { get; init; }
+    public DateTime? DisposalDate { get; init; }
+    public string? DisposalMethod { get; init; }
+    public string? ExternalId { get; init; }
+    public string? ExternalSystem { get; init; }
 }
 
 /// <param name="Scope">How the contract reaches the asset: Asset (listed by name), Category, Site, or Client (all the client's assets).</param>

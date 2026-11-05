@@ -109,10 +109,12 @@ public abstract class TenantAwareControllerBase(ITenantContext tenantContext) : 
     }
 
     protected string UserDisplayName =>
-        User.Identity?.Name
-        ?? User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
-        ?? User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
-        ?? "Unknown User";
+        HttpContext?.User is not { } user
+            ? "Unknown User"
+            : user.Identity?.Name
+              ?? user.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
+              ?? user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+              ?? "Unknown User";
 
     private Guid EnsureTenantAccessAndGetId()
     {

@@ -18,6 +18,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<OrgNode> OrgNodes => Set<OrgNode>();
     public DbSet<UserOrgNodeAssignment> UserOrgNodeAssignments => Set<UserOrgNodeAssignment>();
     public DbSet<FactorySettings> FactorySettings => Set<FactorySettings>();
+    public DbSet<AssetLifecycleEvent> AssetLifecycleEvents => Set<AssetLifecycleEvent>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
@@ -741,6 +742,38 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .HasForeignKey(x => x.OrgNodeId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.TenantId, x.OrgNodeId });
+            entity.Property(x => x.Criticality).HasMaxLength(1);
+            entity.Property(x => x.OperationalStatus).HasMaxLength(30).IsRequired().HasDefaultValue(AssetOperationalStatuses.Operational);
+            entity.Property(x => x.LostProductionPerHour).HasPrecision(18, 4);
+            entity.Property(x => x.DisposalMethod).HasMaxLength(200);
+            entity.Property(x => x.ExternalId).HasMaxLength(100);
+            entity.Property(x => x.ExternalSystem).HasMaxLength(50);
+            entity.HasIndex(x => new { x.TenantId, x.ExternalSystem, x.ExternalId });
+            entity.HasIndex(x => new { x.TenantId, x.UpdatedAt });
+            entity.HasOne(x => x.ParentAsset)
+                .WithMany(x => x.Components)
+                .HasForeignKey(x => x.ParentAssetId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AssetLifecycleEvent>(entity =>
+        {
+            entity.ToTable("asset_lifecycle_events");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EventType).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.FromValue).HasMaxLength(200);
+            entity.Property(x => x.ToValue).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.PerformedByName).HasMaxLength(200);
+            entity.HasIndex(x => new { x.TenantId, x.AssetId, x.OccurredAt });
+            entity.HasOne(x => x.Tenant)
+                .WithMany()
+                .HasForeignKey(x => x.TenantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset)
+                .WithMany(x => x.LifecycleEvents)
+                .HasForeignKey(x => x.AssetId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Technician>(entity =>

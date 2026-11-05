@@ -90,8 +90,9 @@ public sealed class AssetContractsController(
             ?? throw new NotFoundException("Asset was not found.");
     }
 
-    private Task<List<Contract>> LoadContractsAsync(Guid clientId, CancellationToken cancellationToken) =>
-        dbContext.Contracts
+    private async Task<List<Contract>> LoadContractsAsync(Guid? clientId, CancellationToken cancellationToken) =>
+        // Factory assets have no client, so no client contract can cover them.
+        clientId is null ? [] : await dbContext.Contracts
             .Include(x => x.Assets)
             .Include(x => x.Sites).ThenInclude(x => x.Site)
             .Include(x => x.AssetCategories).ThenInclude(x => x.AssetCategory)

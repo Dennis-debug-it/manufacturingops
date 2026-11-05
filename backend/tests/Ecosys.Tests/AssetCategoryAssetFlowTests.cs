@@ -500,16 +500,22 @@ public sealed class AssetCategoryAssetFlowTests
             new FakeTenantContext(tenantId, userId),
             new NoOpUserAccessService());
 
-    private static AssetsController CreateAssetsController(AppDbContext dbContext, Guid tenantId, Guid userId) =>
-        new(
+    private static AssetsController CreateAssetsController(AppDbContext dbContext, Guid tenantId, Guid userId)
+    {
+        var tenantContext = new FakeTenantContext(tenantId, userId);
+        var orgScope = new Ecosys.Infrastructure.Services.Factory.OrgScopeService(dbContext, tenantContext);
+        return new(
             dbContext,
-            new FakeTenantContext(tenantId, userId),
+            tenantContext,
             new NoOpPreventiveMaintenancePlanService(),
             new NoOpAuditLogService(),
             new NoOpUserAccessService(),
             new NoOpBranchAccessService(),
             new FakeDocumentNumberingService(),
-            new NoOpLicenseGuardService(dbContext));
+            new NoOpLicenseGuardService(dbContext),
+            orgScope,
+            new Ecosys.Infrastructure.Services.Factory.AssetLifecycleService(dbContext, orgScope));
+    }
 
     private sealed record FixtureData(Tenant Tenant, User User, Client Client, Site Site);
 

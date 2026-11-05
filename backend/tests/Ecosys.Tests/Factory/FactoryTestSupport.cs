@@ -57,6 +57,19 @@ internal static class FactoryTestSupport
     public static UserAccessService Access(ITenantContext context) => new(context);
 }
 
+/// <summary>License checks always pass; licensing is not what these tests are about.</summary>
+internal sealed class AllowAllLicenseGuard : ILicenseGuardService
+{
+    public Task<TenantLicenseSnapshot> GetSnapshotAsync(Guid tenantId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    public Task<LicenseUsageSnapshot> GetUsageAsync(Guid tenantId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    public Task<IReadOnlyCollection<PlatformLicenseUsageSnapshot>> GetPlatformUsageAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    public Task<TenantLicense> GetOrCreateTenantLicenseAsync(Guid tenantId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    public Task EnsureTenantCanMutateAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task EnsureCanCreateUserAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task EnsureCanCreateBranchAsync(Guid tenantId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task EnsureFeatureEnabledAsync(Guid tenantId, string featureName, CancellationToken cancellationToken = default) => Task.CompletedTask;
+}
+
 internal sealed class FactoryTenantContext(Guid tenantId, Guid userId, bool isAdmin = true, params string[] permissions) : ITenantContext
 {
     public Guid? TenantId => tenantId;

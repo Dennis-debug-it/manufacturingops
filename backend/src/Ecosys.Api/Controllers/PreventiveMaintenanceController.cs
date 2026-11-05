@@ -145,6 +145,12 @@ public sealed class PreventiveMaintenanceController(
             throw new BusinessRuleException("Plan asset was not found.");
         }
 
+        if (plan.Asset.ClientId is not { } clientId)
+        {
+            // Work orders still require a client until the factory work order model (Phase 2) lands.
+            throw new BusinessRuleException("Work orders can't be raised from this plan yet: its asset is a factory asset with no client.");
+        }
+
         // Idempotency guard (F6-01): don't generate a second work order while one is still open for
         // this plan — matches the background PmSchedulerWorker so a double-click or retry can't
         // create duplicate PM work orders.
@@ -173,7 +179,7 @@ public sealed class PreventiveMaintenanceController(
         {
             TenantId = TenantId,
             BranchId = plan.BranchId,
-            ClientId = plan.Asset.ClientId,
+            ClientId = clientId,
             AssetId = plan.AssetId,
             PreventiveMaintenancePlanId = plan.Id,
             PmTemplateId = plan.PmTemplateId,

@@ -58,7 +58,9 @@ public sealed class TenantIsolationTests
             new NoOpUserAccessService(),
             new NoOpBranchAccessService(),
             new NoOpDocumentNumberingService(),
-            new NoOpLicenseGuardService());
+            new NoOpLicenseGuardService(),
+            new Ecosys.Infrastructure.Services.Factory.OrgScopeService(dbContext, tenantContext),
+            new Ecosys.Infrastructure.Services.Factory.AssetLifecycleService(dbContext, new Ecosys.Infrastructure.Services.Factory.OrgScopeService(dbContext, tenantContext)));
 
         await Assert.ThrowsAsync<NotFoundException>(() => clientsController.Get(fixture.TenantBClientId, CancellationToken.None));
         await Assert.ThrowsAsync<NotFoundException>(() => sitesController.Get(fixture.TenantBClientId, fixture.TenantBSiteId, CancellationToken.None));

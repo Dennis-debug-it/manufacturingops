@@ -98,6 +98,11 @@ public sealed class PmSchedulerWorker(
                 if (!plan.AutoSchedule || !ShouldGenerate(plan, now))
                     continue;
 
+                // Work orders still require a client until the factory work order model (Phase 2)
+                // lands; factory assets have none, so their plans wait rather than fail the save.
+                if (plan.Asset is { ClientId: null })
+                    continue;
+
                 var check = await PmContractGuard.CheckAsync(db, plan, plan.NextPmDate!.Value, ct);
                 if (!check.MayGenerate)
                 {

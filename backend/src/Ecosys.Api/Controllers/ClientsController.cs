@@ -491,8 +491,8 @@ public sealed class ClientsController(
             .Select(x => new { x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count, cancellationToken);
         var assetCounts = await dbContext.Assets
-            .Where(x => x.TenantId == TenantId && clientIds.Contains(x.ClientId) && x.Status != "Inactive")
-            .GroupBy(x => x.ClientId)
+            .Where(x => x.TenantId == TenantId && x.ClientId.HasValue && clientIds.Contains(x.ClientId.Value) && x.Status != "Inactive")
+            .GroupBy(x => x.ClientId!.Value)
             .Select(x => new { x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count, cancellationToken);
         var openWorkOrderCounts = await dbContext.WorkOrders
@@ -504,12 +504,13 @@ public sealed class ClientsController(
         var upcomingThreshold = DateTime.UtcNow.Date.AddDays(30);
         var upcomingPmCounts = await dbContext.Assets
             .Where(x => x.TenantId == TenantId
-                && clientIds.Contains(x.ClientId)
+                && x.ClientId.HasValue
+                && clientIds.Contains(x.ClientId.Value)
                 && x.Status != "Inactive"
                 && x.NextPmDate.HasValue
                 && x.NextPmDate.Value.Date >= DateTime.UtcNow.Date
                 && x.NextPmDate.Value.Date <= upcomingThreshold)
-            .GroupBy(x => x.ClientId)
+            .GroupBy(x => x.ClientId!.Value)
             .Select(x => new { x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count, cancellationToken);
 

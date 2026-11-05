@@ -198,7 +198,7 @@ public sealed class PreventiveMaintenanceFlowTests
         var workOrder = new WorkOrder
         {
             TenantId = tenant.Id,
-            ClientId = asset.ClientId,
+            ClientId = asset.ClientId!.Value,
             AssetId = asset.Id,
             WorkOrderNumber = "WO-PM-001",
             Title = "PM - Generator 01",
