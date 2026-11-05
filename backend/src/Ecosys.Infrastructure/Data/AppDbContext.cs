@@ -2859,6 +2859,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("asset_categories");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.DefaultCriticality).HasMaxLength(1);
+            entity.Property(x => x.DefaultMeterTypes).HasMaxLength(200);
             entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
             entity.Property(x => x.Code).HasMaxLength(120);
             entity.Property(x => x.Description).HasMaxLength(1000);

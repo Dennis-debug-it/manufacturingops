@@ -839,6 +839,14 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DefaultCriticality")
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)");
+
+                    b.Property<string>("DefaultMeterTypes")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<int?>("DefaultServiceIntervalMonths")
                         .HasColumnType("integer");
 

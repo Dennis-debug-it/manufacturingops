@@ -19,6 +19,11 @@ public sealed class AssetCategory : AuditableEntity
     public int? DefaultServiceIntervalMonths { get; set; }
     public int DisplayOrder { get; set; }
 
+    /// <summary>Suggested criticality (A/B/C) for new assets of this class.</summary>
+    public string? DefaultCriticality { get; set; }
+    /// <summary>Meter types (comma-separated) every new asset of this class gets, e.g. "RunHours,Production".</summary>
+    public string? DefaultMeterTypes { get; set; }
+
     public Tenant? Tenant { get; set; }
     public SystemTemplatePack? TemplatePack { get; set; }
     public ICollection<AssetCategoryField> Fields { get; set; } = new List<AssetCategoryField>();

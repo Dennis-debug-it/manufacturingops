@@ -72,6 +72,7 @@ public static class DependencyInjection
         services.AddScoped<Services.Factory.IAssetLifecycleService, Services.Factory.AssetLifecycleService>();
         services.AddScoped<Services.Factory.IMeterReadingService, Services.Factory.MeterReadingService>();
         services.AddScoped<Services.Factory.IAssetTagNumberService, Services.Factory.AssetTagNumberService>();
+        services.AddScoped<Services.Factory.IAssetClassService, Services.Factory.AssetClassService>();
         services.AddSingleton<Services.Factory.IAssetLabelPdfRenderer, Services.Factory.AssetLabelPdfRenderer>();
         services.AddScoped<IStockLedgerService, StockLedgerService>();
         services.AddScoped<IUserSessionService, UserSessionService>();

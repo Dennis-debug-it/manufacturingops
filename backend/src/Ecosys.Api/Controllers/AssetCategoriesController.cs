@@ -1,6 +1,7 @@
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services;
+using Ecosys.Infrastructure.Services.Factory;
 using Ecosys.Shared.Auth;
 using Ecosys.Shared.Errors;
 using Microsoft.AspNetCore.Authorization;
@@ -16,20 +17,28 @@ namespace Ecosys.Api.Controllers;
 public sealed class AssetCategoriesController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
-    IUserAccessService userAccessService) : TenantAwareControllerBase(tenantContext)
+    IUserAccessService userAccessService,
+    IFactorySettingsService factorySettingsService,
+    IAssetClassService assetClassService) : TenantAwareControllerBase(tenantContext)
 {
-    private static readonly (string Name, string[] Fields)[] DefaultDefinitions =
-    [
-        ("Generator", ["Fuel Type", "Capacity KVA", "Tank Capacity", "Phase", "Runtime Hours", "Engine Make", "Alternator Make"]),
-        ("UPS", []),
-        ("HVAC", []),
-        ("Solar", []),
-        ("Fire Panel", []),
-        ("Pump", []),
-        ("Transformer", []),
-        ("Switchgear", []),
-        ("Other Equipment", []),
-    ];
+    /// <summary>Asset classes available from each industry pack, so the factory can see what adding one would bring.</summary>
+    [HttpGet("industry-packs")]
+    public ActionResult<IReadOnlyCollection<IndustryAssetPackResponse>> IndustryPacks() =>
+        Ok(IndustryTemplates.All
+            .Select(pack => new IndustryAssetPackResponse(
+                pack.Key,
+                pack.Name,
+                pack.AssetClasses.Select(x => new IndustryAssetClassResponse(x.Code, x.Name, x.Group, x.DefaultCriticality, x.ServiceIntervalMonths, x.Meters, x.Fields.Select(f => f.Label).ToList())).ToList()))
+            .ToList());
+
+    /// <summary>Adds an industry pack's asset classes that the tenant doesn't have yet.</summary>
+    [HttpPost("apply-industry-pack")]
+    public async Task<ActionResult<InstallAssetClassesResult>> ApplyIndustryPack([FromBody] ApplyIndustryPackRequest request, CancellationToken ct)
+    {
+        userAccessService.EnsureAdmin();
+        var key = request.TemplateKey ?? (await factorySettingsService.GetOrCreateAsync(TenantId, ct)).IndustryTemplate;
+        return Ok(await assetClassService.InstallAsync(TenantId, key, ct));
+    }
 
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] bool includeInactive = false, CancellationToken ct = default)
@@ -77,7 +86,9 @@ public sealed class AssetCategoriesController(
             IsActive = true,
             IsSystemTemplate = false,
             DefaultServiceIntervalMonths = request.DefaultServiceIntervalMonths,
-            DisplayOrder = request.DisplayOrder
+            DisplayOrder = request.DisplayOrder,
+            DefaultCriticality = NormalizeCriticality(request.DefaultCriticality),
+            DefaultMeterTypes = NormalizeMeterTypes(request.DefaultMeterTypes)
         };
         dbContext.AssetCategories.Add(cat);
         await dbContext.SaveChangesAsync(ct);
@@ -101,6 +112,8 @@ public sealed class AssetCategoriesController(
         cat.Icon = request.Icon ?? cat.Icon;
         cat.DefaultServiceIntervalMonths = request.DefaultServiceIntervalMonths;
         cat.DisplayOrder = request.DisplayOrder;
+        cat.DefaultCriticality = NormalizeCriticality(request.DefaultCriticality);
+        cat.DefaultMeterTypes = NormalizeMeterTypes(request.DefaultMeterTypes);
         await dbContext.SaveChangesAsync(ct);
         return Ok(MapCategory(cat));
     }
@@ -234,6 +247,8 @@ public sealed class AssetCategoriesController(
         c.IsSystemTemplate,
         c.DefaultServiceIntervalMonths,
         c.DisplayOrder,
+        c.DefaultCriticality,
+        DefaultMeterTypes = (c.DefaultMeterTypes ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries),
         c.CreatedAt,
         c.UpdatedAt,
         Fields = c.Fields.OrderBy(f => f.DisplayOrder).Select(MapField)
@@ -304,46 +319,39 @@ public sealed class AssetCategoriesController(
         }
     }
 
+    /// <summary>A new tenant starts with its industry pack's asset classes (tea by default).</summary>
     private async Task EnsureDefaultCategoriesSeededAsync(CancellationToken cancellationToken)
     {
-        var hasAny = await dbContext.AssetCategories.AnyAsync(x => x.TenantId == TenantId, cancellationToken);
-        if (hasAny)
+        if (await dbContext.AssetCategories.AnyAsync(x => x.TenantId == TenantId, cancellationToken))
         {
             return;
         }
 
-        var categories = new List<AssetCategory>();
-        foreach (var (index, definition) in DefaultDefinitions.Select((item, index) => (index, item)))
+        var settings = await factorySettingsService.GetOrCreateAsync(TenantId, cancellationToken);
+        await assetClassService.InstallAsync(TenantId, settings.IndustryTemplate, cancellationToken);
+    }
+
+    private static string? NormalizeCriticality(string? value)
+    {
+        try
         {
-            var category = new AssetCategory
-            {
-                TenantId = TenantId,
-                Name = definition.Name,
-                Icon = "tool",
-                IsDefault = true,
-                IsActive = true,
-                DisplayOrder = index
-            };
+            return AssetCriticality.Normalize(value);
+        }
+        catch (ArgumentException ex)
+        {
+            throw new BusinessRuleException(ex.Message);
+        }
+    }
 
-            for (var fieldIndex = 0; fieldIndex < definition.Fields.Length; fieldIndex++)
-            {
-                var label = definition.Fields[fieldIndex];
-                category.Fields.Add(new AssetCategoryField
-                {
-                    FieldName = label.ToLowerInvariant().Replace(' ', '_'),
-                    FieldLabel = label,
-                    FieldType = "Text",
-                    IsRequired = false,
-                    IsActive = true,
-                    DisplayOrder = fieldIndex
-                });
-            }
-
-            categories.Add(category);
+    private static string? NormalizeMeterTypes(IReadOnlyCollection<string>? values)
+    {
+        if (values is null || values.Count == 0)
+        {
+            return null;
         }
 
-        dbContext.AssetCategories.AddRange(categories);
-        await dbContext.SaveChangesAsync(cancellationToken);
+        var types = values.Select(x => MeterTypes.Find(x) ?? throw new BusinessRuleException($"Unknown meter type '{x}'.")).Distinct().ToList();
+        return string.Join(',', types);
     }
 }
 
@@ -354,7 +362,15 @@ public sealed record UpsertAssetCategoryRequest(
     int DisplayOrder,
     string? Code = null,
     string? Description = null,
-    int? DefaultServiceIntervalMonths = null);
+    int? DefaultServiceIntervalMonths = null,
+    string? DefaultCriticality = null,
+    IReadOnlyCollection<string>? DefaultMeterTypes = null);
+
+public sealed record ApplyIndustryPackRequest(string? TemplateKey);
+
+public sealed record IndustryAssetClassResponse(string Code, string Name, string Group, string? DefaultCriticality, int? ServiceIntervalMonths, IReadOnlyCollection<string> Meters, IReadOnlyCollection<string> Fields);
+
+public sealed record IndustryAssetPackResponse(string Key, string Name, IReadOnlyCollection<IndustryAssetClassResponse> AssetClasses);
 
 public sealed record UpsertAssetCategoryFieldRequest(
     string FieldLabel,

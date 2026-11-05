@@ -60,7 +60,8 @@ public sealed class TenantIsolationTests
             new NoOpDocumentNumberingService(),
             new NoOpLicenseGuardService(),
             new Ecosys.Infrastructure.Services.Factory.OrgScopeService(dbContext, tenantContext),
-            new Ecosys.Infrastructure.Services.Factory.AssetLifecycleService(dbContext, new Ecosys.Infrastructure.Services.Factory.OrgScopeService(dbContext, tenantContext)));
+            new Ecosys.Infrastructure.Services.Factory.AssetLifecycleService(dbContext, new Ecosys.Infrastructure.Services.Factory.OrgScopeService(dbContext, tenantContext)),
+            new Ecosys.Infrastructure.Services.Factory.AssetClassService(dbContext));
 
         await Assert.ThrowsAsync<NotFoundException>(() => clientsController.Get(fixture.TenantBClientId, CancellationToken.None));
         await Assert.ThrowsAsync<NotFoundException>(() => sitesController.Get(fixture.TenantBClientId, fixture.TenantBSiteId, CancellationToken.None));
@@ -281,7 +282,7 @@ public sealed class TenantIsolationTests
 
         await using var dbContext = CreateDbContext(databaseName, tenantContext);
 
-        var controller = new AssetCategoriesController(dbContext, tenantContext, new NoOpUserAccessService());
+        var controller = new AssetCategoriesController(dbContext, tenantContext, new NoOpUserAccessService(), new Ecosys.Infrastructure.Services.Factory.FactorySettingsService(dbContext), new Ecosys.Infrastructure.Services.Factory.AssetClassService(dbContext));
 
         await Assert.ThrowsAsync<NotFoundException>(() => controller.UpdateField(
             fixture.TenantBAssetCategoryId,

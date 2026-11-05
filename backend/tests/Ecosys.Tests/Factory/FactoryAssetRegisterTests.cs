@@ -258,7 +258,8 @@ public sealed class FactoryAssetRegisterTests
             new DocumentNumberingService(db),
             new AllowAllLicenseGuard(),
             scope,
-            new AssetLifecycleService(db, scope)));
+            new AssetLifecycleService(db, scope),
+            new AssetClassService(db)));
     }
 
     internal static AssetLifecycleController Lifecycle(AppDbContext db, FactoryTenantContext context)

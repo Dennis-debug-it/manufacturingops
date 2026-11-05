@@ -26,7 +26,8 @@ public sealed class AssetsController(
     IDocumentNumberingService documentNumberingService,
     ILicenseGuardService licenseGuardService,
     IOrgScopeService orgScopeService,
-    IAssetLifecycleService assetLifecycleService) : TenantAwareControllerBase(tenantContext)
+    IAssetLifecycleService assetLifecycleService,
+    IAssetClassService assetClassService) : TenantAwareControllerBase(tenantContext)
 {
     private static readonly HashSet<string> AllowedStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -564,6 +565,7 @@ public sealed class AssetsController(
         };
 
         dbContext.Assets.Add(asset);
+        await assetClassService.ApplyDefaultsAsync(asset, cancellationToken);
         var registered = assetLifecycleService.Record(asset, AssetLifecycleEventTypes.Registered, UserId, UserDisplayName,
             location is null ? null : $"Registered at {location.Name}.");
         registered.ToValue = location?.Name;
