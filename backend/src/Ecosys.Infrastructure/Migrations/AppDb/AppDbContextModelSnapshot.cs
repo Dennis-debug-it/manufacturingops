@@ -4645,6 +4645,132 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("intake_protocols", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.JobPlan", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetCategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal?>("EstimatedHours")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("NeedsLineStop")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WorkType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetCategoryId");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("job_plans", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.JobPlanResource", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<Guid>("JobPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<Guid?>("MaterialItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobPlanId");
+
+                    b.HasIndex("MaterialItemId");
+
+                    b.ToTable("job_plan_resources", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.JobPlanStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("EstimatedMinutes")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Instruction")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("JobPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobPlanId");
+
+                    b.ToTable("job_plan_steps", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.KnowledgeArticle", b =>
                 {
                     b.Property<Guid>("Id")
@@ -10455,6 +10581,47 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("sla_escalations", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SlaMatrixCell", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Criticality")
+                        .IsRequired()
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("RepairHours")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<decimal>("ResponseHours")
+                        .HasPrecision(9, 2)
+                        .HasColumnType("numeric(9,2)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Priority", "Criticality")
+                        .IsUnique();
+
+                    b.ToTable("sla_matrix_cells", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.SlaRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -13900,6 +14067,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<Guid?>("JobPlanId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("LeadTechnicianId")
                         .HasColumnType("uuid");
 
@@ -14132,6 +14302,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("FailureRemedyCodeId");
 
                     b.HasIndex("FollowUpOfWorkOrderId");
+
+                    b.HasIndex("JobPlanId");
 
                     b.HasIndex("LeadTechnicianId");
 
@@ -16552,6 +16724,53 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.JobPlan", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.AssetCategory", "AssetCategory")
+                        .WithMany()
+                        .HasForeignKey("AssetCategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AssetCategory");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.JobPlanResource", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.JobPlan", "JobPlan")
+                        .WithMany("Resources")
+                        .HasForeignKey("JobPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.MaterialItem", "MaterialItem")
+                        .WithMany()
+                        .HasForeignKey("MaterialItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("JobPlan");
+
+                    b.Navigation("MaterialItem");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.JobPlanStep", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.JobPlan", "JobPlan")
+                        .WithMany("Steps")
+                        .HasForeignKey("JobPlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("JobPlan");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.KnowledgeArticle", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.KnowledgeCategory", "Category")
@@ -18353,6 +18572,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SlaMatrixCell", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.SlaRecord", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.SlaRule", "SlaRule")
@@ -19467,6 +19697,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasForeignKey("FollowUpOfWorkOrderId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Ecosys.Domain.Entities.JobPlan", "JobPlan")
+                        .WithMany()
+                        .HasForeignKey("JobPlanId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Ecosys.Domain.Entities.Technician", "LeadTechnician")
                         .WithMany()
                         .HasForeignKey("LeadTechnicianId")
@@ -19564,6 +19799,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("FailureRemedyCode");
 
                     b.Navigation("FollowUpOfWorkOrder");
+
+                    b.Navigation("JobPlan");
 
                     b.Navigation("LeadTechnician");
 
@@ -20209,6 +20446,13 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
             modelBuilder.Entity("Ecosys.Domain.Entities.EscalationRule", b =>
                 {
                     b.Navigation("FiredEvents");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.JobPlan", b =>
+                {
+                    b.Navigation("Resources");
+
+                    b.Navigation("Steps");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.KnowledgeArticle", b =>

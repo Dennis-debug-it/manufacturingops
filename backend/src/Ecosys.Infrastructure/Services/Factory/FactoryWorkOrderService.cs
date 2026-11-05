@@ -120,7 +120,8 @@ public sealed record CreateFactoryWorkOrder(
     string Source = FactoryRequestSources.Office,
     string? RequestedByName = null,
     Guid? ParentWorkOrderId = null,
-    Guid? ProblemCodeId = null);
+    Guid? ProblemCodeId = null,
+    Guid? JobPlanId = null);
 
 public sealed record FactoryTransition(
     string Action,
@@ -154,7 +155,8 @@ internal sealed class FactoryWorkOrderService(
     IDocumentNumberingService documentNumberingService,
     IFactorySettingsService factorySettingsService,
     IAssetLifecycleService assetLifecycleService,
-    IOrgScopeService orgScopeService) : IFactoryWorkOrderService
+    IOrgScopeService orgScopeService,
+    IFactorySlaService slaService) : IFactoryWorkOrderService
 {
     public async Task<WorkOrder> CreateAsync(Guid tenantId, FactoryActor actor, CreateFactoryWorkOrder request, CancellationToken cancellationToken = default)
     {
@@ -208,6 +210,14 @@ internal sealed class FactoryWorkOrderService(
             await EnsureCodeAsync(tenantId, problemId, FailureCodeKinds.Problem, cancellationToken);
         }
 
+        JobPlan? plan = null;
+        if (request.JobPlanId is { } planId)
+        {
+            plan = await dbContext.JobPlans.Include(x => x.Steps)
+                .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == planId && x.IsActive, cancellationToken)
+                ?? throw new BusinessRuleException("The job plan was not found.");
+        }
+
         var settings = await factorySettingsService.GetOrCreateAsync(tenantId, cancellationToken);
         var now = DateTime.UtcNow;
         var workOrder = new WorkOrder
@@ -225,9 +235,11 @@ internal sealed class FactoryWorkOrderService(
             IsPreventiveMaintenance = workType == FactoryWorkTypes.Preventive,
             Status = WorkOrderStatuses.Requested,
             IsBreakdown = request.IsBreakdown,
-            NeedsLineStop = request.NeedsLineStop,
+            NeedsLineStop = request.NeedsLineStop || plan?.NeedsLineStop == true,
             DueDate = request.DueDate,
-            EstimatedLabourHours = request.EstimatedHours,
+            EstimatedLabourHours = request.EstimatedHours ?? plan?.EstimatedHours,
+            JobPlanId = plan?.Id,
+            CreatedAt = now,
             RequestSource = request.Source,
             RequestedByName = string.IsNullOrWhiteSpace(request.RequestedByName) ? actor.Name : request.RequestedByName.Trim(),
             FailureProblemCodeId = request.ProblemCodeId,
@@ -236,6 +248,23 @@ internal sealed class FactoryWorkOrderService(
             NotifyClient = false
         };
         dbContext.WorkOrders.Add(workOrder);
+        await slaService.ApplyAsync(workOrder, asset?.Criticality, cancellationToken);
+        foreach (var step in plan?.Steps.OrderBy(x => x.Sequence) ?? Enumerable.Empty<JobPlanStep>())
+        {
+            dbContext.WorkOrderChecklistItems.Add(new WorkOrderChecklistItem
+            {
+                TenantId = tenantId,
+                WorkOrderId = workOrder.Id,
+                SectionName = plan!.Name,
+                QuestionText = step.Instruction,
+                HelperText = step.EstimatedMinutes is { } minutes ? $"About {minutes} min" : null,
+                InputType = "checkbox",
+                QuestionType = "Task",
+                IsRequired = true,
+                SortOrder = step.Sequence
+            });
+        }
+
         AddEvent(workOrder, actor, "Created", null, WorkOrderStatuses.Requested,
             $"{(request.IsBreakdown ? "Breakdown reported" : "Job requested")} by {workOrder.RequestedByName}.");
 

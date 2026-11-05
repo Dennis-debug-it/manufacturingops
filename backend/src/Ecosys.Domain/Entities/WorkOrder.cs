@@ -130,6 +130,9 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public Guid? FailureRemedyCodeId { get; set; }
     /// <summary>The earlier job on the same asset and fault that this one repeats, within the rework window.</summary>
     public Guid? ReworkOfWorkOrderId { get; set; }
+    /// <summary>The job plan the job was raised from; its steps are copied onto the job as checklist items.</summary>
+    public Guid? JobPlanId { get; set; }
+    public JobPlan? JobPlan { get; set; }
     public FailureCode? FailureProblemCode { get; set; }
     public FailureCode? FailureCauseCode { get; set; }
     public FailureCode? FailureRemedyCode { get; set; }

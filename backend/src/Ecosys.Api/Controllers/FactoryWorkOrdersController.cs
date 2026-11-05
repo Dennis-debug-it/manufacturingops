@@ -27,6 +27,7 @@ public sealed class FactoryWorkOrdersController(
     IOrgScopeService orgScopeService,
     IFactoryWorkOrderService workOrderService,
     IFailureCodeService failureCodeService,
+    IFactorySlaService slaService,
     IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
 {
     [HttpGet]
@@ -134,7 +135,8 @@ public sealed class FactoryWorkOrdersController(
             FactoryRequestSources.Office,
             request.RequestedByName,
             null,
-            request.ProblemCodeId), cancellationToken);
+            request.ProblemCodeId,
+            request.JobPlanId), cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "factory-work-order.created", nameof(WorkOrder), workOrder.Id.ToString(),
             $"{(workOrder.IsBreakdown ? "Breakdown" : "Job")} {workOrder.WorkOrderNumber} raised: {workOrder.Title}", cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = workOrder.Id }, await MapDetailAsync(await LoadAsync(workOrder.Id, cancellationToken), cancellationToken));
@@ -155,8 +157,15 @@ public sealed class FactoryWorkOrdersController(
         workOrder.Title = request.Title.Trim();
         workOrder.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
         workOrder.WorkType = FactoryWorkTypes.Find(request.WorkType) ?? throw new BusinessRuleException("Unknown job type.");
-        workOrder.Priority = FactoryPriorities.Find(request.Priority) ?? throw new BusinessRuleException("Unknown priority.");
+        var priority = FactoryPriorities.Find(request.Priority) ?? throw new BusinessRuleException("Unknown priority.");
         workOrder.DueDate = request.DueDate;
+        if (priority != workOrder.Priority)
+        {
+            // Targets follow the new priority, still counted from when the job was raised.
+            workOrder.Priority = priority;
+            await slaService.ApplyAsync(workOrder, workOrder.Asset?.Criticality, cancellationToken);
+        }
+
         workOrder.NeedsLineStop = request.NeedsLineStop;
         workOrder.EstimatedLabourHours = request.EstimatedHours;
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -210,6 +219,20 @@ public sealed class FactoryWorkOrdersController(
             EstimatedHours: request.EstimatedHours,
             ParentWorkOrderId: parent.Id), cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = child.Id }, await MapDetailAsync(await LoadAsync(child.Id, cancellationToken), cancellationToken));
+    }
+
+    /// <summary>Ticks a job plan step done (or not), with an optional remark.</summary>
+    [HttpPost("{id:guid}/steps/{stepId:guid}")]
+    public async Task<ActionResult<FactoryWorkOrderDetail>> Step(Guid id, Guid stepId, [FromBody] StepUpdateRequest request, CancellationToken cancellationToken)
+    {
+        var workOrder = await LoadAsync(id, cancellationToken);
+        await EnsureCanActAsync(workOrder, FactoryWorkOrderActions.Start, cancellationToken, anyOpenStatus: true);
+        var step = await dbContext.WorkOrderChecklistItems.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.WorkOrderId == id && x.Id == stepId, cancellationToken)
+            ?? throw new NotFoundException("Step was not found.");
+        step.ResponseValue = request.Done ? "Done" : null;
+        step.Remarks = string.IsNullOrWhiteSpace(request.Remarks) ? null : request.Remarks.Trim();
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(await MapDetailAsync(workOrder, cancellationToken));
     }
 
     /// <summary>A note for the next shift: what was found, what is left, anything unsafe.</summary>
@@ -393,6 +416,11 @@ public sealed class FactoryWorkOrdersController(
             .Select(w => new FactoryJobLink(w.Id, w.WorkOrderNumber, w.Title, w.Status)).ToListAsync(cancellationToken);
         var signature = await dbContext.WorkOrderSignatures.Where(s => s.WorkOrderId == x.Id).OrderByDescending(s => s.CapturedAt)
             .Select(s => new FactorySignature(s.SignerName, s.CapturedAt, s.SignatureDataUrl)).FirstOrDefaultAsync(cancellationToken);
+        var steps = await dbContext.WorkOrderChecklistItems.Where(s => s.WorkOrderId == x.Id && s.QuestionType == "Task").OrderBy(s => s.SortOrder)
+            .Select(s => new FactoryJobStep(s.Id, s.QuestionText, s.HelperText, s.ResponseValue == "Done", s.Remarks)).ToListAsync(cancellationToken);
+        var plan = x.JobPlanId is { } planId
+            ? await dbContext.JobPlans.Include(p => p.Steps).Include(p => p.Resources).Include(p => p.AssetCategory).SingleOrDefaultAsync(p => p.Id == planId, cancellationToken)
+            : null;
         var downtimeHours = x.DowntimeStartedAt is { } start ? Math.Round((decimal)((x.DowntimeEndedAt ?? DateTime.UtcNow) - start).TotalHours, 2) : (decimal?)null;
 
         return new FactoryWorkOrderDetail(
@@ -414,7 +442,15 @@ public sealed class FactoryWorkOrdersController(
             children, team, labour, parts, signature,
             events.Where(e => e.EventType == "Handover").Select(e => new FactoryJobEvent(e.EventType, e.OccurredAt, e.Message, e.Note ?? (e.ActorUserId is { } a ? actors.GetValueOrDefault(a) : null), e.OldStatus, e.NewStatus)).ToList(),
             events.Where(e => e.EventType != "Handover").Select(e => new FactoryJobEvent(e.EventType, e.OccurredAt, e.Message, e.ActorUserId is { } a ? actors.GetValueOrDefault(a) : null, e.OldStatus, e.NewStatus)).ToList(),
-            FactoryWorkOrderActions.AllowedFrom(WorkOrderStatuses.Normalize(x.Status)));
+            FactoryWorkOrderActions.AllowedFrom(WorkOrderStatuses.Normalize(x.Status)))
+        {
+            JobPlanId = plan?.Id,
+            JobPlanName = plan?.Name,
+            Steps = steps,
+            Resources = plan?.Resources.OrderBy(r => r.Kind).ThenBy(r => r.Description).Select(r => new JobPlanResourceDto(r.Kind, r.Description, r.MaterialItemId, r.Quantity)).ToList() ?? [],
+            ResponseBreached = x.SlaResponseBreached,
+            RepairBreached = x.SlaResolutionBreached,
+        };
     }
 
     private async Task ApplyCodeAsync(FailureCode code, UpsertFailureCodeRequest request, CancellationToken cancellationToken)
@@ -469,7 +505,18 @@ public sealed record FactoryWorkOrderDetail(
     FactorySignature? Signature,
     IReadOnlyCollection<FactoryJobEvent> Handover,
     IReadOnlyCollection<FactoryJobEvent> History,
-    IReadOnlyCollection<string> AllowedActions);
+    IReadOnlyCollection<string> AllowedActions)
+{
+    public Guid? JobPlanId { get; init; }
+    public string? JobPlanName { get; init; }
+    public IReadOnlyCollection<FactoryJobStep> Steps { get; init; } = [];
+    public IReadOnlyCollection<JobPlanResourceDto> Resources { get; init; } = [];
+    public bool ResponseBreached { get; init; }
+    public bool RepairBreached { get; init; }
+}
+
+public sealed record FactoryJobStep(Guid Id, string Instruction, string? Hint, bool Done, string? Remarks);
+public sealed record StepUpdateRequest(bool Done, [StringLength(1000)] string? Remarks = null);
 
 public sealed record CreateFactoryWorkOrderRequest(
     [StringLength(250)] string Title,
@@ -484,7 +531,8 @@ public sealed record CreateFactoryWorkOrderRequest(
     DateTime? DowntimeStartedAt = null,
     decimal? EstimatedHours = null,
     [StringLength(200)] string? RequestedByName = null,
-    Guid? ProblemCodeId = null);
+    Guid? ProblemCodeId = null,
+    Guid? JobPlanId = null);
 
 public sealed record UpdateFactoryWorkOrderRequest(
     [StringLength(250)] string Title, [StringLength(4000)] string? Description, string WorkType, string Priority,

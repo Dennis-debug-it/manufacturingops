@@ -63,6 +63,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<UserDashboardLayout> UserDashboardLayouts => Set<UserDashboardLayout>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
     public DbSet<FailureCode> FailureCodes => Set<FailureCode>();
+    public DbSet<SlaMatrixCell> SlaMatrixCells => Set<SlaMatrixCell>();
+    public DbSet<JobPlan> JobPlans => Set<JobPlan>();
+    public DbSet<JobPlanStep> JobPlanSteps => Set<JobPlanStep>();
+    public DbSet<JobPlanResource> JobPlanResources => Set<JobPlanResource>();
     public DbSet<WorkOrderTemplate> WorkOrderTemplates => Set<WorkOrderTemplate>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
     public DbSet<BranchMaterialStock> BranchMaterialStocks => Set<BranchMaterialStock>();
@@ -767,6 +771,50 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<SlaMatrixCell>(entity =>
+        {
+            entity.ToTable("sla_matrix_cells");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Priority).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Criticality).HasMaxLength(1).IsRequired();
+            entity.Property(x => x.ResponseHours).HasPrecision(9, 2);
+            entity.Property(x => x.RepairHours).HasPrecision(9, 2);
+            entity.HasIndex(x => new { x.TenantId, x.Priority, x.Criticality }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<JobPlan>(entity =>
+        {
+            entity.ToTable("job_plans");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(2000);
+            entity.Property(x => x.WorkType).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.EstimatedHours).HasPrecision(9, 2);
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.AssetCategory).WithMany().HasForeignKey(x => x.AssetCategoryId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<JobPlanStep>(entity =>
+        {
+            entity.ToTable("job_plan_steps");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Instruction).HasMaxLength(1000).IsRequired();
+            entity.HasOne(x => x.JobPlan).WithMany(x => x.Steps).HasForeignKey(x => x.JobPlanId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<JobPlanResource>(entity =>
+        {
+            entity.ToTable("job_plan_resources");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Quantity).HasPrecision(18, 4);
+            entity.HasOne(x => x.JobPlan).WithMany(x => x.Resources).HasForeignKey(x => x.JobPlanId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.MaterialItem).WithMany().HasForeignKey(x => x.MaterialItemId).OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<FailureCode>(entity =>
         {
             entity.ToTable("failure_codes");
@@ -956,6 +1004,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.FailureCauseCode).WithMany().HasForeignKey(x => x.FailureCauseCodeId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.FailureRemedyCode).WithMany().HasForeignKey(x => x.FailureRemedyCodeId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<WorkOrder>().WithMany().HasForeignKey(x => x.ReworkOfWorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.JobPlan).WithMany().HasForeignKey(x => x.JobPlanId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(x => new { x.TenantId, x.OrgNodeId, x.Status });
             entity.HasIndex(x => new { x.TenantId, x.AssetId, x.FailureProblemCodeId, x.CompletedAt });
             entity.ToTable("work_orders", tableBuilder =>
