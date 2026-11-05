@@ -136,7 +136,9 @@ public sealed class FactoryWorkOrdersController(
             request.RequestedByName,
             null,
             request.ProblemCodeId,
-            request.JobPlanId), cancellationToken);
+            request.JobPlanId,
+            request.RequiredCertificationId,
+            request.RequiredPermitTypes), cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "factory-work-order.created", nameof(WorkOrder), workOrder.Id.ToString(),
             $"{(workOrder.IsBreakdown ? "Breakdown" : "Job")} {workOrder.WorkOrderNumber} raised: {workOrder.Title}", cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = workOrder.Id }, await MapDetailAsync(await LoadAsync(workOrder.Id, cancellationToken), cancellationToken));
@@ -168,6 +170,14 @@ public sealed class FactoryWorkOrdersController(
 
         workOrder.NeedsLineStop = request.NeedsLineStop;
         workOrder.EstimatedLabourHours = request.EstimatedHours;
+        if (request.RequiredCertificationId is { } certificationId
+            && !await dbContext.CertificationDefinitions.AnyAsync(c => c.TenantId == TenantId && c.Id == certificationId && c.IsActive, cancellationToken))
+        {
+            throw new BusinessRuleException("The certificate type was not found.");
+        }
+
+        workOrder.RequiredCertificationId = request.RequiredCertificationId;
+        workOrder.RequiredPermitTypes = FactoryJobGuards.NormalisePermitTypes(request.RequiredPermitTypes);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(await MapDetailAsync(workOrder, cancellationToken));
     }
@@ -280,10 +290,12 @@ public sealed class FactoryWorkOrdersController(
             ?? throw new BusinessRuleException("Technician was not found.");
         if (request.Minutes is <= 0 or > 24 * 60) throw new BusinessRuleException("Time must be between 1 minute and 24 hours.");
         var started = FactoryTime.EffectiveAt(request.StartedAt);
+        var (overtime, cost) = await new FactoryJobGuards(dbContext).LabourAsync(technician, started, request.Minutes, cancellationToken);
         dbContext.WorkOrderTimeLogs.Add(new WorkOrderTimeLog
         {
             TenantId = TenantId, WorkOrderId = id, TechnicianId = technician.Id, TechnicianName = technician.FullName,
             StartedAt = started, EndedAt = started.AddMinutes(request.Minutes), DurationMinutes = request.Minutes,
+            IsOvertime = overtime, LabourCost = cost,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim()
         });
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -425,7 +437,15 @@ public sealed class FactoryWorkOrdersController(
         var team = await dbContext.WorkOrderTechnicianAssignments.Where(a => a.WorkOrderId == x.Id)
             .Select(a => new FactoryJobTechnician(a.TechnicianId, a.Technician != null ? a.Technician.FullName : string.Empty, a.IsLead)).ToListAsync(cancellationToken);
         var labour = await dbContext.WorkOrderTimeLogs.Where(t => t.WorkOrderId == x.Id).OrderBy(t => t.StartedAt)
-            .Select(t => new FactoryLabourEntry(t.Id, t.TechnicianName, t.StartedAt, t.DurationMinutes, t.Notes)).ToListAsync(cancellationToken);
+            .Select(t => new FactoryLabourEntry(t.Id, t.TechnicianName, t.StartedAt, t.DurationMinutes, t.Notes, t.IsOvertime, t.LabourCost)).ToListAsync(cancellationToken);
+        var permits = await dbContext.WorkPermits.Where(p => p.WorkOrderId == x.Id).OrderByDescending(p => p.CreatedAt)
+            .Select(p => new FactoryJobPermit(p.Id, p.PermitNumber, p.PermitType, p.Status, p.ValidFrom, p.ValidTo)).ToListAsync(cancellationToken);
+        var locks = await dbContext.LotoLocks.Where(l => l.WorkOrderId == x.Id).OrderBy(l => l.AppliedAt)
+            .Select(l => new FactoryJobLock(l.Id, l.IsolationPointId, l.IsolationPoint!.Code, l.IsolationPoint.Description, l.IsolationPoint.EnergyType, l.LockNumber,
+                l.AppliedByName, l.AppliedAt, l.ZeroEnergyVerified, l.RemovedByName, l.RemovedAt)).ToListAsync(cancellationToken);
+        var certificate = x.RequiredCertificationId is { } certId
+            ? await dbContext.CertificationDefinitions.Where(c => c.Id == certId).Select(c => c.Name).SingleOrDefaultAsync(cancellationToken)
+            : null;
         var parts = await dbContext.WorkOrderMaterialUsages.Where(p => p.WorkOrderId == x.Id).OrderBy(p => p.UsedAt)
             .Select(p => new FactoryPartUsed(p.Id, p.MaterialItemId, p.MaterialItem != null ? p.MaterialItem.ItemName : string.Empty, p.QuantityUsed, p.Notes, p.UsedAt)).ToListAsync(cancellationToken);
         var children = await dbContext.WorkOrders.Where(c => c.ParentWorkOrderId == x.Id)
@@ -470,6 +490,12 @@ public sealed class FactoryWorkOrdersController(
             Resources = plan?.Resources.OrderBy(r => r.Kind).ThenBy(r => r.Description).Select(r => new JobPlanResourceDto(r.Kind, r.Description, r.MaterialItemId, r.Quantity)).ToList() ?? [],
             ResponseBreached = x.SlaResponseBreached,
             RepairBreached = x.SlaResolutionBreached,
+            RequiredCertificationId = x.RequiredCertificationId,
+            RequiredCertificationName = certificate,
+            RequiredPermitTypes = FactoryJobGuards.PermitTypesOf(x.RequiredPermitTypes),
+            Permits = permits,
+            Locks = locks,
+            LabourCost = labour.Sum(l => l.Cost ?? 0),
         };
     }
 
@@ -498,7 +524,7 @@ public sealed record FactoryWorkOrderSummary(
     bool IsRework, string? HoldReason);
 
 public sealed record FactoryJobTechnician(Guid TechnicianId, string Name, bool IsLead);
-public sealed record FactoryLabourEntry(Guid Id, string? TechnicianName, DateTime StartedAt, int Minutes, string? Notes);
+public sealed record FactoryLabourEntry(Guid Id, string? TechnicianName, DateTime StartedAt, int Minutes, string? Notes, bool Overtime = false, decimal? Cost = null);
 public sealed record FactoryPartUsed(Guid Id, Guid MaterialItemId, string PartName, decimal Quantity, string? Notes, DateTime UsedAt);
 public sealed record FactoryJobLink(Guid Id, string WorkOrderNumber, string Title, string Status);
 public sealed record FactorySignature(string SignerName, DateTime CapturedAt, string DataUrl);
@@ -533,7 +559,19 @@ public sealed record FactoryWorkOrderDetail(
     public IReadOnlyCollection<JobPlanResourceDto> Resources { get; init; } = [];
     public bool ResponseBreached { get; init; }
     public bool RepairBreached { get; init; }
+    public Guid? RequiredCertificationId { get; init; }
+    public string? RequiredCertificationName { get; init; }
+    public IReadOnlyCollection<string> RequiredPermitTypes { get; init; } = [];
+    public IReadOnlyCollection<FactoryJobPermit> Permits { get; init; } = [];
+    public IReadOnlyCollection<FactoryJobLock> Locks { get; init; } = [];
+    public decimal LabourCost { get; init; }
 }
+
+public sealed record FactoryJobPermit(Guid Id, string PermitNumber, string PermitType, string Status, DateTime ValidFrom, DateTime ValidTo);
+
+public sealed record FactoryJobLock(
+    Guid Id, Guid IsolationPointId, string PointCode, string PointDescription, string EnergyType, string LockNumber,
+    string AppliedByName, DateTime AppliedAt, bool ZeroEnergyVerified, string? RemovedByName, DateTime? RemovedAt);
 
 public sealed record FactoryJobStep(
     Guid Id, string Instruction, string? Hint, bool Done, string? Remarks,
@@ -554,11 +592,14 @@ public sealed record CreateFactoryWorkOrderRequest(
     decimal? EstimatedHours = null,
     [StringLength(200)] string? RequestedByName = null,
     Guid? ProblemCodeId = null,
-    Guid? JobPlanId = null);
+    Guid? JobPlanId = null,
+    Guid? RequiredCertificationId = null,
+    IReadOnlyCollection<string>? RequiredPermitTypes = null);
 
 public sealed record UpdateFactoryWorkOrderRequest(
     [StringLength(250)] string Title, [StringLength(4000)] string? Description, string WorkType, string Priority,
-    DateTime? DueDate, bool NeedsLineStop, decimal? EstimatedHours);
+    DateTime? DueDate, bool NeedsLineStop, decimal? EstimatedHours,
+    Guid? RequiredCertificationId = null, IReadOnlyCollection<string>? RequiredPermitTypes = null);
 
 public sealed record FactoryActionRequest(
     [StringLength(2000)] string? Reason = null,

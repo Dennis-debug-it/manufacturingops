@@ -121,7 +121,9 @@ public sealed record CreateFactoryWorkOrder(
     string? RequestedByName = null,
     Guid? ParentWorkOrderId = null,
     Guid? ProblemCodeId = null,
-    Guid? JobPlanId = null);
+    Guid? JobPlanId = null,
+    Guid? RequiredCertificationId = null,
+    IReadOnlyCollection<string>? RequiredPermitTypes = null);
 
 public sealed record FactoryTransition(
     string Action,
@@ -157,7 +159,8 @@ internal sealed class FactoryWorkOrderService(
     IAssetLifecycleService assetLifecycleService,
     IOrgScopeService orgScopeService,
     IFactorySlaService slaService,
-    FactoryPmProgress pmProgress) : IFactoryWorkOrderService
+    FactoryPmProgress pmProgress,
+    FactoryJobGuards guards) : IFactoryWorkOrderService
 {
     public async Task<WorkOrder> CreateAsync(Guid tenantId, FactoryActor actor, CreateFactoryWorkOrder request, CancellationToken cancellationToken = default)
     {
@@ -240,6 +243,9 @@ internal sealed class FactoryWorkOrderService(
             DueDate = request.DueDate,
             EstimatedLabourHours = request.EstimatedHours ?? plan?.EstimatedHours,
             JobPlanId = plan?.Id,
+            RequiredCertificationId = request.RequiredCertificationId ?? plan?.RequiredCertificationId,
+            RequiredPermitTypes = FactoryJobGuards.NormalisePermitTypes(
+                (request.RequiredPermitTypes ?? []).Concat(FactoryJobGuards.PermitTypesOf(plan?.RequiredPermitTypes))),
             CreatedAt = now,
             RequestSource = request.Source,
             RequestedByName = string.IsNullOrWhiteSpace(request.RequestedByName) ? actor.Name : request.RequestedByName.Trim(),
@@ -336,6 +342,7 @@ internal sealed class FactoryWorkOrderService(
                 break;
 
             case FactoryWorkOrderActions.Start:
+                await guards.EnsureCanStartAsync(workOrder, DateTime.UtcNow, cancellationToken);
                 workOrder.WorkStartedAt ??= now;
                 SetStatus(workOrder, actor, WorkOrderStatuses.InProgress, "Work started.");
                 break;
@@ -362,6 +369,11 @@ internal sealed class FactoryWorkOrderService(
             case FactoryWorkOrderActions.Resume:
             {
                 var back = workOrder.PreviousStatus is WorkOrderStatuses.InProgress ? WorkOrderStatuses.InProgress : WorkOrderStatuses.Assigned;
+                if (back == WorkOrderStatuses.InProgress)
+                {
+                    await guards.EnsureCanStartAsync(workOrder, DateTime.UtcNow, cancellationToken);
+                }
+
                 workOrder.HoldEndedAt = now;
                 workOrder.HoldReason = null;
                 workOrder.HoldNote = null;
@@ -426,6 +438,7 @@ internal sealed class FactoryWorkOrderService(
             throw new BusinessRuleException("One or more technicians were not found or are inactive.");
         }
 
+        await guards.EnsureCanAssignAsync(workOrder, technicians, DateTime.UtcNow, cancellationToken);
         var lead = transition.LeadTechnicianId is { } leadId && ids.Contains(leadId) ? leadId : ids[0];
         var existing = await dbContext.WorkOrderTechnicianAssignments
             .Where(x => x.TenantId == workOrder.TenantId && x.WorkOrderId == workOrder.Id)
@@ -485,6 +498,7 @@ internal sealed class FactoryWorkOrderService(
             throw new BusinessRuleException("Choose the problem found, so repeat faults can be tracked.");
         }
 
+        await guards.EnsureCanCompleteAsync(workOrder, cancellationToken);
         var stepsLeft = await dbContext.WorkOrderChecklistItems
             .CountAsync(x => x.WorkOrderId == workOrder.Id && x.IsRequired && !x.IsCompleted, cancellationToken);
         if (stepsLeft > 0)

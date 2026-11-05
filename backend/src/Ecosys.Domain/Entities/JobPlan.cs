@@ -27,6 +27,9 @@ public sealed class JobPlan : AuditableEntity, ITenantEntity
     /// <summary>Offered first for assets of this class; null for any asset.</summary>
     public Guid? AssetCategoryId { get; set; }
     public decimal? EstimatedHours { get; set; }
+    /// <summary>Copied onto jobs from this plan: the certificate the technician needs, and the permits.</summary>
+    public Guid? RequiredCertificationId { get; set; }
+    public string? RequiredPermitTypes { get; set; }
     public bool NeedsLineStop { get; set; }
     public bool IsActive { get; set; } = true;
 

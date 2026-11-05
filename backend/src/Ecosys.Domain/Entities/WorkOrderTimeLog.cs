@@ -13,6 +13,10 @@ public sealed class WorkOrderTimeLog : AuditableEntity, ITenantEntity
     public int DurationMinutes { get; set; }
     public string? Notes { get; set; }
     public bool IsBilled { get; set; } = false;
+    /// <summary>Outside the technician's rostered shift (or on a day off).</summary>
+    public bool IsOvertime { get; set; }
+    /// <summary>Cost of the time at the technician's rate when it was logged.</summary>
+    public decimal? LabourCost { get; set; }
 
     public Tenant? Tenant { get; set; }
     public WorkOrder? WorkOrder { get; set; }

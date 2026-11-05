@@ -96,7 +96,7 @@ public sealed class OverhaulTests
     private static OverhaulController Controller(AppDbContext db, FactoryTenantContext context)
     {
         var scope = FactoryTestSupport.Scope(db, context);
-        var workOrders = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db), new FactoryPmProgress(db));
+        var workOrders = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db), new FactoryPmProgress(db), new FactoryJobGuards(db));
         return FactoryAssetRegisterTests.WithHttp(new OverhaulController(db, context, FactoryTestSupport.Access(context), scope, new MaintenanceWindowService(db, FactoryTestSupport.Settings(db)), workOrders));
     }
 

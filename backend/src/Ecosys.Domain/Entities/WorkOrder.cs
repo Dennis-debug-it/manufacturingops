@@ -127,6 +127,10 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public bool NeedsLineStop { get; set; }
     /// <summary>How many weekly windows this job has been carried over from unfinished.</summary>
     public int WindowCarryoverCount { get; set; }
+    /// <summary>Only technicians holding this valid certificate (e.g. an electrical licence) may be assigned.</summary>
+    public Guid? RequiredCertificationId { get; set; }
+    /// <summary>Permit types needed before work starts, comma-separated (HotWork, ConfinedSpace, Electrical, WorkingAtHeights).</summary>
+    public string? RequiredPermitTypes { get; set; }
     public Guid? FailureProblemCodeId { get; set; }
     public Guid? FailureCauseCodeId { get; set; }
     public Guid? FailureRemedyCodeId { get; set; }

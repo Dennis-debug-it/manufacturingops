@@ -147,7 +147,7 @@ public sealed class ComplianceTests
     private static ComplianceService Service(AppDbContext db, FactoryTenantContext context, INotificationDispatcher dispatcher)
     {
         var scope = FactoryTestSupport.Scope(db, context);
-        var workOrders = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db), new FactoryPmProgress(db));
+        var workOrders = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db), new FactoryPmProgress(db), new FactoryJobGuards(db));
         return new ComplianceService(db, workOrders, dispatcher);
     }
 

@@ -189,7 +189,7 @@ public sealed class MaintenanceWindowTests
     private static FactoryPmService Pm(AppDbContext db, FactoryTenantContext context)
     {
         var scope = FactoryTestSupport.Scope(db, context);
-        var workOrders = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db), new FactoryPmProgress(db));
+        var workOrders = new FactoryWorkOrderService(db, new DocumentNumberingService(db), FactoryTestSupport.Settings(db), new AssetLifecycleService(db, scope), scope, new FactorySlaService(db), new FactoryPmProgress(db), new FactoryJobGuards(db));
         return new FactoryPmService(db, workOrders, FactoryTestSupport.Settings(db));
     }
 

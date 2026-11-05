@@ -23,6 +23,18 @@ public sealed class Technician : AuditableEntity, ITenantEntity
     public Guid? ActiveWorkOrderId { get; set; }
     public bool IsActive { get; set; } = true;
 
+    // ── Factory (scope Phase 4) ──
+    /// <summary>Fitter, electrician, boiler operator, instrument technician…</summary>
+    public string? Trade { get; set; }
+    /// <summary>The factory or section they normally work in.</summary>
+    public Guid? HomeOrgNodeId { get; set; }
+    /// <summary>Normal hourly cost of their time.</summary>
+    public decimal? HourlyRate { get; set; }
+    /// <summary>Overtime is paid at the hourly rate × this (1.5 by default; 2 on rest days by policy).</summary>
+    public decimal OvertimeMultiplier { get; set; } = 1.5m;
+    public ICollection<TechnicianSkill> Skills { get; set; } = new List<TechnicianSkill>();
+    public ICollection<TechnicianCertificate> Certificates { get; set; } = new List<TechnicianCertificate>();
+
     public Tenant? Tenant { get; set; }
     public User? User { get; set; }
     public Branch? Branch { get; set; }

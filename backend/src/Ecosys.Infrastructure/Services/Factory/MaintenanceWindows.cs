@@ -367,6 +367,14 @@ internal sealed class MaintenanceWindowService(
             throw new BusinessRuleException($"Finish the start-up checks first ({left} left).");
         }
 
+        var locks = await dbContext.LotoLocks
+            .Where(x => x.RemovedAt == null && dbContext.MaintenanceWindowJobs.Any(j => j.WindowId == window.Id && j.WorkOrderId == x.WorkOrderId))
+            .Select(x => x.WorkOrder!.WorkOrderNumber).Distinct().ToListAsync(cancellationToken);
+        if (locks.Count > 0)
+        {
+            throw new BusinessRuleException($"Isolation locks are still on for {string.Join(", ", locks)}. Remove them before the line is handed back.");
+        }
+
         if (signatureDataUrl is not null && (!signatureDataUrl.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) || signatureDataUrl.Length > 500_000))
         {
             throw new BusinessRuleException("The signature could not be read. Sign again.");
