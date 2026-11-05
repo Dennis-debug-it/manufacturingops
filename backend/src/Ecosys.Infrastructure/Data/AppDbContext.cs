@@ -19,6 +19,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<UserOrgNodeAssignment> UserOrgNodeAssignments => Set<UserOrgNodeAssignment>();
     public DbSet<FactorySettings> FactorySettings => Set<FactorySettings>();
     public DbSet<AssetLifecycleEvent> AssetLifecycleEvents => Set<AssetLifecycleEvent>();
+    public DbSet<Meter> Meters => Set<Meter>();
+    public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
@@ -754,6 +756,40 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.Components)
                 .HasForeignKey(x => x.ParentAssetId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Meter>(entity =>
+        {
+            entity.ToTable("meters");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.MeterType).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Unit).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.CurrentValue).HasPrecision(18, 4);
+            entity.Property(x => x.MinThreshold).HasPrecision(18, 4);
+            entity.Property(x => x.MaxThreshold).HasPrecision(18, 4);
+            entity.Property(x => x.ExternalId).HasMaxLength(100);
+            entity.Property(x => x.ExternalSystem).HasMaxLength(50);
+            entity.HasIndex(x => new { x.TenantId, x.AssetId, x.Name }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.UpdatedAt });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MeterReading>(entity =>
+        {
+            entity.ToTable("meter_readings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Value).HasPrecision(18, 4);
+            entity.Property(x => x.Delta).HasPrecision(18, 4);
+            entity.Property(x => x.Source).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.RecordedByName).HasMaxLength(200);
+            entity.HasIndex(x => new { x.TenantId, x.MeterId, x.ReadAt });
+            entity.HasIndex(x => new { x.TenantId, x.AssetId, x.ReadAt });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Meter).WithMany(x => x.Readings).HasForeignKey(x => x.MeterId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.NoAction);
         });
 
         modelBuilder.Entity<AssetLifecycleEvent>(entity =>

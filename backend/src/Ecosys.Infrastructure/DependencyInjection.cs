@@ -70,6 +70,7 @@ public static class DependencyInjection
         services.AddScoped<Services.Factory.IOrgScopeService, Services.Factory.OrgScopeService>();
         services.AddScoped<Services.Factory.IFactorySettingsService, Services.Factory.FactorySettingsService>();
         services.AddScoped<Services.Factory.IAssetLifecycleService, Services.Factory.AssetLifecycleService>();
+        services.AddScoped<Services.Factory.IMeterReadingService, Services.Factory.MeterReadingService>();
         services.AddScoped<IStockLedgerService, StockLedgerService>();
         services.AddScoped<IUserSessionService, UserSessionService>();
         services.AddScoped<IPlatformBootstrapService, PlatformBootstrapService>();

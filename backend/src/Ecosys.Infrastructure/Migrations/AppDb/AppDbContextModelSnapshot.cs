@@ -5445,6 +5445,150 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("material_request_lines", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.Meter", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("CurrentValue")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ExternalSystem")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsCumulative")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPrimary")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastReadingAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("MaxThreshold")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("MeterType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal?>("MinThreshold")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("TenantId", "UpdatedAt");
+
+                    b.HasIndex("TenantId", "AssetId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("meters", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.MeterReading", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("Delta")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<bool>("IsOutOfRange")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsReset")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MeterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RecordedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("RecordedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("Value")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("MeterId");
+
+                    b.HasIndex("TenantId", "AssetId", "ReadAt");
+
+                    b.HasIndex("TenantId", "MeterId", "ReadAt");
+
+                    b.ToTable("meter_readings", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.MonitoringSetting", b =>
                 {
                     b.Property<Guid>("Id")
@@ -16457,6 +16601,52 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("MaterialRequest");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.Meter", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.MeterReading", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Meter", "Meter")
+                        .WithMany("Readings")
+                        .HasForeignKey("MeterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Meter");
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.MonitoringSetting", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Branch", "DefaultBranch")
@@ -19626,6 +19816,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
             modelBuilder.Entity("Ecosys.Domain.Entities.MaterialRequest", b =>
                 {
                     b.Navigation("Lines");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.Meter", b =>
+                {
+                    b.Navigation("Readings");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.OperationalSystem", b =>
