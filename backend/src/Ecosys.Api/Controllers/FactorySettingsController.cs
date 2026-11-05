@@ -84,6 +84,16 @@ public sealed class FactorySettingsController(
         settings.WeeklyWindowEnd = end;
         settings.LowCropStartMonth = request.LowCropStartMonth;
         settings.LowCropEndMonth = request.LowCropEndMonth;
+        if (!string.IsNullOrWhiteSpace(request.TagPrefix))
+        {
+            var prefix = request.TagPrefix.Trim().ToUpperInvariant();
+            if (prefix.Length > 10 || !prefix.All(char.IsLetterOrDigit))
+            {
+                throw new BusinessRuleException("The tag prefix can be up to 10 letters or digits.");
+            }
+
+            settings.TagPrefix = prefix;
+        }
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "factory-settings.updated", nameof(FactorySettings), settings.Id.ToString(),
@@ -162,7 +172,9 @@ public sealed class FactorySettingsController(
         settings.WeeklyWindowStart.ToString("HH:mm"),
         settings.WeeklyWindowEnd.ToString("HH:mm"),
         settings.LowCropStartMonth,
-        settings.LowCropEndMonth);
+        settings.LowCropEndMonth,
+        settings.TagPrefix,
+        settings.NextTagNumber);
 }
 
 public sealed record FactorySettingsResponse(
@@ -176,7 +188,9 @@ public sealed record FactorySettingsResponse(
     string WeeklyWindowStart,
     string WeeklyWindowEnd,
     int? LowCropStartMonth,
-    int? LowCropEndMonth);
+    int? LowCropEndMonth,
+    string TagPrefix,
+    int NextTagNumber);
 
 public sealed record UpdateFactorySettingsRequest(
     string IndustryTemplate,
@@ -189,7 +203,8 @@ public sealed record UpdateFactorySettingsRequest(
     string WeeklyWindowStart,
     string WeeklyWindowEnd,
     int? LowCropStartMonth,
-    int? LowCropEndMonth);
+    int? LowCropEndMonth,
+    string? TagPrefix = null);
 
 public sealed record SetUserOrgScopeRequest(IReadOnlyCollection<Guid>? OrgNodeIds);
 

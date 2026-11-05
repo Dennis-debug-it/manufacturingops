@@ -20,6 +20,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<FactorySettings> FactorySettings => Set<FactorySettings>();
     public DbSet<AssetLifecycleEvent> AssetLifecycleEvents => Set<AssetLifecycleEvent>();
     public DbSet<Meter> Meters => Set<Meter>();
+    public DbSet<AssetTag> AssetTags => Set<AssetTag>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
@@ -387,6 +388,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.IndustryTemplate).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ProductionUnit).HasMaxLength(50).IsRequired();
             entity.Property(x => x.ProductionUnitShort).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.TagPrefix).HasMaxLength(10).IsRequired().HasDefaultValue("TAG");
+            entity.Property(x => x.NextTagNumber).HasDefaultValue(1).IsConcurrencyToken();
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany()
@@ -756,6 +759,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.Components)
                 .HasForeignKey(x => x.ParentAssetId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AssetTag>(entity =>
+        {
+            entity.ToTable("asset_tags");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TagNumber).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Symbology).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.RetiredReason).HasMaxLength(500);
+            entity.HasIndex(x => new { x.TenantId, x.TagNumber }).IsUnique();
+            // One active tag per asset, enforced by the database as well as the API.
+            entity.HasIndex(x => new { x.TenantId, x.AssetId })
+                .IsUnique()
+                .HasFilter("\"Status\" = 'Active'")
+                .HasDatabaseName("IX_asset_tags_TenantId_AssetId_Active");
+            entity.HasIndex(x => new { x.TenantId, x.UpdatedAt });
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Meter>(entity =>

@@ -1057,6 +1057,75 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("asset_lifecycle_events", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.AssetTag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastPrintedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("PrintCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("ReplacedByTagId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RetiredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RetiredReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Symbology")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TagNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("TenantId", "AssetId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_asset_tags_TenantId_AssetId_Active")
+                        .HasFilter("\"Status\" = 'Active'");
+
+                    b.HasIndex("TenantId", "TagNumber")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "UpdatedAt");
+
+                    b.ToTable("asset_tags", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.AssignmentGroup", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4012,6 +4081,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<int?>("LowCropStartMonth")
                         .HasColumnType("integer");
 
+                    b.Property<int>("NextTagNumber")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<string>("ProductionUnit")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -4021,6 +4096,13 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TagPrefix")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("TAG");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
@@ -15087,6 +15169,25 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                 {
                     b.HasOne("Ecosys.Domain.Entities.Asset", "Asset")
                         .WithMany("LifecycleEvents")
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.AssetTag", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Asset", "Asset")
+                        .WithMany()
                         .HasForeignKey("AssetId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

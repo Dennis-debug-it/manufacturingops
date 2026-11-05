@@ -100,5 +100,9 @@ public sealed class FactorySettings : AuditableEntity, ITenantEntity
     public int? LowCropStartMonth { get; set; }
     public int? LowCropEndMonth { get; set; }
 
+    /// <summary>Asset tags are numbered <c>{TagPrefix}-{000001}</c>; numbers are never reused.</summary>
+    public string TagPrefix { get; set; } = "TAG";
+    public int NextTagNumber { get; set; } = 1;
+
     public Tenant? Tenant { get; set; }
 }

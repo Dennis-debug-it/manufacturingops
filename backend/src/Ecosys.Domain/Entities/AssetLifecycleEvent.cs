@@ -38,6 +38,7 @@ public static class AssetLifecycleEventTypes
 {
     public const string Registered = "Registered";
     public const string Commissioned = "Commissioned";
+    public const string Tagged = "Tagged";
     public const string Transferred = "Transferred";
     public const string ComponentAttached = "ComponentAttached";
     public const string ComponentDetached = "ComponentDetached";
