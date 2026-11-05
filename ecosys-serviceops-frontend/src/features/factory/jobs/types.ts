@@ -108,7 +108,13 @@ export interface JobDetail {
   reworkOf: JobLink | null
   children: JobLink[]
   team: { technicianId: string; name: string; isLead: boolean }[]
-  labour: { id: string; technicianName: string | null; startedAt: string; minutes: number; notes: string | null }[]
+  labour: { id: string; technicianName: string | null; startedAt: string; minutes: number; notes: string | null; overtime: boolean; cost: number | null }[]
+  labourCost: number
+  requiredCertificationId: string | null
+  requiredCertificationName: string | null
+  requiredPermitTypes: string[]
+  permits: { id: string; permitNumber: string; permitType: string; status: 'Requested' | 'Approved' | 'Closed' | 'Rejected' | 'Cancelled'; validFrom: string; validTo: string }[]
+  locks: { id: string; isolationPointId: string; pointCode: string; pointDescription: string; energyType: string; lockNumber: string; appliedByName: string; appliedAt: string; zeroEnergyVerified: boolean; removedByName: string | null; removedAt: string | null }[]
   parts: { id: string; materialItemId: string; partName: string; quantity: number; notes: string | null; usedAt: string }[]
   signature: { signerName: string; capturedAt: string; dataUrl: string } | null
   handover: JobEvent[]

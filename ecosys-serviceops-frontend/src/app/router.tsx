@@ -132,6 +132,8 @@ const WindowPackPage = lazy(async () => ({ default: (await import('../features/f
 const OverhaulPage = lazy(async () => ({ default: (await import('../features/factory/planning/OverhaulPage')).OverhaulPage }))
 const OverhaulPlanPage = lazy(async () => ({ default: (await import('../features/factory/planning/OverhaulPage')).OverhaulPlanPage }))
 const StatutoryPage = lazy(async () => ({ default: (await import('../features/factory/planning/StatutoryPage')).StatutoryPage }))
+const PeoplePage = lazy(async () => ({ default: (await import('../features/factory/people/PeoplePage')).PeoplePage }))
+const SafetyPage = lazy(async () => ({ default: (await import('../features/factory/people/SafetyPage')).SafetyPage }))
 const OperatorReportPage = lazy(async () => ({ default: (await import('../features/public/OperatorReportPage')).OperatorReportPage }))
 const OrganisationSettingsPage = lazy(async () => ({ default: (await import('../features/factory/OrganisationSettingsPage')).OrganisationSettingsPage }))
 import { ClientDetailPage } from '../features/clients/ClientDetailPage'
@@ -355,6 +357,8 @@ export function AppRouter() {
       ['/maintenance/overhaul', OverhaulPage],
       ['/maintenance/overhaul/:id', OverhaulPlanPage],
       ['/maintenance/statutory', StatutoryPage],
+      ['/maintenance/people', PeoplePage],
+      ['/maintenance/safety', SafetyPage],
       ['/maintenance/calendar', MaintenanceCalendarPage],
       ['/maintenance/schedules', MaintenanceSchedulesPage],
       ['/maintenance/schedules/new', MaintenanceSchedulesPage],
@@ -558,6 +562,7 @@ export function AppRouter() {
           <Route path="maintenance/checks" element={<RunningChecksPage />} />
           <Route path="maintenance/checks/:id" element={<CheckRunPage />} />
           <Route path="maintenance/windows" element={<WindowsPage />} />
+          <Route path="maintenance/safety" element={<SafetyPage />} />
           <Route path="maintenance/windows/:id" element={<WindowDetailPage />} />
           <Route path="maintenance/windows/:id/pack" element={<WindowPackPage />} />
           <Route path="guides" element={<TechGuidesPage />} />

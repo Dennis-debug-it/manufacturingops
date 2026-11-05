@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, BookOpen, Activity, Presentation, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2 } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, BookOpen, Activity, Presentation, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -21,6 +21,8 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Weekly window', to: '/maintenance/windows', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: CalendarRange },
   { label: 'Overhaul', to: '/maintenance/overhaul', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: HardHat },
   { label: 'Statutory', to: '/maintenance/statutory', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: FileCheck2 },
+  { label: 'Maintenance team', to: '/maintenance/people', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: UserCog },
+  { label: 'Safety', to: '/maintenance/safety', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: ShieldAlert },
   { label: 'Running checks', to: '/maintenance/checks', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: ClipboardCheck },
   { label: 'Assets', to: '/assets', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], icon: Boxes },
   { label: 'Scan', to: '/scan', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], icon: ScanLine },

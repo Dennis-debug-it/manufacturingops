@@ -13,6 +13,7 @@ import { useFactoryLinks } from '../links'
 import { useJob, useJobActions, useSplitJob } from './api'
 import { ActionDialog } from './ActionDialog'
 import { DeferToOverhaulDrawer } from '../planning/OverhaulPage'
+import { JobSafetyCard } from '../people/JobSafetyCard'
 import { JobStatusBadge } from './JobStatusBadge'
 import { ACTION_LABELS, SUPERVISORY, isTickStep, type JobAction, type JobDetail, type JobStep } from './types'
 
@@ -97,6 +98,7 @@ export function FactoryJobDetailPage() {
         </div>
 
         <aside className="space-y-4">
+          <JobSafetyCard job={job} />
           <HandoverCard job={job} />
           {job.resources.length > 0 ? (
             <Card title={`Tools and parts${job.jobPlanName ? ` · ${job.jobPlanName}` : ''}`}>
@@ -232,9 +234,9 @@ function WorkLogCard({ job }: { job: JobDetail }) {
     }
   }
   return (
-    <Card title={`Labour · ${(total / 60).toFixed(1)} h`}>
+    <Card title={`Labour · ${(total / 60).toFixed(1)} h${job.labourCost ? ` · ${job.labourCost.toLocaleString()}` : ''}`}>
       {job.labour.length > 0 ? (
-        <ul className="mb-3 space-y-1 text-sm">{job.labour.map((x) => <li key={x.id}>{x.technicianName}: {(x.minutes / 60).toFixed(1)} h <span className="text-xs text-slate-500">{formatDateTime(x.startedAt)}{x.notes ? ` · ${x.notes}` : ''}</span></li>)}</ul>
+        <ul className="mb-3 space-y-1 text-sm">{job.labour.map((x) => <li key={x.id}>{x.technicianName}: {(x.minutes / 60).toFixed(1)} h{x.overtime ? <span className="ml-1 rounded bg-amber-100 px-1 text-xs text-amber-800">overtime</span> : null} <span className="text-xs text-slate-500">{formatDateTime(x.startedAt)}{x.notes ? ` · ${x.notes}` : ''}{x.cost != null ? ` · ${x.cost.toLocaleString()}` : ''}</span></li>)}</ul>
       ) : null}
       {job.parts.length > 0 ? (
         <ul className="mb-3 space-y-1 text-sm">{job.parts.map((x) => <li key={x.id}>{x.partName} × {x.quantity}</li>)}</ul>
