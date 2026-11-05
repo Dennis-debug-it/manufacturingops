@@ -10,6 +10,8 @@ public enum NotificationChannels
     Push = 2,
     Email = 4,
     WhatsApp = 8,
+    /// <summary>Text message, for urgent factory alerts to people who may not be on a smartphone.</summary>
+    Sms = 16,
 }
 
 /// <param name="Channels">
@@ -29,7 +31,7 @@ public static class NotificationKeyDescriptor
     /// <summary>The bell, push and email: what a dispatcher key offers and, unless noisy, turns on.</summary>
     public const NotificationChannels Staff = NotificationChannels.InApp | NotificationChannels.Push | NotificationChannels.Email;
 
-    public const NotificationChannels AnyChannel = Staff | NotificationChannels.WhatsApp;
+    public const NotificationChannels AnyChannel = Staff | NotificationChannels.WhatsApp | NotificationChannels.Sms;
 
     private static readonly IReadOnlyList<NotificationDescriptor> All =
     [
@@ -69,8 +71,9 @@ public static class NotificationKeyDescriptor
         Inbox("inventory.request-decided", "My parts request approved or rejected", "Inventory"),
         Inbox("inventory.request-dispatched", "My parts are on the way", "Inventory"),
         Inbox("inventory.low-stock", "A part fell to its reorder level", "Inventory"),
-        Inbox("factory-job.reported", "An operator reported a fault", "Work Orders"),
-        Inbox("factory-check.missed", "Running checks missed in my section", "Work Orders"),
+        // Urgent on the factory floor: also by SMS, on by default (sent only when an SMS gateway is set up).
+        Urgent("factory-job.reported", "An operator reported a fault", "Work Orders"),
+        Urgent("factory-check.missed", "Running checks missed in my section", "Work Orders"),
         Inbox("asset.warranty-expiring", "An asset's warranty is about to expire", "Assets"),
         Inbox("asset.meter-out-of-range", "A meter reading is outside its limits", "Assets"),
         EmailOnly("invoice.sent",         "Invoice sent to client",            "Finance"),
@@ -103,6 +106,9 @@ public static class NotificationKeyDescriptor
     /// </param>
     private static NotificationDescriptor Inbox(string key, string label, string category, NotificationChannels defaults = Staff, bool whatsApp = false) =>
         new(key, label, category, whatsApp ? Staff | NotificationChannels.WhatsApp : Staff, defaults & ~NotificationChannels.WhatsApp);
+
+    private static NotificationDescriptor Urgent(string key, string label, string category) =>
+        new(key, label, category, Staff | NotificationChannels.Sms, Staff | NotificationChannels.Sms);
 
     private static NotificationDescriptor EmailOnly(string key, string label, string category) =>
         new(key, label, category, NotificationChannels.Email, NotificationChannels.Email);

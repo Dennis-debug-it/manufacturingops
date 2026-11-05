@@ -85,6 +85,7 @@ public static class NotificationPreferences
         if (preference.PushEnabled) channels |= NotificationChannels.Push;
         if (preference.EmailEnabled) channels |= NotificationChannels.Email;
         if (preference.WhatsAppEnabled) channels |= NotificationChannels.WhatsApp;
+        if (preference.SmsEnabled ?? descriptor?.DefaultChannels.HasFlag(NotificationChannels.Sms) == true) channels |= NotificationChannels.Sms;
         return channels;
     }
 }

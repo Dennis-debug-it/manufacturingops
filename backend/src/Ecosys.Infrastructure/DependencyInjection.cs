@@ -132,6 +132,14 @@ public static class DependencyInjection
         services.AddScoped<INotificationHousekeeping, NotificationHousekeeping>();
         // WhatsApp reminders from the shared Ecosys number (Release 3 design 4).
         services.AddScoped<INotificationChannel, WhatsAppNotificationChannel>();
+        // SMS for urgent factory alerts, behind ISmsGateway (Africa's Talking when Sms:Provider is set).
+        services.Configure<Services.Sms.SmsOptions>(configuration.GetSection(Services.Sms.SmsOptions.SectionName));
+        services.AddHttpClient(Services.Sms.AfricasTalkingSmsGateway.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
+        if (string.Equals(configuration[$"{Services.Sms.SmsOptions.SectionName}:Provider"], "AfricasTalking", StringComparison.OrdinalIgnoreCase))
+            services.AddScoped<Services.Sms.ISmsGateway, Services.Sms.AfricasTalkingSmsGateway>();
+        else
+            services.AddSingleton<Services.Sms.ISmsGateway, Services.Sms.DisabledSmsGateway>();
+        services.AddScoped<INotificationChannel, Services.Sms.SmsNotificationChannel>();
         services.AddSingleton<IWhatsAppAccountResolver, SharedWhatsAppAccountResolver>();
         services.AddHttpClient(MetaWhatsAppSender.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(20));
         services.AddScoped<IWhatsAppSender, MetaWhatsAppSender>();

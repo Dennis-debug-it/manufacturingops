@@ -14,6 +14,8 @@ public sealed class UserNotificationPreference : AuditableEntity
     public bool PushEnabled { get; set; } = true;
     /// <summary>WhatsApp (Release 3 part 3). Opt-in, so off unless the user turns it on.</summary>
     public bool WhatsAppEnabled { get; set; }
+    /// <summary>SMS. Null follows the key's default (on for urgent factory alerts).</summary>
+    public bool? SmsEnabled { get; set; }
 
     public User? User { get; set; }
 }

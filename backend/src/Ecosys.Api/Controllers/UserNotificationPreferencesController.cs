@@ -20,6 +20,7 @@ public sealed record UserNotificationPreferenceResponse(
     bool InAppEnabled,
     bool PushEnabled,
     bool WhatsAppEnabled,
+    bool SmsEnabled,
     IReadOnlyList<string> Channels);
 
 /// <summary>Push and WhatsApp are optional so an older client that only knows email and in-app leaves them as they are.</summary>
@@ -28,7 +29,8 @@ public sealed record UpdateNotificationPreferenceInput(
     bool EmailEnabled,
     bool InAppEnabled,
     bool? PushEnabled = null,
-    bool? WhatsAppEnabled = null);
+    bool? WhatsAppEnabled = null,
+    bool? SmsEnabled = null);
 
 // ── Controller ───────────────────────────────────────────────────────────────
 
@@ -70,6 +72,7 @@ public sealed class UserNotificationPreferencesController(
                     InAppEnabled: channels.HasFlag(NotificationChannels.InApp),
                     PushEnabled: channels.HasFlag(NotificationChannels.Push),
                     WhatsAppEnabled: channels.HasFlag(NotificationChannels.WhatsApp),
+                    SmsEnabled: channels.HasFlag(NotificationChannels.Sms),
                     Channels: Enum.GetValues<NotificationChannels>()
                         .Where(c => c != NotificationChannels.None && descriptor.Channels.HasFlag(c))
                         .Where(c => c != NotificationChannels.WhatsApp || whatsApp.Allows(descriptor.Key))
@@ -126,6 +129,7 @@ public sealed class UserNotificationPreferencesController(
             pref.InAppEnabled = input.InAppEnabled;
             pref.PushEnabled = input.PushEnabled ?? pref.PushEnabled;
             pref.WhatsAppEnabled = input.WhatsAppEnabled ?? pref.WhatsAppEnabled;
+            pref.SmsEnabled = input.SmsEnabled ?? pref.SmsEnabled;
         }
 
         await db.SaveChangesAsync(cancellationToken);

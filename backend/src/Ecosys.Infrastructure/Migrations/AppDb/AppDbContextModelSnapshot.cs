@@ -13326,6 +13326,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("PushEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<bool?>("SmsEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
