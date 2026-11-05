@@ -16,5 +16,10 @@ public enum WorkOrderStatus
     Rejected = 12,
     Reopened = 13,
     WaitingOnParts = 14,
-    WaitingOnClient = 15
+    WaitingOnClient = 15,
+    // Factory maintenance lifecycle: requested → approved → planned → assigned → in progress → completed → verified → closed.
+    Requested = 16,
+    Approved = 17,
+    Planned = 18,
+    Verified = 19
 }

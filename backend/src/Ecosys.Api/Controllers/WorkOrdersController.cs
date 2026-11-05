@@ -2582,7 +2582,7 @@ public sealed record WorkOrderResponse(
     Guid Id,
     Guid? BranchId,
     string? BranchName,
-    Guid ClientId,
+    Guid? ClientId,
     string? ClientName,
     Guid? SiteId,
     string? SiteName,

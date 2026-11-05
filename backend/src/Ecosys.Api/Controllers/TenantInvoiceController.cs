@@ -827,6 +827,9 @@ public sealed class TenantInvoiceController(
         if (unbilledItems.Count == 0)
             throw new BusinessRuleException("No unbilled items found on this work order.");
 
+        if (workOrder.ClientId is not { } clientId)
+            throw new BusinessRuleException("This is an in-house factory job with no client, so it can't be invoiced.");
+
         // A work order on a project bills to that project, in the project's currency, so the invoice
         // shows in the project's Financials and closing checks.
         var projectCurrency = workOrder.ProjectId is { } projectId
@@ -835,7 +838,7 @@ public sealed class TenantInvoiceController(
         var invoice = new TenantInvoice
         {
             TenantId = TenantId,
-            ClientId = workOrder.ClientId,
+            ClientId = clientId,
             ProjectId = projectCurrency is null ? null : workOrder.ProjectId,
             InvoiceNumber = await documentNumberingService.GenerateAsync(TenantId, null, DocumentTypes.Invoice, cancellationToken),
             DocumentType = DocumentTypes.Invoice,

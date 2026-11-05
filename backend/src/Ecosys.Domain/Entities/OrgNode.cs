@@ -104,5 +104,12 @@ public sealed class FactorySettings : AuditableEntity, ITenantEntity
     public string TagPrefix { get; set; } = "TAG";
     public int NextTagNumber { get; set; } = 1;
 
+    /// <summary>New work orders wait for approval before they can be planned.</summary>
+    public bool RequireWorkOrderApproval { get; set; } = true;
+    /// <summary>Breakdowns skip approval: the machine is already down.</summary>
+    public bool AutoApproveBreakdowns { get; set; } = true;
+    /// <summary>The same fault on the same asset within this many days is flagged as rework.</summary>
+    public int ReworkWindowDays { get; set; } = 30;
+
     public Tenant? Tenant { get; set; }
 }

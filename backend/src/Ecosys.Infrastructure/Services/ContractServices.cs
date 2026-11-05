@@ -1231,7 +1231,8 @@ internal sealed class ContractOperationalService(
     {
         var coverage = await coverageService.EvaluateAsync(
             workOrder.TenantId,
-            workOrder.ClientId,
+            // A factory job has no client, so no client contract or price list applies.
+            workOrder.ClientId ?? Guid.Empty,
             workOrder.SiteId,
             workOrder.AssetId,
             workOrder.WorkType,
@@ -1242,7 +1243,8 @@ internal sealed class ContractOperationalService(
 
         var pricing = await pricingService.EvaluateAsync(
             workOrder.TenantId,
-            workOrder.ClientId,
+            // A factory job has no client, so no client contract or price list applies.
+            workOrder.ClientId ?? Guid.Empty,
             workOrder.SiteId,
             workOrder.AssetId,
             workOrder.WorkType,

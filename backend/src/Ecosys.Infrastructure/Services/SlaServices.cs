@@ -25,7 +25,7 @@ internal sealed class SlaService(
 
     public async Task ApplyDefinitionAsync(WorkOrder workOrder, CancellationToken cancellationToken = default)
     {
-        var rule = await ResolveRuleAsync(workOrder.TenantId, workOrder.ClientId, workOrder.Priority, cancellationToken);
+        var rule = await ResolveRuleAsync(workOrder.TenantId, workOrder.ClientId ?? Guid.Empty, workOrder.Priority, cancellationToken);
 
         if (rule is null)
         {
@@ -154,7 +154,7 @@ internal sealed class SlaService(
         var recordChanged = false;
         if (record is null)
         {
-            var rule = await ResolveRuleAsync(workOrder.TenantId, workOrder.ClientId, workOrder.Priority, cancellationToken);
+            var rule = await ResolveRuleAsync(workOrder.TenantId, workOrder.ClientId ?? Guid.Empty, workOrder.Priority, cancellationToken);
             record = new SlaRecord { TenantId = workOrder.TenantId, WorkOrderId = workOrder.Id, SlaRuleId = rule?.Id };
             dbContext.SlaRecords.Add(record);
             record.SlaRule = rule;

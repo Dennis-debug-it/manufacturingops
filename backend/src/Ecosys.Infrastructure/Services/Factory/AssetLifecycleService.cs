@@ -5,6 +5,19 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Infrastructure.Services.Factory;
 
+public static class FactoryTime
+{
+    /// <summary>
+    /// Forms send dates without a time. A date of today means "now", so events recorded the same
+    /// day keep their real order; a back-dated event keeps its date.
+    /// </summary>
+    public static DateTime EffectiveAt(DateTime? occurredAt)
+    {
+        var now = DateTime.UtcNow;
+        return occurredAt is not { } at || (at.Date == now.Date && at.TimeOfDay == TimeSpan.Zero) ? now : at;
+    }
+}
+
 public interface IAssetLifecycleService
 {
     /// <summary>Adds a lifecycle event to the context; the caller saves.</summary>
@@ -52,15 +65,7 @@ internal sealed class AssetLifecycleService(AppDbContext dbContext, IOrgScopeSer
         return entry;
     }
 
-    /// <summary>
-    /// Forms send dates without a time. A date of today means "now", so events recorded the same
-    /// day keep their real order; a back-dated event keeps its date.
-    /// </summary>
-    internal static DateTime EffectiveAt(DateTime? occurredAt)
-    {
-        var now = DateTime.UtcNow;
-        return occurredAt is not { } at || (at.Date == now.Date && at.TimeOfDay == TimeSpan.Zero) ? now : at;
-    }
+    internal static DateTime EffectiveAt(DateTime? occurredAt) => FactoryTime.EffectiveAt(occurredAt);
 
     public async Task<OrgNode> EnsureLocationAsync(Guid tenantId, Guid userId, Guid orgNodeId, CancellationToken cancellationToken = default)
     {

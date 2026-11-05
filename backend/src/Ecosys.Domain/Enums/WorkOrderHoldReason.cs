@@ -8,5 +8,9 @@ public enum WorkOrderHoldReason
     AwaitingApproval = 4,
     AwaitingSiteAccess = 5,
     AwaitingSpares = 6,
-    Other = 7
+    Other = 7,
+    // Factory holds: the job needs the line stopped, a shutdown, or a contractor.
+    AwaitingWindow = 8,
+    AwaitingShutdown = 9,
+    AwaitingContractor = 10
 }

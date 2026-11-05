@@ -20,6 +20,10 @@ public static class WorkOrderStatuses
     public const string Cancelled = "Cancelled";
     public const string Rejected = "Rejected";
     public const string Reopened = "Reopened";
+    public const string Requested = "Requested";
+    public const string Approved = "Approved";
+    public const string Planned = "Planned";
+    public const string Verified = "Verified";
 
     public static readonly IReadOnlyCollection<string> All =
     [
@@ -36,7 +40,11 @@ public static class WorkOrderStatuses
         Closed,
         Cancelled,
         Rejected,
-        Reopened
+        Reopened,
+        Requested,
+        Approved,
+        Planned,
+        Verified
     ];
 
     public static readonly string[] ClosedStatuses = [Closed, Cancelled, Rejected];
@@ -67,6 +75,10 @@ public static class WorkOrderStatuses
             Cancelled => WorkOrderStatus.Cancelled,
             Rejected => WorkOrderStatus.Rejected,
             Reopened => WorkOrderStatus.Reopened,
+            Requested => WorkOrderStatus.Requested,
+            Approved => WorkOrderStatus.Approved,
+            Planned => WorkOrderStatus.Planned,
+            Verified => WorkOrderStatus.Verified,
             _ => throw new BusinessRuleException("Invalid work order status.")
         };
     }
@@ -126,7 +138,8 @@ public static class WorkOrderStatuses
     public static bool IsOpen(string? status) =>
         !IsClosed(status)
         && !string.Equals(Normalize(status), Completed, StringComparison.OrdinalIgnoreCase)
-        && !string.Equals(Normalize(status), ClientAccepted, StringComparison.OrdinalIgnoreCase);
+        && !string.Equals(Normalize(status), ClientAccepted, StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(Normalize(status), Verified, StringComparison.OrdinalIgnoreCase);
 
     public static string ToValue(WorkOrderStatus status) => status switch
     {
@@ -144,6 +157,10 @@ public static class WorkOrderStatuses
         WorkOrderStatus.Cancelled => Cancelled,
         WorkOrderStatus.Rejected => Rejected,
         WorkOrderStatus.Reopened => Reopened,
+        WorkOrderStatus.Requested => Requested,
+        WorkOrderStatus.Approved => Approved,
+        WorkOrderStatus.Planned => Planned,
+        WorkOrderStatus.Verified => Verified,
         _ => throw new BusinessRuleException("Invalid work order status.")
     };
 }
@@ -216,6 +233,9 @@ public static class WorkOrderHoldReasons
     public const string AwaitingSiteAccess = "Awaiting Site Access";
     public const string AwaitingSpares = "Awaiting Spares";
     public const string Other = "Other";
+    public const string AwaitingWindow = "Waiting for Window";
+    public const string AwaitingShutdown = "Waiting for Shutdown";
+    public const string AwaitingContractor = "Waiting for Contractor";
 
     public const string PendingClient = AwaitingClient;
     public const string PendingMaterials = AwaitingMaterials;
@@ -228,7 +248,10 @@ public static class WorkOrderHoldReasons
         AwaitingApproval,
         AwaitingSiteAccess,
         AwaitingSpares,
-        Other
+        Other,
+        AwaitingWindow,
+        AwaitingShutdown,
+        AwaitingContractor
     ];
 
     public static WorkOrderHoldReason Parse(string? holdReason)
@@ -248,6 +271,9 @@ public static class WorkOrderHoldReasons
             AwaitingSiteAccess or "Waiting for Access" => WorkOrderHoldReason.AwaitingSiteAccess,
             AwaitingSpares or "Waiting for Spares" => WorkOrderHoldReason.AwaitingSpares,
             Other => WorkOrderHoldReason.Other,
+            AwaitingWindow => WorkOrderHoldReason.AwaitingWindow,
+            AwaitingShutdown => WorkOrderHoldReason.AwaitingShutdown,
+            AwaitingContractor => WorkOrderHoldReason.AwaitingContractor,
             _ => throw new BusinessRuleException("Invalid hold reason.")
         };
     }
@@ -272,6 +298,9 @@ public static class WorkOrderHoldReasons
         WorkOrderHoldReason.AwaitingSiteAccess => AwaitingSiteAccess,
         WorkOrderHoldReason.AwaitingSpares => AwaitingSpares,
         WorkOrderHoldReason.Other => Other,
+        WorkOrderHoldReason.AwaitingWindow => AwaitingWindow,
+        WorkOrderHoldReason.AwaitingShutdown => AwaitingShutdown,
+        WorkOrderHoldReason.AwaitingContractor => AwaitingContractor,
         _ => throw new BusinessRuleException("Invalid hold reason.")
     };
 

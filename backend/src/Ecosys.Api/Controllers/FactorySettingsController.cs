@@ -84,6 +84,14 @@ public sealed class FactorySettingsController(
         settings.WeeklyWindowEnd = end;
         settings.LowCropStartMonth = request.LowCropStartMonth;
         settings.LowCropEndMonth = request.LowCropEndMonth;
+        if (request.ReworkWindowDays is < 1 or > 365)
+        {
+            throw new BusinessRuleException("The rework window must be between 1 and 365 days.");
+        }
+
+        settings.RequireWorkOrderApproval = request.RequireWorkOrderApproval ?? settings.RequireWorkOrderApproval;
+        settings.AutoApproveBreakdowns = request.AutoApproveBreakdowns ?? settings.AutoApproveBreakdowns;
+        settings.ReworkWindowDays = request.ReworkWindowDays ?? settings.ReworkWindowDays;
         if (!string.IsNullOrWhiteSpace(request.TagPrefix))
         {
             var prefix = request.TagPrefix.Trim().ToUpperInvariant();
@@ -174,7 +182,10 @@ public sealed class FactorySettingsController(
         settings.LowCropStartMonth,
         settings.LowCropEndMonth,
         settings.TagPrefix,
-        settings.NextTagNumber);
+        settings.NextTagNumber,
+        settings.RequireWorkOrderApproval,
+        settings.AutoApproveBreakdowns,
+        settings.ReworkWindowDays);
 }
 
 public sealed record FactorySettingsResponse(
@@ -190,7 +201,10 @@ public sealed record FactorySettingsResponse(
     int? LowCropStartMonth,
     int? LowCropEndMonth,
     string TagPrefix,
-    int NextTagNumber);
+    int NextTagNumber,
+    bool RequireWorkOrderApproval,
+    bool AutoApproveBreakdowns,
+    int ReworkWindowDays);
 
 public sealed record UpdateFactorySettingsRequest(
     string IndustryTemplate,
@@ -204,7 +218,10 @@ public sealed record UpdateFactorySettingsRequest(
     string WeeklyWindowEnd,
     int? LowCropStartMonth,
     int? LowCropEndMonth,
-    string? TagPrefix = null);
+    string? TagPrefix = null,
+    bool? RequireWorkOrderApproval = null,
+    bool? AutoApproveBreakdowns = null,
+    int? ReworkWindowDays = null);
 
 public sealed record SetUserOrgScopeRequest(IReadOnlyCollection<Guid>? OrgNodeIds);
 

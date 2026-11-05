@@ -122,13 +122,13 @@ internal sealed class EtaNotificationService(
             EtaNotificationEventTypes.Completed => ClientWhatsAppKeys.WorkOrderCompleted,
             _ => null,
         };
-        if (key is null || clientWhatsAppNotifier is null || workOrder.ClientId == Guid.Empty)
+        if (key is null || clientWhatsAppNotifier is null || workOrder.ClientId is not { } clientId || clientId == Guid.Empty)
             return;
 
         try
         {
             await EnsureTrackingTokenAsync(workOrder, cancellationToken);
-            await clientWhatsAppNotifier.NotifyClientAsync(tenantId, workOrder.ClientId, key, new Dictionary<string, string?>
+            await clientWhatsAppNotifier.NotifyClientAsync(tenantId, clientId, key, new Dictionary<string, string?>
             {
                 ["TechnicianName"] = string.IsNullOrWhiteSpace(technicianName) ? "Your technician" : technicianName,
                 ["WorkOrderNumber"] = workOrder.WorkOrderNumber,

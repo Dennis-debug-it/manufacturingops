@@ -62,6 +62,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<TenantModuleSetting> TenantModuleSettings => Set<TenantModuleSetting>();
     public DbSet<UserDashboardLayout> UserDashboardLayouts => Set<UserDashboardLayout>();
     public DbSet<WorkOrder> WorkOrders => Set<WorkOrder>();
+    public DbSet<FailureCode> FailureCodes => Set<FailureCode>();
     public DbSet<WorkOrderTemplate> WorkOrderTemplates => Set<WorkOrderTemplate>();
     public DbSet<MaterialItem> MaterialItems => Set<MaterialItem>();
     public DbSet<BranchMaterialStock> BranchMaterialStocks => Set<BranchMaterialStock>();
@@ -392,6 +393,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.ProductionUnitShort).HasMaxLength(20).IsRequired();
             entity.Property(x => x.TagPrefix).HasMaxLength(10).IsRequired().HasDefaultValue("TAG");
             entity.Property(x => x.NextTagNumber).HasDefaultValue(1).IsConcurrencyToken();
+            entity.Property(x => x.RequireWorkOrderApproval).HasDefaultValue(true);
+            entity.Property(x => x.AutoApproveBreakdowns).HasDefaultValue(true);
+            entity.Property(x => x.ReworkWindowDays).HasDefaultValue(30);
             entity.HasIndex(x => x.TenantId).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany()
@@ -763,6 +767,19 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<FailureCode>(entity =>
+        {
+            entity.ToTable("failure_codes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Code).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.HasIndex(x => new { x.TenantId, x.Kind, x.Code }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.AssetCategory).WithMany().HasForeignKey(x => x.AssetCategoryId).OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<AssetDocument>(entity =>
         {
             entity.ToTable("asset_documents");
@@ -931,6 +948,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
         modelBuilder.Entity<WorkOrder>(entity =>
         {
+            entity.Property(x => x.RequestSource).HasMaxLength(30);
+            entity.Property(x => x.RequestedByName).HasMaxLength(200);
+            entity.Property(x => x.VerificationNotes).HasMaxLength(2000);
+            entity.HasOne(x => x.OrgNode).WithMany().HasForeignKey(x => x.OrgNodeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.FailureProblemCode).WithMany().HasForeignKey(x => x.FailureProblemCodeId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.FailureCauseCode).WithMany().HasForeignKey(x => x.FailureCauseCodeId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.FailureRemedyCode).WithMany().HasForeignKey(x => x.FailureRemedyCodeId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<WorkOrder>().WithMany().HasForeignKey(x => x.ReworkOfWorkOrderId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.OrgNodeId, x.Status });
+            entity.HasIndex(x => new { x.TenantId, x.AssetId, x.FailureProblemCodeId, x.CompletedAt });
             entity.ToTable("work_orders", tableBuilder =>
             {
                 tableBuilder.HasCheckConstraint("CK_work_orders_assignment_type", "\"AssignmentType\" IN ('Unassigned', 'IndividualTechnician', 'MultipleTechnicians', 'AssignmentGroup')");

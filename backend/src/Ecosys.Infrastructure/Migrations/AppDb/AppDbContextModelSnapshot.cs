@@ -4174,6 +4174,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("AutoApproveBreakdowns")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -4203,6 +4208,16 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("RequireWorkOrderApproval")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("ReworkWindowDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30);
 
                     b.Property<string>("TagPrefix")
                         .IsRequired()
@@ -4241,6 +4256,59 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsUnique();
 
                     b.ToTable("factory_settings", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.FailureCode", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("AssetCategoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetCategoryId");
+
+                    b.HasIndex("TenantId", "Kind", "Code")
+                        .IsUnique();
+
+                    b.ToTable("failure_codes", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.FinanceApprovalRule", b =>
@@ -13686,6 +13754,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<DateTime?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime?>("ArrivalAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -13721,7 +13795,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<string>("ClientContactEmail")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("ClientId")
+                    b.Property<Guid?>("ClientId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime?>("ClosedAt")
@@ -13753,6 +13827,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<DateTime?>("DowntimeEndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DowntimeStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -13771,6 +13851,15 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<decimal?>("EstimatedMaterialCost")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid?>("FailureCauseCodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FailureProblemCodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("FailureRemedyCodeId")
+                        .HasColumnType("uuid");
 
                     b.Property<decimal?>("FinalCharge")
                         .HasPrecision(18, 2)
@@ -13796,6 +13885,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("IsBillable")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsBreakdown")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("IsPreventiveMaintenance")
                         .HasColumnType("boolean");
 
@@ -13811,11 +13903,20 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid?>("LeadTechnicianId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("NeedsLineStop")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("NotifyClient")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("OrgNodeId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("ParentWorkOrderId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("PlannedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PlannedMaterialsJson")
                         .HasColumnType("text");
@@ -13902,6 +14003,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<string>("RequestSource")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("RequestedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("ReworkOfWorkOrderId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid?>("SalesOpportunityId")
                         .HasColumnType("uuid");
 
@@ -13962,6 +14074,16 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("VerificationNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("VerifiedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("WorkDoneNotes")
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
@@ -14003,9 +14125,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("ContractId");
 
+                    b.HasIndex("FailureCauseCodeId");
+
+                    b.HasIndex("FailureProblemCodeId");
+
+                    b.HasIndex("FailureRemedyCodeId");
+
                     b.HasIndex("FollowUpOfWorkOrderId");
 
                     b.HasIndex("LeadTechnicianId");
+
+                    b.HasIndex("OrgNodeId");
 
                     b.HasIndex("ParentWorkOrderId");
 
@@ -14019,6 +14149,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsUnique();
 
                     b.HasIndex("RateCardId");
+
+                    b.HasIndex("ReworkOfWorkOrderId");
 
                     b.HasIndex("SalesOpportunityId");
 
@@ -14038,6 +14170,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("TenantId", "WorkOrderNumber")
                         .IsUnique();
+
+                    b.HasIndex("TenantId", "OrgNodeId", "Status");
+
+                    b.HasIndex("TenantId", "AssetId", "FailureProblemCodeId", "CompletedAt");
 
                     b.ToTable("work_orders", null, t =>
                         {
@@ -16289,6 +16425,24 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.FailureCode", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.AssetCategory", "AssetCategory")
+                        .WithMany()
+                        .HasForeignKey("AssetCategoryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AssetCategory");
 
                     b.Navigation("Tenant");
                 });
@@ -19281,8 +19435,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.Client", "Client")
                         .WithMany("WorkOrders")
                         .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Ecosys.Domain.Entities.User", "ClosedByUser")
                         .WithMany()
@@ -19294,6 +19447,21 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasForeignKey("ContractId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Ecosys.Domain.Entities.FailureCode", "FailureCauseCode")
+                        .WithMany()
+                        .HasForeignKey("FailureCauseCodeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.FailureCode", "FailureProblemCode")
+                        .WithMany()
+                        .HasForeignKey("FailureProblemCodeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.FailureCode", "FailureRemedyCode")
+                        .WithMany()
+                        .HasForeignKey("FailureRemedyCodeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Ecosys.Domain.Entities.WorkOrder", "FollowUpOfWorkOrder")
                         .WithMany("FollowUpWorkOrders")
                         .HasForeignKey("FollowUpOfWorkOrderId")
@@ -19303,6 +19471,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .WithMany()
                         .HasForeignKey("LeadTechnicianId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.OrgNode", "OrgNode")
+                        .WithMany()
+                        .HasForeignKey("OrgNodeId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Ecosys.Domain.Entities.WorkOrder", "ParentWorkOrder")
                         .WithMany("ChildWorkOrders")
@@ -19332,6 +19505,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasOne("Ecosys.Domain.Entities.ContractRateCard", "RateCard")
                         .WithMany("WorkOrders")
                         .HasForeignKey("RateCardId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.WorkOrder", null)
+                        .WithMany()
+                        .HasForeignKey("ReworkOfWorkOrderId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Ecosys.Domain.Entities.SalesOpportunity", "SalesOpportunity")
@@ -19379,9 +19557,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Navigation("Contract");
 
+                    b.Navigation("FailureCauseCode");
+
+                    b.Navigation("FailureProblemCode");
+
+                    b.Navigation("FailureRemedyCode");
+
                     b.Navigation("FollowUpOfWorkOrder");
 
                     b.Navigation("LeadTechnician");
+
+                    b.Navigation("OrgNode");
 
                     b.Navigation("ParentWorkOrder");
 

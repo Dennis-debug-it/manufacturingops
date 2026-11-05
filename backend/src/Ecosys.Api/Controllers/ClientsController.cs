@@ -496,8 +496,8 @@ public sealed class ClientsController(
             .Select(x => new { x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count, cancellationToken);
         var openWorkOrderCounts = await dbContext.WorkOrders
-            .Where(x => x.TenantId == TenantId && clientIds.Contains(x.ClientId) && x.Status != "Completed" && x.Status != "Cancelled" && x.Status != "Closed")
-            .GroupBy(x => x.ClientId)
+            .Where(x => x.TenantId == TenantId && x.ClientId.HasValue && clientIds.Contains(x.ClientId.Value) && x.Status != "Completed" && x.Status != "Cancelled" && x.Status != "Closed")
+            .GroupBy(x => x.ClientId!.Value)
             .Select(x => new { x.Key, Count = x.Count() })
             .ToDictionaryAsync(x => x.Key, x => x.Count, cancellationToken);
 

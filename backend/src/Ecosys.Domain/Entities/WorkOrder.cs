@@ -6,7 +6,7 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
     public Guid? BranchId { get; set; }
-    public Guid ClientId { get; set; }
+    public Guid? ClientId { get; set; }
     public Guid? SiteId { get; set; }
     public Guid? SystemId { get; set; }
     public Guid? AssetId { get; set; }
@@ -106,6 +106,34 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     // Repeat visit detection
     public bool IsRepeatVisit { get; set; }
     public int RepeatVisitCount { get; set; }
+
+    // Factory maintenance
+    /// <summary>Where the work is (factory, section or sub-section); taken from the asset when there is one.</summary>
+    public Guid? OrgNodeId { get; set; }
+    /// <summary>How the job came in: Office, Operator, RunningCheck, Preventive.</summary>
+    public string? RequestSource { get; set; }
+    public string? RequestedByName { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+    public Guid? ApprovedByUserId { get; set; }
+    public DateTime? PlannedAt { get; set; }
+    public DateTime? VerifiedAt { get; set; }
+    public Guid? VerifiedByUserId { get; set; }
+    public string? VerificationNotes { get; set; }
+    /// <summary>The asset stopped (a breakdown); downtime runs from <see cref="DowntimeStartedAt"/> to <see cref="DowntimeEndedAt"/>.</summary>
+    public bool IsBreakdown { get; set; }
+    public DateTime? DowntimeStartedAt { get; set; }
+    public DateTime? DowntimeEndedAt { get; set; }
+    /// <summary>The job can only be done with the line stopped (queues for the weekly window in Phase 3).</summary>
+    public bool NeedsLineStop { get; set; }
+    public Guid? FailureProblemCodeId { get; set; }
+    public Guid? FailureCauseCodeId { get; set; }
+    public Guid? FailureRemedyCodeId { get; set; }
+    /// <summary>The earlier job on the same asset and fault that this one repeats, within the rework window.</summary>
+    public Guid? ReworkOfWorkOrderId { get; set; }
+    public FailureCode? FailureProblemCode { get; set; }
+    public FailureCode? FailureCauseCode { get; set; }
+    public FailureCode? FailureRemedyCode { get; set; }
+    public OrgNode? OrgNode { get; set; }
 
     public Tenant? Tenant { get; set; }
     public WorkflowStatus? WorkflowStatus { get; set; }

@@ -898,7 +898,7 @@ public sealed class ContractReferenceController(
         contractAccessService.EnsureCanViewPricing();
         var workOrder = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == workOrderId, cancellationToken)
             ?? throw new NotFoundException("Work order was not found.");
-        var pricing = await contractPricingService.EvaluateAsync(TenantId, workOrder.ClientId, workOrder.SiteId, workOrder.AssetId, workOrder.WorkType, workOrder.Priority, DateTime.UtcNow, workOrder.EstimatedDuration, workOrder.EstimatedMaterialCost, true, cancellationToken);
+        var pricing = await contractPricingService.EvaluateAsync(TenantId, workOrder.ClientId ?? Guid.Empty, workOrder.SiteId, workOrder.AssetId, workOrder.WorkType, workOrder.Priority, DateTime.UtcNow, workOrder.EstimatedDuration, workOrder.EstimatedMaterialCost, true, cancellationToken);
         return Ok(MapPricing(pricing));
     }
 
