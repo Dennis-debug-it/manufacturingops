@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { IsolationPointsPanel } from './people/JobSafetyCard'
+import { AssetPartsPanel } from './stores/AssetPartsPanel'
 import { Link, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ArrowRightLeft, Pencil } from 'lucide-react'
@@ -72,6 +73,7 @@ export function FactoryAssetDetailPage() {
           { id: 'documents', label: 'Documents', content: <DocumentsPanel asset={asset} canManage={canManage} /> },
           { id: 'tag', label: 'Tag', content: <TagsPanel asset={asset} canManage={canManage} /> },
           { id: 'isolation', label: 'Isolation', content: <IsolationPointsPanel assetId={asset.id} canManage={canManage} /> },
+          { id: 'parts', label: 'Parts list', content: <AssetPartsPanel assetId={asset.id} canManage={canManage} /> },
           { id: 'history', label: 'History', content: <HistoryPanel assetId={asset.id} /> },
         ]}
       />

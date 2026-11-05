@@ -227,3 +227,10 @@ export function usePermission(action: string): boolean {
   const { user } = useAuth()
   return useMemo(() => hasPermission(user, action), [action, user])
 }
+
+/** True when the user has any one of the actions (a single hook, so it can be used in place of `usePermission(a) || usePermission(b)`). */
+export function useAnyPermission(...actions: string[]): boolean {
+  const { user } = useAuth()
+  const key = actions.join('|')
+  return useMemo(() => key.split('|').some((action) => hasPermission(user, action)), [key, user])
+}

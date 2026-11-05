@@ -217,6 +217,8 @@ export interface WindowPack {
     steps: { id: string; section: string | null; instruction: string; type: string; unit: string | null; done: boolean }[]
     resources: { kind: string; description: string; quantity: number }[]
     isolation: string
+    spares: { reservationId: string; materialItemId: string; itemCode: string; itemName: string; unitOfMeasure: string; quantity: number; issuedQuantity: number; status: 'Reserved' | 'Kitted' | 'Issued' | 'Released'; storeName: string; location: string }[]
+    shortages: { materialItemId: string; description: string; short: number }[]
   }[]
   handbackItems: HandbackItem[]
   generatedAt: string

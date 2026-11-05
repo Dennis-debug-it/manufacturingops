@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { useQueryClient } from '@tanstack/react-query'
+import { api } from '../../../shared/api/apiClient'
 import { CheckCircle2, Circle, Plus, Printer, Repeat, Search, X } from 'lucide-react'
 import { PageHeader } from '../../../shared/components/PageHeader'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
@@ -28,6 +30,7 @@ export function WindowDetailPage() {
   // Keep the pack on the phone once the window is packed, for the day itself.
   useWindowPack(id, data ? ['Packed', 'InProgress'].includes(data.window.status) : false)
   const action = useWindowAction(id)
+  const queryClient = useQueryClient()
   const [drawer, setDrawer] = useState<'add' | 'edit' | 'skip' | 'handback' | null>(null)
 
   if (isLoading) return <Spinner label="Loading window" />
@@ -40,6 +43,19 @@ export function WindowDetailPage() {
     try {
       await action.mutateAsync({ method, path, body })
       toast.success(done)
+    } catch {
+      // The API client shows the error.
+    }
+  }
+
+  /** Holds each job's planned parts in the factory store, so they are there on the day. */
+  const reserveSpares = async () => {
+    try {
+      const result = await api.post<{ linesReserved: number; shortages: { workOrderNumber: string; itemName: string; short: number; unitOfMeasure: string; isCritical: boolean }[] }>(`/api/factory/windows/${window.id}/reserve-spares`)
+      if (result.shortages.length) toast(`Reserved ${result.linesReserved} line(s). Short: ${result.shortages.map((s) => `${s.itemName} ×${s.short} (${s.workOrderNumber})`).join('; ')}`, { icon: '⚠️', duration: 10_000 })
+      else toast.success(result.linesReserved ? `Reserved ${result.linesReserved} line(s); nothing short` : 'Everything planned is already reserved')
+      void queryClient.invalidateQueries({ queryKey: ['factory', 'window-pack'] })
+      void queryClient.invalidateQueries({ queryKey: ['factory', 'stores'] })
     } catch {
       // The API client shows the error.
     }
@@ -61,6 +77,7 @@ export function WindowDetailPage() {
         secondaryActions={
           <div className="flex flex-wrap gap-2">
             {window.status !== 'Skipped' ? <Link to={`${links.window(window.id)}/pack`} className={secondaryButton}><Printer className="h-4 w-4" />Job pack</Link> : null}
+            {editable && canPlan ? <button type="button" className={secondaryButton} onClick={() => void reserveSpares()}>Reserve spares</button> : null}
             {editable && canPlan ? <button type="button" className={secondaryButton} onClick={() => setDrawer('edit')}>Move or edit</button> : null}
             {editable && canPlan ? <button type="button" className={secondaryButton} onClick={() => setDrawer('skip')}>Skip this week</button> : null}
           </div>
@@ -272,14 +289,20 @@ export function WindowPackPage() {
         <h1 className="text-xl font-semibold text-slate-900">Weekly window job pack · {window.factoryName}</h1>
         <p className="text-sm text-slate-600">{formatDate(window.windowDate, 'EEEE dd MMM yyyy')}, {formatTime(window.startsAt)}–{formatTime(window.endsAt)} · {jobs.length} jobs · {formatNumber(window.plannedHours)} h of {formatNumber(window.capacityHours)} h · printed {formatDateTime(pack.data.generatedAt)}</p>
       </header>
-      {jobs.map(({ job, description, location, steps, resources, isolation }, index) => (
+      {jobs.map(({ job, description, location, steps, resources, isolation, spares, shortages }, index) => (
         <article key={job.workOrderId} className={cn('rounded-lg border border-slate-200 bg-white p-4 print:break-inside-avoid print:rounded-none print:border-0 print:border-b print:border-slate-300')}>
           <h2 className="font-semibold text-slate-900">{index + 1}. {job.title}</h2>
           <p className="text-xs text-slate-600"><span className="font-mono">{job.workOrderNumber}</span>{job.assetCode ? ` · ${job.assetCode} ${job.assetName}` : ''}{location ? ` · ${location}` : ''} · {job.priority}{job.estimatedHours ? ` · ${formatNumber(job.estimatedHours)} h` : ''}</p>
           <p className="mt-1 text-sm"><span className="font-medium">Team:</span> {job.team.length ? job.team.join(', ') : '________________'}</p>
           <p className="mt-1 text-sm font-medium text-rose-800">{isolation}</p>
           {description ? <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{description}</p> : null}
-          {resources.length > 0 ? <p className="mt-1 text-sm"><span className="font-medium">Spares and tools:</span> {resources.map((r) => `${r.description}${r.quantity !== 1 ? ` ×${r.quantity}` : ''}`).join('; ')}</p> : null}
+          {resources.filter((r) => r.kind !== 'Part').length > 0 ? <p className="mt-1 text-sm"><span className="font-medium">Tools:</span> {resources.filter((r) => r.kind !== 'Part').map((r) => `${r.description}${r.quantity !== 1 ? ` ×${r.quantity}` : ''}`).join('; ')}</p> : null}
+          {spares.length > 0 ? (
+            <div className="mt-1 text-sm"><span className="font-medium">Spares from stores:</span>
+              <ul className="ml-4 list-disc">{spares.map((s) => <li key={s.reservationId}>{s.itemName} ×{s.quantity - s.issuedQuantity || s.quantity} {s.unitOfMeasure} · {s.status === 'Kitted' ? 'kitted' : s.status === 'Issued' ? 'issued' : 'reserved'} · collect from {s.location}</li>)}</ul>
+            </div>
+          ) : resources.some((r) => r.kind === 'Part') ? <p className="mt-1 text-sm"><span className="font-medium">Spares (not reserved):</span> {resources.filter((r) => r.kind === 'Part').map((r) => `${r.description}${r.quantity !== 1 ? ` ×${r.quantity}` : ''}`).join('; ')}</p> : null}
+          {shortages.length > 0 ? <p className="mt-1 text-sm font-medium text-rose-800">Short in stores: {shortages.map((s) => `${s.description} ×${s.short}`).join('; ')}</p> : null}
           {steps.length > 0 ? (
             <ol className="mt-2 space-y-0.5 text-sm">
               {steps.map((step) => <li key={step.id} className="flex gap-2"><span aria-hidden>{step.done ? '☑' : '☐'}</span><span>{step.section && steps.some((x) => x.section !== step.section) ? <span className="text-slate-500">{step.section}: </span> : null}{step.instruction}{step.type !== 'Task' && step.type !== 'checkbox' ? ` ______ ${step.unit ?? ''}` : ''}</span></li>)}

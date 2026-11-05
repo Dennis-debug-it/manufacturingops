@@ -115,7 +115,12 @@ export interface JobDetail {
   requiredPermitTypes: string[]
   permits: { id: string; permitNumber: string; permitType: string; status: 'Requested' | 'Approved' | 'Closed' | 'Rejected' | 'Cancelled'; validFrom: string; validTo: string }[]
   locks: { id: string; isolationPointId: string; pointCode: string; pointDescription: string; energyType: string; lockNumber: string; appliedByName: string; appliedAt: string; zeroEnergyVerified: boolean; removedByName: string | null; removedAt: string | null }[]
-  parts: { id: string; materialItemId: string; partName: string; quantity: number; notes: string | null; usedAt: string }[]
+  parts: { id: string; materialItemId: string; partName: string; quantity: number; notes: string | null; usedAt: string; unitCost: number | null }[]
+  partsCost: number
+  contractorId: string | null
+  contractorName: string | null
+  agreementId: string | null
+  agreementNumber: string | null
   signature: { signerName: string; capturedAt: string; dataUrl: string } | null
   handover: JobEvent[]
   history: JobEvent[]

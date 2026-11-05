@@ -134,6 +134,8 @@ const OverhaulPlanPage = lazy(async () => ({ default: (await import('../features
 const StatutoryPage = lazy(async () => ({ default: (await import('../features/factory/planning/StatutoryPage')).StatutoryPage }))
 const PeoplePage = lazy(async () => ({ default: (await import('../features/factory/people/PeoplePage')).PeoplePage }))
 const SafetyPage = lazy(async () => ({ default: (await import('../features/factory/people/SafetyPage')).SafetyPage }))
+const StoresPage = lazy(async () => ({ default: (await import('../features/factory/stores/StoresPage')).StoresPage }))
+const ContractorsPage = lazy(async () => ({ default: (await import('../features/factory/stores/ContractorsPage')).ContractorsPage }))
 const OperatorReportPage = lazy(async () => ({ default: (await import('../features/public/OperatorReportPage')).OperatorReportPage }))
 const OrganisationSettingsPage = lazy(async () => ({ default: (await import('../features/factory/OrganisationSettingsPage')).OrganisationSettingsPage }))
 import { ClientDetailPage } from '../features/clients/ClientDetailPage'
@@ -359,6 +361,8 @@ export function AppRouter() {
       ['/maintenance/statutory', StatutoryPage],
       ['/maintenance/people', PeoplePage],
       ['/maintenance/safety', SafetyPage],
+      ['/maintenance/stores', StoresPage],
+      ['/maintenance/contractors', ContractorsPage],
       ['/maintenance/calendar', MaintenanceCalendarPage],
       ['/maintenance/schedules', MaintenanceSchedulesPage],
       ['/maintenance/schedules/new', MaintenanceSchedulesPage],
