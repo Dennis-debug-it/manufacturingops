@@ -12,5 +12,11 @@ export function useFactoryLinks() {
     jobs: () => `${tech ? '/tech' : ''}/maintenance/jobs`,
     check: (runId: string) => `${tech ? '/tech' : ''}/maintenance/checks/${runId}`,
     checks: () => `${tech ? '/tech' : ''}/maintenance/checks`,
+    window: (id: string) => `${tech ? '/tech' : ''}/maintenance/windows/${id}`,
+    windows: () => `${tech ? '/tech' : ''}/maintenance/windows`,
+    overhaul: (id: string) => `/maintenance/overhaul/${id}`,
+    overhauls: () => '/maintenance/overhaul',
+    pm: () => '/maintenance/pm',
+    statutory: () => '/maintenance/statutory',
   }
 }

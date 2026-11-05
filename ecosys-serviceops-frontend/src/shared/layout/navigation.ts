@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, BookOpen, Activity, Presentation, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, BookOpen, Activity, Presentation, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2 } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -17,6 +17,10 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Live Map', to: '/dispatch/map', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: MapPin },
   { label: 'Factory overview', to: '/maintenance/overview', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: Factory },
   { label: 'Maintenance jobs', to: '/maintenance/jobs', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Wrench },
+  { label: 'Planned maintenance', to: '/maintenance/pm', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: Gauge },
+  { label: 'Weekly window', to: '/maintenance/windows', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: CalendarRange },
+  { label: 'Overhaul', to: '/maintenance/overhaul', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: HardHat },
+  { label: 'Statutory', to: '/maintenance/statutory', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: FileCheck2 },
   { label: 'Running checks', to: '/maintenance/checks', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: ClipboardCheck },
   { label: 'Assets', to: '/assets', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], icon: Boxes },
   { label: 'Scan', to: '/scan', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], icon: ScanLine },

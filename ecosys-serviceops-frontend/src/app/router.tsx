@@ -125,6 +125,13 @@ const RunningChecksPage = lazy(async () => ({ default: (await import('../feature
 const CheckRunPage = lazy(async () => ({ default: (await import('../features/factory/checks/CheckRunPage')).CheckRunPage }))
 const CheckSchedulesSettingsPage = lazy(async () => ({ default: (await import('../features/factory/checks/CheckSchedulesSettingsPage')).CheckSchedulesSettingsPage }))
 const FactoryDashboardPage = lazy(async () => ({ default: (await import('../features/factory/FactoryDashboardPage')).FactoryDashboardPage }))
+const PmPlansPage = lazy(async () => ({ default: (await import('../features/factory/planning/PmPlansPage')).PmPlansPage }))
+const WindowsPage = lazy(async () => ({ default: (await import('../features/factory/planning/WindowsPage')).WindowsPage }))
+const WindowDetailPage = lazy(async () => ({ default: (await import('../features/factory/planning/WindowDetailPage')).WindowDetailPage }))
+const WindowPackPage = lazy(async () => ({ default: (await import('../features/factory/planning/WindowDetailPage')).WindowPackPage }))
+const OverhaulPage = lazy(async () => ({ default: (await import('../features/factory/planning/OverhaulPage')).OverhaulPage }))
+const OverhaulPlanPage = lazy(async () => ({ default: (await import('../features/factory/planning/OverhaulPage')).OverhaulPlanPage }))
+const StatutoryPage = lazy(async () => ({ default: (await import('../features/factory/planning/StatutoryPage')).StatutoryPage }))
 const OperatorReportPage = lazy(async () => ({ default: (await import('../features/public/OperatorReportPage')).OperatorReportPage }))
 const OrganisationSettingsPage = lazy(async () => ({ default: (await import('../features/factory/OrganisationSettingsPage')).OrganisationSettingsPage }))
 import { ClientDetailPage } from '../features/clients/ClientDetailPage'
@@ -341,6 +348,13 @@ export function AppRouter() {
       ['/maintenance/jobs/:id', FactoryJobDetailPage],
       ['/maintenance/checks', RunningChecksPage],
       ['/maintenance/checks/:id', CheckRunPage],
+      ['/maintenance/pm', PmPlansPage],
+      ['/maintenance/windows', WindowsPage],
+      ['/maintenance/windows/:id', WindowDetailPage],
+      ['/maintenance/windows/:id/pack', WindowPackPage],
+      ['/maintenance/overhaul', OverhaulPage],
+      ['/maintenance/overhaul/:id', OverhaulPlanPage],
+      ['/maintenance/statutory', StatutoryPage],
       ['/maintenance/calendar', MaintenanceCalendarPage],
       ['/maintenance/schedules', MaintenanceSchedulesPage],
       ['/maintenance/schedules/new', MaintenanceSchedulesPage],
@@ -543,6 +557,9 @@ export function AppRouter() {
           <Route path="maintenance/jobs/:id" element={<FactoryJobDetailPage />} />
           <Route path="maintenance/checks" element={<RunningChecksPage />} />
           <Route path="maintenance/checks/:id" element={<CheckRunPage />} />
+          <Route path="maintenance/windows" element={<WindowsPage />} />
+          <Route path="maintenance/windows/:id" element={<WindowDetailPage />} />
+          <Route path="maintenance/windows/:id/pack" element={<WindowPackPage />} />
           <Route path="guides" element={<TechGuidesPage />} />
           <Route path="guides/:id" element={<TechGuidePage />} />
           <Route path="help" element={<TechHelpPage />} />

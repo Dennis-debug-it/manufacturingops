@@ -308,8 +308,8 @@ internal sealed class FactoryPmService(
             plan.MeterId = null;
             plan.MeterInterval = null;
             plan.NextMeterDue = null;
-            plan.NextPmDate = (request.NextDueDate ?? plan.NextPmDate
-                ?? throw new BusinessRuleException("Choose when it is next due.")).Date;
+            plan.NextPmDate = DateTime.SpecifyKind((request.NextDueDate ?? plan.NextPmDate
+                ?? throw new BusinessRuleException("Choose when it is next due.")).Date, DateTimeKind.Utc);
         }
 
         var routeIds = (request.RouteAssetIds ?? []).Distinct().ToList();
@@ -552,7 +552,7 @@ internal sealed class FactoryPmService(
             }
             else
             {
-                target = (newDueDate ?? throw new BusinessRuleException("Choose the new due date.")).Date;
+                target = DateTime.SpecifyKind((newDueDate ?? throw new BusinessRuleException("Choose the new due date.")).Date, DateTimeKind.Utc);
             }
 
             var current = plan.NextPmDate ?? now.Date;

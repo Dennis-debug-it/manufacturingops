@@ -217,6 +217,7 @@ export function useMeters(assetId: string) {
   return useQuery({
     queryKey: ['factory', 'asset', assetId, 'meters'],
     queryFn: () => api.get<Meter[]>(`/api/assets/${assetId}/meters`),
+    enabled: Boolean(assetId),
   })
 }
 

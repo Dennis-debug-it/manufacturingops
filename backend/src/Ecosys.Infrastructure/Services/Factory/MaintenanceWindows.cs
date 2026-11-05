@@ -75,7 +75,8 @@ internal sealed class MaintenanceWindowService(
 
             var day = factory.WindowDay ?? settings.WeeklyWindowDay;
             var localNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, zone);
-            var first = localNow.Date.AddDays(((int)day - (int)localNow.DayOfWeek + 7) % 7);
+            // The factory's local date, stored as a UTC-kind date (PostgreSQL only takes UTC).
+            var first = DateTime.SpecifyKind(localNow.Date.AddDays(((int)day - (int)localNow.DayOfWeek + 7) % 7), DateTimeKind.Utc);
             if (first == localNow.Date && localNow.TimeOfDay >= settings.WeeklyWindowEnd.ToTimeSpan() && settings.WeeklyWindowEnd > settings.WeeklyWindowStart)
             {
                 first = first.AddDays(7);

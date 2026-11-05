@@ -249,7 +249,11 @@ internal sealed class FactoryWorkOrderService(
             NotifyClient = false
         };
         dbContext.WorkOrders.Add(workOrder);
-        await slaService.ApplyAsync(workOrder, asset?.Criticality, cancellationToken);
+        // Response and repair targets are for faults; planned and statutory work runs to its due date.
+        if (workType is not (FactoryWorkTypes.Preventive or FactoryWorkTypes.Statutory or FactoryWorkTypes.Inspection) || request.IsBreakdown)
+        {
+            await slaService.ApplyAsync(workOrder, asset?.Criticality, cancellationToken);
+        }
         foreach (var step in plan?.Steps.OrderBy(x => x.Sequence) ?? Enumerable.Empty<JobPlanStep>())
         {
             dbContext.WorkOrderChecklistItems.Add(new WorkOrderChecklistItem

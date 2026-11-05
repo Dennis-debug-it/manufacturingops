@@ -5,17 +5,22 @@ import { PageHeader } from '../../shared/components/PageHeader'
 import { StatCard } from '../../shared/components/StatCard'
 import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
-import { formatDateTime } from '../../shared/utils/dates'
+import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
 import { LocationSelect, formatNumber } from './components/ui'
 import { useFactoryLinks } from './links'
 import { useFactoryDashboard } from './jobs/api'
+import { useComplianceSummary, usePmCompliance, useWindows } from './planning/api'
 
 /** The maintenance manager's view of the factory: what is down now, what is late, and what keeps failing. */
 export function FactoryDashboardPage() {
   const links = useFactoryLinks()
   const [orgNodeId, setOrgNodeId] = useState('')
   const { data, isLoading, isError } = useFactoryDashboard(orgNodeId || undefined)
+  const pm = usePmCompliance(orgNodeId || undefined, 90)
+  const statutory = useComplianceSummary(orgNodeId || undefined)
+  const windows = useWindows()
+  const nextWindow = (windows.data ?? []).find((x) => x.status === 'Planned' || x.status === 'Packed' || x.status === 'InProgress')
 
   return (
     <div className="space-y-5">
@@ -52,6 +57,14 @@ export function FactoryDashboardPage() {
             <StatCard label="Need the line stopped" value={data.jobs.needLineStop} />
             <StatCard label="Downtime, last 7 days" value={`${formatNumber(data.downtimeHoursLast7Days)} h`} />
             <StatCard label="Production lost, 7 days" value={`${formatNumber(data.productionLostLast7Days)} ${data.productionUnit}`} />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Link to={links.pm() + '?tab=compliance'} className="block"><StatCard label="PM on time, 90 days" value={pm.data?.percent == null ? '—' : `${pm.data.percent}%`} tone={pm.data?.percent != null && pm.data.percent < 80 ? 'warning' : 'default'} /></Link>
+            <Link to={links.statutory() + '?status=Overdue'} className="block"><StatCard label="Statutory overdue" value={statutory.data ? `${statutory.data.overdue}${statutory.data.dueSoon ? ` · ${statutory.data.dueSoon} due soon` : ''}` : '—'} tone={statutory.data?.overdue ? 'danger' : 'default'} /></Link>
+            {nextWindow ? (
+              <Link to={links.window(nextWindow.id)} className="block"><StatCard label={`Next window · ${nextWindow.factoryName}`} value={`${formatDate(nextWindow.windowDate, 'EEE dd MMM')} · ${nextWindow.jobs} jobs`} tone={nextWindow.capacityHours > 0 && nextWindow.plannedHours > nextWindow.capacityHours ? 'warning' : 'default'} /></Link>
+            ) : <StatCard label="Next window" value="—" />}
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">

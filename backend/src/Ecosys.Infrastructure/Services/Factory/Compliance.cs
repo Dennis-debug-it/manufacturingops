@@ -116,7 +116,7 @@ internal sealed class ComplianceService(
         }
         else
         {
-            record.ValidUntil = input.ValidUntil;
+            record.ValidUntil = input.ValidUntil is { } valid ? DateTime.SpecifyKind(valid.Date, DateTimeKind.Utc) : null;
         }
 
         if (item.OpenWorkOrderId is { } jobId)

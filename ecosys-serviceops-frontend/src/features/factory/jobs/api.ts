@@ -68,7 +68,17 @@ export function useJobActions(job: Pick<JobDetail, 'id' | 'workOrderNumber'> | u
     act: (action: JobAction, payload: ActionPayload = {}) => run(ACTION_LABELS[action], { url: `${base}/actions/${action}`, body: payload }),
     handover: (note: string) => run('Handover note', { url: `${base}/handover`, body: { note } }),
     labour: (minutes: number, notes: string | null, technicianId: string | null = null) => run('Labour time', { url: `${base}/labour`, body: { minutes, notes, technicianId } }),
-    step: (stepId: string, done: boolean, remarks: string | null) => run(done ? 'Step done' : 'Step undone', { url: `${base}/steps/${stepId}`, body: { done, remarks } }),
+    step: async (stepId: string, done: boolean, remarks: string | null, value: string | null = null) => {
+      const result = await run(done ? 'Step done' : 'Step undone', { url: `${base}/steps/${stepId}`, body: { done, remarks, value } })
+      if (result.queued && job) {
+        // Show the tick straight away while it waits to sync.
+        queryClient.setQueryData<JobDetail>(['factory', 'job', job.id], (current) => current && {
+          ...current,
+          steps: current.steps.map((s) => (s.id === stepId ? { ...s, done, remarks, value: done ? value : null } : s)),
+        })
+      }
+      return result
+    },
   }
 }
 

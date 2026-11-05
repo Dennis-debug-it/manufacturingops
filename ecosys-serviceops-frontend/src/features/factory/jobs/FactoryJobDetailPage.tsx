@@ -12,8 +12,9 @@ import { CriticalityBadge, Field, inputClass, primaryButton, secondaryButton, te
 import { useFactoryLinks } from '../links'
 import { useJob, useJobActions, useSplitJob } from './api'
 import { ActionDialog } from './ActionDialog'
+import { DeferToOverhaulDrawer } from '../planning/OverhaulPage'
 import { JobStatusBadge } from './JobStatusBadge'
-import { ACTION_LABELS, SUPERVISORY, type JobAction, type JobDetail } from './types'
+import { ACTION_LABELS, SUPERVISORY, isTickStep, type JobAction, type JobDetail, type JobStep } from './types'
 
 export function FactoryJobDetailPage() {
   const { id = '' } = useParams()
@@ -21,6 +22,7 @@ export function FactoryJobDetailPage() {
   const { data: job, isLoading, isError } = useJob(id)
   const canSupervise = usePermission('work-orders.assign')
   const [action, setAction] = useState<JobAction | null>(null)
+  const [deferring, setDeferring] = useState(false)
 
   if (isLoading) return <p className="p-6 text-sm text-slate-500">Loading…</p>
   if (isError || !job) return <ErrorState title="Job not found" description="It may be in a factory you don't have access to." />
@@ -41,6 +43,9 @@ export function FactoryJobDetailPage() {
             {available.filter((x) => x !== primary).map((x) => (
               <button key={x} type="button" className={secondaryButton} onClick={() => setAction(x)}>{ACTION_LABELS[x]}</button>
             ))}
+            {canSupervise && !links.tech && isOpen(job) && !['Requested', 'Completed', 'Verified'].includes(job.status) ? (
+              <button type="button" className={secondaryButton} onClick={() => setDeferring(true)}>Defer to overhaul</button>
+            ) : null}
           </div>
         }
       />
@@ -110,6 +115,7 @@ export function FactoryJobDetailPage() {
       </div>
 
       {action ? <ActionDialog job={job} action={action} onClose={() => setAction(null)} /> : null}
+      <DeferToOverhaulDrawer open={deferring} workOrderId={job.id} workOrderNumber={job.workOrderNumber} onClose={() => setDeferring(false)} />
     </div>
   )
 }
@@ -130,22 +136,81 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 const isOpen = (job: JobDetail) => !['Completed', 'Verified', 'Closed', 'Cancelled', 'Rejected'].includes(job.status)
 
 function StepsCard({ job }: { job: JobDetail }) {
-  const actions = useJobActions(job)
   const done = job.steps.filter((x) => x.done).length
+  const sections = job.steps.reduce<{ name: string | null; steps: JobStep[] }[]>((groups, step) => {
+    const last = groups[groups.length - 1]
+    if (last && last.name === step.section) last.steps.push(step)
+    else groups.push({ name: step.section, steps: [step] })
+    return groups
+  }, [])
   return (
     <Card title={`Steps · ${done} of ${job.steps.length} done`}>
-      <ol className="space-y-2">
-        {job.steps.map((step) => (
-          <li key={step.id}>
-            <button type="button" disabled={!isOpen(job)} className="flex w-full items-start gap-3 rounded-lg p-2 text-left hover:bg-slate-50 disabled:cursor-default"
-              onClick={() => void actions.step(step.id, !step.done, step.remarks).catch(() => undefined)}>
-              {step.done ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" /> : <Circle className="mt-0.5 h-5 w-5 shrink-0 text-slate-300" />}
-              <span className={cn('text-sm', step.done && 'text-slate-500 line-through')}>{step.instruction}{step.hint ? <span className="block text-xs text-slate-400 no-underline">{step.hint}</span> : null}</span>
-            </button>
-          </li>
+      <div className="space-y-4">
+        {sections.map((group, index) => (
+          <div key={`${group.name ?? ''}-${index}`}>
+            {group.name && sections.length > 1 ? <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{group.name}</h3> : null}
+            <ol className="space-y-1">
+              {group.steps.map((step) => <StepRow key={step.id} job={job} step={step} />)}
+            </ol>
+          </div>
         ))}
-      </ol>
+      </div>
     </Card>
+  )
+}
+
+function StepRow({ job, step }: { job: JobDetail; step: JobStep }) {
+  const actions = useJobActions(job)
+  const [value, setValue] = useState(step.value ?? '')
+  const editable = isOpen(job)
+  const save = (done: boolean, next: string | null) => void actions.step(step.id, done, step.remarks, next).catch(() => undefined)
+  const number = step.type === 'number' || step.type === 'reading'
+  const outOfRange = number && value !== '' && ((step.minValue != null && Number(value) < step.minValue) || (step.maxValue != null && Number(value) > step.maxValue))
+  const icon = step.done ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" /> : <Circle className="mt-0.5 h-5 w-5 shrink-0 text-slate-300" />
+
+  if (isTickStep(step)) {
+    return (
+      <li>
+        <button type="button" disabled={!editable} className="flex w-full items-start gap-3 rounded-lg p-2 text-left hover:bg-slate-50 disabled:cursor-default" onClick={() => save(!step.done, null)}>
+          {icon}
+          <span className={cn('text-sm', step.done && 'text-slate-500 line-through')}>
+            {step.instruction}{step.required ? null : <span className="text-xs text-slate-400"> (optional)</span>}
+            {step.hint ? <span className="block text-xs text-slate-400 no-underline">{step.hint}</span> : null}
+          </span>
+        </button>
+      </li>
+    )
+  }
+
+  const passFail = ['passfail', 'yesno', 'boolean'].includes(step.type)
+  return (
+    <li className="flex flex-wrap items-start gap-3 rounded-lg p-2">
+      {icon}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-slate-800">{step.instruction}{step.required ? null : <span className="text-xs text-slate-400"> (optional)</span>}</p>
+        {step.minValue != null || step.maxValue != null ? <p className="text-xs text-slate-500">Limits {step.minValue ?? '…'}–{step.maxValue ?? '…'} {step.unit}</p> : null}
+        {editable ? (
+          passFail ? (
+            <div className="mt-1 flex gap-2">
+              {[{ v: step.type === 'yesno' ? 'yes' : 'pass', label: step.type === 'yesno' ? 'Yes' : 'OK' }, { v: step.type === 'yesno' ? 'no' : 'fail', label: step.type === 'yesno' ? 'No' : 'Not OK' }].map((option) => (
+                <button key={option.v} type="button" aria-pressed={step.value === option.v} onClick={() => save(true, option.v)}
+                  className={cn('h-10 rounded-lg border px-4 text-sm font-medium', step.value === option.v ? 'border-[var(--app-primary)] bg-[var(--app-primary)] text-white' : 'border-slate-200 bg-white text-slate-700')}>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-1 flex items-center gap-2">
+              <input aria-label={step.instruction} type={number ? 'number' : 'text'} inputMode={number ? 'decimal' : undefined} step="any"
+                className={cn(inputClass, number ? 'max-w-32' : 'max-w-sm', outOfRange && 'border-amber-500')} value={value} onChange={(event) => setValue(event.target.value)} />
+              {step.unit ? <span className="text-sm text-slate-500">{step.unit}</span> : null}
+              <button type="button" className={secondaryButton} disabled={!value.trim() || value === step.value} onClick={() => save(true, value.trim())}>Save</button>
+            </div>
+          )
+        ) : <p className="text-sm font-medium text-slate-900">{step.value ?? '—'} {step.value ? step.unit : null}</p>}
+        {outOfRange ? <p className="mt-1 text-xs text-amber-700">Outside the limits: say what you found in a handover note or raise a job.</p> : null}
+      </div>
+    </li>
   )
 }
 

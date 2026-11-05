@@ -116,7 +116,7 @@ export interface JobDetail {
   allowedActions: JobAction[]
   jobPlanId: string | null
   jobPlanName: string | null
-  steps: { id: string; instruction: string; hint: string | null; done: boolean; remarks: string | null }[]
+  steps: JobStep[]
   resources: { kind: 'Tool' | 'Part'; description: string; materialItemId: string | null; quantity: number }[]
   responseBreached: boolean
   repairBreached: boolean
@@ -181,3 +181,21 @@ export interface FactoryDashboard {
   plannedJobsLast30Days: number
   runningChecksLast24Hours: { due: number; completed: number; missed: number; outstanding: number; failedItems: number }
 }
+
+/** A job plan task or a PM checklist item. Tasks and tick boxes are ticked; the rest need a value. */
+export interface JobStep {
+  id: string
+  instruction: string
+  hint: string | null
+  done: boolean
+  remarks: string | null
+  section: string | null
+  type: string
+  unit: string | null
+  minValue: number | null
+  maxValue: number | null
+  value: string | null
+  required: boolean
+}
+
+export const isTickStep = (step: Pick<JobStep, 'type'>) => step.type === 'Task' || step.type === 'checkbox'
