@@ -190,7 +190,6 @@ public sealed class PortalBoundaryTests
     [Theory]
     [InlineData(typeof(PortalController))]
     [InlineData(typeof(PortalAuthController))]
-    [InlineData(typeof(PortalKnowledgeController))]
     [InlineData(typeof(PortalProjectsController))]
     [InlineData(typeof(CsatController))]
     public void PortalControllers_AreOutsideTheTenantBoundary(Type controllerType)
@@ -203,7 +202,6 @@ public sealed class PortalBoundaryTests
 
     [Theory]
     [InlineData(typeof(PortalController))]
-    [InlineData(typeof(PortalKnowledgeController))]
     [InlineData(typeof(PortalProjectsController))]
     public void PortalControllers_StillRequireThePortalPolicy(Type controllerType)
     {

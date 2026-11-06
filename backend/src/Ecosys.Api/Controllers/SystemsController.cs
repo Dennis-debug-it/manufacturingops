@@ -177,12 +177,8 @@ public sealed class SystemsController(
             .Select(x => new SystemWorkOrderResponse(x.Id, x.WorkOrderNumber, x.Title, x.Status, x.WorkType, x.Priority, x.AssetId, x.Asset != null ? x.Asset.AssetName : null))
             .ToListAsync(cancellationToken);
 
-        var relatedDocuments = await dbContext.KnowledgeDocuments
-            .Where(x => x.TenantId == TenantId && x.LinkedSystemId == systemId)
-            .OrderByDescending(x => x.UploadedAt)
-            .Take(10)
-            .Select(x => new RelatedSystemDocumentResponse(x.Id, x.Title, x.FileName, x.Status, x.UploadedAt))
-            .ToListAsync(cancellationToken);
+        // Knowledge documents were part of the ServiceOps knowledge base, which is not carried over.
+        var relatedDocuments = new List<RelatedSystemDocumentResponse>();
 
         return new SystemDetailResponse(
             Map(system, assets.Count, workOrders.Count(x => x.Status is not "Completed" and not "Cancelled" and not "Closed")),

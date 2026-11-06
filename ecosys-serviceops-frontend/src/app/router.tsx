@@ -15,7 +15,6 @@ import { isTechnicianWorkspaceUser, techPathFor } from '../shared/utils/technici
 import { TechLayout } from '../features/tech/TechLayout'
 import { TechJobsPage } from '../features/tech/TechJobsPage'
 import { TechJobPage } from '../features/tech/TechJobPage'
-import { TechGuidePage, TechGuidesPage } from '../features/tech/TechGuides'
 import { TechAccountPage } from '../features/tech/TechAccountPage'
 import { TechSitePage } from '../features/tech/TechSitePage'
 import { NotificationsPage, TechNotificationsPage } from '../features/notifications/NotificationsPage'
@@ -182,7 +181,6 @@ import { EscalationRulesSettingsPage } from '../features/settings/EscalationRule
 import { WOTemplatesSettingsPage } from '../features/settings/WOTemplatesSettingsPage'
 import { MyApprovalsPage } from '../features/approvals/MyApprovalsPage'
 import { WhatsAppInboxPage } from '../features/whatsapp/WhatsAppInboxPage'
-import { KnowledgeBasePage } from '../features/knowledge/KnowledgeBasePage'
 import { LiveMapPage } from '../features/dispatch/LiveMapPage'
 import { DailyRouteView } from '../features/dispatch/DailyRouteView'
 import { SchedulingBoardPage } from '../features/dispatch/SchedulingBoardPage'
@@ -438,7 +436,6 @@ export function AppRouter() {
       ['/team/time-attendance/timesheets/:id', TimeAttendanceTimesheetDetailPage],
       ['/team/time-attendance/leave', TimeAttendanceLeavePage],
       ['/team/time-attendance/reports', TimeAttendanceReportsPage],
-      ['/knowledge', KnowledgeBasePage],
       ['/help', HelpPage],
       ['/help/:guideId', HelpPage],
       ['/contracts', ContractsPage],
@@ -575,8 +572,6 @@ export function AppRouter() {
           <Route path="maintenance/safety" element={<SafetyPage />} />
           <Route path="maintenance/windows/:id" element={<WindowDetailPage />} />
           <Route path="maintenance/windows/:id/pack" element={<WindowPackPage />} />
-          <Route path="guides" element={<TechGuidesPage />} />
-          <Route path="guides/:id" element={<TechGuidePage />} />
           <Route path="help" element={<TechHelpPage />} />
           <Route path="account" element={<TechAccountPage />} />
           <Route path="notifications" element={<TechNotificationsPage />} />

@@ -221,14 +221,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<SlaEscalation> SlaEscalations => Set<SlaEscalation>();
     public DbSet<SlaRecord> SlaRecords => Set<SlaRecord>();
     public DbSet<EtaNotificationSettings> EtaNotificationSettings => Set<EtaNotificationSettings>();
-    public DbSet<KnowledgeCategory> KnowledgeCategories => Set<KnowledgeCategory>();
-    public DbSet<KnowledgeArticle> KnowledgeArticles => Set<KnowledgeArticle>();
-    public DbSet<KnowledgeDocument> KnowledgeDocuments => Set<KnowledgeDocument>();
-    public DbSet<KnowledgeDocumentChunk> KnowledgeDocumentChunks => Set<KnowledgeDocumentChunk>();
-    public DbSet<KnowledgeTag> KnowledgeTags => Set<KnowledgeTag>();
-    public DbSet<KnowledgeArticleTag> KnowledgeArticleTags => Set<KnowledgeArticleTag>();
-    public DbSet<KnowledgeArticleVersion> KnowledgeArticleVersions => Set<KnowledgeArticleVersion>();
-    public DbSet<KnowledgeArticleFeedback> KnowledgeArticleFeedback => Set<KnowledgeArticleFeedback>();
     public DbSet<ClientPreferentialRate> ClientPreferentialRates => Set<ClientPreferentialRate>();
     public DbSet<FinanceApprovalRule> FinanceApprovalRules => Set<FinanceApprovalRule>();
     public DbSet<MaterialIssue> MaterialIssues => Set<MaterialIssue>();
@@ -4078,161 +4070,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<KnowledgeCategory>(entity =>
-        {
-            entity.ToTable("knowledge_categories");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(1000);
-            entity.Property(x => x.Icon).HasMaxLength(60);
-            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
-            entity.HasOne(x => x.Tenant)
-                .WithMany()
-                .HasForeignKey(x => x.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<KnowledgeArticle>(entity =>
-        {
-            entity.ToTable("knowledge_articles");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Title).HasMaxLength(240).IsRequired();
-            entity.Property(x => x.Slug).HasMaxLength(260).IsRequired();
-            entity.Property(x => x.Summary).HasMaxLength(2000);
-            entity.Property(x => x.Body).HasMaxLength(64000).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Visibility).HasMaxLength(40).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.Slug }).IsUnique();
-            entity.HasOne(x => x.Tenant)
-                .WithMany()
-                .HasForeignKey(x => x.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Category)
-                .WithMany(x => x.Articles)
-                .HasForeignKey(x => x.CategoryId)
-                .OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.CreatedByUser)
-                .WithMany()
-                .HasForeignKey(x => x.CreatedByUserId)
-                .OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.UpdatedByUser)
-                .WithMany()
-                .HasForeignKey(x => x.UpdatedByUserId)
-                .OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.SourceWorkOrder)
-                .WithMany()
-                .HasForeignKey(x => x.SourceWorkOrderId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<KnowledgeArticleFeedback>(entity =>
-        {
-            entity.ToTable("knowledge_article_feedback");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Comment).HasMaxLength(2000);
-            entity.HasIndex(x => new { x.TenantId, x.ArticleId });
-            entity.HasOne(x => x.Tenant)
-                .WithMany()
-                .HasForeignKey(x => x.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Article)
-                .WithMany(x => x.Feedback)
-                .HasForeignKey(x => x.ArticleId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.ClientPortalUser)
-                .WithMany()
-                .HasForeignKey(x => x.ClientPortalUserId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<KnowledgeDocument>(entity =>
-        {
-            entity.ToTable("knowledge_documents");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(2000);
-            entity.Property(x => x.TagsJson).HasMaxLength(4000);
-            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
-            entity.Property(x => x.FileName).HasMaxLength(260).IsRequired();
-            entity.Property(x => x.FileType).HasMaxLength(100).IsRequired();
-            entity.Property(x => x.StoragePath).HasMaxLength(1000).IsRequired();
-            entity.Property(x => x.ExtractedText);
-            entity.HasIndex(x => new { x.TenantId, x.Title, x.Version });
-            entity.HasOne(x => x.Tenant).WithMany(x => x.KnowledgeDocuments).HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Category).WithMany().HasForeignKey(x => x.CategoryId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.LinkedClient).WithMany().HasForeignKey(x => x.LinkedClientId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.LinkedSite).WithMany().HasForeignKey(x => x.LinkedSiteId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.LinkedSystem).WithMany(x => x.KnowledgeDocuments).HasForeignKey(x => x.LinkedSystemId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.LinkedAsset).WithMany().HasForeignKey(x => x.LinkedAssetId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.LinkedWorkOrder).WithMany().HasForeignKey(x => x.LinkedWorkOrderId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.UploadedByUser).WithMany().HasForeignKey(x => x.UploadedByUserId).OnDelete(DeleteBehavior.Restrict);
-        });
-
-        modelBuilder.Entity<KnowledgeDocumentChunk>(entity =>
-        {
-            entity.ToTable("knowledge_document_chunks");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.SectionTitle).HasMaxLength(300);
-            entity.Property(x => x.ChunkText).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.DocumentId, x.ChunkOrder }).IsUnique();
-            entity.HasOne(x => x.Tenant).WithMany(x => x.KnowledgeDocumentChunks).HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Document).WithMany(x => x.Chunks).HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Article).WithMany().HasForeignKey(x => x.ArticleId).OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<KnowledgeTag>(entity =>
-        {
-            entity.ToTable("knowledge_tags");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
-            entity.Property(x => x.Slug).HasMaxLength(140).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.Slug }).IsUnique();
-            entity.HasOne(x => x.Tenant)
-                .WithMany()
-                .HasForeignKey(x => x.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<KnowledgeArticleTag>(entity =>
-        {
-            entity.ToTable("knowledge_article_tags");
-            entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.ArticleId, x.TagId }).IsUnique();
-            entity.HasOne(x => x.Tenant)
-                .WithMany()
-                .HasForeignKey(x => x.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Article)
-                .WithMany(x => x.ArticleTags)
-                .HasForeignKey(x => x.ArticleId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Tag)
-                .WithMany(x => x.ArticleTags)
-                .HasForeignKey(x => x.TagId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<KnowledgeArticleVersion>(entity =>
-        {
-            entity.ToTable("knowledge_article_versions");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Title).HasMaxLength(240).IsRequired();
-            entity.Property(x => x.Body).HasMaxLength(64000).IsRequired();
-            entity.HasIndex(x => new { x.ArticleId, x.VersionNumber }).IsUnique();
-            entity.HasOne(x => x.Tenant)
-                .WithMany()
-                .HasForeignKey(x => x.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Article)
-                .WithMany(x => x.Versions)
-                .HasForeignKey(x => x.ArticleId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.UpdatedByUser)
-                .WithMany()
-                .HasForeignKey(x => x.UpdatedByUserId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
-
         ApplyTenantQueryFilters(modelBuilder);
     }
 
@@ -6012,18 +5849,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entry.Entity.IssuedAt = EnsureUtc(entry.Entity.IssuedAt);
             entry.Entity.ApprovedAt = EnsureUtc(entry.Entity.ApprovedAt);
             entry.Entity.RejectedAt = EnsureUtc(entry.Entity.RejectedAt);
-        }
-
-        foreach (var entry in ChangeTracker.Entries<KnowledgeDocument>())
-        {
-            if (entry.State is not EntityState.Added and not EntityState.Modified)
-            {
-                continue;
-            }
-
-            entry.Entity.CreatedAt = EnsureUtc(entry.Entity.CreatedAt);
-            entry.Entity.UpdatedAt = EnsureUtc(entry.Entity.UpdatedAt);
-            entry.Entity.UploadedAt = EnsureUtc(entry.Entity.UploadedAt);
         }
 
         foreach (var entry in ChangeTracker.Entries<PlatformPayment>())

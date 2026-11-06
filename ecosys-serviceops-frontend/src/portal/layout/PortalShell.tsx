@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { cn } from '../../shared/utils/cn'
 import { brand } from '../../shared/config/brand'
-import { LayoutDashboard, ClipboardList, FileText, UserCircle2, LogOut, BookOpen, FileSignature, Boxes, CalendarClock, ScrollText, BarChart3, FolderKanban, type LucideIcon } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, FileText, UserCircle2, LogOut, FileSignature, Boxes, CalendarClock, ScrollText, BarChart3, FolderKanban, type LucideIcon } from 'lucide-react'
 import { usePortalAuth } from '../auth/PortalAuthContext'
 import { Crystal } from '../../shared/components/Crystal'
 import { usePortalSettings } from '../api'
@@ -26,7 +26,6 @@ const portalNav: PortalNavItem[] = [
   { label: 'Contracts', to: '/portal/contracts', icon: ScrollText, feature: portalFeatures.contracts },
   { label: 'Projects', to: '/portal/projects', icon: FolderKanban, feature: portalFeatures.projects },
   { label: 'Reports', to: '/portal/reports', icon: BarChart3 },
-  { label: 'Help Center', to: '/portal/knowledge', icon: BookOpen },
   { label: 'Profile', to: '/portal/profile', icon: UserCircle2 },
 ]
 

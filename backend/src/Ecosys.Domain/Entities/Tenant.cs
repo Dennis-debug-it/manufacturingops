@@ -101,6 +101,4 @@ public sealed class Tenant : AuditableEntity
     public ICollection<ClientPreferentialRate> ClientPreferentialRates { get; set; } = new List<ClientPreferentialRate>();
     public ICollection<FinanceApprovalRule> FinanceApprovalRules { get; set; } = new List<FinanceApprovalRule>();
     public ICollection<MaterialIssue> MaterialIssues { get; set; } = new List<MaterialIssue>();
-    public ICollection<KnowledgeDocument> KnowledgeDocuments { get; set; } = new List<KnowledgeDocument>();
-    public ICollection<KnowledgeDocumentChunk> KnowledgeDocumentChunks { get; set; } = new List<KnowledgeDocumentChunk>();
 }

@@ -25,8 +25,6 @@ describe('techPathFor', () => {
     expect(techPathFor('/work-orders')).toBe('/tech')
     expect(techPathFor('/my-time')).toBe('/tech/time')
     expect(techPathFor('/team/time-attendance/leave')).toBe('/tech/time')
-    expect(techPathFor('/knowledge')).toBe('/tech/guides')
-    expect(techPathFor('/knowledge/k1')).toBe('/tech/guides/k1')
     expect(techPathFor('/me')).toBe('/tech/account')
     expect(techPathFor('/settings/account')).toBe('/tech/account')
     expect(techPathFor('/inventory/vans/v1')).toBe('/tech/account')

@@ -23,5 +23,4 @@ public sealed class OperationalSystem : AuditableEntity, ITenantEntity
     public ICollection<Asset> Assets { get; set; } = new List<Asset>();
     public ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
     public ICollection<MaterialIssue> MaterialIssues { get; set; } = new List<MaterialIssue>();
-    public ICollection<KnowledgeDocument> KnowledgeDocuments { get; set; } = new List<KnowledgeDocument>();
 }

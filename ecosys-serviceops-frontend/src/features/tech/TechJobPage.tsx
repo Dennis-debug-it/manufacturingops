@@ -12,7 +12,6 @@ import { jobPhase, myAssignmentOf, PHASE_LABEL, PHASE_TONE } from './jobState'
 import { hasLeftSite, isOnSite } from '../work-orders/types'
 import { formatDateTime } from '../../shared/utils/dates'
 import { TechFinish } from './TechFinish'
-import { TechJobGuides } from './TechGuides'
 import { TechMaterials } from './TechMaterials'
 import { TechOverview } from './TechOverview'
 import { TechParts } from './TechParts'
@@ -232,7 +231,6 @@ export function TechJobPage() {
         <>
           <TechPreviousVisit job={job} />
           <TechOverview job={job} editable={editable} />
-          <TechJobGuides workOrderId={id} />
           <TechSalesLead job={job} />
         </>
       ) : null}

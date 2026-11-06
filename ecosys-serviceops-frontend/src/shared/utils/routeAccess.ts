@@ -45,7 +45,6 @@ const rules: RouteRule[] = [
   { prefix: '/calendar', allow: (can) => can('activities.view') },
   { prefix: '/activities', allow: (can) => can('activities.view') },
   { prefix: '/action-items', allow: (can) => can('activities.view') },
-  { prefix: '/knowledge', allow: (can) => can('knowledge.view') },
 ]
 
 const matches = (path: string, prefix: string) => path === prefix || path.startsWith(prefix + '/')

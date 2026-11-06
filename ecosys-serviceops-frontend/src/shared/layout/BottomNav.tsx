@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { BookOpen, CalendarDays, ClipboardList, MoreHorizontal, UserCircle2, Watch, X } from 'lucide-react'
+import { CalendarDays, ClipboardList, MoreHorizontal, UserCircle2, Watch, X } from 'lucide-react'
 import { cn } from '../utils/cn'
 import { useAuth } from '../hooks/useAuth'
 import { hasPermission } from '../hooks/usePermission'
@@ -11,7 +11,6 @@ const technicianNav = [
   { label: 'Jobs', to: '/work-orders', icon: ClipboardList },
   { label: 'My Time', to: '/my-time', icon: Watch },
   { label: 'Today', to: '/maintenance/calendar', icon: CalendarDays },
-  { label: 'Guides', to: '/knowledge', icon: BookOpen },
   { label: 'Profile', to: '/me', icon: UserCircle2 },
 ]
 

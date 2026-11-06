@@ -125,7 +125,7 @@ public static class ServiceOpsPlans
     public static readonly IReadOnlySet<string> SharedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "AccessControl", "ActionItems", "Activities", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "Calendar", "CalendarFeed", "ClientPortalContacts",
-        "Clients", "ClientContacts", "Dev", "Integrations", "Kip", "Knowledge", "KnowledgeDocuments", "Notifications", "PortalAuth", "PortalKnowledge",
+        "Clients", "ClientContacts", "Dev", "Integrations", "Notifications", "PortalAuth",
         "PublicWorkOrder", "OperatorFaultReport", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
         // Factory hierarchy and settings: the backbone every factory module hangs off.

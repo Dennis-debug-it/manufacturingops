@@ -7,7 +7,7 @@ import { technicianGuide } from './guides'
 export function TechHelpPage() {
   return (
     <div className="space-y-3">
-      <Link to="/tech/guides" className="inline-flex items-center gap-1 text-sm text-slate-600"><ChevronLeft className="h-4 w-4" />Guides</Link>
+      <Link to="/tech" className="inline-flex items-center gap-1 text-sm text-slate-600"><ChevronLeft className="h-4 w-4" />Today</Link>
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <GuideContent guide={technicianGuide} />
       </div>

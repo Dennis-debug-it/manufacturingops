@@ -2,7 +2,6 @@ import { useMutation, useQuery, type QueryClient } from '@tanstack/react-query'
 import { api, apiClient } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { Van, VanStockLine } from '../inventory/vansApi'
-import type { KnowledgeArticleListItem } from '../knowledge/types'
 import type { WorkOrder, WorkOrderExecutionBundle, WorkOrderServiceReportPreview } from '../work-orders/types'
 
 // Keys live under 'work-orders' so every work-order mutation's invalidation refreshes them too.
@@ -27,26 +26,6 @@ export function useMyTechnician() {
     queryKey: ['technician', 'me'],
     // 404 just means "no technician profile" (e.g. office staff on /me); callers handle its absence.
     queryFn: () => api.get<{ technicianId: string; fullName: string }>(endpoints.technicianJobs.me, undefined, { suppressGlobalErrorToast: true }),
-    staleTime: 5 * 60_000,
-    retry: false,
-  })
-}
-
-// Published guides a technician can read; /search only returns published articles they may see.
-export function useGuideSearch(q: string) {
-  return useQuery({
-    queryKey: ['knowledge-articles', 'tech-search', q],
-    queryFn: () => api.get<KnowledgeArticleListItem[]>(endpoints.knowledge.search, { q: q || undefined }),
-    staleTime: 30_000,
-  })
-}
-
-export function useGuideSuggestions(workOrderId: string) {
-  return useQuery({
-    queryKey: ['knowledge-articles', 'tech-suggestions', workOrderId],
-    // Optional extra on the job screen: stay quiet if this user's role can't read the knowledge base.
-    queryFn: () => api.get<KnowledgeArticleListItem[]>(endpoints.knowledge.suggestionsForWorkOrder(workOrderId), undefined, { suppressGlobalErrorToast: true }),
-    enabled: Boolean(workOrderId),
     staleTime: 5 * 60_000,
     retry: false,
   })

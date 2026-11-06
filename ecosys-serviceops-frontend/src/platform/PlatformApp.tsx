@@ -34,7 +34,6 @@ import { CrmSettingsPage } from './settings/CrmSettingsPage'
 import { AnnouncementsSettingsPage } from './settings/AnnouncementsSettingsPage'
 import { SupportSettingsPage } from './settings/SupportSettingsPage'
 import { HealthSettingsPage } from './settings/HealthSettingsPage'
-import { DemoWorkspacePage } from './DemoWorkspacePage'
 
 /**
  * The roles allowed to open each platform section, keyed by the section's nav `to` path.
@@ -107,7 +106,6 @@ export function PlatformApp() {
           <Route path="reports" element={<RequirePlatformSection navPath="/platform/reports"><ReportsPage /></RequirePlatformSection>} />
           <Route path="audit" element={<RequirePlatformSection navPath="/platform/audit"><AuditPage /></RequirePlatformSection>} />
           <Route path="health" element={<RequirePlatformSection navPath="/platform/health"><HealthSettingsPage /></RequirePlatformSection>} />
-          <Route path="demo" element={<RequirePlatformSection navPath="/platform/demo"><DemoWorkspacePage /></RequirePlatformSection>} />
 
           <Route path="settings" element={<RequirePlatformSection navPath="/platform/settings"><SettingsPage /></RequirePlatformSection>}>
             <Route index element={<PlatformSettingsOverviewPage />} />

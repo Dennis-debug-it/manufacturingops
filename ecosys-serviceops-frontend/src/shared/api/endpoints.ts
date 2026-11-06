@@ -324,16 +324,6 @@ export const endpoints = {
   auditLogs: {
     list: '/api/audit-logs',
   },
-  knowledge: {
-    articles: '/api/knowledge/articles',
-    article: (id: string) => `/api/knowledge/articles/${id}`,
-    publish: (id: string) => `/api/knowledge/articles/${id}/publish`,
-    archive: (id: string) => `/api/knowledge/articles/${id}/archive`,
-    categories: '/api/knowledge/categories',
-    category: (id: string) => `/api/knowledge/categories/${id}`,
-    search: '/api/knowledge/search',
-    suggestionsForWorkOrder: (workOrderId: string) => `/api/knowledge/suggestions/work-order/${workOrderId}`,
-  },
   me: {
     notificationPreferences: '/api/me/notification-preferences',
     pushPublicKey: '/api/me/push/public-key',

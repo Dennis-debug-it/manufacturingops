@@ -43,9 +43,6 @@ export function techPathFor(pathname: string): string {
   const jobId = pathname.match(/^\/work-orders\/([^/]+)/)?.[1]
   if (jobId) return `/tech/jobs/${jobId}`
   if (pathname === '/my-time' || pathname.startsWith('/team/time-attendance')) return '/tech/time'
-  const articleId = pathname.match(/^\/knowledge\/([^/]+)/)?.[1]
-  if (articleId) return `/tech/guides/${articleId}`
-  if (pathname.startsWith('/knowledge')) return '/tech/guides'
   if (pathname.startsWith('/help')) return '/tech/help'
   if (pathname === '/scan' || pathname.startsWith('/scan/')) return `/tech${pathname}`
   const assetId = pathname.match(/^\/assets\/([^/]+)/)?.[1]

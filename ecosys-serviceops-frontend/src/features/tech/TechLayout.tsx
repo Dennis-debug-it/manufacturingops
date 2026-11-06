@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { BookOpen, CalendarClock, CalendarRange, ClipboardCheck, ClipboardList, Factory, HardHat, LogOut, UserRound, ScanLine } from 'lucide-react'
+import { CalendarClock, CalendarRange, ClipboardCheck, ClipboardList, Factory, HardHat, LogOut, UserRound, ScanLine } from 'lucide-react'
 import { Logo } from '../../shared/components/Logo'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
@@ -25,7 +25,6 @@ const SECTIONS = [
   { to: '/tech/scan', label: 'Scan', icon: ScanLine, match: (path: string) => path.startsWith('/tech/scan') || path.startsWith('/tech/assets') },
   { to: '/tech/site', label: 'Site', icon: HardHat, match: (path: string) => path.startsWith('/tech/site') },
   { to: '/tech/time', label: 'Time & Leave', icon: CalendarClock, match: (path: string) => path.startsWith('/tech/time') },
-  { to: '/tech/guides', label: 'Guides', icon: BookOpen, match: (path: string) => path.startsWith('/tech/guides') },
   { to: '/tech/account', label: 'Me', icon: UserRound, match: (path: string) => path.startsWith('/tech/account') },
 ] as const
 

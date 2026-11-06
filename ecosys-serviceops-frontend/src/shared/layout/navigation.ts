@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, BookOpen, Activity, Presentation, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, Activity, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -37,7 +37,6 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Clients', to: '/clients', roles: ['admin', 'manager', 'dispatcher', 'finance', 'viewer'], permission: 'clients.view', icon: Building2 },
   { label: 'Inventory', to: '/inventory', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], permission: 'materials.view', icon: Package },
   { label: 'Users & Access', to: '/team', roles: ['admin'], permission: 'team.view', icon: Users },
-  { label: 'Knowledge', to: '/knowledge', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer', 'materials_controller'], permission: 'knowledge.view', icon: BookOpen },
   { label: 'Contracts', to: '/contracts', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'contracts.view', icon: FileText },
   // Shown only when the tenant licenses the Projects add-on (entitlements hide it otherwise).
   { label: 'Projects', to: '/projects', roles: ['admin', 'manager', 'dispatcher', 'finance', 'viewer'], permission: 'projects.view', icon: FolderKanban },
@@ -75,6 +74,5 @@ export const platformNavItems: NavItem[] = [
   { label: 'Reports', to: '/platform/reports', roles: ['super_admin'], permission: 'platform.reports.view', icon: BarChart3 },
   { label: 'Audit Logs', to: '/platform/audit', roles: ['super_admin'], permission: 'platform.audit.view', icon: Settings2 },
   { label: 'System Health', to: '/platform/health', roles: ['super_admin'], permission: 'platform.settings.view', icon: Activity },
-  { label: 'Demo Workspace', to: '/platform/demo', roles: ['super_admin'], permission: 'platform.settings.view', icon: Presentation },
   { label: 'Settings', to: '/platform/settings', roles: ['super_admin'], permission: 'platform.settings.view', icon: Settings2 },
 ]
