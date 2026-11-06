@@ -23,7 +23,6 @@ describe('visibleGuides', () => {
     expect(finance).not.toContain('dispatch')
     expect(finance).not.toContain('inventory')
     expect(finance).not.toContain('time-attendance')
-    expect(finance).not.toContain('client-portal')
   })
 
   it('hides guides for areas the edition does not include, even from the admin', () => {

@@ -34,7 +34,6 @@ public static class DependencyInjection
         services.AddMemoryCache();
         services.AddDataProtection();
         services.AddScoped<ITenantContext, HttpTenantContext>();
-        services.AddScoped<IPortalContext, HttpPortalContext>();
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 
         services.AddSingleton<IRuntimeMetrics, RuntimeMetrics>();
@@ -53,7 +52,6 @@ public static class DependencyInjection
             .AddDbContextCheck<AppDbContext>("postgres", tags: ["ready"]);
 
         services.AddScoped<IMvpAuthService, MvpAuthService>();
-        services.AddScoped<IPortalAuthService, PortalAuthService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
         services.AddScoped<IDocumentNumberingService, DocumentNumberingService>();
         services.AddScoped<IPreventiveMaintenancePlanService, PreventiveMaintenancePlanService>();

@@ -11,7 +11,7 @@ namespace Ecosys.Tests;
 /// </summary>
 public sealed class GetOrCreateRaceTests
 {
-    [PortalPostgresFact]
+    [IsolatedPostgresFact]
     public async Task GetOrCreate_WhenAnotherRequestCreatesTheRowFirst_ReturnsThatRow()
     {
         var connectionString = Environment.GetEnvironmentVariable("ECOSYS_TEST_DB_CONNECTION")!;
@@ -64,4 +64,14 @@ public sealed class GetOrCreateRaceTests
         Port = 993,
         DefaultPriority = "Medium",
     };
+}
+
+/// <summary>Runs only with an isolated PostgreSQL test connection (ECOSYS_TEST_DB_CONNECTION).</summary>
+public sealed class IsolatedPostgresFactAttribute : FactAttribute
+{
+    public IsolatedPostgresFactAttribute()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ECOSYS_TEST_DB_CONNECTION")))
+            Skip = "Requires an isolated PostgreSQL test connection; InMemory does not show the race.";
+    }
 }

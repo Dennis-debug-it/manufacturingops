@@ -18,7 +18,6 @@ Operational modules:
 Frontend mapping:
 - tenant shell: dashboard, work orders, maintenance, clients, inventory, team, contracts, finance, reports, settings
 - platform shell: platform dashboard, CRM, tenants, finance, users, audit, system settings
-- portal shell: client requests, assets, maintenance, reports, invoices, quotes, profile
 
 TODO markers below are intentional for endpoints that exist in the domain spec but are not confirmed in the current backend snapshot.
 */
@@ -669,47 +668,9 @@ export const endpoints = {
   platformAuditLogs: {
     list: '/api/platform/audit-logs',
   },
-  portal: {
-    requestLink: '/api/portal/auth/request-link',
-    verify: '/api/portal/auth/verify',
-    accessLink: '/api/portal/auth/access-link',
-    me: '/api/portal/auth/me',
-    logout: '/api/portal/auth/logout',
-    settings: '/api/portal/settings',
-    dashboardSummary: '/api/portal/dashboard/summary',
-    reportSummary: '/api/portal/reports/summary',
-    workOrders: '/api/portal/work-orders',
-    workOrder: (id: string) => `/api/portal/work-orders/${id}`,
-    workOrderNotes: (id: string) => `/api/portal/work-orders/${id}/notes`,
-    assets: '/api/portal/assets',
-    maintenance: '/api/portal/maintenance',
-    invoices: '/api/portal/invoices',
-    invoice: (id: string) => `/api/portal/invoices/${id}`,
-    quotations: '/api/portal/quotations',
-    quotation: (id: string) => `/api/portal/quotations/${id}`,
-    quotationAccept: (id: string) => `/api/portal/quotations/${id}/accept`,
-    quotationReject: (id: string) => `/api/portal/quotations/${id}/reject`,
-    contracts: '/api/portal/contracts',
-    projects: '/api/portal/projects',
-    project: (id: string) => `/api/portal/projects/${id}`,
-    projectDocument: (id: string, documentId: string) => `/api/portal/projects/${id}/documents/${documentId}/download`,
-    projectBilling: (id: string) => `/api/portal/projects/${id}/valuations`,
-    profile: '/api/portal/profile',
-    whatsApp: '/api/portal/profile/whatsapp',
-    whatsAppStart: '/api/portal/profile/whatsapp/start',
-    whatsAppVerify: '/api/portal/profile/whatsapp/verify',
-    whatsAppOptOut: '/api/portal/profile/whatsapp/opt-out',
-    knowledgeCategories: '/api/portal/knowledge/categories',
-    knowledgeArticles: '/api/portal/knowledge/articles',
-    knowledgeArticle: (slug: string) => `/api/portal/knowledge/articles/${slug}`,
-    knowledgeFeedback: (id: string) => `/api/portal/knowledge/articles/${id}/feedback`,
-  },
   clientPortalContacts: {
     list: (clientId: string) => `/api/clients/${clientId}/portal-users`,
     create: (clientId: string) => `/api/clients/${clientId}/portal-users`,
     status: (clientId: string, id: string) => `/api/clients/${clientId}/portal-users/${id}/status`,
-    resendLink: (clientId: string, id: string) => `/api/clients/${clientId}/portal-users/${id}/resend-link`,
-    accessLink: (clientId: string, id: string) => `/api/clients/${clientId}/portal-users/${id}/access-link`,
-    resetAccessLink: (clientId: string, id: string) => `/api/clients/${clientId}/portal-users/${id}/access-link/reset`,
   },
 } as const

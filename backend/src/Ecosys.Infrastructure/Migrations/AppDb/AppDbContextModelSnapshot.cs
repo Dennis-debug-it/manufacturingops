@@ -2211,62 +2211,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("client_contacts", (string)null);
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.ClientPortalLoginToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ClientPortalUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("ConsumedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("RequestedIp")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserAgent")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
-                    b.HasIndex("ClientPortalUserId", "ExpiresAt");
-
-                    b.ToTable("client_portal_login_tokens", (string)null);
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.ClientPortalUser", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("AccessLinkCreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("AccessLinkNonce")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
 
                     b.Property<Guid>("ClientId")
                         .HasColumnType("uuid");
@@ -2289,12 +2238,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
-
-                    b.Property<bool>("IsPendingApproval")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("LastLoginAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Phone")
                         .HasMaxLength(50)
@@ -16691,17 +16634,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Client");
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.ClientPortalLoginToken", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.ClientPortalUser", "ClientPortalUser")
-                        .WithMany("LoginTokens")
-                        .HasForeignKey("ClientPortalUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ClientPortalUser");
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.ClientPortalUser", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Client", "Client")
@@ -21197,11 +21129,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Systems");
 
                     b.Navigation("WorkOrders");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.ClientPortalUser", b =>
-                {
-                    b.Navigation("LoginTokens");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.ComplianceItem", b =>

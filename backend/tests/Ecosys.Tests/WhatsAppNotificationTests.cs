@@ -527,7 +527,6 @@ public sealed class WhatsAppNotificationTests
     [InlineData("MyWhatsApp")]
     [InlineData("WhatsAppNotifications")]
     [InlineData("ClientWhatsAppConsent")]
-    [InlineData("PortalWhatsApp")]
     [InlineData("WhatsAppWebhook")]
     public void Controllers_AreSharedAcrossPlans(string controller)
     {

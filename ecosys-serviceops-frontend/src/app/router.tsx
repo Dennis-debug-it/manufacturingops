@@ -154,7 +154,6 @@ import { InventorySettingsPage as SettingsInventoryPageReal } from '../features/
 import { WhatsAppSettingsPage as SettingsWhatsAppPageReal } from '../features/settings/WhatsAppSettingsPage'
 import { WhatsAppRemindersSettingsPage } from '../features/settings/WhatsAppRemindersSettingsPage'
 import { PaymentsSettingsPage as SettingsPaymentsPageReal } from '../features/settings/PaymentsSettingsPage'
-import { PortalSettingsPage as SettingsPortalPageReal } from '../features/settings/PortalSettingsPage'
 import { IntegrationsSettingsPage as SettingsIntegrationsPageReal } from '../features/settings/IntegrationsSettingsPage'
 import { ExecutiveDashboardSettingsPage as SettingsExecutiveDashboardPageReal } from '../features/settings/ExecutiveDashboardSettingsPage'
 import { SettingsDashboardsPage } from '../features/settings/SettingsDashboardsPage'
@@ -172,7 +171,6 @@ import { LiveMapPage } from '../features/dispatch/LiveMapPage'
 import { DailyRouteView } from '../features/dispatch/DailyRouteView'
 import { SchedulingBoardPage } from '../features/dispatch/SchedulingBoardPage'
 import { PlatformApp } from '../platform/PlatformApp'
-import { PortalApp } from '../portal/PortalApp'
 
 const tenantRoles: AppRole[] = ['admin', 'manager', 'dispatcher', 'technician', 'materials_controller', 'finance', 'viewer']
 const platformRoles: AppRole[] = ['super_admin', 'platform_sales']
@@ -248,7 +246,6 @@ const SettingsMonitoringIntakePage = SettingsMonitoringIntakePageReal
 const SettingsWhatsAppPage = SettingsWhatsAppPageReal
 const SettingsPaymentsPage = SettingsPaymentsPageReal
 const SettingsCreditControlPage = SettingsCreditControlPageReal
-const SettingsPortalPage = SettingsPortalPageReal
 const SettingsNotificationsPage = SettingsNotificationsPageReal
 const SettingsIntegrationsPage = SettingsIntegrationsPageReal
 const SettingsSecurityPage = SettingsSecurityPageReal
@@ -472,7 +469,6 @@ export function AppRouter() {
       ['/settings/whatsapp-reminders', WhatsAppRemindersSettingsPage],
       ['/settings/payments', SettingsPaymentsPage],
       ['/settings/credit-control', SettingsCreditControlPage],
-      ['/settings/portal', SettingsPortalPage],
       ['/settings/notifications', MyNotificationSettingsPage],
       ['/settings/workspace-notifications', SettingsNotificationsPage],
       ['/settings/integrations', SettingsIntegrationsPage],
@@ -521,7 +517,6 @@ export function AppRouter() {
         <Route path="/403" element={<ForbiddenPage />} />
         <Route path="/404" element={<NotFoundPage />} />
 
-        <Route path="/portal/*" element={<PortalApp />} />
 
         <Route path="/platform/*" element={<ProtectedRoute allowedRoles={platformRoles}><PlatformApp /></ProtectedRoute>} />
         <Route path="/command-centre/*" element={<Navigate to="/platform/overview" replace />} />

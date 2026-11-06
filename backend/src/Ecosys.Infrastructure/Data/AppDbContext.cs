@@ -34,7 +34,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
     public DbSet<ApprovalRequestStep> ApprovalRequestSteps => Set<ApprovalRequestStep>();
     public DbSet<ClientPortalUser> ClientPortalUsers => Set<ClientPortalUser>();
-    public DbSet<ClientPortalLoginToken> ClientPortalLoginTokens => Set<ClientPortalLoginToken>();
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<OperationalSystem> Systems => Set<OperationalSystem>();
     public DbSet<Asset> Assets => Set<Asset>();
@@ -600,7 +599,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
         modelBuilder.Entity<ClientPortalUser>(entity =>
         {
-            entity.Property(x => x.AccessLinkNonce).HasMaxLength(64);
             entity.Property(x => x.WhatsAppNumber).HasMaxLength(20);
             entity.Property(x => x.WhatsAppConsentMethod).HasMaxLength(20);
             entity.ToTable("client_portal_users");
@@ -617,21 +615,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Client)
                 .WithMany(x => x.PortalUsers)
                 .HasForeignKey(x => x.ClientId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<ClientPortalLoginToken>(entity =>
-        {
-            entity.ToTable("client_portal_login_tokens");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
-            entity.Property(x => x.RequestedIp).HasMaxLength(100);
-            entity.Property(x => x.UserAgent).HasMaxLength(1000);
-            entity.HasIndex(x => x.TokenHash).IsUnique();
-            entity.HasIndex(x => new { x.ClientPortalUserId, x.ExpiresAt });
-            entity.HasOne(x => x.ClientPortalUser)
-                .WithMany(x => x.LoginTokens)
-                .HasForeignKey(x => x.ClientPortalUserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

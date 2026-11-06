@@ -198,11 +198,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthorizationPolicies.TenantStaff, policy => policy
         .RequireAuthenticatedUser()
         .RequireAssertion(context => AppRoles.IsTenantWorkspacePrincipal(context.User)));
-
-    options.AddPolicy("PortalAccess", policy => policy.RequireAuthenticatedUser()
-        .RequireRole(AppRoles.PortalClient).AddRequirements(new PortalSessionRequirement()));
 });
-builder.Services.AddScoped<IAuthorizationHandler, PortalSessionAuthorizationHandler>();
 builder.Services.AddScoped<Ecosys.Api.Offline.IdempotencyFilter>();
 builder.Services.AddControllers(options => options.Filters.AddService<Ecosys.Api.Offline.IdempotencyFilter>())
     .AddJsonOptions(options =>

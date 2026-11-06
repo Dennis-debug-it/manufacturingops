@@ -185,49 +185,6 @@ public sealed class PortalBoundaryTests
         Assert.False(typeof(TenantAwareControllerBase).IsAssignableFrom(typeof(PlatformAnnouncementsController)));
     }
 
-    // ── The portal side is untouched ──────────────────────────────────────────
-
-    [Theory]
-    [InlineData(typeof(PortalController))]
-    [InlineData(typeof(PortalAuthController))]
-    public void PortalControllers_AreOutsideTheTenantBoundary(Type controllerType)
-    {
-        // If a portal controller ever derived from TenantAwareControllerBase it would inherit the
-        // TenantStaff policy and lock every portal user out of their own portal.
-        Assert.False(typeof(TenantAwareControllerBase).IsAssignableFrom(controllerType));
-        Assert.False(RequiresTenantStaff(controllerType));
-    }
-
-    [Theory]
-    [InlineData(typeof(PortalController))]
-    public void PortalControllers_StillRequireThePortalPolicy(Type controllerType)
-    {
-        Assert.Contains(
-            controllerType.GetCustomAttributes<AuthorizeAttribute>(inherit: true),
-            attribute => attribute.Policy == AuthorizationPolicies.PortalAccess);
-    }
-
-    [Fact]
-    public void PortalContext_StillResolvesAPortalPrincipal()
-    {
-        var clientId = Guid.NewGuid();
-        var tenantId = Guid.NewGuid();
-        var portalContext = PortalContextFor(PortalPrincipal(tenantId, clientId));
-
-        Assert.True(portalContext.IsAuthenticated);
-        Assert.Equal(tenantId, portalContext.GetRequiredTenantId());
-        Assert.Equal(clientId, portalContext.GetRequiredClientId());
-    }
-
-    [Fact]
-    public void PortalContext_RejectsATenantStaffPrincipal()
-    {
-        // The mirror image of the defect: staff tokens must not reach portal endpoints either.
-        var portalContext = PortalContextFor(TenantStaffPrincipal(AppRoles.Admin, Guid.NewGuid()));
-
-        Assert.False(portalContext.IsAuthenticated);
-    }
-
     // ── The portal principal is recognised, and refused, in code ──────────────
 
     [Fact]
@@ -583,9 +540,6 @@ public sealed class PortalBoundaryTests
 
     private static ITenantContext TenantContextFor(ClaimsPrincipal principal) =>
         (ITenantContext)CreateInfrastructureInstance("Ecosys.Infrastructure.Security.HttpTenantContext", AccessorFor(principal));
-
-    private static IPortalContext PortalContextFor(ClaimsPrincipal principal) =>
-        (IPortalContext)CreateInfrastructureInstance("Ecosys.Infrastructure.Security.HttpPortalContext", AccessorFor(principal));
 
     private static IUserAccessService UserAccessServiceFor(ITenantContext tenantContext) =>
         (IUserAccessService)CreateInfrastructureInstance("Ecosys.Infrastructure.Services.UserAccessService", tenantContext);

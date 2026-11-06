@@ -274,7 +274,7 @@ export function useReactivateAsset(id: string) {
   })
 }
 
-// ── Client Portal Contacts ───────────────────────────────────────────────────
+// ── Client Contacts ───────────────────────────────────────────────────
 
 export interface ClientPortalContact {
   id: string
@@ -282,11 +282,8 @@ export interface ClientPortalContact {
   email: string
   phone: string | null
   isActive: boolean
-  /** Invited by non-admin staff while approval is required; cannot sign in until an admin activates it. */
-  isPendingApproval: boolean
-  lastLoginAt: string | null
   createdAt: string
-  /** Gets the client WhatsApp messages: consent recorded by the office or confirmed from the portal. */
+  /** Gets the client WhatsApp messages (consent recorded by the office). */
   receivesWhatsApp?: boolean
   whatsAppNumber?: string | null
   whatsAppConsentAt?: string | null
@@ -322,33 +319,6 @@ export function useUpdateClientPortalContactStatus(clientId: string) {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['clients', clientId, 'portal-contacts'] }),
   })
 }
-
-export function useResendClientPortalLink(clientId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (id: string) => api.post<ClientPortalContact>(endpoints.clientPortalContacts.resendLink(clientId, id)),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['clients', clientId, 'portal-contacts'] }),
-  })
-}
-
-export interface PortalAccessLink {
-  link: string
-  portalLoginUrl: string
-}
-
-/**
- * Admin-only: the contact's permanent, full-access portal link (never expires). The same link is
- * returned each time until it is reset; resetting makes the previous link stop working.
- */
-export function usePortalAccessLink(clientId: string) {
-  return useMutation({
-    mutationFn: ({ id, reset }: { id: string; reset: boolean }) =>
-      api.post<PortalAccessLink>(reset ? endpoints.clientPortalContacts.resetAccessLink(clientId, id) : endpoints.clientPortalContacts.accessLink(clientId, id), {}),
-  })
-}
-
-/** Where clients sign in; they enter their email and get a one-time link. */
-export const portalLoginUrl = () => `${window.location.origin}/portal/login`
 
 // ── Client Archive/Delete ────────────────────────────────────────────────────
 

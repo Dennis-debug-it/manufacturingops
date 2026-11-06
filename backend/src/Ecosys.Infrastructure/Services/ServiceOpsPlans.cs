@@ -101,7 +101,7 @@ public static class ServiceOpsPlans
 
     private static readonly HashSet<string> ProjectsControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Projects", "ProjectSettings", "Consultants", "PortalProjects", "ProjectSite", "ProjectCommercial"
+        
     };
 
     /// <summary>Each module's controllers, so classification and gating read from one table.</summary>
@@ -125,20 +125,20 @@ public static class ServiceOpsPlans
     public static readonly IReadOnlySet<string> SharedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "AccessControl", "ActionItems", "Activities", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "Calendar", "CalendarFeed", "ClientPortalContacts",
-        "Clients", "ClientContacts", "Dev", "Integrations", "Notifications", "PortalAuth",
+        "Clients", "ClientContacts", "Dev", "Integrations", "Notifications",
         "PublicWorkOrder", "OperatorFaultReport", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
         // Factory hierarchy and settings: the backbone every factory module hangs off.
         "OrgNodes", "FactorySettings",
         // WhatsApp reminders (Release 3 design 6): every edition, gated by the WhatsApp add-on.
         // The two-way inbox (WhatsApp controller) needs the WhatsApp Business add-on.
-        "MyWhatsApp", "WhatsAppNotifications", "ClientWhatsAppConsent", "PortalWhatsApp", "WhatsAppWebhook"
+        "MyWhatsApp", "WhatsAppNotifications", "ClientWhatsAppConsent", "WhatsAppWebhook"
     };
 
     /// <summary>Controllers whose module requirement is decided per route inside <see cref="RequiredModules"/>.</summary>
     public static readonly IReadOnlySet<string> RouteClassifiedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "Portal", "WorkOrderBilling", "Import", "Settings"
+        "WorkOrderBilling", "Import", "Settings"
     };
 
     public static bool IsClassified(string controller) =>
@@ -149,13 +149,6 @@ public static class ServiceOpsPlans
     public static IReadOnlyList<string> RequiredModules(string? controller, string path)
     {
         var route = path.ToLowerInvariant();
-        if (controller == "Portal")
-        {
-            if (route.StartsWith("/api/portal/projects")) return [Projects];
-            if (route.StartsWith("/api/portal/invoices") || route.StartsWith("/api/portal/quotations")) return [Finance];
-            if (route.StartsWith("/api/portal/assets") || route.StartsWith("/api/portal/maintenance") || route.StartsWith("/api/portal/contracts")) return [Maintenance];
-            if (!route.StartsWith("/api/portal/profile")) return [Operations];
-        }
         if (controller == "WorkOrderBilling" || route.Contains("/generate-invoice") || route.Contains("/convert-to-work-order") || route.EndsWith("/from-quote"))
             return [Operations, Finance];
         // Every Projects route needs only Projects: the editions that include it include everything its

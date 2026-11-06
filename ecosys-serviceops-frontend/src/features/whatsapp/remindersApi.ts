@@ -1,11 +1,10 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
-import { portalApi } from '../../portal/api/portalApiClient'
 import { notificationKeys } from '../notifications/api'
 import type { WhatsAppOutboxStatus } from './reminderLogic'
 
-/** The signed-in person's own WhatsApp opt-in (staff or a portal contact). */
+/** The signed-in person's own WhatsApp opt-in . */
 export interface WhatsAppMyStatus {
   /** The workspace has WhatsApp and the shared Ecosys number is set up. */
   available: boolean
@@ -48,15 +47,6 @@ export const staffWhatsAppApi: WhatsAppOptInApi = {
   optIn: () => api.post<WhatsAppMyStatus>(endpoints.me.whatsAppOptIn),
   optOut: () => api.post<WhatsAppMyStatus>(endpoints.me.whatsAppOptOut),
   showErrors: false,
-}
-
-export const portalWhatsAppApi: WhatsAppOptInApi = {
-  queryKey: ['portal', 'whatsapp'],
-  get: () => portalApi.get<WhatsAppMyStatus>(endpoints.portal.whatsApp),
-  start: (phoneNumber) => portalApi.post<WhatsAppStartResult>(endpoints.portal.whatsAppStart, { phoneNumber }),
-  verify: (code) => portalApi.post<WhatsAppMyStatus>(endpoints.portal.whatsAppVerify, { code }),
-  optOut: () => portalApi.post<WhatsAppMyStatus>(endpoints.portal.whatsAppOptOut),
-  showErrors: true,
 }
 
 export function useWhatsAppMyStatus(source: WhatsAppOptInApi) {

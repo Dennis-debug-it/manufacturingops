@@ -10,7 +10,6 @@ import {
   Clock,
   FileSignature,
   FileText,
-  Globe,
   Inbox,
   Package,
   Rocket,
@@ -696,39 +695,6 @@ const clients: Guide = {
   ],
 }
 
-const clientPortal: Guide = {
-  id: 'client-portal',
-  title: 'Client portal',
-  summary: 'Let clients log requests, approve quotes and see their jobs, invoices and reports online.',
-  icon: Globe,
-  path: '/clients',
-  pathLabel: 'Clients',
-  roles: ['manager'],
-  sections: [
-    {
-      title: 'Give a client access',
-      steps: [
-        'Open the client and go to the Client Portal tab.',
-        'Click Invite Contact, enter their name and email and click Send Portal Invitation.',
-        'Use Copy portal link to share the link yourself, Resend Invite if it got lost, and Approve contacts who asked for access.',
-      ],
-      tip: 'Clients sign in with Send sign-in link: they get a link by email, so there is no password to forget.',
-    },
-    {
-      title: 'What clients can do',
-      steps: [
-        'Submit a Request (or New Request, then Submit Request): it becomes a work order for you.',
-        'Accept Quote or Decline Quote on quotes you send.',
-        'See their invoices, assets, maintenance plan, contracts, service reports and update their profile.',
-      ],
-    },
-    {
-      title: 'What they see',
-      text: 'Admins choose what the portal shows and how it looks under Settings → Portal. Knowledge base articles marked Public appear there too.',
-    },
-  ],
-}
-
 const settings: Guide = {
   id: 'settings',
   title: 'Settings overview',
@@ -766,7 +732,6 @@ export const guides: Guide[] = [
   timeAttendance,
   knowledge,
   reports,
-  clientPortal,
   technicianApp,
   maintenanceTemplates,
   ...(EMAIL_INTAKE_ENABLED ? [emailIntake] : []),

@@ -122,8 +122,8 @@ export function ClientDetailPage() {
             content: <ClientContactsPanel clientId={id} />,
           },
           {
-            id: 'portal-access',
-            label: 'Client Portal',
+            id: 'notify-contacts',
+            label: 'Job Updates',
             content: <ClientPortalContactsTab clientId={id} />,
           },
           {

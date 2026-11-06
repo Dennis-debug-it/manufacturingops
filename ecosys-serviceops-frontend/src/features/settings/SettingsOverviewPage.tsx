@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import {
   Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
-  Radio, MessageCircle, CreditCard, ShieldCheck, Users, Bell, Plug, LineChart,
+  Radio, MessageCircle, CreditCard, ShieldCheck, Bell, Plug, LineChart,
   UserCircle, ScrollText, GitBranch, MapPin, Timer, Workflow, AlertTriangle, Rocket, Percent, LayoutDashboard, Handshake,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
@@ -75,7 +75,6 @@ const groups: SettingsGroup[] = [
   {
     title: 'Access & Notifications',
     items: [
-      { to: '/settings/portal', label: 'Portal', description: 'Client portal visibility controls.', icon: Users },
       { to: '/settings/notifications', label: 'My Notifications', description: WHATSAPP_ENABLED ? 'How you hear about each event: bell, push, email or WhatsApp.' : 'How you hear about each event: bell, push or email.', icon: Bell },
       ...(WHATSAPP_ENABLED ? [{ to: '/settings/whatsapp-reminders', label: 'WhatsApp Reminders', description: 'Which notifications may go on WhatsApp, usage and message log.', icon: MessageCircle }] : []),
       { to: '/settings/workspace-notifications', label: 'Workspace Notifications', description: 'Event notification matrix.', icon: Bell },

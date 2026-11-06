@@ -437,7 +437,7 @@ public sealed class AdvancedSettingsController(
 
     private static readonly HashSet<string> ModuleSettingKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        "executive-dashboard", "inventory", "payments", "portal", "integrations",
+        "executive-dashboard", "inventory", "payments", "integrations",
     };
 
     [HttpGet("module/{moduleKey}")]
