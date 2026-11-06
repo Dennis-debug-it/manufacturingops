@@ -15,6 +15,7 @@ import { ActionDialog } from './ActionDialog'
 import { DeferToOverhaulDrawer } from '../planning/OverhaulPage'
 import { JobSafetyCard } from '../people/JobSafetyCard'
 import { JobContractorCard, JobSparesCard } from '../stores/JobSparesCard'
+import { JobCostsCard } from '../performance/JobCostsCard'
 import { JobStatusBadge } from './JobStatusBadge'
 import { ACTION_LABELS, SUPERVISORY, isTickStep, type JobAction, type JobDetail, type JobStep } from './types'
 
@@ -102,6 +103,7 @@ export function FactoryJobDetailPage() {
           <JobSafetyCard job={job} />
           <JobSparesCard job={job} />
           <JobContractorCard job={job} />
+          <JobCostsCard jobId={job.id} />
           <HandoverCard job={job} />
           {job.resources.length > 0 ? (
             <Card title={`Tools and parts${job.jobPlanName ? ` · ${job.jobPlanName}` : ''}`}>

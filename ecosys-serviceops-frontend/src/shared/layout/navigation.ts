@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, BookOpen, Activity, Presentation, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, BookOpen, Activity, Presentation, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -16,6 +16,7 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Scheduling Board', to: '/dispatch/board', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: CalendarClock },
   { label: 'Live Map', to: '/dispatch/map', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: MapPin },
   { label: 'Factory overview', to: '/maintenance/overview', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: Factory },
+  { label: 'Performance', to: '/maintenance/performance', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: TrendingUp },
   { label: 'Maintenance jobs', to: '/maintenance/jobs', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Wrench },
   { label: 'Planned maintenance', to: '/maintenance/pm', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: Gauge },
   { label: 'Weekly window', to: '/maintenance/windows', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: CalendarRange },
@@ -24,6 +25,8 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Maintenance team', to: '/maintenance/people', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: UserCog },
   { label: 'Stores and spares', to: '/maintenance/stores', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], permission: 'materials.view', icon: Warehouse },
   { label: 'Contractors', to: '/maintenance/contractors', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: ContractorIcon },
+  { label: 'Maintenance costs', to: '/maintenance/costs', roles: ['admin', 'manager', 'viewer'], permission: 'reports.view', icon: Landmark },
+  { label: 'Compliance and audits', to: '/maintenance/compliance', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: BadgeCheck },
   { label: 'Safety', to: '/maintenance/safety', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: ShieldAlert },
   { label: 'Running checks', to: '/maintenance/checks', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: ClipboardCheck },
   { label: 'Assets', to: '/assets', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], icon: Boxes },
