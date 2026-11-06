@@ -40,14 +40,16 @@ public sealed record CreateScheduledReportRequest(
     string DateRangePreset,
     string? GroupBy,
     string? ClientId,
-    string Recipients);
+    string Recipients,
+    Guid? OrgNodeId = null);
 
 // ── Implementation ───────────────────────────────────────────────────────────
 
 public sealed class ScheduledReportService(
     AppDbContext db,
     IEmailOutboxService emailOutbox,
-    ILogger<ScheduledReportService> logger) : IScheduledReportService
+    ILogger<ScheduledReportService> logger,
+    Factory.IFactoryKpiService? factoryKpis = null) : IScheduledReportService
 {
     // ── CRUD ─────────────────────────────────────────────────────────────────
 
@@ -60,7 +62,10 @@ public sealed class ScheduledReportService(
     }
 
     private static readonly HashSet<string> ValidReportTypes = new(StringComparer.OrdinalIgnoreCase)
-        { "Revenue", "Aging", "ClientStatement", "WorkOrderSummary", "Invoices" };
+        { "Revenue", "Aging", "ClientStatement", "WorkOrderSummary", "Invoices", FactoryKpiReportType };
+
+    /// <summary>The factory maintenance board report: every KPI category for a group, factory or section.</summary>
+    public const string FactoryKpiReportType = "FactoryKpis";
 
     private static readonly HashSet<string> FinanceReportTypes = new(StringComparer.OrdinalIgnoreCase)
         { "Revenue", "Aging", "ClientStatement", "Invoices" };
@@ -71,7 +76,7 @@ public sealed class ScheduledReportService(
     /// </summary>
     internal static string ResolveReportEventKey(string reportType) =>
         FinanceReportTypes.Contains(reportType) ? "scheduled-report.finance"
-        : string.Equals(reportType, "WorkOrderSummary", StringComparison.OrdinalIgnoreCase) ? "scheduled-report.operations"
+        : string.Equals(reportType, "WorkOrderSummary", StringComparison.OrdinalIgnoreCase) || string.Equals(reportType, FactoryKpiReportType, StringComparison.OrdinalIgnoreCase) ? "scheduled-report.operations"
         : "scheduled-report";
 
     private static readonly HashSet<string> ValidFrequencies = new(StringComparer.OrdinalIgnoreCase)
@@ -122,6 +127,7 @@ public sealed class ScheduledReportService(
         report.DateRangePreset = req.DateRangePreset;
         report.GroupBy = req.GroupBy;
         report.ClientId = req.ClientId;
+        report.OrgNodeId = req.OrgNodeId;
         report.Recipients = req.Recipients.Trim();
         report.NextRunAt = await ComputeNextRunAtAsync(report);
         await db.SaveChangesAsync(ct);
@@ -239,8 +245,27 @@ public sealed class ScheduledReportService(
             "ClientStatement" => await GenerateClientStatementAsync(report, start, end, ct),
             "WorkOrderSummary" => await GenerateWorkOrderSummaryAsync(report, start, end, ct),
             "Invoices" => await GenerateInvoicesReportAsync(report, start, end, ct),
+            FactoryKpiReportType => await GenerateFactoryKpiReportAsync(report, start, end, ct),
             _ => throw new InvalidOperationException($"Unknown report type: {report.ReportType}")
         };
+    }
+
+    private async Task<byte[]> GenerateFactoryKpiReportAsync(ScheduledReport report, DateTime start, DateTime end, CancellationToken ct)
+    {
+        if (factoryKpis is null) throw new InvalidOperationException("Factory KPIs are not available.");
+        List<Guid>? nodes = null;
+        var scopeName = "All factories";
+        if (report.OrgNodeId is { } root)
+        {
+            var edges = await db.OrgNodes.AsNoTracking().Where(x => x.TenantId == report.TenantId).Select(x => new { x.Id, x.ParentId, x.Name }).ToListAsync(ct);
+            scopeName = edges.FirstOrDefault(x => x.Id == root)?.Name ?? scopeName;
+            nodes = [root];
+            for (var i = 0; i < nodes.Count; i++) nodes.AddRange(edges.Where(x => x.ParentId == nodes[i]).Select(x => x.Id));
+        }
+
+        var kpis = await factoryKpis.KpisAsync(report.TenantId, nodes, scopeName, start, end, ct);
+        var company = await db.Tenants.AsNoTracking().Where(x => x.Id == report.TenantId).Select(x => x.CompanyName ?? x.Name).SingleOrDefaultAsync(ct) ?? string.Empty;
+        return Factory.FactoryPdfs.KpiReport(company, kpis);
     }
 
     private async Task<byte[]> GenerateRevenueReportAsync(ScheduledReport report, DateTime start, DateTime end, CancellationToken ct)
@@ -503,6 +528,7 @@ public sealed class ScheduledReportService(
         DateRangePreset = req.DateRangePreset,
         GroupBy = req.GroupBy,
         ClientId = req.ClientId,
+        OrgNodeId = req.OrgNodeId,
         Recipients = req.Recipients.Trim(),
         IsActive = true
     };

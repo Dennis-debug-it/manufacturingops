@@ -142,6 +142,8 @@ public sealed class ContractorInvoice : AuditableEntity, ITenantEntity
     public DateTime InvoiceDate { get; set; }
     public string Currency { get; set; } = "KES";
     public decimal Amount { get; set; }
+    /// <summary>VAT included in the amount; costs are reported net of it.</summary>
+    public decimal VatAmount { get; set; }
     public string Status { get; set; } = ContractorInvoiceStatuses.Received;
     /// <summary>Why it did not match, one issue per line.</summary>
     public string? MatchIssues { get; set; }

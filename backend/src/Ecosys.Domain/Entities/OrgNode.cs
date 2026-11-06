@@ -131,5 +131,16 @@ public sealed class FactorySettings : AuditableEntity, ITenantEntity
     /// <summary>…and at this many it moves to the overhaul list.</summary>
     public int WindowCarryoverToOverhaulAt { get; set; } = 3;
 
+    /// <summary>Value of one production unit (e.g. KES per kg made tea), to put a money figure on downtime.</summary>
+    public decimal? ProductionUnitValue { get; set; }
+    /// <summary>VAT rate (%) used where costs are entered gross.</summary>
+    public decimal VatRatePercent { get; set; } = 16;
+    /// <summary>Peak-season months (1–12, comma separated), e.g. the flush months; downtime is split peak vs low.</summary>
+    public string PeakSeasonMonths { get; set; } = "3,4,5,10,11,12";
+    /// <summary>Personal data of people who have left (contractors' training and PPE records, withdrawn consents) is anonymised after this many years.</summary>
+    public int PersonalDataRetentionYears { get; set; } = 7;
+    /// <summary>Where the tenant's data is hosted, stated for data protection notices.</summary>
+    public string? DataResidency { get; set; }
+
     public Tenant? Tenant { get; set; }
 }

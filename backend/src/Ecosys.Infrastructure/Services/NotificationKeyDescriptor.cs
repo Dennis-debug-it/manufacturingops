@@ -77,6 +77,8 @@ public static class NotificationKeyDescriptor
         Urgent("compliance.overdue", "A statutory inspection or calibration is overdue", "Work Orders"),
         Inbox("compliance.due", "A statutory inspection or calibration is due soon", "Work Orders"),
         Inbox("factory-window.carryover", "Weekly window jobs carried over", "Work Orders"),
+        Inbox("compliance.audit-due", "An audit is coming up", "Work Orders"),
+        Urgent("compliance.nc-overdue", "A corrective action from an audit is overdue", "Work Orders"),
         Urgent("spares.critical-low", "A critical spare is low or out of stock", "Inventory"),
         Inbox("contractor.document-expiring", "A contractor's insurance or compliance document is expiring", "Work Orders"),
         Inbox("contractor.agreement-renewal", "A maintenance agreement is due for renewal", "Work Orders"),

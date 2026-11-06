@@ -9,15 +9,17 @@ public static class MeterTypes
     public const string Production = "Production";
     public const string Odometer = "Odometer";
     public const string Energy = "Energy";
+    /// <summary>Boiler fuel: firewood (m³ or kg), furnace oil, briquettes.</summary>
+    public const string Fuel = "Fuel";
     public const string Temperature = "Temperature";
     public const string Vibration = "Vibration";
     public const string Pressure = "Pressure";
     public const string Other = "Other";
 
-    public static readonly IReadOnlyList<string> All = [RunHours, Production, Odometer, Energy, Temperature, Vibration, Pressure, Other];
+    public static readonly IReadOnlyList<string> All = [RunHours, Production, Odometer, Energy, Fuel, Temperature, Vibration, Pressure, Other];
 
     /// <summary>Counters only go up (until reset); gauges are spot measurements.</summary>
-    public static bool IsCumulativeByDefault(string type) => type is RunHours or Production or Odometer or Energy;
+    public static bool IsCumulativeByDefault(string type) => type is RunHours or Production or Odometer or Energy or Fuel;
 
     public static string DefaultUnit(string type, string productionUnit) => type switch
     {
@@ -25,6 +27,7 @@ public static class MeterTypes
         Production => productionUnit,
         Odometer => "km",
         Energy => "kWh",
+        Fuel => "m³",
         Temperature => "°C",
         Vibration => "mm/s",
         Pressure => "bar",

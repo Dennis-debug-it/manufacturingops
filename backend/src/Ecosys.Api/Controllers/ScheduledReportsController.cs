@@ -117,7 +117,8 @@ public sealed class ScheduledReportsController(
         dto.DateRangePreset ?? "LastMonth",
         dto.GroupBy,
         dto.ClientId,
-        dto.Recipients);
+        dto.Recipients,
+        dto.OrgNodeId);
 
     private static ScheduledReportDto MapToDto(Domain.Entities.ScheduledReport r) => new(
         r.Id,
@@ -143,7 +144,7 @@ public sealed class ScheduledReportsController(
 
 public sealed record ScheduledReportInputDto(
     [Required, MaxLength(200)] string Name,
-    [Required, AllowedValues("Revenue", "Aging", "ClientStatement", "WorkOrderSummary", "Invoices")] string ReportType,
+    [Required, AllowedValues("Revenue", "Aging", "ClientStatement", "WorkOrderSummary", "Invoices", "FactoryKpis")] string ReportType,
     [Required, AllowedValues("Daily", "Weekly", "Monthly", "Quarterly")] string Frequency,
     [Range(1, 28)] int? DayOfMonth,
     [AllowedValues("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", null)] string? DayOfWeek,
@@ -151,7 +152,8 @@ public sealed record ScheduledReportInputDto(
     [AllowedValues("LastWeek", "LastMonth", "LastQuarter", "LastYear", "YTD", null)] string? DateRangePreset,
     string? GroupBy,
     string? ClientId,
-    [Required] string Recipients);
+    [Required] string Recipients,
+    Guid? OrgNodeId = null);
 
 public sealed record ScheduledReportDto(
     Guid Id,

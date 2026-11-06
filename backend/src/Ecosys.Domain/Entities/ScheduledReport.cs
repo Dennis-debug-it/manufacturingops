@@ -33,6 +33,9 @@ public sealed class ScheduledReport : AuditableEntity, ITenantEntity
     /// <summary>For ClientStatement: specific client ID, or null for all clients.</summary>
     public string? ClientId { get; set; }
 
+    /// <summary>Factory reports: the group, factory or section reported on; null for everything.</summary>
+    public Guid? OrgNodeId { get; set; }
+
     /// <summary>Comma-separated recipient email addresses.</summary>
     public string Recipients { get; set; } = string.Empty;
 
