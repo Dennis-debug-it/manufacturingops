@@ -1,5 +1,5 @@
 import { addDays, format, parseISO } from 'date-fns'
-import { toWorkspaceDate } from '../../../shared/utils/dates'
+import { toWorkspaceDate } from '../utils/dates'
 
 export const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)] disabled:bg-slate-50'
 export const textAreaClass = 'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--app-primary)]'

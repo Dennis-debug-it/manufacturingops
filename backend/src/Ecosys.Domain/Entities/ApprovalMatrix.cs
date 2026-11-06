@@ -11,11 +11,11 @@ public static class ApprovalDocumentTypes
 {
     public const string PurchaseOrder = "PurchaseOrder";
     public const string Expense = "Expense";
-    public const string ProjectVariation = "ProjectVariation";
+
     /// <summary>A customer quotation, approved before it is sent (e.g. large or low-margin quotes).</summary>
     public const string Quotation = "Quotation";
 
-    public static readonly string[] All = [PurchaseOrder, Expense, ProjectVariation, Quotation];
+    public static readonly string[] All = [PurchaseOrder, Expense, Quotation];
 
     public static bool IsSupported(string? value) =>
         value is not null && All.Contains(value, StringComparer.OrdinalIgnoreCase);

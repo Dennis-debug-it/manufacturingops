@@ -73,9 +73,6 @@ public interface ILinkedRecordService
     /// <summary>Labels and links for display; records that no longer exist are left out.</summary>
     Task<IReadOnlyDictionary<(string EntityType, Guid EntityId), LinkedRecord>> DescribeAsync(
         Guid tenantId, IEnumerable<(string? EntityType, Guid? EntityId)> records, CancellationToken cancellationToken = default);
-
-    /// <summary>Projects the viewer may see (none without the Projects module and projects.view), honouring members-only visibility.</summary>
-    Task<IQueryable<Project>> VisibleProjectsAsync(AccessViewer viewer, CancellationToken cancellationToken = default);
 }
 
 public static class LinkedRecords
@@ -85,15 +82,13 @@ public static class LinkedRecords
         ActivityEntityTypes.All.FirstOrDefault(x => string.Equals(x, entityType?.Trim(), StringComparison.OrdinalIgnoreCase));
 }
 
-internal sealed class LinkedRecordService(AppDbContext dbContext, IProjectSettingsService projectSettingsService) : ILinkedRecordService
+internal sealed class LinkedRecordService(AppDbContext dbContext) : ILinkedRecordService
 {
     public async Task<bool> CanOpenAsync(AccessViewer viewer, string entityType, Guid entityId, CancellationToken cancellationToken = default)
     {
         var tenantId = viewer.TenantId;
         switch (LinkedRecords.Normalize(entityType))
         {
-            case ActivityEntityTypes.Project:
-                return await (await VisibleProjectsAsync(viewer, cancellationToken)).AnyAsync(x => x.Id == entityId, cancellationToken);
             case ActivityEntityTypes.Client:
                 return await dbContext.Clients.AnyAsync(x => x.TenantId == tenantId && x.Id == entityId, cancellationToken);
             case ActivityEntityTypes.Contract:
@@ -116,11 +111,6 @@ internal sealed class LinkedRecordService(AppDbContext dbContext, IProjectSettin
         List<Guid> Ids(string type) => wanted.Where(x => x.Type == type).Select(x => x.Id).ToList();
         var result = new Dictionary<(string, Guid), LinkedRecord>();
 
-        var projectIds = Ids(ActivityEntityTypes.Project);
-        if (projectIds.Count > 0)
-            foreach (var x in await dbContext.Projects.Where(x => x.TenantId == tenantId && projectIds.Contains(x.Id))
-                         .Select(x => new { x.Id, x.ProjectNumber, x.Name }).ToListAsync(cancellationToken))
-                result[(ActivityEntityTypes.Project, x.Id)] = new(ActivityEntityTypes.Project, x.Id, $"{x.ProjectNumber} {x.Name}", $"/projects/{x.Id}");
         var clientIds = Ids(ActivityEntityTypes.Client);
         if (clientIds.Count > 0)
             foreach (var x in await dbContext.Clients.Where(x => x.TenantId == tenantId && clientIds.Contains(x.Id))
@@ -139,20 +129,6 @@ internal sealed class LinkedRecordService(AppDbContext dbContext, IProjectSettin
         return result;
     }
 
-    public async Task<IQueryable<Project>> VisibleProjectsAsync(AccessViewer viewer, CancellationToken cancellationToken = default)
-    {
-        var tenantId = viewer.TenantId;
-        var query = dbContext.Projects.Where(x => x.TenantId == tenantId);
-        if (!viewer.HasModule(ServiceOpsPlans.Projects) || !viewer.Can(PermissionNames.ProjectsView))
-            return query.Where(_ => false);
-        if (viewer.Can(PermissionNames.ProjectsManage))
-            return query;
-        var settings = await projectSettingsService.GetAsync(tenantId, cancellationToken);
-        if (settings.Visibility != ProjectVisibility.MembersOnly)
-            return query;
-        var userId = viewer.UserId;
-        return query.Where(x => x.ProjectManagerUserId == userId || x.Members.Any(m => m.UserId == userId));
-    }
 }
 
 internal static class ContractCalendarRules

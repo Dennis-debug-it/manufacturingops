@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkOrder, WorkOrderExecutionBundle } from '../../work-orders/types'
 import type { MyAttendanceStatus } from '../../team/timeAttendance/api'
-import type { MusterDaySheet } from '../../projects/types'
 import type { OutboxEntry } from './outbox'
-import { applyToAttendance, applyToBundle, applyToJob, applyToMusterSheet, isPendingPhoto } from './overlay'
+import { applyToAttendance, applyToBundle, applyToJob, isPendingPhoto } from './overlay'
 
 const job = {
   id: 'wo-1',
@@ -96,52 +95,8 @@ describe('applyToAttendance', () => {
     expect(applyToAttendance(status, [clockIn, entry('clock-out', { workOrderId: null })]).status).toBe('NotClockedIn')
   })
 
-  it('shows the project site a queued clock-in is against, and clears it on clock-out', () => {
-    const status: MyAttendanceStatus = { technicianId: 't1', technicianName: 'Moses', status: 'NotClockedIn', clockInAt: null, lastLocation: null, currentWorkOrderId: null, currentWorkOrderNumber: null }
-    const clockIn = entry('clock-in', { workOrderId: null, body: { projectId: 'p1' }, meta: { projectName: 'PRJ-0007 Westlands' } })
-    expect(applyToAttendance(status, [clockIn])).toMatchObject({ status: 'ClockedIn', projectId: 'p1', projectName: 'PRJ-0007 Westlands' })
-    expect(applyToAttendance(status, [clockIn, entry('clock-out', { workOrderId: null })])).toMatchObject({ projectId: null, projectName: null })
-    expect(applyToAttendance(status, [entry('clock-in', { workOrderId: null, body: {} })])).toMatchObject({ projectId: null, projectName: null })
-  })
 })
 
-describe('applyToMusterSheet', () => {
-  const sheet: MusterDaySheet = {
-    workDate: '2026-10-21',
-    isSubmitted: false,
-    isLocked: false,
-    manDays: 0,
-    rows: [
-      { workerId: 'w1', fullName: 'Achieng', trade: 'Mason', engagementType: 'Casual', status: 'Present', isSuggestion: true, note: null, isActive: true },
-      { workerId: 'w2', fullName: 'Kiptoo', trade: 'Helper', engagementType: 'Casual', status: null, isSuggestion: false, note: null, isActive: true },
-      { workerId: 'w3', fullName: 'Wanjiru', trade: null, engagementType: 'Permanent', status: null, isSuggestion: false, note: null, isActive: true },
-    ],
-  }
-  const muster = (projectId: string, date: string, marks: { workerId: string; status: string; note?: string | null }[]) =>
-    entry('muster', { workOrderId: null, method: 'PUT', body: { marks }, meta: { projectId, date } })
-
-  it('shows queued marks as saved and recounts the man-days, later saves winning', () => {
-    const view = applyToMusterSheet(sheet, 'p1', '2026-10-21', [
-      muster('p1', '2026-10-21', [{ workerId: 'w1', status: 'Present' }, { workerId: 'w2', status: 'Absent' }]),
-      muster('p1', '2026-10-21', [{ workerId: 'w2', status: 'HalfDay', note: 'Left at noon' }]),
-    ])
-    expect(view.rows[0]).toMatchObject({ status: 'Present', isSuggestion: false })
-    expect(view.rows[1]).toMatchObject({ status: 'HalfDay', isSuggestion: false, note: 'Left at noon' })
-    expect(view.rows[2]).toMatchObject({ status: null })
-    expect(view.manDays).toBe(1.5)
-    expect(view.isSubmitted).toBe(true)
-    // The server copy itself is never changed.
-    expect(sheet.rows[0]!.isSuggestion).toBe(true)
-  })
-
-  it('ignores saves for another site or day', () => {
-    const view = applyToMusterSheet(sheet, 'p1', '2026-10-21', [
-      muster('p2', '2026-10-21', [{ workerId: 'w2', status: 'Present' }]),
-      muster('p1', '2026-10-20', [{ workerId: 'w2', status: 'Present' }]),
-    ])
-    expect(view).toBe(sheet)
-  })
-})
 
 describe('trips and the clock', () => {
   const status: MyAttendanceStatus = { technicianId: 't1', technicianName: 'Moses', status: 'NotClockedIn', clockInAt: null, lastLocation: null, currentWorkOrderId: null, currentWorkOrderNumber: null }

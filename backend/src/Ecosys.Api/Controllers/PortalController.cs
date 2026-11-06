@@ -26,15 +26,10 @@ public sealed class PortalController(
     [HttpGet("settings")]
     public async Task<ActionResult<PortalSettingsResponse>> GetSettings(
         [FromServices] ILicenseGuardService licenseGuardService,
-        [FromServices] IProjectSettingsService projectSettingsService,
         CancellationToken cancellationToken)
     {
         var settings = await LoadSettingsAsync(cancellationToken);
-        // Projects appear in the portal only when the tenant licenses the module and has the
-        // portal page switched on in Project settings.
         var modules = (await licenseGuardService.GetSnapshotAsync(TenantId, cancellationToken)).Modules;
-        var showProjects = modules.Contains(ServiceOpsPlans.Projects, StringComparer.OrdinalIgnoreCase)
-            && (await projectSettingsService.GetAsync(TenantId, cancellationToken)).ClientPortal;
         // Contracts and the asset register come with the Maintenance module.
         var hasMaintenance = modules.Contains(ServiceOpsPlans.Maintenance, StringComparer.OrdinalIgnoreCase);
         return Ok(new PortalSettingsResponse(
@@ -43,8 +38,7 @@ public sealed class PortalController(
             settings.ShowInvoices,
             settings.ShowContracts && hasMaintenance,
             settings.ShowAssetRegister && hasMaintenance,
-            settings.WelcomeMessage,
-            showProjects));
+            settings.WelcomeMessage));
     }
 
     [HttpGet("dashboard/summary")]
@@ -534,7 +528,7 @@ public sealed class PortalController(
 
 // ── Response / request DTOs ─────────────────────────────────────────────────
 
-public sealed record PortalSettingsResponse(bool AllowRequestSubmission, bool AllowQuoteResponses, bool ShowInvoices, bool ShowContracts, bool ShowAssetRegister, string? WelcomeMessage, bool ShowProjects = false);
+public sealed record PortalSettingsResponse(bool AllowRequestSubmission, bool AllowQuoteResponses, bool ShowInvoices, bool ShowContracts, bool ShowAssetRegister, string? WelcomeMessage);
 
 public sealed record PortalCurrencyAmount(string Currency, decimal Amount);
 public sealed record PortalDashboardSummaryResponse(int OpenWorkOrders, int OverdueWorkOrders, int AssetCount, int UpcomingPmCount, IReadOnlyCollection<PortalCurrencyAmount> OutstandingBalances, int PendingQuotations, string Currency, int AssetsUnderWarranty = 0);

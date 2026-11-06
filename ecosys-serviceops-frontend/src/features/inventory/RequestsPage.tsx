@@ -7,7 +7,6 @@ import { DataTable, type DataTableColumn } from '../../shared/components/DataTab
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { ErrorState } from '../../shared/components/ErrorState'
-import { ProjectPicker } from '../../shared/components/ProjectPicker'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { cn } from '../../shared/utils/cn'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
@@ -450,14 +449,11 @@ function NewIssueSlipDrawer({ open, onClose }: { open: boolean; onClose: () => v
   const { data: materials } = useMaterials({ status: 'active' })
   const { data: workOrders } = useWorkOrders()
   const [workOrderId, setWorkOrderId] = useState('')
-  const [projectId, setProjectId] = useState('')
   const [notes, setNotes] = useState('')
   const [lines, setLines] = useState<DraftLine[]>([{ materialItemId: '', quantity: '1' }])
-  const workOrderClientId = (workOrders ?? []).find((wo) => wo.id === workOrderId)?.clientId ?? null
 
   const close = () => {
     setWorkOrderId('')
-    setProjectId('')
     setNotes('')
     setLines([{ materialItemId: '', quantity: '1' }])
     onClose()
@@ -471,7 +467,6 @@ function NewIssueSlipDrawer({ open, onClose }: { open: boolean; onClose: () => v
     try {
       const created = await createIssue.mutateAsync({
         workOrderId: workOrderId || null,
-        projectId: projectId || null,
         notes: notes.trim() || null,
         lines: payloadLines,
       })
@@ -505,7 +500,6 @@ function NewIssueSlipDrawer({ open, onClose }: { open: boolean; onClose: () => v
             value={workOrderId}
             onChange={(event) => {
               setWorkOrderId(event.target.value)
-              setProjectId('')
             }}
             className={fieldClass}
           >
@@ -513,7 +507,6 @@ function NewIssueSlipDrawer({ open, onClose }: { open: boolean; onClose: () => v
             {(workOrders ?? []).map((wo) => <option key={wo.id} value={wo.id}>{wo.workOrderNumber} — {wo.title}</option>)}
           </select>
         </div>
-        <ProjectPicker id="issue-project" value={projectId} onChange={setProjectId} clientId={workOrderClientId} className={fieldClass} labelClassName={labelClass} />
         <div>
           <span className={labelClass}>Parts</span>
           <div className="space-y-2">

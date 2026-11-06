@@ -42,12 +42,12 @@ public static class ActionItemStatuses
 /// <summary>The records an activity or action item can be linked to.</summary>
 public static class ActivityEntityTypes
 {
-    public const string Project = "Project";
+
     public const string Client = "Client";
     public const string Contract = "Contract";
     public const string WorkOrder = "WorkOrder";
 
-    public static readonly string[] All = [Project, Client, Contract, WorkOrder];
+    public static readonly string[] All = [Client, Contract, WorkOrder];
 }
 
 /// <summary>
@@ -95,7 +95,6 @@ public sealed class ActivityAttendee : ITenantEntity
     public Guid TenantId { get; set; }
     public Guid ActivityId { get; set; }
     public Guid? UserId { get; set; }
-    public Guid? ConsultantId { get; set; }
     public Guid? ClientContactId { get; set; }
     public string? ExternalName { get; set; }
     public string? ExternalEmail { get; set; }
@@ -106,7 +105,6 @@ public sealed class ActivityAttendee : ITenantEntity
 
     public Activity? Activity { get; set; }
     public User? User { get; set; }
-    public Consultant? Consultant { get; set; }
     public ClientPortalUser? ClientContact { get; set; }
 }
 

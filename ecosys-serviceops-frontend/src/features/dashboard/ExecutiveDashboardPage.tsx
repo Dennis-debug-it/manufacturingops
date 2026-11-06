@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   endOfMonth,
@@ -25,9 +24,6 @@ import { formatCurrency, formatNumber, formatPercent } from '../../shared/utils/
 import { cn } from '../../shared/utils/cn'
 import { useRevenueReport, type RevenueReportRow } from '../finance/api'
 import { usePmComplianceReport } from '../maintenance/api'
-import { useProjectSummary } from '../projects/api'
-import { useEntitlements } from '../../shared/hooks/useEntitlements'
-import { usePermission } from '../../shared/hooks/usePermission'
 import type { DashboardSummary } from './types'
 
 type Period = 'week' | 'month' | 'quarter' | 'year' | 'custom'
@@ -75,8 +71,6 @@ function resolveRange(period: Period, customFrom: string, customTo: string) {
 
 export function ExecutiveDashboardPage() {
   const [period, setPeriod] = useState<Period>('month')
-  const { hasModule } = useEntitlements()
-  const canViewProjects = usePermission('projects.view')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
 
@@ -240,7 +234,6 @@ export function ExecutiveDashboardPage() {
             </div>
           </section>
 
-          {hasModule('projects') && canViewProjects ? <ProjectsRow /> : null}
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
@@ -316,37 +309,5 @@ export function ExecutiveDashboardPage() {
         </>
       )}
     </div>
-  )
-}
-
-/** Shown when the tenant has Projects: today's register totals (not tied to the period selector). */
-function ProjectsRow() {
-  const { data, isLoading, isError, refetch } = useProjectSummary()
-  const tiles = data
-    ? [
-        { label: 'Active Projects', value: formatNumber(data.activeProjects), tone: 'text-slate-900' },
-        { label: 'Behind Schedule', value: formatNumber(data.behindSchedule), tone: data.behindSchedule > 0 ? 'text-rose-600' : 'text-slate-900' },
-        { label: 'Pending Variations', value: formatNumber(data.pendingVariationsCount), tone: data.pendingVariationsCount > 0 ? 'text-amber-600' : 'text-slate-900' },
-        { label: 'Open Contract Value', value: formatCurrency(data.totalRevisedValue), tone: 'text-slate-900' },
-      ]
-    : []
-  return (
-    <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-      <SectionHeader title="Projects" description="Open projects today, from the project register." />
-      {isError ? (
-        <ErrorState title="Projects unavailable" description="We couldn’t load the project register totals." onRetry={() => void refetch()} />
-      ) : isLoading || !data ? (
-        <Spinner label="Loading projects" />
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {tiles.map((tile) => (
-            <Link key={tile.label} to="/projects" className="rounded-xl border border-slate-200 px-4 py-3 transition hover:bg-white">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{tile.label}</div>
-              <div className={cn('mt-2 text-xl font-semibold', tile.tone)}>{tile.value}</div>
-            </Link>
-          ))}
-        </div>
-      )}
-    </section>
   )
 }

@@ -68,8 +68,6 @@ export function isOfflineQueryKey(key: QueryKey): boolean {
   if (scope === 'attendance') return second === 'me' || second === 'leave-types'
   // The unfiltered parts list, so parts used can still be picked offline.
   if (scope === 'picker') return second === 'materials' && third === ''
-  // A supervisor's sites, each site's roster and the muster days they opened, so the roll can be marked offline.
-  if (scope === 'projects') return second === 'my-sites' || third === 'workers' || third === 'muster'
   // The asset register copy that lets a tag be scanned with no signal, and the factory tree.
   // Plus the shift's running checks and each check's questions, and the technician's factory jobs.
   if (scope === 'factory') return ['scan-index', 'org-nodes', 'checks-due', 'check-run', 'job', 'jobs', 'failure-codes', 'windows', 'window', 'window-pack'].includes(String(second))

@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, MapPin, CalendarClock, Activity, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, MapPin, CalendarClock, Activity, LifeBuoy, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -37,8 +37,6 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Inventory', to: '/inventory', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], permission: 'materials.view', icon: Package },
   { label: 'Users & Access', to: '/team', roles: ['admin'], permission: 'team.view', icon: Users },
   { label: 'Contracts', to: '/contracts', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'contracts.view', icon: FileText },
-  // Shown only when the tenant licenses the Projects add-on (entitlements hide it otherwise).
-  { label: 'Projects', to: '/projects', roles: ['admin', 'manager', 'dispatcher', 'finance', 'viewer'], permission: 'projects.view', icon: FolderKanban },
   // Shared on every plan; each calendar source checks its own module on the server.
   { label: 'My Calendar', to: '/calendar', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer', 'materials_controller'], permission: 'activities.view', icon: CalendarDays },
   { label: 'Action Items', to: '/action-items', roles: ['admin', 'manager', 'dispatcher', 'technician', 'finance', 'viewer', 'materials_controller'], permission: 'activities.view', icon: ListChecks },

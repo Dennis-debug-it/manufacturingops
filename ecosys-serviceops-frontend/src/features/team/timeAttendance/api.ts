@@ -291,9 +291,6 @@ export interface MyAttendanceStatus {
   lastLocation: string | null
   currentWorkOrderId: string | null
   currentWorkOrderNumber: string | null
-  /** The project site the open clock-in is against, if any ("PRJ-0007 Westlands block B"). */
-  projectId?: string | null
-  projectName?: string | null
 }
 
 // The "my" reads fail for accounts with no technician profile; the page explains that in place,
@@ -311,7 +308,7 @@ export function useMyAttendanceStatus() {
 export function useClockInMine() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { location?: string; projectId?: string } = {}) => api.post<MyAttendanceStatus>('/api/attendance/me/clock-in', payload),
+    mutationFn: (payload: { location?: string } = {}) => api.post<MyAttendanceStatus>('/api/attendance/me/clock-in', payload),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['attendance', 'me'] }),
   })
 }

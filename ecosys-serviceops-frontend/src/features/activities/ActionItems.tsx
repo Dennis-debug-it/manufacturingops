@@ -6,7 +6,7 @@ import { FormDrawer } from '../../shared/components/FormDrawer'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { cn } from '../../shared/utils/cn'
 import { formatDate } from '../../shared/utils/dates'
-import { dateInputValue, dateOrNull, fieldClass, labelClass, primaryButtonClass, secondaryButtonClass, smallButtonClass, textOrNull } from '../projects/components/formStyles'
+import { dateInputValue, dateOrNull, fieldClass, labelClass, primaryButtonClass, secondaryButtonClass, smallButtonClass, textOrNull } from '../../shared/components/formStyles'
 import { useActivityPeople, useSaveActionItem } from './api'
 import type { ActionItem, ActionItemStatus, LinkedEntityType, SaveActionItemPayload } from './types'
 

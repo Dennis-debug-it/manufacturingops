@@ -190,7 +190,6 @@ public sealed class PortalBoundaryTests
     [Theory]
     [InlineData(typeof(PortalController))]
     [InlineData(typeof(PortalAuthController))]
-    [InlineData(typeof(PortalProjectsController))]
     public void PortalControllers_AreOutsideTheTenantBoundary(Type controllerType)
     {
         // If a portal controller ever derived from TenantAwareControllerBase it would inherit the
@@ -201,7 +200,6 @@ public sealed class PortalBoundaryTests
 
     [Theory]
     [InlineData(typeof(PortalController))]
-    [InlineData(typeof(PortalProjectsController))]
     public void PortalControllers_StillRequireThePortalPolicy(Type controllerType)
     {
         Assert.Contains(

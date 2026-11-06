@@ -12,8 +12,8 @@ describe('edition entitlements', () => {
     }
   })
 
-  it('keeps maintenance, inventory, projects and the advanced tools in Professional', () => {
-    for (const path of ['/maintenance/schedules', '/assets', '/contracts', '/inventory/stock', '/projects', '/finance/expenses', '/approvals', '/settings/email-intake']) {
+  it('keeps maintenance, inventory and the advanced tools in Professional', () => {
+    for (const path of ['/maintenance/schedules', '/assets', '/contracts', '/inventory/stock', '/finance/expenses', '/approvals', '/settings/email-intake']) {
       expect(canAccessModulePath(path, essentials)).toBe(false)
       expect(canAccessModulePath(path, professional)).toBe(true)
     }

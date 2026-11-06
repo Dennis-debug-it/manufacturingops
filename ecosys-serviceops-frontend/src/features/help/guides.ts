@@ -10,7 +10,6 @@ import {
   Clock,
   FileSignature,
   FileText,
-  FolderKanban,
   Globe,
   Inbox,
   Package,
@@ -582,79 +581,6 @@ const contracts: Guide = {
   ],
 }
 
-const projects: Guide = {
-  id: 'projects',
-  title: 'Projects',
-  summary: 'Installations, fit-outs and other finite jobs: plan, run the site, bill by valuation, and hand over.',
-  icon: FolderKanban,
-  path: '/projects',
-  pathLabel: 'Projects',
-  sections: [
-    {
-      title: 'Before your first project',
-      text: 'Projects comes with the Professional and Enterprise editions. An admin sets it up once under Projects → Settings.',
-      steps: [
-        'Under Features, switch on what you track: Milestones, Tasks, Variations, Materials, Muster roll, Site diary, Valuations, Financials and Documents.',
-        'Add Project types (for example Solar installation or Office fit-out) and Stages. "Behaves as" tells Ecosys what a stage means, such as Handover or Closed.',
-        'Add Templates: milestones with a weight and a day offset, and tasks one per line, so a new project starts with its plan filled in.',
-        'Under "Who can see projects", choose whether everyone with Projects access sees every project, or people see only projects they are on.',
-      ],
-      tip: 'Keep consultants (architects, engineers, quantity surveyors) in Projects → Consultants so you can link them to any project.',
-    },
-    {
-      title: 'Start a project',
-      steps: [
-        'Click New Project. Choose the client, site, project type and template, then enter the name, contract value, planned start and end, and project manager.',
-        'Or open an accepted quotation and click Award as project: the client, value and scope come from the quote.',
-        'The project starts in the first stage. Use Change stage as the job moves on.',
-      ],
-    },
-    {
-      title: 'Plan and track progress',
-      steps: [
-        'Milestones: add each one with a weight and a planned date. Progress is the weighted share of completed milestones.',
-        'Tasks: give each task an assignee and a due date. The assignee is reminded the day before it is due.',
-        'Team: add the people working on the project and their role on it.',
-        'Work & Materials: link work orders and material issues so their cost lands on the project.',
-      ],
-    },
-    {
-      title: 'Variations',
-      steps: [
-        'Click New variation, choose Addition or Omission, and enter the amount and the client or consultant instruction reference.',
-        'Submit it for approval. The project’s revised value changes only once it is approved.',
-      ],
-    },
-    {
-      title: 'Run the site',
-      steps: [
-        'Muster roll: build the Roster of workers (permanent, casual or subcontractor, with trade and daily rate), then mark who is on site each day. Supervisors can mark it from the technician app, offline too.',
-        'Site diary: record the weather, work completed, instructions received, and issues and delays each day, then Submit.',
-        'Labour & wages: the wage sheet is worked out from the muster roll and the daily rates.',
-      ],
-      tip: 'A muster roll locks after the number of days set in Project settings, so pay is not changed after the fact.',
-    },
-    {
-      title: 'Bill the client',
-      steps: [
-        'Under Valuations, set the Billing terms once: advance, retention, how much retention is released at practical completion, and the defects liability period.',
-        'Raise advance invoice if the client pays an advance; it is recovered from later valuations.',
-        'Click New valuation, enter work done to date and materials on site, then Save and submit for certification.',
-        'When the consultant certifies it, click Record certificate, then Raise invoice. Retention is held back automatically.',
-        'The completion share of the retention becomes due at handover, and the rest when the defects liability period ends.',
-      ],
-    },
-    {
-      title: 'Costs and closing',
-      steps: [
-        'Financials shows budget lines against actual cost: labour from the muster roll, materials, expenses, supplier bills and recorded costs.',
-        'At handover, click Create maintenance contract to carry the client into an ongoing service contract.',
-        'Move the project to a closing stage. Ecosys blocks it while variations await a decision, material issues are open, a valuation is in progress or certified but not invoiced, or more of the value is uninvoiced than Project settings allow.',
-      ],
-    },
-  ],
-}
-
 const timeAttendance: Guide = {
   id: 'time-attendance',
   title: 'Time and leave',
@@ -835,7 +761,6 @@ export const guides: Guide[] = [
   assets,
   inventory,
   contracts,
-  projects,
   finance,
   approvals,
   timeAttendance,

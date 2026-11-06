@@ -62,7 +62,6 @@ public sealed class MaterialIssuesController(
             WorkOrderId = request.WorkOrderId,
             AssetId = request.AssetId,
             ClientId = request.ClientId,
-            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, request.ClientId, cancellationToken),
             SiteId = request.SiteId,
             SystemId = request.SystemId,
             IssuedToUserId = request.IssuedToUserId,
@@ -100,9 +99,6 @@ public sealed class MaterialIssuesController(
 
         issue.TotalEstimatedCost = issue.Lines.Sum(x => x.QuantityRequested * (x.UnitCost ?? 0));
         // Stock is valued in the tenant's currency; the project must be able to convert it.
-        if (issue.ProjectId.HasValue)
-            await ProjectFinanceRules.EnsureCostCurrencyAsync(dbContext, TenantId, issue.ProjectId,
-                await ProjectFinanceRules.StockCurrencyAsync(dbContext, TenantId, cancellationToken), cancellationToken);
         dbContext.MaterialIssues.Add(issue);
         await dbContext.SaveChangesAsync(cancellationToken);
 

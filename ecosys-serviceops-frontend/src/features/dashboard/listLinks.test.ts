@@ -4,9 +4,7 @@ import { contractListFilterSpec, filterContracts } from '../contracts/listFilter
 import { invoiceListFilterSpec, invoiceListParams } from '../finance/invoiceListFilters'
 import { filterReceipts, receiptListFilterSpec } from '../finance/receiptListFilters'
 import { matchesRequestStage, requestStageFromParam, purchaseOrderChoice, purchaseOrderFiltersFor, purchaseOrderListFilterSpec } from '../inventory/listFilters'
-import { filterProjects, projectListFilterSpec, stageCategoryFor, stageParamFor } from '../projects/listFilters'
 import type { ContractListItem } from '../contracts/types'
-import type { ProjectListItem } from '../projects/types'
 
 /** Each dashboard link (RoleDashboardQueries.cs) read back by the list page it opens. */
 const read = <K extends string>(link: string, spec: Parameters<typeof readUrlFilters<K>>[1]) =>
@@ -33,21 +31,6 @@ describe('dashboard links open filtered lists', () => {
     expect(rows.filter((row) => matchesRequestStage(row, stage)).map((x) => x.id)).toEqual(['a'])
     expect(rows.filter((row) => matchesRequestStage(row, requestStageFromParam(null))).map((x) => x.id)).toEqual(['a', 'b'])
     expect(requestStageFromParam('pending_approval')).toBe('open')
-  })
-
-  it('projects: stage default, behind schedule and id lists', () => {
-    const project = (id: string, isBehindSchedule: boolean) => ({ id, isBehindSchedule }) as ProjectListItem
-    const rows = [project('AAA', true), project('bbb', false), project('ccc', true)]
-    const behind = read('/projects?health=behind', projectListFilterSpec)
-    expect(filterProjects(rows, behind).map((x) => x.id)).toEqual(['AAA', 'ccc'])
-    const linked = read('/projects?stage=all&ids=aaa,bbb', projectListFilterSpec)
-    expect(filterProjects(rows, linked).map((x) => x.id)).toEqual(['AAA', 'bbb'])
-    expect(stageCategoryFor(linked.stage)).toBe('')
-    expect(stageCategoryFor(read('/projects?mine=true', projectListFilterSpec).stage)).toBe('Open')
-    expect(read('/projects?mine=true', projectListFilterSpec).mine).toBe('true')
-    expect(stageParamFor('Open')).toBe('')
-    expect(stageParamFor('')).toBe('all')
-    expect(stageParamFor('Active')).toBe('Active')
   })
 
   it('contracts: live ones ending within the window', () => {

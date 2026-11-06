@@ -5,7 +5,7 @@ import { CalendarPlus, ChevronLeft, ChevronRight, Link2, Users } from 'lucide-re
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
 import { cn } from '../../shared/utils/cn'
-import { primaryButtonClass, secondaryButtonClass } from '../projects/components/formStyles'
+import { primaryButtonClass, secondaryButtonClass } from '../../shared/components/formStyles'
 import { useActivityPeople, useCalendar } from './api'
 import { ActivityDrawer } from './ActivityDrawer'
 import { calendarRange, defaultCalendarMode, groupByDay, itemTimeLabel, type CalendarMode } from './logic'

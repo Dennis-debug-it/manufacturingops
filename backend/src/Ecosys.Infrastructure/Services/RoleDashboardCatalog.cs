@@ -56,21 +56,12 @@ public static class DashboardWidgetCatalog
     public const string FinanceCashReceived = "finance.cash-received";
     public const string FinanceTaxWithheld = "finance.tax-withheld";
     public const string FinanceInvoicesToSend = "finance.invoices-to-send";
-    public const string ProjectsBillingWaiting = "projects.billing-waiting";
-    public const string ProjectsBehindSchedule = "projects.behind-schedule";
-    public const string ProjectsMine = "projects.mine";
-    public const string ProjectsPendingVariations = "projects.pending-variations";
-    public const string ProjectsValuationsAwaiting = "projects.valuations-awaiting";
-    public const string ProjectsMusterToday = "projects.muster-today";
-    public const string ProjectsUncostedLabour = "projects.uncosted-labour";
     public const string ActionItemsDue = "action-items.due";
 
     private static readonly string[] Ops = [ServiceOpsPlans.Operations];
     private static readonly string[] Mnt = [ServiceOpsPlans.Maintenance];
     private static readonly string[] Inv = [ServiceOpsPlans.Inventory];
     private static readonly string[] Fin = [ServiceOpsPlans.Finance];
-    private static readonly string[] Prj = [ServiceOpsPlans.Projects];
-    private static readonly string[] PrjFin = [ServiceOpsPlans.Projects, ServiceOpsPlans.Finance];
 
     private static readonly string[] ViewWorkOrders = [PermissionNames.CanViewWorkOrders];
     private static readonly string[] Dispatch = [PermissionNames.CanAssignWorkOrders];
@@ -86,8 +77,6 @@ public static class DashboardWidgetCatalog
     private static readonly string[] ContractData = [DashboardDataAreas.Contracts];
     private static readonly string[] MaterialData = [DashboardDataAreas.Materials];
     private static readonly string[] FinanceData = [DashboardDataAreas.Finance];
-    private static readonly string[] ProjectData = [DashboardDataAreas.Projects];
-    private static readonly string[] ProjectFinanceData = [DashboardDataAreas.Projects, DashboardDataAreas.Finance];
     private static readonly string[] ActivityData = [DashboardDataAreas.Activities];
 
     public static readonly IReadOnlyList<DashboardWidgetDefinition> All =
@@ -124,20 +113,6 @@ public static class DashboardWidgetCatalog
             Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
         new(FinanceInvoicesToSend, "Invoices to send", "Draft invoices not yet issued.",
             Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
-        new(ProjectsBillingWaiting, "Project billing waiting", "Certified valuations not yet invoiced, and retention that can be released.",
-            PrjFin, ViewFinance, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch, ProjectFinanceData),
-        new(ProjectsBehindSchedule, "Projects behind schedule", "Open projects whose progress is behind their planned milestones.",
-            Prj, [PermissionNames.ProjectsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
-        new(ProjectsMine, "My projects", "Projects you manage or are on, with progress against plan.",
-            Prj, [PermissionNames.ProjectsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
-        new(ProjectsPendingVariations, "Pending variations", "Variations submitted and waiting for a decision.",
-            Prj, [PermissionNames.ProjectsVariationsApprove, PermissionNames.ProjectsManage], DashboardWidgetSizes.Small, DashboardWidgetScope.User, ProjectData),
-        new(ProjectsValuationsAwaiting, "Valuations awaiting certificate or invoice", "Submitted valuations not yet certified, and certified ones not yet invoiced.",
-            PrjFin, [PermissionNames.ProjectsFinancialsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
-        new(ProjectsMusterToday, "Today's muster roll", "Active projects with workers, and whether today's roll has been marked.",
-            Prj, [PermissionNames.ProjectsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
-        new(ProjectsUncostedLabour, "Uncosted labour days", "Days on the muster roll with no daily rate set for the worker.",
-            PrjFin, [PermissionNames.ProjectsFinancialsView], DashboardWidgetSizes.Wide, DashboardWidgetScope.User, ProjectData),
         new(ActionItemsDue, "My action items", "Your open action items: overdue, and due in the next seven days.",
             [], [PermissionNames.ActivitiesView], DashboardWidgetSizes.Small, DashboardWidgetScope.User, ActivityData),
     ];
@@ -165,7 +140,6 @@ public static class DashboardRoleDefaults
         DashboardWidgetCatalog.TechniciansWorkload,
         DashboardWidgetCatalog.MaintenancePmCompliance,
         DashboardWidgetCatalog.ContractsExpiring,
-        DashboardWidgetCatalog.ProjectsBehindSchedule,
         DashboardWidgetCatalog.FinanceReceivablesOverdue,
     ];
 
@@ -183,17 +157,11 @@ public static class DashboardRoleDefaults
         DashboardWidgetCatalog.FinanceCashReceived,
         DashboardWidgetCatalog.FinanceTaxWithheld,
         DashboardWidgetCatalog.FinanceInvoicesToSend,
-        DashboardWidgetCatalog.ProjectsBillingWaiting,
     ];
 
     private static readonly string[] ProjectManagerWidgets =
     [
-        DashboardWidgetCatalog.ProjectsMine,
         DashboardWidgetCatalog.ActionItemsDue,
-        DashboardWidgetCatalog.ProjectsPendingVariations,
-        DashboardWidgetCatalog.ProjectsValuationsAwaiting,
-        DashboardWidgetCatalog.ProjectsMusterToday,
-        DashboardWidgetCatalog.ProjectsUncostedLabour,
     ];
 
     private static readonly string[] Materials =

@@ -42,16 +42,6 @@ public static class DashboardDataAreas
         [typeof(TenantInvoice)] = Finance,
         [typeof(TenantPayment)] = Finance,
         [typeof(WithholdingCertificate)] = Finance,
-        [typeof(Project)] = Projects,
-        [typeof(ProjectStage)] = Projects,
-        [typeof(ProjectMember)] = Projects,
-        [typeof(ProjectMilestone)] = Projects,
-        [typeof(ProjectVariation)] = Projects,
-        [typeof(ProjectValuation)] = Projects,
-        [typeof(ProjectRetentionRelease)] = Projects,
-        [typeof(ProjectWorker)] = Projects,
-        [typeof(ProjectWorkerRate)] = Projects,
-        [typeof(ProjectMusterEntry)] = Projects,
         [typeof(ActionItem)] = Activities,
     };
 

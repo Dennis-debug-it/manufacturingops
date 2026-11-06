@@ -18,7 +18,6 @@ import { endpoints } from '../../shared/api/endpoints'
 import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 import { useConvertProformaToInvoice, useInvoice, useRecordPayment, useReversePayment, useSendInvoice, useVoidInvoice } from './api'
 import { EditInvoiceDrawer } from './components/EditInvoiceDrawer'
-import { WithholdingSection } from './components/WithholdingSection'
 import type { InvoiceLine, Payment, SourceQuotation } from './types'
 
 const paymentMethods = ['Cash', 'MPesa', 'BankTransfer', 'Cheque', 'Card']
@@ -277,16 +276,6 @@ export function InvoiceDetailPage() {
       <SummarySection title="Payment History" description="Payments recorded against this invoice.">
         <DataTable columns={paymentColumns} data={invoice.payments} emptyTitle="No payments" emptyDescription={isProforma ? 'Payments become available after this proforma is converted to a final invoice.' : 'Payments recorded for this invoice will appear here.'} />
       </SummarySection>
-
-      {!isProforma ? (
-        <WithholdingSection
-          invoiceId={invoice.id}
-          currency={invoice.currency}
-          balance={invoice.balance}
-          canRecordOnInvoice={invoice.status !== 'Draft' && invoice.status !== 'Void'}
-          canManage={canManage}
-        />
-      ) : null}
 
       <EditInvoiceDrawer open={showEdit} invoice={invoice} onClose={() => setShowEdit(false)} />
 

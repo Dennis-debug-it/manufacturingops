@@ -31,14 +31,7 @@ describe('visibleGuides', () => {
     const visible = visibleGuides(user('admin', {}), essentials).map((guide) => guide.id)
     expect(visible).toContain('work-orders')
     expect(visible).toContain('finance')
-    expect(visible).not.toContain('projects')
     expect(visible).not.toContain('maintenance')
-  })
-
-  it('shows the Projects guide to people with projects.view', () => {
-    const viewer = { ...user('viewer', {}), capabilities: ['projects.view'] } as unknown as AuthUser
-    expect(ids(viewer)).toContain('projects')
-    expect(ids(user('dispatcher', { canViewWorkOrders: true }))).not.toContain('projects')
   })
 
 

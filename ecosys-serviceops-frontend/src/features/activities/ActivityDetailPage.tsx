@@ -11,7 +11,7 @@ import { usePermission } from '../../shared/hooks/usePermission'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
-import { fieldClass, labelClass, primaryButtonClass, secondaryButtonClass, smallButtonClass, textAreaClass, textOrNull } from '../projects/components/formStyles'
+import { fieldClass, labelClass, primaryButtonClass, secondaryButtonClass, smallButtonClass, textAreaClass, textOrNull } from '../../shared/components/formStyles'
 import {
   downloadMinutesPdf,
   useActivity,

@@ -19,7 +19,6 @@ public sealed class TenantQuotation : AuditableEntity, ITenantEntity
     public string Currency { get; set; } = "KES";
     public Guid? ConvertedToInvoiceId { get; set; }
     public Guid? ConvertedToWorkOrderId { get; set; }
-    public Guid? ConvertedToProjectId { get; set; }
     public string? RejectionReason { get; set; }
     /// <summary>The client's acceptance in the portal: the name they typed as their signature, when, and from where.</summary>
     public string? AcceptedByName { get; set; }

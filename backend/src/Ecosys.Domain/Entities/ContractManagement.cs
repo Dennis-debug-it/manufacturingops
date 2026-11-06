@@ -9,7 +9,6 @@ public sealed class Contract : AuditableEntity, ITenantEntity
     public string ContractNumber { get; set; } = string.Empty;
     public Guid ClientId { get; set; }
     /// <summary>The project whose handover created this maintenance contract, if any.</summary>
-    public Guid? SourceProjectId { get; set; }
     public string Name { get; set; } = string.Empty;
     public ContractType ContractType { get; set; } = ContractType.ComprehensiveMaintenance;
     public ContractStatus Status { get; set; } = ContractStatus.Draft;

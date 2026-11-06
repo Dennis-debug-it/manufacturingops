@@ -128,11 +128,6 @@ public static class DependencyInjection
         services.AddScoped<IContractPricingService, ContractPricingService>();
         services.AddScoped<IContractLifecycleService, ContractLifecycleService>();
         services.AddScoped<IContractOperationalService, ContractOperationalService>();
-        services.AddScoped<IProjectSettingsService, ProjectSettingsService>();
-        services.AddScoped<IProjectSetupService, ProjectSetupService>();
-        services.AddScoped<IProjectAccessService, ProjectAccessService>();
-        services.AddScoped<IProjectService, ProjectService>();
-        services.AddScoped<IProjectNotificationService, ProjectNotificationService>();
         // One way to notify (Release 3 design 2.1). The Api replaces the no-op live notifier with
         // SignalR. Further channels register as INotificationChannel (WhatsApp, below).
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
@@ -157,14 +152,11 @@ public static class DependencyInjection
         services.AddScoped<IWhatsAppVerificationService, WhatsAppVerificationService>();
         services.AddScoped<IWhatsAppWebhookProcessor, WhatsAppWebhookProcessor>();
         services.AddScoped<IClientWhatsAppNotifier, ClientWhatsAppNotifier>();
-        services.AddScoped<IProjectFinancialsService, ProjectFinancialsService>();
         // Role dashboards (Release 3 design part 4).
         services.AddScoped<ITenantModuleResolver, LicenseTenantModuleResolver>();
         services.AddScoped<IDashboardSettingsService, DashboardSettingsService>();
         services.AddScoped<RoleDashboardQueries>();
         services.AddScoped<IRoleDashboardService, RoleDashboardService>();
-        services.AddScoped<IProjectInvoiceService, ProjectInvoiceService>();
-        services.AddScoped<IProjectReminderRunner, ProjectReminderRunner>();
         // Calendar & Activities (Release 3 step 3b).
         services.AddScoped<IAccessViewerFactory, AccessViewerFactory>();
         services.AddScoped<ILinkedRecordService, LinkedRecordService>();
@@ -202,7 +194,6 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<ContractReminderWorker>();
         services.AddSingleInstanceHostedService<ScheduledReportWorker>();
         services.AddSingleInstanceHostedService<ApprovalReminderWorker>();
-        services.AddSingleInstanceHostedService<ProjectReminderWorker>();
         services.AddSingleInstanceHostedService<AttendanceAutoClockOutWorker>();
         services.AddSingleInstanceHostedService<EscalationRuleWorker>();
         services.AddSingleInstanceHostedService<SubscriptionLifecycleWorker>();

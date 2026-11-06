@@ -19,7 +19,6 @@ public sealed record DashboardQueryViewer(Guid TenantId, Guid UserId, bool IsAdm
 /// </summary>
 internal sealed class RoleDashboardQueries(
     AppDbContext dbContext,
-    IProjectSettingsService projectSettingsService,
     ITenantTimeZoneService tenantTimeZoneService)
 {
     public const int ListLimit = 6;
@@ -53,13 +52,6 @@ internal sealed class RoleDashboardQueries(
             DashboardWidgetCatalog.FinanceCashReceived => await CashReceivedAsync(viewer, clock, cancellationToken),
             DashboardWidgetCatalog.FinanceTaxWithheld => await TaxWithheldAsync(viewer, clock, cancellationToken),
             DashboardWidgetCatalog.FinanceInvoicesToSend => await InvoicesToSendAsync(viewer, cancellationToken),
-            DashboardWidgetCatalog.ProjectsBillingWaiting => await BillingWaitingAsync(viewer, cancellationToken),
-            DashboardWidgetCatalog.ProjectsBehindSchedule => await BehindScheduleAsync(viewer, clock, cancellationToken),
-            DashboardWidgetCatalog.ProjectsMine => await MyProjectsAsync(viewer, clock, cancellationToken),
-            DashboardWidgetCatalog.ProjectsPendingVariations => await PendingVariationsAsync(viewer, cancellationToken),
-            DashboardWidgetCatalog.ProjectsValuationsAwaiting => await ValuationsAwaitingAsync(viewer, cancellationToken),
-            DashboardWidgetCatalog.ProjectsMusterToday => await MusterTodayAsync(viewer, clock, cancellationToken),
-            DashboardWidgetCatalog.ProjectsUncostedLabour => await UncostedLabourAsync(viewer, cancellationToken),
             DashboardWidgetCatalog.ActionItemsDue => await ActionItemsDueAsync(viewer, clock, cancellationToken),
             _ => throw new InvalidOperationException($"No query for dashboard widget '{widget.Key}'."),
         };
@@ -90,25 +82,6 @@ internal sealed class RoleDashboardQueries(
 
     private static DashboardStat Count(string label, int value, string link, string? tone = null) =>
         new(label, value, "number", null, link, value > 0 ? tone : null);
-
-    /// <summary>Past this many projects a figure links to the whole register rather than a long id list.</summary>
-    private const int MaxLinkedProjects = 50;
-
-    /// <summary>
-    /// The projects behind a figure: one opens on the right tab; several open the register narrowed to
-    /// just them (<c>?ids=</c>, every stage, since some are handed over).
-    /// </summary>
-    private static string ProjectsLink(IEnumerable<Guid> projectIds, string tab)
-    {
-        var ids = projectIds.Distinct().ToList();
-        return ids.Count switch
-        {
-            0 => "/projects",
-            1 => $"/projects/{ids[0]}?tab={tab}",
-            > MaxLinkedProjects => "/projects?stage=all",
-            _ => $"/projects?stage=all&ids={string.Join(',', ids)}",
-        };
-    }
 
     private static string InvoicesLink(string age, string? currency = null) =>
         currency is null ? $"/finance/invoices?age={age}" : $"/finance/invoices?age={age}&currency={Uri.EscapeDataString(currency)}";
@@ -380,207 +353,6 @@ internal sealed class RoleDashboardQueries(
         return new Result(
             [Count("Drafts", count, "/finance/invoices?status=Draft", "warning")],
             [.. oldest.Select(x => new DashboardListItem($"{x.InvoiceNumber} {x.Client}", null, x.TotalAmount, "money", x.Currency, $"/finance/invoices/{x.Id}"))]);
-    }
-
-    // ── Projects ─────────────────────────────────────────────────────────────
-
-    /// <summary>All of the tenant's projects in the caller's branches (finance figures are tenant-wide money).</summary>
-    private IQueryable<Project> BranchProjects(DashboardQueryViewer viewer) =>
-        dbContext.Projects.AsNoTracking().Where(x => x.TenantId == viewer.TenantId).WhereAccessible(viewer.Scope, x => x.BranchId);
-
-    /// <summary>
-    /// Projects the caller may open: the same rule as the project register (managers see all, others
-    /// see all unless the tenant chose members-only), within the caller's branches.
-    /// </summary>
-    private async Task<IQueryable<Project>> VisibleProjectsAsync(DashboardQueryViewer viewer, CancellationToken ct)
-    {
-        var query = BranchProjects(viewer);
-        if (viewer.Can(PermissionNames.ProjectsManage))
-            return query;
-        var settings = await projectSettingsService.GetAsync(viewer.TenantId, ct);
-        if (settings.Visibility != ProjectVisibility.MembersOnly)
-            return query;
-        var userId = viewer.UserId;
-        return query.Where(x => x.ProjectManagerUserId == userId || x.Members.Any(m => m.UserId == userId));
-    }
-
-    private async Task<List<Project>> OpenProjectsWithMilestonesAsync(IQueryable<Project> projects, CancellationToken ct) =>
-        await projects.Where(x => ProjectStageCategories.Open.Contains(x.Stage!.Category))
-            .Include(x => x.Stage)
-            .Include(x => x.Milestones)
-            .AsSplitQuery()
-            .ToListAsync(ct);
-
-    private static DashboardListItem ProgressItem(Project project, decimal planned) =>
-        new($"{project.ProjectNumber} {project.Name}",
-            $"{project.EffectiveProgressPercent:0.#}% done, {planned:0.#}% planned",
-            project.EffectiveProgressPercent, "percent", null, $"/projects/{project.Id}?tab=milestones",
-            ProjectCommercials.IsBehindSchedule(project.EffectiveProgressPercent, planned) ? "danger" : null);
-
-    private async Task<Result> BehindScheduleAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
-    {
-        var projects = await OpenProjectsWithMilestonesAsync(await VisibleProjectsAsync(viewer, ct), ct);
-        var behind = projects
-            .Where(x => x.Stage!.Category != ProjectStageCategories.OnHold)
-            .Select(x => new { Project = x, Planned = ProjectCommercials.ComputePlannedProgress(x.Milestones, clock.Today) })
-            .Where(x => ProjectCommercials.IsBehindSchedule(x.Project.EffectiveProgressPercent, x.Planned))
-            .OrderByDescending(x => x.Planned - x.Project.EffectiveProgressPercent)
-            .ToList();
-        return new Result(
-            [Count("Behind schedule", behind.Count, "/projects?health=behind", "danger"), Count("Open projects", projects.Count, "/projects?stage=Open")],
-            [.. behind.Take(ListLimit).Select(x => ProgressItem(x.Project, x.Planned))]);
-    }
-
-    private async Task<Result> MyProjectsAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
-    {
-        var mine = (await VisibleProjectsAsync(viewer, ct)).Where(ProjectListFilters.InvolvesUser(viewer.UserId));
-        var projects = await OpenProjectsWithMilestonesAsync(mine, ct);
-        var rows = projects
-            .Select(x => new { Project = x, Planned = ProjectCommercials.ComputePlannedProgress(x.Milestones, clock.Today) })
-            .OrderByDescending(x => x.Planned - x.Project.EffectiveProgressPercent)
-            .ToList();
-        return new Result(
-            [
-                Count("My open projects", rows.Count, "/projects?mine=true"),
-                Count("Behind schedule", rows.Count(x => x.Project.Stage!.Category != ProjectStageCategories.OnHold
-                    && ProjectCommercials.IsBehindSchedule(x.Project.EffectiveProgressPercent, x.Planned)), "/projects?mine=true&health=behind", "danger"),
-            ],
-            [.. rows.Take(ListLimit).Select(x => ProgressItem(x.Project, x.Planned))],
-            rows.Count == 0 ? "You are not on any open project." : null);
-    }
-
-    private async Task<Result> PendingVariationsAsync(DashboardQueryViewer viewer, CancellationToken ct)
-    {
-        var projects = (await VisibleProjectsAsync(viewer, ct)).Where(x => ProjectStageCategories.Open.Contains(x.Stage!.Category)).Select(x => x.Id);
-        var rows = await dbContext.ProjectVariations.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && x.Status == ProjectVariationStatuses.Submitted && projects.Contains(x.ProjectId))
-            .OrderBy(x => x.SubmittedAt)
-            .Select(x => new { x.ProjectId, x.Project!.ProjectNumber, x.VariationNumber, x.Title, x.Kind, x.Amount, x.Project.Currency })
-            .ToListAsync(ct);
-        var stats = new List<DashboardStat>
-        {
-            Count("Awaiting decision", rows.Count, ProjectsLink(rows.Select(x => x.ProjectId), "variations"), "warning"),
-        };
-        stats.AddRange(rows.GroupBy(x => x.Currency).Select(g => new DashboardStat("Net value",
-            g.Sum(x => x.Kind == ProjectVariationKinds.Omission ? -x.Amount : x.Amount), "money", g.Key, ProjectsLink(g.Select(x => x.ProjectId), "variations"))));
-        return new Result(stats,
-            [.. rows.Take(ListLimit).Select(x => new DashboardListItem($"{x.VariationNumber} {x.Title}", x.ProjectNumber,
-                x.Kind == ProjectVariationKinds.Omission ? -x.Amount : x.Amount, "money", x.Currency, $"/projects/{x.ProjectId}?tab=variations"))]);
-    }
-
-    private async Task<Result> ValuationsAwaitingAsync(DashboardQueryViewer viewer, CancellationToken ct)
-    {
-        var projects = (await VisibleProjectsAsync(viewer, ct)).Select(x => x.Id);
-        var rows = await dbContext.ProjectValuations.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && projects.Contains(x.ProjectId)
-                && (x.Status == ProjectValuationStatuses.Submitted || (x.Status == ProjectValuationStatuses.Certified && x.InvoiceId == null)))
-            .OrderBy(x => x.PeriodEnd)
-            .Select(x => new { x.ProjectId, x.Project!.ProjectNumber, x.ValuationNumber, x.Status, Amount = x.CertifiedAmount ?? x.AmountDue, x.Project.Currency })
-            .ToListAsync(ct);
-        var submitted = rows.Where(x => x.Status == ProjectValuationStatuses.Submitted).ToList();
-        var certified = rows.Where(x => x.Status == ProjectValuationStatuses.Certified).ToList();
-        return new Result(
-            [
-                Count("Awaiting certificate", submitted.Count, ProjectsLink(submitted.Select(x => x.ProjectId), "valuations"), "warning"),
-                Count("Certified, not invoiced", certified.Count, ProjectsLink(certified.Select(x => x.ProjectId), "valuations"), "warning"),
-            ],
-            [.. rows.Take(ListLimit).Select(x => new DashboardListItem($"{x.ProjectNumber} {x.ValuationNumber}",
-                x.Status == ProjectValuationStatuses.Submitted ? "Awaiting certificate" : "Certified, not invoiced",
-                x.Amount, "money", x.Currency, $"/projects/{x.ProjectId}?tab=valuations"))]);
-    }
-
-    private async Task<Result> MusterTodayAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
-    {
-        var settings = await projectSettingsService.GetAsync(viewer.TenantId, ct);
-        if (!settings.MusterRoll)
-            return new Result([], [], "The muster roll is turned off in Projects settings.");
-
-        var active = (await VisibleProjectsAsync(viewer, ct))
-            .Where(x => x.Stage!.Category == ProjectStageCategories.Active)
-            .Where(x => dbContext.ProjectWorkers.Any(w => w.TenantId == viewer.TenantId && w.ProjectId == x.Id && w.IsActive));
-        var projects = await active.Select(x => new
-            {
-                x.Id,
-                x.ProjectNumber,
-                x.Name,
-                Marked = dbContext.ProjectMusterEntries.Count(m => m.TenantId == viewer.TenantId && m.ProjectId == x.Id && m.WorkDate == clock.Today),
-                Workers = dbContext.ProjectWorkers.Count(w => w.TenantId == viewer.TenantId && w.ProjectId == x.Id && w.IsActive),
-            })
-            .ToListAsync(ct);
-        var notMarked = projects.Where(x => x.Marked == 0).OrderBy(x => x.ProjectNumber).ToList();
-        return new Result(
-            [
-                Count("Not marked yet", notMarked.Count, ProjectsLink(notMarked.Select(x => x.Id), "site"), "warning"),
-                Count("Marked", projects.Count - notMarked.Count, ProjectsLink(projects.Where(x => x.Marked > 0).Select(x => x.Id), "site")),
-            ],
-            [.. projects.OrderBy(x => x.Marked > 0).ThenBy(x => x.ProjectNumber).Take(ListLimit).Select(x => new DashboardListItem(
-                $"{x.ProjectNumber} {x.Name}", x.Marked > 0 ? $"{x.Marked} of {x.Workers} marked" : $"Not marked · {x.Workers} workers",
-                null, null, null, $"/projects/{x.Id}?tab=site", x.Marked > 0 ? null : "warning"))],
-            projects.Count == 0 ? "No active project has workers on its roster." : null);
-    }
-
-    private async Task<Result> UncostedLabourAsync(DashboardQueryViewer viewer, CancellationToken ct)
-    {
-        var projectIds = (await VisibleProjectsAsync(viewer, ct)).Where(x => ProjectStageCategories.Open.Contains(x.Stage!.Category)).Select(x => x.Id);
-        var entries = await dbContext.ProjectMusterEntries.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && projectIds.Contains(x.ProjectId) && x.DayFraction > 0)
-            .ToListAsync(ct);
-        var workerIds = entries.Select(x => x.ProjectWorkerId).Distinct().ToList();
-        var rates = await dbContext.ProjectWorkerRates.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && workerIds.Contains(x.ProjectWorkerId))
-            .ToListAsync(ct);
-        var byProject = entries.GroupBy(x => x.ProjectId)
-            .Select(g => new { ProjectId = g.Key, Uncosted = ProjectLabour.Summarize(g, rates).Sum(x => x.UncostedDays) })
-            .Where(x => x.Uncosted > 0)
-            .OrderByDescending(x => x.Uncosted)
-            .ToList();
-        var ids = byProject.Select(x => x.ProjectId).ToList();
-        var names = await dbContext.Projects.AsNoTracking().Where(x => x.TenantId == viewer.TenantId && ids.Contains(x.Id))
-            .Select(x => new { x.Id, x.ProjectNumber, x.Name }).ToDictionaryAsync(x => x.Id, ct);
-        var total = byProject.Sum(x => x.Uncosted);
-        return new Result(
-            [new DashboardStat("Uncosted days", total, "number", null, ProjectsLink(byProject.Select(x => x.ProjectId), "wages"), total > 0 ? "warning" : null)],
-            [.. byProject.Take(ListLimit).Select(x => new DashboardListItem($"{names[x.ProjectId].ProjectNumber} {names[x.ProjectId].Name}", "days with no daily rate",
-                x.Uncosted, "number", null, $"/projects/{x.ProjectId}?tab=wages", "warning"))]);
-    }
-
-    private async Task<Result> BillingWaitingAsync(DashboardQueryViewer viewer, CancellationToken ct)
-    {
-        var projects = BranchProjects(viewer);
-        var certified = await dbContext.ProjectValuations.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && x.Status == ProjectValuationStatuses.Certified && x.InvoiceId == null
-                && projects.Select(p => p.Id).Contains(x.ProjectId))
-            .Select(x => new { x.ProjectId, x.Project!.ProjectNumber, x.Project.Name, x.ValuationNumber, Amount = x.CertifiedAmount ?? x.AmountDue, x.Project.Currency })
-            .ToListAsync(ct);
-
-        // Retention: only handed-over projects can have any due; the arithmetic is the project financials' own.
-        var handedOver = await projects.Where(x => x.HandedOverAt != null && x.RetentionPercent > 0).ToListAsync(ct);
-        var handedOverIds = handedOver.Select(x => x.Id).ToList();
-        var valuations = await dbContext.ProjectValuations.AsNoTracking().Where(x => x.TenantId == viewer.TenantId && handedOverIds.Contains(x.ProjectId)).ToListAsync(ct);
-        var releases = await dbContext.ProjectRetentionReleases.AsNoTracking().Where(x => x.TenantId == viewer.TenantId && handedOverIds.Contains(x.ProjectId)).ToListAsync(ct);
-        var retention = handedOver
-            .Select(p =>
-            {
-                var (_, completion, final) = ProjectFinancialsService.RetentionPosition(p,
-                    valuations.Where(v => v.ProjectId == p.Id).ToList(), releases.Where(r => r.ProjectId == p.Id).ToList());
-                return new { Project = p, Due = completion + final };
-            })
-            .Where(x => x.Due > 0)
-            .ToList();
-
-        var stats = new List<DashboardStat>
-        {
-            Count("Certified, not invoiced", certified.Count, ProjectsLink(certified.Select(x => x.ProjectId), "valuations"), "warning"),
-        };
-        stats.AddRange(certified.GroupBy(x => x.Currency).Select(g => new DashboardStat("To invoice", g.Sum(x => x.Amount), "money", g.Key, ProjectsLink(g.Select(x => x.ProjectId), "valuations"), "warning")));
-        stats.Add(Count("Retention due", retention.Count, ProjectsLink(retention.Select(x => x.Project.Id), "financials"), "warning"));
-        stats.AddRange(retention.GroupBy(x => x.Project.Currency).Select(g => new DashboardStat("Retention to release", g.Sum(x => x.Due), "money", g.Key, ProjectsLink(g.Select(x => x.Project.Id), "financials"), "warning")));
-
-        var items = certified.Select(x => new DashboardListItem($"{x.ProjectNumber} {x.ValuationNumber}", "Certified, not invoiced", x.Amount, "money", x.Currency, $"/projects/{x.ProjectId}?tab=valuations"))
-            .Concat(retention.Select(x => new DashboardListItem($"{x.Project.ProjectNumber} {x.Project.Name}", "Retention can be released", x.Due, "money", x.Project.Currency, $"/projects/{x.Project.Id}?tab=financials")))
-            .Take(ListLimit)
-            .ToList();
-        return new Result(stats, items);
     }
 
     // ── Activities ───────────────────────────────────────────────────────────

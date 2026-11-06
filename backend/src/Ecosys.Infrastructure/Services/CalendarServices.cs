@@ -164,28 +164,6 @@ internal sealed class CalendarService(AppDbContext dbContext, ILinkedRecordServi
                 DateOnly.FromDateTime(x.NextPmDate!.Value), "/maintenance/calendar", viewer.UserId, x.SiteName)));
         }
 
-        if (wanted.Contains(CalendarSources.Projects))
-        {
-            var visible = (await linkedRecords.VisibleProjectsAsync(viewer, cancellationToken))
-                .Where(x => x.Stage!.Category != ProjectStageCategories.Cancelled && x.Stage.Category != ProjectStageCategories.Closed);
-            var milestones = await dbContext.ProjectMilestones
-                .Where(x => x.TenantId == tenantId && visible.Any(p => p.Id == x.ProjectId && p.ProjectManagerUserId != null && people.Contains(p.ProjectManagerUserId.Value))
-                    && x.PlannedDate != null && x.PlannedDate >= fromDate && x.PlannedDate <= toDate
-                    && x.Status != ProjectMilestoneStatuses.Completed && x.Status != ProjectMilestoneStatuses.Verified)
-                .Select(x => new { x.Id, x.Name, x.PlannedDate, x.ProjectId, x.Project!.ProjectNumber, x.Project.ProjectManagerUserId, x.Status })
-                .ToListAsync(cancellationToken);
-            items.AddRange(milestones.Select(x => Day($"milestone-{x.Id}", CalendarSources.Projects, $"{x.ProjectNumber} milestone: {x.Name}", x.PlannedDate!.Value,
-                $"/projects/{x.ProjectId}?tab=milestones", x.ProjectManagerUserId, status: x.Status)));
-            var tasks = await dbContext.ProjectTasks
-                .Where(x => x.TenantId == tenantId && visible.Any(p => p.Id == x.ProjectId) && x.AssigneeUserId != null && people.Contains(x.AssigneeUserId.Value)
-                    && x.DueDate != null && x.DueDate >= fromDate && x.DueDate <= toDate
-                    && x.Status != ProjectTaskStatuses.Done && x.Status != ProjectTaskStatuses.Cancelled)
-                .Select(x => new { x.Id, x.Title, x.DueDate, x.ProjectId, x.Project!.ProjectNumber, x.AssigneeUserId, x.Status })
-                .ToListAsync(cancellationToken);
-            items.AddRange(tasks.Select(x => Day($"project-task-{x.Id}", CalendarSources.Projects, $"{x.ProjectNumber} task: {x.Title}", x.DueDate!.Value,
-                $"/projects/{x.ProjectId}?tab=tasks", x.AssigneeUserId, status: x.Status)));
-        }
-
         if (wanted.Contains(CalendarSources.Contracts))
         {
             // Contract owners see their own; whoever manages contracts sees every live one.

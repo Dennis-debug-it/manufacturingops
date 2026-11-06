@@ -16,7 +16,6 @@ import { TechLayout } from '../features/tech/TechLayout'
 import { TechJobsPage } from '../features/tech/TechJobsPage'
 import { TechJobPage } from '../features/tech/TechJobPage'
 import { TechAccountPage } from '../features/tech/TechAccountPage'
-import { TechSitePage } from '../features/tech/TechSitePage'
 import { NotificationsPage, TechNotificationsPage } from '../features/notifications/NotificationsPage'
 import { MyNotificationSettingsPage } from '../features/notifications/NotificationPreferences'
 import { MyTimePage } from '../features/team/MyTimePage'
@@ -77,10 +76,6 @@ import { GroupsPage as TeamGroupsPageReal } from '../features/team/GroupsPage'
 import { LiveAttendancePage, TimesheetsPage, TimesheetDetailPage, LeavePage, TimeAttendanceReportsPage } from '../features/team/TimeAttendancePages'
 import { ContractsPage as ContractsPageReal } from '../features/contracts/ContractsPage'
 import { ContractDetailPage as ContractDetailPageReal } from '../features/contracts/ContractDetailPage'
-import { ProjectsPage } from '../features/projects/ProjectsPage'
-import { ProjectDetailPage } from '../features/projects/ProjectDetailPage'
-import { ConsultantsPage } from '../features/projects/ConsultantsPage'
-import { ProjectSettingsPage } from '../features/projects/ProjectSettingsPage'
 import { CalendarPage as MyCalendarPage } from '../features/activities/CalendarPage'
 import { CalendarFeedPage } from '../features/activities/CalendarFeedPage'
 import { ActivityDetailPage } from '../features/activities/ActivityDetailPage'
@@ -426,10 +421,6 @@ export function AppRouter() {
       ['/help/:guideId', HelpPage],
       ['/contracts', ContractsPage],
       ['/contracts/:id', ContractDetailPage],
-      ['/projects', ProjectsPage],
-      ['/projects/consultants', ConsultantsPage],
-      ['/projects/settings', ProjectSettingsPage],
-      ['/projects/:id', ProjectDetailPage],
       ['/calendar', MyCalendarPage],
       ['/calendar/feed', CalendarFeedPage],
       ['/activities/:id', ActivityDetailPage],
@@ -544,7 +535,6 @@ export function AppRouter() {
           <Route path="jobs/:id" element={<TechJobPage />} />
           <Route path="jobs/:id/:section" element={<TechJobPage />} />
           <Route path="time" element={<MyTimePage />} />
-          <Route path="site" element={<TechSitePage />} />
           <Route path="scan" element={<ScanPage />} />
           <Route path="scan/:code" element={<ScanPage />} />
           <Route path="assets/:id" element={<FactoryAssetDetailPage />} />

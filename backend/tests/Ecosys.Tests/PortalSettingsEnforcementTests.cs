@@ -105,28 +105,12 @@ public sealed class PortalSettingsEnforcementTests
 
         await SeedLicenseAsync(db, ServiceOpsPlans.Essentials);
 
-        var result = await CreateController(db).GetSettings(new LicenseGuardService(db), new ProjectSettingsService(db), CancellationToken.None);
+        var result = await CreateController(db).GetSettings(new LicenseGuardService(db), CancellationToken.None);
         var settings = Assert.IsType<PortalSettingsResponse>(Assert.IsType<OkObjectResult>(result.Result).Value);
 
         Assert.False(settings.ShowContracts);
         Assert.True(settings.ShowInvoices);
         Assert.Equal("Karibu", settings.WelcomeMessage);
-        Assert.False(settings.ShowProjects);
-    }
-
-    [Theory]
-    [InlineData(ServiceOpsPlans.Professional, true, true)]
-    [InlineData(ServiceOpsPlans.Professional, false, false)]
-    [InlineData(ServiceOpsPlans.Essentials, true, false)]
-    public async Task Settings_ShowProjects_NeedsTheModuleAndThePortalSetting(string edition, bool clientPortal, bool expected)
-    {
-        await using var db = CreateDbContext();
-        await SeedLicenseAsync(db, edition);
-        await new ProjectSettingsService(db).SaveAsync(_tenantId, new ProjectSettingsModel { ClientPortal = clientPortal });
-
-        var result = await CreateController(db).GetSettings(new LicenseGuardService(db), new ProjectSettingsService(db), CancellationToken.None);
-
-        Assert.Equal(expected, Assert.IsType<PortalSettingsResponse>(Assert.IsType<OkObjectResult>(result.Result).Value).ShowProjects);
     }
 
     private async Task SeedLicenseAsync(AppDbContext db, string edition)

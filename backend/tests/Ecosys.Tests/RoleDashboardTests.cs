@@ -150,24 +150,6 @@ public sealed class RoleDashboardTests
         Assert.Equal(DashboardRoleDefaults.ConfigurableRoles, settings.Roles.Select(x => x.Role));
     }
 
-    [Fact]
-    public async Task AdminHidingForProjectManagers_AppliesToPeopleRunningAProject()
-    {
-        var harness = await Harness.CreateAsync();
-        await harness.AddProjectAsync(harness.ManagerId);
-        var admin = harness.Service(harness.AdminId, AppRoles.Admin, isAdmin: true);
-        var manager = harness.Service(harness.ManagerId, AppRoles.Manager, permissions: PermissionNames.All);
-
-        var keys = (await manager.GetLayoutAsync()).Items.Select(x => x.Key).ToList();
-        Assert.Contains(DashboardWidgetCatalog.ProjectsMine, keys);
-        Assert.Contains(DashboardWidgetCatalog.ProjectsMusterToday, keys);
-
-        await admin.SetHiddenAsync(DashboardRoleDefaults.ProjectManager, [DashboardWidgetCatalog.ProjectsMusterToday]);
-        Assert.DoesNotContain((await manager.GetLayoutAsync()).Items, x => x.Key == DashboardWidgetCatalog.ProjectsMusterToday);
-        // An admin who runs no project keeps it.
-        Assert.Equal(DashboardWidgetCatalog.ProjectsMusterToday, (await admin.GetWidgetAsync(DashboardWidgetCatalog.ProjectsMusterToday, null, false)).Key);
-    }
-
     // ── Personal layouts ───────────────────────────────────────────────────────
 
     [Fact]
@@ -324,22 +306,6 @@ public sealed class RoleDashboardTests
         }
         Assert.Equal(1m, (await admin.GetWidgetAsync(DashboardWidgetCatalog.WorkOrdersOpenOverdue, null, false)).Stats[0].Value);
         Assert.Equal(2m, (await admin.GetWidgetAsync(DashboardWidgetCatalog.WorkOrdersOpenOverdue, null, true)).Stats[0].Value);
-    }
-
-    [Fact]
-    public async Task ProjectWidgets_HonourMembersOnlyVisibility()
-    {
-        var harness = await Harness.CreateAsync();
-        await harness.AddProjectAsync(harness.ManagerId, behind: true);
-        harness.Db.TenantModuleSettings.Add(new TenantModuleSetting { TenantId = harness.TenantId, ModuleKey = "projects", ValueJson = "{\"visibility\":\"MembersOnly\"}" });
-        await harness.Db.SaveChangesAsync();
-
-        var outsider = harness.Service(harness.ViewerId, AppRoles.Viewer, permissions: [PermissionNames.ProjectsView]);
-        Assert.Equal(0m, (await outsider.GetWidgetAsync(DashboardWidgetCatalog.ProjectsBehindSchedule, null, false)).Stats[0].Value);
-        var pm = harness.Service(harness.ManagerId, AppRoles.Viewer, permissions: [PermissionNames.ProjectsView]);
-        var behind = await pm.GetWidgetAsync(DashboardWidgetCatalog.ProjectsBehindSchedule, null, false);
-        Assert.Equal(1m, behind.Stats[0].Value);
-        Assert.Contains("?tab=milestones", Assert.Single(behind.Items).Link);
     }
 
     [Fact]
@@ -536,7 +502,6 @@ public sealed class RoleDashboardTests
     {
         var harness = await Harness.CreateAsync();
         await harness.SeedSampleDataAsync();
-        var project = await harness.AddProjectAsync(harness.ManagerId, behind: true);
         var admin = harness.Service(harness.AdminId, AppRoles.Admin, isAdmin: true);
         async Task<string> Link(string key, string label) =>
             (await admin.GetWidgetAsync(key, null, true)).Stats.First(x => x.Label == label).Link;
@@ -549,15 +514,6 @@ public sealed class RoleDashboardTests
         Assert.Equal("/inventory/purchase-orders?state=late", await Link(DashboardWidgetCatalog.PurchaseOrdersOpen, "Past expected date"));
         Assert.Equal("/inventory/requests?stage=Requested", await Link(DashboardWidgetCatalog.MaterialsPendingIssues, "Awaiting approval"));
         Assert.Equal("/contracts?expiring=30", await Link(DashboardWidgetCatalog.ContractsExpiring, "Within 30 days"));
-        Assert.Equal("/projects?health=behind", await Link(DashboardWidgetCatalog.ProjectsBehindSchedule, "Behind schedule"));
-        Assert.Equal($"/projects/{project.Id}?tab=variations", await Link(DashboardWidgetCatalog.ProjectsPendingVariations, "Awaiting decision"));
-
-        // Several projects behind one figure: the register narrowed to them.
-        var second = await harness.AddProjectAsync(harness.ManagerId);
-        var link = await Link(DashboardWidgetCatalog.ProjectsPendingVariations, "Awaiting decision");
-        Assert.StartsWith("/projects?stage=all&ids=", link);
-        Assert.Contains(project.Id.ToString(), link);
-        Assert.Contains(second.Id.ToString(), link);
     }
 
     [Fact]
@@ -602,7 +558,6 @@ public sealed class RoleDashboardTests
             harness.Db.UserBranchAssignments.Add(new UserBranchAssignment { TenantId = harness.TenantId, UserId = harness.ManagerId, BranchId = north, IsDefault = true });
             await harness.Db.SaveChangesAsync();
             await harness.SeedSampleDataAsync();
-            await harness.AddProjectAsync(harness.ManagerId, behind: true);
 
             var admin = harness.Service(harness.AdminId, AppRoles.Admin, isAdmin: true);
             var manager = harness.Service(harness.ManagerId, AppRoles.Manager, permissions: PermissionNames.All);
@@ -613,8 +568,8 @@ public sealed class RoleDashboardTests
                 Assert.Equal(widget.Key, (await manager.GetWidgetAsync(widget.Key, null, true)).Key);
             }
 
-            var saved = await manager.SaveLayoutAsync([new(DashboardWidgetCatalog.ProjectsMine, "small")]);
-            Assert.Equal(DashboardWidgetCatalog.ProjectsMine, saved.Items[0].Key);
+            var saved = await manager.SaveLayoutAsync([new(DashboardWidgetCatalog.ContractsExpiring, "small")]);
+            Assert.Equal(DashboardWidgetCatalog.ContractsExpiring, saved.Items[0].Key);
             Assert.True((await manager.GetLayoutAsync()).IsCustomized);
             Assert.False((await manager.ResetLayoutAsync()).IsCustomized);
             await admin.SetHiddenAsync(AppRoles.Manager, [DashboardWidgetCatalog.ContractsExpiring]);
@@ -729,10 +684,9 @@ public sealed class RoleDashboardTests
         {
             var context = new FakeTenantContext(TenantId, userId, role, isAdmin, permissions ?? []);
             var db = createContext(context);
-            var projectSettings = new ProjectSettingsService(db);
             return new RoleDashboardService(db, context, new UserAccessService(context), new BranchAccessService(db, context),
                 new FixedModules(Modules), new DashboardSettingsService(db),
-                new RoleDashboardQueries(db, projectSettings, TestTimeZones.Create(db)), cache, Singletons.Versions);
+                new RoleDashboardQueries(db, TestTimeZones.Create(db)), cache, Singletons.Versions);
         }
 
         public async Task<(Guid North, Guid South)> AddBranchesAsync()
@@ -753,44 +707,6 @@ public sealed class RoleDashboardTests
             };
             Db.WorkOrders.Add(workOrder);
             return workOrder;
-        }
-
-        /// <summary>A project managed by <paramref name="managerUserId"/>, optionally behind its planned milestones.</summary>
-        public async Task<Project> AddProjectAsync(Guid managerUserId, bool behind = false)
-        {
-            var type = new ProjectType { TenantId = TenantId, Name = "Installation" };
-            var stage = new ProjectStage { TenantId = TenantId, Name = "In Progress", Category = ProjectStageCategories.Active, SortOrder = 10 };
-            Db.AddRange(type, stage);
-            var project = new Project
-            {
-                TenantId = TenantId, ProjectNumber = $"PRJ-{Random.Shared.Next(1000, 9999)}", Name = "Westlands Mall", ClientId = ClientId,
-                ProjectTypeId = type.Id, StageId = stage.Id, ProjectManagerUserId = managerUserId, OriginalValue = 1_000_000m, Currency = "KES",
-            };
-            Db.Projects.Add(project);
-            Db.ProjectMilestones.Add(new ProjectMilestone
-            {
-                TenantId = TenantId, ProjectId = project.Id, Name = "Rough-in", Weight = 1,
-                PlannedDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(behind ? -10 : 10),
-            });
-            var worker = new ProjectWorker { TenantId = TenantId, ProjectId = project.Id, FullName = "Juma", IsActive = true };
-            Db.ProjectWorkers.Add(worker);
-            Db.ProjectMusterEntries.Add(new ProjectMusterEntry
-            {
-                TenantId = TenantId, ProjectId = project.Id, ProjectWorkerId = worker.Id, WorkDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1),
-                Status = ProjectMusterStatuses.Present, DayFraction = 1, MarkedByUserId = managerUserId,
-            });
-            Db.ProjectVariations.Add(new ProjectVariation
-            {
-                TenantId = TenantId, ProjectId = project.Id, VariationNumber = "VO-001", Title = "Extra ducts", Amount = 50_000m,
-                Status = ProjectVariationStatuses.Submitted, SubmittedAt = DateTime.UtcNow,
-            });
-            Db.ProjectValuations.Add(new ProjectValuation
-            {
-                TenantId = TenantId, ProjectId = project.Id, ValuationNumber = "VAL-001", PeriodEnd = DateOnly.FromDateTime(DateTime.UtcNow),
-                Status = ProjectValuationStatuses.Certified, CertifiedAmount = 200_000m, AmountDue = 200_000m,
-            });
-            await Db.SaveChangesAsync();
-            return project;
         }
 
         /// <summary>A little of everything the widgets read, so their in-memory steps run too.</summary>

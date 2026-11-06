@@ -5,7 +5,6 @@ import type {
   WorkOrderPhoto,
 } from '../../work-orders/types'
 import type { MyAttendanceStatus } from '../../team/timeAttendance/api'
-import type { MusterDaySheet, MusterStatus } from '../../projects/types'
 import type { OutboxEntry } from './outbox'
 
 /**
@@ -157,16 +156,11 @@ export function applyToAttendance(status: MyAttendanceStatus, entries: OutboxEnt
   for (const entry of entries) {
     const clockedIn = next.status !== 'NotClockedIn'
     switch (entry.kind) {
-      case 'clock-in': {
-        const projectId = (bodyOf(entry).projectId as string | null | undefined) ?? null
-        next = {
-          ...next, status: 'ClockedIn', clockInAt: entry.occurredAt,
-          projectId, projectName: projectId ? ((entry.meta?.projectName as string | undefined) ?? null) : null,
-        }
+      case 'clock-in':
+        next = { ...next, status: 'ClockedIn', clockInAt: entry.occurredAt }
         break
-      }
       case 'clock-out':
-        next = { ...next, status: 'NotClockedIn', clockInAt: null, currentWorkOrderId: null, currentWorkOrderNumber: null, projectId: null, projectName: null }
+        next = { ...next, status: 'NotClockedIn', clockInAt: null, currentWorkOrderId: null, currentWorkOrderNumber: null }
         break
       case 'clock-status':
         next = { ...next, status: String(bodyOf(entry).status) as MyAttendanceStatus['status'] }
@@ -193,33 +187,6 @@ export function applyToAttendance(status: MyAttendanceStatus, entries: OutboxEnt
     }
   }
   return next
-}
-
-/** The queued muster saves for one project's day, oldest first. */
-export function musterEntriesFor(entries: OutboxEntry[], projectId: string, date: string) {
-  return entries.filter((entry) => entry.kind === 'muster' && entry.meta?.projectId === projectId && entry.meta?.date === date)
-}
-
-const MAN_DAYS: Record<MusterStatus, number> = { Present: 1, HalfDay: 0.5, Absent: 0 }
-
-/**
- * A day sheet with the supervisor's queued marks on top: each marked worker shows the saved
- * status (no longer a suggestion) and the man-day count follows. Later saves win.
- */
-export function applyToMusterSheet(sheet: MusterDaySheet, projectId: string, date: string, entries: OutboxEntry[]): MusterDaySheet {
-  const queued = musterEntriesFor(entries, projectId, date)
-  if (queued.length === 0) return sheet
-  const marks = new Map<string, { status: MusterStatus; note: string | null }>()
-  for (const entry of queued) {
-    const body = bodyOf(entry) as { marks?: { workerId: string; status: MusterStatus; note: string | null }[] }
-    for (const mark of body.marks ?? []) marks.set(mark.workerId, { status: mark.status, note: mark.note ?? null })
-  }
-  const rows = sheet.rows.map((row) => {
-    const mark = marks.get(row.workerId)
-    return mark ? { ...row, status: mark.status, note: mark.note, isSuggestion: false } : row
-  })
-  const manDays = rows.reduce((total, row) => total + (row.status && !row.isSuggestion ? MAN_DAYS[row.status] : 0), 0)
-  return { ...sheet, rows, manDays, isSubmitted: true }
 }
 
 export function isPendingPhoto(photo: WorkOrderPhoto): photo is PendingPhoto {

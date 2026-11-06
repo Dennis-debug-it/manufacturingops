@@ -25,14 +25,12 @@ public sealed class WithholdingCertificatesController(
 {
     [HttpGet("withholding-certificates")]
     public async Task<ActionResult<IReadOnlyCollection<WithholdingCertificateResponse>>> List(
-        [FromQuery] Guid? clientId, [FromQuery] Guid? projectId, CancellationToken cancellationToken)
+        [FromQuery] Guid? clientId, CancellationToken cancellationToken)
     {
         userAccessService.EnsureAdminOrPermission(PermissionNames.FinanceView);
         var query = dbContext.WithholdingCertificates.Include(x => x.Invoice).Include(x => x.Client).Where(x => x.TenantId == TenantId);
         if (clientId.HasValue)
             query = query.Where(x => x.ClientId == clientId);
-        if (projectId.HasValue)
-            query = query.Where(x => x.Invoice!.ProjectId == projectId);
         var certificates = await query.OrderByDescending(x => x.CertificateDate).Take(500).ToListAsync(cancellationToken);
         return Ok(certificates.Select(Map).ToList());
     }

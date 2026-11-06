@@ -92,10 +92,3 @@ public static class PurchaseOrderListStates
         };
 }
 
-/// <summary>The project register's <c>mine</c> filter, shared with the "My projects" widget.</summary>
-public static class ProjectListFilters
-{
-    /// <summary>Managed by the user, or the user is on the team (directly or as a technician).</summary>
-    public static Expression<Func<Project, bool>> InvolvesUser(Guid userId) =>
-        x => x.ProjectManagerUserId == userId || x.Members.Any(m => m.UserId == userId || (m.Technician != null && m.Technician.UserId == userId));
-}

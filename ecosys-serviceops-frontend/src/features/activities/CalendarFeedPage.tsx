@@ -6,7 +6,7 @@ import { Spinner } from '../../shared/components/Spinner'
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { apiBaseUrl } from '../../shared/api/apiClient'
 import { formatDateTime } from '../../shared/utils/dates'
-import { fieldClass, primaryButtonClass, secondaryButtonClass } from '../projects/components/formStyles'
+import { fieldClass, primaryButtonClass, secondaryButtonClass } from '../../shared/components/formStyles'
 import { useCalendarFeed, useCreateCalendarFeed, useRevokeCalendarFeed } from './api'
 import { feedUrl, webcalUrl } from './logic'
 

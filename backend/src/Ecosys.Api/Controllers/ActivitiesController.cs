@@ -32,7 +32,7 @@ public sealed class ActivitiesController(
         return Ok(await MapSummariesAsync(viewer, activities, cancellationToken));
     }
 
-    /// <summary>People who can be invited: staff, consultants (with Projects) and, for a client, its portal contacts.</summary>
+    /// <summary>People who can be invited: staff and, for a client, its portal contacts.</summary>
     [HttpGet("people")]
     public async Task<ActionResult<ActivityPeopleResponse>> People([FromQuery] Guid? clientId, CancellationToken cancellationToken)
     {
@@ -40,15 +40,11 @@ public sealed class ActivitiesController(
         viewer.Ensure(PermissionNames.ActivitiesView);
         var users = await dbContext.Users.Where(x => x.TenantId == TenantId && x.IsActive && x.Role != AppRoles.PortalClient)
             .OrderBy(x => x.FullName).Select(x => new ActivityPersonOption(x.Id, x.FullName, x.JobTitle ?? x.Role)).ToListAsync(cancellationToken);
-        var consultants = viewer.HasModule(ServiceOpsPlans.Projects)
-            ? await dbContext.Consultants.Where(x => x.TenantId == TenantId && x.IsActive).OrderBy(x => x.FirmName)
-                .Select(x => new ActivityPersonOption(x.Id, x.ContactPerson ?? x.FirmName, x.ContactPerson == null ? x.Discipline : x.FirmName)).ToListAsync(cancellationToken)
-            : [];
         var contacts = clientId.HasValue
             ? await dbContext.ClientPortalUsers.Where(x => x.TenantId == TenantId && x.ClientId == clientId && x.IsActive).OrderBy(x => x.FullName)
                 .Select(x => new ActivityPersonOption(x.Id, x.FullName, x.Email)).ToListAsync(cancellationToken)
             : [];
-        return Ok(new ActivityPeopleResponse(users, consultants, contacts));
+        return Ok(new ActivityPeopleResponse(users, contacts));
     }
 
     [HttpGet("{id:guid}")]
@@ -156,8 +152,8 @@ public sealed class ActivitiesController(
             .OrderBy(x => x.UserId.HasValue ? 0 : 1).ThenBy(x => names.GetValueOrDefault(x.Id))
             .Select(x => new ActivityAttendeeResponse(
                 x.Id,
-                x.UserId.HasValue ? "Staff" : x.ConsultantId.HasValue ? "Consultant" : x.ClientContactId.HasValue ? "ClientContact" : "External",
-                x.UserId, x.ConsultantId, x.ClientContactId, names.GetValueOrDefault(x.Id, "Guest"),
+                x.UserId.HasValue ? "Staff" : x.ClientContactId.HasValue ? "ClientContact" : "External",
+                x.UserId, x.ClientContactId, names.GetValueOrDefault(x.Id, "Guest"),
                 x.ExternalEmail ?? (x.ClientContactId is { } contact ? emails.GetValueOrDefault(contact) : null),
                 x.UserId.HasValue ? x.Response : null, x.Attended))
             .ToList();
@@ -186,7 +182,7 @@ public sealed record ActivitySummaryResponse(
     Guid OrganizerUserId, string? OrganizerName, LinkedRecordResponse? LinkedRecord, int AttendeeCount, DateTime? MinutesPublishedAt, string? MyResponse);
 
 public sealed record ActivityAttendeeResponse(
-    Guid Id, string Kind, Guid? UserId, Guid? ConsultantId, Guid? ClientContactId, string Name, string? Email, string? Response, bool Attended);
+    Guid Id, string Kind, Guid? UserId, Guid? ClientContactId, string Name, string? Email, string? Response, bool Attended);
 
 public sealed record MinutesAddendumResponse(Guid Id, string Text, string? AuthorName, DateTime CreatedAt);
 
@@ -198,16 +194,16 @@ public sealed record ActivityDetailResponse(
 public sealed record ActivityPersonOption(Guid Id, string Name, string? Detail);
 
 public sealed record ActivityPeopleResponse(
-    IReadOnlyList<ActivityPersonOption> Users, IReadOnlyList<ActivityPersonOption> Consultants, IReadOnlyList<ActivityPersonOption> ClientContacts);
+    IReadOnlyList<ActivityPersonOption> Users, IReadOnlyList<ActivityPersonOption> ClientContacts);
 
-public sealed record SaveActivityAttendeeRequest(Guid? UserId, Guid? ConsultantId, Guid? ClientContactId, string? ExternalName, string? ExternalEmail);
+public sealed record SaveActivityAttendeeRequest(Guid? UserId, Guid? ClientContactId, string? ExternalName, string? ExternalEmail);
 
 public sealed record SaveActivityRequest(
     string? Type, string Title, DateTime StartsAt, DateTime EndsAt, bool AllDay, string? Location, Guid? OrganizerUserId,
     string? EntityType, Guid? EntityId, string? Agenda, int? ReminderMinutesBefore, IReadOnlyList<SaveActivityAttendeeRequest>? Attendees)
 {
     public SaveActivityCommand ToCommand() => new(Type, Title, StartsAt, EndsAt, AllDay, Location, OrganizerUserId, EntityType, EntityId, Agenda,
-        ReminderMinutesBefore, Attendees?.Select(x => new ActivityAttendeeInput(x.UserId, x.ConsultantId, x.ClientContactId, x.ExternalName, x.ExternalEmail)).ToList());
+        ReminderMinutesBefore, Attendees?.Select(x => new ActivityAttendeeInput(x.UserId, x.ClientContactId, x.ExternalName, x.ExternalEmail)).ToList());
 }
 
 public sealed record CancelActivityRequest(string? Reason);

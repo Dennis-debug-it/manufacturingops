@@ -12,7 +12,6 @@ export interface PortalSettings {
   showAssetRegister: boolean
   welcomeMessage: string | null
   /** True when the tenant licenses Projects and shows it in the portal. */
-  showProjects?: boolean
 }
 
 export function usePortalSettings() {

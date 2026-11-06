@@ -30,10 +30,5 @@ describe('offline cache', () => {
     expect(isOfflineQueryKey(['attendance', 'me', 'status'])).toBe(true)
     expect(isOfflineQueryKey(['branches'])).toBe(false)
     // A site supervisor's sites, rosters and muster days, so the roll can be marked offline.
-    expect(isOfflineQueryKey(['projects', 'my-sites'])).toBe(true)
-    expect(isOfflineQueryKey(['projects', 'p1', 'workers', { includeInactive: false }])).toBe(true)
-    expect(isOfflineQueryKey(['projects', 'p1', 'muster', { date: '2026-10-21' }])).toBe(true)
-    expect(isOfflineQueryKey(['projects', 'p1', 'wage-sheet', {}])).toBe(false)
-    expect(isOfflineQueryKey(['projects', 'p1', 'worker-rates', {}])).toBe(false)
   })
 })

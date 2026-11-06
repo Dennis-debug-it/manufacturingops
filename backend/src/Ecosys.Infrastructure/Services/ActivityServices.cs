@@ -20,7 +20,7 @@ public static class ActivityNotificationKeys
     public const string ActionItemDue = "action-item.due";
 }
 
-public sealed record ActivityAttendeeInput(Guid? UserId, Guid? ConsultantId, Guid? ClientContactId, string? ExternalName, string? ExternalEmail);
+public sealed record ActivityAttendeeInput(Guid? UserId, Guid? ClientContactId, string? ExternalName, string? ExternalEmail);
 
 public sealed record SaveActivityCommand(
     string? Type,
@@ -483,12 +483,9 @@ internal sealed class ActivityService(
         if (inputs.Count > 100)
             throw new BusinessRuleException("An activity can have at most 100 attendees.");
         var userIds = inputs.Where(x => x.UserId.HasValue).Select(x => x.UserId!.Value).Distinct().ToList();
-        var consultantIds = inputs.Where(x => x.ConsultantId.HasValue).Select(x => x.ConsultantId!.Value).Distinct().ToList();
         var contactIds = inputs.Where(x => x.ClientContactId.HasValue).Select(x => x.ClientContactId!.Value).Distinct().ToList();
         if (userIds.Count > 0 && await dbContext.Users.CountAsync(x => x.TenantId == tenantId && x.IsActive && userIds.Contains(x.Id), cancellationToken) != userIds.Count)
             throw new BusinessRuleException("Select valid staff attendees.");
-        if (consultantIds.Count > 0 && await dbContext.Consultants.CountAsync(x => x.TenantId == tenantId && consultantIds.Contains(x.Id), cancellationToken) != consultantIds.Count)
-            throw new BusinessRuleException("Select valid consultants.");
         if (contactIds.Count > 0 && await dbContext.ClientPortalUsers.CountAsync(x => x.TenantId == tenantId && contactIds.Contains(x.Id), cancellationToken) != contactIds.Count)
             throw new BusinessRuleException("Select valid client contacts.");
 
@@ -498,15 +495,15 @@ internal sealed class ActivityService(
         {
             var externalName = Clean(input.ExternalName, 200, "An attendee's name");
             var externalEmail = Clean(input.ExternalEmail, 256, "An attendee's email")?.ToLowerInvariant();
-            var kinds = (input.UserId.HasValue ? 1 : 0) + (input.ConsultantId.HasValue ? 1 : 0) + (input.ClientContactId.HasValue ? 1 : 0)
+            var kinds = (input.UserId.HasValue ? 1 : 0) + (input.ClientContactId.HasValue ? 1 : 0)
                 + (externalName is not null || externalEmail is not null ? 1 : 0);
             if (kinds != 1)
-                throw new BusinessRuleException("Each attendee is one person: a user, a consultant, a client contact or an outside name and email.");
+                throw new BusinessRuleException("Each attendee is one person: a user, a client contact or an outside name and email.");
             if (externalEmail is not null && (!externalEmail.Contains('@') || externalEmail.Contains(' ')))
                 throw new BusinessRuleException($"{externalEmail} is not a valid email address.");
             if (input.UserId == activity.OrganizerUserId)
                 continue;
-            var identity = input.UserId is { } u ? $"u:{u}" : input.ConsultantId is { } c ? $"c:{c}" : input.ClientContactId is { } k ? $"k:{k}" : $"e:{externalEmail}|{externalName}";
+            var identity = input.UserId is { } u ? $"u:{u}" : input.ClientContactId is { } k ? $"k:{k}" : $"e:{externalEmail}|{externalName}";
             if (!seen.Add(identity))
                 continue;
 
@@ -516,16 +513,15 @@ internal sealed class ActivityService(
                 TenantId = tenantId,
                 ActivityId = activity.Id,
                 UserId = input.UserId,
-                ConsultantId = input.ConsultantId,
                 ClientContactId = input.ClientContactId,
-                ExternalName = input.UserId.HasValue || input.ConsultantId.HasValue || input.ClientContactId.HasValue ? null : externalName,
-                ExternalEmail = input.UserId.HasValue || input.ConsultantId.HasValue || input.ClientContactId.HasValue ? null : externalEmail,
+                ExternalName = input.UserId.HasValue || input.ClientContactId.HasValue ? null : externalName,
+                ExternalEmail = input.UserId.HasValue || input.ClientContactId.HasValue ? null : externalEmail,
             });
         }
         return result;
 
         static string Identity(ActivityAttendee x) =>
-            x.UserId is { } u ? $"u:{u}" : x.ConsultantId is { } c ? $"c:{c}" : x.ClientContactId is { } k ? $"k:{k}" : $"e:{x.ExternalEmail}|{x.ExternalName}";
+            x.UserId is { } u ? $"u:{u}" : x.ClientContactId is { } k ? $"k:{k}" : $"e:{x.ExternalEmail}|{x.ExternalName}";
     }
 
     private async Task ApplyActionItemAsync(ActionItem item, SaveActionItemCommand command, CancellationToken cancellationToken)
@@ -702,15 +698,11 @@ internal sealed class ActivityNotifier(
     public async Task<IReadOnlyDictionary<Guid, string>> AttendeeNamesAsync(Activity activity, CancellationToken cancellationToken)
     {
         var userIds = activity.Attendees.Where(x => x.UserId.HasValue).Select(x => x.UserId!.Value).ToList();
-        var consultantIds = activity.Attendees.Where(x => x.ConsultantId.HasValue).Select(x => x.ConsultantId!.Value).ToList();
         var contactIds = activity.Attendees.Where(x => x.ClientContactId.HasValue).Select(x => x.ClientContactId!.Value).ToList();
         var users = await dbContext.Users.Where(x => userIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
-        var consultants = await dbContext.Consultants.Where(x => consultantIds.Contains(x.Id))
-            .ToDictionaryAsync(x => x.Id, x => x.ContactPerson == null ? x.FirmName : $"{x.ContactPerson} ({x.FirmName})", cancellationToken);
         var contacts = await dbContext.ClientPortalUsers.Where(x => contactIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, x => x.FullName, cancellationToken);
         return activity.Attendees.ToDictionary(x => x.Id, x =>
             x.UserId is { } u ? users.GetValueOrDefault(u, "Staff member")
-            : x.ConsultantId is { } c ? consultants.GetValueOrDefault(c, "Consultant")
             : x.ClientContactId is { } k ? contacts.GetValueOrDefault(k, "Client contact")
             : x.ExternalName ?? x.ExternalEmail ?? "Guest");
     }

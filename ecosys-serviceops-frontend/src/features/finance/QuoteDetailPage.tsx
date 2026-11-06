@@ -8,7 +8,6 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { SummarySection } from '../../shared/pages/ModulePage'
 import { usePermission } from '../../shared/hooks/usePermission'
-import { useEntitlements } from '../../shared/hooks/useEntitlements'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { apiClient } from '../../shared/api/apiClient'
@@ -24,15 +23,11 @@ import {
   useSendQuotation,
 } from './api'
 import type { QuotationLine } from './types'
-import { AwardProjectDrawer } from './components/AwardProjectDrawer'
 
 export function QuoteDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const canManage = usePermission('finance.manage')
-  const { hasModule } = useEntitlements()
-  const canAwardProject = usePermission('projects.manage') && hasModule('projects')
-  const [showAward, setShowAward] = useState(false)
   const { data: quote, isLoading, isError } = useQuotation(id)
   const sendQuote = useSendQuotation(id ?? '')
   const accept = useAcceptQuotation(id ?? '')
@@ -164,11 +159,6 @@ export function QuoteDetailPage() {
               ) : null}
             </>
             ) : null}
-            {canAwardProject && quote.status === 'Accepted' ? (
-              <button type="button" onClick={() => setShowAward(true)} className="inline-flex h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
-                Award as project
-              </button>
-            ) : null}
           </div>
         }
       />
@@ -217,7 +207,6 @@ export function QuoteDetailPage() {
         <DataTable columns={lineColumns} data={quote.lines} emptyTitle="No lines" emptyDescription="No line items on this quote." />
       </SummarySection>
 
-      <AwardProjectDrawer open={showAward} quotationId={quote.id} defaultName={quote.subject ?? ''} onClose={() => setShowAward(false)} />
     </div>
   )
 }

@@ -248,25 +248,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<ClientContact> ClientContacts => Set<ClientContact>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
-    public DbSet<ProjectType> ProjectTypes => Set<ProjectType>();
-    public DbSet<ProjectStage> ProjectStages => Set<ProjectStage>();
-    public DbSet<ProjectTemplate> ProjectTemplates => Set<ProjectTemplate>();
-    public DbSet<Project> Projects => Set<Project>();
-    public DbSet<ProjectMember> ProjectMembers => Set<ProjectMember>();
-    public DbSet<Consultant> Consultants => Set<Consultant>();
-    public DbSet<ProjectConsultant> ProjectConsultants => Set<ProjectConsultant>();
-    public DbSet<ProjectMilestone> ProjectMilestones => Set<ProjectMilestone>();
-    public DbSet<ProjectTask> ProjectTasks => Set<ProjectTask>();
-    public DbSet<ProjectVariation> ProjectVariations => Set<ProjectVariation>();
-    public DbSet<ProjectWorker> ProjectWorkers => Set<ProjectWorker>();
-    public DbSet<ProjectWorkerRate> ProjectWorkerRates => Set<ProjectWorkerRate>();
-    public DbSet<ProjectMusterEntry> ProjectMusterEntries => Set<ProjectMusterEntry>();
-    public DbSet<ProjectDiaryEntry> ProjectDiaryEntries => Set<ProjectDiaryEntry>();
-    public DbSet<ProjectBudgetLine> ProjectBudgetLines => Set<ProjectBudgetLine>();
-    public DbSet<ProjectCostEntry> ProjectCostEntries => Set<ProjectCostEntry>();
-    public DbSet<ProjectValuation> ProjectValuations => Set<ProjectValuation>();
-    public DbSet<ProjectRetentionRelease> ProjectRetentionReleases => Set<ProjectRetentionRelease>();
-    public DbSet<ProjectReminderLog> ProjectReminderLogs => Set<ProjectReminderLog>();
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<ActivityAttendee> ActivityAttendees => Set<ActivityAttendee>();
     public DbSet<ActivityMinutesAddendum> ActivityMinutesAddenda => Set<ActivityMinutesAddendum>();
@@ -1192,11 +1173,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany(x => x.WorkOrders)
                 .HasForeignKey(x => x.ContractId)
                 .OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.Project)
-                .WithMany()
-                .HasForeignKey(x => x.ProjectId)
-                .OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
             entity.HasOne(x => x.RateCard)
                 .WithMany(x => x.WorkOrders)
                 .HasForeignKey(x => x.RateCardId)
@@ -3661,8 +3637,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Tenant).WithMany(x => x.MaterialIssues).HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Branch).WithMany(x => x.MaterialIssues).HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.WorkOrder).WithMany(x => x.MaterialIssues).HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
             entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.Site).WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.SetNull);
@@ -4838,308 +4812,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     private void ConfigureProjects(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<ProjectType>(entity =>
-        {
-            entity.ToTable("project_types");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(1000);
-            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.DefaultTemplate).WithMany().HasForeignKey(x => x.DefaultTemplateId).OnDelete(DeleteBehavior.SetNull);
-        });
-        ApplyTenantFilter<ProjectType>(modelBuilder);
-
-        modelBuilder.Entity<ProjectStage>(entity =>
-        {
-            entity.ToTable("project_stages", tableBuilder =>
-                tableBuilder.HasCheckConstraint("CK_project_stages_category",
-                    "\"Category\" IN ('Planning', 'Active', 'OnHold', 'Handover', 'Completed', 'Closed', 'Cancelled')"));
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
-            entity.Property(x => x.Category).HasMaxLength(30).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<ProjectStage>(modelBuilder);
-
-        modelBuilder.Entity<ProjectTemplate>(entity =>
-        {
-            entity.ToTable("project_templates");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
-            entity.Property(x => x.ItemsJson).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<ProjectTemplate>(modelBuilder);
-
-        modelBuilder.Entity<Project>(entity =>
-        {
-            entity.ToTable("projects");
-            entity.HasKey(x => x.Id);
-            entity.Ignore(x => x.RevisedValue);
-            entity.Ignore(x => x.EffectiveProgressPercent);
-            entity.Property(x => x.ProjectNumber).HasMaxLength(50).IsRequired();
-            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(4000);
-            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired().HasDefaultValue("KES");
-            entity.Property(x => x.OriginalValue).HasPrecision(18, 2);
-            entity.Property(x => x.ApprovedAdditions).HasPrecision(18, 2);
-            entity.Property(x => x.ApprovedOmissions).HasPrecision(18, 2);
-            entity.Property(x => x.ValueVersion).IsConcurrencyToken();
-            entity.Property(x => x.ProgressPercent).HasPrecision(5, 2);
-            entity.Property(x => x.ProgressOverridePercent).HasPrecision(5, 2);
-            entity.Property(x => x.ProgressOverrideReason).HasMaxLength(1000);
-            entity.Property(x => x.ClosureNotes).HasMaxLength(2000);
-            entity.Property(x => x.VisibleInClientPortal).HasDefaultValue(true);
-            entity.Property(x => x.RetentionPercent).HasPrecision(5, 2);
-            entity.Property(x => x.RetentionCapAmount).HasPrecision(18, 2);
-            entity.Property(x => x.RetentionReleaseAtCompletionPercent).HasPrecision(5, 2).HasDefaultValue(50m);
-            entity.Property(x => x.AdvancePaymentAmount).HasPrecision(18, 2);
-            entity.Property(x => x.AdvanceRecoveryPercent).HasPrecision(5, 2);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectNumber }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.ClientId });
-            entity.HasIndex(x => new { x.TenantId, x.StageId });
-            entity.HasIndex(x => new { x.TenantId, x.ProjectManagerUserId });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Branch).WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.Site).WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.ProjectType).WithMany().HasForeignKey(x => x.ProjectTypeId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.Stage).WithMany().HasForeignKey(x => x.StageId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.ProjectManagerUser).WithMany().HasForeignKey(x => x.ProjectManagerUserId).OnDelete(DeleteBehavior.SetNull);
-        });
-        ApplyTenantFilter<Project>(modelBuilder);
-
-        modelBuilder.Entity<ProjectMember>(entity =>
-        {
-            entity.ToTable("project_members", tableBuilder =>
-                tableBuilder.HasCheckConstraint("CK_project_members_person", "\"UserId\" IS NOT NULL OR \"TechnicianId\" IS NOT NULL"));
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Role).HasMaxLength(30).IsRequired();
-            entity.Property(x => x.Trade).HasMaxLength(100);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
-            entity.HasIndex(x => new { x.TenantId, x.UserId });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany(x => x.Members).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Technician).WithMany().HasForeignKey(x => x.TechnicianId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<ProjectMember>(modelBuilder);
-
-        modelBuilder.Entity<Consultant>(entity =>
-        {
-            entity.ToTable("consultants");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.FirmName).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Discipline).HasMaxLength(100);
-            entity.Property(x => x.ContactPerson).HasMaxLength(200);
-            entity.Property(x => x.Phone).HasMaxLength(50);
-            entity.Property(x => x.Email).HasMaxLength(256);
-            entity.Property(x => x.PhysicalAddress).HasMaxLength(500);
-            entity.Property(x => x.Notes).HasMaxLength(2000);
-            entity.HasIndex(x => new { x.TenantId, x.FirmName }).IsUnique();
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<Consultant>(modelBuilder);
-
-        modelBuilder.Entity<ProjectConsultant>(entity =>
-        {
-            entity.ToTable("project_consultants");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.RoleOnProject).HasMaxLength(100);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.ConsultantId }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.ConsultantId });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany(x => x.Consultants).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Consultant).WithMany().HasForeignKey(x => x.ConsultantId).OnDelete(DeleteBehavior.Restrict);
-        });
-        ApplyTenantFilter<ProjectConsultant>(modelBuilder);
-
-        modelBuilder.Entity<ProjectMilestone>(entity =>
-        {
-            entity.ToTable("project_milestones", tableBuilder =>
-                tableBuilder.HasCheckConstraint("CK_project_milestones_weight", "\"Weight\" >= 0"));
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Weight).HasPrecision(9, 2);
-            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany(x => x.Milestones).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<ProjectMilestone>(modelBuilder);
-
-        modelBuilder.Entity<ProjectTask>(entity =>
-        {
-            entity.ToTable("project_tasks");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(4000);
-            entity.Property(x => x.Priority).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
-            entity.HasIndex(x => new { x.TenantId, x.AssigneeUserId });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany(x => x.Tasks).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Milestone).WithMany().HasForeignKey(x => x.MilestoneId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.AssigneeUser).WithMany().HasForeignKey(x => x.AssigneeUserId).OnDelete(DeleteBehavior.SetNull);
-        });
-        ApplyTenantFilter<ProjectTask>(modelBuilder);
-
-        modelBuilder.Entity<ProjectVariation>(entity =>
-        {
-            entity.ToTable("project_variations", tableBuilder =>
-            {
-                tableBuilder.HasCheckConstraint("CK_project_variations_amount", "\"Amount\" > 0");
-                tableBuilder.HasCheckConstraint("CK_project_variations_kind", "\"Kind\" IN ('Addition', 'Omission')");
-            });
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.VariationNumber).HasMaxLength(50).IsRequired();
-            entity.Property(x => x.Kind).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.Amount).HasPrecision(18, 2);
-            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(4000);
-            entity.Property(x => x.ClientReference).HasMaxLength(100);
-            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.DecisionNote).HasMaxLength(2000);
-            entity.HasIndex(x => new { x.TenantId, x.VariationNumber }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.Status });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany(x => x.Variations).HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<ProjectVariation>(modelBuilder);
-
-        modelBuilder.Entity<ProjectWorker>(entity =>
-        {
-            entity.ToTable("project_workers");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Phone).HasMaxLength(50);
-            entity.Property(x => x.Trade).HasMaxLength(100);
-            entity.Property(x => x.EngagementType).HasMaxLength(30).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Technician).WithMany().HasForeignKey(x => x.TechnicianId).OnDelete(DeleteBehavior.SetNull);
-        });
-        ApplyTenantFilter<ProjectWorker>(modelBuilder);
-
-        modelBuilder.Entity<ProjectWorkerRate>(entity =>
-        {
-            entity.ToTable("project_worker_rates", tableBuilder =>
-                tableBuilder.HasCheckConstraint("CK_project_worker_rates_rate", "\"DailyRate\" >= 0"));
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.DailyRate).HasPrecision(18, 2);
-            entity.Property(x => x.Note).HasMaxLength(500);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectWorkerId, x.EffectiveFrom }).IsUnique();
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Worker).WithMany(x => x.Rates).HasForeignKey(x => x.ProjectWorkerId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<ProjectWorkerRate>(modelBuilder);
-
-        modelBuilder.Entity<ProjectMusterEntry>(entity =>
-        {
-            entity.ToTable("project_muster_entries", tableBuilder =>
-                tableBuilder.HasCheckConstraint("CK_project_muster_entries_status", "\"Status\" IN ('Present', 'HalfDay', 'Absent')"));
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.DayFraction).HasPrecision(3, 2);
-            entity.Property(x => x.Note).HasMaxLength(500);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectWorkerId, x.WorkDate }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.WorkDate });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Worker).WithMany().HasForeignKey(x => x.ProjectWorkerId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<ProjectMusterEntry>(modelBuilder);
-
-        modelBuilder.Entity<ProjectDiaryEntry>(entity =>
-        {
-            entity.ToTable("project_diary_entries");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.WorkCompleted).HasMaxLength(4000);
-            entity.Property(x => x.IssuesAndDelays).HasMaxLength(4000);
-            entity.Property(x => x.InstructionsReceived).HasMaxLength(4000);
-            entity.Property(x => x.Weather).HasMaxLength(100);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.EntryDate });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.AuthorUser).WithMany().HasForeignKey(x => x.AuthorUserId).OnDelete(DeleteBehavior.Restrict);
-        });
-        ApplyTenantFilter<ProjectDiaryEntry>(modelBuilder);
-
-        modelBuilder.Entity<ProjectBudgetLine>(entity =>
-        {
-            entity.ToTable("project_budget_lines");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Category).HasMaxLength(30).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(500);
-            entity.Property(x => x.Amount).HasPrecision(18, 2);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<ProjectBudgetLine>(modelBuilder);
-
-        modelBuilder.Entity<ProjectCostEntry>(entity =>
-        {
-            entity.ToTable("project_cost_entries");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Category).HasMaxLength(30).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
-            entity.Property(x => x.Amount).HasPrecision(18, 2);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<ProjectCostEntry>(modelBuilder);
-
-        modelBuilder.Entity<ProjectValuation>(entity =>
-        {
-            entity.ToTable("project_valuations");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.ValuationNumber).HasMaxLength(50).IsRequired();
-            foreach (var amount in new[] { nameof(ProjectValuation.WorkDoneToDate), nameof(ProjectValuation.MaterialsOnSite), nameof(ProjectValuation.GrossValueToDate),
-                         nameof(ProjectValuation.RetentionToDate), nameof(ProjectValuation.AdvanceRecoveredToDate), nameof(ProjectValuation.PreviouslyCertified),
-                         nameof(ProjectValuation.AmountDue), nameof(ProjectValuation.CertifiedAmount) })
-                entity.Property(amount).HasPrecision(18, 2);
-            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.CertificateReference).HasMaxLength(100);
-            entity.Property(x => x.Notes).HasMaxLength(2000);
-            entity.HasIndex(x => new { x.TenantId, x.ValuationNumber }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.Status });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.CertifiedByConsultant).WithMany().HasForeignKey(x => x.CertifiedByConsultantId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.SetNull);
-        });
-        ApplyTenantFilter<ProjectValuation>(modelBuilder);
-
-        modelBuilder.Entity<ProjectRetentionRelease>(entity =>
-        {
-            entity.ToTable("project_retention_releases", tableBuilder =>
-                tableBuilder.HasCheckConstraint("CK_project_retention_releases_amount", "\"Amount\" > 0"));
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Stage).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Amount).HasPrecision(18, 2);
-            entity.HasIndex(x => new { x.TenantId, x.ProjectId, x.Stage }).IsUnique();
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Project).WithMany().HasForeignKey(x => x.ProjectId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.SetNull);
-        });
-        ApplyTenantFilter<ProjectRetentionRelease>(modelBuilder);
-
-        modelBuilder.Entity<ProjectReminderLog>(entity =>
-        {
-            entity.ToTable("project_reminder_logs");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.NotificationKey).HasMaxLength(80).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.EntityId, x.NotificationKey, x.ForDate }).IsUnique();
-        });
-        ApplyTenantFilter<ProjectReminderLog>(modelBuilder);
-
         // ── Activities, action items and the calendar feed (Release 3 step 3b) ──
 
         modelBuilder.Entity<Activity>(entity =>
@@ -5176,7 +4848,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 tableBuilder.HasCheckConstraint("CK_activity_attendees_response", "\"Response\" IN ('Pending', 'Accepted', 'Declined')");
                 // Exactly one kind of attendee.
                 tableBuilder.HasCheckConstraint("CK_activity_attendees_one_kind",
-                    "(CASE WHEN \"UserId\" IS NULL THEN 0 ELSE 1 END) + (CASE WHEN \"ConsultantId\" IS NULL THEN 0 ELSE 1 END)"
+                    "(CASE WHEN \"UserId\" IS NULL THEN 0 ELSE 1 END)"
                     + " + (CASE WHEN \"ClientContactId\" IS NULL THEN 0 ELSE 1 END)"
                     + " + (CASE WHEN \"ExternalEmail\" IS NULL AND \"ExternalName\" IS NULL THEN 0 ELSE 1 END) = 1");
             });
@@ -5190,7 +4862,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Activity).WithMany(x => x.Attendees).HasForeignKey(x => x.ActivityId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Consultant).WithMany().HasForeignKey(x => x.ConsultantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.ClientContact).WithMany().HasForeignKey(x => x.ClientContactId).OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<ActivityAttendee>(modelBuilder);
@@ -5270,27 +4941,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
         });
         ApplyTenantFilter<WithholdingCertificate>(modelBuilder);
-
-        // Project links on existing records: an optional foreign key and a (tenant, project) index each.
-        ConfigureProjectLink<AttendanceEntry>(modelBuilder, x => x.ProjectId);
-        ConfigureProjectLink<Expense>(modelBuilder, x => x.ProjectId);
-        ConfigureProjectLink<SupplierBill>(modelBuilder, x => x.ProjectId);
-        ConfigureProjectLink<PurchaseOrder>(modelBuilder, x => x.ProjectId);
-        ConfigureProjectLink<TenantInvoice>(modelBuilder, x => x.ProjectId);
-        ConfigureProjectLink<Contract>(modelBuilder, x => x.SourceProjectId);
-        ConfigureProjectLink<TenantQuotation>(modelBuilder, x => x.ConvertedToProjectId);
-        modelBuilder.Entity<TenantInvoice>().HasOne<ProjectValuation>().WithMany().HasForeignKey(x => x.ProjectValuationId).OnDelete(DeleteBehavior.SetNull);
-    }
-
-    private static void ConfigureProjectLink<TEntity>(ModelBuilder modelBuilder, Expression<Func<TEntity, Guid?>> projectId)
-        where TEntity : class, ITenantEntity
-    {
-        modelBuilder.Entity<TEntity>(entity =>
-        {
-            var member = ((MemberExpression)projectId.Body).Member.Name;
-            entity.HasOne<Project>().WithMany().HasForeignKey(member).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(nameof(ITenantEntity.TenantId), member);
-        });
     }
 
     private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder)

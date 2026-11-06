@@ -172,12 +172,7 @@ internal sealed class RoleDashboardService(
         var modules = await moduleResolver.GetModulesAsync(tenantId, cancellationToken);
         var settings = await settingsService.GetAsync(tenantId, cancellationToken);
 
-        var isProjectManager = modules.Contains(ServiceOpsPlans.Projects, StringComparer.OrdinalIgnoreCase)
-            && (tenantContext.IsAdmin || tenantContext.HasPermission(PermissionNames.ProjectsView))
-            && await dbContext.Projects.AsNoTracking().AnyAsync(x => x.TenantId == tenantId
-                && ProjectStageCategories.Open.Contains(x.Stage!.Category)
-                && (x.ProjectManagerUserId == userId || x.Members.Any(m => m.UserId == userId && m.Role == ProjectMemberRoles.ProjectManager)),
-                cancellationToken);
+        const bool isProjectManager = false;
 
         var hidden = settings.HiddenFor(role)
             .Concat(isProjectManager ? settings.HiddenFor(DashboardRoleDefaults.ProjectManager) : [])

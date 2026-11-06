@@ -3,17 +3,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { endpoints } from '../../../shared/api/endpoints'
 import type { AttendanceStatus } from '../../team/timeAttendance/api'
 import type { WorkOrder } from '../../work-orders/types'
-import type { MusterDaySheet, MySite } from '../../projects/types'
-import type { MusterMarkPayload } from '../../projects/siteApi'
 import { performAction, type NewOutboxAction, type PerformResult } from './outbox'
 import { refreshAfterSync } from './hooks'
 
 type Job = Pick<WorkOrder, 'id' | 'workOrderNumber'>
 type Position = { latitude: number | null; longitude: number | null }
-type Site = Pick<MySite, 'projectId' | 'projectNumber' | 'name'>
 
 /**
- * Every action a technician takes on a job, plus clock in/out and a site supervisor's muster roll. Each one works offline: it applies
+ * Every action a technician takes on a job, plus clock in/out. Each one works offline: it applies
  * on screen at once and is sent now or as soon as the signal is back (see outbox.ts). The result
  * says whether it was queued so the screen can say "saved, will sync" rather than "saved".
  */
@@ -97,29 +94,13 @@ export function useTechActions() {
         }),
       flagSalesLead: (job: Job, note: string) =>
         onJob(job, 'sales-lead', 'Sales lead flagged', { method: 'POST', url: endpoints.technicianJobs.salesLead(job.id), body: { note } }),
-      /** Optionally against a project site the technician is on (shown on their clock while it syncs). */
-      clockIn: (site?: Site | null) =>
-        run({
-          kind: 'clock-in', label: site ? `Clocked in · ${site.projectNumber}` : 'Clocked in', workOrderId: null,
-          method: 'POST', url: '/api/attendance/me/clock-in', body: site ? { projectId: site.projectId } : {},
-          ...(site ? { meta: { projectName: `${site.projectNumber} ${site.name}` } } : {}),
-        }),
+      clockIn: () => run({ kind: 'clock-in', label: 'Clocked in', workOrderId: null, method: 'POST', url: '/api/attendance/me/clock-in', body: {} }),
       clockOut: () => run({ kind: 'clock-out', label: 'Clocked out', workOrderId: null, method: 'POST', url: '/api/attendance/me/clock-out' }),
       setClockStatus: (status: Exclude<AttendanceStatus, 'NotClockedIn'>) =>
         run({
           kind: 'clock-status',
           label: status === 'OnBreak' ? 'Started break' : status === 'Travelling' ? 'Travelling' : 'Back to work',
           workOrderId: null, method: 'POST', url: '/api/attendance/me/status', body: { status },
-        }),
-      /**
-       * A day's muster roll for a site: presence only, never pay. The server upserts one mark per
-       * worker per day, so a replay of the same day is harmless; the date travels in the URL.
-       */
-      saveMuster: (site: Site, date: string, marks: MusterMarkPayload[]) =>
-        run<MusterDaySheet>({
-          kind: 'muster', label: `Muster roll · ${site.projectNumber} · ${date}`, workOrderId: null,
-          method: 'PUT', url: `${endpoints.projectSite.muster(site.projectId)}?date=${encodeURIComponent(date)}`, body: { marks },
-          meta: { projectId: site.projectId, date },
         }),
     }
   }, [busy, queryClient])

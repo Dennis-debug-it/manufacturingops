@@ -14,8 +14,6 @@ export type OutboxKind =
   | 'respond' | 'in-transit' | 'arrive' | 'depart' | 'start' | 'hold' | 'resume' | 'complete'
   | 'notes' | 'checklist' | 'photo' | 'signature' | 'material'
   | 'clock-in' | 'clock-out' | 'clock-status'
-  /** A supervisor's day of muster-roll marks on a project site (an idempotent upsert of the whole day). */
-  | 'muster'
   /** New work the technician spotted on a job, passed to sales as a lead. */
   | 'sales-lead'
   /** A step on a factory job (start, hold, complete…), a handover note, labour time or a ticked job-plan step. */

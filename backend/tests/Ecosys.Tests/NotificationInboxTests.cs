@@ -32,7 +32,7 @@ public sealed class NotificationInboxTests
         Assert.Null(alice.ReadAt);
         Assert.Null(alice.ArchivedAt);
         Assert.NotNull(alice.PushPendingSince);
-        Assert.Equal("/projects/1?tab=variations", alice.Url);
+        Assert.Equal("/activities", alice.Url);
 
         // A push-only row exists for the push worker but never shows in the bell.
         var bob = await harness.Db.Notifications.SingleAsync(x => x.UserId == harness.Bob);
@@ -84,9 +84,9 @@ public sealed class NotificationInboxTests
         Assert.Empty(whatsApp.Deliveries);
 
         // A task-due reminder is (step 3d), but only for a user who turned it on: WhatsApp is never a default.
-        harness.Db.UserNotificationPreferences.Add(Preference(harness, harness.Bob, inApp: true, push: true, email: true, whatsApp: true, key: ProjectNotificationKeys.TaskDue));
+        harness.Db.UserNotificationPreferences.Add(Preference(harness, harness.Bob, inApp: true, push: true, email: true, whatsApp: true, key: ActivityNotificationKeys.ActionItemDue));
         await harness.Db.SaveChangesAsync();
-        await dispatcher.NotifyAsync(Request(harness, [harness.Alice, harness.Bob], key: ProjectNotificationKeys.TaskDue));
+        await dispatcher.NotifyAsync(Request(harness, [harness.Alice, harness.Bob], key: ActivityNotificationKeys.ActionItemDue));
         Assert.Equal(harness.Bob, Assert.Single(whatsApp.Deliveries).UserId);
     }
 
@@ -259,7 +259,7 @@ public sealed class NotificationInboxTests
         var push = Assert.Single(sender.Sent);
         Assert.Equal([harness.Alice], push.UserIds);
         Assert.Equal("Fresh", push.Message.Title);
-        Assert.Equal($"project.variation-submitted-{fresh.EntityId}", push.Message.Tag);
+        Assert.Equal($"action-item.assigned-{fresh.EntityId}", push.Message.Tag);
         var pending = await harness.NewContext().Notifications.Where(x => x.PushPendingSince != null).Select(x => x.Title).ToListAsync();
         Assert.Equal(["Failing"], pending);
 
@@ -332,13 +332,13 @@ public sealed class NotificationInboxTests
     private static T Ok<T>(ActionResult<T> result) =>
         Assert.IsAssignableFrom<T>(Assert.IsType<OkObjectResult>(result.Result).Value);
 
-    private static NotificationRequest Request(Harness harness, IReadOnlyCollection<Guid> userIds, string key = ProjectNotificationKeys.VariationSubmitted) =>
+    private static NotificationRequest Request(Harness harness, IReadOnlyCollection<Guid> userIds, string key = ActivityNotificationKeys.ActionItemAssigned) =>
         new(harness.TenantId, key, userIds, "Variation VO-001 to review", "Addition of KES 50,000.00 on PRJ-001.",
-            "/projects/1?tab=variations", "Project", Guid.NewGuid(),
-            new Dictionary<string, string?> { ["ProjectNumber"] = "PRJ-001" });
+            "/activities", "ActionItem", Guid.NewGuid(),
+            new Dictionary<string, string?> { ["Title"] = "Resize ducts" });
 
     private static UserNotificationPreference Preference(Harness harness, Guid userId, bool inApp, bool push, bool email, bool whatsApp = false,
-        string key = ProjectNotificationKeys.VariationSubmitted) => new()
+        string key = ActivityNotificationKeys.ActionItemAssigned) => new()
     {
         TenantId = harness.TenantId, UserId = userId, NotificationKey = key,
         InAppEnabled = inApp, PushEnabled = push, EmailEnabled = email, WhatsAppEnabled = whatsApp,
@@ -346,8 +346,8 @@ public sealed class NotificationInboxTests
 
     private static Notification Row(Guid tenantId, Guid userId, string title, DateTime? pushPendingSince = null) => new()
     {
-        TenantId = tenantId, UserId = userId, Key = ProjectNotificationKeys.VariationSubmitted, Title = title, Body = "Body",
-        EntityType = "Project", EntityId = Guid.NewGuid(), PushPendingSince = pushPendingSince,
+        TenantId = tenantId, UserId = userId, Key = ActivityNotificationKeys.ActionItemAssigned, Title = title, Body = "Body",
+        EntityType = "ActionItem", EntityId = Guid.NewGuid(), PushPendingSince = pushPendingSince,
     };
 
     private static Tenant TestTenant(Guid id) => new()

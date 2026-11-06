@@ -226,7 +226,6 @@ public sealed class PurchaseOrdersController(
                 ? await DefaultExpectedAtAsync(supplier, cancellationToken)
                 : DateTime.SpecifyKind(request.ExpectedAt.Value, DateTimeKind.Utc),
             Notes = request.Notes?.Trim(),
-            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, null, cancellationToken),
             Currency = await CurrencyConverter.ResolveAsync(dbContext, TenantId, request.Currency, cancellationToken),
         };
         var materialIds = request.Lines.Where(x => x.MaterialItemId.HasValue).Select(x => x.MaterialItemId!.Value).Distinct().ToList();
@@ -259,7 +258,6 @@ public sealed class PurchaseOrdersController(
         }
         order.TotalAmount = order.Lines.Sum(x => x.LineTotal);
 
-        await ProjectFinanceRules.EnsureCostCurrencyAsync(dbContext, TenantId, order.ProjectId, order.Currency, cancellationToken);
         dbContext.PurchaseOrders.Add(order);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "inventory.po.created", nameof(PurchaseOrder), order.Id.ToString(), $"Purchase order {order.PoNumber} created for {supplier.SupplierName}", cancellationToken);
@@ -339,7 +337,6 @@ public sealed class PurchaseOrdersController(
             order.Currency = await CurrencyConverter.ResolveAsync(dbContext, TenantId, request.Currency, cancellationToken);
         order.TotalAmount = lines.Sum(x => x.LineTotal);
         order.UpdatedAt = DateTime.UtcNow;
-        await ProjectFinanceRules.EnsureCostCurrencyAsync(dbContext, TenantId, order.ProjectId, order.Currency, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "inventory.po.updated", nameof(PurchaseOrder), order.Id.ToString(),
             $"Purchase order {order.PoNumber} edited ({lines.Count} lines, total {previousTotal:N2} → {order.TotalAmount:N2}).", cancellationToken);
@@ -402,7 +399,7 @@ public sealed class PurchaseOrdersController(
             .Where(x => x.Id == UserId)
             .Select(x => x.FullName)
             .FirstOrDefaultAsync(cancellationToken) ?? "Unknown";
-        var stockCurrency = await ProjectFinanceRules.StockCurrencyAsync(dbContext, TenantId, cancellationToken);
+        var stockCurrency = await CurrencyConverter.StockCurrencyAsync(dbContext, TenantId, cancellationToken);
         var converter = await CurrencyConverter.LoadAsync(dbContext, TenantId, stockCurrency, cancellationToken);
 
         PurchaseOrder order = null!;

@@ -383,7 +383,6 @@ public sealed class WorkOrdersController(
             TenantId = TenantId,
             BranchId = branchId,
             ClientId = request.ClientId,
-            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, request.ClientId, cancellationToken),
             SiteId = request.SiteId,
             SystemId = request.SystemId,
             AssetId = request.AssetId,

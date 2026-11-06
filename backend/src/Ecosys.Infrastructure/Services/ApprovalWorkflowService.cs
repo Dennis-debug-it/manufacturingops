@@ -238,19 +238,6 @@ internal sealed class ApprovalWorkflowService(
                 }
                 break;
             }
-            case ApprovalDocumentTypes.ProjectVariation:
-            {
-                var variation = await dbContext.ProjectVariations
-                    .SingleOrDefaultAsync(x => x.TenantId == request.TenantId && x.Id == request.DocumentId, cancellationToken);
-                if (variation is not null && variation.Status == ProjectVariationStatuses.Submitted)
-                {
-                    variation.Status = approved ? ProjectVariationStatuses.Approved : ProjectVariationStatuses.Rejected;
-                    variation.DecidedAt = DateTime.UtcNow;
-                    variation.DecidedByUserId = tenantContext.UserId;
-                    await ProjectCommercials.RecomputeApprovedTotalsAsync(dbContext, request.TenantId, variation.ProjectId, cancellationToken);
-                }
-                break;
-            }
             case ApprovalDocumentTypes.PurchaseOrder:
             {
                 // A PO stays Draft on approval (now cleared to be Sent); a rejection cancels it.

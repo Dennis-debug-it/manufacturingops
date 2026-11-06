@@ -73,9 +73,7 @@ public sealed class ExpensesPayablesController(
             IncurredAt = DateTime.SpecifyKind(request.IncurredAt, DateTimeKind.Utc),
             Status = "Submitted",
             Description = request.Description?.Trim(),
-            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, null, cancellationToken),
         };
-        await ProjectFinanceRules.EnsureCostCurrencyAsync(dbContext, TenantId, expense.ProjectId, expense.Currency, cancellationToken);
         dbContext.Expenses.Add(expense);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "finance.expense.submitted", nameof(Expense), expense.Id.ToString(), $"Expense {expense.ClaimNumber} submitted ({expense.Currency} {expense.Amount:N2})", cancellationToken);
@@ -182,9 +180,7 @@ public sealed class ExpensesPayablesController(
             DueDate = DateTime.SpecifyKind(request.DueDate, DateTimeKind.Utc),
             Status = "Open",
             Notes = request.Notes?.Trim(),
-            ProjectId = await ProjectLinks.ResolveAsync(dbContext, TenantId, request.ProjectId, null, cancellationToken),
         };
-        await ProjectFinanceRules.EnsureCostCurrencyAsync(dbContext, TenantId, bill.ProjectId, bill.Currency, cancellationToken);
         dbContext.SupplierBills.Add(bill);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "finance.payable.created", nameof(SupplierBill), bill.Id.ToString(), $"Bill {bill.BillNumber} for {supplier.SupplierName} ({bill.Currency} {bill.Amount:N2})", cancellationToken);
