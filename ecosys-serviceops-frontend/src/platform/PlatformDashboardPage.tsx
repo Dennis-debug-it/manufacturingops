@@ -14,14 +14,13 @@ import { Crystal } from '../shared/components/Crystal'
 import { formatCurrency } from '../shared/utils/format'
 import { formatDate, formatDateTime } from '../shared/utils/dates'
 import {
-  useLeads,
   usePlatformDashboardSummary,
   usePlatformSummary,
   usePlatformAuditLogs,
   useTenants,
 } from './api'
 import { licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from './common'
-import type { PlatformLeadListItem, PlatformTenantListItem } from './types'
+import type { PlatformTenantListItem } from './types'
 
 // Independent, self-refreshing health pill — deliberately NOT part of the dashboard's combined
 // loading/error gate, so system-health stays visible even if other panels are slow or failing.
@@ -79,7 +78,6 @@ export function PlatformDashboardPage() {
   const summary = usePlatformDashboardSummary()
   const platform = usePlatformSummary()
   const tenants = useTenants()
-  const leads = useLeads()
   const auditLogs = usePlatformAuditLogs()
 
   // Only the two aggregate endpoints that feed the headline KPIs are load-critical; the tenant,
@@ -101,7 +99,6 @@ export function PlatformDashboardPage() {
   }
 
   const tenantRows = tenants.data ?? []
-  const leadRows = leads.data ?? []
   const auditRows = (auditLogs.data ?? []).slice(0, 8)
 
   const attentionTenants = tenantRows.filter((tenant) =>
@@ -113,7 +110,6 @@ export function PlatformDashboardPage() {
   ).slice(0, 8)
 
   const recentTenants = [...tenantRows].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8)
-  const recentLeads = [...leadRows].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8)
 
   const tenantColumns: DataTableColumn<PlatformTenantListItem>[] = [
     { key: 'name', header: 'Tenant', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/platform/tenants/${row.tenantId}`}>{row.name}</Link> },
@@ -125,18 +121,11 @@ export function PlatformDashboardPage() {
     { key: 'createdAt', header: 'Created', cell: (row) => formatDate(row.createdAt) },
   ]
 
-  const leadColumns: DataTableColumn<PlatformLeadListItem>[] = [
-    { key: 'company', header: 'Company', cell: (row) => <Link className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/platform/leads?lead=${row.id}`}>{row.companyName}</Link> },
-    { key: 'contact', header: 'Contact', cell: (row) => row.contactPersonName },
-    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
-    { key: 'createdAt', header: 'Created', cell: (row) => formatDateTime(row.createdAt) },
-  ]
-
   return (
     <div className="space-y-5" data-testid="command-centre-dashboard">
       <PageHeader
         title="Platform Owner Overview"
-        subtitle="Operational command centre for tenant lifecycle, leads, licensing, and finance."
+        subtitle="Operational command centre for tenant lifecycle, licensing, and finance."
         primaryAction={<div className="flex items-center gap-3"><LastUpdated at={summary.dataUpdatedAt} /><HealthChip /></div>}
       />
 
@@ -181,30 +170,6 @@ export function PlatformDashboardPage() {
             </div>
           </div>
 
-          <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-base font-semibold text-slate-900">Lead funnel</p>
-                <p className="mt-1 text-sm text-slate-600">Recent workspace requests and follow-up status.</p>
-              </div>
-              <Link className="inline-flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900" to="/platform/leads">
-                View leads
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-            <div className="mt-4">
-              <AsyncPanel query={leads} loadingLabel="Loading leads" errorTitle="Leads unavailable" errorDescription="Recent leads could not be loaded.">
-                {() => (
-                  <DataTable<PlatformLeadListItem>
-                    columns={leadColumns}
-                    data={recentLeads}
-                    emptyTitle="No leads yet"
-                    emptyDescription="Public workspace requests will appear here."
-                  />
-                )}
-              </AsyncPanel>
-            </div>
-          </div>
         </div>
 
         <div className="space-y-5">

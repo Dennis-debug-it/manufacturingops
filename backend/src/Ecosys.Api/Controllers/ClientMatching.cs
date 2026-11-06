@@ -107,8 +107,6 @@ public static class ClientMatching
         if (hasHistory)
             throw new BusinessRuleException($"{source.ClientName} already has jobs, assets, contracts or invoices, so it cannot be merged automatically.");
 
-        await dbContext.SalesOpportunities.Where(x => x.TenantId == tenantId && x.ClientId == sourceId).ForEachAsync(x => x.ClientId = targetId, cancellationToken);
-        await dbContext.SalesTenders.Where(x => x.TenantId == tenantId && x.ClientId == sourceId).ForEachAsync(x => x.ClientId = targetId, cancellationToken);
         await dbContext.TenantQuotations.Where(x => x.TenantId == tenantId && x.ClientId == sourceId).ForEachAsync(x => x.ClientId = targetId, cancellationToken);
         await dbContext.Sites.Where(x => x.TenantId == tenantId && x.ClientId == sourceId).ForEachAsync(x => x.ClientId = targetId, cancellationToken);
         await dbContext.ClientPortalUsers.Where(x => x.TenantId == tenantId && x.ClientId == sourceId).ForEachAsync(x => x.ClientId = targetId, cancellationToken);
@@ -128,13 +126,6 @@ public static class ClientMatching
             same.Email ??= contact.Email;
             same.Phone ??= contact.Phone;
             same.JobTitle ??= contact.JobTitle;
-            var links = await dbContext.SalesOpportunityContacts.Where(x => x.ContactId == contact.Id).ToListAsync(cancellationToken);
-            foreach (var link in links)
-            {
-                var alreadyLinked = await dbContext.SalesOpportunityContacts.AnyAsync(x => x.OpportunityId == link.OpportunityId && x.ContactId == same.Id, cancellationToken);
-                if (alreadyLinked) dbContext.SalesOpportunityContacts.Remove(link);
-                else link.ContactId = same.Id;
-            }
             dbContext.ClientContacts.Remove(contact);
         }
 

@@ -384,7 +384,6 @@ public sealed class PortalController(
         quote.AcceptedByPortalUserId = portalContext.PortalUserId;
 
         quote.Status = "Accepted";
-        await SalesQuotationSync.OnAnsweredAsync(dbContext, quote, accepted: true, null, null, portalContext.FullName, "by the client in the portal", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, null, "portal.quotation.accepted", nameof(TenantQuotation), quote.Id.ToString(), $"Quotation '{quote.QuoteNumber}' accepted via client portal, signed by {quote.AcceptedByName}{(quote.AcceptedByTitle is null ? "" : $" ({quote.AcceptedByTitle})")} from {quote.AcceptedFromIp ?? "an unknown address"}.", actorName: portalContext.FullName, cancellationToken: cancellationToken);
         return Ok(MapQuotationDetail(quote));
@@ -414,7 +413,6 @@ public sealed class PortalController(
 
         quote.Status = "Rejected";
         quote.RejectionReason = reason;
-        await SalesQuotationSync.OnAnsweredAsync(dbContext, quote, accepted: false, reason, null, portalContext.FullName, "by the client in the portal", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, null, "portal.quotation.rejected", nameof(TenantQuotation), quote.Id.ToString(), $"Quotation '{quote.QuoteNumber}' rejected via client portal. Reason: {reason}", actorName: portalContext.FullName, cancellationToken: cancellationToken);
         return Ok(MapQuotationDetail(quote));

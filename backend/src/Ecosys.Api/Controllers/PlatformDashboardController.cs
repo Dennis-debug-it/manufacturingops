@@ -34,8 +34,9 @@ public sealed class PlatformDashboardController(AppDbContext dbContext) : Contro
         var mrr = await LicensePricing.MonthlyRecurringRevenueAsync(dbContext, x => x.Status == "Active" || x.Status == "Trial", cancellationToken);
 
         // Conversion metrics (4b).
-        var totalLeads = await dbContext.PlatformLeads.CountAsync(cancellationToken);
-        var convertedLeads = await dbContext.PlatformLeads.CountAsync(x => x.ConvertedTenantId != null || x.Status == "Converted to Workspace", cancellationToken);
+        // The platform lead pipeline is not carried over; sign-ups convert straight to workspaces.
+        var totalLeads = 0;
+        var convertedLeads = 0;
         var leadConversionRate = totalLeads > 0 ? Math.Round((decimal)convertedLeads / totalLeads * 100, 1) : 0m;
 
         var paidLicenses = await dbContext.TenantLicenses.CountAsync(x => x.Status == "Active", cancellationToken);

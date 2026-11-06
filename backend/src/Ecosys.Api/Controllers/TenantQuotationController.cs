@@ -194,7 +194,6 @@ public sealed class TenantQuotationController(
         if (quote.Status != "Sent") throw new BusinessRuleException("Only Sent quotations can be accepted.");
         quote.Status = "Accepted";
         quote.AcceptedAt = DateTime.UtcNow;
-        await SalesQuotationSync.OnAnsweredAsync(dbContext, quote, accepted: true, null, UserId, await ActorNameAsync(cancellationToken), "(recorded by staff)", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapDetail(quote));
     }
@@ -209,7 +208,6 @@ public sealed class TenantQuotationController(
         var quote = await LoadQuoteAsync(id, cancellationToken);
         quote.Status = "Rejected";
         quote.RejectionReason = request.Reason?.Trim();
-        await SalesQuotationSync.OnAnsweredAsync(dbContext, quote, accepted: false, quote.RejectionReason, UserId, await ActorNameAsync(cancellationToken), "(recorded by staff)", cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapDetail(quote));
     }
@@ -294,7 +292,6 @@ public sealed class TenantQuotationController(
             Status = "Open",
             Priority = "Medium",
             WorkType = "CorrectiveMaintenance",
-            SalesOpportunityId = quote.SalesOpportunityId,
             IsBillable = true,
         };
 

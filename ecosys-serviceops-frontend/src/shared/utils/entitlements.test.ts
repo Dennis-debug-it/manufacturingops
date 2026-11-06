@@ -38,10 +38,4 @@ describe('edition entitlements', () => {
     expect(requiredModulesForPath('/crmx')).toEqual([])
   })
 
-  it('puts the sales CRM on every edition: it needs Operations and Finance', () => {
-    expect(requiredModulesForPath('/crm')).toEqual(['operations', 'finance'])
-    expect(requiredModulesForPath('/crm/tenders/abc')).toEqual(['operations', 'finance'])
-    expect(canAccessModulePath('/crm', essentials)).toBe(true)
-    expect(canAccessModulePath('/crm/opportunities/abc', ['finance'])).toBe(false)
-  })
 })

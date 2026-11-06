@@ -18,9 +18,8 @@ public static class CalendarSources
     public const string Maintenance = "maintenance";
     public const string Projects = "projects";
     public const string Contracts = "contracts";
-    public const string Sales = "sales";
 
-    public static readonly string[] All = [Activities, ActionItems, WorkOrders, Maintenance, Projects, Contracts, Sales];
+    public static readonly string[] All = [Activities, ActionItems, WorkOrders, Maintenance, Projects, Contracts];
 
     /// <summary>Sources about the tenant rather than one person; the team view leaves them out.</summary>
     public static readonly string[] TenantWide = [Maintenance, Contracts];
@@ -74,9 +73,6 @@ internal sealed class CalendarService(AppDbContext dbContext, ILinkedRecordServi
             sources.Add(CalendarSources.Projects);
         if (maintenance)
             sources.Add(CalendarSources.Contracts);
-        // The CRM needs Operations and Finance (ServiceOpsPlans.CrmControllers).
-        if (operations && viewer.HasModule(ServiceOpsPlans.Finance) && viewer.Can(PermissionNames.CrmView))
-            sources.Add(CalendarSources.Sales);
         return sources;
     }
 
@@ -212,28 +208,6 @@ internal sealed class CalendarService(AppDbContext dbContext, ILinkedRecordServi
                     items.Add(Day($"contract-renewal-{contract.Id}", CalendarSources.Contracts, $"{contract.ContractNumber} renewal notice: {contract.Name}", notice,
                         $"/contracts/{contract.Id}", userId));
             }
-        }
-
-        if (wanted.Contains(CalendarSources.Sales))
-        {
-            // Follow-ups on open deals land with the deal owner, as their reminders do; deadlines of bids not yet submitted with the bid's owner.
-            var followUps = await dbContext.SalesActivities
-                .Where(x => x.TenantId == tenantId && x.DueAt != null && x.CompletedAt == null && x.DueAt >= from && x.DueAt < to
-                    && x.Opportunity != null && x.Opportunity.Stage != "Won" && x.Opportunity.Stage != "Lost"
-                    && x.Opportunity.OwnerUserId != null && people.Contains(x.Opportunity.OwnerUserId.Value))
-                .Select(x => new { x.Id, x.Summary, x.Type, x.DueAt, x.OpportunityId, Deal = x.Opportunity!.Title, x.Opportunity.OwnerUserId, x.Opportunity.Location })
-                .ToListAsync(cancellationToken);
-            items.AddRange(followUps.Select(x => new CalendarItem($"sales-follow-up-{x.Id}", CalendarSources.Sales,
-                $"{(x.Type == "FollowUp" ? "Follow up" : x.Type)}: {x.Deal}", x.DueAt!.Value, x.DueAt.Value.AddMinutes(30), false,
-                x.Location, $"/crm/opportunities/{x.OpportunityId}", x.OwnerUserId, null)));
-            string[] unsubmitted = ["Received", "Reviewing", "Preparing"];
-            var tenders = await dbContext.SalesTenders
-                .Where(x => x.TenantId == tenantId && unsubmitted.Contains(x.Status) && x.SubmissionDeadline >= from && x.SubmissionDeadline < to
-                    && x.OwnerUserId != null && people.Contains(x.OwnerUserId.Value))
-                .Select(x => new { x.Id, x.Type, x.Title, x.SubmissionDeadline, x.OwnerUserId, x.Status })
-                .ToListAsync(cancellationToken);
-            items.AddRange(tenders.Select(x => new CalendarItem($"sales-tender-{x.Id}", CalendarSources.Sales, $"{x.Type} due: {x.Title}",
-                x.SubmissionDeadline, x.SubmissionDeadline.AddMinutes(30), false, null, $"/crm/tenders/{x.Id}", x.OwnerUserId, x.Status)));
         }
 
         return items.OrderBy(x => x.StartsAt).ThenBy(x => x.AllDay ? 0 : 1).ThenBy(x => x.Title).ToList();

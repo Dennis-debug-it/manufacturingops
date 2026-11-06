@@ -25,12 +25,10 @@ const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
   ['finance', ['/finance', '/settings/payments']],
 ]
 /** The sales CRM joins an RFQ's quote (Finance) to its job (Operations), so it needs both; every edition has them. */
-const crmPaths = ['/crm', '/settings/sales']
 
 export function requiredModulesForPath(path: string): ServiceOpsModule[] {
   const matches = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`)
   if (matches('/finance/billable-work')) return ['operations', 'finance']
-  if (crmPaths.some(matches)) return ['operations', 'finance']
   const match = modulePaths.find(([, prefixes]) => prefixes.some(matches))
   return match ? [match[0]] : []
 }

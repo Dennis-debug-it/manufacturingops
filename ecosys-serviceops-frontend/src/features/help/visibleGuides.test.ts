@@ -41,10 +41,6 @@ describe('visibleGuides', () => {
     expect(ids(user('dispatcher', { canViewWorkOrders: true }))).not.toContain('projects')
   })
 
-  it('shows the sales guide to whoever holds the CRM capability', () => {
-    expect(ids(user('dispatcher', { canViewWorkOrders: true, canViewCrm: true }))).toContain('sales-crm')
-    expect(ids(user('manager', { canViewWorkOrders: true, canViewCrm: false }))).not.toContain('sales-crm')
-  })
 
   it("hides guides for screens the workspace's plan doesn't include", () => {
     const operationsOnly = (path: string) => !path.startsWith('/crm') && !path.startsWith('/finance')

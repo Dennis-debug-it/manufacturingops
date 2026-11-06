@@ -94,7 +94,6 @@ public sealed class Tenant : AuditableEntity
     public ICollection<PlatformInvoice> PlatformInvoices { get; set; } = new List<PlatformInvoice>();
     public ICollection<PlatformPayment> PlatformPayments { get; set; } = new List<PlatformPayment>();
     public ICollection<PlatformExpense> PlatformExpenses { get; set; } = new List<PlatformExpense>();
-    public ICollection<PlatformLead> ConvertedLeads { get; set; } = new List<PlatformLead>();
     public ICollection<WorkOrderPhotoEvidence> WorkOrderPhotoEvidence { get; set; } = new List<WorkOrderPhotoEvidence>();
     public ICollection<WorkOrderSignature> WorkOrderSignatures { get; set; } = new List<WorkOrderSignature>();
     public ICollection<WorkOrderMaterialUsage> WorkOrderMaterialUsages { get; set; } = new List<WorkOrderMaterialUsage>();

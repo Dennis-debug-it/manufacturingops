@@ -191,7 +191,6 @@ public sealed class PortalBoundaryTests
     [InlineData(typeof(PortalController))]
     [InlineData(typeof(PortalAuthController))]
     [InlineData(typeof(PortalProjectsController))]
-    [InlineData(typeof(CsatController))]
     public void PortalControllers_AreOutsideTheTenantBoundary(Type controllerType)
     {
         // If a portal controller ever derived from TenantAwareControllerBase it would inherit the

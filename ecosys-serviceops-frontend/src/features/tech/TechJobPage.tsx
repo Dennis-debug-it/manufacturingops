@@ -6,7 +6,6 @@ import { Spinner } from '../../shared/components/Spinner'
 import { cn } from '../../shared/utils/cn'
 import { useMyTechnician } from './api'
 import { savedMessage, useTechActions } from './offline/actions'
-import { TechSalesLead } from './TechSalesLead'
 import { useJobHasQueuedActions, useMyAttendanceView, useTechBundle, useTechJobView } from './offline/hooks'
 import { jobPhase, myAssignmentOf, PHASE_LABEL, PHASE_TONE } from './jobState'
 import { hasLeftSite, isOnSite } from '../work-orders/types'
@@ -231,7 +230,6 @@ export function TechJobPage() {
         <>
           <TechPreviousVisit job={job} />
           <TechOverview job={job} editable={editable} />
-          <TechSalesLead job={job} />
         </>
       ) : null}
       {section === 'photos' ? <TechPhotos job={job} editable={editable} /> : null}

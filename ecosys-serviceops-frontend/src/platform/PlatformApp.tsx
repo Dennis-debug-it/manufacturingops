@@ -9,12 +9,6 @@ import { PlatformShell } from './layout/PlatformShell'
 import { PlatformDashboardPage } from './PlatformDashboardPage'
 import { TenantsPage } from './tenants/TenantsPage'
 import { TenantDetailPage } from './tenants/TenantDetailPage'
-import { LeadsPage } from './crm/LeadsPage'
-import { ContactsPage } from './crm/ContactsPage'
-import { ActivitiesPage } from './crm/ActivitiesPage'
-import { TasksPage } from './crm/TasksPage'
-import { PipelinePage } from './crm/PipelinePage'
-import { LeadDetailPage } from './crm/LeadDetailPage'
 import { UsersPage } from './UsersPage'
 import { LicensingPage } from './LicensingPage'
 import { FinancePage } from './FinancePage'
@@ -30,7 +24,6 @@ import { EmailTemplatesSettingsPage } from './settings/EmailTemplatesSettingsPag
 import { EmailDeliverySettingsPage } from './settings/EmailDeliverySettingsPage'
 import { SecuritySettingsPage } from './settings/SecuritySettingsPage'
 import { AuditSettingsPage } from './settings/AuditSettingsPage'
-import { CrmSettingsPage } from './settings/CrmSettingsPage'
 import { AnnouncementsSettingsPage } from './settings/AnnouncementsSettingsPage'
 import { SupportSettingsPage } from './settings/SupportSettingsPage'
 import { HealthSettingsPage } from './settings/HealthSettingsPage'
@@ -92,13 +85,6 @@ export function PlatformApp() {
           <Route path="tenants" element={<RequirePlatformSection navPath="/platform/tenants"><TenantsPage /></RequirePlatformSection>} />
           <Route path="tenants/:id" element={<RequirePlatformSection navPath="/platform/tenants"><TenantDetailPage /></RequirePlatformSection>} />
 
-          <Route path="leads" element={<RequirePlatformSection navPath="/platform/leads"><LeadsPage /></RequirePlatformSection>} />
-          <Route path="crm/pipeline" element={<RequirePlatformSection navPath="/platform/leads"><PipelinePage /></RequirePlatformSection>} />
-          <Route path="crm/leads/:id" element={<RequirePlatformSection navPath="/platform/leads"><LeadDetailPage /></RequirePlatformSection>} />
-          <Route path="crm/contacts" element={<RequirePlatformSection navPath="/platform/leads"><ContactsPage /></RequirePlatformSection>} />
-          <Route path="crm/activities" element={<RequirePlatformSection navPath="/platform/leads"><ActivitiesPage /></RequirePlatformSection>} />
-          <Route path="crm/tasks" element={<RequirePlatformSection navPath="/platform/leads"><TasksPage /></RequirePlatformSection>} />
-          <Route path="crm/*" element={<Navigate to="/platform/leads" replace />} />
 
           <Route path="users" element={<RequirePlatformSection navPath="/platform/users"><UsersPage /></RequirePlatformSection>} />
           <Route path="licensing" element={<RequirePlatformSection navPath="/platform/licensing"><LicensingPage /></RequirePlatformSection>} />
@@ -118,7 +104,6 @@ export function PlatformApp() {
             <Route path="security" element={<SecuritySettingsPage />} />
             <Route path="audit" element={<AuditSettingsPage />} />
             <Route path="templates" element={<EmailTemplatesSettingsPage />} />
-            <Route path="crm" element={<CrmSettingsPage />} />
             <Route path="announcements" element={<AnnouncementsSettingsPage />} />
             <Route path="support" element={<SupportSettingsPage />} />
             <Route path="health" element={<HealthSettingsPage />} />

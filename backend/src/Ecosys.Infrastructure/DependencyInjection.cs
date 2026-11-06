@@ -111,7 +111,6 @@ public static class DependencyInjection
         services.AddScoped<IUserCredentialDeliveryService, UserCredentialDeliveryService>();
         services.AddScoped<ITemporaryPasswordService, TemporaryPasswordService>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
-        services.AddScoped<IPlatformLeadNotifier, PlatformLeadNotifier>();
         services.AddScoped<ISelfSignupService, SelfSignupService>();
         services.AddScoped<IEmailIntakeMailbox, ImapEmailIntakeMailbox>();
         services.AddScoped<IEmailIntakeService, EmailIntakeService>();
@@ -204,9 +203,6 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<ScheduledReportWorker>();
         services.AddSingleInstanceHostedService<ApprovalReminderWorker>();
         services.AddSingleInstanceHostedService<ProjectReminderWorker>();
-        services.AddScoped<ISalesReminderService, SalesReminderService>();
-        services.AddScoped<ISalesOwnerResolver, SalesOwnerResolver>();
-        services.AddSingleInstanceHostedService<SalesReminderWorker>();
         services.AddSingleInstanceHostedService<AttendanceAutoClockOutWorker>();
         services.AddSingleInstanceHostedService<EscalationRuleWorker>();
         services.AddSingleInstanceHostedService<SubscriptionLifecycleWorker>();

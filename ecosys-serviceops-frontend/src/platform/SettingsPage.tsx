@@ -9,7 +9,6 @@ const items = [
   { label: 'Security', to: '/platform/settings/security' },
   { label: 'Roles & Permissions', to: '/platform/settings/identity' },
   { label: 'Modules', to: '/platform/settings/features' },
-  { label: 'CRM', to: '/platform/settings/crm' },
   { label: 'Announcements', to: '/platform/settings/announcements' },
   { label: 'Support', to: '/platform/settings/support' },
   { label: 'Document Templates', to: '/platform/settings/email-templates' },

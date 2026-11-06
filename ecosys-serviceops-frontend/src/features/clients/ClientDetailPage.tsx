@@ -19,7 +19,6 @@ import { AssetFormDrawer } from './components/AssetFormDrawer'
 import { ClientPortalContactsTab } from './components/ClientPortalContactsTab'
 import type { ClientSiteSummary } from './types'
 import { RecordActivitiesPanel } from '../activities/RecordActivitiesPanel'
-import { ClientSalesTab } from '../crm/components/ClientSalesTab'
 import { ClientContactsPanel } from './components/ClientContactsPanel'
 import { MergeProspectDialog } from './components/MergeProspectDialog'
 
@@ -195,11 +194,6 @@ export function ClientDetailPage() {
                 emptyDescription="Contracts covering this client will appear here once created in the Contracts module."
               />
             ),
-          },
-          {
-            id: 'sales',
-            label: 'Sales',
-            content: <ClientSalesTab clientId={id} />,
           },
           {
             id: 'activities',

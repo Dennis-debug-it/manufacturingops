@@ -3,7 +3,7 @@ import { format, subDays } from 'date-fns'
 import { Download } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
-import { EmptyState } from '../../shared/components/EmptyState'
+
 import { ErrorState } from '../../shared/components/ErrorState'
 import { StatCard } from '../../shared/components/StatCard'
 import { StatusBadge } from '../../shared/components/StatusBadge'
@@ -17,7 +17,7 @@ import { useWorkOrders } from '../work-orders/api'
 import { toWorkOrderListFilters } from '../work-orders/listModel'
 import { useFinanceDashboard } from '../finance/api'
 import { usePmComplianceReport } from '../maintenance/api'
-import { useAssetReliability, useCsatReport, useTechnicianProductivity, useWorkOrderPerformance } from './api'
+import { useAssetReliability, useTechnicianProductivity, useWorkOrderPerformance } from './api'
 
 const tabs = [
   { id: 'wo-performance', label: 'Work Order' },
@@ -25,7 +25,6 @@ const tabs = [
   { id: 'pm-compliance', label: 'PM Compliance' },
   { id: 'finance', label: 'Finance' },
   { id: 'technician', label: 'Technician Performance' },
-  { id: 'csat', label: 'CSAT' },
 ] as const
 
 export function ReportsPage() {
@@ -41,13 +40,11 @@ export function ReportsPage() {
   // The finance figures are only for people who can see finance.
   const canViewFinance = usePermission('finance.view')
   const financeQuery = useFinanceDashboard({ enabled: canViewFinance })
-  const csatQuery = useCsatReport({ from, to })
 
   const { data: performance } = performanceQuery
   const { data: technicianReport } = technicianQuery
   const { data: pmCompliance } = pmQuery
   const { data: financeDashboard } = financeQuery
-  const { data: csat } = csatQuery
 
   /**
    * The SLA tab needs the same 30-day window as every other tab and nothing else, so it goes
@@ -246,95 +243,6 @@ export function ReportsPage() {
         )
       ) : null}
 
-      {tab === 'csat' ? (
-        csatQuery.isError ? (
-          <ErrorState
-            title="CSAT report unavailable"
-            description="We couldn’t load survey results for this period, which is not the same as no surveys having been sent."
-            onRetry={() => void csatQuery.refetch()}
-          />
-        ) : csatQuery.isLoading ? (
-          <Spinner label="Loading CSAT report" />
-        ) : !csat || csat.sentCount === 0 ? (
-          <EmptyState title="No surveys sent yet" description="CSAT surveys are emailed to clients automatically when work orders are completed. Results will appear here." />
-        ) : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatCard label="Average Score" value={csat.averageScore != null ? `${csat.averageScore} / 5` : '—'} tone={csat.averageScore != null && csat.averageScore >= 4 ? 'success' : csat.averageScore != null && csat.averageScore < 3 ? 'warning' : 'default'} />
-              <StatCard label="Surveys Sent" value={csat.sentCount} />
-              <StatCard label="Responses" value={csat.responseCount} />
-              <StatCard label="Response Rate" value={`${csat.responseRate}%`} />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-900">Score Distribution</h3>
-                <div className="mt-4 space-y-2">
-                  {csat.scoreDistribution.slice().reverse().map((row) => {
-                    const max = Math.max(1, ...csat.scoreDistribution.map((r) => r.count))
-                    return (
-                      <div key={row.score} className="flex items-center gap-3 text-sm">
-                        <span className="w-14 shrink-0 text-slate-600">{row.score} star{row.score > 1 ? 's' : ''}</span>
-                        <div className="h-3 flex-1 overflow-hidden rounded-full bg-slate-100">
-                          <div className="h-full rounded-full bg-amber-400" style={{ width: `${(row.count / max) * 100}%` }} />
-                        </div>
-                        <span className="w-8 shrink-0 text-right text-slate-700">{row.count}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-              </section>
-
-              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-900">Monthly Trend</h3>
-                <DataTable
-                  className="mt-4"
-                  columns={[
-                    { key: 'month', header: 'Month', cell: (row) => row.month },
-                    { key: 'averageScore', header: 'Avg Score', cell: (row) => `${row.averageScore} / 5` },
-                    { key: 'responseCount', header: 'Responses', cell: (row) => row.responseCount },
-                  ]}
-                  data={csat.monthlyTrend.map((row) => ({ id: row.month, ...row }))}
-                  emptyTitle="No responses yet"
-                  emptyDescription="Trend appears once clients start responding."
-                />
-              </section>
-            </div>
-
-            <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">By Technician</h3>
-              <DataTable
-                className="mt-4"
-                columns={[
-                  { key: 'technicianName', header: 'Technician', cell: (row) => row.technicianName },
-                  { key: 'averageScore', header: 'Avg Score', cell: (row) => `${row.averageScore} / 5` },
-                  { key: 'responseCount', header: 'Responses', cell: (row) => row.responseCount },
-                ]}
-                data={csat.byTechnician.map((row) => ({ id: row.technicianId, ...row }))}
-                emptyTitle="No technician ratings yet"
-                emptyDescription="Scores are attributed to the lead technician on each work order."
-              />
-            </section>
-
-            {csat.recentComments.length > 0 ? (
-              <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-                <h3 className="text-sm font-semibold text-slate-900">Recent Comments</h3>
-                <ul className="mt-4 space-y-3">
-                  {csat.recentComments.map((row, index) => (
-                    <li key={index} className="rounded-xl border border-slate-200 px-4 py-3">
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span>{row.clientName ?? 'Client'}</span>
-                        <span>{row.score} / 5</span>
-                      </div>
-                      <p className="mt-1 text-sm leading-6 text-slate-700">{row.comment}</p>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-          </div>
-        )
-      ) : null}
     </div>
   )
 }

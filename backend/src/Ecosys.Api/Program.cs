@@ -54,7 +54,6 @@ builder.Services.AddHttpClient();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<IServiceOpsNotifier, SignalRServiceOpsNotifier>();
-builder.Services.AddScoped<ISalesInboundEmailHandler, Ecosys.Api.Controllers.SalesInboundEmailHandler>();
 builder.Services.AddScoped<IInboxNotifier, SignalRInboxNotifier>();
 // Singleton: the per-tenant throttle that calls it lives for the whole process.
 builder.Services.AddSingleton<IDashboardNotifier, SignalRDashboardNotifier>();

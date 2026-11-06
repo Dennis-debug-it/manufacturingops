@@ -29,7 +29,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<PendingSignup> PendingSignups => Set<PendingSignup>();
-    public DbSet<CsatSurvey> CsatSurveys => Set<CsatSurvey>();
     public DbSet<ApprovalMatrix> ApprovalMatrices => Set<ApprovalMatrix>();
     public DbSet<ApprovalLevel> ApprovalLevels => Set<ApprovalLevel>();
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
@@ -198,10 +197,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<PlatformExpense> PlatformExpenses => Set<PlatformExpense>();
     public DbSet<PlatformDocumentTemplate> PlatformDocumentTemplates => Set<PlatformDocumentTemplate>();
     public DbSet<PlatformSetting> PlatformSettings => Set<PlatformSetting>();
-    public DbSet<PlatformLead> PlatformLeads => Set<PlatformLead>();
-    public DbSet<CrmContact> CrmContacts => Set<CrmContact>();
-    public DbSet<CrmActivity> CrmActivities => Set<CrmActivity>();
-    public DbSet<CrmTask> CrmTasks => Set<CrmTask>();
     public DbSet<PlatformAnnouncement> PlatformAnnouncements => Set<PlatformAnnouncement>();
     public DbSet<Attachment> Attachments => Set<Attachment>();
     public DbSet<WorkOrderPhotoEvidence> WorkOrderPhotoEvidence => Set<WorkOrderPhotoEvidence>();
@@ -250,23 +245,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<CreditNoteLine> CreditNoteLines => Set<CreditNoteLine>();
     public DbSet<TenantQuotation> TenantQuotations => Set<TenantQuotation>();
     public DbSet<TenantQuotationLine> TenantQuotationLines => Set<TenantQuotationLine>();
-    public DbSet<SalesOpportunity> SalesOpportunities => Set<SalesOpportunity>();
-    public DbSet<SalesActivity> SalesActivities => Set<SalesActivity>();
-    public DbSet<SalesTender> SalesTenders => Set<SalesTender>();
-    public DbSet<TenantSalesSettings> TenantSalesSettings => Set<TenantSalesSettings>();
     public DbSet<ClientContact> ClientContacts => Set<ClientContact>();
-    public DbSet<SalesAssignmentRule> SalesAssignmentRules => Set<SalesAssignmentRule>();
-    public DbSet<SalesStageChange> SalesStageChanges => Set<SalesStageChange>();
-    public DbSet<SalesTarget> SalesTargets => Set<SalesTarget>();
-    public DbSet<SalesPipeline> SalesPipelines => Set<SalesPipeline>();
-    public DbSet<SalesPipelineStage> SalesPipelineStages => Set<SalesPipelineStage>();
-    public DbSet<SalesCustomField> SalesCustomFields => Set<SalesCustomField>();
-    public DbSet<SalesCustomFieldValue> SalesCustomFieldValues => Set<SalesCustomFieldValue>();
-    public DbSet<SalesSequence> SalesSequences => Set<SalesSequence>();
-    public DbSet<SalesSequenceStep> SalesSequenceSteps => Set<SalesSequenceStep>();
-    public DbSet<SalesSequenceEnrollment> SalesSequenceEnrollments => Set<SalesSequenceEnrollment>();
-    public DbSet<SalesSavedView> SalesSavedViews => Set<SalesSavedView>();
-    public DbSet<SalesOpportunityContact> SalesOpportunityContacts => Set<SalesOpportunityContact>();
     public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
     public DbSet<ProjectType> ProjectTypes => Set<ProjectType>();
@@ -298,7 +277,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        RecordSalesStageChanges();
         ApplyAuditFields();
         NormalizeUtcFields();
         return base.SaveChangesAsync(cancellationToken);
@@ -306,7 +284,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
 
     public override int SaveChanges()
     {
-        RecordSalesStageChanges();
         ApplyAuditFields();
         NormalizeUtcFields();
         return base.SaveChanges();
@@ -638,22 +615,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.DecidedByName).HasMaxLength(200);
             entity.Property(x => x.Note).HasMaxLength(2000);
             entity.HasIndex(x => new { x.TenantId, x.Status });
-        });
-
-        modelBuilder.Entity<CsatSurvey>(entity =>
-        {
-            entity.ToTable("csat_surveys");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
-            entity.Property(x => x.Comment).HasMaxLength(2000);
-            entity.Property(x => x.Channel).HasMaxLength(20);
-            entity.HasIndex(x => x.TokenHash).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.WorkOrderId }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.RespondedAt });
-            entity.HasOne(x => x.WorkOrder)
-                .WithMany()
-                .HasForeignKey(x => x.WorkOrderId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ClientPortalUser>(entity =>
@@ -1263,11 +1224,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Quote)
                 .WithMany()
                 .HasForeignKey(x => x.QuoteId)
-                .OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => x.SalesOpportunityId);
-            entity.HasOne(x => x.SalesOpportunity)
-                .WithMany(x => x.WorkOrders)
-                .HasForeignKey(x => x.SalesOpportunityId)
                 .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.ParentWorkOrder)
                 .WithMany(x => x.ChildWorkOrders)
@@ -3548,69 +3504,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => x.Category).IsUnique();
         });
 
-        modelBuilder.Entity<PlatformLead>(entity =>
-        {
-            entity.ToTable("platform_leads");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.CompanyName).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.ContactPersonName).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
-            entity.Property(x => x.Phone).HasMaxLength(50).IsRequired();
-            entity.Property(x => x.Country).HasMaxLength(120);
-            entity.Property(x => x.Industry).HasMaxLength(120);
-            entity.Property(x => x.CompanySize).HasMaxLength(120);
-            entity.Property(x => x.Message).HasMaxLength(4000);
-            entity.Property(x => x.PreferredContactMethod).HasMaxLength(40);
-            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.Notes).HasMaxLength(4000);
-            entity.HasIndex(x => x.CreatedAt);
-            entity.HasIndex(x => x.Status);
-            entity.HasIndex(x => x.ConvertedTenantId);
-            entity.HasOne(x => x.ConvertedTenant)
-                .WithMany(x => x.ConvertedLeads)
-                .HasForeignKey(x => x.ConvertedTenantId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<CrmContact>(entity =>
-        {
-            entity.ToTable("crm_contacts");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.FullName).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.CompanyName).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Email).HasMaxLength(256).IsRequired();
-            entity.Property(x => x.Phone).HasMaxLength(50);
-            entity.Property(x => x.Role).HasMaxLength(120);
-            entity.HasIndex(x => x.LeadId);
-            entity.HasOne(x => x.Lead).WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<CrmActivity>(entity =>
-        {
-            entity.ToTable("crm_activities");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Type).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Summary).HasMaxLength(2000).IsRequired();
-            entity.Property(x => x.LoggedByName).HasMaxLength(200);
-            entity.HasIndex(x => x.ContactId);
-            entity.HasIndex(x => x.LeadId);
-            entity.HasOne(x => x.Contact).WithMany().HasForeignKey(x => x.ContactId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Lead).WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<CrmTask>(entity =>
-        {
-            entity.ToTable("crm_tasks");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
-            entity.Property(x => x.Priority).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.AssignedToName).HasMaxLength(200);
-            entity.HasIndex(x => x.Status);
-            entity.HasOne(x => x.RelatedContact).WithMany().HasForeignKey(x => x.RelatedContactId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.RelatedLead).WithMany().HasForeignKey(x => x.RelatedLeadId).OnDelete(DeleteBehavior.SetNull);
-        });
-
         modelBuilder.Entity<PlatformAnnouncement>(entity =>
         {
             entity.ToTable("platform_announcements");
@@ -4490,99 +4383,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.Site).WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.ConvertedToInvoice).WithMany().HasForeignKey(x => x.ConvertedToInvoiceId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.ConvertedToWorkOrder).WithMany().HasForeignKey(x => x.ConvertedToWorkOrderId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.SalesOpportunity).WithMany(x => x.Quotations).HasForeignKey(x => x.SalesOpportunityId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => x.SalesOpportunityId);
             entity.HasIndex(x => new { x.TenantId, x.QuoteNumber }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.Status });
         });
         ApplyTenantFilter<TenantQuotation>(modelBuilder);
 
         // ── Sales CRM ────────────────────────────────────────────────────────
-        modelBuilder.Entity<SalesOpportunity>(entity =>
-        {
-            entity.ToTable("sales_opportunities");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Stage).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.CompanyName).HasMaxLength(200);
-            entity.Property(x => x.ContactName).HasMaxLength(150);
-            entity.Property(x => x.ContactEmail).HasMaxLength(256);
-            entity.Property(x => x.ContactPhone).HasMaxLength(50);
-            entity.Property(x => x.Location).HasMaxLength(250);
-            entity.Property(x => x.Source).HasMaxLength(60);
-            entity.Property(x => x.ServiceType).HasMaxLength(50);
-            entity.Property(x => x.Description).HasMaxLength(4000);
-            entity.Property(x => x.EstimatedValue).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired();
-            entity.Property(x => x.OwnerName).HasMaxLength(150);
-            entity.Property(x => x.LostReason).HasMaxLength(500);
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.Site).WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => new { x.TenantId, x.Stage });
-            entity.HasIndex(x => new { x.TenantId, x.ClientId });
-            entity.HasIndex(x => new { x.TenantId, x.OwnerUserId });
-            entity.HasIndex(x => new { x.TenantId, x.RenewalOfContractId });
-            entity.HasIndex(x => new { x.TenantId, x.PipelineId });
-            entity.HasIndex(x => new { x.TenantId, x.SourceWorkOrderId });
-        });
-        ApplyTenantFilter<SalesOpportunity>(modelBuilder);
-
-        modelBuilder.Entity<TenantSalesSettings>(entity =>
-        {
-            entity.ToTable("tenant_sales_settings");
-            entity.HasKey(x => x.Id);
-            entity.HasIndex(x => x.TenantId).IsUnique();
-            entity.Property(x => x.DealVisibility).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.LeadEmailAddress).HasMaxLength(256);
-            entity.Property(x => x.WebFormKey).HasMaxLength(64);
-            entity.HasIndex(x => x.WebFormKey).IsUnique();
-        });
-        ApplyTenantFilter<TenantSalesSettings>(modelBuilder);
-
-        modelBuilder.Entity<SalesSequence>(entity =>
-        {
-            entity.ToTable("sales_sequences");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
-            entity.HasIndex(x => x.TenantId);
-        });
-        ApplyTenantFilter<SalesSequence>(modelBuilder);
-
-        modelBuilder.Entity<SalesSequenceStep>(entity =>
-        {
-            entity.ToTable("sales_sequence_steps");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Action).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.Subject).HasMaxLength(200);
-            entity.Property(x => x.Body).HasMaxLength(4000).IsRequired();
-            entity.HasOne(x => x.Sequence).WithMany(x => x.Steps).HasForeignKey(x => x.SequenceId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<SalesSequenceStep>(modelBuilder);
-
-        modelBuilder.Entity<SalesSequenceEnrollment>(entity =>
-        {
-            entity.ToTable("sales_sequence_enrollments");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.StoppedReason).HasMaxLength(300);
-            entity.HasOne(x => x.Sequence).WithMany().HasForeignKey(x => x.SequenceId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Opportunity).WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(x => new { x.Status, x.NextDueAt });
-            entity.HasIndex(x => new { x.TenantId, x.OpportunityId });
-        });
-        ApplyTenantFilter<SalesSequenceEnrollment>(modelBuilder);
-
-        modelBuilder.Entity<SalesSavedView>(entity =>
-        {
-            entity.ToTable("sales_saved_views");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.Query).HasMaxLength(1000).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.UserId });
-        });
-        ApplyTenantFilter<SalesSavedView>(modelBuilder);
-
         modelBuilder.Entity<ClientContact>(entity =>
         {
             entity.ToTable("client_contacts");
@@ -4598,141 +4404,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.Email });
         });
         ApplyTenantFilter<ClientContact>(modelBuilder);
-
-        modelBuilder.Entity<SalesOpportunityContact>(entity =>
-        {
-            entity.ToTable("sales_opportunity_contacts");
-            entity.HasKey(x => x.Id);
-            entity.HasOne(x => x.Opportunity).WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Contact).WithMany().HasForeignKey(x => x.ContactId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(x => new { x.OpportunityId, x.ContactId }).IsUnique();
-        });
-        ApplyTenantFilter<SalesOpportunityContact>(modelBuilder);
-
-        modelBuilder.Entity<SalesAssignmentRule>(entity =>
-        {
-            entity.ToTable("sales_assignment_rules");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
-            entity.Property(x => x.Source).HasMaxLength(60);
-            entity.Property(x => x.ServiceType).HasMaxLength(50);
-            entity.Property(x => x.LocationContains).HasMaxLength(120);
-            entity.Property(x => x.Method).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.OwnerUserIds).HasMaxLength(2000).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.SortOrder });
-        });
-        ApplyTenantFilter<SalesAssignmentRule>(modelBuilder);
-
-        modelBuilder.Entity<SalesStageChange>(entity =>
-        {
-            entity.ToTable("sales_stage_changes");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.FromStage).HasMaxLength(40);
-            entity.Property(x => x.ToStage).HasMaxLength(40).IsRequired();
-            entity.HasOne(x => x.Opportunity).WithMany().HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(x => new { x.TenantId, x.ChangedAt });
-            entity.HasIndex(x => new { x.OpportunityId, x.ChangedAt });
-        });
-        ApplyTenantFilter<SalesStageChange>(modelBuilder);
-
-        modelBuilder.Entity<SalesTarget>(entity =>
-        {
-            entity.ToTable("sales_targets");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
-            entity.HasIndex(x => new { x.TenantId, x.Month, x.OwnerUserId }).IsUnique();
-        });
-        ApplyTenantFilter<SalesTarget>(modelBuilder);
-
-        modelBuilder.Entity<SalesPipeline>(entity =>
-        {
-            entity.ToTable("sales_pipelines");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.Module).HasMaxLength(40);
-            entity.HasIndex(x => new { x.TenantId, x.SortOrder });
-        });
-        ApplyTenantFilter<SalesPipeline>(modelBuilder);
-
-        modelBuilder.Entity<SalesPipelineStage>(entity =>
-        {
-            entity.ToTable("sales_pipeline_stages");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Key).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Name).HasMaxLength(60).IsRequired();
-            entity.Property(x => x.RequiredFields).HasMaxLength(2000);
-            entity.HasOne(x => x.Pipeline).WithMany(x => x.Stages).HasForeignKey(x => x.PipelineId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(x => new { x.PipelineId, x.Key }).IsUnique();
-        });
-        ApplyTenantFilter<SalesPipelineStage>(modelBuilder);
-
-        modelBuilder.Entity<SalesCustomField>(entity =>
-        {
-            entity.ToTable("sales_custom_fields");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Key).HasMaxLength(60).IsRequired();
-            entity.Property(x => x.Label).HasMaxLength(100).IsRequired();
-            entity.Property(x => x.FieldType).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.Options).HasMaxLength(4000);
-            entity.Property(x => x.HelpText).HasMaxLength(300);
-            entity.HasOne<SalesPipeline>().WithMany().HasForeignKey(x => x.PipelineId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => new { x.TenantId, x.Key }).IsUnique();
-        });
-        ApplyTenantFilter<SalesCustomField>(modelBuilder);
-
-        modelBuilder.Entity<SalesCustomFieldValue>(entity =>
-        {
-            entity.ToTable("sales_custom_field_values");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Value).HasMaxLength(1000).IsRequired();
-            entity.HasOne(x => x.Opportunity).WithMany(x => x.CustomFieldValues).HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Field).WithMany().HasForeignKey(x => x.FieldId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(x => new { x.OpportunityId, x.FieldId }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.FieldId, x.Value });
-        });
-        ApplyTenantFilter<SalesCustomFieldValue>(modelBuilder);
-
-        modelBuilder.Entity<SalesActivity>(entity =>
-        {
-            entity.ToTable("sales_activities");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Type).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Summary).HasMaxLength(2000).IsRequired();
-            entity.Property(x => x.LoggedByName).HasMaxLength(150);
-            entity.HasOne(x => x.Opportunity).WithMany(x => x.Activities).HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(x => new { x.TenantId, x.OpportunityId, x.OccurredAt });
-            entity.HasIndex(x => new { x.TenantId, x.DueAt });
-        });
-        ApplyTenantFilter<SalesActivity>(modelBuilder);
-
-        modelBuilder.Entity<SalesTender>(entity =>
-        {
-            entity.ToTable("sales_tenders");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Type).HasMaxLength(10).IsRequired();
-            entity.Property(x => x.Reference).HasMaxLength(120);
-            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.IssuerName).HasMaxLength(200);
-            entity.Property(x => x.ContactName).HasMaxLength(150);
-            entity.Property(x => x.ContactEmail).HasMaxLength(256);
-            entity.Property(x => x.ContactPhone).HasMaxLength(50);
-            entity.Property(x => x.SubmissionMethod).HasMaxLength(120);
-            entity.Property(x => x.BidBondAmount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Description).HasMaxLength(4000);
-            entity.Property(x => x.EstimatedValue).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.SubmittedValue).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired();
-            entity.Property(x => x.OutcomeNotes).HasMaxLength(1000);
-            entity.Property(x => x.OwnerName).HasMaxLength(150);
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.Opportunity).WithMany(x => x.Tenders).HasForeignKey(x => x.OpportunityId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => new { x.TenantId, x.Status });
-            entity.HasIndex(x => new { x.TenantId, x.SubmissionDeadline });
-            entity.HasIndex(x => x.OpportunityId);
-        });
-        ApplyTenantFilter<SalesTender>(modelBuilder);
 
         modelBuilder.Entity<TenantQuotationLine>(entity =>
         {
@@ -5639,47 +5310,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         modelBuilder.Entity<TEntity>().HasQueryFilter(filter);
     }
 
-    /// <summary>
-    /// Writes a <see cref="SalesStageChange"/> for every deal created or moved to another stage in this
-    /// save, so the history is complete whichever code path moved it.
-    /// </summary>
-    private void RecordSalesStageChanges()
-    {
-        var utcNow = DateTime.UtcNow;
-        var changes = new List<SalesStageChange>();
-        foreach (var entry in ChangeTracker.Entries<SalesOpportunity>())
-        {
-            string? from;
-            if (entry.State == EntityState.Added)
-                from = null;
-            else if (entry.State == EntityState.Modified && entry.Property(x => x.Stage).IsModified
-                && !string.Equals(entry.Property(x => x.Stage).OriginalValue, entry.Entity.Stage, StringComparison.Ordinal))
-                from = entry.Property(x => x.Stage).OriginalValue;
-            else
-                continue;
-
-            // A deal recorded as won or lost on a past date (an import) keeps that date.
-            var at = entry.Entity.Stage switch
-            {
-                "Won" when entry.Entity.WonAt < utcNow => entry.Entity.WonAt!.Value,
-                "Lost" when entry.Entity.LostAt < utcNow => entry.Entity.LostAt!.Value,
-                _ => utcNow,
-            };
-            entry.Entity.StageChangedAt = at;
-            changes.Add(new SalesStageChange
-            {
-                TenantId = entry.Entity.TenantId,
-                OpportunityId = entry.Entity.Id,
-                FromStage = from,
-                ToStage = entry.Entity.Stage,
-                ChangedAt = at,
-                ChangedByUserId = tenantContext?.UserId,
-            });
-        }
-        if (changes.Count > 0)
-            SalesStageChanges.AddRange(changes);
-    }
-
     private void ApplyAuditFields()
     {
         var utcNow = DateTime.UtcNow;
@@ -5874,18 +5504,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entry.Entity.UpdatedAt = EnsureUtc(entry.Entity.UpdatedAt);
             entry.Entity.ExpenseDate = EnsureUtc(entry.Entity.ExpenseDate);
             entry.Entity.ApprovedAt = EnsureUtc(entry.Entity.ApprovedAt);
-        }
-
-        foreach (var entry in ChangeTracker.Entries<PlatformLead>())
-        {
-            if (entry.State is not EntityState.Added and not EntityState.Modified)
-            {
-                continue;
-            }
-
-            entry.Entity.CreatedAt = EnsureUtc(entry.Entity.CreatedAt);
-            entry.Entity.UpdatedAt = EnsureUtc(entry.Entity.UpdatedAt);
-            entry.Entity.ContactedAt = EnsureUtc(entry.Entity.ContactedAt);
         }
 
         foreach (var entry in ChangeTracker.Entries<PasswordResetToken>())

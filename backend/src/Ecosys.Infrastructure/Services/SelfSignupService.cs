@@ -44,7 +44,6 @@ internal sealed class SelfSignupService(
     IEmailSubjectRuleService emailSubjectRuleService,
     IEmailOutboxService emailOutboxService,
     IEmailSettingsResolver emailSettingsResolver,
-    IPlatformLeadNotifier platformLeadNotifier,
     IAuditLogService auditLogService,
     IOptions<AuthSecurityOptions> authSecurityOptions,
     IOptions<SmtpOptions> smtpOptions,
@@ -160,20 +159,6 @@ internal sealed class SelfSignupService(
         }
 
         signup.TenantId = result.TenantId;
-        var lead = new PlatformLead
-        {
-            CompanyName = signup.CompanyName,
-            ContactPersonName = signup.FullName,
-            Email = signup.Email,
-            Phone = signup.Phone,
-            Country = signup.Country,
-            Industry = signup.Industry,
-            Message = "Started a 14-day free trial through self sign-up.",
-            PreferredContactMethod = "Email",
-            Status = "Converted to Workspace",
-            ConvertedTenantId = result.TenantId,
-        };
-        dbContext.PlatformLeads.Add(lead);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
@@ -184,7 +169,6 @@ internal sealed class SelfSignupService(
             result.TenantId.ToString(),
             $"'{signup.CompanyName}' confirmed '{signup.Email}' and started a trial through self sign-up.",
             cancellationToken);
-        await platformLeadNotifier.TryNotifyAsync(lead, result.UserId, cancellationToken);
         return result;
     }
 

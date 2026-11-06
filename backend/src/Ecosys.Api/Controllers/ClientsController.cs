@@ -654,8 +654,7 @@ public sealed class ClientsController(
             await dbContext.CreditNotes.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
             await dbContext.TenantQuotations.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
             await dbContext.Sites.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
-            await dbContext.SalesOpportunities.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken)
-                + await dbContext.SalesTenders.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken));
+            0);
     }
 }
 

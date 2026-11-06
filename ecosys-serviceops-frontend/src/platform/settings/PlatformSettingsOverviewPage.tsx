@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import {
-  Building2, Layers, Palette, Flag, Mail, Send, Users2, ShieldCheck, Megaphone,
+  Building2, Layers, Palette, Flag, Mail, Send, ShieldCheck, Megaphone,
   MessageCircleQuestion, Activity, ScrollText,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
@@ -12,7 +12,6 @@ const items: Array<{ to: string; label: string; description: string; icon: typeo
   { to: '/platform/settings/features', label: 'Edition Features', description: 'What each edition includes.', icon: Flag },
   { to: '/platform/settings/email-templates', label: 'Email Templates', description: 'Platform-wide transactional email defaults.', icon: Mail },
   { to: '/platform/settings/email-delivery', label: 'Email Delivery', description: 'SMTP, flags, and subject rules.', icon: Send },
-  { to: '/platform/settings/crm', label: 'CRM', description: 'Pipeline and lead routing configuration.', icon: Users2 },
   { to: '/platform/settings/security', label: 'Security', description: 'Password policy and session rules.', icon: ShieldCheck },
   { to: '/platform/settings/announcements', label: 'Announcements', description: 'Platform-wide banners and release notes.', icon: Megaphone },
   { to: '/platform/settings/support', label: 'Support', description: 'Support contact and escalation routing.', icon: MessageCircleQuestion },

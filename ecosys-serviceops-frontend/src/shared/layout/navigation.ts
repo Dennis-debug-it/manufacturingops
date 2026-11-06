@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, Megaphone, MessageCircle, CheckSquare, MapPin, CalendarClock, Handshake, Activity, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, MapPin, CalendarClock, Activity, LifeBuoy, FolderKanban, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -33,7 +33,6 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Scan', to: '/scan', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], icon: ScanLine },
   { label: 'Maintenance calendar', to: '/maintenance/calendar', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Wrench },
   // Any office role can be granted the CRM in the role matrix, so the capability (not the role) decides.
-  { label: 'Sales', to: '/crm', roles: ['admin', 'manager', 'dispatcher', 'finance', 'viewer', 'materials_controller'], permission: 'crm.view', icon: Handshake },
   { label: 'Clients', to: '/clients', roles: ['admin', 'manager', 'dispatcher', 'finance', 'viewer'], permission: 'clients.view', icon: Building2 },
   { label: 'Inventory', to: '/inventory', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], permission: 'materials.view', icon: Package },
   { label: 'Users & Access', to: '/team', roles: ['admin'], permission: 'team.view', icon: Users },
@@ -67,7 +66,6 @@ export const platformNavItems: NavItem[] = [
   // path prefix, so a bare `/platform` matched every platform route and kept Overview highlighted.
   { label: 'Overview', to: '/platform/overview', roles: ['super_admin', 'platform_sales'], permission: 'platform.dashboard.view', icon: ShieldCheck },
   { label: 'Tenants', to: '/platform/tenants', roles: ['super_admin', 'platform_sales'], permission: 'platform.tenants.view', icon: Building2 },
-  { label: 'Leads', to: '/platform/leads', roles: ['super_admin', 'platform_sales'], permission: 'platform.crm.view', icon: Megaphone },
   { label: 'Finance', to: '/platform/finance', roles: ['super_admin'], permission: 'platform.finance.view', icon: Wallet },
   { label: 'Users', to: '/platform/users', roles: ['super_admin'], permission: 'platform.users.view', icon: Users },
   { label: 'Licensing', to: '/platform/licensing', roles: ['super_admin'], permission: 'platform.licensing.view', icon: FileText },

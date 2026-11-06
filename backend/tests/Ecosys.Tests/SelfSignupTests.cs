@@ -84,10 +84,6 @@ public sealed class SelfSignupTests : IAsyncLifetime
             Assert.Equal(tenant.Id, owner.TenantId);
             Assert.False(owner.MustChangePassword);
 
-            var lead = await db.PlatformLeads.SingleAsync(x => x.Email == "amina@riftcool.test");
-            Assert.Equal("Converted to Workspace", lead.Status);
-            Assert.Equal(tenant.Id, lead.ConvertedTenantId);
-            Assert.Equal("+254700000001", lead.Phone);
         }
 
         // The owner signs in later with the password chosen on the form.

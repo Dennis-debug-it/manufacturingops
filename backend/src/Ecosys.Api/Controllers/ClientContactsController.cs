@@ -71,7 +71,7 @@ public sealed class ClientContactsController(
     private void EnsureCanEdit()
     {
         userAccessService.EnsureTenantOperationalAccess();
-        if (!(tenantContext.IsAdmin || tenantContext.HasPermission(PermissionNames.CanManageAssets) || SalesCrmAccess.CanManage(tenantContext)))
+        if (!(tenantContext.IsAdmin || tenantContext.HasPermission(PermissionNames.CanManageAssets)))
             throw new ForbiddenException("You do not have permission to edit client contacts.");
     }
 

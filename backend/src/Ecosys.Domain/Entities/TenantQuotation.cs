@@ -27,7 +27,6 @@ public sealed class TenantQuotation : AuditableEntity, ITenantEntity
     public DateTime? AcceptedAt { get; set; }
     public string? AcceptedFromIp { get; set; }
     public Guid? AcceptedByPortalUserId { get; set; }
-    public Guid? SalesOpportunityId { get; set; }
     /// <summary>When the quotation was sent to the client, and by whom; the sales chase list counts from here.</summary>
     public DateTime? SentAt { get; set; }
     public Guid? SentByUserId { get; set; }
@@ -39,7 +38,6 @@ public sealed class TenantQuotation : AuditableEntity, ITenantEntity
     public Site? Site { get; set; }
     public TenantInvoice? ConvertedToInvoice { get; set; }
     public WorkOrder? ConvertedToWorkOrder { get; set; }
-    public SalesOpportunity? SalesOpportunity { get; set; }
     public ICollection<TenantQuotationLine> Lines { get; set; } = new List<TenantQuotationLine>();
 }
 

@@ -250,11 +250,6 @@ export function WorkOrderDetailPage() {
           Quote #{workOrder.quoteNumber}
         </Link>
       ) : null}
-      {workOrder.salesOpportunityId ? (
-        <Link to={`/crm/opportunities/${workOrder.salesOpportunityId}`} className={cn(chipClass, 'text-emerald-700 hover:bg-emerald-50')}>
-          From deal{workOrder.salesOpportunityTitle ? `: ${workOrder.salesOpportunityTitle}` : ''}
-        </Link>
-      ) : null}
     </div>
   )
 

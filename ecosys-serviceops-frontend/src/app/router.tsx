@@ -35,7 +35,6 @@ import { RequestDemoPage } from '../features/public/RequestDemoPage'
 import { SignupPage } from '../features/public/SignupPage'
 import { SignupVerifyPage } from '../features/public/SignupVerifyPage'
 import { DemoConfirmationPage } from '../features/public/DemoConfirmationPage'
-import { CsatSurveyPage } from '../features/public/CsatSurveyPage'
 import { EnquiryFormPage } from '../features/public/EnquiryFormPage'
 import { TrackJobPage } from '../features/portal/TrackJobPage'
 import { ForbiddenPage } from '../features/public/ForbiddenPage'
@@ -91,12 +90,6 @@ import { DocumentsPage } from '../features/finance/DocumentsPage'
 import { InvoiceDetailPage } from '../features/finance/InvoiceDetailPage'
 import { FinanceOverviewPage } from '../features/finance/FinanceOverviewPage'
 import { QuotesPage } from '../features/finance/QuotesPage'
-import { PipelinePage } from '../features/crm/PipelinePage'
-import { OpportunityDetailPage } from '../features/crm/OpportunityDetailPage'
-import { TendersPage } from '../features/crm/TendersPage'
-import { FollowUpsPage } from '../features/crm/FollowUpsPage'
-import { SalesReportsPage } from '../features/crm/SalesReportsPage'
-import { TenderDetailPage } from '../features/crm/TenderDetailPage'
 import { QuoteDetailPage } from '../features/finance/QuoteDetailPage'
 import { AgingPage as FinanceAgingPageReal } from '../features/finance/AgingPage'
 import { CreditControlPage } from '../features/finance/CreditControlPage'
@@ -176,7 +169,6 @@ import { SlaPoliciesPage } from '../features/settings/SlaPoliciesPage'
 import { WorkflowsSettingsPage } from '../features/settings/WorkflowsSettingsPage'
 import { OperationalDefaultsSettingsPage } from '../features/settings/OperationalDefaultsSettingsPage'
 import { FinanceDefaultsSettingsPage } from '../features/settings/FinanceDefaultsSettingsPage'
-import { SalesSettingsPage } from '../features/settings/SalesSettingsPage'
 import { EscalationRulesSettingsPage } from '../features/settings/EscalationRulesSettingsPage'
 import { WOTemplatesSettingsPage } from '../features/settings/WOTemplatesSettingsPage'
 import { MyApprovalsPage } from '../features/approvals/MyApprovalsPage'
@@ -373,12 +365,6 @@ export function AppRouter() {
       ['/maintenance/schedules/:id', MaintenanceScheduleDetailPage],
       ['/maintenance/compliance', MaintenanceCompliancePage],
       ['/maintenance/engine', MaintenanceEnginePage],
-      ['/crm', PipelinePage],
-      ['/crm/opportunities/:id', OpportunityDetailPage],
-      ['/crm/follow-ups', FollowUpsPage],
-      ['/crm/reports', SalesReportsPage],
-      ['/crm/tenders', TendersPage],
-      ['/crm/tenders/:id', TenderDetailPage],
       ['/clients', ClientsPage],
       ['/clients/:id', ClientDetailPage],
       ['/clients/:id/sites/new', ClientWizardPage],
@@ -510,7 +496,6 @@ export function AppRouter() {
       ['/settings/workflows', WorkflowsSettingsPage],
       ['/settings/operational-defaults', OperationalDefaultsSettingsPage],
       ['/settings/finance-defaults', FinanceDefaultsSettingsPage],
-      ['/settings/sales', SalesSettingsPage],
       ['/settings/escalation-rules', EscalationRulesSettingsPage],
       ['/settings/wo-templates', WOTemplatesSettingsPage],
       ['/approvals', MyApprovalsPage],
@@ -539,7 +524,6 @@ export function AppRouter() {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/signup/verify" element={<SignupVerifyPage />} />
         <Route path="/demo-confirmation" element={<DemoConfirmationPage />} />
-        <Route path="/csat/:token" element={<CsatSurveyPage />} />
         <Route path="/enquiry/:key" element={<EnquiryFormPage />} />
         <Route path="/track/:token" element={<TrackJobPage />} />
         <Route path="/t/:tag" element={<OperatorReportPage />} />

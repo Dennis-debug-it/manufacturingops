@@ -24,13 +24,3 @@ public sealed class ClientContact : AuditableEntity, ITenantEntity
     public Client? Client { get; set; }
 }
 
-/// <summary>A person involved in a deal.</summary>
-public sealed class SalesOpportunityContact : AuditableEntity, ITenantEntity
-{
-    public Guid TenantId { get; set; }
-    public Guid OpportunityId { get; set; }
-    public Guid ContactId { get; set; }
-
-    public SalesOpportunity? Opportunity { get; set; }
-    public ClientContact? Contact { get; set; }
-}
