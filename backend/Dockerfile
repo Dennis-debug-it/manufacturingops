@@ -9,8 +9,6 @@ COPY Directory.Build.props ./
 COPY src/Ecosys.Api/Ecosys.Api.csproj                       src/Ecosys.Api/
 COPY src/Ecosys.Domain/Ecosys.Domain.csproj                src/Ecosys.Domain/
 COPY src/Ecosys.Infrastructure/Ecosys.Infrastructure.csproj src/Ecosys.Infrastructure/
-COPY src/Ecosys.Platform/Ecosys.Platform.csproj            src/Ecosys.Platform/
-COPY src/Ecosys.ServiceOps/Ecosys.ServiceOps.csproj        src/Ecosys.ServiceOps/
 COPY src/Ecosys.Shared/Ecosys.Shared.csproj                src/Ecosys.Shared/
 RUN dotnet restore src/Ecosys.Api/Ecosys.Api.csproj
 
