@@ -30,11 +30,8 @@ import { ResetPasswordPage } from '../features/auth/ResetPasswordPage'
 import { ChangePasswordPage } from '../features/auth/ChangePasswordPage'
 import { ImpersonationEntryPage } from '../features/auth/ImpersonationEntryPage'
 import { DemoSignedOutPage } from '../features/auth/DemoSignedOutPage'
-import { RequestDemoPage } from '../features/public/RequestDemoPage'
 import { SignupPage } from '../features/public/SignupPage'
 import { SignupVerifyPage } from '../features/public/SignupVerifyPage'
-import { DemoConfirmationPage } from '../features/public/DemoConfirmationPage'
-import { EnquiryFormPage } from '../features/public/EnquiryFormPage'
 import { TrackJobPage } from '../features/portal/TrackJobPage'
 import { ForbiddenPage } from '../features/public/ForbiddenPage'
 import { NotFoundPage } from '../features/public/NotFoundPage'
@@ -139,7 +136,6 @@ import { TimeAttendanceSettingsPage as SettingsTimeAttendancePageReal } from '..
 import { InventorySettingsPage as SettingsInventoryPageReal } from '../features/settings/InventorySettingsPage'
 import { WhatsAppSettingsPage as SettingsWhatsAppPageReal } from '../features/settings/WhatsAppSettingsPage'
 import { WhatsAppRemindersSettingsPage } from '../features/settings/WhatsAppRemindersSettingsPage'
-import { PaymentsSettingsPage as SettingsPaymentsPageReal } from '../features/settings/PaymentsSettingsPage'
 import { IntegrationsSettingsPage as SettingsIntegrationsPageReal } from '../features/settings/IntegrationsSettingsPage'
 import { ExecutiveDashboardSettingsPage as SettingsExecutiveDashboardPageReal } from '../features/settings/ExecutiveDashboardSettingsPage'
 import { SettingsDashboardsPage } from '../features/settings/SettingsDashboardsPage'
@@ -148,7 +144,6 @@ import { NotificationTemplatesPage } from '../features/settings/NotificationTemp
 import { SlaPoliciesPage } from '../features/settings/SlaPoliciesPage'
 import { WorkflowsSettingsPage } from '../features/settings/WorkflowsSettingsPage'
 import { OperationalDefaultsSettingsPage } from '../features/settings/OperationalDefaultsSettingsPage'
-import { FinanceDefaultsSettingsPage } from '../features/settings/FinanceDefaultsSettingsPage'
 import { EscalationRulesSettingsPage } from '../features/settings/EscalationRulesSettingsPage'
 import { WOTemplatesSettingsPage } from '../features/settings/WOTemplatesSettingsPage'
 import { MyApprovalsPage } from '../features/approvals/MyApprovalsPage'
@@ -214,7 +209,6 @@ const SettingsTimeAttendancePage = SettingsTimeAttendancePageReal
 const SettingsEmailIntakePage = SettingsEmailIntakePageReal
 const SettingsMonitoringIntakePage = SettingsMonitoringIntakePageReal
 const SettingsWhatsAppPage = SettingsWhatsAppPageReal
-const SettingsPaymentsPage = SettingsPaymentsPageReal
 const SettingsNotificationsPage = SettingsNotificationsPageReal
 const SettingsIntegrationsPage = SettingsIntegrationsPageReal
 const SettingsSecurityPage = SettingsSecurityPageReal
@@ -421,7 +415,6 @@ export function AppRouter() {
       ['/settings/monitoring', SettingsMonitoringIntakePage],
       ['/settings/whatsapp', SettingsWhatsAppPage],
       ['/settings/whatsapp-reminders', WhatsAppRemindersSettingsPage],
-      ['/settings/payments', SettingsPaymentsPage],
       ['/settings/notifications', MyNotificationSettingsPage],
       ['/settings/workspace-notifications', SettingsNotificationsPage],
       ['/settings/integrations', SettingsIntegrationsPage],
@@ -436,7 +429,6 @@ export function AppRouter() {
       ['/settings/sla-policies', SlaPoliciesPage],
       ['/settings/workflows', WorkflowsSettingsPage],
       ['/settings/operational-defaults', OperationalDefaultsSettingsPage],
-      ['/settings/finance-defaults', FinanceDefaultsSettingsPage],
       ['/settings/escalation-rules', EscalationRulesSettingsPage],
       ['/settings/wo-templates', WOTemplatesSettingsPage],
       ['/approvals', MyApprovalsPage],
@@ -458,11 +450,8 @@ export function AppRouter() {
         <Route path="/change-password" element={<ChangePasswordPage />} />
         <Route path="/impersonate-entry" element={<ImpersonationEntryPage />} />
         <Route path="/demo/signed-out" element={<DemoSignedOutPage />} />
-        <Route path="/request-demo" element={<RequestDemoPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/signup/verify" element={<SignupVerifyPage />} />
-        <Route path="/demo-confirmation" element={<DemoConfirmationPage />} />
-        <Route path="/enquiry/:key" element={<EnquiryFormPage />} />
         <Route path="/track/:token" element={<TrackJobPage />} />
         <Route path="/t/:tag" element={<OperatorReportPage />} />
         <Route path="/403" element={<ForbiddenPage />} />

@@ -99,8 +99,6 @@ const rolePermissions: Record<AppRole, string[]> = {
   super_admin: ['*'],
   platform_sales: [
     'platform.dashboard.view',
-    'platform.crm.view',
-    'platform.crm.manage',
     'platform.tenants.view',
     'platform.finance.view',
   ],
@@ -112,8 +110,6 @@ const permissionSetLookup: Partial<Record<string, keyof PermissionSet>> = {
   'work-orders.assign': 'canAssignWorkOrders',
   'work-orders.start': 'canCompleteWorkOrders',
   'work-orders.complete': 'canCompleteWorkOrders',
-  'knowledge.view': 'canViewKnowledge',
-  'knowledge.manage': 'canManageKnowledge',
   'materials.view': 'canViewMaterials',
   'materials.request': 'canRequestMaterials',
   'materials.manage': 'canManageMaterials',
@@ -128,8 +124,6 @@ const permissionSetLookup: Partial<Record<string, keyof PermissionSet>> = {
   'finance.rates.manage': 'canManageFinanceRates',
   'finance.approvals.view': 'canViewFinanceApprovals',
   'finance.approvals.manage': 'canManageFinanceApprovals',
-  'finance.billable-work.view': 'canViewBillableWork',
-  'finance.billable-work.manage': 'canManageBillableWork',
   'platform.tenants.view': 'canViewPlatformTenants',
   'platform.tenants.create': 'canCreatePlatformTenants',
   'platform.tenants.edit': 'canEditPlatformTenants',
@@ -146,8 +140,6 @@ const permissionSetLookup: Partial<Record<string, keyof PermissionSet>> = {
   'inventory.transfers.manage': 'canManageMaterials',
   'inventory.materials.manage': 'canManageMaterials',
   'pm-templates.manage': 'canManageSettings',
-  'crm.view': 'canViewCrm',
-  'crm.manage': 'canManageCrm',
 }
 
 /**
@@ -181,19 +173,9 @@ const executeActions = new Set([
  * checked there rather than against the static role map.
  */
 const capabilityActions = new Set([
-  'projects.view',
-  'projects.manage',
-  'projects.variations.submit',
-  'projects.variations.approve',
-  'projects.close',
-  'projects.settings',
-  'projects.muster.mark',
-  'projects.financials.view',
-  'projects.financials.manage',
   'activities.view',
   'activities.manage',
   'calendar.team',
-  'crm.view_all',
 ])
 
 /** The same check as usePermission, for code that isn't a component (e.g. route access rules). */

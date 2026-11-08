@@ -32,8 +32,8 @@ public interface ISelfSignupService
 
 /// <summary>
 /// Self-service sign-up for new companies. The email is confirmed before anything is created, so a
-/// workspace always belongs to a mailbox its owner controls; each completed sign-up is recorded as a
-/// lead (status "Converted to Workspace") and the platform owner is told about it.
+/// workspace always belongs to a mailbox its owner controls; each completed sign-up is written to the
+/// audit log and the new tenant appears under Platform → Tenants.
 /// </summary>
 internal sealed class SelfSignupService(
     AppDbContext dbContext,
@@ -53,7 +53,7 @@ internal sealed class SelfSignupService(
     public const string SentMessage =
         "Check your email. We've sent a link to confirm your address and open your workspace. If you already have an account, sign in or reset your password instead.";
     private const string InvalidLinkMessage = "This sign-up link is invalid or has expired. Please sign up again.";
-    private const string UnavailableMessage = "Sign-up is temporarily unavailable. Please request a demo and we'll set up your workspace.";
+    private const string UnavailableMessage = "Sign-up is temporarily unavailable. Please contact us and we'll set up your workspace.";
     /// <summary>Unconfirmed sign-ups allowed per email address per hour, so the form can't be used to flood a mailbox.</summary>
     private const int MaxLinksPerEmailPerHour = 3;
 

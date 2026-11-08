@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { canAccessModulePath, requiredModulesForPath } from './entitlements'
 
 const essentials = ['operations', 'finance']
-const professional = [...essentials, 'maintenance', 'inventory', 'projects', 'advanced']
+const professional = [...essentials, 'maintenance', 'inventory', 'advanced']
 const enterprise = [...professional, 'enterprise_tools']
 
 describe('edition entitlements', () => {

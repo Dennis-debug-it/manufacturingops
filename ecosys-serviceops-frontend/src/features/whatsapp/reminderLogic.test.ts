@@ -62,7 +62,7 @@ describe('display helpers', () => {
 
 describe('settings helpers', () => {
   it('toggles a key without duplicates', () => {
-    expect(toggleAllowedKey(['work-order.assigned'], 'project.muster-missing', true)).toEqual(['project.muster-missing', 'work-order.assigned'])
+    expect(toggleAllowedKey(['work-order.assigned'], 'factory-check.missed', true)).toEqual(['factory-check.missed', 'work-order.assigned'])
     expect(toggleAllowedKey(['a', 'a', 'b'], 'a', false)).toEqual(['b'])
     expect(toggleAllowedKey(['a'], 'a', true)).toEqual(['a'])
   })

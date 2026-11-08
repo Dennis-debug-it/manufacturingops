@@ -2,7 +2,7 @@ export type ActivityType = 'Meeting' | 'SiteVisit' | 'Inspection' | 'Call'
 export type ActivityStatus = 'Scheduled' | 'Held' | 'Cancelled'
 export type AttendeeResponse = 'Pending' | 'Accepted' | 'Declined'
 export type ActionItemStatus = 'Open' | 'Done' | 'Cancelled'
-export type LinkedEntityType = 'Project' | 'Client' | 'Contract' | 'WorkOrder'
+export type LinkedEntityType = 'Client' | 'Contract' | 'WorkOrder'
 export type AttendeeKind = 'Staff' | 'Consultant' | 'ClientContact' | 'External'
 
 export const activityTypeLabels: Record<ActivityType, string> = {
@@ -130,16 +130,14 @@ export interface SaveActionItemPayload {
   entityId: string | null
 }
 
-export type CalendarSource = 'activities' | 'action-items' | 'work-orders' | 'maintenance' | 'projects' | 'contracts' | 'sales'
+export type CalendarSource = 'activities' | 'action-items' | 'work-orders' | 'maintenance' | 'contracts'
 
 export const calendarSourceLabels: Record<CalendarSource, string> = {
   activities: 'Meetings & visits',
   'action-items': 'Action items',
   'work-orders': 'Work orders',
   maintenance: 'Maintenance due',
-  projects: 'Project dates',
   contracts: 'Contract dates',
-  sales: 'Sales follow-ups',
 }
 
 export interface CalendarItem {

@@ -15,8 +15,8 @@ public sealed class ServiceOpsPlanTests
 {
     [Theory]
     [InlineData("essentials", "operations,finance")]
-    [InlineData("professional", "operations,finance,maintenance,inventory,projects,advanced")]
-    [InlineData("enterprise", "operations,finance,maintenance,inventory,projects,advanced,enterprise_tools")]
+    [InlineData("professional", "operations,finance,maintenance,inventory,advanced")]
+    [InlineData("enterprise", "operations,finance,maintenance,inventory,advanced,enterprise_tools")]
     [InlineData("suite", "")]
     public void EditionCodesDetermineModules_RegardlessOfDisplayNames(string code, string expected)
     {
@@ -50,7 +50,7 @@ public sealed class ServiceOpsPlanTests
     [InlineData("essentials", "WorkOrders", "/api/workorders", true)]
     [InlineData("essentials", "TenantFinance", "/api/finance/rate-cards", true)]
     [InlineData("essentials", "Clients", "/api/clients", true)]
-    // Professional adds maintenance, inventory, projects and the advanced tools.
+    // Professional adds maintenance, inventory and the advanced tools.
     [InlineData("essentials", "PreventiveMaintenance", "/api/preventive-maintenance", false)]
     [InlineData("essentials", "Assets", "/api/assets", false)]
     [InlineData("essentials", "Contracts", "/api/contracts", false)]

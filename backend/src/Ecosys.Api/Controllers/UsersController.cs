@@ -840,8 +840,6 @@ public sealed class UsersController(
         entity.CanCreateWorkOrders = permissions.CanCreateWorkOrders;
         entity.CanAssignWorkOrders = permissions.CanAssignWorkOrders;
         entity.CanCompleteWorkOrders = permissions.CanCompleteWorkOrders;
-        entity.CanViewKnowledge = permissions.CanViewKnowledge;
-        entity.CanManageKnowledge = permissions.CanManageKnowledge;
         entity.CanViewMaterials = permissions.CanViewMaterials;
         entity.CanRequestMaterials = permissions.CanRequestMaterials;
         entity.CanManageMaterials = permissions.CanManageMaterials;
@@ -856,11 +854,7 @@ public sealed class UsersController(
         entity.CanManageFinanceRates = permissions.CanManageFinanceRates;
         entity.CanViewFinanceApprovals = permissions.CanViewFinanceApprovals;
         entity.CanManageFinanceApprovals = permissions.CanManageFinanceApprovals;
-        entity.CanViewBillableWork = permissions.CanViewBillableWork;
-        entity.CanManageBillableWork = permissions.CanManageBillableWork;
         entity.CanOverrideMaterialStock = permissions.CanOverrideMaterialStock;
-        entity.CanViewCrm = permissions.CanViewCrm;
-        entity.CanManageCrm = permissions.CanManageCrm;
     }
 
     private UserResponse Map(
@@ -878,8 +872,6 @@ public sealed class UsersController(
                 CanCreateWorkOrders = user.Permission.CanCreateWorkOrders,
                 CanAssignWorkOrders = user.Permission.CanAssignWorkOrders,
                 CanCompleteWorkOrders = user.Permission.CanCompleteWorkOrders,
-                CanViewKnowledge = user.Permission.CanViewKnowledge,
-                CanManageKnowledge = user.Permission.CanManageKnowledge,
                 CanViewMaterials = user.Permission.CanViewMaterials,
                 CanRequestMaterials = user.Permission.CanRequestMaterials,
                 CanManageMaterials = user.Permission.CanManageMaterials,
@@ -894,11 +886,7 @@ public sealed class UsersController(
                 CanManageFinanceRates = user.Permission.CanManageFinanceRates,
                 CanViewFinanceApprovals = user.Permission.CanViewFinanceApprovals,
                 CanManageFinanceApprovals = user.Permission.CanManageFinanceApprovals,
-                CanViewBillableWork = user.Permission.CanViewBillableWork,
-                CanManageBillableWork = user.Permission.CanManageBillableWork,
                 CanOverrideMaterialStock = user.Permission.CanOverrideMaterialStock,
-                CanViewCrm = user.Permission.CanViewCrm,
-                CanManageCrm = user.Permission.CanManageCrm
             };
 
         return new UserResponse(
@@ -1022,8 +1010,6 @@ public sealed record PermissionRequest(
     bool CanCreateWorkOrders,
     bool CanAssignWorkOrders,
     bool CanCompleteWorkOrders,
-    bool CanViewKnowledge,
-    bool CanManageKnowledge,
     bool CanViewMaterials,
     bool CanRequestMaterials,
     bool CanManageMaterials,
@@ -1038,11 +1024,7 @@ public sealed record PermissionRequest(
     bool CanManageFinanceRates,
     bool CanViewFinanceApprovals,
     bool CanManageFinanceApprovals,
-    bool CanViewBillableWork,
-    bool CanManageBillableWork,
-    bool CanOverrideMaterialStock,
-    bool CanViewCrm = false,
-    bool CanManageCrm = false)
+    bool CanOverrideMaterialStock)
 {
     public UserPermissionsModel ToModel() =>
         new()
@@ -1051,8 +1033,6 @@ public sealed record PermissionRequest(
             CanCreateWorkOrders = CanCreateWorkOrders,
             CanAssignWorkOrders = CanAssignWorkOrders,
             CanCompleteWorkOrders = CanCompleteWorkOrders,
-            CanViewKnowledge = CanViewKnowledge,
-            CanManageKnowledge = CanManageKnowledge,
             CanViewMaterials = CanViewMaterials,
             CanRequestMaterials = CanRequestMaterials,
             CanManageMaterials = CanManageMaterials,
@@ -1067,11 +1047,7 @@ public sealed record PermissionRequest(
             CanManageFinanceRates = CanManageFinanceRates,
             CanViewFinanceApprovals = CanViewFinanceApprovals,
             CanManageFinanceApprovals = CanManageFinanceApprovals,
-            CanViewBillableWork = CanViewBillableWork,
-            CanManageBillableWork = CanManageBillableWork,
             CanOverrideMaterialStock = CanOverrideMaterialStock,
-            CanViewCrm = CanViewCrm,
-            CanManageCrm = CanManageCrm
         };
 }
 

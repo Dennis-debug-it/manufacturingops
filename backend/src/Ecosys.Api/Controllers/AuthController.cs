@@ -311,8 +311,6 @@ public sealed class AuthController(
             CanCreateWorkOrders = permissions.CanCreateWorkOrders,
             CanAssignWorkOrders = permissions.CanAssignWorkOrders,
             CanCompleteWorkOrders = permissions.CanCompleteWorkOrders,
-            CanViewKnowledge = permissions.CanViewKnowledge,
-            CanManageKnowledge = permissions.CanManageKnowledge,
             CanViewMaterials = permissions.CanViewMaterials,
             CanRequestMaterials = permissions.CanRequestMaterials,
             CanManageMaterials = permissions.CanManageMaterials,
@@ -327,11 +325,7 @@ public sealed class AuthController(
             CanManageFinanceRates = permissions.CanManageFinanceRates,
             CanViewFinanceApprovals = permissions.CanViewFinanceApprovals,
             CanManageFinanceApprovals = permissions.CanManageFinanceApprovals,
-            CanViewBillableWork = permissions.CanViewBillableWork,
-            CanManageBillableWork = permissions.CanManageBillableWork,
             CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
-            CanViewCrm = permissions.CanViewCrm,
-            CanManageCrm = permissions.CanManageCrm,
             CanViewPlatformTenants = isPlatformOwner,
             CanCreatePlatformTenants = isPlatformOwner,
             CanEditPlatformTenants = isPlatformOwner,
@@ -414,8 +408,6 @@ public sealed record PermissionResponse
     public bool CanCreateWorkOrders { get; init; }
     public bool CanAssignWorkOrders { get; init; }
     public bool CanCompleteWorkOrders { get; init; }
-    public bool CanViewKnowledge { get; init; }
-    public bool CanManageKnowledge { get; init; }
     public bool CanViewMaterials { get; init; }
     public bool CanRequestMaterials { get; init; }
     public bool CanManageMaterials { get; init; }
@@ -430,11 +422,7 @@ public sealed record PermissionResponse
     public bool CanManageFinanceRates { get; init; }
     public bool CanViewFinanceApprovals { get; init; }
     public bool CanManageFinanceApprovals { get; init; }
-    public bool CanViewBillableWork { get; init; }
-    public bool CanManageBillableWork { get; init; }
     public bool CanOverrideMaterialStock { get; init; }
-    public bool CanViewCrm { get; init; }
-    public bool CanManageCrm { get; init; }
     public bool CanViewPlatformTenants { get; init; }
     public bool CanCreatePlatformTenants { get; init; }
     public bool CanEditPlatformTenants { get; init; }

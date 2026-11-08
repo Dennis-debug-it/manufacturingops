@@ -7,9 +7,7 @@ import {
   fromActivityTimes,
   groupByDay,
   itemDayKeys,
-  readVariationPrefill,
   toActivityTimes,
-  variationPrefillUrl,
   webcalUrl,
 } from './logic'
 import type { CalendarItem } from './types'
@@ -74,17 +72,5 @@ describe('calendar feed link', () => {
     expect(feedUrl('https://api.ecosys.test/', '/api/calendar/feed/abc.ics', 'https://app.ecosys.test')).toBe('https://api.ecosys.test/api/calendar/feed/abc.ics')
     expect(feedUrl('', '/api/calendar/feed/abc.ics', 'https://app.ecosys.test')).toBe('https://app.ecosys.test/api/calendar/feed/abc.ics')
     expect(webcalUrl('https://api.ecosys.test/api/calendar/feed/abc.ics')).toBe('webcal://api.ecosys.test/api/calendar/feed/abc.ics')
-  })
-})
-
-describe('raise variation from this', () => {
-  it('round-trips the prefill through the project link', () => {
-    const url = variationPrefillUrl('p1', 'From meeting: Site meeting', 'Client asked for 2 extra sockets & a DB.')
-    const [path, query] = url.split('?')
-    expect(path).toBe('/projects/p1')
-    const params = new URLSearchParams(query)
-    expect(params.get('tab')).toBe('variations')
-    expect(readVariationPrefill(params)).toEqual({ title: 'From meeting: Site meeting', description: 'Client asked for 2 extra sockets & a DB.' })
-    expect(readVariationPrefill(new URLSearchParams('tab=variations'))).toBeNull()
   })
 })

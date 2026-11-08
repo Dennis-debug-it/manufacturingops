@@ -6,8 +6,6 @@ export interface PermissionSetFields {
   canCreateWorkOrders: boolean
   canAssignWorkOrders: boolean
   canCompleteWorkOrders: boolean
-  canViewKnowledge: boolean
-  canManageKnowledge: boolean
   canViewMaterials: boolean
   canRequestMaterials: boolean
   canManageMaterials: boolean
@@ -22,11 +20,7 @@ export interface PermissionSetFields {
   canManageFinanceRates: boolean
   canViewFinanceApprovals: boolean
   canManageFinanceApprovals: boolean
-  canViewBillableWork: boolean
-  canManageBillableWork: boolean
   canOverrideMaterialStock: boolean
-  canViewCrm: boolean
-  canManageCrm: boolean
 }
 
 export interface TeamUser {

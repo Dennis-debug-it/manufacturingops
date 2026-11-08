@@ -8,8 +8,6 @@ export interface RoleCapabilities {
   canCreateWorkOrders: boolean
   canAssignWorkOrders: boolean
   canCompleteWorkOrders: boolean
-  canViewKnowledge: boolean
-  canManageKnowledge: boolean
   canViewMaterials: boolean
   canRequestMaterials: boolean
   canManageMaterials: boolean
@@ -24,11 +22,7 @@ export interface RoleCapabilities {
   canManageFinanceRates: boolean
   canViewFinanceApprovals: boolean
   canManageFinanceApprovals: boolean
-  canViewBillableWork: boolean
-  canManageBillableWork: boolean
   canOverrideMaterialStock: boolean
-  canViewCrm: boolean
-  canManageCrm: boolean
 }
 
 export type CapabilityKey = keyof RoleCapabilities
@@ -39,8 +33,6 @@ export const EMPTY_CAPABILITIES: RoleCapabilities = {
   canCreateWorkOrders: false,
   canAssignWorkOrders: false,
   canCompleteWorkOrders: false,
-  canViewKnowledge: false,
-  canManageKnowledge: false,
   canViewMaterials: false,
   canRequestMaterials: false,
   canManageMaterials: false,
@@ -55,11 +47,7 @@ export const EMPTY_CAPABILITIES: RoleCapabilities = {
   canManageFinanceRates: false,
   canViewFinanceApprovals: false,
   canManageFinanceApprovals: false,
-  canViewBillableWork: false,
-  canManageBillableWork: false,
   canOverrideMaterialStock: false,
-  canViewCrm: false,
-  canManageCrm: false,
 }
 
 /** Every capability set to true — used to show Admin's implicit full access. */
@@ -115,13 +103,6 @@ export const capabilityGroups: Array<{ group: string; items: Array<{ key: Capabi
     ],
   },
   {
-    group: 'Knowledge',
-    items: [
-      { key: 'canViewKnowledge', label: 'View knowledge base' },
-      { key: 'canManageKnowledge', label: 'Manage knowledge base' },
-    ],
-  },
-  {
     group: 'Inventory & Materials',
     items: [
       { key: 'canViewMaterials', label: 'View materials' },
@@ -142,15 +123,6 @@ export const capabilityGroups: Array<{ group: string; items: Array<{ key: Capabi
       { key: 'canManageFinanceRates', label: 'Manage rate cards' },
       { key: 'canViewFinanceApprovals', label: 'View invoice approvals' },
       { key: 'canManageFinanceApprovals', label: 'Manage invoice approvals' },
-      { key: 'canViewBillableWork', label: 'View billable work' },
-      { key: 'canManageBillableWork', label: 'Manage billable work' },
-    ],
-  },
-  {
-    group: 'Sales CRM',
-    items: [
-      { key: 'canViewCrm', label: 'View sales pipeline & RFPs/RFQs' },
-      { key: 'canManageCrm', label: 'Manage deals, RFPs/RFQs & exchange rates' },
     ],
   },
   {

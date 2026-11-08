@@ -5,9 +5,9 @@ import { canOpenPath } from './routeAccess'
 const user = (role: string, permissions: Partial<PermissionSet>) => ({ role, permissions }) as unknown as AuthUser
 
 describe('canOpenPath', () => {
-  const dispatcher = user('dispatcher', { canViewWorkOrders: true, canCreateWorkOrders: true, canAssignWorkOrders: true, canViewMaterials: true, canViewKnowledge: true })
-  const finance = user('finance', { canViewWorkOrders: true, canViewFinance: true, canViewReports: true, canViewKnowledge: true })
-  const stores = user('materials_controller', { canViewWorkOrders: true, canViewMaterials: true, canManageMaterials: true, canViewReports: true, canViewKnowledge: true })
+  const dispatcher = user('dispatcher', { canViewWorkOrders: true, canCreateWorkOrders: true, canAssignWorkOrders: true, canViewMaterials: true })
+  const finance = user('finance', { canViewWorkOrders: true, canViewFinance: true, canViewReports: true })
+  const stores = user('materials_controller', { canViewWorkOrders: true, canViewMaterials: true, canManageMaterials: true, canViewReports: true })
 
   it('lets admins open everything', () => {
     expect(canOpenPath(user('admin', {}), '/settings/security')).toBe(true)

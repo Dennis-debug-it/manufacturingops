@@ -1,7 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import {
   BarChart3,
-  BookOpen,
   Boxes,
   Building2,
   CheckSquare,
@@ -95,12 +94,12 @@ const usersAccess: Guide = {
       text: 'The role decides which screens someone sees and where they land after signing in.',
       steps: [
         'Admin — full access to everything, including settings and users.',
-        'Manager — operations, finance figures, approvals, reports and the sales pipeline.',
+        'Manager — operations, maintenance, finance figures, approvals and reports.',
         'Dispatcher — work orders, clients and maintenance.',
         'Technician — the mobile technician app: their jobs, time & leave, guides.',
-        'Materials Controller — stores and logistics: stock, issuing parts, purchase orders, suppliers, transfers and vans. Starts on Inventory.',
-        'Finance — quotes, invoices, payments, expenses, finance reports and the sales pipeline. Starts on Finance.',
-        'Viewer — read-only access to operations and the sales pipeline.',
+        'Materials Controller — stores and logistics: stock, issuing parts, purchase orders, suppliers and transfers. Starts on Inventory.',
+        'Finance — rate cards, preferential and exchange rates, approvals and maintenance costs. Starts on Finance.',
+        'Viewer — read-only access to operations and maintenance.',
       ],
     },
     {
@@ -124,7 +123,7 @@ const usersAccess: Guide = {
     {
       title: 'Fine-tune permissions',
       steps: [
-        'Users & Access → Roles & Permissions: tick what each role can do (for example, let Materials Controllers override stock levels, or give Dispatchers the sales pipeline under Sales CRM).',
+        'Users & Access → Roles & Permissions: tick what each role can do (for example, let Materials Controllers override stock levels, or let Dispatchers view reports).',
         'On a person’s page you can adjust their own permissions, branch access and teams.',
         'Use Reset Password to send a reset link (or generate a password for people without email), and Deactivate when someone leaves.',
       ],
@@ -219,11 +218,10 @@ const technicianApp: Guide = {
       text: 'Keep working. Everything you do is saved on the phone and sent when you are back online; the job shows “waiting to sync” until then.',
     },
     {
-      title: 'Time, guides and your account',
+      title: 'Time and your account',
       steps: [
         'Time & Leave: clock in and out, and request leave.',
-        'Guides: search manuals, fixes and how-tos from the knowledge base.',
-        'Me: change your password, choose notifications, and see your van’s stock.',
+        'Me: change your password, choose notifications, and confirm the tools you hold.',
       ],
     },
   ],
@@ -396,7 +394,7 @@ const maintenance: Guide = {
 const inventory: Guide = {
   id: 'inventory',
   title: 'Inventory',
-  summary: 'Parts, stock levels, issuing to jobs, van stock, tools, stock counts, purchasing, suppliers and reports.',
+  summary: 'Parts, stock levels, issuing to jobs, tools, stock counts, purchasing, suppliers and reports.',
   icon: Package,
   path: '/inventory',
   pathLabel: 'Inventory',
@@ -404,13 +402,13 @@ const inventory: Guide = {
     {
       title: 'Parts and stock',
       steps: [
-        'Inventory opens on Overview: one list of what needs doing (requests to approve or issue, low stock, late deliveries, returns, counts in progress) and the stock at each branch and van.',
+        'Inventory opens on Overview: one list of what needs doing (requests to approve or issue, low stock, late deliveries, returns, counts in progress) and the stock at each branch.',
         'On Stock levels or Parts catalogue, click New Part, or Bulk Import a spreadsheet with opening quantities and the branch each goes into. Set the reorder level so you are warned before you run out.',
         'Re-importing a spreadsheet updates parts whose code is already in the catalogue: name, category, unit, reorder level and cost are replaced, and a quantity sets the stock at that branch. Leave the quantity blank to keep stock as it is.',
         'A part cannot be deactivated while it still has stock, open requests, purchase orders to receive, or is on an open count.',
         'Buy stock with a purchase order. On a part, Manual receipt is for stock that arrives any other way (a reason is required); Adjust Stock corrects a count. Both ask which branch, and can record batch or serial numbers.',
-        'Stock levels shows each part by branch and van, or each location by part; filter by location, category or low stock. A part’s Stock by Location tab shows every branch and van holding it.',
-        'Movements lists every receipt, issue, return, adjustment, transfer and van move, filterable by type, branch, dates and search (including serial numbers).',
+        'Stock levels shows each part by branch, or each location by part; filter by location, category or low stock. A part’s Stock by Location tab shows every branch holding it.',
+        'Movements lists every receipt, issue, return, adjustment and transfer, filterable by type, branch, dates and search (including serial numbers).',
       ],
     },
     {
@@ -423,7 +421,7 @@ const inventory: Guide = {
     {
       title: 'Stock counts',
       steps: [
-        'Under Stock counts, click New count and choose a branch or a van (and a category to count part of the store). Tick Only parts held here to skip parts never stocked there, and Blind count to hide book quantities from counters.',
+        'Under Stock counts, click New count and choose a branch (and a category to count part of the store). Tick Only parts held here to skip parts never stocked there, and Blind count to hide book quantities from counters.',
         'Count on screen, with Quick entry (scan or type a code and quantity), or on paper: download or print the count sheet, fill in the Counted column and import it back. Add part covers anything found that the count did not list.',
         'Tick Recount on a line to have it checked again; posting waits until it is. Use the Not counted, Variances and Recount filters to finish, and save as you go.',
         'Post count adjusts each counted part by the difference from what the books said when the count opened. Parts you did not count are left alone. If the differences are worth more than the approval limit in Settings → Inventory, someone who approves materials must post it.',
@@ -438,7 +436,7 @@ const inventory: Guide = {
         'Under Returns, Receive or Reject parts coming back from jobs, or click Record return when a technician hands parts in at the counter.',
         'Parts received as Faulty are held under Faulty parts. Click Deal with it to record them as returned to the supplier (with the RMA number), written off, or back into stock.',
         'Stores is notified of new requests and of parts falling to their reorder level; the person who asked is notified when their request is approved, rejected or dispatched. Each person can change this under their notification preferences.',
-        'Parts a technician logs on a job come off their van when it carries enough, otherwise from the branch.',
+        'Parts a technician logs on a job come off the branch stock.',
         'If a technician buys a part at a supplier\'s counter, they tick "I bought this directly from a supplier" when logging it. Stock may go below zero; the purchase waits under Purchasing → Direct purchases. When the supplier\'s invoice arrives, tick the purchases on it and click Reconcile — they are booked back in and the balance is right again. Stores can also record a direct purchase from a handed-in receipt.',
       ],
     },
@@ -464,7 +462,7 @@ const inventory: Guide = {
     },
     {
       title: 'Reports',
-      text: 'Inventory Reports has Stock Valuation by branch and van, Usage over a date range (parts used less parts returned), Purchase Orders, and a Movements export. Each exports to CSV.',
+      text: 'Inventory Reports has Stock Valuation by branch, Usage over a date range (parts used less parts returned), Purchase Orders, and a Movements export. Each exports to CSV.',
     },
     {
       title: 'Settings',
@@ -476,46 +474,18 @@ const inventory: Guide = {
 const finance: Guide = {
   id: 'finance',
   title: 'Finance',
-  summary: 'Quotes, invoices, payments, credit notes, expenses, bills and finance reports.',
+  summary: 'Rate cards, preferential rates and exchange rates for costing maintenance work.',
   icon: Wallet,
   path: '/finance',
   pathLabel: 'Finance',
   sections: [
     {
       title: 'Where to find things',
-      text: 'Finance is grouped into Documents (Documents, Quotes, Invoices, Credit Notes, Receipts), Pricing (Rate Cards, Preferential Rates, Exchange Rates), Control (Approvals, Credit Control, Aging) and Reports (Reports, Expenses, Payables).',
+      text: 'Finance holds the prices maintenance is costed with: Rate Cards (labour and call-out rates), Preferential Rates (per client or contract) and Exchange Rates (for parts bought in another currency).',
     },
     {
-      title: 'Quote to invoice',
-      steps: [
-        'Under Quotes, click New Quote, add the lines and click Create Quote.',
-        'Click Send to email it. When the client agrees (or accepts it in the client portal) click Accept.',
-        'Click Convert to Invoice, or Build Proforma if you need payment first.',
-      ],
-    },
-    {
-      title: 'Invoices and payments',
-      steps: [
-        'Under Invoices, click New Invoice, add the lines and click Create Invoice.',
-        'When the client pays, open the invoice and click Record Payment (Cash, MPesa, BankTransfer, Cheque or Card).',
-        'For one payment that covers several invoices, go to Receipts → Receive Payment and choose Apply to invoices, or keep it On account.',
-      ],
-    },
-    {
-      title: 'Credit notes',
-      text: 'Under Credit Notes, click New Credit Note, then Create Draft, then Issue when it is right.',
-    },
-    {
-      title: 'Expenses and bills',
-      text: 'Staff claim expenses under Expenses with New Expense Claim and Submit Claim; claims go for approval. Supplier bills are entered under Payables with New Bill and Create Bill.',
-    },
-    {
-      title: 'Chasing payment',
-      text: 'Credit Control and Aging show who owes what and for how long. Open a client’s Statement and click Email Statement to send it.',
-    },
-    {
-      title: 'Finance reports',
-      text: 'Reports has Revenue Summary, Collections, By Client, Outstanding Receivables, Payables Aging and Contract P&L.',
+      title: 'Costing',
+      text: 'Job and asset costs, and the spend against each budget, are under Maintenance → Maintenance costs.',
     },
   ],
 }
@@ -576,27 +546,6 @@ const timeAttendance: Guide = {
         'Leave lists leave requests to Approve or Reject; New Leave Request and Submit Request add one for someone.',
         'Reports shows hours and leave over a period; Export downloads it.',
       ],
-    },
-  ],
-}
-
-const knowledge: Guide = {
-  id: 'knowledge',
-  title: 'Knowledge base',
-  summary: 'Write how-to articles and procedures for your team and clients.',
-  icon: BookOpen,
-  path: '/knowledge',
-  pathLabel: 'Knowledge',
-  sections: [
-    {
-      title: 'Write an article',
-      steps: [
-        'Click New Category to group articles (for example Generators or Safety), then New Article.',
-        'Write the body in Markdown: headings, lists, links and images.',
-        'Choose the Visibility: Internal (all staff), Technicians only, Admins only, or Public (visible in the client portal).',
-        'Click Save to keep a draft, then Publish when it’s ready.',
-      ],
-      tip: 'Technicians find published articles under Guides in the technician app, even on site.',
     },
   ],
 }
@@ -681,8 +630,9 @@ const settings: Guide = {
         'Company Profile, Branding and Document Templates: how you appear on documents.',
         'Email, Email Intake, Email Templates and Delivery Logs: email in and out.',
         'Numbering Rules, Operational Defaults, PM Templates, Work Order Templates, Asset Categories, SLA Policies, Status Workflows and Escalation Rules: how work runs.',
-        'Finance Defaults, Payments, Credit Control and Approval Matrix: money.',
-        'Portal, Notifications, Notification Templates, Security and Audit Logs: clients, alerts and control.',
+        'Approval Matrix: who signs off purchase orders.',
+        'Sensors, Integrations and Monitoring Intake: data coming in from machines and other systems.',
+        'Notifications, Notification Templates, Security and Audit Logs: alerts and control.',
       ],
     },
   ],
@@ -700,7 +650,6 @@ export const guides: Guide[] = [
   finance,
   approvals,
   timeAttendance,
-  knowledge,
   reports,
   technicianApp,
   maintenanceTemplates,

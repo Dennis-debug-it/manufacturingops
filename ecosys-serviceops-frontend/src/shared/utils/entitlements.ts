@@ -1,6 +1,6 @@
 /**
  * ServiceOps modules. An edition is a fixed list of them (the backend's ServiceOpsPlans.EditionModules):
- * Essentials = operations + finance; Professional adds maintenance, inventory, projects and advanced;
+ * Essentials = operations + finance; Professional adds maintenance, inventory and advanced;
  * Enterprise adds enterprise_tools. The WhatsApp Business add-on adds whatsapp_business on any edition.
  */
 export type ServiceOpsModule =
@@ -8,7 +8,6 @@ export type ServiceOpsModule =
   | 'finance'
   | 'maintenance'
   | 'inventory'
-  | 'projects'
   | 'advanced'
   | 'enterprise_tools'
   | 'whatsapp_business'
@@ -21,13 +20,11 @@ const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
   ['enterprise_tools', ['/settings/integrations', '/settings/monitoring-intake', '/settings/monitoring']],
   ['whatsapp_business', ['/whatsapp', '/settings/whatsapp']],
   ['operations', ['/dashboard', '/work-orders', '/sites', '/reports', '/team/technicians', '/team/skills', '/team/groups', '/settings/notification-templates', '/settings/wo-templates', '/settings/executive-dashboard']],
-  ['finance', ['/finance', '/settings/payments']],
+  ['finance', ['/finance']],
 ]
-/** The sales CRM joins an RFQ's quote (Finance) to its job (Operations), so it needs both; every edition has them. */
 
 export function requiredModulesForPath(path: string): ServiceOpsModule[] {
   const matches = (prefix: string) => path === prefix || path.startsWith(`${prefix}/`)
-  if (matches('/finance/billable-work')) return ['operations', 'finance']
   const match = modulePaths.find(([, prefixes]) => prefixes.some(matches))
   return match ? [match[0]] : []
 }

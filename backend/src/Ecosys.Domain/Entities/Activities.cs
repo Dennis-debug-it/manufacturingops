@@ -42,7 +42,6 @@ public static class ActionItemStatuses
 /// <summary>The records an activity or action item can be linked to.</summary>
 public static class ActivityEntityTypes
 {
-
     public const string Client = "Client";
     public const string Contract = "Contract";
     public const string WorkOrder = "WorkOrder";
@@ -51,7 +50,7 @@ public static class ActivityEntityTypes
 }
 
 /// <summary>
-/// A meeting, site visit, inspection or call (Release 3 design 3.2), optionally linked to a project,
+/// A meeting, site visit, inspection or call (Release 3 design 3.2), optionally linked to a
 /// client, contract or work order. Times are UTC; an all-day activity stores its dates as UTC midnight.
 /// Minutes are written once it is Held and locked when published; corrections are addenda.
 /// </summary>

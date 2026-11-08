@@ -16,10 +16,9 @@ public static class CalendarSources
     public const string ActionItems = "action-items";
     public const string WorkOrders = "work-orders";
     public const string Maintenance = "maintenance";
-    public const string Projects = "projects";
     public const string Contracts = "contracts";
 
-    public static readonly string[] All = [Activities, ActionItems, WorkOrders, Maintenance, Projects, Contracts];
+    public static readonly string[] All = [Activities, ActionItems, WorkOrders, Maintenance, Contracts];
 
     /// <summary>Sources about the tenant rather than one person; the team view leaves them out.</summary>
     public static readonly string[] TenantWide = [Maintenance, Contracts];
@@ -69,8 +68,6 @@ internal sealed class CalendarService(AppDbContext dbContext, ILinkedRecordServi
         var maintenance = viewer.HasModule(ServiceOpsPlans.Maintenance);
         if (maintenance && (viewer.Can(PermissionNames.CanManageSettings) || viewer.Can(PermissionNames.CanAssignWorkOrders)))
             sources.Add(CalendarSources.Maintenance);
-        if (viewer.HasModule(ServiceOpsPlans.Projects) && viewer.Can(PermissionNames.ProjectsView))
-            sources.Add(CalendarSources.Projects);
         if (maintenance)
             sources.Add(CalendarSources.Contracts);
         return sources;

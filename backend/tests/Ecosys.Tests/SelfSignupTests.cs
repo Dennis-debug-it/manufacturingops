@@ -148,7 +148,7 @@ public sealed class SelfSignupTests : IAsyncLifetime
         var start = await client.PostAsJsonAsync("/api/auth/signup/start", Form("nomail@server.test"));
 
         Assert.Equal(HttpStatusCode.BadRequest, start.StatusCode);
-        Assert.Contains("request a demo", await start.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("contact us", await start.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

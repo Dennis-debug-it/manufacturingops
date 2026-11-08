@@ -12,7 +12,7 @@ import { itemTimeLabel } from './logic'
 import { activityTypeLabels, type ActionItem, type LinkedEntityType } from './types'
 
 /**
- * Meetings and action items for one record: a project's Tasks tab, a client page or a contract page
+ * Meetings and action items for one record: a client page or a contract page
  * (R3). Labelled apart from the record's own tasks.
  */
 export function RecordActivitiesPanel({ entityType, entityId, clientId, readOnly = false, show = ['actions', 'meetings'] }: {

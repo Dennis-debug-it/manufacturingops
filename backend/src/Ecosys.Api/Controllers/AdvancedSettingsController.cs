@@ -198,106 +198,6 @@ public sealed class AdvancedSettingsController(
         return Ok(policy);
     }
 
-    /// <summary>
-    /// The tenant's own finance addresses, copied (CC) on finance documents sent to clients. Invoices,
-    /// receipts and statements always go To the client — see FinancialRecipientResolver. Used to be
-    /// editable only from the platform side, where the tenant couldn't see or change it.
-    /// </summary>
-    [HttpGet("finance-recipients")]
-    public async Task<ActionResult<IReadOnlyCollection<FinanceRecipientDto>>> GetFinanceRecipients(CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        var recipients = await dbContext.TenantNotificationRecipients
-            .Where(x => x.TenantId == TenantId && x.IsActive)
-            .OrderBy(x => x.CreatedAt)
-            .ToListAsync(cancellationToken);
-        return Ok(recipients.Select(x => new FinanceRecipientDto(x.Email, AppliesToFromGroup(x.RecipientGroup))).ToList());
-    }
-
-    [HttpPut("finance-recipients")]
-    public async Task<ActionResult<IReadOnlyCollection<FinanceRecipientDto>>> UpdateFinanceRecipients([FromBody] IReadOnlyCollection<FinanceRecipientDto> request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        var cleaned = new List<FinanceRecipientDto>();
-        foreach (var item in request ?? [])
-        {
-            var email = item.Email?.Trim().ToLowerInvariant();
-            if (string.IsNullOrWhiteSpace(email)) continue;
-            if (email.Length > 256 || !System.Net.Mail.MailAddress.TryCreate(email, out _))
-                throw new BusinessRuleException($"'{item.Email}' is not a valid email address.");
-            var appliesTo = FinanceRecipientDocumentTypes.FirstOrDefault(x => string.Equals(x, item.AppliesTo, StringComparison.OrdinalIgnoreCase)) ?? "All";
-            if (!cleaned.Any(x => x.Email == email && x.AppliesTo == appliesTo)) cleaned.Add(new FinanceRecipientDto(email, appliesTo));
-        }
-
-        if (cleaned.Count > 20) throw new BusinessRuleException("Add at most 20 finance addresses.");
-
-        var current = await dbContext.TenantNotificationRecipients.Where(x => x.TenantId == TenantId).ToListAsync(cancellationToken);
-        dbContext.TenantNotificationRecipients.RemoveRange(current);
-        dbContext.TenantNotificationRecipients.AddRange(cleaned.Select(x => new TenantNotificationRecipient
-        {
-            TenantId = TenantId,
-            Email = x.Email,
-            RecipientGroup = x.AppliesTo == "All" ? "cc" : $"{x.AppliesTo} CC",
-            IsActive = true,
-        }));
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(cleaned);
-    }
-
-    private static readonly string[] FinanceRecipientDocumentTypes = ["All", "Invoice", "Receipt", "Statement"];
-
-    private static string AppliesToFromGroup(string? group)
-    {
-        var normalized = new string((group ?? string.Empty).Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
-        return FinanceRecipientDocumentTypes.Skip(1).FirstOrDefault(x => normalized.StartsWith(x.ToLowerInvariant(), StringComparison.Ordinal)) ?? "All";
-    }
-
-    [HttpGet("finance-defaults")]
-    public async Task<ActionResult<TenantFinanceDefaults>> GetFinanceDefaults(CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        var defaults = await dbContext.TenantFinanceDefaults.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken)
-            ?? new TenantFinanceDefaults { TenantId = TenantId };
-        return Ok(defaults);
-    }
-
-    [HttpPut("finance-defaults")]
-    public async Task<ActionResult<TenantFinanceDefaults>> UpdateFinanceDefaults([FromBody] TenantFinanceDefaultsRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-
-        if (string.IsNullOrWhiteSpace(request.TaxName))
-        {
-            throw new BusinessRuleException("Tax name is required.");
-        }
-        if (request.DefaultVatRate < 0 || request.DefaultVatRate > 100)
-        {
-            throw new BusinessRuleException("Default tax rate must be between 0 and 100.");
-        }
-        if (request.DefaultInvoiceDueDays < 0 || request.DefaultQuotationValidityDays < 0)
-        {
-            throw new BusinessRuleException("Due days and validity days cannot be negative.");
-        }
-
-        var defaults = await dbContext.TenantFinanceDefaults.SingleOrDefaultAsync(x => x.TenantId == TenantId, cancellationToken);
-        if (defaults is null)
-        {
-            defaults = new TenantFinanceDefaults { TenantId = TenantId };
-            dbContext.TenantFinanceDefaults.Add(defaults);
-        }
-
-        defaults.EnableVat = request.EnableVat;
-        defaults.TaxName = request.TaxName.Trim();
-        defaults.DefaultVatRate = request.DefaultVatRate;
-        defaults.DefaultPaymentTerms = string.IsNullOrWhiteSpace(request.DefaultPaymentTerms) ? "30 days" : request.DefaultPaymentTerms.Trim();
-        defaults.DefaultInvoiceDueDays = request.DefaultInvoiceDueDays;
-        defaults.DefaultQuotationValidityDays = request.DefaultQuotationValidityDays;
-        defaults.DefaultExpenseApprovalRequired = request.DefaultExpenseApprovalRequired;
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(defaults);
-    }
-
     [HttpGet("security")]
     public async Task<ActionResult<TenantSecurityPolicy>> GetSecurity(CancellationToken cancellationToken)
     {
@@ -437,7 +337,7 @@ public sealed class AdvancedSettingsController(
 
     private static readonly HashSet<string> ModuleSettingKeys = new(StringComparer.OrdinalIgnoreCase)
     {
-        "executive-dashboard", "inventory", "payments", "integrations",
+        "executive-dashboard", "inventory", "integrations",
     };
 
     [HttpGet("module/{moduleKey}")]
@@ -755,14 +655,3 @@ public sealed record NotificationSettingsRequest(bool EmailAlertsEnabled, bool S
 public sealed record MonitoringSettingsRequest(string ProviderName, string? EndpointLabel, string? WebhookSecret, Guid? DefaultBranchId, string DefaultPriority, bool AutoCreateWorkOrders, bool IsEnabled);
 public sealed record TenantOperationsPolicyRequest(bool RequireTechnicianSignature, bool RequireClientSignature, bool AllowRemoteCompletion, bool AutoSendServiceReportOnApproval = false);
 
-public sealed record TenantFinanceDefaultsRequest(
-    bool EnableVat,
-    string TaxName,
-    decimal DefaultVatRate,
-    string DefaultPaymentTerms,
-    int DefaultInvoiceDueDays,
-    int DefaultQuotationValidityDays,
-    bool DefaultExpenseApprovalRequired);
-
-/// <summary><c>AppliesTo</c>: All, Invoice, Receipt or Statement.</summary>
-public sealed record FinanceRecipientDto(string Email, string AppliesTo);

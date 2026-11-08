@@ -159,14 +159,12 @@ internal sealed class ContractAccessService(ITenantContext tenantContext) : ICon
         !tenantContext.IsSuperAdmin
         && (tenantContext.IsAdmin
             || tenantContext.HasPermission(PermissionNames.FinanceManageRates)
-            || tenantContext.HasPermission(PermissionNames.FinanceManageBillableWork)
             || IsFinanceLike());
 
     public bool CanViewPricing() =>
         !tenantContext.IsSuperAdmin
         && (tenantContext.IsAdmin
             || tenantContext.HasPermission(PermissionNames.FinanceViewRates)
-            || tenantContext.HasPermission(PermissionNames.FinanceViewBillableWork)
             || tenantContext.HasPermission(PermissionNames.FinanceView)
             || tenantContext.HasPermission(PermissionNames.FinanceManageRates)
             || IsFinanceLike());

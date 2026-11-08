@@ -34,7 +34,7 @@ export interface OutboxEntry {
   kind: OutboxKind
   /** What the technician did, as shown in the sync list ("Arrival on WO-0042"). */
   label: string
-  /** The job it belongs to; null for clock and site (muster) actions. */
+  /** The job it belongs to; null for clock actions. */
   workOrderId: string | null
   method: 'POST' | 'PUT' | 'PATCH'
   url: string

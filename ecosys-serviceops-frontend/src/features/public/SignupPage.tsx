@@ -114,8 +114,6 @@ export function SignupPage() {
           </button>
           <p className="text-center text-sm text-slate-500">
             Already have an account? <Link to="/login" className="font-medium text-slate-900 hover:underline">Sign in</Link>
-            {' · '}
-            Prefer a guided setup? <Link to="/request-demo" className="font-medium text-slate-900 hover:underline">Request a demo</Link>
           </p>
         </form>
       </div>

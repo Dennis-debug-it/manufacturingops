@@ -54,10 +54,7 @@ a wording change, change both.
 
 | Name | Notification key | Body | Footer |
 |---|---|---|---|
-| `muster_missing` | `project.muster-missing` | `*{{1}}*: today's muster roll for {{2}} ({{3}}) hasn't been marked yet. Please mark it in Ecosys.` | `Ecosys reminders. Reply STOP to stop.` |
-| `task_due` | `project.task-due` | `*{{1}}*: your task "{{2}}" on {{3}} is due on {{4}}.` | `Ecosys reminders. Reply STOP to stop.` |
-| `valuation_certified` | `project.valuation-certified` | `*{{1}}*: valuation {{2}} on {{3}} was certified for {{4}}. It is ready to invoice in Ecosys.` | `Ecosys reminders. Reply STOP to stop.` |
-| `retention_due` | `project.retention-due` | `*{{1}}*: retention of {{2}} on {{3}} is due for release at {{4}}.` | `Ecosys reminders. Reply STOP to stop.` |
+| `checks_missed` | `factory-check.missed` | `*{{1}}*: running checks in {{2}} were not done in shift {{3}}. Please see Ecosys.` | `Ecosys reminders. Reply STOP to stop.` |
 | `meeting_reminder` | `activity.reminder` | `*{{1}}*: reminder, "{{2}}" starts at {{3}}. Location: {{4}}.` | `Ecosys reminders. Reply STOP to stop.` |
 | `action_item_due` | `action-item.due` | `*{{1}}*: your action item "{{2}}" is due on {{3}}.` | `Ecosys reminders. Reply STOP to stop.` |
 | `work_order_assigned` | `work-order.assigned` | `*{{1}}*: work order {{2}} "{{3}}" ({{4}} priority) has been assigned to you. Open the Ecosys technician app for details.` | `Ecosys reminders. Reply STOP to stop.` |
@@ -68,8 +65,6 @@ a wording change, change both.
 |---|---|---|---|
 | `technician_on_the_way` | `technician-on-the-way` | `*{{1}}*: {{2}} is on the way for job {{3}}. Track the visit here: {{4}}` | `Sent by Ecosys for the business named above. Reply STOP to stop these messages.` |
 | `work_order_completed` | `work-order-completed` | `*{{1}}*: job {{2}} has been completed by {{3}}. Details: {{4}}` | same |
-| `invoice_issued` | `invoice-issued` | `*{{1}}*: invoice {{2}} for {{3}} has been sent to your email. It is due on {{4}}.` | same |
-| `valuation_certified_client` | `valuation-certified-client` | `*{{1}}*: valuation {{2}} on {{3}} has been certified for {{4}}.` | same |
 
 ### Number confirmation (category: Authentication)
 
@@ -126,7 +121,7 @@ Meta per message:
 1. Platform → Tenants → the tenant → **Users** tab → **WhatsApp reminders: On**
    (`PUT /api/platform/whatsapp/tenants/{tenantId}`).
 2. The tenant admin chooses which notifications may use WhatsApp under **Settings → WhatsApp Reminders**.
-   Defaults: muster roll not marked, work order assigned, meeting reminder, technician on the way.
+   Defaults: running checks missed, work order assigned, meeting reminder, technician on the way.
 3. Staff opt in under **Settings → My Notifications** (office) or **Account** (technician app): enter the
    number, type the code sent on WhatsApp. Client contacts opt in from the portal **Profile**, or office
    staff record their agreement on the client's **Client Portal** tab (who, when, how).

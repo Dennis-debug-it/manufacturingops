@@ -53,7 +53,7 @@ public sealed class WhatsAppNotificationTests
         var sender = new MetaWhatsAppSender(new HandlerFactory(handler), NullLogger<MetaWhatsAppSender>.Instance);
         var account = new WhatsAppSendingAccount("1234567890", "token-xyz", "v21.0", "https://graph.example.test", null);
 
-        var result = await sender.SendTemplateAsync(account, AliceNumber, "muster_missing", "en", ["Acme Builders", "Westlands Mall", "2026-10-21"], null, CancellationToken.None);
+        var result = await sender.SendTemplateAsync(account, AliceNumber, "checks_missed", "en", ["Acme Builders", "Westlands Mall", "2026-10-21"], null, CancellationToken.None);
 
         Assert.True(result.Succeeded);
         Assert.Equal("wamid.ABC", result.MessageId);
@@ -66,7 +66,7 @@ public sealed class WhatsAppNotificationTests
         Assert.Equal("254712345678", root.GetProperty("to").GetString());
         Assert.Equal("template", root.GetProperty("type").GetString());
         var template = root.GetProperty("template");
-        Assert.Equal("muster_missing", template.GetProperty("name").GetString());
+        Assert.Equal("checks_missed", template.GetProperty("name").GetString());
         Assert.Equal("en", template.GetProperty("language").GetProperty("code").GetString());
         var body = Assert.Single(template.GetProperty("components").EnumerateArray());
         Assert.Equal("body", body.GetProperty("type").GetString());
@@ -98,9 +98,9 @@ public sealed class WhatsAppNotificationTests
     [Fact]
     public void Catalogue_FirstParameterIsTheTenantName_AndEveryKeyHasATemplate()
     {
-        var muster = WhatsAppTemplateCatalogue.Find("project.muster-missing")!;
-        var parameters = WhatsAppTemplateCatalogue.BuildParameters(muster, "Acme Builders",
-            new Dictionary<string, string?> { ["projectname"] = "Westlands\nMall", ["WorkDate"] = null });
+        var missed = WhatsAppTemplateCatalogue.Find("factory-check.missed")!;
+        var parameters = WhatsAppTemplateCatalogue.BuildParameters(missed, "Acme Builders",
+            new Dictionary<string, string?> { ["place"] = "Westlands\nMall", ["Shift"] = null });
         Assert.Equal(["Acme Builders", "Westlands Mall", "-"], parameters);
 
         foreach (var descriptor in NotificationKeyDescriptor.List().Where(d => d.Channels.HasFlag(NotificationChannels.WhatsApp)))
@@ -168,8 +168,8 @@ public sealed class WhatsAppNotificationTests
         await harness.OptInUserAsync(harness.Alice, AliceNumber);
         var off = Microsoft.Extensions.Options.Options.Create(new PlatformFeatureOptions { WhatsApp = false });
         var result = await new WhatsAppOutbox(harness.NewContext(), harness.Options, NullLogger<WhatsAppOutbox>.Instance, off)
-            .QueueAsync(new WhatsAppQueueRequest(harness.TenantId, "project.muster-missing", AliceNumber, "Alice",
-                new Dictionary<string, string?> { ["ProjectName"] = "Westlands Mall", ["WorkDate"] = "2026-10-21" }));
+            .QueueAsync(new WhatsAppQueueRequest(harness.TenantId, "factory-check.missed", AliceNumber, "Alice",
+                new Dictionary<string, string?> { ["Place"] = "Westlands Mall", ["Shift"] = "2026-10-21" }));
         Assert.Equal(WhatsAppQueueOutcome.FeatureOff, result.Outcome);
         Assert.Empty(await harness.NewContext().WhatsAppOutboxMessages.IgnoreQueryFilters().ToListAsync());
     }
@@ -182,13 +182,13 @@ public sealed class WhatsAppNotificationTests
         var otherTenantUser = await harness.AddUserAsync(harness.OtherTenantId, "Alice Elsewhere");
         await harness.OptInUserAsync(otherTenantUser, AliceNumber);
         // A message queued before STOP arrives.
-        var queuedEarlier = await harness.QueueAsync(harness.TenantId, "project.muster-missing");
+        var queuedEarlier = await harness.QueueAsync(harness.TenantId, "factory-check.missed");
         Assert.Equal(WhatsAppQueueOutcome.Queued, queuedEarlier.Outcome);
 
         await harness.PostWebhookAsync(MessagePayload("254712345678", "Stop "));
 
-        Assert.Equal(WhatsAppQueueOutcome.OptedOut, (await harness.QueueAsync(harness.TenantId, "project.muster-missing")).Outcome);
-        Assert.Equal(WhatsAppQueueOutcome.OptedOut, (await harness.QueueAsync(harness.OtherTenantId, "project.muster-missing")).Outcome);
+        Assert.Equal(WhatsAppQueueOutcome.OptedOut, (await harness.QueueAsync(harness.TenantId, "factory-check.missed")).Outcome);
+        Assert.Equal(WhatsAppQueueOutcome.OptedOut, (await harness.QueueAsync(harness.OtherTenantId, "factory-check.missed")).Outcome);
         await harness.ProcessAsync();
         var skipped = await harness.NewContext().WhatsAppOutboxMessages.IgnoreQueryFilters().SingleAsync(x => x.Id == queuedEarlier.MessageId);
         Assert.Equal(WhatsAppOutboxStatuses.Skipped, skipped.Status);
@@ -201,7 +201,7 @@ public sealed class WhatsAppNotificationTests
         Assert.Single(await harness.NewContext().WhatsAppOptOuts.ToListAsync());
 
         await harness.PostWebhookAsync(MessagePayload("254712345678", "START"));
-        Assert.Equal(WhatsAppQueueOutcome.Queued, (await harness.QueueAsync(harness.OtherTenantId, "project.muster-missing")).Outcome);
+        Assert.Equal(WhatsAppQueueOutcome.Queued, (await harness.QueueAsync(harness.OtherTenantId, "factory-check.missed")).Outcome);
     }
 
     // ── Opt-in, consent and allowed keys ───────────────────────────────────────
@@ -212,39 +212,39 @@ public sealed class WhatsAppNotificationTests
         var harness = await Harness.CreateAsync();
         var channel = new WhatsAppNotificationChannel(harness.Db, harness.Outbox(), NullLogger<WhatsAppNotificationChannel>.Instance);
         var dispatcher = new NotificationDispatcher(harness.Db, null!, null!, null!, new NullInboxNotifier(), [channel], NullLogger<NotificationDispatcher>.Instance);
-        NotificationRequest Request(string key) => new(harness.TenantId, key, [harness.Alice], "Muster", "Not marked", null, "Project", Guid.NewGuid(),
-            new Dictionary<string, string?> { ["ProjectName"] = "Westlands Mall", ["WorkDate"] = "2026-10-21" }, Channels: NotificationChannels.WhatsApp);
+        NotificationRequest Request(string key) => new(harness.TenantId, key, [harness.Alice], "Checks missed", "Not done", null, "RunningCheck", Guid.NewGuid(),
+            new Dictionary<string, string?> { ["Place"] = "Westlands Mall", ["Shift"] = "2026-10-21" }, Channels: NotificationChannels.WhatsApp);
         harness.Db.UserNotificationPreferences.AddRange(
-            new UserNotificationPreference { TenantId = harness.TenantId, UserId = harness.Alice, NotificationKey = "project.muster-missing", WhatsAppEnabled = true },
-            new UserNotificationPreference { TenantId = harness.TenantId, UserId = harness.Alice, NotificationKey = "project.task-due", WhatsAppEnabled = true });
+            new UserNotificationPreference { TenantId = harness.TenantId, UserId = harness.Alice, NotificationKey = "factory-check.missed", WhatsAppEnabled = true },
+            new UserNotificationPreference { TenantId = harness.TenantId, UserId = harness.Alice, NotificationKey = "action-item.due", WhatsAppEnabled = true });
         await harness.Db.SaveChangesAsync();
 
         // A number on the account is not an opt-in.
         var alice = await harness.Db.Users.SingleAsync(x => x.Id == harness.Alice);
         alice.WhatsAppNumber = AliceNumber;
         await harness.Db.SaveChangesAsync();
-        await dispatcher.NotifyAsync(Request("project.muster-missing"));
+        await dispatcher.NotifyAsync(Request("factory-check.missed"));
         Assert.Equal(0, await harness.CountRowsAsync());
 
         await harness.OptInUserAsync(harness.Alice, AliceNumber);
-        // project.task-due can use WhatsApp but isn't among this tenant's allowed keys (the defaults).
-        await dispatcher.NotifyAsync(Request("project.task-due"));
+        // action-item.due can use WhatsApp but isn't among this tenant's allowed keys (the defaults).
+        await dispatcher.NotifyAsync(Request("action-item.due"));
         Assert.Equal(0, await harness.CountRowsAsync());
 
-        await dispatcher.NotifyAsync(Request("project.muster-missing"));
+        await dispatcher.NotifyAsync(Request("factory-check.missed"));
         var row = await harness.Db.WhatsAppOutboxMessages.SingleAsync();
-        Assert.Equal(("muster_missing", AliceNumber, harness.Alice), (row.TemplateName, row.ToPhone, row.RecipientUserId));
+        Assert.Equal(("checks_missed", AliceNumber, harness.Alice), (row.TemplateName, row.ToPhone, row.RecipientUserId));
         Assert.Equal("[\"Acme Builders\",\"Westlands Mall\",\"2026-10-21\"]", row.ParametersJson);
 
         // The tenant's flag turned off stops everything.
         await harness.SetFeatureAsync(harness.TenantId, false);
-        await dispatcher.NotifyAsync(Request("project.muster-missing"));
+        await dispatcher.NotifyAsync(Request("factory-check.missed"));
         Assert.Equal(1, await harness.CountRowsAsync());
 
         // Opting out stops it too.
         await harness.SetFeatureAsync(harness.TenantId, true);
         await harness.MyWhatsApp(harness.Alice).OptOut(CancellationToken.None);
-        await dispatcher.NotifyAsync(Request("project.muster-missing"));
+        await dispatcher.NotifyAsync(Request("factory-check.missed"));
         Assert.Equal(1, await harness.CountRowsAsync());
     }
 
@@ -274,23 +274,23 @@ public sealed class WhatsAppNotificationTests
         var row = await harness.Db.WhatsAppOutboxMessages.SingleAsync();
         Assert.Equal((marked.Id, "technician_on_the_way", "+254733444555"), (row.RecipientPortalUserId!.Value, row.TemplateName, row.ToPhone));
 
-        // invoice-issued isn't allowed by default, and another tenant's client id finds nobody.
-        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.InvoiceIssued, values, "TenantInvoice", Guid.NewGuid());
+        // work-order-completed isn't allowed by default, and another tenant's client id finds nobody.
+        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.WorkOrderCompleted, values, "WorkOrder", Guid.NewGuid());
         await notifier.NotifyClientAsync(harness.OtherTenantId, client.Id, ClientWhatsAppKeys.TechnicianOnTheWay, values, "WorkOrder", Guid.NewGuid());
         Assert.Equal(1, await harness.CountRowsAsync());
 
-        // Once allowed, an invoice goes once per contact however often the hook runs.
-        await harness.Settings().SaveSettings(new SaveWhatsAppTenantSettingsRequest([ClientWhatsAppKeys.InvoiceIssued]), CancellationToken.None);
-        var invoiceId = Guid.NewGuid();
-        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.InvoiceIssued, values, "TenantInvoice", invoiceId, onceScope: invoiceId.ToString("N"));
-        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.InvoiceIssued, values, "TenantInvoice", invoiceId, onceScope: invoiceId.ToString("N"));
+        // Once allowed, a completion goes once per contact however often the hook runs.
+        await harness.Settings().SaveSettings(new SaveWhatsAppTenantSettingsRequest([ClientWhatsAppKeys.WorkOrderCompleted]), CancellationToken.None);
+        var jobId = Guid.NewGuid();
+        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.WorkOrderCompleted, values, "WorkOrder", jobId, onceScope: jobId.ToString("N"));
+        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.WorkOrderCompleted, values, "WorkOrder", jobId, onceScope: jobId.ToString("N"));
         Assert.Equal(2, await harness.CountRowsAsync());
 
         // Turned off: no more messages, but consent history stays.
         var off = Ok(await consent.Record(client.Id, marked.Id, new RecordWhatsAppConsentRequest(null, false, null), CancellationToken.None));
         Assert.False(off.ReceivesWhatsApp);
         Assert.NotNull(off.ConsentAt);
-        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.InvoiceIssued, values, "TenantInvoice", Guid.NewGuid());
+        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.WorkOrderCompleted, values, "WorkOrder", Guid.NewGuid());
         Assert.Equal(2, await harness.CountRowsAsync());
     }
 
@@ -306,9 +306,9 @@ public sealed class WhatsAppNotificationTests
 
         var preferences = new UserNotificationPreferencesController(harness.TenantDb(harness.Alice), harness.Context(harness.Alice));
         var list = Ok(await preferences.Get(CancellationToken.None));
-        Assert.Contains("WhatsApp", list.Single(x => x.NotificationKey == "project.muster-missing").Channels);
-        Assert.DoesNotContain("WhatsApp", list.Single(x => x.NotificationKey == "project.task-due").Channels);
-        Assert.False(list.Single(x => x.NotificationKey == "project.muster-missing").WhatsAppEnabled);
+        Assert.Contains("WhatsApp", list.Single(x => x.NotificationKey == "factory-check.missed").Channels);
+        Assert.DoesNotContain("WhatsApp", list.Single(x => x.NotificationKey == "action-item.due").Channels);
+        Assert.False(list.Single(x => x.NotificationKey == "factory-check.missed").WhatsAppEnabled);
 
         await harness.SetFeatureAsync(harness.TenantId, false);
         list = Ok(await preferences.Get(CancellationToken.None));
@@ -322,16 +322,16 @@ public sealed class WhatsAppNotificationTests
     {
         var harness = await Harness.CreateAsync(cap: 2);
 
-        Assert.Equal(WhatsAppQueueOutcome.Queued, (await harness.QueueAsync(harness.TenantId, "project.muster-missing")).Outcome);
-        Assert.Equal(WhatsAppQueueOutcome.Queued, (await harness.QueueAsync(harness.TenantId, "project.muster-missing")).Outcome);
-        var over = await harness.QueueAsync(harness.TenantId, "project.muster-missing");
+        Assert.Equal(WhatsAppQueueOutcome.Queued, (await harness.QueueAsync(harness.TenantId, "factory-check.missed")).Outcome);
+        Assert.Equal(WhatsAppQueueOutcome.Queued, (await harness.QueueAsync(harness.TenantId, "factory-check.missed")).Outcome);
+        var over = await harness.QueueAsync(harness.TenantId, "factory-check.missed");
         Assert.Equal(WhatsAppQueueOutcome.OverCap, over.Outcome);
         var skipped = await harness.Db.WhatsAppOutboxMessages.SingleAsync(x => x.Id == over.MessageId);
         Assert.Equal(WhatsAppOutboxStatuses.Skipped, skipped.Status);
         Assert.Contains("limit", skipped.ErrorMessage);
         // Skipped rows don't count, and the other tenant has its own allowance.
         Assert.Equal(2, await harness.Outbox().CountThisMonthAsync(harness.TenantId, DateTime.UtcNow));
-        Assert.Equal(WhatsAppQueueOutcome.Queued, (await harness.QueueAsync(harness.OtherTenantId, "project.muster-missing")).Outcome);
+        Assert.Equal(WhatsAppQueueOutcome.Queued, (await harness.QueueAsync(harness.OtherTenantId, "factory-check.missed")).Outcome);
 
         await harness.ProcessAsync();
         Assert.Equal(3, harness.Sender.Sent.Count);
@@ -344,7 +344,7 @@ public sealed class WhatsAppNotificationTests
     {
         var harness = await Harness.CreateAsync();
         harness.Sender.Next = WhatsAppSendResult.Failed("Meta returned 503", retryable: true);
-        var id = (await harness.QueueAsync(harness.TenantId, "project.muster-missing")).MessageId!.Value;
+        var id = (await harness.QueueAsync(harness.TenantId, "factory-check.missed")).MessageId!.Value;
         var now = DateTime.UtcNow;
 
         await harness.ProcessAsync(now);
@@ -376,7 +376,7 @@ public sealed class WhatsAppNotificationTests
         // The tenant's log shows the failure, with the number masked.
         var log = Ok(await harness.Settings().Outbox(null, null, null, CancellationToken.None));
         var entry = Assert.Single(log.Items);
-        Assert.Equal((WhatsAppOutboxStatuses.Failed, "Muster roll not marked"), (entry.Status, entry.Label));
+        Assert.Equal((WhatsAppOutboxStatuses.Failed, "Running checks missed"), (entry.Status, entry.Label));
         Assert.DoesNotContain("345", entry.To);
     }
 
@@ -385,22 +385,22 @@ public sealed class WhatsAppNotificationTests
     {
         var harness = await Harness.CreateAsync();
         harness.Sender.Next = WhatsAppSendResult.Failed("Template not approved", retryable: false);
-        var refused = (await harness.QueueAsync(harness.TenantId, "project.muster-missing")).MessageId!.Value;
+        var refused = (await harness.QueueAsync(harness.TenantId, "factory-check.missed")).MessageId!.Value;
         await harness.ProcessAsync();
         Assert.Equal((WhatsAppOutboxStatuses.Failed, 1), ((await harness.ReloadAsync(refused)).Status, (await harness.ReloadAsync(refused)).AttemptCount));
 
         harness.Sender.Next = null;
-        var ok = (await harness.QueueAsync(harness.TenantId, "project.muster-missing")).MessageId!.Value;
+        var ok = (await harness.QueueAsync(harness.TenantId, "factory-check.missed")).MessageId!.Value;
         await harness.ProcessAsync();
         var sent = await harness.ReloadAsync(ok);
         Assert.Equal(WhatsAppOutboxStatuses.Sent, sent.Status);
         Assert.StartsWith("wamid.", sent.ProviderMessageId);
         var call = harness.Sender.Sent.Last();
-        Assert.Equal(("muster_missing", AliceNumber), (call.Template, call.To));
+        Assert.Equal(("checks_missed", AliceNumber), (call.Template, call.To));
         Assert.Equal("Acme Builders", call.Parameters[0]);
 
         // Abandoned mid-send by a stopped instance: back in the queue.
-        var abandoned = (await harness.QueueAsync(harness.TenantId, "project.muster-missing")).MessageId!.Value;
+        var abandoned = (await harness.QueueAsync(harness.TenantId, "factory-check.missed")).MessageId!.Value;
         await using (var db = harness.NewContext())
         {
             var row = await db.WhatsAppOutboxMessages.SingleAsync(x => x.Id == abandoned);
@@ -412,7 +412,7 @@ public sealed class WhatsAppNotificationTests
         Assert.Equal((WhatsAppOutboxStatuses.Pending, 1), ((await harness.ReloadAsync(abandoned)).Status, (await harness.ReloadAsync(abandoned)).AttemptCount));
 
         var unconfigured = await Harness.CreateAsync(configured: false);
-        var skipped = (await unconfigured.QueueAsync(unconfigured.TenantId, "project.muster-missing")).MessageId!.Value;
+        var skipped = (await unconfigured.QueueAsync(unconfigured.TenantId, "factory-check.missed")).MessageId!.Value;
         await unconfigured.ProcessAsync();
         Assert.Equal(WhatsAppOutboxStatuses.Skipped, (await unconfigured.ReloadAsync(skipped)).Status);
         Assert.Empty(unconfigured.Sender.Sent);
@@ -445,9 +445,9 @@ public sealed class WhatsAppNotificationTests
         Assert.False(status.BlockedByStop); // confirming again is fresh consent
         Assert.Equal(AliceNumber, status.Number);
         var prefs = await harness.NewContext().UserNotificationPreferences.IgnoreQueryFilters().Where(x => x.UserId == harness.Alice).ToListAsync();
-        Assert.True(prefs.Single(x => x.NotificationKey == "project.muster-missing").WhatsAppEnabled);
+        Assert.True(prefs.Single(x => x.NotificationKey == "factory-check.missed").WhatsAppEnabled);
         Assert.True(prefs.Single(x => x.NotificationKey == "work-order.assigned").WhatsAppEnabled);
-        Assert.DoesNotContain(prefs, x => x.NotificationKey == "project.task-due"); // not allowed by the tenant
+        Assert.DoesNotContain(prefs, x => x.NotificationKey == "action-item.due"); // not allowed by the tenant
 
         // A used code can't be used again.
         await Assert.ThrowsAsync<BusinessRuleException>(() => me.Verify(new WhatsAppVerifyRequest(code), CancellationToken.None));
@@ -551,19 +551,19 @@ public sealed class WhatsAppNotificationTests
             await harness.Verification().VerifyAsync(subject, harness.Sender.Sent.Single().Parameters[0]);
             Assert.True(Ok(await harness.MyWhatsApp(harness.Alice).Get(CancellationToken.None)).OptedIn);
 
-            // A muster reminder through the real dispatcher and channel.
+            // A missed-checks alert through the real dispatcher and channel.
             await using (var db = harness.NewContext())
             {
                 var channel = new WhatsAppNotificationChannel(db, harness.Outbox(db), NullLogger<WhatsAppNotificationChannel>.Instance);
                 var dispatcher = new NotificationDispatcher(db, null!, null!, null!, new NullInboxNotifier(), [channel], NullLogger<NotificationDispatcher>.Instance);
-                await dispatcher.NotifyAsync(new NotificationRequest(harness.TenantId, "project.muster-missing", [harness.Alice], "Muster", "Not marked", null, "Project", Guid.NewGuid(),
-                    new Dictionary<string, string?> { ["ProjectName"] = "Westlands Mall", ["WorkDate"] = "2026-10-21" }, Channels: NotificationChannels.WhatsApp));
+                await dispatcher.NotifyAsync(new NotificationRequest(harness.TenantId, "factory-check.missed", [harness.Alice], "Checks missed", "Not done", null, "RunningCheck", Guid.NewGuid(),
+                    new Dictionary<string, string?> { ["Place"] = "Westlands Mall", ["Shift"] = "2026-10-21" }, Channels: NotificationChannels.WhatsApp));
             }
             await harness.ProcessAsync();
-            var muster = harness.Sender.Sent.Last();
-            Assert.Equal(("muster_missing", AliceNumber), (muster.Template, muster.To));
+            var missed = harness.Sender.Sent.Last();
+            Assert.Equal(("checks_missed", AliceNumber), (missed.Template, missed.To));
 
-            var row = await harness.NewContext().WhatsAppOutboxMessages.IgnoreQueryFilters().SingleAsync(x => x.TemplateName == "muster_missing");
+            var row = await harness.NewContext().WhatsAppOutboxMessages.IgnoreQueryFilters().SingleAsync(x => x.TemplateName == "checks_missed");
             await harness.PostWebhookAsync(StatusPayload(row.ProviderMessageId!, "delivered"));
             Assert.Equal(WhatsAppOutboxStatuses.Delivered, (await harness.ReloadAsync(row.Id)).Status);
 
@@ -574,9 +574,9 @@ public sealed class WhatsAppNotificationTests
 
             await harness.PostWebhookAsync(MessagePayload("254712345678", "STOP"));
             await harness.PostWebhookAsync(MessagePayload("254712345678", "STOP")); // twice is fine
-            Assert.Equal(WhatsAppQueueOutcome.OptedOut, (await harness.QueueAsync(harness.TenantId, "project.muster-missing")).Outcome);
+            Assert.Equal(WhatsAppQueueOutcome.OptedOut, (await harness.QueueAsync(harness.TenantId, "factory-check.missed")).Outcome);
             await harness.PostWebhookAsync(MessagePayload("254712345678", "START"));
-            Assert.Equal(WhatsAppQueueOutcome.Queued, (await harness.QueueAsync(harness.TenantId, "project.muster-missing")).Outcome);
+            Assert.Equal(WhatsAppQueueOutcome.Queued, (await harness.QueueAsync(harness.TenantId, "factory-check.missed")).Outcome);
         });
     }
 
@@ -685,7 +685,7 @@ public sealed class WhatsAppNotificationTests
 
         public Task<WhatsAppQueueResult> QueueAsync(Guid tenantId, string key) =>
             Outbox(NewContext()).QueueAsync(new WhatsAppQueueRequest(tenantId, key, AliceNumber, "Alice",
-                new Dictionary<string, string?> { ["ProjectName"] = "Westlands Mall", ["WorkDate"] = "2026-10-21" }));
+                new Dictionary<string, string?> { ["Place"] = "Westlands Mall", ["Shift"] = "2026-10-21" }));
 
         public async Task<int> ProcessAsync(DateTime? now = null)
         {
@@ -710,7 +710,7 @@ public sealed class WhatsAppNotificationTests
         {
             var row = new WhatsAppOutboxMessage
             {
-                TenantId = TenantId, NotificationKey = "project.muster-missing", TemplateName = "muster_missing", ToPhone = AliceNumber,
+                TenantId = TenantId, NotificationKey = "factory-check.missed", TemplateName = "checks_missed", ToPhone = AliceNumber,
                 Status = WhatsAppOutboxStatuses.Sent, SentAt = DateTime.UtcNow, ProviderMessageId = providerMessageId, AttemptCount = 1,
             };
             await using var db = NewContext();

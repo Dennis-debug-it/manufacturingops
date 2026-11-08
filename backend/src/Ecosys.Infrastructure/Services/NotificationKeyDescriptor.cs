@@ -49,17 +49,6 @@ public static class NotificationKeyDescriptor
         EmailOnly("pm.overdue",           "Preventive maintenance overdue",    "Preventive Maintenance"),
         Inbox("pm.contract-lapsed", "PM schedule on hold: contract lapsed", "Preventive Maintenance"),
         EmailOnly("service-report.sent",  "Service report sent to client",     "Work Orders"),
-        Inbox("project.member-added",        "Added to a project team",        "Projects"),
-        Inbox("project.task-assigned",       "Project task assigned to me",    "Projects"),
-        Inbox("project.variation-submitted", "Project variation to review",    "Projects"),
-        Inbox("project.variation-decided",   "Project variation decided",      "Projects"),
-        Inbox("project.task-due", "Project task due soon", "Projects", whatsApp: true),
-        Inbox("project.milestone-due", "Project milestone coming up", "Projects"),
-        Inbox("project.milestone-overdue", "Project milestone overdue", "Projects"),
-        Inbox("project.end-date-approaching", "Project end date approaching", "Projects"),
-        Inbox("project.muster-missing", "Muster roll not marked", "Projects", whatsApp: true),
-        Inbox("project.valuation-certified", "Project valuation certified", "Projects", whatsApp: true),
-        Inbox("project.retention-due", "Project retention due for release", "Projects", whatsApp: true),
         Inbox("activity.scheduled", "Meeting or visit scheduled with me", "Calendar & Activities"),
         Inbox("activity.updated", "Meeting or visit moved or changed", "Calendar & Activities"),
         Inbox("activity.cancelled", "Meeting or visit cancelled", "Calendar & Activities"),
@@ -73,7 +62,7 @@ public static class NotificationKeyDescriptor
         Inbox("inventory.low-stock", "A part fell to its reorder level", "Inventory"),
         // Urgent on the factory floor: also by SMS, on by default (sent only when an SMS gateway is set up).
         Urgent("factory-job.reported", "An operator reported a fault", "Work Orders"),
-        Urgent("factory-check.missed", "Running checks missed in my section", "Work Orders"),
+        Urgent("factory-check.missed", "Running checks missed in my section", "Work Orders", whatsApp: true),
         Urgent("compliance.overdue", "A statutory inspection or calibration is overdue", "Work Orders"),
         Inbox("compliance.due", "A statutory inspection or calibration is due soon", "Work Orders"),
         Inbox("factory-window.carryover", "Weekly window jobs carried over", "Work Orders"),
@@ -114,8 +103,8 @@ public static class NotificationKeyDescriptor
     private static NotificationDescriptor Inbox(string key, string label, string category, NotificationChannels defaults = Staff, bool whatsApp = false) =>
         new(key, label, category, whatsApp ? Staff | NotificationChannels.WhatsApp : Staff, defaults & ~NotificationChannels.WhatsApp);
 
-    private static NotificationDescriptor Urgent(string key, string label, string category) =>
-        new(key, label, category, Staff | NotificationChannels.Sms, Staff | NotificationChannels.Sms);
+    private static NotificationDescriptor Urgent(string key, string label, string category, bool whatsApp = false) =>
+        new(key, label, category, Staff | NotificationChannels.Sms | (whatsApp ? NotificationChannels.WhatsApp : 0), Staff | NotificationChannels.Sms);
 
     private static NotificationDescriptor EmailOnly(string key, string label, string category) =>
         new(key, label, category, NotificationChannels.Email, NotificationChannels.Email);

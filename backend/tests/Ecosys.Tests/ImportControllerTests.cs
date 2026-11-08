@@ -389,8 +389,6 @@ public sealed class ImportControllerTests
                 CanCreateWorkOrders = true,
                 CanAssignWorkOrders = true,
                 CanCompleteWorkOrders = true,
-                CanViewKnowledge = true,
-                CanManageKnowledge = true,
                 CanViewMaterials = true,
                 CanRequestMaterials = true,
                 CanManageMaterials = true,
@@ -405,11 +403,7 @@ public sealed class ImportControllerTests
                 CanManageFinanceRates = true,
                 CanViewFinanceApprovals = true,
                 CanManageFinanceApprovals = true,
-                CanViewBillableWork = true,
-                CanManageBillableWork = true,
                 CanOverrideMaterialStock = true,
-                CanViewCrm = true,
-                CanManageCrm = true
             };
 
         public UserPermissionsModel GetSuperAdminPermissions() =>

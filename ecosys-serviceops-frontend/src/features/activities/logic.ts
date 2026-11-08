@@ -115,25 +115,3 @@ export function feedUrl(apiBaseUrl: string, path: string, origin: string): strin
 export function webcalUrl(url: string): string {
   return url.replace(/^https?:\/\//i, 'webcal://')
 }
-
-// ── "Raise variation from this" ─────────────────────────────────────────────
-
-const VARIATION_FLAG = 'newVariation'
-const MAX_PREFILL = 1500
-
-/** The project link that opens the variation form prefilled with a title and description. */
-export function variationPrefillUrl(projectId: string, title: string, description: string): string {
-  const params = new URLSearchParams({
-    tab: 'variations',
-    [VARIATION_FLAG]: '1',
-    vTitle: title.slice(0, 200),
-    vDescription: description.slice(0, MAX_PREFILL),
-  })
-  return `/projects/${projectId}?${params.toString()}`
-}
-
-/** The prefill a project page was opened with, if any. */
-export function readVariationPrefill(params: URLSearchParams): { title: string; description: string } | null {
-  if (params.get(VARIATION_FLAG) !== '1') return null
-  return { title: params.get('vTitle') ?? '', description: params.get('vDescription') ?? '' }
-}

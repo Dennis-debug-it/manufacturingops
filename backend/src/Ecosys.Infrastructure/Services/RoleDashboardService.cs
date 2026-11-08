@@ -172,16 +172,12 @@ internal sealed class RoleDashboardService(
         var modules = await moduleResolver.GetModulesAsync(tenantId, cancellationToken);
         var settings = await settingsService.GetAsync(tenantId, cancellationToken);
 
-        const bool isProjectManager = false;
-
-        var hidden = settings.HiddenFor(role)
-            .Concat(isProjectManager ? settings.HiddenFor(DashboardRoleDefaults.ProjectManager) : [])
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var hidden = settings.HiddenFor(role).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var allowed = DashboardWidgetCatalog.All
             .Where(x => HasModules(modules, x) && HasPermission(x) && !hidden.Contains(x.Key))
             .Select(x => x.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return new Viewer(tenantId, userId, role, DashboardRoleDefaults.For(role, isProjectManager), allowed, modules);
+        return new Viewer(tenantId, userId, role, DashboardRoleDefaults.For(role), allowed, modules);
     }
 
     private bool HasPermission(DashboardWidgetDefinition widget) =>

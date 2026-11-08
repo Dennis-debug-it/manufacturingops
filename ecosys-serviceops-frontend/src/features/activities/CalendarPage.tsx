@@ -16,9 +16,7 @@ const sourceTone: Record<CalendarSource, string> = {
   'action-items': 'bg-amber-100 text-amber-900 border-amber-200',
   'work-orders': 'bg-emerald-100 text-emerald-900 border-emerald-200',
   maintenance: 'bg-teal-100 text-teal-900 border-teal-200',
-  projects: 'bg-violet-100 text-violet-900 border-violet-200',
   contracts: 'bg-rose-100 text-rose-900 border-rose-200',
-  sales: 'bg-orange-100 text-orange-900 border-orange-200',
 }
 
 const sourceDot: Record<CalendarSource, string> = {
@@ -26,9 +24,7 @@ const sourceDot: Record<CalendarSource, string> = {
   'action-items': 'bg-amber-500',
   'work-orders': 'bg-emerald-500',
   maintenance: 'bg-teal-500',
-  projects: 'bg-violet-500',
   contracts: 'bg-rose-500',
-  sales: 'bg-orange-500',
 }
 
 const initialMode = () => (typeof window === 'undefined' ? 'month' : defaultCalendarMode(window.innerWidth))
@@ -61,7 +57,7 @@ export function CalendarPage() {
     <div className="space-y-4">
       <PageHeader
         title={team ? 'Team calendar' : 'My calendar'}
-        subtitle="Meetings and visits, with the work order, project and contract dates you can open."
+        subtitle="Meetings and visits, with the work order, maintenance and contract dates you can open."
         secondaryActions={<Link to="/calendar/feed" className={secondaryButtonClass}><Link2 className="h-4 w-4" />Subscribe</Link>}
         primaryAction={<button type="button" className={primaryButtonClass} onClick={() => setScheduleOn(format(selectedDay ?? new Date(), 'yyyy-MM-dd'))}><CalendarPlus className="h-4 w-4" />Schedule</button>}
       />

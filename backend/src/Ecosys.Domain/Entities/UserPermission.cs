@@ -9,8 +9,6 @@ public sealed class UserPermission : AuditableEntity
     public bool CanCreateWorkOrders { get; set; }
     public bool CanAssignWorkOrders { get; set; }
     public bool CanCompleteWorkOrders { get; set; }
-    public bool CanViewKnowledge { get; set; }
-    public bool CanManageKnowledge { get; set; }
     public bool CanViewMaterials { get; set; }
     public bool CanRequestMaterials { get; set; }
     public bool CanManageMaterials { get; set; }
@@ -25,11 +23,7 @@ public sealed class UserPermission : AuditableEntity
     public bool CanManageFinanceRates { get; set; }
     public bool CanViewFinanceApprovals { get; set; }
     public bool CanManageFinanceApprovals { get; set; }
-    public bool CanViewBillableWork { get; set; }
-    public bool CanManageBillableWork { get; set; }
     public bool CanOverrideMaterialStock { get; set; }
-    public bool CanViewCrm { get; set; }
-    public bool CanManageCrm { get; set; }
 
     public User? User { get; set; }
 }

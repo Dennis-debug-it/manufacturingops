@@ -9700,12 +9700,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("CanManageAssets")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("CanManageBillableWork")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CanManageCrm")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("CanManageFinance")
                         .HasColumnType("boolean");
 
@@ -9713,9 +9707,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageFinanceRates")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CanManageKnowledge")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMaterials")
@@ -9730,12 +9721,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("CanRequestMaterials")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("CanViewBillableWork")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CanViewCrm")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("CanViewFinance")
                         .HasColumnType("boolean");
 
@@ -9743,9 +9728,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanViewFinanceRates")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CanViewKnowledge")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanViewMaterials")
@@ -11826,55 +11808,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("tenant_api_keys", (string)null);
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantFinanceDefaults", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("DefaultExpenseApprovalRequired")
-                        .HasColumnType("boolean");
-
-                    b.Property<int>("DefaultInvoiceDueDays")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("DefaultPaymentTerms")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<int>("DefaultQuotationValidityDays")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal>("DefaultVatRate")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<bool>("EnableVat")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("TaxName")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId")
-                        .IsUnique();
-
-                    b.ToTable("tenant_finance_defaults", (string)null);
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantLicense", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12967,12 +12900,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("CanManageAssets")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("CanManageBillableWork")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CanManageCrm")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("CanManageFinance")
                         .HasColumnType("boolean");
 
@@ -12980,9 +12907,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageFinanceRates")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CanManageKnowledge")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanManageMaterials")
@@ -12997,12 +12921,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("CanRequestMaterials")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("CanViewBillableWork")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CanViewCrm")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("CanViewFinance")
                         .HasColumnType("boolean");
 
@@ -13010,9 +12928,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanViewFinanceRates")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("CanViewKnowledge")
                         .HasColumnType("boolean");
 
                     b.Property<bool>("CanViewMaterials")
@@ -18871,17 +18786,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantFinanceDefaults", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany("TenantFinanceDefaults")
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Tenant");
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantLicense", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.LicensePlan", "LicensePlan")
@@ -20536,8 +20440,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Technicians");
 
                     b.Navigation("TemplatePackInstallations");
-
-                    b.Navigation("TenantFinanceDefaults");
 
                     b.Navigation("TenantLicenses");
 

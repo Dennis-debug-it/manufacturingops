@@ -6,7 +6,7 @@ import { persistQueryClient, persistQueryClientSave, type PersistedClient, type 
 /**
  * Keeps what a technician needs in the field on the phone (their jobs, each job's details,
  * checklist and work so far, the previous visit on follow-ups, their clock status, the parts
- * list and, for site supervisors, their sites' rosters and muster days) so the app opens and shows it with no signal. Only these queries are stored, only for the
+ * list) so the app opens and shows it with no signal. Only these queries are stored, only for the
  * signed-in user, and it is wiped on sign-out.
  */
 

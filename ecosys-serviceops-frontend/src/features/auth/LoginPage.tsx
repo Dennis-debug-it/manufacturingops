@@ -174,10 +174,6 @@ export function LoginPage() {
               <Link to="/signup" className="font-medium text-slate-900 hover:underline">
                 Start a free trial
               </Link>
-              {' or '}
-              <Link to="/request-demo" className="font-medium text-slate-900 hover:underline">
-                request a demo
-              </Link>
             </p>
           </form>
         </div>
@@ -188,7 +184,7 @@ export function LoginPage() {
         <div className="relative h-full w-full overflow-hidden rounded-[2rem] bg-gradient-to-br from-slate-800 to-slate-950">
           <img
             src="/ecosys-technicians.jpg"
-            alt="ECOSYS technicians reviewing operations on a tablet"
+            alt="ECOSYS technicians reviewing maintenance on a tablet"
             className="absolute inset-0 h-full w-full object-cover"
             onError={(event) => { event.currentTarget.style.display = 'none' }}
           />
@@ -196,7 +192,7 @@ export function LoginPage() {
           <div className="absolute inset-x-0 bottom-0 p-12">
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-300">Operational control</p>
             <h2 className="mt-4 max-w-xl text-4xl font-semibold tracking-tight text-white">
-              Command field service, finance, and platform operations from one system.
+              Run factory maintenance, stores and the leaf collection fleet from one system.
             </h2>
           </div>
         </div>

@@ -59,7 +59,7 @@ export function CalendarFeedPage() {
         breadcrumbs={[{ label: 'Calendar', to: '/calendar' }, { label: 'Calendar link' }]}
       />
       <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-        <p>This is a private link to <strong>your</strong> calendar: your meetings and visits, and the work order, project and contract dates you can open. It shows titles, times and places only, never amounts or notes.</p>
+        <p>This is a private link to <strong>your</strong> calendar: your meetings and visits, and the work order, maintenance and contract dates you can open. It shows titles, times and places only, never amounts or notes.</p>
         <p><strong>It only goes one way.</strong> Changes you make in Google or Outlook don't come back to Ecosys. Google and Outlook check the link every few hours, so a new or moved meeting can take a while to show there. Ecosys itself is always up to date.</p>
         <p>Anyone who has the link can see these items, so keep it to yourself. If it gets out, turn it off or make a new one; the old link then stops working.</p>
       </section>

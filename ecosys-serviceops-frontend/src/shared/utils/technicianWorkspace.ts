@@ -4,7 +4,6 @@ import type { AuthUser, PermissionSet } from '../types/auth'
 const MANAGEMENT_PERMISSIONS: (keyof PermissionSet)[] = [
   'canCreateWorkOrders',
   'canAssignWorkOrders',
-  'canManageKnowledge',
   'canManageMaterials',
   'canApproveMaterials',
   'canIssueMaterials',
@@ -17,10 +16,7 @@ const MANAGEMENT_PERMISSIONS: (keyof PermissionSet)[] = [
   'canManageFinanceRates',
   'canViewFinanceApprovals',
   'canManageFinanceApprovals',
-  'canViewBillableWork',
-  'canManageBillableWork',
   'canOverrideMaterialStock',
-  'canManageCrm',
 ]
 
 /**

@@ -8,12 +8,11 @@ import { endpoints } from '../../shared/api/endpoints'
 import type { PlatformLicensePlan } from '../types'
 
 const modules: ReadonlyArray<[string, string]> = [
-  ['operations', 'Work orders, dispatch, technician app, clients & sites, reports'],
-  ['finance', 'Quotations, invoices, credit notes'],
-  ['maintenance', 'Preventive maintenance, assets, contracts, SLA'],
-  ['inventory', 'Materials, vans, purchase orders, stock'],
-  ['projects', 'Projects'],
-  ['advanced', 'Workflows, intake, time & attendance, expenses, approvals'],
+  ['operations', 'Work orders, technician app, clients & sites, reports'],
+  ['finance', 'Rate cards, preferential and exchange rates'],
+  ['maintenance', 'Preventive maintenance, assets, condition monitoring, reliability, leaf fleet, contracts, SLA'],
+  ['inventory', 'Materials, purchase orders, stock, tools'],
+  ['advanced', 'Workflows, intake, time & attendance, approvals'],
   ['enterprise_tools', 'Multiple branches, API & webhooks, monitoring'],
 ]
 

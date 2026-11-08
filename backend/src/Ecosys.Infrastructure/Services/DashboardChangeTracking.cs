@@ -19,8 +19,6 @@ public static class DashboardDataAreas
     public const string Maintenance = "maintenance";
     public const string Contracts = "contracts";
     public const string Materials = "materials";
-    public const string Finance = "finance";
-    public const string Projects = "projects";
     public const string Activities = "activities";
 
     /// <summary>

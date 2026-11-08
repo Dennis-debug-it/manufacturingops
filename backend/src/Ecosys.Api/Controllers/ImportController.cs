@@ -1515,11 +1515,7 @@ public sealed class ImportController(
             CanManageFinanceRates = permissions.CanManageFinanceRates,
             CanViewFinanceApprovals = permissions.CanViewFinanceApprovals,
             CanManageFinanceApprovals = permissions.CanManageFinanceApprovals,
-            CanViewBillableWork = permissions.CanViewBillableWork,
-            CanManageBillableWork = permissions.CanManageBillableWork,
             CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
-            CanViewCrm = permissions.CanViewCrm,
-            CanManageCrm = permissions.CanManageCrm
         };
 
     // Every action here previews or commits a privileged bulk mutation, so each one carries the same

@@ -24,7 +24,6 @@ const permissionOptions = [
   { value: 'finance.manage', label: 'Finance — Manage' },
   { value: 'can_manage_materials', label: 'Inventory — Manage Materials' },
   { value: 'can_manage_settings', label: 'Settings — Manage' },
-  { value: 'projects.variations.approve', label: 'Projects — Approve Variations' },
 ]
 const defaultPermission = 'finance.manage_approvals'
 

@@ -6,8 +6,6 @@ public static class PermissionNames
     public const string CanCreateWorkOrders = "can_create_workorders";
     public const string CanAssignWorkOrders = "can_assign_workorders";
     public const string CanCompleteWorkOrders = "can_complete_workorders";
-    public const string CanViewKnowledge = "can_view_knowledge";
-    public const string CanManageKnowledge = "can_manage_knowledge";
     public const string CanViewMaterials = "can_view_materials";
     public const string CanRequestMaterials = "can_request_materials";
     public const string CanManageMaterials = "can_manage_materials";
@@ -22,20 +20,9 @@ public static class PermissionNames
     public const string FinanceManageRates = "finance.manage_rates";
     public const string FinanceViewApprovals = "finance.view_approvals";
     public const string FinanceManageApprovals = "finance.manage_approvals";
-    public const string FinanceViewBillableWork = "finance.view_billable_work";
-    public const string FinanceManageBillableWork = "finance.manage_billable_work";
     public const string MaterialsOverrideStock = "materials.override_stock";
     public const string AttendanceView = "attendance.view";
     public const string AttendanceManage = "attendance.manage";
-    public const string ProjectsView = "projects.view";
-    public const string ProjectsManage = "projects.manage";
-    public const string ProjectsVariationsSubmit = "projects.variations.submit";
-    public const string ProjectsVariationsApprove = "projects.variations.approve";
-    public const string ProjectsClose = "projects.close";
-    public const string ProjectsSettings = "projects.settings";
-    public const string ProjectsMusterMark = "projects.muster.mark";
-    public const string ProjectsFinancialsView = "projects.financials.view";
-    public const string ProjectsFinancialsManage = "projects.financials.manage";
     /// <summary>See meetings and action items, and organise your own (Release 3 design 3.6).</summary>
     public const string ActivitiesView = "activities.view";
     /// <summary>Organise and change any meeting, not only your own.</summary>
@@ -50,27 +37,10 @@ public static class PermissionNames
     /// </summary>
     public static readonly string[] CapabilityOnly =
     [
-        ProjectsView,
-        ProjectsManage,
-        ProjectsVariationsSubmit,
-        ProjectsVariationsApprove,
-        ProjectsClose,
-        ProjectsSettings,
-        ProjectsMusterMark,
-        ProjectsFinancialsView,
-        ProjectsFinancialsManage,
         ActivitiesView,
         ActivitiesManage,
-        CalendarTeam,
-        CrmViewAll
+        CalendarTeam
     ];
-    public const string CrmView = "crm.view";
-    public const string CrmManage = "crm.manage";
-    /// <summary>
-    /// Sees every deal, RFP/RFQ and follow-up when the workspace limits people to their own deals
-    /// (Sales settings). Without it, and with that limit on, people see what they own.
-    /// </summary>
-    public const string CrmViewAll = "crm.view_all";
 
     public static readonly string[] All =
     [
@@ -78,8 +48,6 @@ public static class PermissionNames
         CanCreateWorkOrders,
         CanAssignWorkOrders,
         CanCompleteWorkOrders,
-        CanViewKnowledge,
-        CanManageKnowledge,
         CanViewMaterials,
         CanRequestMaterials,
         CanManageMaterials,
@@ -94,25 +62,11 @@ public static class PermissionNames
         FinanceManageRates,
         FinanceViewApprovals,
         FinanceManageApprovals,
-        FinanceViewBillableWork,
-        FinanceManageBillableWork,
         MaterialsOverrideStock,
         AttendanceView,
         AttendanceManage,
-        ProjectsView,
-        ProjectsManage,
-        ProjectsVariationsSubmit,
-        ProjectsVariationsApprove,
-        ProjectsClose,
-        ProjectsSettings,
-        ProjectsMusterMark,
-        ProjectsFinancialsView,
-        ProjectsFinancialsManage,
         ActivitiesView,
         ActivitiesManage,
-        CalendarTeam,
-        CrmView,
-        CrmManage,
-        CrmViewAll
+        CalendarTeam
     ];
 }

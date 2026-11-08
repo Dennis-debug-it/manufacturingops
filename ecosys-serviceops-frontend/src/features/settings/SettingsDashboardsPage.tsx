@@ -11,7 +11,6 @@ const roleLabels: Record<string, string> = {
   Manager: 'Managers',
   Dispatcher: 'Dispatchers',
   finance: 'Finance',
-  ProjectManager: 'Project managers',
   MaterialsController: 'Materials controllers',
   Viewer: 'Viewers',
   Technician: 'Technicians',

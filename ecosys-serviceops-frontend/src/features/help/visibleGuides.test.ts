@@ -12,31 +12,29 @@ describe('visibleGuides', () => {
   })
 
   it('shows each role only the areas it can open', () => {
-    const dispatcher = ids(user('dispatcher', { canViewWorkOrders: true, canAssignWorkOrders: true, canViewMaterials: true, canViewKnowledge: true }))
-    expect(dispatcher).toEqual(expect.arrayContaining(['work-orders', 'inventory', 'knowledge', 'time-attendance']))
+    const dispatcher = ids(user('dispatcher', { canViewWorkOrders: true, canAssignWorkOrders: true, canViewMaterials: true }))
+    expect(dispatcher).toEqual(expect.arrayContaining(['work-orders', 'inventory', 'time-attendance']))
     expect(dispatcher).not.toContain('finance')
     expect(dispatcher).not.toContain('approvals')
     expect(dispatcher).not.toContain('settings')
 
-    const finance = ids(user('finance', { canViewWorkOrders: true, canViewFinance: true, canViewReports: true, canViewKnowledge: true }))
+    const finance = ids(user('finance', { canViewWorkOrders: true, canViewFinance: true, canViewReports: true }))
     expect(finance).toEqual(expect.arrayContaining(['finance', 'contracts', 'reports', 'approvals']))
     expect(finance).not.toContain('inventory')
     expect(finance).not.toContain('time-attendance')
   })
 
   it('hides guides for areas the edition does not include, even from the admin', () => {
-    const essentials = (path: string) => !['/projects', '/maintenance', '/inventory', '/assets', '/contracts'].some((prefix) => path.startsWith(prefix))
+    const essentials = (path: string) => !['/maintenance', '/inventory', '/assets', '/contracts'].some((prefix) => path.startsWith(prefix))
     const visible = visibleGuides(user('admin', {}), essentials).map((guide) => guide.id)
     expect(visible).toContain('work-orders')
     expect(visible).toContain('finance')
     expect(visible).not.toContain('maintenance')
   })
 
-
   it("hides guides for screens the workspace's plan doesn't include", () => {
-    const operationsOnly = (path: string) => !path.startsWith('/crm') && !path.startsWith('/finance')
+    const operationsOnly = (path: string) => !path.startsWith('/finance')
     const guidesOnOperations = visibleGuides(user('admin', {}), operationsOnly).map((guide) => guide.id)
-    expect(guidesOnOperations).not.toContain('sales-crm')
     expect(guidesOnOperations).not.toContain('finance')
     expect(guidesOnOperations).toContain('work-orders')
   })

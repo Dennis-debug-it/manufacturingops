@@ -109,12 +109,6 @@ public static class DashboardWidgetCatalog
 /// <summary>Default layouts per role (5.2). Admins hide widgets per role; users rearrange their own.</summary>
 public static class DashboardRoleDefaults
 {
-    /// <summary>
-    /// Not a login role: anyone who manages an open project (or is on one as its project manager).
-    /// Its widgets are added to their own role's default, and an admin can hide widgets for it too.
-    /// </summary>
-    public const string ProjectManager = "ProjectManager";
-
     private static readonly string[] Manager =
     [
         DashboardWidgetCatalog.WorkOrdersOpenOverdue,
@@ -138,11 +132,6 @@ public static class DashboardRoleDefaults
         DashboardWidgetCatalog.ActionItemsDue,
     ];
 
-    private static readonly string[] ProjectManagerWidgets =
-    [
-        DashboardWidgetCatalog.ActionItemsDue,
-    ];
-
     private static readonly string[] Materials =
     [
         DashboardWidgetCatalog.MaterialsLowStock,
@@ -153,7 +142,7 @@ public static class DashboardRoleDefaults
     /// <summary>The roles an admin can hide widgets for, in the order the settings screen lists them.</summary>
     public static readonly IReadOnlyList<string> ConfigurableRoles =
     [
-        AppRoles.Admin, AppRoles.Manager, AppRoles.Dispatcher, AppRoles.FinanceUser, ProjectManager,
+        AppRoles.Admin, AppRoles.Manager, AppRoles.Dispatcher, AppRoles.FinanceUser,
         AppRoles.MaterialsController, AppRoles.Viewer, AppRoles.Technician,
     ];
 
@@ -172,13 +161,8 @@ public static class DashboardRoleDefaults
         AppRoles.Dispatcher => Dispatcher,
         AppRoles.FinanceUser => Finance,
         AppRoles.MaterialsController => Materials,
-        ProjectManager => ProjectManagerWidgets,
         // Viewers get read-only versions of the manager widgets they have permission for.
         AppRoles.Viewer => Manager,
         _ => [],
     };
-
-    /// <summary>The role default for this person: their role's widgets, then the project manager's if they run a project.</summary>
-    public static IReadOnlyList<string> For(string role, bool isProjectManager) =>
-        isProjectManager ? [.. For(role).Concat(ProjectManagerWidgets).Distinct(StringComparer.OrdinalIgnoreCase)] : For(role);
 }

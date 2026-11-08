@@ -3,7 +3,7 @@ import { flattenPages, formatUnreadBadge, groupPreferences, inAppPath, markAllRe
 import type { InboxNotification, NotificationPreference } from './types'
 
 const item = (id: string, readAt: string | null = null): InboxNotification => ({
-  id, key: 'project.task-assigned', title: `Task ${id}`, body: 'Body', url: `/projects/${id}`, entityType: 'Project', entityId: id,
+  id, key: 'work-order.assigned', title: `Job ${id}`, body: 'Body', url: `/work-orders/${id}`, entityType: 'WorkOrder', entityId: id,
   severity: 'Info', createdAt: '2026-10-21T08:00:00Z', readAt,
 })
 
@@ -62,7 +62,7 @@ describe('mark read', () => {
 
 describe('inAppPath', () => {
   it('follows only in-app links', () => {
-    expect(inAppPath('/projects/1?tab=tasks')).toBe('/projects/1?tab=tasks')
+    expect(inAppPath('/work-orders/1?tab=parts')).toBe('/work-orders/1?tab=parts')
     expect(inAppPath('https://evil.example')).toBeNull()
     expect(inAppPath('//evil.example')).toBeNull()
     expect(inAppPath(null)).toBeNull()

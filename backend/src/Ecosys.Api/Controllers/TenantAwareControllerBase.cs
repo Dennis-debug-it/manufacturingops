@@ -43,7 +43,6 @@ public abstract class TenantAwareControllerBase(ITenantContext tenantContext) : 
         {
             PermissionNames.CanCreateWorkOrders,
             PermissionNames.CanAssignWorkOrders,
-            PermissionNames.CanManageKnowledge,
             PermissionNames.CanManageMaterials,
             PermissionNames.CanApproveMaterials,
             PermissionNames.CanIssueMaterials,
@@ -56,10 +55,7 @@ public abstract class TenantAwareControllerBase(ITenantContext tenantContext) : 
             PermissionNames.FinanceManageRates,
             PermissionNames.FinanceViewApprovals,
             PermissionNames.FinanceManageApprovals,
-            PermissionNames.FinanceViewBillableWork,
-            PermissionNames.FinanceManageBillableWork,
             PermissionNames.MaterialsOverrideStock,
-            PermissionNames.CrmManage,
         };
 
         if (managementPermissions.Any(p => tenantContext.HasPermission(p)))

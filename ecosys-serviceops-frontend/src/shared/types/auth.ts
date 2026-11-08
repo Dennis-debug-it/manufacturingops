@@ -7,8 +7,6 @@ export interface PermissionSet {
   canCreateWorkOrders: boolean
   canAssignWorkOrders: boolean
   canCompleteWorkOrders: boolean
-  canViewKnowledge: boolean
-  canManageKnowledge: boolean
   canViewMaterials: boolean
   canRequestMaterials: boolean
   canManageMaterials: boolean
@@ -23,11 +21,7 @@ export interface PermissionSet {
   canManageFinanceRates: boolean
   canViewFinanceApprovals: boolean
   canManageFinanceApprovals: boolean
-  canViewBillableWork: boolean
-  canManageBillableWork: boolean
   canOverrideMaterialStock: boolean
-  canViewCrm: boolean
-  canManageCrm: boolean
   canViewPlatformTenants: boolean
   canCreatePlatformTenants: boolean
   canEditPlatformTenants: boolean
@@ -51,7 +45,7 @@ export interface AuthUser {
   mustChangePassword: boolean
   permissions: PermissionSet
   /**
-   * Granted capabilities that have no `PermissionSet` field, such as `projects.view`. Sent by
+   * Granted capabilities that have no `PermissionSet` field, such as `activities.view`. Sent by
    * login and /api/auth/me; absent on sessions stored before the field existed.
    */
   capabilities?: string[]

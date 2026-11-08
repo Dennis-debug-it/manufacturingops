@@ -89,27 +89,6 @@ public sealed class RoleLoginTests
         Assert.True(login.User.Permissions.CanViewWorkOrders, $"Role '{role}' resolved to no work-order access at all.");
     }
 
-    [Theory]
-    [InlineData(AppRoles.Manager, true, true)]
-    [InlineData(AppRoles.FinanceUser, true, true)]
-    [InlineData(AppRoles.Viewer, true, false)]
-    [InlineData(AppRoles.Dispatcher, false, false)]
-    [InlineData(AppRoles.Technician, false, false)]
-    public async Task CrmCapabilities_ReachTheLoginAndTheToken(string role, bool canView, bool canManage)
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedAsync(dbContext, role);
-
-        var login = await LoginAsync(dbContext, fixture);
-
-        Assert.Equal(canView, login.User.Permissions.CanViewCrm);
-        Assert.Equal(canManage, login.User.Permissions.CanManageCrm);
-        // The API checks the claim, not the login body, so the token has to carry it too.
-        var token = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(login.Token);
-        Assert.Equal(canView.ToString(), token.Claims.Single(x => x.Type == PermissionNames.CrmView).Value);
-        Assert.Equal(canManage.ToString(), token.Claims.Single(x => x.Type == PermissionNames.CrmManage).Value);
-    }
-
     [Fact]
     public async Task MaterialsController_RunsTheStores_ButNotDispatchOrFinance()
     {
@@ -151,7 +130,7 @@ public sealed class RoleLoginTests
     public async Task Login_And_Me_Agree_ForTenantAdmin_EvenWhenTheStoredRowIsStale()
     {
         // The observed EC-011 case: an Admin whose stored user_permissions row said
-        // CanViewKnowledge=false, while login handed back the full tenant permission set.
+        // CanViewReports=false, while login handed back the full tenant permission set.
         await using var dbContext = CreateDbContext();
         var fixture = await SeedAsync(dbContext, AppRoles.Admin);
 
@@ -159,7 +138,7 @@ public sealed class RoleLoginTests
         var me = await GetCurrentUserAsync(dbContext, fixture);
 
         Assert.Equal(login.User.Permissions, me.User.Permissions);
-        Assert.True(login.User.Permissions.CanViewKnowledge);
+        Assert.True(login.User.Permissions.CanViewReports);
         Assert.True(login.User.Permissions.CanManageSettings);
     }
 
@@ -169,7 +148,7 @@ public sealed class RoleLoginTests
         await using var dbContext = CreateDbContext();
         var fixture = await SeedAsync(dbContext, AppRoles.Technician);
 
-        // The tenant's matrix grants asset management and withholds knowledge, the exact opposite of
+        // The tenant's matrix grants asset management and withholds reports, the exact opposite of
         // the stale row seeded against the user.
         dbContext.RolePermissions.Add(new RolePermission
         {
@@ -177,7 +156,7 @@ public sealed class RoleLoginTests
             Role = AppRoles.Technician,
             CanViewWorkOrders = true,
             CanManageAssets = true,
-            CanViewKnowledge = false
+            CanViewReports = false
         });
         await dbContext.SaveChangesAsync();
 
@@ -185,7 +164,7 @@ public sealed class RoleLoginTests
         var me = await GetCurrentUserAsync(dbContext, fixture);
 
         Assert.True(login.User.Permissions.CanManageAssets);
-        Assert.False(login.User.Permissions.CanViewKnowledge);
+        Assert.False(login.User.Permissions.CanViewReports);
         Assert.Equal(login.User.Permissions, me.User.Permissions);
     }
 
@@ -347,15 +326,13 @@ public sealed class RoleLoginTests
             IsActive = true,
             HasAllBranchAccess = string.Equals(role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase),
             // Deliberately contradictory: nothing but the stale row grants finance management, and
-            // nothing but the stale row withholds knowledge. Neither endpoint may read it.
+            // nothing but the stale row withholds reports. Neither endpoint may read it.
             Permission = new UserPermission
             {
-                CanViewKnowledge = false,
+                CanViewReports = false,
                 CanManageFinance = true,
                 CanManageFinanceRates = true,
-                CanOverrideMaterialStock = true,
-                CanViewCrm = true,
-                CanManageCrm = true
+                CanOverrideMaterialStock = true
             }
         };
         user.PasswordHash = new PasswordHasher<User>().HashPassword(user, Password);

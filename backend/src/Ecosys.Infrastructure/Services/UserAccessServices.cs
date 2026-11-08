@@ -14,8 +14,6 @@ public sealed record UserPermissionsModel
     public bool CanCreateWorkOrders { get; init; }
     public bool CanAssignWorkOrders { get; init; }
     public bool CanCompleteWorkOrders { get; init; }
-    public bool CanViewKnowledge { get; init; }
-    public bool CanManageKnowledge { get; init; }
     public bool CanViewMaterials { get; init; }
     public bool CanRequestMaterials { get; init; }
     public bool CanManageMaterials { get; init; }
@@ -30,13 +28,9 @@ public sealed record UserPermissionsModel
     public bool CanManageFinanceRates { get; init; }
     public bool CanViewFinanceApprovals { get; init; }
     public bool CanManageFinanceApprovals { get; init; }
-    public bool CanViewBillableWork { get; init; }
-    public bool CanManageBillableWork { get; init; }
     public bool CanOverrideMaterialStock { get; init; }
     /// <summary>Granted <see cref="PermissionNames.CapabilityOnly"/> capabilities.</summary>
     public IReadOnlyList<string> Capabilities { get; init; } = [];
-    public bool CanViewCrm { get; init; }
-    public bool CanManageCrm { get; init; }
 }
 
 public interface IUserPermissionTemplateService
@@ -75,7 +69,6 @@ internal sealed class UserPermissionTemplateService : IUserPermissionTemplateSer
             {
                 CanViewWorkOrders = true,
                 CanCompleteWorkOrders = true,
-                CanViewKnowledge = true,
                 CanViewMaterials = true,
                 CanRequestMaterials = true
             },
@@ -85,8 +78,6 @@ internal sealed class UserPermissionTemplateService : IUserPermissionTemplateSer
                 CanCreateWorkOrders = true,
                 CanAssignWorkOrders = true,
                 CanCompleteWorkOrders = true,
-                CanViewKnowledge = true,
-                CanManageKnowledge = true,
                 CanViewMaterials = true,
                 CanRequestMaterials = true,
                 CanViewReports = true
@@ -94,7 +85,6 @@ internal sealed class UserPermissionTemplateService : IUserPermissionTemplateSer
             "Store Manager" => new UserPermissionsModel
             {
                 CanViewWorkOrders = true,
-                CanViewKnowledge = true,
                 CanViewMaterials = true,
                 CanRequestMaterials = true,
                 CanManageMaterials = true,
@@ -105,7 +95,6 @@ internal sealed class UserPermissionTemplateService : IUserPermissionTemplateSer
             "Finance Manager" => new UserPermissionsModel
             {
                 CanViewWorkOrders = true,
-                CanViewKnowledge = true,
                 CanViewReports = true,
                 CanViewFinance = true,
                 CanManageFinance = true,
@@ -113,34 +102,27 @@ internal sealed class UserPermissionTemplateService : IUserPermissionTemplateSer
                 CanManageFinanceRates = true,
                 CanViewFinanceApprovals = true,
                 CanManageFinanceApprovals = true,
-                CanViewBillableWork = true,
-                CanManageBillableWork = true
             },
             "Helpdesk Officer" => new UserPermissionsModel
             {
                 CanViewWorkOrders = true,
                 CanCreateWorkOrders = true,
-                CanViewKnowledge = true,
                 CanViewMaterials = true,
                 CanRequestMaterials = true
             },
             "Manager" => new UserPermissionsModel
             {
                 CanViewWorkOrders = true,
-                CanViewKnowledge = true,
-                CanManageKnowledge = true,
                 CanViewMaterials = true,
                 CanRequestMaterials = true,
                 CanViewReports = true,
                 CanViewFinance = true,
                 CanViewFinanceRates = true,
                 CanViewFinanceApprovals = true,
-                CanViewBillableWork = true
             },
             _ => new UserPermissionsModel
             {
                 CanViewWorkOrders = true,
-                CanViewKnowledge = true,
                 CanViewMaterials = true,
                 CanRequestMaterials = true
             }
@@ -154,8 +136,6 @@ internal sealed class UserPermissionTemplateService : IUserPermissionTemplateSer
             CanCreateWorkOrders = true,
             CanAssignWorkOrders = true,
             CanCompleteWorkOrders = true,
-            CanViewKnowledge = true,
-            CanManageKnowledge = true,
             CanViewMaterials = true,
             CanRequestMaterials = true,
             CanManageMaterials = true,
@@ -170,12 +150,8 @@ internal sealed class UserPermissionTemplateService : IUserPermissionTemplateSer
             CanManageFinanceRates = true,
             CanViewFinanceApprovals = true,
             CanManageFinanceApprovals = true,
-            CanViewBillableWork = true,
-            CanManageBillableWork = true,
             CanOverrideMaterialStock = true,
             Capabilities = PermissionNames.CapabilityOnly,
-            CanViewCrm = true,
-            CanManageCrm = true
         };
 
     public UserPermissionsModel GetSuperAdminPermissions() => new();

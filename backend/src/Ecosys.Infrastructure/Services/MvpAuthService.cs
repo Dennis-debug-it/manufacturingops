@@ -691,8 +691,6 @@ internal sealed class MvpAuthService(
             CanCreateWorkOrders = permissions.CanCreateWorkOrders,
             CanAssignWorkOrders = permissions.CanAssignWorkOrders,
             CanCompleteWorkOrders = permissions.CanCompleteWorkOrders,
-            CanViewKnowledge = permissions.CanViewKnowledge,
-            CanManageKnowledge = permissions.CanManageKnowledge,
             CanViewMaterials = permissions.CanViewMaterials,
             CanRequestMaterials = permissions.CanRequestMaterials,
             CanManageMaterials = permissions.CanManageMaterials,
@@ -707,11 +705,7 @@ internal sealed class MvpAuthService(
             CanManageFinanceRates = permissions.CanManageFinanceRates,
             CanViewFinanceApprovals = permissions.CanViewFinanceApprovals,
             CanManageFinanceApprovals = permissions.CanManageFinanceApprovals,
-            CanViewBillableWork = permissions.CanViewBillableWork,
-            CanManageBillableWork = permissions.CanManageBillableWork,
             CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
-            CanViewCrm = permissions.CanViewCrm,
-            CanManageCrm = permissions.CanManageCrm
         };
 
     public static UserPermissionsModel FromEntity(UserPermission permission) =>
@@ -721,8 +715,6 @@ internal sealed class MvpAuthService(
             CanCreateWorkOrders = permission.CanCreateWorkOrders,
             CanAssignWorkOrders = permission.CanAssignWorkOrders,
             CanCompleteWorkOrders = permission.CanCompleteWorkOrders,
-            CanViewKnowledge = permission.CanViewKnowledge,
-            CanManageKnowledge = permission.CanManageKnowledge,
             CanViewMaterials = permission.CanViewMaterials,
             CanRequestMaterials = permission.CanRequestMaterials,
             CanManageMaterials = permission.CanManageMaterials,
@@ -737,11 +729,7 @@ internal sealed class MvpAuthService(
             CanManageFinanceRates = permission.CanManageFinanceRates,
             CanViewFinanceApprovals = permission.CanViewFinanceApprovals,
             CanManageFinanceApprovals = permission.CanManageFinanceApprovals,
-            CanViewBillableWork = permission.CanViewBillableWork,
-            CanManageBillableWork = permission.CanManageBillableWork,
             CanOverrideMaterialStock = permission.CanOverrideMaterialStock,
-            CanViewCrm = permission.CanViewCrm,
-            CanManageCrm = permission.CanManageCrm
         };
 
     private static IEnumerable<Claim> ToClaims(UserPermissionsModel permissions)
@@ -750,8 +738,6 @@ internal sealed class MvpAuthService(
         yield return new Claim(PermissionNames.CanCreateWorkOrders, permissions.CanCreateWorkOrders.ToString());
         yield return new Claim(PermissionNames.CanAssignWorkOrders, permissions.CanAssignWorkOrders.ToString());
         yield return new Claim(PermissionNames.CanCompleteWorkOrders, permissions.CanCompleteWorkOrders.ToString());
-        yield return new Claim(PermissionNames.CanViewKnowledge, permissions.CanViewKnowledge.ToString());
-        yield return new Claim(PermissionNames.CanManageKnowledge, permissions.CanManageKnowledge.ToString());
         yield return new Claim(PermissionNames.CanViewMaterials, permissions.CanViewMaterials.ToString());
         yield return new Claim(PermissionNames.CanRequestMaterials, permissions.CanRequestMaterials.ToString());
         yield return new Claim(PermissionNames.CanManageMaterials, permissions.CanManageMaterials.ToString());
@@ -766,15 +752,11 @@ internal sealed class MvpAuthService(
         yield return new Claim(PermissionNames.FinanceManageRates, permissions.CanManageFinanceRates.ToString());
         yield return new Claim(PermissionNames.FinanceViewApprovals, permissions.CanViewFinanceApprovals.ToString());
         yield return new Claim(PermissionNames.FinanceManageApprovals, permissions.CanManageFinanceApprovals.ToString());
-        yield return new Claim(PermissionNames.FinanceViewBillableWork, permissions.CanViewBillableWork.ToString());
-        yield return new Claim(PermissionNames.FinanceManageBillableWork, permissions.CanManageBillableWork.ToString());
         yield return new Claim(PermissionNames.MaterialsOverrideStock, permissions.CanOverrideMaterialStock.ToString());
         foreach (var capability in permissions.Capabilities)
         {
             yield return new Claim(capability, bool.TrueString);
         }
-        yield return new Claim(PermissionNames.CrmView, permissions.CanViewCrm.ToString());
-        yield return new Claim(PermissionNames.CrmManage, permissions.CanManageCrm.ToString());
     }
 
     private static NumberingSetting CreateNumberingSetting(Tenant tenant, Guid? branchId, string documentType, string prefix) =>

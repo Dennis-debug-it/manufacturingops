@@ -49,24 +49,18 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
             CanCreateWorkOrders = true,
             CanAssignWorkOrders = true,
             CanCompleteWorkOrders = true,
-            CanViewKnowledge = true,
-            CanManageKnowledge = true,
             CanViewMaterials = true,
             CanRequestMaterials = true,
             CanViewReports = true,
             CanViewFinance = true,
             CanViewFinanceRates = true,
             CanViewFinanceApprovals = true,
-            CanViewBillableWork = true,
-            CanViewCrm = true,
-            CanManageCrm = true
         },
         AppRoles.Dispatcher => new UserPermissionsModel
         {
             CanViewWorkOrders = true,
             CanCreateWorkOrders = true,
             CanAssignWorkOrders = true,
-            CanViewKnowledge = true,
             CanViewMaterials = true,
             CanRequestMaterials = true
         },
@@ -74,7 +68,6 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
         {
             CanViewWorkOrders = true,
             CanCompleteWorkOrders = true,
-            CanViewKnowledge = true,
             CanViewMaterials = true,
             CanRequestMaterials = true
         },
@@ -83,7 +76,6 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
         AppRoles.MaterialsController => new UserPermissionsModel
         {
             CanViewWorkOrders = true,
-            CanViewKnowledge = true,
             CanViewMaterials = true,
             CanRequestMaterials = true,
             CanManageMaterials = true,
@@ -94,7 +86,6 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
         AppRoles.FinanceUser => new UserPermissionsModel
         {
             CanViewWorkOrders = true,
-            CanViewKnowledge = true,
             CanViewReports = true,
             CanViewFinance = true,
             CanManageFinance = true,
@@ -102,20 +93,14 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
             CanManageFinanceRates = true,
             CanViewFinanceApprovals = true,
             CanManageFinanceApprovals = true,
-            CanViewBillableWork = true,
-            CanManageBillableWork = true,
-            CanViewCrm = true,
-            CanManageCrm = true
         },
         // Viewer == the previous catch-all default, so legacy "User" accounts keep exactly what they had,
         // plus read-only access to the sales pipeline, which Viewers had before CRM got its own capability.
         _ => new UserPermissionsModel
         {
             CanViewWorkOrders = true,
-            CanViewKnowledge = true,
             CanViewMaterials = true,
             CanRequestMaterials = true,
-            CanViewCrm = true
         }
     };
 
@@ -304,8 +289,6 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
         entity.CanCreateWorkOrders = p.CanCreateWorkOrders;
         entity.CanAssignWorkOrders = p.CanAssignWorkOrders;
         entity.CanCompleteWorkOrders = p.CanCompleteWorkOrders;
-        entity.CanViewKnowledge = p.CanViewKnowledge;
-        entity.CanManageKnowledge = p.CanManageKnowledge;
         entity.CanViewMaterials = p.CanViewMaterials;
         entity.CanRequestMaterials = p.CanRequestMaterials;
         entity.CanManageMaterials = p.CanManageMaterials;
@@ -320,11 +303,7 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
         entity.CanManageFinanceRates = p.CanManageFinanceRates;
         entity.CanViewFinanceApprovals = p.CanViewFinanceApprovals;
         entity.CanManageFinanceApprovals = p.CanManageFinanceApprovals;
-        entity.CanViewBillableWork = p.CanViewBillableWork;
-        entity.CanManageBillableWork = p.CanManageBillableWork;
         entity.CanOverrideMaterialStock = p.CanOverrideMaterialStock;
-        entity.CanViewCrm = p.CanViewCrm;
-        entity.CanManageCrm = p.CanManageCrm;
     }
 
     private static UserPermissionsModel FromEntity(RolePermission e) => new()
@@ -333,8 +312,6 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
         CanCreateWorkOrders = e.CanCreateWorkOrders,
         CanAssignWorkOrders = e.CanAssignWorkOrders,
         CanCompleteWorkOrders = e.CanCompleteWorkOrders,
-        CanViewKnowledge = e.CanViewKnowledge,
-        CanManageKnowledge = e.CanManageKnowledge,
         CanViewMaterials = e.CanViewMaterials,
         CanRequestMaterials = e.CanRequestMaterials,
         CanManageMaterials = e.CanManageMaterials,
@@ -349,10 +326,6 @@ internal sealed class RolePermissionService(AppDbContext dbContext) : IRolePermi
         CanManageFinanceRates = e.CanManageFinanceRates,
         CanViewFinanceApprovals = e.CanViewFinanceApprovals,
         CanManageFinanceApprovals = e.CanManageFinanceApprovals,
-        CanViewBillableWork = e.CanViewBillableWork,
-        CanManageBillableWork = e.CanManageBillableWork,
         CanOverrideMaterialStock = e.CanOverrideMaterialStock,
-        CanViewCrm = e.CanViewCrm,
-        CanManageCrm = e.CanManageCrm
     };
 }

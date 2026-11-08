@@ -67,42 +67,7 @@ internal sealed class DynamicAccessService(AppDbContext dbContext, IRolePermissi
 /// </summary>
 internal static class CapabilityRoleDefaults
 {
-    private static readonly string[] ProjectViewers = [PermissionNames.ProjectsView];
-
-    private static readonly string[] ProjectManagers =
-    [
-        PermissionNames.ProjectsView,
-        PermissionNames.ProjectsManage,
-        PermissionNames.ProjectsVariationsSubmit,
-        PermissionNames.ProjectsVariationsApprove,
-        PermissionNames.ProjectsClose,
-        PermissionNames.ProjectsMusterMark,
-        PermissionNames.ProjectsFinancialsView,
-        PermissionNames.ProjectsFinancialsManage
-    ];
-
-    private static readonly string[] ProjectFinance =
-    [
-        PermissionNames.ProjectsView,
-        PermissionNames.ProjectsFinancialsView,
-        PermissionNames.ProjectsFinancialsManage
-    ];
-
-    // Field staff mark the muster roll only on projects where they are a Supervisor or Project
-    // Manager member; the capability alone opens nothing else.
-    private static readonly string[] FieldSupervisors = [PermissionNames.ProjectsMusterMark];
-
-    public static IReadOnlyList<string> For(string? role) => [.. ProjectDefaults(role), .. ActivityDefaults(role)];
-
-    private static IReadOnlyList<string> ProjectDefaults(string? role)
-    {
-        if (string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)) return ProjectManagers;
-        if (string.Equals(role, AppRoles.FinanceUser, StringComparison.OrdinalIgnoreCase)) return ProjectFinance;
-        if (string.Equals(role, AppRoles.Dispatcher, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(role, AppRoles.Viewer, StringComparison.OrdinalIgnoreCase)) return ProjectViewers;
-        if (string.Equals(role, AppRoles.Technician, StringComparison.OrdinalIgnoreCase)) return FieldSupervisors;
-        return [];
-    }
+    public static IReadOnlyList<string> For(string? role) => ActivityDefaults(role);
 
     /// <summary>
     /// Every staff role sees meetings and action items and can organise its own; managers organise any
@@ -126,7 +91,6 @@ internal static class PermissionMap
     {
         [PermissionNames.CanViewWorkOrders] = p.CanViewWorkOrders, [PermissionNames.CanCreateWorkOrders] = p.CanCreateWorkOrders,
         [PermissionNames.CanAssignWorkOrders] = p.CanAssignWorkOrders, [PermissionNames.CanCompleteWorkOrders] = p.CanCompleteWorkOrders,
-        [PermissionNames.CanViewKnowledge] = p.CanViewKnowledge, [PermissionNames.CanManageKnowledge] = p.CanManageKnowledge,
         [PermissionNames.CanViewMaterials] = p.CanViewMaterials, [PermissionNames.CanRequestMaterials] = p.CanRequestMaterials,
         [PermissionNames.CanManageMaterials] = p.CanManageMaterials, [PermissionNames.CanApproveMaterials] = p.CanApproveMaterials,
         [PermissionNames.CanIssueMaterials] = p.CanIssueMaterials, [PermissionNames.CanManageAssets] = p.CanManageAssets,
@@ -134,19 +98,16 @@ internal static class PermissionMap
         [PermissionNames.FinanceView] = p.CanViewFinance, [PermissionNames.FinanceManage] = p.CanManageFinance,
         [PermissionNames.FinanceViewRates] = p.CanViewFinanceRates, [PermissionNames.FinanceManageRates] = p.CanManageFinanceRates,
         [PermissionNames.FinanceViewApprovals] = p.CanViewFinanceApprovals, [PermissionNames.FinanceManageApprovals] = p.CanManageFinanceApprovals,
-        [PermissionNames.FinanceViewBillableWork] = p.CanViewBillableWork, [PermissionNames.FinanceManageBillableWork] = p.CanManageBillableWork,
-        [PermissionNames.MaterialsOverrideStock] = p.CanOverrideMaterialStock,
-        [PermissionNames.CrmView] = p.CanViewCrm, [PermissionNames.CrmManage] = p.CanManageCrm
+        [PermissionNames.MaterialsOverrideStock] = p.CanOverrideMaterialStock
     };
 
     public static UserPermissionsModel ToModel(HashSet<string> p) => new()
     {
         CanViewWorkOrders=p.Contains(PermissionNames.CanViewWorkOrders), CanCreateWorkOrders=p.Contains(PermissionNames.CanCreateWorkOrders), CanAssignWorkOrders=p.Contains(PermissionNames.CanAssignWorkOrders), CanCompleteWorkOrders=p.Contains(PermissionNames.CanCompleteWorkOrders),
-        CanViewKnowledge=p.Contains(PermissionNames.CanViewKnowledge), CanManageKnowledge=p.Contains(PermissionNames.CanManageKnowledge), CanViewMaterials=p.Contains(PermissionNames.CanViewMaterials), CanRequestMaterials=p.Contains(PermissionNames.CanRequestMaterials),
+        CanViewMaterials=p.Contains(PermissionNames.CanViewMaterials), CanRequestMaterials=p.Contains(PermissionNames.CanRequestMaterials),
         CanManageMaterials=p.Contains(PermissionNames.CanManageMaterials), CanApproveMaterials=p.Contains(PermissionNames.CanApproveMaterials), CanIssueMaterials=p.Contains(PermissionNames.CanIssueMaterials), CanManageAssets=p.Contains(PermissionNames.CanManageAssets),
         CanManageSettings=p.Contains(PermissionNames.CanManageSettings), CanViewReports=p.Contains(PermissionNames.CanViewReports), CanViewFinance=p.Contains(PermissionNames.FinanceView), CanManageFinance=p.Contains(PermissionNames.FinanceManage),
         CanViewFinanceRates=p.Contains(PermissionNames.FinanceViewRates), CanManageFinanceRates=p.Contains(PermissionNames.FinanceManageRates), CanViewFinanceApprovals=p.Contains(PermissionNames.FinanceViewApprovals), CanManageFinanceApprovals=p.Contains(PermissionNames.FinanceManageApprovals),
-        CanViewBillableWork=p.Contains(PermissionNames.FinanceViewBillableWork), CanManageBillableWork=p.Contains(PermissionNames.FinanceManageBillableWork), CanOverrideMaterialStock=p.Contains(PermissionNames.MaterialsOverrideStock),
-        CanViewCrm=p.Contains(PermissionNames.CrmView), CanManageCrm=p.Contains(PermissionNames.CrmManage)
+        CanOverrideMaterialStock=p.Contains(PermissionNames.MaterialsOverrideStock)
     };
 }

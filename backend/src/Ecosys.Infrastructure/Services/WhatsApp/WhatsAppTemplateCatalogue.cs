@@ -13,8 +13,6 @@ public static class ClientWhatsAppKeys
 {
     public const string TechnicianOnTheWay = "technician-on-the-way";
     public const string WorkOrderCompleted = "work-order-completed";
-    public const string InvoiceIssued = "invoice-issued";
-    public const string ValuationCertified = "valuation-certified-client";
 }
 
 /// <param name="Name">The template name submitted to Meta.</param>
@@ -54,18 +52,9 @@ public static class WhatsAppTemplateCatalogue
     private static readonly IReadOnlyList<WhatsAppTemplateDefinition> All =
     [
         // ── Staff ────────────────────────────────────────────────────────────
-        new("project.muster-missing", "muster_missing", WhatsAppAudiences.Staff, "Muster roll not marked", "UTILITY",
-            ["ProjectName", "WorkDate"],
-            "*{{1}}*: today's muster roll for {{2}} ({{3}}) hasn't been marked yet. Please mark it in Ecosys.", StaffFooter),
-        new("project.task-due", "task_due", WhatsAppAudiences.Staff, "Project task due", "UTILITY",
-            ["TaskTitle", "ProjectName", "DueDate"],
-            "*{{1}}*: your task \"{{2}}\" on {{3}} is due on {{4}}.", StaffFooter),
-        new("project.valuation-certified", "valuation_certified", WhatsAppAudiences.Staff, "Valuation certified", "UTILITY",
-            ["ValuationNumber", "ProjectName", "CertifiedAmount"],
-            "*{{1}}*: valuation {{2}} on {{3}} was certified for {{4}}. It is ready to invoice in Ecosys.", StaffFooter),
-        new("project.retention-due", "retention_due", WhatsAppAudiences.Staff, "Retention due for release", "UTILITY",
-            ["Amount", "ProjectName", "Stage"],
-            "*{{1}}*: retention of {{2}} on {{3}} is due for release at {{4}}.", StaffFooter),
+        new("factory-check.missed", "checks_missed", WhatsAppAudiences.Staff, "Running checks missed", "UTILITY",
+            ["Place", "Shift"],
+            "*{{1}}*: running checks in {{2}} were not done in shift {{3}}. Please see Ecosys.", StaffFooter),
         new("activity.reminder", "meeting_reminder", WhatsAppAudiences.Staff, "Meeting reminder", "UTILITY",
             ["ActivityTitle", "When", "Location"],
             "*{{1}}*: reminder, \"{{2}}\" starts at {{3}}. Location: {{4}}.", StaffFooter),
@@ -83,12 +72,6 @@ public static class WhatsAppTemplateCatalogue
         new(ClientWhatsAppKeys.WorkOrderCompleted, "work_order_completed", WhatsAppAudiences.Client, "Job completed", "UTILITY",
             ["WorkOrderNumber", "TechnicianName", "TrackingLink"],
             "*{{1}}*: job {{2}} has been completed by {{3}}. Details: {{4}}", ClientFooter),
-        new(ClientWhatsAppKeys.InvoiceIssued, "invoice_issued", WhatsAppAudiences.Client, "Invoice issued", "UTILITY",
-            ["InvoiceNumber", "TotalAmount", "DueDate"],
-            "*{{1}}*: invoice {{2}} for {{3}} has been sent to your email. It is due on {{4}}.", ClientFooter),
-        new(ClientWhatsAppKeys.ValuationCertified, "valuation_certified_client", WhatsAppAudiences.Client, "Valuation certified", "UTILITY",
-            ["ValuationNumber", "ProjectName", "CertifiedAmount"],
-            "*{{1}}*: valuation {{2}} on {{3}} has been certified for {{4}}.", ClientFooter),
 
         // ── Number confirmation ──────────────────────────────────────────────
         // Meta's authentication templates have fixed text and a copy-code button; the code fills both.
@@ -99,7 +82,7 @@ public static class WhatsAppTemplateCatalogue
 
     /// <summary>What a tenant allows when it has never saved its WhatsApp settings (design 4.2).</summary>
     public static readonly IReadOnlyList<string> DefaultAllowedKeys =
-        ["project.muster-missing", "work-order.assigned", "activity.reminder", ClientWhatsAppKeys.TechnicianOnTheWay];
+        ["factory-check.missed", "work-order.assigned", "activity.reminder", ClientWhatsAppKeys.TechnicianOnTheWay];
 
     public static IReadOnlyList<WhatsAppTemplateDefinition> List() => All;
 

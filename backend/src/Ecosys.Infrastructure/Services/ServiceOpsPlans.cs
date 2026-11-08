@@ -21,7 +21,6 @@ public static class ServiceOpsPlans
     // Professional adds these.
     public const string Maintenance = "maintenance";
     public const string Inventory = "inventory";
-    public const string Projects = "projects";
     public const string Advanced = "advanced";
     // Enterprise adds this: multiple branches, API keys and webhooks, monitoring (settings routes and limits).
     public const string EnterpriseModule = "enterprise_tools";
@@ -35,7 +34,7 @@ public static class ServiceOpsPlans
     public static readonly IReadOnlyList<string> Editions = [Essentials, Professional, Enterprise];
 
     /// <summary>Every module a sales pipeline can be tied to.</summary>
-    public static readonly IReadOnlyList<string> AllModules = [Operations, Finance, Maintenance, Inventory, Projects, Advanced, EnterpriseModule];
+    public static readonly IReadOnlyList<string> AllModules = [Operations, Finance, Maintenance, Inventory, Advanced, EnterpriseModule];
 
     public static bool IsEdition(string? code) => code is Essentials or Professional or Enterprise;
 
@@ -50,8 +49,8 @@ public static class ServiceOpsPlans
     public static IReadOnlyList<string> EditionModules(string? planCode) => planCode switch
     {
         Essentials => [Operations, Finance],
-        Professional => [Operations, Finance, Maintenance, Inventory, Projects, Advanced],
-        Enterprise => [Operations, Finance, Maintenance, Inventory, Projects, Advanced, EnterpriseModule],
+        Professional => [Operations, Finance, Maintenance, Inventory, Advanced],
+        Enterprise => [Operations, Finance, Maintenance, Inventory, Advanced, EnterpriseModule],
         _ => []
     };
 
@@ -99,11 +98,6 @@ public static class ServiceOpsPlans
         "ExchangeRates", "TenantFinance"
     };
 
-    private static readonly HashSet<string> ProjectsControllers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        
-    };
-
     /// <summary>Each module's controllers, so classification and gating read from one table.</summary>
     private static readonly (string Module, HashSet<string> Controllers)[] ModuleControllers =
     [
@@ -111,14 +105,13 @@ public static class ServiceOpsPlans
         (Finance, FinanceControllers),
         (Maintenance, MaintenanceControllers),
         (Inventory, InventoryControllers),
-        (Projects, ProjectsControllers),
         (Advanced, AdvancedControllers),
         (WhatsAppBusiness, WhatsAppBusinessControllers),
     ];
 
     /// <summary>
     /// Tenant controllers deliberately available to every ServiceOps plan (identity, workspace settings,
-    /// clients, knowledge base, audit, attachments…). Listed explicitly so that a new controller is never
+    /// clients, audit, attachments…). Listed explicitly so that a new controller is never
     /// ungated by omission: <c>ServiceOpsModuleClassificationTests</c> fails for any controller that is in
     /// none of the Operations/Finance/Shared/route-classified sets (audit TM-P2-03).
     /// </summary>
@@ -159,7 +152,7 @@ public static class ServiceOpsPlans
             if (setting is "email-intake" or "time-attendance" or "credit-control") return [Advanced];
             if (setting is "monitoring-webhooks" or "api-keys" or "webhooks") return [EnterpriseModule];
             if (setting is "whatsapp") return [WhatsAppBusiness];
-            if (setting is "payments" or "tax" or "finance") return [Finance];
+            if (setting is "tax" or "finance") return [Finance];
         }
         if (controller == "Import" && route.Contains("/assets")) return [Maintenance];
         if (controller == "Import" && (route.Contains("/sites") || route.Contains("/technicians"))) return [Operations];

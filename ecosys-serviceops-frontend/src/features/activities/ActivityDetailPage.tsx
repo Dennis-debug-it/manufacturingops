@@ -1,14 +1,12 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { Ban, Download, FilePlus2, Lock, Pencil, Plus } from 'lucide-react'
+import { Ban, Download, Lock, Pencil, Plus } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { Spinner } from '../../shared/components/Spinner'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
-import { usePermission } from '../../shared/hooks/usePermission'
-import { useEntitlements } from '../../shared/hooks/useEntitlements'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { fieldClass, labelClass, primaryButtonClass, secondaryButtonClass, smallButtonClass, textAreaClass, textOrNull } from '../../shared/components/formStyles'
@@ -24,7 +22,7 @@ import {
 } from './api'
 import { ActivityDrawer } from './ActivityDrawer'
 import { ActionItemDrawer, ActionItemList } from './ActionItems'
-import { itemTimeLabel, variationPrefillUrl } from './logic'
+import { itemTimeLabel } from './logic'
 import { activityTypeLabels, type ActionItem, type ActivityDetail } from './types'
 
 const kindLabels = { Staff: 'Staff', Consultant: 'Consultant', ClientContact: 'Client contact', External: 'Guest' } as const
@@ -40,9 +38,7 @@ export function ActivityDetailPage() {
 function ActivityDetailView({ activity }: { activity: ActivityDetail }) {
   const { summary, canManage } = activity
   const id = summary.id
-  const { hasModule } = useEntitlements()
   const { user } = useAuth()
-  const canRaiseVariation = usePermission('projects.variations.submit') && hasModule('projects')
   const cancel = useCancelActivity()
   const respond = useRespondToActivity()
   const markHeld = useMarkActivityHeld()
@@ -61,7 +57,6 @@ function ActivityDetailView({ activity }: { activity: ActivityDetail }) {
   const published = Boolean(summary.minutesPublishedAt)
   const started = new Date(summary.startsAt) <= new Date()
   const canRecord = canManage && summary.status !== 'Cancelled' && started && !published
-  const project = summary.linkedRecord?.entityType === 'Project' ? summary.linkedRecord : null
   const myAttendee = activity.attendees.find((x) => x.userId !== null && x.userId === user?.userId)
 
   const run = async (action: () => Promise<unknown>, success: string) => {
@@ -149,9 +144,6 @@ function ActivityDetailView({ activity }: { activity: ActivityDetail }) {
             <h2 className="text-sm font-semibold text-slate-900">Minutes</h2>
             <div className="flex flex-wrap gap-2">
               {activity.minutes ? <button type="button" className={smallButtonClass} onClick={() => void downloadMinutesPdf(id, `Minutes-${summary.startsAt.slice(0, 10)}.pdf`)}><Download className="h-3.5 w-3.5" />PDF</button> : null}
-              {project && canRaiseVariation && activity.minutes ? (
-                <Link className={smallButtonClass} to={variationPrefillUrl(project.entityId, `From meeting: ${summary.title}`, activity.minutes)}><FilePlus2 className="h-3.5 w-3.5" />Raise variation from this</Link>
-              ) : null}
             </div>
           </div>
           {published ? (

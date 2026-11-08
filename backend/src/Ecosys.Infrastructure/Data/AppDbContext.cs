@@ -180,7 +180,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<PmReport> PmReports => Set<PmReport>();
     public DbSet<TenantSecurityPolicy> TenantSecurityPolicies => Set<TenantSecurityPolicy>();
     public DbSet<TenantOperationsPolicy> TenantOperationsPolicies => Set<TenantOperationsPolicy>();
-    public DbSet<TenantFinanceDefaults> TenantFinanceDefaults => Set<TenantFinanceDefaults>();
     public DbSet<IntakeProtocol> IntakeProtocols => Set<IntakeProtocol>();
     public DbSet<MonitoringSetting> MonitoringSettings => Set<MonitoringSetting>();
     public DbSet<MonitoringWebhookIntegration> MonitoringWebhookIntegrations => Set<MonitoringWebhookIntegration>();
@@ -3143,19 +3142,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<TenantFinanceDefaults>(entity =>
-        {
-            entity.ToTable("tenant_finance_defaults");
-            entity.HasKey(x => x.Id);
-            entity.HasIndex(x => x.TenantId).IsUnique();
-            entity.Property(x => x.TaxName).HasMaxLength(50);
-            entity.Property(x => x.DefaultPaymentTerms).HasMaxLength(50);
-            entity.Property(x => x.DefaultVatRate).HasPrecision(5, 2);
-            entity.HasOne(x => x.Tenant)
-                .WithMany(x => x.TenantFinanceDefaults)
-                .HasForeignKey(x => x.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
 
         modelBuilder.Entity<IntakeProtocol>(entity =>
         {
@@ -4568,10 +4554,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         });
         ApplyTenantFilter<UserDashboardLayout>(modelBuilder);
 
-        ConfigureProjects(modelBuilder);
+        ConfigureActivities(modelBuilder);
     }
 
-    private void ConfigureProjects(ModelBuilder modelBuilder)
+    private void ConfigureActivities(ModelBuilder modelBuilder)
     {
         // ── Activities, action items and the calendar feed (Release 3 step 3b) ──
 

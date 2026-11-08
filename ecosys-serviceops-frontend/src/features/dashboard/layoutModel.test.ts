@@ -61,7 +61,7 @@ describe('dashboard layout model', () => {
   })
 
   it('picks the widgets that read a changed data area', () => {
-    const catalogue = [widget('wo'), widget('pm', 'small', ['maintenance', 'work-orders']), widget('cash', 'small', ['finance']), widget('billing', 'wide', ['projects', 'finance'])]
+    const catalogue = [widget('wo'), widget('pm', 'small', ['maintenance', 'work-orders']), widget('cash', 'small', ['finance']), widget('billing', 'wide', ['contracts', 'finance'])]
     expect(widgetKeysForAreas(catalogue, ['work-orders'])).toEqual(['wo', 'pm'])
     expect(widgetKeysForAreas(catalogue, ['finance', 'contracts'])).toEqual(['cash', 'billing'])
     expect(widgetKeysForAreas(catalogue, [])).toEqual([])

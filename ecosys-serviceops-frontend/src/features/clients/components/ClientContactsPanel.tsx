@@ -11,9 +11,7 @@ const empty: UpsertClientContactPayload = { fullName: '', jobTitle: null, email:
 
 /** The people at a client: who to call, and what part they play in buying. */
 export function ClientContactsPanel({ clientId }: { clientId: string }) {
-  const canEditClients = usePermission('clients.edit')
-  const canManageCrm = usePermission('crm.manage')
-  const canEdit = canEditClients || canManageCrm
+  const canEdit = usePermission('clients.edit')
   const { data: contacts, isLoading } = useClientContacts(clientId)
   const save = useSaveClientContact(clientId)
   const remove = useDeleteClientContact(clientId)

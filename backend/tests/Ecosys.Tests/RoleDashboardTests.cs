@@ -48,7 +48,7 @@ public sealed class RoleDashboardTests
     {
         Assert.Equal(DashboardWidgetCatalog.All.Count, DashboardWidgetCatalog.All.Select(x => x.Key).Distinct().Count());
         foreach (var role in DashboardRoleDefaults.ConfigurableRoles)
-            Assert.All(DashboardRoleDefaults.For(role, isProjectManager: true), key => Assert.NotNull(DashboardWidgetCatalog.Find(key)));
+            Assert.All(DashboardRoleDefaults.For(role), key => Assert.NotNull(DashboardWidgetCatalog.Find(key)));
         Assert.True(ServiceOpsPlans.IsClassified("RoleDashboard"));
         Assert.Empty(ServiceOpsPlans.RequiredModules("RoleDashboard", "/api/dashboard/widgets/finance.cash-received"));
     }
@@ -331,7 +331,7 @@ public sealed class RoleDashboardTests
     public void Catalogue_EveryWidgetReadsAKnownArea()
     {
         string[] known = [DashboardDataAreas.WorkOrders, DashboardDataAreas.Maintenance, DashboardDataAreas.Contracts,
-            DashboardDataAreas.Materials, DashboardDataAreas.Finance, DashboardDataAreas.Projects, DashboardDataAreas.Activities];
+            DashboardDataAreas.Materials, DashboardDataAreas.Activities];
         Assert.All(DashboardWidgetCatalog.All, widget => Assert.NotEmpty(widget.Areas));
         Assert.All(DashboardWidgetCatalog.All.SelectMany(x => x.Areas), area => Assert.Contains(area, known));
     }
@@ -396,7 +396,7 @@ public sealed class RoleDashboardTests
         Assert.Same(before, await admin.GetWidgetAsync(DashboardWidgetCatalog.WorkOrdersOpenOverdue, null, false));
         Assert.Equal(version, harness.Singletons.Versions.Get(harness.TenantId, DashboardDataAreas.WorkOrders));
         Assert.Equal(1, harness.Singletons.Versions.Get(harness.TenantId, DashboardDataAreas.Contracts));
-        Assert.Equal(0, harness.Singletons.Versions.Get(harness.TenantId, DashboardDataAreas.Finance));
+        Assert.Equal(0, harness.Singletons.Versions.Get(harness.TenantId, DashboardDataAreas.Materials));
     }
 
     [Fact]
@@ -409,8 +409,8 @@ public sealed class RoleDashboardTests
 
         broadcaster.Notify(busy, [DashboardDataAreas.WorkOrders]);
         await WaitForBroadcastsAsync(notifier, x => x.TenantId == busy, 1);
-        broadcaster.Notify(busy, [DashboardDataAreas.Finance]);
-        broadcaster.Notify(busy, [DashboardDataAreas.Projects, DashboardDataAreas.Finance]);
+        broadcaster.Notify(busy, [DashboardDataAreas.Activities]);
+        broadcaster.Notify(busy, [DashboardDataAreas.Contracts, DashboardDataAreas.Activities]);
         broadcaster.Notify(quiet, [DashboardDataAreas.Materials]);
 
         // The other tenant isn't held back by the busy one's window.
@@ -421,7 +421,7 @@ public sealed class RoleDashboardTests
         // The changes inside the window go out together when it ends.
         var busySent = await WaitForBroadcastsAsync(notifier, x => x.TenantId == busy, 2);
         Assert.Equal([DashboardDataAreas.WorkOrders], busySent[0].Areas);
-        Assert.Equal([DashboardDataAreas.Finance, DashboardDataAreas.Projects], busySent[1].Areas);
+        Assert.Equal([DashboardDataAreas.Activities, DashboardDataAreas.Contracts], busySent[1].Areas);
     }
 
     [Fact]
@@ -510,8 +510,8 @@ public sealed class RoleDashboardTests
         Assert.Equal("/action-items?due=overdue", data.Stats.Single(x => x.Label == "Overdue").Link);
         Assert.Equal(["Late", "Soon"], data.Items.Select(x => x.Label));
 
-        // It's in the project manager's default layout.
-        Assert.Contains(DashboardWidgetCatalog.ActionItemsDue, DashboardRoleDefaults.For(DashboardRoleDefaults.ProjectManager));
+        // It's in the finance user's default layout.
+        Assert.Contains(DashboardWidgetCatalog.ActionItemsDue, DashboardRoleDefaults.For(AppRoles.FinanceUser));
     }
 
     // ── PostgreSQL ─────────────────────────────────────────────────────────────

@@ -25,8 +25,7 @@ import { MergeProspectDialog } from './components/MergeProspectDialog'
 export function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const canEdit = usePermission('clients.edit')
-  const { hasModule, canAccessPath } = useEntitlements()
-  const canViewSales = usePermission('crm.view') && canAccessPath('/crm')
+  const { hasModule } = useEntitlements()
   const hasOperations = hasModule('operations')
   const { data, isLoading, isError } = useClientSummary(id)
   const { data: workOrders } = useWorkOrders(undefined, hasOperations)
@@ -206,8 +205,7 @@ export function ClientDetailPage() {
             content: <EmptyState title="No documents" description="Client documents and attachments will appear here." />,
           },
         ]
-          .filter((tab) => hasOperations || !['sites', 'assets', 'work-orders', 'contracts'].includes(tab.id))
-          .filter((tab) => canViewSales || tab.id !== 'sales')}
+          .filter((tab) => hasOperations || !['sites', 'assets', 'work-orders', 'contracts'].includes(tab.id))}
       />
 
       <SiteFormDrawer open={showSiteForm} clientId={id} onClose={() => setShowSiteForm(false)} />

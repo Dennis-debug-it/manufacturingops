@@ -21,8 +21,8 @@ public sealed class AuthSecurityOptions
 
     /// <summary>
     /// The public "Start free trial" page (POST /api/auth/signup/start and /verify). A company signs
-    /// up, confirms its email, and gets a 14-day trial workspace. On by default; set false to send
-    /// prospects through Request a demo only.
+    /// up, confirms its email, and gets a 14-day trial workspace. On by default; set false so that
+    /// workspaces are only created from the platform side.
     /// </summary>
     public bool EmailVerifiedSignupEnabled { get; set; } = true;
 

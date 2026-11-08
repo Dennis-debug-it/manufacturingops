@@ -1448,8 +1448,6 @@ public sealed partial class AuthEmailSafetyTests
             CanCreateWorkOrders = true,
             CanAssignWorkOrders = true,
             CanCompleteWorkOrders = true,
-            CanViewKnowledge = true,
-            CanManageKnowledge = true,
             CanViewMaterials = true,
             CanRequestMaterials = true,
             CanManageMaterials = true,
@@ -1464,11 +1462,7 @@ public sealed partial class AuthEmailSafetyTests
             CanManageFinanceRates = true,
             CanViewFinanceApprovals = true,
             CanManageFinanceApprovals = true,
-            CanViewBillableWork = true,
-            CanManageBillableWork = true,
             CanOverrideMaterialStock = true,
-            CanViewCrm = true,
-            CanManageCrm = true
         };
         public UserPermissionsModel GetFullTenantPermissions() => GetDefaultPermissions(string.Empty, null);
         public UserPermissionsModel GetSuperAdminPermissions() => new UserPermissionsModel();

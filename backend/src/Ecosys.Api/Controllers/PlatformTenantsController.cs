@@ -1781,8 +1781,6 @@ public sealed class PlatformTenantsController(
             CanCreateWorkOrders = permissions.CanCreateWorkOrders,
             CanAssignWorkOrders = permissions.CanAssignWorkOrders,
             CanCompleteWorkOrders = permissions.CanCompleteWorkOrders,
-            CanViewKnowledge = permissions.CanViewKnowledge,
-            CanManageKnowledge = permissions.CanManageKnowledge,
             CanViewMaterials = permissions.CanViewMaterials,
             CanRequestMaterials = permissions.CanRequestMaterials,
             CanManageMaterials = permissions.CanManageMaterials,
@@ -1797,11 +1795,7 @@ public sealed class PlatformTenantsController(
             CanManageFinanceRates = permissions.CanManageFinanceRates,
             CanViewFinanceApprovals = permissions.CanViewFinanceApprovals,
             CanManageFinanceApprovals = permissions.CanManageFinanceApprovals,
-            CanViewBillableWork = permissions.CanViewBillableWork,
-            CanManageBillableWork = permissions.CanManageBillableWork,
             CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
-            CanViewCrm = permissions.CanViewCrm,
-            CanManageCrm = permissions.CanManageCrm,
         };
 
     private static UserPermission ToEntity(UserPermissionsModel permissions) =>
@@ -1822,11 +1816,7 @@ public sealed class PlatformTenantsController(
             CanManageFinanceRates = permissions.CanManageFinanceRates,
             CanViewFinanceApprovals = permissions.CanViewFinanceApprovals,
             CanManageFinanceApprovals = permissions.CanManageFinanceApprovals,
-            CanViewBillableWork = permissions.CanViewBillableWork,
-            CanManageBillableWork = permissions.CanManageBillableWork,
             CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
-            CanViewCrm = permissions.CanViewCrm,
-            CanManageCrm = permissions.CanManageCrm,
         };
 
     private static string GenerateTemporaryPassword()
