@@ -19,16 +19,14 @@ public sealed class StockLedgerFeedTests
 
     private static AppDbContext Db() => new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
-    private async Task<(MaterialItem Part, Van Van)> Seed(AppDbContext db)
+    private async Task<MaterialItem> Seed(AppDbContext db)
     {
         var part = new MaterialItem { TenantId = tenantId, ItemCode = "FLT-1", ItemName = "Air filter", UnitOfMeasure = "each", UnitCost = 10 };
-        var van = new Van { TenantId = tenantId, Name = "Van 1", HomeBranchId = mainBranch };
         db.Branches.AddRange(
             new Branch { Id = mainBranch, TenantId = tenantId, Name = "Main", Code = "M" },
             new Branch { Id = otherBranch, TenantId = tenantId, Name = "Other", Code = "O" });
         db.Users.Add(new User { Id = userId, TenantId = tenantId, FullName = "Storekeeper", Email = "store@tenant.test", Role = AppRoles.Admin, PasswordHash = string.Empty, IsActive = true });
         db.MaterialItems.Add(part);
-        db.Vans.Add(van);
         await db.SaveChangesAsync();
 
         var ledger = new StockLedgerService(db);
@@ -39,9 +37,7 @@ public sealed class StockLedgerFeedTests
         await db.SaveChangesAsync();
         await ledger.RecordReceiptAsync(part, otherBranch, 5, userId, "Opening", "GRN-2");
         await db.SaveChangesAsync();
-        await ledger.RecordVanLoadAsync(part, mainBranch, van.Id, 3, userId, "Load");
-        await db.SaveChangesAsync();
-        return (part, van);
+        return part;
     }
 
     private StockMovementsController Controller(AppDbContext db, IBranchAccessService branches, TimeZoneInfo? zone = null) =>
@@ -59,18 +55,14 @@ public sealed class StockLedgerFeedTests
         await using var db = Db();
         await Seed(db);
 
-        var page = Page(await Controller(db, new AllBranches()).List(null, null, null, null, null, null, null, 1, 50, default));
+        var page = Page(await Controller(db, new AllBranches()).List(null, null, null, null, null, null, 1, 50, default));
 
-        Assert.Equal(5, page.TotalCount);
+        Assert.Equal(3, page.TotalCount);
         var adjustment = page.Items.Single(x => x.MovementType == "Adjustment");
         Assert.Equal(-2, adjustment.QuantityChange);
         Assert.Equal(8, adjustment.BalanceAfter);
         Assert.Equal("Air filter", adjustment.ItemName);
         Assert.Equal("Storekeeper", adjustment.CreatedByName);
-        // A van load is two rows of the same type: out of the branch, onto the van. Neither is an issue.
-        Assert.Equal(3, page.Items.Single(x => x.MovementType == "VanLoad" && x.VanId != null).QuantityChange);
-        Assert.Equal("Van 1", page.Items.Single(x => x.MovementType == "VanLoad" && x.VanId != null).VanName);
-        Assert.Equal(-3, page.Items.Single(x => x.MovementType == "VanLoad" && x.BranchId == mainBranch).QuantityChange);
         Assert.DoesNotContain(page.Items, x => x.MovementType == "Issue");
     }
 
@@ -81,30 +73,29 @@ public sealed class StockLedgerFeedTests
         await Seed(db);
         var controller = Controller(db, new AllBranches());
 
-        Assert.Equal(2, Page(await controller.List(null, null, null, "Receipt", null, null, null, 1, 50, default)).TotalCount);
-        Assert.Equal("GRN-2", Assert.Single(Page(await controller.List(null, null, null, null, null, null, "grn-2", 1, 50, default)).Items).ReferenceNumber);
-        Assert.Equal(5, Page(await controller.List(null, null, null, null, DateTime.UtcNow.Date, DateTime.UtcNow.Date, null, 1, 50, default)).TotalCount);
-        Assert.Equal(0, Page(await controller.List(null, null, null, null, DateTime.UtcNow.Date.AddDays(1), null, null, 1, 50, default)).TotalCount);
+        Assert.Equal(2, Page(await controller.List(null, null, "Receipt", null, null, null, 1, 50, default)).TotalCount);
+        Assert.Equal("GRN-2", Assert.Single(Page(await controller.List(null, null, null, null, null, "grn-2", 1, 50, default)).Items).ReferenceNumber);
+        Assert.Equal(3, Page(await controller.List(null, null, null, DateTime.UtcNow.Date, DateTime.UtcNow.Date, null, 1, 50, default)).TotalCount);
+        Assert.Equal(0, Page(await controller.List(null, null, null, DateTime.UtcNow.Date.AddDays(1), null, null, 1, 50, default)).TotalCount);
     }
 
     [Fact]
-    public async Task BranchScopeKeepsOtherBranchesOutButIncludesVansBasedHere()
+    public async Task BranchScopeKeepsOtherBranchesOut()
     {
         await using var db = Db();
         await Seed(db);
 
-        var page = Page(await Controller(db, new OnlyBranch(mainBranch)).List(null, null, null, null, null, null, null, 1, 50, default));
+        var page = Page(await Controller(db, new OnlyBranch(mainBranch)).List(null, null, null, null, null, null, 1, 50, default));
 
-        Assert.Equal(4, page.TotalCount);
+        Assert.Equal(2, page.TotalCount);
         Assert.DoesNotContain(page.Items, x => x.BranchId == otherBranch);
-        Assert.Contains(page.Items, x => x.VanId != null);
     }
 
     [Fact]
     public async Task BranchSummaryCountsPartsLowStockAndValuePerBranch()
     {
         await using var db = Db();
-        var (part, _) = await Seed(db);
+        var part = await Seed(db);
         (await db.BranchMaterialStocks.SingleAsync(x => x.BranchId == otherBranch)).ReorderLevel = 6;
         await db.SaveChangesAsync();
         var controller = new MaterialsController(db, new FakeTenantContext(tenantId, userId), new StockLedgerService(db),
@@ -113,7 +104,7 @@ public sealed class StockLedgerFeedTests
         var rows = Assert.IsAssignableFrom<IReadOnlyCollection<BranchStockSummaryResponse>>(Assert.IsType<OkObjectResult>((await controller.GetBranchSummary(default)).Result).Value);
 
         var main = rows.Single(x => x.BranchId == mainBranch);
-        Assert.Equal((1, 0, 50m), (main.PartsStocked, main.LowStockParts, main.StockValue));
+        Assert.Equal((1, 0, 80m), (main.PartsStocked, main.LowStockParts, main.StockValue));
         var other = rows.Single(x => x.BranchId == otherBranch);
         Assert.Equal((1, 1, 50m), (other.PartsStocked, other.LowStockParts, other.StockValue));
         Assert.Equal(10, part.UnitCost);
@@ -133,42 +124,40 @@ public sealed class StockLedgerFeedTests
         var localDay = TimeZoneInfo.ConvertTimeFromUtc(late, nairobi).Date;
         var controller = Controller(db, new AllBranches(), nairobi);
 
-        Assert.Equal(5, Page(await controller.List(null, null, null, null, localDay, localDay, null, 1, 50, default)).TotalCount);
-        Assert.Equal(0, Page(await controller.List(null, null, null, null, late.Date, late.Date, null, 1, 50, default)).TotalCount);
+        Assert.Equal(3, Page(await controller.List(null, null, null, localDay, localDay, null, 1, 50, default)).TotalCount);
+        Assert.Equal(0, Page(await controller.List(null, null, null, late.Date, late.Date, null, 1, 50, default)).TotalCount);
     }
 
     [Fact]
-    public async Task ValuationCoversBranchesAndVansAtTheirCost()
+    public async Task ValuationCoversEveryBranchAtItsCost()
     {
         await using var db = Db();
         await Seed(db);
 
         var report = Assert.IsType<StockValuationResponse>(Assert.IsType<OkObjectResult>(await Reports(db).Valuation(null, null, default)).Value);
 
-        Assert.Equal([("Main", "Branch", 5m), ("Other", "Branch", 5m), ("Van 1", "Van", 3m)],
+        Assert.Equal([("Main", "Branch", 8m), ("Other", "Branch", 5m)],
             report.Rows.Select(x => (x.Location, x.LocationType, x.Quantity)));
         Assert.Equal(130m, report.TotalValue);
     }
 
     [Fact]
-    public async Task UsageCountsIssuesAndVanUseLessReturnsButNotVanLoads()
+    public async Task UsageCountsIssuesLessReturns()
     {
         await using var db = Db();
-        var (part, van) = await Seed(db);
+        var part = await Seed(db);
         var ledger = new StockLedgerService(db);
         var job = Guid.NewGuid();
         await ledger.RecordIssueAsync(part, mainBranch, 4, userId, "Job", workOrderId: job);
         await db.SaveChangesAsync();
         await ledger.RecordReturnAsync(part, mainBranch, 1, userId, "Unused", workOrderId: job);
         await db.SaveChangesAsync();
-        await ledger.RecordVanConsumeAsync(part, van.Id, 2, userId, "Fitted");
-        await db.SaveChangesAsync();
 
         var report = Assert.IsType<StockUsageResponse>(Assert.IsType<OkObjectResult>(await Reports(db).Usage(null, null, null, null, default)).Value);
 
         var row = Assert.Single(report.Rows);
-        Assert.Equal((6m, 1m, 5m, 1), (row.QuantityUsed, row.QuantityReturned, row.NetQuantity, row.JobCount));
-        Assert.Equal(50m, row.NetValue);
+        Assert.Equal((4m, 1m, 3m, 1), (row.QuantityUsed, row.QuantityReturned, row.NetQuantity, row.JobCount));
+        Assert.Equal(30m, row.NetValue);
     }
 
     [Fact]
@@ -177,7 +166,7 @@ public sealed class StockLedgerFeedTests
         await using var db = Db();
         await Seed(db);
 
-        var file = Assert.IsType<FileContentResult>(await Reports(db).Movements(null, null, null, "Adjustment", null, null, null, default));
+        var file = Assert.IsType<FileContentResult>(await Reports(db).Movements(null, null, "Adjustment", null, null, null, default));
 
         Assert.Equal("text/csv", file.ContentType);
         var lines = System.Text.Encoding.UTF8.GetString(file.FileContents).Trim().Split('\n');

@@ -28,7 +28,6 @@ const rules: RouteRule[] = [
   { prefix: '/dashboard/executive', allow: (can) => can('reports.view') && can('finance.view') },
   { prefix: '/finance', allow: (can) => can('finance.view') },
   { prefix: '/reports', allow: (can) => can('reports.view') },
-  { prefix: '/dispatch', allow: (can) => can('dispatch.view') },
   { prefix: '/inventory', allow: (can) => can('materials.view') },
   { prefix: '/maintenance/compliance', allow: (can) => can('reports.view') },
   { prefix: '/maintenance/schedules', allow: (can) => can('settings.manage') || can('work-orders.create') || can('work-orders.assign') },

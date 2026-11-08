@@ -38,7 +38,6 @@ import { NewWorkOrderForm } from './components/NewWorkOrderForm'
 import { ReassignDrawer } from './components/ReassignDrawer'
 import { RelatedWorkOrdersPanel } from './components/RelatedWorkOrdersPanel'
 import { SubtasksPanel } from './components/SubtasksPanel'
-import { TechnicianLocationPanel } from './components/TechnicianLocationPanel'
 import { hasRecordedArrival } from './dispatchGuards'
 import { ActivityTab } from './tabs/ActivityTab'
 import { OverviewTab } from './tabs/OverviewTab'
@@ -352,7 +351,6 @@ export function WorkOrderDetailPage() {
         defaultTabId="overview"
         sidebar={
           <>
-            <TechnicianLocationPanel workOrder={workOrder} />
             <DocumentsPanel workOrderId={id} />
             <SubtasksPanel workOrder={workOrder} />
             <FollowUpsPanel workOrder={workOrder} onCreate={canFollowUp ? () => setFollowUpOpen(true) : null} />

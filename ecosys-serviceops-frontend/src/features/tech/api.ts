@@ -1,7 +1,6 @@
 import { useMutation, useQuery, type QueryClient } from '@tanstack/react-query'
 import { api, apiClient } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
-import type { Van, VanStockLine } from '../inventory/vansApi'
 import type { WorkOrder, WorkOrderExecutionBundle, WorkOrderServiceReportPreview } from '../work-orders/types'
 
 // Keys live under 'work-orders' so every work-order mutation's invalidation refreshes them too.
@@ -47,23 +46,6 @@ export async function downloadServiceReport(workOrderId: string, workOrderNumber
   link.download = `${workOrderNumber}-service-report.pdf`
   link.click()
   URL.revokeObjectURL(url)
-}
-
-/** The van assigned to this technician, if any. Quiet on 403 for roles without stock access. */
-export function useMyVan(technicianId: string | undefined) {
-  return useQuery({
-    queryKey: ['inventory', 'vans', 'mine', technicianId],
-    queryFn: async () => {
-      const vans = await api.get<Van[]>(endpoints.vans.list, undefined, { suppressGlobalErrorToast: true })
-      const van = vans.find((item) => item.technicianId === technicianId)
-      if (!van) return null
-      const stock = await api.get<VanStockLine[]>(endpoints.vans.stock(van.id), undefined, { suppressGlobalErrorToast: true })
-      return { van, stock }
-    },
-    enabled: Boolean(technicianId),
-    retry: false,
-    staleTime: 30_000,
-  })
 }
 
 /** The service report of the job a follow-up returns to, so the technician knows what happened last time. */

@@ -16,8 +16,7 @@ export interface StockCountSummary {
   startedByName: string | null
   createdAt: string
   postedAt: string | null
-  vanId: string | null
-  /** The van's name for a van count, else the branch's. */
+  /** The counted branch's name. */
   locationName: string | null
   isBlind: boolean
   recountLines: number
@@ -55,7 +54,6 @@ export interface StockCountDetail {
   postedAt: string | null
   lines: StockCountLine[]
   netVarianceValue: number
-  vanId: string | null
   locationName: string | null
   isBlind: boolean
   /** True when this viewer is not shown book quantities (an open blind count). */
@@ -99,7 +97,6 @@ function useStockCountMutation<TPayload>(request: (payload: TPayload) => Promise
 
 export interface CreateStockCountPayload {
   branchId: string | null
-  vanId: string | null
   category: string | null
   notes: string | null
   /** Only parts held (or with a reorder level) at the location. */

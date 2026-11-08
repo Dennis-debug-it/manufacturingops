@@ -13,14 +13,13 @@ describe('visibleGuides', () => {
 
   it('shows each role only the areas it can open', () => {
     const dispatcher = ids(user('dispatcher', { canViewWorkOrders: true, canAssignWorkOrders: true, canViewMaterials: true, canViewKnowledge: true }))
-    expect(dispatcher).toEqual(expect.arrayContaining(['work-orders', 'dispatch', 'inventory', 'knowledge', 'time-attendance']))
+    expect(dispatcher).toEqual(expect.arrayContaining(['work-orders', 'inventory', 'knowledge', 'time-attendance']))
     expect(dispatcher).not.toContain('finance')
     expect(dispatcher).not.toContain('approvals')
     expect(dispatcher).not.toContain('settings')
 
     const finance = ids(user('finance', { canViewWorkOrders: true, canViewFinance: true, canViewReports: true, canViewKnowledge: true }))
     expect(finance).toEqual(expect.arrayContaining(['finance', 'contracts', 'reports', 'approvals']))
-    expect(finance).not.toContain('dispatch')
     expect(finance).not.toContain('inventory')
     expect(finance).not.toContain('time-attendance')
   })

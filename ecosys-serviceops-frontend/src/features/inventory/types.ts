@@ -23,7 +23,6 @@ export interface Material {
 
 export interface MaterialStockLocations {
   branches: Array<{ branchId: string; branchName: string; quantityOnHand: number; reorderLevel: number; unitCost: number | null; isLowStock: boolean }>
-  vans: Array<{ vanId: string; vanName: string; quantityOnHand: number }>
 }
 
 export interface StockMovement {
@@ -168,8 +167,6 @@ export interface StockLedgerEntry {
   balanceAfter: number
   branchId: string | null
   branchName: string | null
-  vanId: string | null
-  vanName: string | null
   workOrderId: string | null
   workOrderNumber: string | null
   referenceNumber: string | null

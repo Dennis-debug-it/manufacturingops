@@ -204,7 +204,6 @@ export const useCancelMaterialIssue = (id: string) => useMaterialIssueAction(end
 export interface StockLedgerFilters {
   materialId?: string | undefined
   branchId?: string | undefined
-  vanId?: string | undefined
   type?: string | undefined
   from?: string | undefined
   to?: string | undefined
@@ -220,7 +219,6 @@ export function useStockLedger(filters: StockLedgerFilters) {
       api.get<PagedResult<StockLedgerEntry>>(endpoints.stockMovements.list, {
         materialId: filters.materialId || undefined,
         branchId: filters.branchId || undefined,
-        vanId: filters.vanId || undefined,
         type: filters.type || undefined,
         from: filters.from || undefined,
         to: filters.to || undefined,
@@ -278,15 +276,15 @@ export function useBranches(options: { enabled?: boolean } = {}) {
   })
 }
 
-/** One part at one location: a branch, a van, or "Main stores" for a tenant without branches. */
+/** One part at one location: a branch, or "Main stores" for a tenant without branches. */
 export interface StockLocationRow {
   materialId: string
   itemCode: string
   itemName: string
   category: string | null
   unitOfMeasure: string
-  locationType: 'Branch' | 'Van' | 'Stores'
-  /** The branch or van; null for "Main stores". */
+  locationType: 'Branch' | 'Stores'
+  /** The branch; null for "Main stores". */
   locationId: string | null
   locationName: string
   quantityOnHand: number

@@ -268,22 +268,8 @@ public interface IStockLedgerService
     Task<StockMovement> RecordTransferOutAsync(MaterialItem material, Guid fromBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default);
     Task<StockMovement> RecordTransferInAsync(MaterialItem material, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default);
 
-    /// <summary>Load stock from a branch onto a van: branch issue + van receipt (tenant total unchanged).</summary>
-    Task RecordVanLoadAsync(MaterialItem material, Guid fromBranchId, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default);
-    /// <summary>Return stock from a van back to a branch: van issue + branch receipt (tenant total unchanged).</summary>
-    Task RecordVanReturnAsync(MaterialItem material, Guid vanId, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default);
     /// <summary>
-    /// Correct a van's balance (a stock count found more or less on the van): changes the van balance
-    /// and the tenant total by the same amount. Implemented by <see cref="StockLedgerService"/>.
-    /// </summary>
-    Task<StockMovement> RecordVanAdjustmentAsync(MaterialItem material, Guid vanId, decimal quantityChange, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException("This stock ledger cannot adjust van stock.");
-
-    /// <summary>Consume stock from a van (used on a job): decrements van balance and tenant total.</summary>
-    Task<StockMovement> RecordVanConsumeAsync(MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Runs one stock mutation — issue, transfer, receipt, van move, material request fulfilment —
+    /// Runs one stock mutation — issue, transfer, receipt, material request fulfilment —
     /// as a single atomic unit. Every Record* method above reads a balance, checks the negative-stock
     /// guard against that read and writes the new balance back; the caller then saves. Without one
     /// transaction around all of it a second caller reads the same balance between the guard and the
@@ -327,10 +313,7 @@ internal sealed class StockLedgerService(AppDbContext dbContext, INotificationDi
         "Return",
         "Adjustment",
         "TransferOut",
-        "TransferIn",
-        "VanLoad",
-        "VanReturn",
-        "VanConsume"
+        "TransferIn"
     };
 
     /// <summary>PostgreSQL <c>serialization_failure</c>.</summary>
@@ -342,10 +325,10 @@ internal sealed class StockLedgerService(AppDbContext dbContext, INotificationDi
     /// <summary>
     /// Serializable is the isolation the guard actually needs: the check is "does the balance I just
     /// read still allow this movement?", and only serializable stops another transaction committing a
-    /// balance change in between. The <c>xmin</c> tokens on MaterialItem, BranchMaterialStock and
-    /// VanMaterialStock catch the single-row collision on their own; the transaction is what extends
+    /// balance change in between. The <c>xmin</c> tokens on MaterialItem and BranchMaterialStock
+    /// catch the single-row collision on their own; the transaction is what extends
     /// that guarantee across the several rows one movement touches — a transfer writes two branch
-    /// rows, a van load writes a branch row and a van row — and across actions that save more than
+    /// rows — and across actions that save more than
     /// once, so a half-applied movement can never reach the ledger.
     /// <para>
     /// Deliberately no retry, unlike <see cref="DocumentNumberingService"/>. That service replays a
@@ -532,132 +515,6 @@ internal sealed class StockLedgerService(AppDbContext dbContext, INotificationDi
         var movement = await RecordReceiptAsync(material, toBranchId, quantity, createdByUserId, reason, referenceNumber, cancellationToken: cancellationToken);
         movement.MovementType = "TransferIn";
         return movement;
-    }
-
-    public async Task RecordVanLoadAsync(MaterialItem material, Guid fromBranchId, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default)
-    {
-        if (quantity <= 0)
-        {
-            throw new BusinessRuleException("Load quantity must be greater than zero.");
-        }
-
-        // Branch side: issue from the source branch (validates branch stock, decrements branch + tenant total).
-        // Typed as a van load, not an issue: the stock moved to a van, it was not used.
-        var branchSide = await IssueCoreAsync(material, fromBranchId, quantity, createdByUserId, reason, referenceNumber, null, null, false, cancellationToken);
-        branchSide.MovementType = "VanLoad";
-        // Van side: receipt into the van (increments van + tenant total). Net tenant total change is zero.
-        await RecordVanMovementAsync(material, vanId, "VanLoad", quantity, createdByUserId, reason, referenceNumber, null, false, cancellationToken);
-    }
-
-    public async Task RecordVanReturnAsync(MaterialItem material, Guid vanId, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default)
-    {
-        if (quantity <= 0)
-        {
-            throw new BusinessRuleException("Return quantity must be greater than zero.");
-        }
-
-        // Van side: issue from the van (validates van stock, decrements van + tenant total).
-        await RecordVanMovementAsync(material, vanId, "VanReturn", -quantity, createdByUserId, reason, referenceNumber, null, false, cancellationToken);
-        // Branch side: receipt back into the branch (increments branch + tenant total). Net tenant total change is zero.
-        // Typed as a van return, not a receipt: nothing was bought.
-        var branchSide = await RecordReceiptAsync(material, toBranchId, quantity, createdByUserId, reason, referenceNumber, cancellationToken: cancellationToken);
-        branchSide.MovementType = "VanReturn";
-    }
-
-    public async Task<StockMovement> RecordVanConsumeAsync(MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default)
-    {
-        if (quantity <= 0)
-        {
-            throw new BusinessRuleException("Consume quantity must be greater than zero.");
-        }
-
-        // Stock leaves the system entirely: decrement van balance and tenant total.
-        var allowNegativeStock = await TenantAllowsNegativeStockAsync(material.TenantId, cancellationToken);
-        return await RecordVanMovementAsync(material, vanId, "VanConsume", -quantity, createdByUserId, reason, referenceNumber, workOrderId, allowNegativeStock, cancellationToken);
-    }
-
-    public async Task<StockMovement> RecordVanAdjustmentAsync(MaterialItem material, Guid vanId, decimal quantityChange, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default)
-    {
-        var allowNegativeStock = await TenantAllowsNegativeStockAsync(material.TenantId, cancellationToken);
-        return await RecordVanMovementAsync(material, vanId, "Adjustment", quantityChange, createdByUserId, reason, referenceNumber, null, allowNegativeStock, cancellationToken);
-    }
-
-    private async Task<StockMovement> RecordVanMovementAsync(
-        MaterialItem material,
-        Guid vanId,
-        string movementType,
-        decimal quantityDelta,
-        Guid? createdByUserId,
-        string? reason,
-        string? referenceNumber,
-        Guid? workOrderId,
-        bool allowNegativeStock,
-        CancellationToken cancellationToken)
-    {
-        if (quantityDelta == 0)
-        {
-            throw new BusinessRuleException("Quantity change cannot be zero.");
-        }
-
-        var stock = await EnsureVanStockAsync(material, vanId, cancellationToken);
-        var nextBalance = stock.QuantityOnHand + quantityDelta;
-        if (!allowNegativeStock && nextBalance < 0)
-        {
-            throw new BusinessRuleException($"Insufficient stock on the van for material '{material.ItemName}'.");
-        }
-
-        stock.QuantityOnHand = nextBalance;
-        if (material.UnitCost.HasValue && !stock.UnitCost.HasValue)
-        {
-            stock.UnitCost = material.UnitCost;
-        }
-
-        material.QuantityOnHand += quantityDelta;
-        if (!allowNegativeStock && material.QuantityOnHand < 0)
-        {
-            throw new BusinessRuleException("Stock update would reduce stock below zero.");
-        }
-
-        var movement = new StockMovement
-        {
-            TenantId = material.TenantId,
-            VanId = vanId,
-            MaterialId = material.Id,
-            WorkOrderId = workOrderId,
-            MovementType = movementType,
-            Quantity = Math.Abs(quantityDelta),
-            QuantityChange = quantityDelta,
-            BalanceAfter = stock.QuantityOnHand,
-            Reason = reason?.Trim(),
-            ReferenceNumber = referenceNumber?.Trim(),
-            CreatedByUserId = createdByUserId
-        };
-
-        dbContext.StockMovements.Add(movement);
-        return movement;
-    }
-
-    private async Task<VanMaterialStock> EnsureVanStockAsync(MaterialItem material, Guid vanId, CancellationToken cancellationToken)
-    {
-        var stock = await dbContext.VanMaterialStocks.SingleOrDefaultAsync(
-            x => x.TenantId == material.TenantId && x.VanId == vanId && x.MaterialId == material.Id,
-            cancellationToken);
-
-        if (stock is null)
-        {
-            stock = new VanMaterialStock
-            {
-                TenantId = material.TenantId,
-                VanId = vanId,
-                MaterialId = material.Id,
-                QuantityOnHand = 0,
-                ReorderLevel = material.ReorderLevel,
-                UnitCost = material.UnitCost
-            };
-            dbContext.VanMaterialStocks.Add(stock);
-        }
-
-        return stock;
     }
 
     /// <summary>Notes a part that has just gone from above its reorder level to at or below it.</summary>

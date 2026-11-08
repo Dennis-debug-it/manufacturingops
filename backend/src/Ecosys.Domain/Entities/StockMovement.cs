@@ -6,7 +6,6 @@ public sealed class StockMovement : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
     public Guid? BranchId { get; set; }
-    public Guid? VanId { get; set; }
     /// <summary>The factory store the movement was in (factory stores; branches and vans are ServiceOps).</summary>
     public Guid? StoreId { get; set; }
     /// <summary>Cost per unit at the time of the movement (tenant currency), for valuation and job costing.</summary>
@@ -28,7 +27,6 @@ public sealed class StockMovement : AuditableEntity, ITenantEntity
 
     public Tenant? Tenant { get; set; }
     public Branch? Branch { get; set; }
-    public Van? Van { get; set; }
     public MaterialItem? Material { get; set; }
     public WorkOrder? WorkOrder { get; set; }
     public MaterialRequest? MaterialRequest { get; set; }

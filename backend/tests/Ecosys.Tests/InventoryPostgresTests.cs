@@ -28,11 +28,10 @@ public sealed class InventoryPostgresTests
         {
             await using var db = Context(connection);
             var branch = new Branch { TenantId = tenantId, Name = "Main", Code = "M" };
-            var van = new Van { TenantId = tenantId, Name = "Van 1", HomeBranchId = branch.Id };
             var part = new MaterialItem { TenantId = tenantId, ItemCode = "F", ItemName = "Filter", Category = "Filters", UnitOfMeasure = "each", ReorderLevel = 20, UnitCost = 10 };
             db.Tenants.Add(new Tenant { Id = tenantId, Name = "Acme", Slug = $"acme-{Guid.NewGuid():N}"[..12], CompanyName = "Acme", Email = "ops@acme.test", Country = "Kenya" });
             db.Users.Add(new User { Id = userId, TenantId = tenantId, FullName = "Storekeeper", Email = $"store-{Guid.NewGuid():N}@acme.test", Role = AppRoles.Admin, PasswordHash = string.Empty, IsActive = true });
-            db.AddRange(branch, van, part);
+            db.AddRange(branch, part);
             await db.SaveChangesAsync();
 
             var branches = new Branches(branch.Id);
@@ -44,7 +43,7 @@ public sealed class InventoryPostgresTests
             var counts = new StockCountsController(db, new TestTenant(tenantId, userId), new AllowAll(), branches, ledger, numbers, new NoAudit());
             var reports = new InventoryReportsController(db, new TestTenant(tenantId, userId), new AllowAll(), branches, new Zone());
 
-            // Buy, receive into the branch, load a van, use some, adjust.
+            // Buy, receive into the branch, use some, adjust.
             var supplier = Value(await purchasing.CreateSupplier(new("Acme Parts", LeadTimeDays: 5), default));
             await materials.Update(part.Id, new("F", "Filter", "Filters", "each", 0, 20, 10, null, "123456", supplier.Id, 12), default);
             var order = Value(await purchasing.CreatePurchaseOrder(new(supplier.Id, null, [new(null, 30, 12, part.Id)]), default));
@@ -53,28 +52,23 @@ public sealed class InventoryPostgresTests
             await materials.Replenish(part.Id, new(branch.Id, 2, null, "Top-up", null), default);
             await ledger.ExecuteAsync(async ct =>
             {
-                await ledger.RecordVanLoadAsync(part, branch.Id, van.Id, 5, userId, "Load", cancellationToken: ct);
-                await db.SaveChangesAsync(ct);
-            });
-            await ledger.ExecuteAsync(async ct =>
-            {
-                await ledger.RecordVanConsumeAsync(part, van.Id, 2, userId, "Fitted", cancellationToken: ct);
+                await ledger.RecordIssueAsync(part, branch.Id, 5, userId, "Fitted", cancellationToken: ct);
                 await db.SaveChangesAsync(ct);
             });
             await materials.Adjust(part.Id, new(branch.Id, -1, "Damaged"), default);
 
             // Reads used by the screens.
             Assert.Single(Value(await materials.GetBranchSummary(default)));
-            Assert.Single(Value(await materials.GetStockLocations(part.Id, default)).Vans);
+            Assert.Single(Value(await materials.GetStockLocations(part.Id, default)).Branches);
             Assert.NotEmpty(Value(await materials.GetMovements(part.Id, null, default)));
             Assert.Single(Value(await materials.GetAll(false, null, "123456", null, default)));
             Assert.NotNull(Value(await purchasing.GetSupplier(supplier.Id, default)).PreferredParts);
             Assert.NotEmpty(Value(await purchasing.ListSuppliers(default)));
 
-            var ledgerPage = Value(await movements.List(null, null, null, null, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, "lot", 1, 50, default));
+            var ledgerPage = Value(await movements.List(null, null, null, DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, "lot", 1, 50, default));
             Assert.Equal(1, ledgerPage.TotalCount);
-            // PO receipt, replenish, van load (branch and van sides), van use, adjustment.
-            Assert.Equal(6, Value(await movements.List(null, branch.Id, null, null, null, null, null, 1, 50, default)).TotalCount);
+            // PO receipt, replenish, issue, adjustment.
+            Assert.Equal(4, Value(await movements.List(null, branch.Id, null, null, null, null, 1, 50, default)).TotalCount);
 
             // Stock count: open, count, post.
             var count = Assert.IsType<StockCountDetailResponse>(Assert.IsType<CreatedAtActionResult>((await counts.Create(new(branch.Id), default)).Result).Value);
@@ -82,16 +76,13 @@ public sealed class InventoryPostgresTests
             Assert.Single(Value(await counts.List("Open", default)));
             await counts.Post(count.Id, default);
 
-            // Stock by location (branch and van rows), a blind van count, and the requests queue.
+            // Stock by location, a blind count, and the requests queue.
             var locations = Value(await materials.GetStockByLocation(default));
             Assert.Contains(locations, x => x.LocationType == StockLocationTypes.Branch && x.LocationId == branch.Id);
-            Assert.Equal(3m, Assert.Single(locations, x => x.LocationType == StockLocationTypes.Van).QuantityOnHand);
-            var vanCount = Assert.IsType<StockCountDetailResponse>(Assert.IsType<CreatedAtActionResult>((await counts.Create(new(null, VanId: van.Id, OnlyStocked: true, Blind: true), default)).Result).Value);
-            Assert.Equal("Van 1", vanCount.LocationName);
-            await counts.SaveLines(vanCount.Id, new([new(vanCount.Lines[0].Id, 2, null, NeedsRecount: false)]), default);
-            Assert.Contains(Value(await counts.List("Open", default)), x => x.VanId == van.Id && x.IsBlind);
-            await counts.Post(vanCount.Id, default);
-            Assert.Equal(2m, (await db.VanMaterialStocks.SingleAsync(x => x.VanId == van.Id)).QuantityOnHand);
+            var blind = Assert.IsType<StockCountDetailResponse>(Assert.IsType<CreatedAtActionResult>((await counts.Create(new(branch.Id, OnlyStocked: true, Blind: true), default)).Result).Value);
+            Assert.Equal("Main", blind.LocationName);
+            Assert.Contains(Value(await counts.List("Open", default)), x => x.Id == blind.Id && x.IsBlind);
+            await counts.Cancel(blind.Id, default);
 
             var issues = new MaterialIssuesController(db, new TestTenant(tenantId, userId), new AllowAll(), branches, numbers, ledger, new NoAudit());
             await issues.Create(new(branch.Id, null, null, null, null, null, null, "Counter issue", [new(part.Id, 1, null, null)]), default);
@@ -108,10 +99,10 @@ public sealed class InventoryPostgresTests
             // Reports.
             Assert.IsType<StockValuationResponse>(Assert.IsType<OkObjectResult>(await reports.Valuation(null, null, default)).Value);
             var usage = Assert.IsType<StockUsageResponse>(Assert.IsType<OkObjectResult>(await reports.Usage(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, null, null, default)).Value);
-            // 2 fitted from the van and 1 on the counter issue slip.
-            Assert.Equal(3, Assert.Single(usage.Rows).QuantityUsed);
+            // 5 fitted and 1 on the counter issue slip.
+            Assert.Equal(6, Assert.Single(usage.Rows).QuantityUsed);
             Assert.IsType<FileContentResult>(await reports.Usage(null, null, branch.Id, "csv", default));
-            Assert.IsType<FileContentResult>(await reports.Movements(null, null, null, null, null, null, null, default));
+            Assert.IsType<FileContentResult>(await reports.Movements(null, null, null, null, null, null, default));
         });
     }
 

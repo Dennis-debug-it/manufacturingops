@@ -119,7 +119,7 @@ function ValuationReport({ branchId }: { branchId: string }) {
   }
 
   const columns: DataTableColumn<StockValuationRow & { id: string }>[] = [
-    { key: 'location', header: 'Location', cell: (row) => (row.locationType === 'Van' ? `Van · ${row.location}` : row.location) },
+    { key: 'location', header: 'Location', cell: (row) => row.location },
     { key: 'item', header: 'Part', cell: (row) => <Link className="underline decoration-slate-300 underline-offset-4" to={`/inventory/parts/${row.materialItemId}`}>{row.itemName} <span className="font-mono text-xs text-slate-500">{row.itemCode}</span></Link> },
     { key: 'category', header: 'Category', cell: (row) => row.category ?? '—' },
     { key: 'quantity', header: 'Qty', cell: (row) => `${row.quantity} ${row.unitOfMeasure}` },
@@ -132,7 +132,7 @@ function ValuationReport({ branchId }: { branchId: string }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard label="Total Stock Value" value={isLoading ? '—' : formatCurrency(data?.totalValue ?? 0)} />
         {(data?.locations ?? []).slice(0, 3).map((location) => (
-          <StatCard key={`${location.locationType}-${location.location}`} label={location.locationType === 'Van' ? `Van · ${location.location}` : location.location} value={formatCurrency(location.value)} />
+          <StatCard key={`${location.locationType}-${location.location}`} label={location.location} value={formatCurrency(location.value)} />
         ))}
       </div>
       <div className="flex justify-end">
@@ -143,7 +143,7 @@ function ValuationReport({ branchId }: { branchId: string }) {
         data={(data?.rows ?? []).map((row) => ({ ...row, id: `${row.locationType}-${row.location}-${row.materialItemId}` }))}
         loading={isLoading}
         emptyTitle="No stock on hand"
-        emptyDescription="Parts held at branches and on vans appear here with their value."
+        emptyDescription="Parts held at branches appear here with their value."
         virtualise={(data?.rows.length ?? 0) > 150}
       />
     </div>
@@ -172,7 +172,7 @@ function UsageReport({ branchId, from, to }: { branchId: string; from: string; t
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-600">
-          Parts issued to jobs, requests and issues, plus parts used off vans, less unused parts returned. Van loads and transfers are moves, not use.
+          Parts issued to jobs, requests and issues, less unused parts returned. Transfers are moves, not use.
           {data ? <span className="ml-1 font-semibold text-slate-900">Total {formatCurrency(data.totalValue)}</span> : null}
         </p>
         <ExportButton disabled={!data} onExport={() => downloadInventoryReport('usage', filters, `stock-usage-${from}-${to}.csv`)} />
@@ -242,7 +242,7 @@ function PurchaseOrderReport() {
 function MovementExport({ branchId, from, to }: { branchId: string; from: string; to: string }) {
   return (
     <div className="space-y-3 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-4 text-sm text-slate-600 shadow-sm backdrop-blur-[var(--glass-blur-md)]">
-      <p>Every receipt, issue, return, adjustment, transfer and van move between the chosen dates{branchId ? ' at the chosen branch and its vans' : ''}, with signed quantity, balance after, reference, reason and batch/serial numbers.</p>
+      <p>Every receipt, issue, return, adjustment, transfer between the chosen dates{branchId ? ' at the chosen branch' : ''}, with signed quantity, balance after, reference, reason and batch/serial numbers.</p>
       <p>To browse or filter further first, use <Link className="font-medium text-slate-900 underline underline-offset-4" to="/inventory/movements">Movements</Link>.</p>
       <ExportButton onExport={() => downloadInventoryReport('movements', { branchId: branchId || undefined, from: from || undefined, to: to || undefined }, `stock-movements-${from}-${to}.csv`)} />
     </div>

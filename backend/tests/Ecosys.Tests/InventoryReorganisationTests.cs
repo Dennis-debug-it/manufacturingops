@@ -34,7 +34,7 @@ public sealed class InventoryReorganisationTests
 
     private static T Ok<T>(ActionResult<T> result) => Assert.IsAssignableFrom<T>(Assert.IsType<OkObjectResult>(result.Result).Value);
 
-    private async Task<(MaterialItem Filter, MaterialItem Belt, MaterialItem Untouched, Van Van)> Seed(AppDbContext db)
+    private async Task<(MaterialItem Filter, MaterialItem Belt, MaterialItem Untouched)> Seed(AppDbContext db)
     {
         db.Users.Add(new User { Id = userId, TenantId = tenantId, FullName = "Storekeeper", Email = "store@tenant.test", Role = AppRoles.Admin, PasswordHash = string.Empty, IsActive = true });
         db.Branches.AddRange(
@@ -43,9 +43,7 @@ public sealed class InventoryReorganisationTests
         var filter = new MaterialItem { TenantId = tenantId, ItemCode = "F", ItemName = "Filter", UnitOfMeasure = "each", UnitCost = 10, ReorderLevel = 0 };
         var belt = new MaterialItem { TenantId = tenantId, ItemCode = "B", ItemName = "Belt", UnitOfMeasure = "each", UnitCost = 50 };
         var untouched = new MaterialItem { TenantId = tenantId, ItemCode = "U", ItemName = "Never stocked", UnitOfMeasure = "each", UnitCost = 1 };
-        var van = new Van { TenantId = tenantId, Name = "Van 1", HomeBranchId = branchId };
         db.MaterialItems.AddRange(filter, belt, untouched);
-        db.Vans.Add(van);
         await db.SaveChangesAsync();
 
         var ledger = new StockLedgerService(db);
@@ -55,16 +53,16 @@ public sealed class InventoryReorganisationTests
         await db.SaveChangesAsync();
         await ledger.RecordReceiptAsync(belt, branchId, 1, userId, "Opening", null);
         await db.SaveChangesAsync();
-        await ledger.RecordVanLoadAsync(filter, branchId, van.Id, 3, userId, "Load", null);
+        await ledger.RecordAdjustmentAsync(filter, branchId, -3, userId, "Damaged");
         await db.SaveChangesAsync();
-        return (filter, belt, untouched, van);
+        return (filter, belt, untouched);
     }
 
     [Fact]
-    public async Task StockByLocation_ListsEachBranchAndVanBalance_AndSkipsPartsNeverStockedThere()
+    public async Task StockByLocation_ListsEachBranchBalance_AndSkipsPartsNeverStockedThere()
     {
         await using var db = Db();
-        var (filter, belt, untouched, van) = await Seed(db);
+        var (filter, belt, untouched) = await Seed(db);
         // Belt is low at Nairobi (1 on hand, reorder level 2); the branch row carries the level.
         (await db.BranchMaterialStocks.SingleAsync(x => x.MaterialId == belt.Id)).ReorderLevel = 2;
         await db.SaveChangesAsync();
@@ -75,9 +73,6 @@ public sealed class InventoryReorganisationTests
         var filterRows = rows.Where(x => x.MaterialId == filter.Id).ToList();
         Assert.Equal(7m, filterRows.Single(x => x.LocationId == branchId).QuantityOnHand);
         Assert.Equal(4m, filterRows.Single(x => x.LocationId == otherBranchId).QuantityOnHand);
-        var onVan = filterRows.Single(x => x.LocationType == StockLocationTypes.Van);
-        Assert.Equal(van.Id, onVan.LocationId);
-        Assert.Equal(3m, onVan.QuantityOnHand);
         Assert.Equal("Nairobi", filterRows.Single(x => x.LocationId == branchId).LocationName);
         Assert.True(rows.Single(x => x.MaterialId == belt.Id).IsLowStock);
         Assert.DoesNotContain(filterRows, x => x.IsLowStock);
@@ -97,7 +92,7 @@ public sealed class InventoryReorganisationTests
     public async Task ManualReceipt_NeedsAReason()
     {
         await using var db = Db();
-        var (filter, _, _, _) = await Seed(db);
+        var (filter, _, _) = await Seed(db);
         var controller = Materials(db);
 
         await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Replenish(filter.Id, new(branchId, 5, null, " ", null), default));
@@ -112,7 +107,7 @@ public sealed class InventoryReorganisationTests
     public async Task IssueSlip_CanHandOverLessThanAsked_AndLeaveALineOut()
     {
         await using var db = Db();
-        var (filter, belt, _, _) = await Seed(db);
+        var (filter, belt, _) = await Seed(db);
         var issue = new MaterialIssue
         {
             TenantId = tenantId, BranchId = branchId, IssueNumber = "MI-1", IssueStatus = "approved", RequestedByUserId = userId,
@@ -142,7 +137,7 @@ public sealed class InventoryReorganisationTests
     public async Task Queue_ListsJobPartsRequestsIssueSlipsAndRetiredRestockRequestsWithOneSetOfStages()
     {
         await using var db = Db();
-        var (filter, belt, _, _) = await Seed(db);
+        var (filter, belt, _) = await Seed(db);
         var workOrder = new WorkOrder { TenantId = tenantId, WorkOrderNumber = "WO-9" };
         db.WorkOrders.Add(workOrder);
         var workOrderId = workOrder.Id;
@@ -182,11 +177,10 @@ public sealed class InventoryReorganisationTests
     public async Task APartWithStockOrOpenWorkCannotBeDeactivated()
     {
         await using var db = Db();
-        var (filter, _, untouched, _) = await Seed(db);
+        var (filter, _, untouched) = await Seed(db);
         var controller = Materials(db);
 
         var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Delete(filter.Id, default));
-        Assert.Contains("on vans", error.Message);
 
         db.MaterialIssues.Add(new MaterialIssue
         {
@@ -210,7 +204,7 @@ public sealed class InventoryReorganisationTests
     public async Task ADraftPurchaseOrderCanBeEdited_AndAChangedTotalStartsApprovalAgain()
     {
         await using var db = Db();
-        var (filter, belt, _, _) = await Seed(db);
+        var (filter, belt, _) = await Seed(db);
         var supplier = new Supplier { TenantId = tenantId, SupplierName = "Acme Parts", Email = "sales@acme.test" };
         db.Suppliers.Add(supplier);
         await db.SaveChangesAsync();
@@ -238,7 +232,7 @@ public sealed class InventoryReorganisationTests
     public async Task APurchaseOrderPdfCanBeDownloaded_AndEmailedToTheSupplier_WhichMarksADraftSent()
     {
         await using var db = Db();
-        var (filter, _, _, _) = await Seed(db);
+        var (filter, _, _) = await Seed(db);
         db.Tenants.Add(new Tenant { Id = tenantId, Name = "Rift", Slug = "rift", CompanyName = "Rift Valley Facilities", Email = "ops@rift.test", Country = "Kenya" });
         var supplier = new Supplier { TenantId = tenantId, SupplierName = "Acme Parts", Email = "sales@acme.test", ContactPerson = "Peter" };
         var noEmail = new Supplier { TenantId = tenantId, SupplierName = "Walk-in" };
@@ -273,7 +267,7 @@ public sealed class InventoryReorganisationTests
     public async Task StoresHearsAboutNewRequestsAndLowStock_AndTheRequesterHearsTheOutcome()
     {
         await using var db = Db();
-        var (filter, _, _, _) = await Seed(db);
+        var (filter, _, _) = await Seed(db);
         var technician = new User { TenantId = tenantId, FullName = "Moses", Email = "moses@tenant.test", Role = AppRoles.Technician, PasswordHash = string.Empty, IsActive = true };
         var stores = new User { TenantId = tenantId, FullName = "Stores", Email = "stores@tenant.test", Role = AppRoles.MaterialsController, PasswordHash = string.Empty, IsActive = true };
         var manager = new User { TenantId = tenantId, FullName = "Manager", Email = "manager@tenant.test", Role = AppRoles.Manager, PasswordHash = string.Empty, IsActive = true };
@@ -306,7 +300,7 @@ public sealed class InventoryReorganisationTests
         stock.ReorderLevel = 2;
         await db.SaveChangesAsync();
         var ledger = new StockLedgerService(db, dispatcher);
-        // 4 on hand (10 received, 3 to the van, 3 dispatched); taking 2 lands exactly on the level.
+        // 4 on hand (10 received, 3 written off, 3 dispatched); taking 2 lands exactly on the level.
         await ledger.ExecuteAsync(async ct => { await ledger.RecordIssueAsync(filter, branchId, 2, userId, "Job", cancellationToken: ct); await db.SaveChangesAsync(ct); });
         var low = Assert.Single(dispatcher.Sent);
         Assert.Equal(InventoryNotifications.LowStock, low.Key);
@@ -359,7 +353,7 @@ public sealed class InventoryReorganisationTests
     public async Task HeldFaultyParts_CanGoBackToTheSupplier_BeWrittenOff_OrBeRestocked_InPart()
     {
         await using var db = Db();
-        var (filter, _, _, _) = await Seed(db);
+        var (filter, _, _) = await Seed(db);
         var supplier = new Supplier { TenantId = tenantId, SupplierName = "Acme Parts" };
         var held = new HeldPart { TenantId = tenantId, MaterialItemId = filter.Id, BranchId = branchId, Quantity = 5, UnitCost = 10, SourceReference = "PR-7" };
         db.AddRange(supplier, held);

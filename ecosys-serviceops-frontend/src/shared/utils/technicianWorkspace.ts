@@ -48,6 +48,6 @@ export function techPathFor(pathname: string): string {
   const assetId = pathname.match(/^\/assets\/([^/]+)/)?.[1]
   if (assetId) return `/tech/assets/${assetId}`
   if (pathname === '/notifications') return '/tech/notifications'
-  if (pathname === '/me' || pathname.startsWith('/settings/account') || pathname.startsWith('/settings/notifications') || pathname.startsWith('/inventory/vans')) return '/tech/account'
+  if (pathname === '/me' || pathname.startsWith('/settings/account') || pathname.startsWith('/settings/notifications')) return '/tech/account'
   return '/tech'
 }

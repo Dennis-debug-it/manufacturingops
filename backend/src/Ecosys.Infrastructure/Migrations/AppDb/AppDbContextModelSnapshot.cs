@@ -10605,9 +10605,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("VanId")
-                        .HasColumnType("uuid");
-
                     b.HasKey("Id");
 
                     b.HasIndex("BranchId");
@@ -10615,8 +10612,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("PostedByUserId");
 
                     b.HasIndex("StartedByUserId");
-
-                    b.HasIndex("VanId");
 
                     b.HasIndex("TenantId", "CountNumber")
                         .IsUnique();
@@ -10749,9 +10744,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("VanId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid?>("WorkOrderId")
                         .HasColumnType("uuid");
 
@@ -10766,8 +10758,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("MaterialRequestId");
 
                     b.HasIndex("StoreId");
-
-                    b.HasIndex("VanId");
 
                     b.HasIndex("WorkOrderId");
 
@@ -13676,95 +13666,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("TenantId", "UserId", "LoginAt");
 
                     b.ToTable("user_sessions", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.Van", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("HomeBranchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<string>("RegistrationNumber")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Guid?>("TechnicianId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("HomeBranchId");
-
-                    b.HasIndex("TechnicianId");
-
-                    b.HasIndex("TenantId", "Name");
-
-                    b.ToTable("vans", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.VanMaterialStock", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("MaterialId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("QuantityOnHand")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("ReorderLevel")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal?>("UnitCost")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("VanId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MaterialId");
-
-                    b.HasIndex("VanId");
-
-                    b.HasIndex("TenantId", "VanId", "MaterialId")
-                        .IsUnique();
-
-                    b.ToTable("van_material_stocks", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.VendorCatalogueItem", b =>
@@ -19138,11 +19039,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Ecosys.Domain.Entities.Van", "Van")
-                        .WithMany()
-                        .HasForeignKey("VanId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.Navigation("Branch");
 
                     b.Navigation("PostedByUser");
@@ -19150,8 +19046,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("StartedByUser");
 
                     b.Navigation("Tenant");
-
-                    b.Navigation("Van");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.StockCountLine", b =>
@@ -19215,11 +19109,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("Ecosys.Domain.Entities.Van", "Van")
-                        .WithMany()
-                        .HasForeignKey("VanId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Ecosys.Domain.Entities.WorkOrder", "WorkOrder")
                         .WithMany()
                         .HasForeignKey("WorkOrderId")
@@ -19234,8 +19123,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("MaterialRequest");
 
                     b.Navigation("Tenant");
-
-                    b.Navigation("Van");
 
                     b.Navigation("WorkOrder");
                 });
@@ -20149,58 +20036,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.Van", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Branch", "HomeBranch")
-                        .WithMany()
-                        .HasForeignKey("HomeBranchId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Ecosys.Domain.Entities.Technician", "Technician")
-                        .WithMany()
-                        .HasForeignKey("TechnicianId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("HomeBranch");
-
-                    b.Navigation("Technician");
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.VanMaterialStock", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.MaterialItem", "Material")
-                        .WithMany("VanStocks")
-                        .HasForeignKey("MaterialId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.Van", "Van")
-                        .WithMany("MaterialStocks")
-                        .HasForeignKey("VanId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Material");
-
-                    b.Navigation("Tenant");
-
-                    b.Navigation("Van");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.VendorCatalogueItem", b =>
@@ -21238,8 +21073,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("StockMovements");
 
                     b.Navigation("StockTransfers");
-
-                    b.Navigation("VanStocks");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.MaterialRequest", b =>
@@ -21569,11 +21402,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Sessions");
 
                     b.Navigation("TechnicianProfile");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.Van", b =>
-                {
-                    b.Navigation("MaterialStocks");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.WhatsAppConversation", b =>

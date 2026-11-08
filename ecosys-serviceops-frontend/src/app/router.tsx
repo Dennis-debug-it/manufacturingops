@@ -59,10 +59,8 @@ import { InventoryShell } from '../features/inventory/components/InventoryShell'
 import { FaultyPartsPage } from '../features/inventory/FaultyPartsPage'
 import { DirectPurchasesPage } from '../features/inventory/DirectPurchasesPage'
 import { PartsReturnsPage } from '../features/inventory/PartsReturnsPage'
-import { VansPage } from '../features/inventory/VansPage'
 import { StockCountDetailPage, StockCountsPage } from '../features/inventory/StockCountsPage'
 import { ToolDetailPage, ToolsPage } from '../features/inventory/ToolsPage'
-import { VanDetailPage } from '../features/inventory/VanDetailPage'
 import { AlertsPage as InventoryAlertsPageReal } from '../features/inventory/AlertsPage'
 import { ReportsPage as InventoryReportsPageReal } from '../features/inventory/ReportsPage'
 import { UsersPage as TeamUsersPageReal } from '../features/team/UsersPage'
@@ -167,9 +165,6 @@ import { EscalationRulesSettingsPage } from '../features/settings/EscalationRule
 import { WOTemplatesSettingsPage } from '../features/settings/WOTemplatesSettingsPage'
 import { MyApprovalsPage } from '../features/approvals/MyApprovalsPage'
 import { WhatsAppInboxPage } from '../features/whatsapp/WhatsAppInboxPage'
-import { LiveMapPage } from '../features/dispatch/LiveMapPage'
-import { DailyRouteView } from '../features/dispatch/DailyRouteView'
-import { SchedulingBoardPage } from '../features/dispatch/SchedulingBoardPage'
 import { PlatformApp } from '../platform/PlatformApp'
 
 const tenantRoles: AppRole[] = ['admin', 'manager', 'dispatcher', 'technician', 'materials_controller', 'finance', 'viewer']
@@ -375,8 +370,6 @@ export function AppRouter() {
       ['/inventory/locations', InventoryLocationsPage],
       ['/inventory/locations/:id', InventoryLocationDetailPage],
       ['/inventory/movements', InventoryMovementsPage],
-      ['/inventory/vans', VansPage],
-      ['/inventory/vans/:id', VanDetailPage],
       ['/inventory/purchase-orders', InventoryPurchaseOrdersPage],
       ['/inventory/purchase-orders/new', InventoryPurchaseOrdersPage],
       ['/inventory/purchase-orders/:id', InventoryPurchaseOrderDetailPage],
@@ -490,9 +483,6 @@ export function AppRouter() {
       ['/me', TechAccountPage],
       ['/notifications', NotificationsPage],
       ['/onboarding', OnboardingPage],
-      ['/dispatch/map', LiveMapPage],
-      ['/dispatch/route/:technicianId', DailyRouteView],
-      ['/dispatch/board', SchedulingBoardPage],
     ] as const,
     [],
   )

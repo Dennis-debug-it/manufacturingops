@@ -15,7 +15,6 @@ import { cn } from '../../shared/utils/cn'
 import { formatDateTime } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { useBranches, useCatalogueSuggestions, useMaterials } from './api'
-import { useVans } from './vansApi'
 import {
   useAddStockCountLine,
   useCancelStockCount,
@@ -51,7 +50,7 @@ export function StockCountsPage() {
 
   const columns: DataTableColumn<StockCountSummary>[] = [
     { key: 'countNumber', header: 'Count', cell: (row) => <Link className="font-mono text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/inventory/stock-counts/${row.id}`}>{row.countNumber}</Link>, sortValue: (row) => row.countNumber },
-    { key: 'location', header: 'Location', cell: (row) => <span>{row.locationName ?? row.branchName ?? 'All stock'}{row.vanId ? <span className="ml-1 text-xs text-slate-500">Van</span> : null}</span>, sortValue: (row) => row.locationName },
+    { key: 'location', header: 'Location', cell: (row) => <span>{row.locationName ?? row.branchName ?? 'All stock'}</span>, sortValue: (row) => row.locationName },
     { key: 'category', header: 'Category', cell: (row) => row.category ?? 'All parts', sortValue: (row) => row.category },
     { key: 'progress', header: 'Counted', cell: (row) => `${row.countedLines} / ${row.lineCount}`, sortValue: (row) => (row.lineCount ? row.countedLines / row.lineCount : 0) },
     { key: 'varianceLines', header: 'Variances', cell: (row) => (row.isBlind && row.status === 'Open' ? <span className="text-slate-400">Blind</span> : row.varianceLines), sortValue: (row) => row.varianceLines },
@@ -65,7 +64,7 @@ export function StockCountsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Stock counts"
-        subtitle="Count what is on the shelf or on a van, and post the differences as adjustments."
+        subtitle="Count what is on the shelf and post the differences as adjustments."
         primaryAction={
           canCount ? (
             <button type="button" onClick={() => setShowNew(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
@@ -98,9 +97,7 @@ export function StockCountsPage() {
 function NewCountDrawer({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
   const { data: branches } = useBranches()
-  const { data: vans } = useVans()
   const activeBranches = (branches ?? []).filter((branch) => branch.isActive)
-  const activeVans = (vans ?? []).filter((van) => van.isActive)
   const { categories } = useCatalogueSuggestions()
   const [location, setLocation] = useState('')
   const [category, setCategory] = useState('')
@@ -115,7 +112,6 @@ function NewCountDrawer({ onClose }: { onClose: () => void }) {
     try {
       const count = await create.mutateAsync({
         branchId: kind === 'branch' ? id ?? null : null,
-        vanId: kind === 'van' ? id ?? null : null,
         category: category || null,
         notes: notes.trim() || null,
         onlyStocked,
@@ -150,11 +146,6 @@ function NewCountDrawer({ onClose }: { onClose: () => void }) {
             {activeBranches.length > 1 ? (
               <optgroup label="Branches">
                 {activeBranches.map((branch) => <option key={branch.id} value={`branch:${branch.id}`}>{branch.name}</option>)}
-              </optgroup>
-            ) : null}
-            {activeVans.length > 0 ? (
-              <optgroup label="Vans">
-                {activeVans.map((van) => <option key={van.id} value={`van:${van.id}`}>{van.name}{van.technicianName ? ` (${van.technicianName})` : ''}</option>)}
               </optgroup>
             ) : null}
           </select>
@@ -393,7 +384,7 @@ export function StockCountDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={`Stock count ${data.countNumber}`}
-        subtitle={[data.locationName ?? data.branchName ?? 'All stock', data.vanId ? 'van' : null, data.category ?? 'All parts', data.isBlind ? 'blind count' : null, `opened ${formatDateTime(data.createdAt)}${data.startedByName ? ` by ${data.startedByName}` : ''}`].filter(Boolean).join(' · ')}
+        subtitle={[data.locationName ?? data.branchName ?? 'All stock', data.category ?? 'All parts', data.isBlind ? 'blind count' : null, `opened ${formatDateTime(data.createdAt)}${data.startedByName ? ` by ${data.startedByName}` : ''}`].filter(Boolean).join(' · ')}
         breadcrumbs={[{ label: 'Stock counts', to: '/inventory/stock-counts' }, { label: data.countNumber }]}
         secondaryActions={
           <div className="flex flex-wrap items-center gap-2">

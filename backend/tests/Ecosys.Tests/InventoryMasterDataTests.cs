@@ -113,28 +113,6 @@ public sealed class InventoryMasterDataTests
         Assert.Equal(6, part.QuantityOnHand);
     }
 
-    [Fact]
-    public async Task StockLocationsListsBranchesAndVansHoldingThePart()
-    {
-        await using var db = Db();
-        await SeedUser(db);
-        var branch = new Branch { TenantId = tenantId, Name = "Main", Code = "M" };
-        var van = new Van { TenantId = tenantId, Name = "Van 1", HomeBranchId = branch.Id };
-        var part = new MaterialItem { TenantId = tenantId, ItemCode = "P", ItemName = "Pump", UnitOfMeasure = "each" };
-        db.AddRange(branch, van, part);
-        await db.SaveChangesAsync();
-        var ledger = new StockLedgerService(db);
-        await ledger.RecordReceiptAsync(part, branch.Id, 6, userId, "Opening", null);
-        await db.SaveChangesAsync();
-        await ledger.RecordVanLoadAsync(part, branch.Id, van.Id, 2, userId, "Load");
-        await db.SaveChangesAsync();
-
-        var locations = Ok(await Materials(db).GetStockLocations(part.Id, default));
-
-        Assert.Equal(("Main", 4m), (locations.Branches.Single().BranchName, locations.Branches.Single().QuantityOnHand));
-        Assert.Equal(("Van 1", 2m), (locations.Vans.Single().VanName, locations.Vans.Single().QuantityOnHand));
-    }
-
     [Theory]
     [InlineData(2, 10, null, 18)]      // top up to twice the reorder level
     [InlineData(2, 10, 5.0, 10)]       // two lots of 5 clear the level of 10 from 2

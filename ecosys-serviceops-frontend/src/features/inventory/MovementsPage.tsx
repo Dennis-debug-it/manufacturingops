@@ -27,9 +27,6 @@ const movementTypes = ['Receipt', 'Issue', 'Return', 'Adjustment', 'TransferIn',
 const typeLabels: Record<string, string> = {
   TransferIn: 'Transfer In',
   TransferOut: 'Transfer Out',
-  VanLoad: 'Van Load',
-  VanReturn: 'Van Return',
-  VanConsume: 'Van Use',
 }
 const inputClass = 'h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 
@@ -105,7 +102,7 @@ function LedgerView() {
       ),
     },
     { key: 'balanceAfter', header: 'Balance After', cell: (row) => <span className="tabular-nums">{row.balanceAfter}</span> },
-    { key: 'location', header: 'Location', cell: (row) => (row.vanName ? `Van · ${row.vanName}` : row.branchName ?? '—') },
+    { key: 'location', header: 'Location', cell: (row) => row.branchName ?? '—' },
     {
       key: 'reference',
       header: 'Reference',

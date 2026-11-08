@@ -3,7 +3,7 @@ import { api, apiClient } from '../../shared/api/apiClient'
 
 export interface StockValuationRow {
   location: string
-  locationType: 'Branch' | 'Van' | 'Workspace'
+  locationType: 'Branch' | 'Workspace'
   materialItemId: string
   itemCode: string
   itemName: string

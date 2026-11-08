@@ -88,12 +88,11 @@ export function LocationDetailPage() {
                 { key: 'itemName', header: 'Part', cell: (row) => row.itemName ?? '—' },
                 { key: 'movementType', header: 'Type', cell: (row) => <StatusBadge status={row.movementType} /> },
                 { key: 'change', header: 'Change', cell: (row) => (row.quantityChange == null ? `±${row.quantity}` : row.quantityChange > 0 ? `+${row.quantityChange}` : row.quantityChange) },
-                { key: 'location', header: 'Where', cell: (row) => (row.vanName ? `Van · ${row.vanName}` : 'Branch') },
                 { key: 'referenceNumber', header: 'Reference', cell: (row) => row.workOrderNumber ?? row.referenceNumber ?? '—' },
               ]}
               data={movements?.items ?? []}
               emptyTitle="No movements"
-              emptyDescription="The latest 50 movements at this branch and its vans appear here. All Movements on the Movements tab has the full history."
+              emptyDescription="The latest 50 movements at this branch appear here. All Movements on the Movements tab has the full history."
             />
           ),
         },

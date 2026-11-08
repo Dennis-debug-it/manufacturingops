@@ -5,7 +5,6 @@ const ROUTE_CRYSTAL: Array<[prefix: string, variant: CrystalVariant]> = [
   ['/work-orders', 'work-orders'],
   ['/inventory', 'assets'],
   ['/maintenance', 'assets'],
-  ['/dispatch', 'command-centre'],
   ['/scheduling', 'command-centre'],
   ['/live-map', 'command-centre'],
   ['/reports', 'analytics'],

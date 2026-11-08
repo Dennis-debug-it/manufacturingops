@@ -4,7 +4,6 @@ import {
   BookOpen,
   Boxes,
   Building2,
-  CalendarClock,
   CheckSquare,
   ClipboardList,
   Clock,
@@ -97,7 +96,7 @@ const usersAccess: Guide = {
       steps: [
         'Admin — full access to everything, including settings and users.',
         'Manager — operations, finance figures, approvals, reports and the sales pipeline.',
-        'Dispatcher — work orders, the scheduling board, live map, clients and maintenance.',
+        'Dispatcher — work orders, clients and maintenance.',
         'Technician — the mobile technician app: their jobs, time & leave, guides.',
         'Materials Controller — stores and logistics: stock, issuing parts, purchase orders, suppliers, transfers and vans. Starts on Inventory.',
         'Finance — quotes, invoices, payments, expenses, finance reports and the sales pipeline. Starts on Finance.',
@@ -364,30 +363,6 @@ const workOrders: Guide = {
   ],
 }
 
-const scheduling: Guide = {
-  id: 'dispatch',
-  title: 'Scheduling and live map',
-  summary: 'Plan who goes where, see technicians on the map and plan their route.',
-  icon: CalendarClock,
-  path: '/dispatch/board',
-  pathLabel: 'Scheduling Board',
-  sections: [
-    {
-      title: 'Scheduling Board',
-      steps: [
-        'Jobs not yet assigned are in the Unassigned list.',
-        'Drag a job onto a technician’s row at the time you want. Drag it to Drop here to unassign to take it off.',
-        'Use Today and the day/week switch to move around, and All priorities to filter.',
-        'Click Open dispatch actions on a job to assign a crew, reschedule or add notes in the Dispatch drawer.',
-      ],
-    },
-    {
-      title: 'Live Map',
-      text: 'Live Map shows where your technicians are and refreshes every 30 seconds (or click Refresh). Click View daily route to see a technician’s jobs for the day in order; Optimise Route reorders them to cut travel.',
-    },
-  ],
-}
-
 const maintenance: Guide = {
   id: 'maintenance',
   title: 'Planned maintenance',
@@ -476,10 +451,6 @@ const inventory: Guide = {
         'On a purchase order, Download PDF prints it in your purchase order design, and Email to supplier sends the PDF and marks a draft Sent. A draft can be edited; changing its total sends it for approval again.',
         'Mark Sent once it is with the supplier. When goods arrive, click Receive on a line, enter the quantity, the branch it goes into and any batch or serial numbers; linked parts go into stock and their cost is averaged in. Lines marked Non-stock only record the delivery.',
       ],
-    },
-    {
-      title: 'Vans',
-      text: 'Under Vans, click New Van for each vehicle, then Load stock onto it. Parts used on jobs are recorded with Consume and unused stock goes back with Return.',
     },
     {
       title: 'Tools and test equipment',
@@ -721,7 +692,6 @@ export const guides: Guide[] = [
   gettingStarted,
   workOrders,
   serviceReports,
-  scheduling,
   maintenance,
   clients,
   assets,

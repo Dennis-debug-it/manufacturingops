@@ -72,47 +72,6 @@ public sealed class WorkOrderExecutionFlowTests
     }
 
     /// <summary>
-    /// A technician's logged part comes off their own van when it carries enough; before, every logged
-    /// part came out of the branch and van balances never went down from job use.
-    /// </summary>
-    [Fact]
-    public async Task MaterialUsage_ComesOffTheTechniciansVan_WhenItHoldsEnough_ElseTheBranch()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedFixtureAsync(dbContext);
-        var van = new Van { TenantId = fixture.Tenant.Id, Name = "Van 7", TechnicianId = fixture.Technician.Id, HomeBranchId = fixture.Branch.Id };
-        dbContext.Vans.Add(van);
-        await dbContext.SaveChangesAsync();
-        var ledger = new StockLedgerService(dbContext);
-        await ledger.RecordReceiptAsync(fixture.Material, fixture.Branch.Id, 5, fixture.User.Id, "Opening", null);
-        await dbContext.SaveChangesAsync();
-        await ledger.RecordVanLoadAsync(fixture.Material, fixture.Branch.Id, van.Id, 3, fixture.User.Id, "Load", null);
-        await dbContext.SaveChangesAsync();
-        var controller = CreateExecutionController(dbContext, fixture, ledger: ledger);
-
-        Assert.IsType<OkObjectResult>((await controller.AddMaterialUsage(fixture.WorkOrder.Id,
-            new AddWorkOrderMaterialUsageRequest(fixture.Material.Id, null, 2, null, true, null, null), CancellationToken.None)).Result);
-        Assert.Equal(1m, (await dbContext.VanMaterialStocks.SingleAsync(x => x.VanId == van.Id)).QuantityOnHand);
-        Assert.Equal(2m, (await dbContext.BranchMaterialStocks.SingleAsync(x => x.BranchId == fixture.Branch.Id)).QuantityOnHand);
-        var consume = await dbContext.StockMovements.SingleAsync(x => x.MovementType == "VanConsume");
-        Assert.Equal(fixture.WorkOrder.Id, consume.WorkOrderId);
-
-        // The van holds 1, not 2: this one comes from the branch.
-        Assert.IsType<OkObjectResult>((await controller.AddMaterialUsage(fixture.WorkOrder.Id,
-            new AddWorkOrderMaterialUsageRequest(fixture.Material.Id, null, 2, null, true, null, null), CancellationToken.None)).Result);
-        Assert.Equal(1m, (await dbContext.VanMaterialStocks.SingleAsync(x => x.VanId == van.Id)).QuantityOnHand);
-        Assert.Equal(0m, (await dbContext.BranchMaterialStocks.SingleAsync(x => x.BranchId == fixture.Branch.Id)).QuantityOnHand);
-
-        // FromBranch skips the van even when it could cover the part.
-        await ledger.RecordReceiptAsync(fixture.Material, fixture.Branch.Id, 1, fixture.User.Id, "Top-up", null);
-        await dbContext.SaveChangesAsync();
-        Assert.IsType<OkObjectResult>((await controller.AddMaterialUsage(fixture.WorkOrder.Id,
-            new AddWorkOrderMaterialUsageRequest(fixture.Material.Id, null, 1, null, true, null, null, FromBranch: true), CancellationToken.None)).Result);
-        Assert.Equal(1m, (await dbContext.VanMaterialStocks.SingleAsync(x => x.VanId == van.Id)).QuantityOnHand);
-        Assert.Equal(3, await dbContext.WorkOrderMaterialUsages.CountAsync());
-    }
-
-    /// <summary>
     /// A part bought at a supplier's counter for the job may take the branch below zero, even with
     /// negative stock off; it waits as a direct purchase until stores reconciles the supplier invoice,
     /// which books it back so the balance is right again.
@@ -1175,9 +1134,6 @@ public sealed class WorkOrderExecutionFlowTests
         public Task<StockMovement> RecordReturnAsync(MaterialItem material, Guid? branchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, Guid? materialRequestId = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<StockMovement> RecordTransferInAsync(MaterialItem material, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<StockMovement> RecordTransferOutAsync(MaterialItem material, Guid fromBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task RecordVanLoadAsync(MaterialItem material, Guid fromBranchId, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task RecordVanReturnAsync(MaterialItem material, Guid vanId, Guid toBranchId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<StockMovement> RecordVanConsumeAsync(MaterialItem material, Guid vanId, decimal quantity, Guid? createdByUserId, string? reason, string? referenceNumber = null, Guid? workOrderId = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task ExecuteAsync(Func<CancellationToken, Task> operation, CancellationToken cancellationToken = default) => operation(cancellationToken);
     }
 

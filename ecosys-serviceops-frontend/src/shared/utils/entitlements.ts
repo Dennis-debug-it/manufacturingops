@@ -20,7 +20,7 @@ const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
   ['advanced', ['/approvals', '/finance/expenses', '/finance/payables', '/finance/credit-control', '/finance/invoice-approvals', '/team/time-attendance', '/settings/time-attendance', '/settings/email-intake', '/settings/workflows', '/settings/credit-control', '/settings/approval-matrices', '/settings/approval-matrix']],
   ['enterprise_tools', ['/settings/integrations', '/settings/monitoring-intake', '/settings/monitoring']],
   ['whatsapp_business', ['/whatsapp', '/settings/whatsapp']],
-  ['operations', ['/dashboard', '/work-orders', '/dispatch', '/sites', '/reports', '/team/technicians', '/team/skills', '/team/groups', '/settings/notification-templates', '/settings/wo-templates', '/settings/executive-dashboard']],
+  ['operations', ['/dashboard', '/work-orders', '/sites', '/reports', '/team/technicians', '/team/skills', '/team/groups', '/settings/notification-templates', '/settings/wo-templates', '/settings/executive-dashboard']],
   ['finance', ['/finance', '/settings/payments']],
 ]
 /** The sales CRM joins an RFQ's quote (Finance) to its job (Operations), so it needs both; every edition has them. */

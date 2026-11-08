@@ -158,23 +158,19 @@ public sealed partial class WorkOrderExecutionController(
                 ?? throw new BusinessRuleException("Asset was not found.");
         }
 
-        // Where the part came from. A technician carries stock on their van, so a part they log comes
-        // off that van when it holds enough; before, every logged part came out of the branch and van
-        // balances only went down when the office pressed Consume. FromBranch forces the branch, and
-        // VanId names a van explicitly (the office logging for a technician).
+        // Where the part came from: the work order's branch store.
         // A part bought straight from a supplier for this job never passed through stores: it is
         // logged against the branch, allowed below zero, and held as a direct purchase until stores
         // reconciles it with the supplier's invoice (Inventory → Direct purchases).
         if (request.BoughtDirect && request.SupplierId is Guid supplierId
             && !await dbContext.Suppliers.AnyAsync(x => x.TenantId == TenantId && x.Id == supplierId, cancellationToken))
             throw new BusinessRuleException("Supplier was not found.");
-        var van = request.FromBranch || request.BoughtDirect ? null : await ResolveUsageVanAsync(request.VanId, material.Id, request.QuantityUsed, cancellationToken);
 
         // A work order without a branch used to book usage against the part's overall total only, so
         // no branch balance moved (and a direct purchase never showed as below zero anywhere). Fall
         // back to the user's default branch; if that can't be decided, keep the old behaviour.
         var usageBranchId = workOrder.BranchId;
-        if (usageBranchId is null && van is null)
+        if (usageBranchId is null)
         {
             try
             {
@@ -189,9 +185,7 @@ public sealed partial class WorkOrderExecutionController(
         await stockLedgerService.ExecuteAsync(async ct =>
         {
             var reason = $"Used on work order {workOrder.WorkOrderNumber}";
-            var movement = van is not null
-                ? await stockLedgerService.RecordVanConsumeAsync(material, van.Id, request.QuantityUsed, UserId, reason, workOrder.WorkOrderNumber, workOrder.Id, ct)
-                : await stockLedgerService.RecordIssueAsync(
+            var movement = await stockLedgerService.RecordIssueAsync(
                     material,
                     usageBranchId,
                     request.QuantityUsed,
@@ -247,7 +241,7 @@ public sealed partial class WorkOrderExecutionController(
                 Status = WorkOrderStatuses.Normalize(workOrder.Status),
                 Message = request.BoughtDirect
                     ? $"Used {request.QuantityUsed} x {material.ItemName}, bought direct from {request.SupplierName?.Trim() ?? "a supplier"}."
-                    : van is null ? $"Used {request.QuantityUsed} x {material.ItemName}." : $"Used {request.QuantityUsed} x {material.ItemName} from {van.Name}.",
+                    : $"Used {request.QuantityUsed} x {material.ItemName}.",
                 OccurredAt = OccurredAt.UtcNow
             });
 
@@ -264,33 +258,6 @@ public sealed partial class WorkOrderExecutionController(
             cancellationToken);
 
         return Ok(await BuildExecutionBundleAsync(workOrderId, cancellationToken));
-    }
-
-    /// <summary>
-    /// The van a logged part comes off: the named van, or else the current user's own van when it
-    /// holds at least the quantity. Null means the branch.
-    /// </summary>
-    private async Task<Van?> ResolveUsageVanAsync(Guid? vanId, Guid materialId, decimal quantity, CancellationToken cancellationToken)
-    {
-        if (vanId is Guid named)
-        {
-            return await dbContext.Vans.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == named && x.IsActive, cancellationToken)
-                ?? throw new BusinessRuleException("Van was not found.");
-        }
-
-        var userId = UserId;
-        var ownVan = await dbContext.Vans
-            .Where(x => x.TenantId == TenantId && x.IsActive && x.Technician != null && x.Technician.UserId == userId)
-            .OrderBy(x => x.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (ownVan is null)
-            return null;
-
-        var onVan = await dbContext.VanMaterialStocks
-            .Where(x => x.TenantId == TenantId && x.VanId == ownVan.Id && x.MaterialId == materialId)
-            .Select(x => (decimal?)x.QuantityOnHand)
-            .SingleOrDefaultAsync(cancellationToken) ?? 0;
-        return onVan >= quantity ? ownVan : null;
     }
 
     [HttpPost("photos")]
@@ -1532,12 +1499,10 @@ public sealed record SaveWorkOrderExecutionNotesRequest(string? Findings, string
 public sealed record PauseWorkOrderRequest(string? HoldReason, string? Note);
 public sealed record MarkInTransitRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? InTransitAt, string? Notes);
 /// <param name="BatchOrSerial">Serial or batch number(s) of the units fitted, kept on the stock movement for traceability.</param>
-/// <param name="VanId">Take the part off this van. When omitted, the user's own van is used if it holds enough.</param>
-/// <param name="FromBranch">Take the part from the work order's branch even if the user's van holds it.</param>
 /// <param name="BoughtDirect">Bought straight from a supplier for this job: may take the branch below zero, and waits to be reconciled with the supplier's invoice.</param>
 /// <param name="SupplierName">Who it was bought from, as typed (or pick <paramref name="SupplierId"/>).</param>
 /// <param name="SupplierReference">The supplier's receipt or cash-sale number.</param>
-public sealed record AddWorkOrderMaterialUsageRequest(Guid MaterialItemId, Guid? AssetId, decimal QuantityUsed, decimal? UnitCost, bool Chargeable, string? Notes, DateTime? UsedAt, string? BatchOrSerial = null, Guid? VanId = null, bool FromBranch = false,
+public sealed record AddWorkOrderMaterialUsageRequest(Guid MaterialItemId, Guid? AssetId, decimal QuantityUsed, decimal? UnitCost, bool Chargeable, string? Notes, DateTime? UsedAt, string? BatchOrSerial = null,
     bool BoughtDirect = false, Guid? SupplierId = null, string? SupplierName = null, string? SupplierReference = null);
 public sealed record UpdateWorkOrderPhotoRequest(string? Caption, string? Category, bool IncludeInReport);
 public sealed record CaptureWorkOrderSignatureRequest(string SignatureType, string SignerName, string? SignerRole, string SignatureDataUrl, string? Comment);

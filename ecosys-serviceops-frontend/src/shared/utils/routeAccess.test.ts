@@ -25,11 +25,10 @@ describe('canOpenPath', () => {
   })
 
   it('opens each area to the roles whose work it is', () => {
-    expect(canOpenPath(dispatcher, '/dispatch/board')).toBe(true)
+    expect(canOpenPath(dispatcher, '/work-orders')).toBe(true)
     expect(canOpenPath(dispatcher, '/finance/invoices')).toBe(false)
     expect(canOpenPath(finance, '/finance/payables')).toBe(true)
     expect(canOpenPath(finance, '/inventory/stock')).toBe(false)
-    expect(canOpenPath(finance, '/dispatch/board')).toBe(false)
     expect(canOpenPath(stores, '/inventory/purchase-orders')).toBe(true)
     expect(canOpenPath(stores, '/finance')).toBe(false)
     expect(canOpenPath(stores, '/dashboard/executive')).toBe(false)

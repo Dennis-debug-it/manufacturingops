@@ -7,7 +7,7 @@ const enterprise = [...professional, 'enterprise_tools']
 
 describe('edition entitlements', () => {
   it('gives Essentials the work order to invoice loop', () => {
-    for (const path of ['/work-orders', '/dispatch/board', '/finance/invoices', '/finance/quotes', '/finance/billable-work', '/clients']) {
+    for (const path of ['/work-orders', '/finance/invoices', '/finance/quotes', '/finance/billable-work', '/clients']) {
       expect(canAccessModulePath(path, essentials)).toBe(true)
     }
   })

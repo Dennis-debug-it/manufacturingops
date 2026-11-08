@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, MapPin, CalendarClock, Activity, LifeBuoy, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -13,8 +13,6 @@ export interface NavItem {
 export const tenantNavItems: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'dashboard.view', icon: LayoutDashboard },
   { label: 'Work Orders', to: '/work-orders', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], permission: 'work-orders.view', icon: ClipboardList },
-  { label: 'Scheduling Board', to: '/dispatch/board', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: CalendarClock },
-  { label: 'Live Map', to: '/dispatch/map', roles: ['admin', 'manager', 'dispatcher'], permission: 'dispatch.view', icon: MapPin },
   { label: 'Factory overview', to: '/maintenance/overview', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: Factory },
   { label: 'Performance', to: '/maintenance/performance', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: TrendingUp },
   { label: 'Maintenance jobs', to: '/maintenance/jobs', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Wrench },

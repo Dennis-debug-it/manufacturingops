@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Truck, Wrench } from 'lucide-react'
+import { Wrench } from 'lucide-react'
 import { Spinner } from '../../shared/components/Spinner'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { cn } from '../../shared/utils/cn'
@@ -11,7 +11,7 @@ import { WhatsAppOptInCard } from '../whatsapp/WhatsAppOptInCard'
 import { staffWhatsAppApi } from '../whatsapp/remindersApi'
 import { formatDate } from '../../shared/utils/dates'
 import { useAcknowledgeTool, useMyTools } from '../inventory/toolsApi'
-import { useChangeMyPassword, useMyTechnician, useMyVan } from './api'
+import { useChangeMyPassword, useMyTechnician } from './api'
 
 const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 const cardClass = 'space-y-3 rounded-xl border border-slate-200 bg-white p-4'
@@ -58,31 +58,6 @@ function NotificationSettings() {
       <h2 className="px-1 text-sm font-semibold text-slate-900">Notifications</h2>
       <WhatsAppOptInCard source={staffWhatsAppApi} audience="staff" />
       <NotificationPreferencesList />
-    </section>
-  )
-}
-
-/** Stock on the van assigned to this technician; hidden when no van is assigned. */
-function MyVan() {
-  const { data: me } = useMyTechnician()
-  const { data, isLoading } = useMyVan(me?.technicianId)
-  if (isLoading) return <Spinner label="Loading van stock" />
-  if (!data) return null
-  const { van, stock } = data
-
-  return (
-    <section className={cardClass}>
-      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Truck className="h-4 w-4 text-slate-500" />My van: {van.name}{van.registrationNumber ? ` (${van.registrationNumber})` : ''}</h2>
-      {!stock.some((line) => line.quantityOnHand > 0) ? <p className="text-sm text-slate-500">The van has no stock on board.</p> : (
-        <ul className="divide-y divide-slate-100 text-sm">
-          {stock.filter((line) => line.quantityOnHand > 0).map((line) => (
-            <li key={line.materialId} className="flex justify-between gap-3 py-1.5">
-              <span className="text-slate-900">{line.materialName}</span>
-              <span className={cn('shrink-0', line.quantityOnHand <= line.reorderLevel ? 'text-amber-700' : 'text-slate-500')}>{line.quantityOnHand} {line.unitOfMeasure}</span>
-            </li>
-          ))}
-        </ul>
-      )}
     </section>
   )
 }
@@ -148,7 +123,6 @@ export function TechAccountPage() {
           {tenant?.companyName ? (<><dt className="text-slate-500">Company</dt><dd className="text-slate-900">{tenant.companyName}</dd></>) : null}
         </dl>
       </section>
-      <MyVan />
       <MyTools />
       <ChangePassword />
       <JobAlertsSetting />

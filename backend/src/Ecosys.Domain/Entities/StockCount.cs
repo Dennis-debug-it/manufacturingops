@@ -14,7 +14,6 @@ public sealed class StockCount : AuditableEntity, ITenantEntity
     /// <summary>The branch counted; null in a workspace without branches, and for a van count.</summary>
     public Guid? BranchId { get; set; }
     /// <summary>The van counted, when the count is of a van's stock rather than a branch's.</summary>
-    public Guid? VanId { get; set; }
     /// <summary>
     /// A blind count: counters do not see the book quantity while counting, so they count what is
     /// there rather than confirm what the system says. The expected figures show once it is posted.
@@ -31,7 +30,6 @@ public sealed class StockCount : AuditableEntity, ITenantEntity
 
     public Tenant? Tenant { get; set; }
     public Branch? Branch { get; set; }
-    public Van? Van { get; set; }
     public User? StartedByUser { get; set; }
     public User? PostedByUser { get; set; }
     public ICollection<StockCountLine> Lines { get; set; } = new List<StockCountLine>();

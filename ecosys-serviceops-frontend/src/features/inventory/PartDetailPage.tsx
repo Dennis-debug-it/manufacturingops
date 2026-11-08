@@ -170,7 +170,6 @@ export function PartDetailPage() {
   const stockByLocation = useMemo(
     () => [
       ...(locations?.branches ?? []).map((row) => ({ id: `b-${row.branchId}`, location: row.branchName, kind: 'Branch', quantityOnHand: row.quantityOnHand, reorderLevel: row.reorderLevel as number | null, isLowStock: row.isLowStock })),
-      ...(locations?.vans ?? []).map((row) => ({ id: `v-${row.vanId}`, location: row.vanName, kind: 'Van', quantityOnHand: row.quantityOnHand, reorderLevel: null as number | null, isLowStock: false })),
     ],
     [locations],
   )
@@ -307,12 +306,12 @@ export function PartDetailPage() {
                   { key: 'kind', header: 'Type', cell: (row) => row.kind },
                   { key: 'quantityOnHand', header: 'On Hand', cell: (row) => `${row.quantityOnHand} ${material.unitOfMeasure}` },
                   { key: 'reorderLevel', header: 'Reorder Level', cell: (row) => row.reorderLevel ?? '—' },
-                  { key: 'status', header: 'Status', cell: (row) => (row.kind === 'Van' ? null : <StatusBadge status={row.isLowStock ? 'Low Stock' : 'OK'} />) },
+                  { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.isLowStock ? 'Low Stock' : 'OK'} /> },
                 ]}
                 data={stockByLocation}
                 loading={locationsLoading}
                 emptyTitle={locationsError ? 'Locations unavailable' : 'Not held anywhere'}
-                emptyDescription={locationsError ? 'Stock by location could not be loaded.' : 'This part has no branch or van stock yet.'}
+                emptyDescription={locationsError ? 'Stock by location could not be loaded.' : 'This part has no branch stock yet.'}
               />
             ),
           },

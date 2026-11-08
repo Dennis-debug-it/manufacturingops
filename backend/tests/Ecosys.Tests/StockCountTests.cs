@@ -107,38 +107,6 @@ public sealed class StockCountTests
     }
 
     [Fact]
-    public async Task AVanCountSnapshotsTheVanAndPostsAdjustmentsToTheVanNotTheBranch()
-    {
-        await using var db = Db();
-        var (filter, _) = await Seed(db);
-        var van = new Van { TenantId = tenantId, Name = "Van 2", HomeBranchId = branchId };
-        db.Vans.Add(van);
-        await db.SaveChangesAsync();
-        var ledger = new StockLedgerService(db);
-        await ledger.RecordVanLoadAsync(filter, branchId, van.Id, 3, userId, "Load", null);
-        await db.SaveChangesAsync();
-
-        var controller = Controller(db);
-        var count = Created(await controller.Create(new(null, VanId: van.Id, OnlyStocked: true), default));
-
-        // Only the filter is on the van; the belt was never loaded, so it is not listed.
-        var line = Assert.Single(count.Lines);
-        Assert.Equal(filter.Id, line.MaterialItemId);
-        Assert.Equal(3m, line.ExpectedQuantity);
-        Assert.Equal("Van 2", count.LocationName);
-        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(new(null, VanId: van.Id), default));
-
-        Ok(await controller.SaveLines(count.Id, new([new(line.Id, 2)]), default));
-        Ok(await controller.Post(count.Id, default));
-
-        Assert.Equal(2m, (await db.VanMaterialStocks.SingleAsync(x => x.VanId == van.Id && x.MaterialId == filter.Id)).QuantityOnHand);
-        Assert.Equal(7m, (await db.BranchMaterialStocks.SingleAsync(x => x.BranchId == branchId && x.MaterialId == filter.Id)).QuantityOnHand);
-        var adjustment = await db.StockMovements.SingleAsync(x => x.MovementType == "Adjustment");
-        Assert.Equal(van.Id, adjustment.VanId);
-        Assert.Equal(-1m, adjustment.QuantityChange);
-    }
-
-    [Fact]
     public async Task ABlindCountHidesBookQuantitiesFromCountersAndRecountMarksBlockPosting()
     {
         await using var db = Db();

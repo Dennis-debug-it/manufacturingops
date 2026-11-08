@@ -51,15 +51,7 @@ public sealed class InventoryReportsController(
                 .ToListAsync(cancellationToken));
         }
 
-        rows.AddRange(await dbContext.VanMaterialStocks.AsNoTracking()
-            .Where(x => x.TenantId == TenantId && x.Material!.IsActive && x.QuantityOnHand != 0)
-            .WhereAccessible(scope, x => x.Van!.HomeBranchId)
-            .Select(x => new StockValuationRowResponse(x.Van!.Name, "Van", x.MaterialId, x.Material!.ItemCode, x.Material.ItemName,
-                x.Material.Category, x.Material.UnitOfMeasure, x.QuantityOnHand, x.UnitCost ?? x.Material.UnitCost,
-                Math.Round(x.QuantityOnHand * (x.UnitCost ?? x.Material.UnitCost ?? 0), 2)))
-            .ToListAsync(cancellationToken));
-
-        rows = rows.OrderBy(x => x.LocationType == "Van").ThenBy(x => x.Location).ThenBy(x => x.ItemName).ToList();
+        rows = rows.OrderBy(x => x.Location).ThenBy(x => x.ItemName).ToList();
         if (IsCsv(format))
         {
             return CsvFile("stock-valuation.csv", "Location,Type,Code,Part,Category,Unit,Quantity,Unit Cost,Value",
@@ -75,7 +67,7 @@ public sealed class InventoryReportsController(
 
     /// <summary>
     /// Parts consumed in a period: issued to jobs, requests and issues plus used off vans, less unused
-    /// parts returned. Van loads, transfers and receipts are moves, not use, and are left out.
+    /// parts returned. Transfers and receipts are moves, not use, and are left out.
     /// </summary>
     [HttpGet("usage")]
     public async Task<IActionResult> Usage(
@@ -85,8 +77,8 @@ public sealed class InventoryReportsController(
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         var zone = await tenantTimeZoneService.GetTimeZoneAsync(TenantId, cancellationToken);
         var movements = StockLedgerQuery.Apply(
-            dbContext.StockMovements.AsNoTracking().Where(x => x.TenantId == TenantId && (x.MovementType == "Issue" || x.MovementType == "VanConsume" || x.MovementType == "Return")),
-            scope, zone, new StockLedgerFilter(null, null, null, from, to, null));
+            dbContext.StockMovements.AsNoTracking().Where(x => x.TenantId == TenantId && (x.MovementType == "Issue" || x.MovementType == "Return")),
+            scope, zone, new StockLedgerFilter(null, null, from, to, null));
 
         var grouped = await movements
             .GroupBy(x => new { x.MaterialId, x.Material!.ItemCode, x.Material.ItemName, x.Material.Category, x.Material.UnitOfMeasure, x.Material.UnitCost })
@@ -126,26 +118,26 @@ public sealed class InventoryReportsController(
     /// <summary>The stock ledger, filtered as on the Movements page, as a CSV download.</summary>
     [HttpGet("movements")]
     public async Task<IActionResult> Movements(
-        [FromQuery] Guid? materialId, [FromQuery] Guid? branchId, [FromQuery] Guid? vanId, [FromQuery] string? type,
+        [FromQuery] Guid? materialId, [FromQuery] Guid? branchId, [FromQuery] string? type,
         [FromQuery] DateTime? from, [FromQuery] DateTime? to, [FromQuery] string? search, CancellationToken cancellationToken)
     {
         EnsureViewAccess();
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         var zone = await tenantTimeZoneService.GetTimeZoneAsync(TenantId, cancellationToken);
         var rows = await StockLedgerQuery.Apply(dbContext.StockMovements.AsNoTracking().Where(x => x.TenantId == TenantId), scope, zone,
-                new StockLedgerFilter(materialId, vanId, type, from, to, search))
+                new StockLedgerFilter(materialId, type, from, to, search))
             .OrderByDescending(x => x.CreatedAt)
             .Take(50_000)
             .Select(StockMovementsController.Projection)
             .ToListAsync(cancellationToken);
 
         return CsvFile($"stock-movements{FileSuffix(from, to)}.csv",
-            "When,Type,Code,Part,Change,Unit,Balance After,Branch,Van,Work Order,Reference,Reason,Batch / Serial,By",
+            "When,Type,Code,Part,Change,Unit,Balance After,Branch,Work Order,Reference,Reason,Batch / Serial,By",
             rows.Select(x => new object?[]
             {
                 TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(x.CreatedAt, DateTimeKind.Utc), zone).ToString("yyyy-MM-dd HH:mm"),
                 x.MovementType, x.ItemCode, x.ItemName, x.QuantityChange?.ToString() ?? $"±{x.Quantity}", x.UnitOfMeasure, x.BalanceAfter,
-                x.BranchName, x.VanName, x.WorkOrderNumber, x.ReferenceNumber, x.Reason, x.BatchOrSerial, x.CreatedByName,
+                x.BranchName, x.WorkOrderNumber, x.ReferenceNumber, x.Reason, x.BatchOrSerial, x.CreatedByName,
             }));
     }
 

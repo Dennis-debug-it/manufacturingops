@@ -27,13 +27,12 @@ public sealed class StockMovementsController(
     /// <param name="branchId">A branch: its own movements plus those of vans based there.</param>
     /// <param name="from">First day included, in the workspace's time zone.</param>
     /// <param name="to">Last day included, in the workspace's time zone.</param>
-    /// <param name="type">A movement type, e.g. Receipt, Issue, Adjustment, TransferOut, VanConsume.</param>
+    /// <param name="type">A movement type, e.g. Receipt, Issue, Adjustment, TransferOut.</param>
     /// <param name="search">Matches part name or code, reference, reason or batch/serial number.</param>
     [HttpGet]
     public async Task<ActionResult<PagedResult<StockLedgerEntryResponse>>> List(
         [FromQuery] Guid? materialId,
         [FromQuery] Guid? branchId,
-        [FromQuery] Guid? vanId,
         [FromQuery] string? type,
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
@@ -46,7 +45,7 @@ public sealed class StockMovementsController(
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, cancellationToken);
         var zone = await tenantTimeZoneService.GetTimeZoneAsync(TenantId, cancellationToken);
         var query = StockLedgerQuery.Apply(dbContext.StockMovements.AsNoTracking().Where(x => x.TenantId == TenantId), scope, zone,
-            new StockLedgerFilter(materialId, vanId, type, from, to, search));
+            new StockLedgerFilter(materialId, type, from, to, search));
         var result = await query
             .OrderByDescending(x => x.CreatedAt)
             .ThenByDescending(x => x.Id)
@@ -69,8 +68,6 @@ public sealed class StockMovementsController(
             x.BalanceAfter,
             x.BranchId,
             x.Branch != null ? x.Branch.Name : null,
-            x.VanId,
-            x.Van != null ? x.Van.Name : null,
             x.WorkOrderId,
             x.WorkOrder != null ? x.WorkOrder.WorkOrderNumber : null,
             x.ReferenceNumber,
@@ -86,7 +83,7 @@ public sealed class StockMovementsController(
             PermissionNames.CanIssueMaterials);
 }
 
-public sealed record StockLedgerFilter(Guid? MaterialId, Guid? VanId, string? Type, DateTime? From, DateTime? To, string? Search);
+public sealed record StockLedgerFilter(Guid? MaterialId, string? Type, DateTime? From, DateTime? To, string? Search);
 
 /// <summary>The stock ledger's filters, shared by the movement feed and the inventory reports.</summary>
 public static class StockLedgerQuery
@@ -96,8 +93,6 @@ public static class StockLedgerQuery
         query = ApplyScope(query, scope);
         if (filter.MaterialId.HasValue)
             query = query.Where(x => x.MaterialId == filter.MaterialId);
-        if (filter.VanId.HasValue)
-            query = query.Where(x => x.VanId == filter.VanId);
         if (!string.IsNullOrWhiteSpace(filter.Type) && !string.Equals(filter.Type, "All", StringComparison.OrdinalIgnoreCase))
         {
             var normalized = filter.Type.Trim();
@@ -138,7 +133,7 @@ public static class StockLedgerQuery
     }
 
     /// <summary>
-    /// Branch access covers a branch's own movements and those of the vans based there; branchless
+    /// Branch access covers a branch's own movements; branchless
     /// movements (a workspace without branches) are visible whenever branches are not configured.
     /// </summary>
     private static IQueryable<StockMovement> ApplyScope(IQueryable<StockMovement> query, BranchQueryScope scope)
@@ -146,12 +141,10 @@ public static class StockLedgerQuery
         if (!scope.HasConfiguredBranches)
             return query;
         if (scope.RequestedBranchId is { } requested)
-            return query.Where(x => x.BranchId == requested || (x.VanId != null && x.Van!.HomeBranchId == requested));
+            return query.Where(x => x.BranchId == requested);
 
         var ids = scope.AccessibleBranchIds.ToList();
-        return query.Where(x =>
-            (x.BranchId != null && ids.Contains(x.BranchId.Value))
-            || (x.VanId != null && x.Van!.HomeBranchId != null && ids.Contains(x.Van.HomeBranchId.Value)));
+        return query.Where(x => x.BranchId != null && ids.Contains(x.BranchId.Value));
     }
 }
 
@@ -169,8 +162,6 @@ public sealed record StockLedgerEntryResponse(
     decimal BalanceAfter,
     Guid? BranchId,
     string? BranchName,
-    Guid? VanId,
-    string? VanName,
     Guid? WorkOrderId,
     string? WorkOrderNumber,
     string? ReferenceNumber,

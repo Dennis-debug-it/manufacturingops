@@ -53,8 +53,7 @@ public sealed class StockCountsController(
                 x.CreatedAt,
                 x.PostedAt)
             {
-                VanId = x.VanId,
-                LocationName = x.Van != null ? x.Van.Name : x.Branch != null ? x.Branch.Name : null,
+                LocationName = x.Branch != null ? x.Branch.Name : null,
                 IsBlind = x.IsBlind,
                 RecountLines = x.Lines.Count(l => l.NeedsRecount),
             })
@@ -80,25 +79,9 @@ public sealed class StockCountsController(
     public async Task<ActionResult<StockCountDetailResponse>> Create([FromBody] CreateStockCountRequest request, CancellationToken cancellationToken)
     {
         EnsureCountAccess();
-        Guid? branchId;
-        Van? van = null;
-        if (request.VanId is Guid vanId)
-        {
-            van = await dbContext.Vans.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == vanId && x.IsActive, cancellationToken)
-                ?? throw new BusinessRuleException("Van was not found.");
-            if (van.HomeBranchId is Guid home)
-                await branchAccessService.EnsureCanAccessBranchAsync(TenantId, home, cancellationToken);
-            // A van count is filed under the van's home branch, so branch access applies to it.
-            branchId = van.HomeBranchId;
-            if (await dbContext.StockCounts.AnyAsync(x => x.TenantId == TenantId && x.VanId == vanId && x.Status == StockCountStatuses.Open, cancellationToken))
-                throw new BusinessRuleException($"{van.Name} already has an open stock count. Post or cancel it first.");
-        }
-        else
-        {
-            branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, cancellationToken);
-            if (await dbContext.StockCounts.AnyAsync(x => x.TenantId == TenantId && x.VanId == null && x.BranchId == branchId && x.Status == StockCountStatuses.Open, cancellationToken))
-                throw new BusinessRuleException("This branch already has an open stock count. Post or cancel it first.");
-        }
+        var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId, cancellationToken);
+        if (await dbContext.StockCounts.AnyAsync(x => x.TenantId == TenantId && x.BranchId == branchId && x.Status == StockCountStatuses.Open, cancellationToken))
+            throw new BusinessRuleException("This branch already has an open stock count. Post or cancel it first.");
 
         var category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim();
         var parts = await dbContext.MaterialItems.AsNoTracking()
@@ -109,13 +92,12 @@ public sealed class StockCountsController(
         if (parts.Count == 0)
             throw new BusinessRuleException(category is null ? "There are no active parts to count." : $"There are no active parts in {category}.");
 
-        var balances = await BalancesAtAsync(van?.Id, branchId, cancellationToken);
+        var balances = await BalancesAtAsync(branchId, cancellationToken);
         var count = new StockCount
         {
             TenantId = TenantId,
             CountNumber = await documentNumberingService.GenerateAsync(TenantId, branchId, DocumentTypes.StockCount, cancellationToken),
             BranchId = branchId,
-            VanId = van?.Id,
             IsBlind = request.Blind,
             Category = category,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
@@ -126,7 +108,7 @@ public sealed class StockCountsController(
             var (quantity, reorderLevel, unitCost) = balances is null
                 ? (part.QuantityOnHand, part.ReorderLevel, part.UnitCost)
                 : balances.TryGetValue(part.Id, out var held) ? (held.Quantity, held.ReorderLevel, held.UnitCost ?? part.UnitCost) : (0m, 0m, part.UnitCost);
-            // "Only parts held here" skips what was never stocked at this location, so a branch or van
+            // "Only parts held here" skips what was never stocked at this location, so a branch
             // count is not padded out with the whole catalogue. Add a part found on the shelf with AddLine.
             if (request.OnlyStocked && quantity == 0 && reorderLevel <= 0)
                 continue;
@@ -144,7 +126,7 @@ public sealed class StockCountsController(
         dbContext.StockCounts.Add(count);
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "inventory.stock_count.opened", nameof(StockCount), count.Id.ToString(),
-            $"Opened stock count {count.CountNumber}{(van is null ? string.Empty : $" of van {van.Name}")} ({count.Lines.Count} parts{(count.IsBlind ? ", blind" : string.Empty)}).", cancellationToken);
+            $"Opened stock count {count.CountNumber} ({count.Lines.Count} parts{(count.IsBlind ? ", blind" : string.Empty)}).", cancellationToken);
 
         return CreatedAtAction(nameof(Get), new { id = count.Id }, Map(await LoadAsync(count.Id, cancellationToken)));
     }
@@ -161,7 +143,7 @@ public sealed class StockCountsController(
         var part = await dbContext.MaterialItems.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.MaterialItemId && x.IsActive, cancellationToken)
             ?? throw new BusinessRuleException("Part was not found.");
 
-        var balances = await BalancesAtAsync(count.VanId, count.BranchId, cancellationToken);
+        var balances = await BalancesAtAsync(count.BranchId, cancellationToken);
         var (quantity, unitCost) = balances is null
             ? (part.QuantityOnHand, part.UnitCost)
             : balances.TryGetValue(part.Id, out var held) ? (held.Quantity, held.UnitCost ?? part.UnitCost) : (0m, part.UnitCost);
@@ -255,10 +237,7 @@ public sealed class StockCountsController(
                     continue;
                 var material = await dbContext.MaterialItems.SingleAsync(x => x.TenantId == TenantId && x.Id == line.MaterialItemId, ct);
                 var reason = line.Notes is null ? $"Stock count {count.CountNumber}" : $"Stock count {count.CountNumber}: {line.Notes}";
-                if (count.VanId is Guid vanId)
-                    await stockLedgerService.RecordVanAdjustmentAsync(material, vanId, delta, UserId, reason, count.CountNumber, ct);
-                else
-                    await stockLedgerService.RecordAdjustmentAsync(material, count.BranchId, delta, UserId, reason, count.CountNumber, cancellationToken: ct);
+                await stockLedgerService.RecordAdjustmentAsync(material, count.BranchId, delta, UserId, reason, count.CountNumber, cancellationToken: ct);
                 adjusted++;
             }
 
@@ -288,20 +267,11 @@ public sealed class StockCountsController(
     }
 
     /// <summary>
-    /// Book balances at the counted location, by part: the van's, or the branch's. Null for a workspace
+    /// Book balances at the counted branch, by part. Null for a workspace
     /// without branches, where each part's own total is the balance.
     /// </summary>
-    private async Task<Dictionary<Guid, (decimal Quantity, decimal ReorderLevel, decimal? UnitCost)>?> BalancesAtAsync(Guid? vanId, Guid? branchId, CancellationToken cancellationToken)
+    private async Task<Dictionary<Guid, (decimal Quantity, decimal ReorderLevel, decimal? UnitCost)>?> BalancesAtAsync(Guid? branchId, CancellationToken cancellationToken)
     {
-        if (vanId is Guid van)
-        {
-            return (await dbContext.VanMaterialStocks.AsNoTracking()
-                    .Where(x => x.TenantId == TenantId && x.VanId == van)
-                    .Select(x => new { x.MaterialId, x.QuantityOnHand, x.ReorderLevel, x.UnitCost })
-                    .ToListAsync(cancellationToken))
-                .ToDictionary(x => x.MaterialId, x => (x.QuantityOnHand, x.ReorderLevel, x.UnitCost));
-        }
-
         if (branchId is Guid branch)
         {
             return (await dbContext.BranchMaterialStocks.AsNoTracking()
@@ -319,7 +289,6 @@ public sealed class StockCountsController(
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
         return await dbContext.StockCounts
             .Include(x => x.Branch)
-            .Include(x => x.Van)
             .Include(x => x.StartedByUser)
             .Include(x => x.PostedByUser)
             .Include(x => x.Lines)
@@ -390,8 +359,7 @@ public sealed class StockCountsController(
             lines,
             lines.Sum(x => x.VarianceValue ?? 0))
         {
-            VanId = count.VanId,
-            LocationName = count.Van?.Name ?? count.Branch?.Name,
+            LocationName = count.Branch?.Name,
             IsBlind = count.IsBlind,
             ExpectedHidden = hideExpected,
             GrossVarianceValue = hideExpected ? 0 : lines.Sum(x => Math.Abs(x.VarianceValue ?? 0)),
@@ -399,10 +367,9 @@ public sealed class StockCountsController(
     }
 }
 
-/// <param name="VanId">Count a van instead of a branch; BranchId is ignored then.</param>
 /// <param name="OnlyStocked">List only parts held at the location (or with a reorder level there).</param>
 /// <param name="Blind">Hide book quantities from counters until the count is posted.</param>
-public sealed record CreateStockCountRequest(Guid? BranchId, string? Category = null, string? Notes = null, Guid? VanId = null, bool OnlyStocked = false, bool Blind = false);
+public sealed record CreateStockCountRequest(Guid? BranchId, string? Category = null, string? Notes = null, bool OnlyStocked = false, bool Blind = false);
 
 public sealed record AddStockCountLineRequest(Guid MaterialItemId, decimal? CountedQuantity = null);
 
@@ -415,8 +382,7 @@ public sealed record StockCountSummaryResponse(
     Guid Id, string CountNumber, Guid? BranchId, string? BranchName, string? Category, string Status,
     int LineCount, int CountedLines, int VarianceLines, string? StartedByName, DateTime CreatedAt, DateTime? PostedAt)
 {
-    public Guid? VanId { get; init; }
-    /// <summary>The van's name for a van count, else the branch's.</summary>
+    /// <summary>The counted branch's name.</summary>
     public string? LocationName { get; init; }
     public bool IsBlind { get; init; }
     public int RecountLines { get; init; }
@@ -437,7 +403,6 @@ public sealed record StockCountDetailResponse(
     string? StartedByName, DateTime CreatedAt, string? PostedByName, DateTime? PostedAt,
     IReadOnlyList<StockCountLineResponse> Lines, decimal NetVarianceValue)
 {
-    public Guid? VanId { get; init; }
     public string? LocationName { get; init; }
     public bool IsBlind { get; init; }
     /// <summary>True when this viewer is not shown the book quantities (an open blind count).</summary>

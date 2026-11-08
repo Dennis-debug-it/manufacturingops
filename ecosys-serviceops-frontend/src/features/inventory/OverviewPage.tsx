@@ -165,18 +165,18 @@ export function OverviewPage() {
       const entry = map.get(key) ?? {
         id: key,
         name: row.locationName,
-        type: row.locationType === 'Van' ? 'Van' : row.locationType === 'Branch' ? 'Branch' : 'Stores',
+        type: row.locationType === 'Branch' ? 'Branch' : 'Stores',
         parts: 0,
         low: 0,
         value: 0,
-        to: row.locationType === 'Van' && row.locationId ? `/inventory/vans/${row.locationId}` : row.locationType === 'Branch' && row.locationId ? `/inventory/locations/${row.locationId}` : `/inventory/stock?view=location&location=${encodeURIComponent(key)}`,
+        to: row.locationType === 'Branch' && row.locationId ? `/inventory/locations/${row.locationId}` : `/inventory/stock?view=location&location=${encodeURIComponent(key)}`,
       }
       if (row.quantityOnHand !== 0) entry.parts += 1
       if (row.isLowStock) entry.low += 1
       entry.value += row.quantityOnHand * (row.unitCost ?? 0)
       map.set(key, entry)
     }
-    return Array.from(map.values()).sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'Van' ? 1 : -1))
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
   }, [stock.data])
 
   const stockValue = locations.reduce((sum, row) => sum + row.value, 0)

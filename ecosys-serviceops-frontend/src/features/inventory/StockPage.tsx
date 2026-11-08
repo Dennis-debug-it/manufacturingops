@@ -26,7 +26,6 @@ interface PartTotal {
   category: string | null
   unitOfMeasure: string
   inStores: number
-  onVans: number
   total: number
   locations: number
   value: number
@@ -36,7 +35,7 @@ interface PartTotal {
 const locationKey = (row: StockLocationRow) => `${row.locationType}:${row.locationId ?? 'stores'}`
 
 /**
- * Stock where it actually is. Rows come from each branch's (or the stores') balance and each van's,
+ * Stock where it actually is. Rows come from each branch's (or the stores') balance,
  * so "by location" is real per-branch stock — the old page grouped parts by a branch name the list
  * never sent and put everything under "Unassigned".
  */
@@ -66,7 +65,7 @@ export function StockPage() {
   const locations = useMemo(() => {
     const seen = new Map<string, { key: string; name: string; type: StockLocationRow['locationType'] }>()
     for (const row of rows) seen.set(locationKey(row), { key: locationKey(row), name: row.locationName, type: row.locationType })
-    return Array.from(seen.values()).sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'Van' ? 1 : -1))
+    return Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name))
   }, [rows])
   const categories = useMemo(() => Array.from(new Set(rows.map((row) => row.category).filter((value): value is string => Boolean(value)))).sort(), [rows])
 
@@ -84,10 +83,9 @@ export function StockPage() {
     for (const row of filtered) {
       const entry = totals.get(row.materialId) ?? {
         id: row.materialId, materialId: row.materialId, itemCode: row.itemCode, itemName: row.itemName, category: row.category,
-        unitOfMeasure: row.unitOfMeasure, inStores: 0, onVans: 0, total: 0, locations: 0, value: 0, lowAt: [],
+        unitOfMeasure: row.unitOfMeasure, inStores: 0, total: 0, locations: 0, value: 0, lowAt: [],
       }
-      if (row.locationType === 'Van') entry.onVans += row.quantityOnHand
-      else entry.inStores += row.quantityOnHand
+      entry.inStores += row.quantityOnHand
       entry.total += row.quantityOnHand
       if (row.quantityOnHand !== 0) entry.locations += 1
       entry.value += row.quantityOnHand * (row.unitCost ?? 0)
@@ -121,7 +119,6 @@ export function StockPage() {
     { key: 'itemCode', header: 'Code', cell: (row) => <span className="font-mono text-xs text-slate-600">{row.itemCode}</span>, sortValue: (row) => row.itemCode },
     { key: 'category', header: 'Category', cell: (row) => row.category ?? '—', sortValue: (row) => row.category },
     { key: 'inStores', header: 'In stores', cell: (row) => <span className="tabular-nums">{row.inStores}</span>, sortValue: (row) => row.inStores },
-    { key: 'onVans', header: 'On vans', cell: (row) => <span className="tabular-nums">{row.onVans}</span>, sortValue: (row) => row.onVans },
     { key: 'total', header: 'Total', cell: (row) => <span className="font-semibold tabular-nums">{row.total} {row.unitOfMeasure}</span>, sortValue: (row) => row.total },
     { key: 'value', header: 'Value', cell: (row) => formatCurrency(row.value), sortValue: (row) => row.value },
     {
@@ -133,7 +130,7 @@ export function StockPage() {
   ]
 
   const locationColumns: DataTableColumn<StockLocationRow & { id: string }>[] = [
-    { key: 'location', header: 'Location', cell: (row) => <span>{row.locationName} <span className="text-xs text-slate-500">{row.locationType === 'Van' ? 'Van' : row.locationType === 'Branch' ? 'Branch' : ''}</span></span>, sortValue: (row) => row.locationName },
+    { key: 'location', header: 'Location', cell: (row) => <span>{row.locationName} <span className="text-xs text-slate-500">{row.locationType === 'Branch' ? 'Branch' : ''}</span></span>, sortValue: (row) => row.locationName },
     { key: 'itemName', header: 'Part', cell: (row) => partLink(row.materialId, row.itemName), sortValue: (row) => row.itemName },
     { key: 'itemCode', header: 'Code', cell: (row) => <span className="font-mono text-xs text-slate-600">{row.itemCode}</span>, sortValue: (row) => row.itemCode },
     { key: 'quantityOnHand', header: 'On hand', cell: (row) => <span className="tabular-nums">{row.quantityOnHand} {row.unitOfMeasure}</span>, sortValue: (row) => row.quantityOnHand },
@@ -146,7 +143,7 @@ export function StockPage() {
     <div className="space-y-4">
       <PageHeader
         title="Stock levels"
-        subtitle="What is on hand at each branch and on each van."
+        subtitle="What is on hand at each branch."
         primaryAction={
           canManage ? (
             <button type="button" onClick={() => setShowForm(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
@@ -186,7 +183,7 @@ export function StockPage() {
             </label>
             <select aria-label="Location" value={location} onChange={(event) => setParam('location', event.target.value)} className={fieldClass}>
               <option value="">All locations</option>
-              {locations.map((option) => <option key={option.key} value={option.key}>{option.type === 'Van' ? `Van · ${option.name}` : option.name}</option>)}
+              {locations.map((option) => <option key={option.key} value={option.key}>{option.name}</option>)}
             </select>
             {categories.length > 0 ? (
               <select aria-label="Category" value={category} onChange={(event) => setParam('category', event.target.value)} className={fieldClass}>

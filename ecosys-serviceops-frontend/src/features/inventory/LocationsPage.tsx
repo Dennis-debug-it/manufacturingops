@@ -36,7 +36,7 @@ export function LocationsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Locations"
-        subtitle="Branches that hold stock. Mobile stock on vehicles is under Vans."
+        subtitle="Branches that hold stock."
       />
       <DataTable columns={columns} data={rows} loading={isLoading} emptyTitle={isError ? 'Locations unavailable' : 'No locations'} emptyDescription={isError ? 'Branches could not be loaded.' : 'No branches configured yet.'} />
     </div>

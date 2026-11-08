@@ -70,7 +70,7 @@ public static class ServiceOpsPlans
 
     private static readonly HashSet<string> OperationsControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "AssignmentGroups", "ContractReference", "Dashboard", "Dispatch", "EtaNotificationSettings", "Reports", "Sites",
+        "AssignmentGroups", "ContractReference", "Dashboard", "EtaNotificationSettings", "Reports", "Sites",
         "TeamManagement", "Technicians", "TechnicianJobs", "WorkOrderAssignments", "WorkOrderExecution",
         "WorkOrderTemplates", "WorkOrders"
     };
@@ -82,7 +82,7 @@ public static class ServiceOpsPlans
     private static readonly HashSet<string> InventoryControllers = new(StringComparer.OrdinalIgnoreCase)
     {
         "MaterialIssues", "MaterialRequests", "Materials", "PartsRequests", "PartsReturns", "PurchaseOrders",
-        "StockCounts", "StockMovements", "StockTransfers", "Vans", "InventoryReports", "Tools", "InventoryRequests",
+        "StockCounts", "StockMovements", "StockTransfers", "InventoryReports", "Tools", "InventoryRequests",
         "PurchaseOrderDocuments", "HeldParts", "DirectPurchases", "FactoryStores"
     };
     private static readonly HashSet<string> AdvancedControllers = new(StringComparer.OrdinalIgnoreCase)
