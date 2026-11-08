@@ -1094,6 +1094,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.PlannedMaterialsJson);
             entity.Property(x => x.PreviousStatus).HasMaxLength(50);
             entity.HasIndex(x => new { x.TenantId, x.WorkOrderNumber }).IsUnique();
+            // The work order list's sorts and filters.
+            entity.HasIndex(x => new { x.TenantId, x.CreatedAt });
+            entity.HasIndex(x => new { x.TenantId, x.DueDate });
+            entity.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAt });
+            entity.HasIndex(x => new { x.TenantId, x.ScheduledStartAt }).HasFilter("\"ScheduledStartAt\" IS NOT NULL");
             entity.HasIndex(x => x.TrackingToken).IsUnique().HasFilter("\"TrackingToken\" IS NOT NULL");
             entity.HasIndex(x => x.ParentWorkOrderId);
             entity.HasIndex(x => x.FollowUpOfWorkOrderId);
@@ -2411,6 +2416,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("audit_logs");
             entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.TenantId, x.CreatedAt });
             entity.Property(x => x.ActorName).HasMaxLength(200);
             entity.Property(x => x.Action).HasMaxLength(100).IsRequired();
             entity.Property(x => x.EntityName).HasMaxLength(100).IsRequired();
@@ -3654,7 +3660,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.SpecialInstructions).HasMaxLength(2000);
             entity.Property(x => x.Latitude).HasPrecision(9, 6);
             entity.Property(x => x.Longitude).HasPrecision(9, 6);
-            entity.HasIndex(x => new { x.TenantId, x.SiteCode });
+            entity.HasIndex(x => new { x.TenantId, x.SiteCode }).IsUnique();
             entity.HasOne(x => x.Tenant)
                 .WithMany()
                 .HasForeignKey(x => x.TenantId)

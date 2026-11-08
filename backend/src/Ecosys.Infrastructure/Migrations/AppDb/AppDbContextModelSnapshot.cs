@@ -1603,9 +1603,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId");
-
                     b.HasIndex("UserId");
+
+                    b.HasIndex("TenantId", "CreatedAt");
 
                     b.ToTable("audit_logs", (string)null);
                 });
@@ -9812,7 +9812,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("ClientId");
 
-                    b.HasIndex("TenantId", "SiteCode");
+                    b.HasIndex("TenantId", "SiteCode")
+                        .IsUnique();
 
                     b.ToTable("sites", (string)null);
                 });
@@ -13817,10 +13818,19 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("WorkflowStatusId");
 
+                    b.HasIndex("TenantId", "CreatedAt");
+
+                    b.HasIndex("TenantId", "DueDate");
+
+                    b.HasIndex("TenantId", "ScheduledStartAt")
+                        .HasFilter("\"ScheduledStartAt\" IS NOT NULL");
+
                     b.HasIndex("TenantId", "WorkOrderNumber")
                         .IsUnique();
 
                     b.HasIndex("TenantId", "OrgNodeId", "Status");
+
+                    b.HasIndex("TenantId", "Status", "CreatedAt");
 
                     b.HasIndex("TenantId", "AssetId", "FailureProblemCodeId", "CompletedAt");
 

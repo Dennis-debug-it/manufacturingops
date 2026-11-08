@@ -391,41 +391,18 @@ record the proxy's IP and all callers share one auth rate-limit bucket.
 
 Diff your `.env` against `.env.example` for anything else new.
 
-### 7.4 Pre-migration data checks — run these BEFORE applying migrations
+### 7.4 The migration baseline
 
-The schema hardening migration `AddTenantQueryIndexesFinanceDeleteGuardsAndStockRowVersions`
-adds uniqueness and foreign-key guarantees that a long-running database may already violate.
-PostgreSQL validates existing rows when these are applied, so the migration **fails and rolls
-back** if any of the checks below return a non-zero count. Run them first and clean up what
-they find; on a fresh database they all return zero and nothing else is needed.
-
-Duplicates block three new unique indexes:
-
-```sql
-SELECT "TenantId", "SiteCode",    count(*) FROM sites          GROUP BY 1,2 HAVING count(*) > 1;
-SELECT "TenantId", "ClaimNumber", count(*) FROM expenses       GROUP BY 1,2 HAVING count(*) > 1;
-SELECT "TenantId", "BillNumber",  count(*) FROM supplier_bills GROUP BY 1,2 HAVING count(*) > 1;
-```
-
-Orphaned rows block the four new financial delete guards:
-
-```sql
-SELECT count(*) FROM payment_allocations a LEFT JOIN tenant_invoices i ON i."Id" = a."InvoiceId" WHERE i."Id" IS NULL;
-SELECT count(*) FROM tenant_payments p LEFT JOIN tenant_invoices i ON i."Id" = p."InvoiceId" WHERE p."InvoiceId" IS NOT NULL AND i."Id" IS NULL;
-SELECT count(*) FROM credit_notes c LEFT JOIN tenant_invoices i ON i."Id" = c."InvoiceId" WHERE c."InvoiceId" IS NOT NULL AND i."Id" IS NULL;
-SELECT count(*) FROM work_order_billable_items b LEFT JOIN work_orders w ON w."Id" = b."WorkOrderId" WHERE w."Id" IS NULL;
-```
-
-**Intended behaviour change.** After this migration, deleting a work order that has billable
-items, or an invoice that has payments, allocations or credit notes, returns **409 Conflict**
-instead of silently destroying the financial record. That is the point of the change: those
-cascades were erasing already-invoiced history.
+The ServiceOps migration history was squashed into one baseline, `InitialBaseline`, when the
+out-of-scope modules were pruned (Phase 0). A fresh database is built from that baseline at
+first start-up. A database built from the old history cannot be upgraded in place: the API
+refuses to start against one and says so. Recreate it, or load its data into a fresh database
+built from the baseline.
 
 **Tenant offboarding is an ordered teardown, not one statement.** `tenants` cascades to nearly
 every tenant-scoped table, but roughly 28 intra-tenant `RESTRICT` foreign keys are checked
 immediately rather than deferred, so a single `DELETE FROM tenants` fails. Delete in dependency
-order: financial leaves (allocations, payments, credit notes, invoices, quotations, supplier
-bills, expenses), then work-order leaves and `work_orders`, then inventory and knowledge leaves,
+order: work-order leaves and `work_orders`, then inventory and knowledge leaves,
 then assets, systems, sites, contracts, clients, suppliers, technicians, materials, branches
 (leaf branches before parents), then `users`, then the tenant row.
 

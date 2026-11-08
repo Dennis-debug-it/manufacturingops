@@ -408,6 +408,7 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
+        await MigrationBaseline.EnsureCompatibleAsync(dbContext);
         await dbContext.Database.MigrateAsync();
     }
     catch (Exception ex)

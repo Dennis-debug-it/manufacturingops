@@ -23,4 +23,14 @@ It moves factories from reactive, paper-based maintenance to planned, traceable,
 
 ## Status
 
-Phase 0: forked from Ecosys ServiceOps (with history); pruning out-of-scope modules. Stack: .NET 10 + PostgreSQL + React PWA.
+Stack: .NET 10 + PostgreSQL + React PWA.
+
+- **Phase 0 (done):** forked from Ecosys ServiceOps (with history). Out-of-scope modules pruned:
+  client finance (quotations, invoices, credit notes, receipts, withholding, expenses), the sales
+  and platform CRM, the client portal, projects, vans and dispatch, CSAT, and Kip AI and the
+  knowledge base. The migration history is squashed into one baseline (`InitialBaseline`).
+- **Phases 1–6 (done):** factory hierarchy and assets, work orders and the technician app,
+  preventive maintenance and the weekly window, safety and compliance, spares and contractors,
+  costs, KPIs and evidence packs.
+- **Phase 7 (in progress):** condition monitoring, sensor feeds, predictive groundwork and
+  leaf collection fleet maintenance.
