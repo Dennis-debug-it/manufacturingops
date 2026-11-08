@@ -1061,36 +1061,9 @@ public sealed class WorkOrdersController(
 
         var documents = new List<WorkOrderDocumentResponse>();
 
-        if (workOrder.QuoteId.HasValue)
-        {
-            var quote = await dbContext.TenantQuotations
-                .Where(x => x.TenantId == TenantId && x.Id == workOrder.QuoteId.Value)
-                .Select(x => new { x.Id, x.QuoteNumber, x.Status })
-                .SingleOrDefaultAsync(cancellationToken);
-            if (quote is not null)
-            {
-                documents.Add(new WorkOrderDocumentResponse("Quote", quote.Id, quote.QuoteNumber, quote.Status, $"/api/quotations/{quote.Id}/pdf"));
-            }
-        }
-
         if (!string.IsNullOrWhiteSpace(workOrder.ReportNumber))
         {
             documents.Add(new WorkOrderDocumentResponse("ServiceReport", workOrder.Id, workOrder.ReportNumber, workOrder.ReportStatus ?? "Draft", $"/api/workorders/{workOrder.Id}/service-report/pdf"));
-        }
-
-        var invoiceIds = await dbContext.TenantInvoiceLines
-            .Where(x => x.WorkOrderId == id)
-            .Select(x => x.InvoiceId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
-        if (invoiceIds.Count > 0)
-        {
-            var invoices = await dbContext.TenantInvoices
-                .Where(x => x.TenantId == TenantId && invoiceIds.Contains(x.Id))
-                .Select(x => new { x.Id, x.InvoiceNumber, x.Status })
-                .ToListAsync(cancellationToken);
-            documents.AddRange(invoices.Select(x => new WorkOrderDocumentResponse("Invoice", x.Id, x.InvoiceNumber, x.Status, $"/api/invoices/{x.Id}/pdf")));
         }
 
         var materialRequests = await dbContext.MaterialRequests
@@ -1360,92 +1333,6 @@ public sealed class WorkOrdersController(
         });
     }
 
-    [HttpPost("from-quote")]
-    public async Task<ActionResult<WorkOrderResponse>> CreateFromQuote([FromBody] CreateWorkOrderFromQuoteRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdminOrPermission(PermissionNames.CanCreateWorkOrders);
-        await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
-
-        var quote = await dbContext.TenantQuotations
-            .Include(x => x.Client)
-            .Include(x => x.Lines)
-            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.QuoteId, cancellationToken)
-            ?? throw new NotFoundException("Quotation was not found.");
-
-        if (!string.Equals(quote.Status, "Accepted", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new BusinessRuleException("Only accepted quotations can be converted to a work order.");
-        }
-
-        var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, null, cancellationToken);
-        var workOrder = new WorkOrder
-        {
-            TenantId = TenantId,
-            BranchId = branchId,
-            ClientId = quote.ClientId,
-            SiteId = quote.SiteId,
-            WorkOrderNumber = await documentNumberingService.GenerateAsync(TenantId, branchId, DocumentTypes.WorkOrder, cancellationToken),
-            Title = string.IsNullOrWhiteSpace(quote.Subject) ? $"Work from quotation {quote.QuoteNumber}" : quote.Subject.Trim(),
-            Description = quote.Notes,
-            Priority = WorkOrderPriorities.Medium,
-            Status = WorkOrderStatuses.New,
-            WorkType = WorkOrderTypes.CorrectiveMaintenance,
-            QuoteId = quote.Id,
-            IsBillable = true,
-            NotifyClient = true,
-            TrackingToken = TrackingTokenGenerator.Generate()
-        };
-
-        if (contractOperationalService is not null)
-        {
-            await contractOperationalService.ApplyOperationalSnapshotAsync(workOrder, cancellationToken);
-        }
-        else
-        {
-            await slaService.ApplyDefinitionAsync(workOrder, cancellationToken);
-        }
-
-        dbContext.WorkOrders.Add(workOrder);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        foreach (var line in quote.Lines)
-        {
-            dbContext.WorkOrderBillableItems.Add(new WorkOrderBillableItem
-            {
-                TenantId = TenantId,
-                WorkOrderId = workOrder.Id,
-                Description = line.Description,
-                ItemType = line.ItemType,
-                Quantity = line.Quantity,
-                Unit = line.Unit,
-                UnitRate = line.UnitRate,
-                RateCardId = line.RateCardId,
-                LineTotal = line.LineTotal,
-                TaxRate = line.TaxRate,
-                TaxAmount = line.GrandTotal - line.LineTotal,
-                GrandTotal = line.GrandTotal
-            });
-        }
-
-        quote.Status = "Converted";
-        quote.ConvertedToWorkOrderId = workOrder.Id;
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        await workOrderLifecycleService.RecordCreatedAsync(TenantId, workOrder.Id, UserId, workOrder.WorkOrderNumber, cancellationToken);
-        await auditLogService.LogAsync(
-            TenantId,
-            UserId,
-            "Work order created from quotation",
-            nameof(WorkOrder),
-            workOrder.Id.ToString(),
-            $"Created work order '{workOrder.WorkOrderNumber}' from quotation '{quote.QuoteNumber}'.",
-            cancellationToken);
-
-        var persisted = await QueryWorkOrders(await branchAccessService.GetQueryScopeAsync(TenantId, workOrder.BranchId, cancellationToken))
-            .SingleAsync(x => x.Id == workOrder.Id, cancellationToken);
-        return CreatedAtAction(nameof(Get), new { id = workOrder.Id }, Map(persisted));
-    }
-
     [HttpPost("{id:guid}/duplicate")]
     public async Task<ActionResult<WorkOrderResponse>> Duplicate(Guid id, CancellationToken cancellationToken)
     {
@@ -1488,8 +1375,7 @@ public sealed class WorkOrdersController(
             PlannedMaterialsJson = source.PlannedMaterialsJson,
             NotifyClient = source.NotifyClient,
             ClientContactEmail = source.ClientContactEmail,
-            TrackingToken = TrackingTokenGenerator.Generate(),
-            IsBillable = source.IsBillable
+            TrackingToken = TrackingTokenGenerator.Generate()
         };
 
         if (contractOperationalService is not null)
@@ -1797,7 +1683,6 @@ public sealed class WorkOrdersController(
             .ThenInclude(x => x.Technician)
             .Include(x => x.PmTemplate)
             .Include(x => x.ChecklistItems)
-            .Include(x => x.Quote)
             .Include(x => x.ChildWorkOrders)
             .Include(x => x.FollowUpOfWorkOrder)
             .Include(x => x.FollowUpWorkOrders)
@@ -2077,8 +1962,8 @@ public sealed class WorkOrdersController(
             workOrder.ScheduledEndAt,
             workOrder.NotifyClient,
             workOrder.ClientContactEmail,
-            workOrder.BillingStatus,
-            workOrder.IsBillable,
+            "NotBillable",
+            false,
             workOrder.Client?.ContactPerson,
             workOrder.Client?.ContactPhone,
             workOrder.Client?.SlaPlan,
@@ -2119,8 +2004,8 @@ public sealed class WorkOrdersController(
             workOrder.AppliedRateSource,
             workOrder.TrackingToken,
             workOrder.WorkOrderTemplateId,
-            workOrder.QuoteId,
-            workOrder.Quote?.QuoteNumber,
+            null,
+            null,
             workOrder.ParentWorkOrderId,
             workOrder.ChildWorkOrders?.Count ?? 0,
             WorkOrderStatuses.IsHold(workOrder.Status) ? WorkOrderHoldTypes.FromStatus(workOrder.Status) : null,
@@ -2586,7 +2471,6 @@ public sealed record WorkOrderLinkResponse(Guid Id, string WorkOrderNumber, stri
 
 public sealed record PlannedMaterialResponse(Guid MaterialId, string MaterialName, decimal Quantity);
 public sealed record HoldWorkOrderRequest(string? Reason, string? HoldType);
-public sealed record CreateWorkOrderFromQuoteRequest(Guid QuoteId);
 
 public sealed record WorkOrderSlaStatusResponse(
     Guid WorkOrderId,

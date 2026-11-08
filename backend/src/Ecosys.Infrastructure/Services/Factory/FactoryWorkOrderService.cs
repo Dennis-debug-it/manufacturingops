@@ -250,8 +250,6 @@ internal sealed class FactoryWorkOrderService(
             RequestSource = request.Source,
             RequestedByName = string.IsNullOrWhiteSpace(request.RequestedByName) ? actor.Name : request.RequestedByName.Trim(),
             FailureProblemCodeId = request.ProblemCodeId,
-            IsBillable = false,
-            BillingStatus = "NotBillable",
             NotifyClient = false
         };
         dbContext.WorkOrders.Add(workOrder);

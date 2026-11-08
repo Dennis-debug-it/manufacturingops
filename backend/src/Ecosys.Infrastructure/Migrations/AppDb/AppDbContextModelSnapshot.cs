@@ -2090,17 +2090,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<decimal?>("CreditLimit")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("CurrentBalance")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(18,2)")
-                        .HasDefaultValue(0m);
-
-                    b.Property<Guid?>("DefaultCreditTermId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Email")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -2137,8 +2126,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("DefaultCreditTermId");
 
                     b.HasIndex("SlaDefinitionId");
 
@@ -3679,197 +3666,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("cost_centres", (string)null);
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.CreditNote", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AmountApplied")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("Balance")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreditNoteNumber")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<Guid?>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("IssueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<decimal>("Subtotal")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("TaxAmount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.HasIndex("TenantId", "ClientId");
-
-                    b.HasIndex("TenantId", "CreditNoteNumber")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "Status");
-
-                    b.ToTable("credit_notes", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.CreditNoteLine", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CreditNoteId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<decimal>("GrandTotal")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("ItemType")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<decimal>("LineTotal")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("Quantity")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("TaxAmount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("TaxRate")
-                        .HasColumnType("numeric(8,4)");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<decimal>("UnitRate")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreditNoteId");
-
-                    b.ToTable("credit_note_lines", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.CreditTerm", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal?>("CreditLimit")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("DepositPercent")
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDefault")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDepositRequired")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("NetDays")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(30);
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "Code")
-                        .IsUnique();
-
-                    b.ToTable("credit_terms", (string)null);
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.DirectPurchase", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4646,84 +4442,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("TenantId", "BaseCurrency", "QuoteCurrency", "EffectiveFrom");
 
                     b.ToTable("exchange_rates", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.Expense", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime?>("ApprovedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ApprovedByName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid?>("ApprovedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)");
-
-                    b.Property<string>("ClaimNumber")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasDefaultValue("KES");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<DateTime>("IncurredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ReceiptUrl")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasDefaultValue("Submitted");
-
-                    b.Property<string>("SubmittedByName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid?>("SubmittedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "Status");
-
-                    b.ToTable("expenses", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.FactorySettings", b =>
@@ -7973,54 +7691,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("UserId", "ExpiresAt");
 
                     b.ToTable("password_reset_tokens", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.PaymentAllocation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("AllocatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("SourceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("SourceType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.HasIndex("TenantId", "InvoiceId", "Status");
-
-                    b.HasIndex("TenantId", "SourceType", "SourceId");
-
-                    b.ToTable("payment_allocations", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.PendingSignup", b =>
@@ -11325,110 +10995,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("suppliers", (string)null);
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.SupplierBill", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("AmountPaid")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("BillNumber")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasDefaultValue("KES");
-
-                    b.Property<DateTime>("DueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasDefaultValue("Open");
-
-                    b.Property<Guid>("SupplierId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SupplierId");
-
-                    b.HasIndex("TenantId", "Status");
-
-                    b.ToTable("supplier_bills", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.SupplierBillPayment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Method")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<DateTime>("PaidAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Reference")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<Guid>("SupplierBillId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SupplierBillId");
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("supplier_bill_payments", (string)null);
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.SystemTemplatePack", b =>
                 {
                     b.Property<Guid>("Id")
@@ -11980,168 +11546,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("tenant_finance_defaults", (string)null);
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantInvoice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("AmountPaid")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("Balance")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("CreditTermId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<decimal?>("DepositAmount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime?>("DepositDueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("DepositPaid")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("DocumentType")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<DateTime>("DueDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("InvoiceDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("InvoiceNumber")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<decimal>("Subtotal")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("TaxAmount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TermsAndConditions")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.HasIndex("CreditTermId");
-
-                    b.HasIndex("TenantId", "ClientId");
-
-                    b.HasIndex("TenantId", "DocumentType");
-
-                    b.HasIndex("TenantId", "InvoiceNumber")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "Status");
-
-                    b.ToTable("tenant_invoices", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantInvoiceLine", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("BillableItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<decimal>("GrandTotal")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ItemType")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<decimal>("LineTotal")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("Quantity")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<decimal>("TaxAmount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("TaxRate")
-                        .HasColumnType("numeric(8,4)");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<decimal>("UnitRate")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("WorkOrderId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("BillableItemId");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.HasIndex("WorkOrderId");
-
-                    b.ToTable("tenant_invoice_lines", (string)null);
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantLicense", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12390,241 +11794,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsUnique();
 
                     b.ToTable("tenant_operations_policies", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantPayment", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Method")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<DateTime>("PaymentDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PaymentNumber")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<string>("Reference")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.HasIndex("TenantId", "InvoiceId");
-
-                    b.HasIndex("TenantId", "PaymentNumber")
-                        .IsUnique();
-
-                    b.ToTable("tenant_payments", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantQuotation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("AcceptedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("AcceptedByName")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<Guid?>("AcceptedByPortalUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("AcceptedByTitle")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<string>("AcceptedFromIp")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<int>("ChaseReminderStage")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ConvertedToInvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ConvertedToWorkOrderId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<DateTime>("QuoteDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("QuoteNumber")
-                        .IsRequired()
-                        .HasMaxLength(60)
-                        .HasColumnType("character varying(60)");
-
-                    b.Property<string>("RejectionReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime?>("SentAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("SentByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("SiteId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<string>("Subject")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<decimal>("Subtotal")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("TaxAmount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TotalAmount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ValidUntil")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.HasIndex("ConvertedToInvoiceId");
-
-                    b.HasIndex("ConvertedToWorkOrderId");
-
-                    b.HasIndex("SiteId");
-
-                    b.HasIndex("TenantId", "QuoteNumber")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "Status");
-
-                    b.ToTable("tenant_quotations", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantQuotationLine", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<decimal>("GrandTotal")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("ItemType")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<decimal>("LineTotal")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("Quantity")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<Guid>("QuotationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("RateCardId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TaxRate")
-                        .HasColumnType("numeric(8,4)");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<decimal>("UnitRate")
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("QuotationId");
-
-                    b.HasIndex("RateCardId");
-
-                    b.ToTable("tenant_quotation_lines", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantSecurityPolicy", b =>
@@ -14195,78 +13364,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("whatsapp_verification_codes", (string)null);
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.WithholdingCertificate", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateOnly>("CertificateDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("CertificateNumber")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("ClientId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<decimal?>("RatePercent")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<Guid>("RecordedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("TaxType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.HasIndex("TenantId", "InvoiceId");
-
-                    b.HasIndex("TenantId", "ClientId", "CertificateNumber");
-
-                    b.ToTable("withholding_certificates", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_withholding_certificates_amount", "\"Amount\" > 0");
-
-                            t.HasCheckConstraint("CK_withholding_certificates_tax_type", "\"TaxType\" IN ('VAT', 'IncomeTax')");
-                        });
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.WorkOrder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -14334,10 +13431,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<string>("BillingModel")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
-
-                    b.Property<string>("BillingStatus")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<Guid?>("BranchId")
                         .HasColumnType("uuid");
@@ -14435,9 +13528,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("HoldStartedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<bool>("IsBillable")
-                        .HasColumnType("boolean");
-
                     b.Property<bool>("IsBreakdown")
                         .HasColumnType("boolean");
 
@@ -14512,9 +13602,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
-
-                    b.Property<Guid?>("QuoteId")
-                        .HasColumnType("uuid");
 
                     b.Property<Guid?>("RateCardId")
                         .HasColumnType("uuid");
@@ -14712,9 +13799,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("PreventiveMaintenancePlanId");
 
-                    b.HasIndex("QuoteId")
-                        .IsUnique();
-
                     b.HasIndex("RateCardId");
 
                     b.HasIndex("RequiredCertificationId");
@@ -14866,98 +13950,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("TenantId", "WorkOrderId", "PerformedAt");
 
                     b.ToTable("work_order_assignment_history", (string)null);
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.WorkOrderBillableItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<decimal>("GrandTotal")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid?>("InvoiceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<bool>("IsBilled")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsManualEntry")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("ItemType")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<decimal>("LineTotal")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<decimal>("Quantity")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<Guid?>("RateCardId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("SourceMaterialUsageId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("SourceTimeLogId")
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("TaxAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("TaxRate")
-                        .HasPrecision(8, 4)
-                        .HasColumnType("numeric(8,4)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Unit")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<decimal>("UnitRate")
-                        .HasPrecision(18, 4)
-                        .HasColumnType("numeric(18,4)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("WorkOrderId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RateCardId");
-
-                    b.HasIndex("WorkOrderId");
-
-                    b.HasIndex("TenantId", "IsBilled");
-
-                    b.HasIndex("TenantId", "WorkOrderId");
-
-                    b.ToTable("work_order_billable_items", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.WorkOrderChecklistItem", b =>
@@ -16501,11 +15493,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
             modelBuilder.Entity("Ecosys.Domain.Entities.Client", b =>
                 {
-                    b.HasOne("Ecosys.Domain.Entities.CreditTerm", "DefaultCreditTerm")
-                        .WithMany("Clients")
-                        .HasForeignKey("DefaultCreditTermId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Ecosys.Domain.Entities.SlaDefinition", "SlaDefinition")
                         .WithMany("Clients")
                         .HasForeignKey("SlaDefinitionId")
@@ -16516,8 +15503,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("DefaultCreditTerm");
 
                     b.Navigation("SlaDefinition");
 
@@ -17051,54 +16036,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("OrgNode");
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.CreditNote", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Client", "Client")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
-                        .WithMany()
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
-
-                    b.Navigation("Invoice");
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.CreditNoteLine", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.CreditNote", "CreditNote")
-                        .WithMany("Lines")
-                        .HasForeignKey("CreditNoteId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("CreditNote");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.CreditTerm", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Tenant");
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.DirectPurchase", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Branch", "Branch")
@@ -17292,17 +16229,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.ExchangeRate", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.Expense", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
                         .WithMany()
@@ -18349,25 +17275,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.PaymentAllocation", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
-                        .WithMany()
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Invoice");
-
-                    b.Navigation("Tenant");
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.PermissionThreshold", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.PermissionGroup", "PermissionGroup")
@@ -19345,44 +18252,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.SupplierBill", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Supplier", "Supplier")
-                        .WithMany()
-                        .HasForeignKey("SupplierId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Supplier");
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.SupplierBillPayment", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.SupplierBill", "SupplierBill")
-                        .WithMany("Payments")
-                        .HasForeignKey("SupplierBillId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("SupplierBill");
-
-                    b.Navigation("Tenant");
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.Technician", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.WorkOrder", "ActiveWorkOrder")
@@ -19477,57 +18346,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantInvoice", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Client", "Client")
-                        .WithMany("Invoices")
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.CreditTerm", "CreditTerm")
-                        .WithMany("Invoices")
-                        .HasForeignKey("CreditTermId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
-
-                    b.Navigation("CreditTerm");
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantInvoiceLine", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.WorkOrderBillableItem", "BillableItem")
-                        .WithMany()
-                        .HasForeignKey("BillableItemId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
-                        .WithMany("Lines")
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.WorkOrder", "WorkOrder")
-                        .WithMany()
-                        .HasForeignKey("WorkOrderId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("BillableItem");
-
-                    b.Navigation("Invoice");
-
-                    b.Navigation("WorkOrder");
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantLicense", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.LicensePlan", "LicensePlan")
@@ -19589,90 +18407,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired();
 
                     b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantPayment", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Client", "Client")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
-                        .WithMany("Payments")
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
-
-                    b.Navigation("Invoice");
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantQuotation", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Client", "Client")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "ConvertedToInvoice")
-                        .WithMany()
-                        .HasForeignKey("ConvertedToInvoiceId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Ecosys.Domain.Entities.WorkOrder", "ConvertedToWorkOrder")
-                        .WithMany()
-                        .HasForeignKey("ConvertedToWorkOrderId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Ecosys.Domain.Entities.Site", "Site")
-                        .WithMany()
-                        .HasForeignKey("SiteId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
-
-                    b.Navigation("ConvertedToInvoice");
-
-                    b.Navigation("ConvertedToWorkOrder");
-
-                    b.Navigation("Site");
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantQuotationLine", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.TenantQuotation", "Quotation")
-                        .WithMany("Lines")
-                        .HasForeignKey("QuotationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.RateCard", "RateCard")
-                        .WithMany()
-                        .HasForeignKey("RateCardId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Quotation");
-
-                    b.Navigation("RateCard");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantSecurityPolicy", b =>
@@ -20152,33 +18886,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.WithholdingCertificate", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Client", "Client")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.TenantInvoice", "Invoice")
-                        .WithMany()
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
-
-                    b.Navigation("Invoice");
-
-                    b.Navigation("Tenant");
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.WorkOrder", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Asset", "Asset")
@@ -20276,11 +18983,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasForeignKey("PreventiveMaintenancePlanId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("Ecosys.Domain.Entities.TenantQuotation", "Quote")
-                        .WithMany()
-                        .HasForeignKey("QuoteId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Ecosys.Domain.Entities.ContractRateCard", "RateCard")
                         .WithMany("WorkOrders")
                         .HasForeignKey("RateCardId")
@@ -20355,8 +19057,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("PmTemplate");
 
                     b.Navigation("PreventiveMaintenancePlan");
-
-                    b.Navigation("Quote");
 
                     b.Navigation("RateCard");
 
@@ -20454,32 +19154,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("ToGroup");
 
                     b.Navigation("ToTechnician");
-
-                    b.Navigation("WorkOrder");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.WorkOrderBillableItem", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.RateCard", "RateCard")
-                        .WithMany()
-                        .HasForeignKey("RateCardId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Ecosys.Domain.Entities.WorkOrder", "WorkOrder")
-                        .WithMany("BillableItems")
-                        .HasForeignKey("WorkOrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("RateCard");
-
-                    b.Navigation("Tenant");
 
                     b.Navigation("WorkOrder");
                 });
@@ -20953,8 +19627,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Navigation("Contracts");
 
-                    b.Navigation("Invoices");
-
                     b.Navigation("PortalUsers");
 
                     b.Navigation("PreferentialRates");
@@ -21016,18 +19688,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
             modelBuilder.Entity("Ecosys.Domain.Entities.ContractorInvoice", b =>
                 {
                     b.Navigation("Lines");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.CreditNote", b =>
-                {
-                    b.Navigation("Lines");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.CreditTerm", b =>
-                {
-                    b.Navigation("Clients");
-
-                    b.Navigation("Invoices");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.EscalationRule", b =>
@@ -21222,11 +19882,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("PurchaseOrders");
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.SupplierBill", b =>
-                {
-                    b.Navigation("Payments");
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.SystemTemplatePack", b =>
                 {
                     b.Navigation("AssetCategories");
@@ -21346,18 +20001,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("WorkOrders");
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantInvoice", b =>
-                {
-                    b.Navigation("Lines");
-
-                    b.Navigation("Payments");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.TenantQuotation", b =>
-                {
-                    b.Navigation("Lines");
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.Tool", b =>
                 {
                     b.Navigation("Assignments");
@@ -21414,8 +20057,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("AssignmentHistory");
 
                     b.Navigation("Assignments");
-
-                    b.Navigation("BillableItems");
 
                     b.Navigation("ChecklistItems");
 

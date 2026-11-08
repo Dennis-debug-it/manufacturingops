@@ -131,7 +131,7 @@ public sealed class PlatformSupportToolsController(
         await dbContext.WorkOrders.CountAsync(x => x.TenantId == tenantId, cancellationToken),
         await dbContext.Clients.CountAsync(x => x.TenantId == tenantId, cancellationToken),
         await dbContext.Assets.CountAsync(x => x.TenantId == tenantId, cancellationToken),
-        await dbContext.TenantInvoices.CountAsync(x => x.TenantId == tenantId, cancellationToken),
+        0,
         await dbContext.Contracts.CountAsync(x => x.TenantId == tenantId, cancellationToken),
         await dbContext.Users.CountAsync(x => x.TenantId == tenantId, cancellationToken));
 

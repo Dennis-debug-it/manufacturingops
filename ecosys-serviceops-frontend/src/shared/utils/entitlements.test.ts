@@ -7,13 +7,13 @@ const enterprise = [...professional, 'enterprise_tools']
 
 describe('edition entitlements', () => {
   it('gives Essentials the work order to invoice loop', () => {
-    for (const path of ['/work-orders', '/finance/invoices', '/finance/quotes', '/finance/billable-work', '/clients']) {
+    for (const path of ['/work-orders', '/finance/rate-cards', '/clients']) {
       expect(canAccessModulePath(path, essentials)).toBe(true)
     }
   })
 
   it('keeps maintenance, inventory and the advanced tools in Professional', () => {
-    for (const path of ['/maintenance/schedules', '/assets', '/contracts', '/inventory/stock', '/finance/expenses', '/approvals', '/settings/email-intake']) {
+    for (const path of ['/maintenance/schedules', '/assets', '/contracts', '/inventory/stock', '/approvals', '/settings/email-intake']) {
       expect(canAccessModulePath(path, essentials)).toBe(false)
       expect(canAccessModulePath(path, professional)).toBe(true)
     }
@@ -33,8 +33,7 @@ describe('edition entitlements', () => {
 
   it('matches whole path segments only', () => {
     expect(requiredModulesForPath('/projectsish')).toEqual([])
-    expect(requiredModulesForPath('/finance/expenses')).toEqual(['advanced'])
-    expect(requiredModulesForPath('/finance/invoices')).toEqual(['finance'])
+    expect(requiredModulesForPath('/finance/rate-cards')).toEqual(['finance'])
     expect(requiredModulesForPath('/crmx')).toEqual([])
   })
 

@@ -47,11 +47,6 @@ internal sealed class RoleDashboardQueries(
             DashboardWidgetCatalog.MaterialsLowStock => await LowStockAsync(viewer, cancellationToken),
             DashboardWidgetCatalog.MaterialsPendingIssues => await PendingIssuesAsync(viewer, cancellationToken),
             DashboardWidgetCatalog.PurchaseOrdersOpen => await OpenPurchaseOrdersAsync(viewer, clock, cancellationToken),
-            DashboardWidgetCatalog.FinanceReceivablesOverdue => await ReceivablesOverdueAsync(viewer, clock, cancellationToken),
-            DashboardWidgetCatalog.FinanceReceivablesAgeing => await ReceivablesAgeingAsync(viewer, clock, cancellationToken),
-            DashboardWidgetCatalog.FinanceCashReceived => await CashReceivedAsync(viewer, clock, cancellationToken),
-            DashboardWidgetCatalog.FinanceTaxWithheld => await TaxWithheldAsync(viewer, clock, cancellationToken),
-            DashboardWidgetCatalog.FinanceInvoicesToSend => await InvoicesToSendAsync(viewer, cancellationToken),
             DashboardWidgetCatalog.ActionItemsDue => await ActionItemsDueAsync(viewer, clock, cancellationToken),
             _ => throw new InvalidOperationException($"No query for dashboard widget '{widget.Key}'."),
         };
@@ -82,9 +77,6 @@ internal sealed class RoleDashboardQueries(
 
     private static DashboardStat Count(string label, int value, string link, string? tone = null) =>
         new(label, value, "number", null, link, value > 0 ? tone : null);
-
-    private static string InvoicesLink(string age, string? currency = null) =>
-        currency is null ? $"/finance/invoices?age={age}" : $"/finance/invoices?age={age}&currency={Uri.EscapeDataString(currency)}";
 
     // ── Operations ───────────────────────────────────────────────────────────
 
@@ -280,79 +272,6 @@ internal sealed class RoleDashboardQueries(
             [.. list.Select(x => new DashboardListItem($"{x.PoNumber} {x.Supplier}",
                 x.ExpectedAt is null ? x.Status : $"{x.Status} · expected {x.ExpectedAt:dd MMM}", x.TotalAmount, "money", x.Currency,
                 $"/inventory/purchase-orders/{x.Id}", x.Status != "Draft" && x.ExpectedAt < clock.TodayStartUtc ? "danger" : null))]);
-    }
-
-    // ── Finance ──────────────────────────────────────────────────────────────
-
-    /// <summary>The tenant's invoices; <see cref="ReceivableAges"/> narrows them as the invoice list's <c>age</c> filter does.</summary>
-    private IQueryable<TenantInvoice> Invoices(DashboardQueryViewer viewer) =>
-        dbContext.TenantInvoices.AsNoTracking().Where(x => x.TenantId == viewer.TenantId);
-
-    private async Task<Result> ReceivablesOverdueAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
-    {
-        var overdue = await ReceivableAges.Apply(Invoices(viewer), ReceivableAges.Overdue, clock.TodayStartUtc)
-            .Select(x => new { x.Id, x.InvoiceNumber, Client = x.Client!.ClientName, x.Currency, x.Balance, x.DueDate })
-            .ToListAsync(ct);
-        var stats = new List<DashboardStat> { Count("Overdue invoices", overdue.Count, InvoicesLink(ReceivableAges.Overdue), "danger") };
-        stats.AddRange(overdue.GroupBy(x => x.Currency).OrderByDescending(g => g.Count())
-            .Select(g => new DashboardStat("Overdue balance", g.Sum(x => x.Balance), "money", g.Key, InvoicesLink(ReceivableAges.Overdue, g.Key), "danger")));
-        return new Result(stats,
-            [.. overdue.OrderBy(x => x.DueDate).Take(ListLimit).Select(x => new DashboardListItem($"{x.InvoiceNumber} {x.Client}",
-                $"{ReceivableAges.DaysOverdue(x.DueDate, clock.TodayStartUtc)} days overdue", x.Balance, "money", x.Currency, $"/finance/invoices/{x.Id}", "danger"))]);
-    }
-
-    private async Task<Result> ReceivablesAgeingAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
-    {
-        var rows = await ReceivableAges.Receivables(Invoices(viewer)).Select(x => new { x.Currency, x.Balance, x.DueDate }).ToListAsync(ct);
-        var stats = new List<DashboardStat>();
-        var currencies = rows.GroupBy(x => x.Currency).OrderByDescending(g => g.Sum(x => x.Balance)).ToList();
-        foreach (var currency in currencies)
-        {
-            foreach (var bucket in ReceivableAges.Buckets)
-            {
-                var amount = currency.Where(x => ReceivableAges.BucketOf(x.DueDate, clock.TodayStartUtc) == bucket.Key).Sum(x => x.Balance);
-                stats.Add(new DashboardStat(bucket.Label, amount, "money", currency.Key, InvoicesLink(bucket.Key, currency.Key), amount > 0 ? bucket.Tone : null));
-            }
-        }
-        return new Result(stats, [], rows.Count == 0 ? "Nothing is owed." : null);
-    }
-
-    private async Task<Result> CashReceivedAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
-    {
-        var payments = await dbContext.TenantPayments.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && x.Status == "Confirmed" && x.PaymentDate >= clock.MonthStartUtc && x.PaymentDate < clock.TodayEndUtc)
-            .Select(x => new { Currency = x.Invoice != null ? x.Invoice.Currency : null, x.Amount })
-            .ToListAsync(ct);
-        var link = $"/finance/receipts?status=Confirmed&from={clock.MonthStart:yyyy-MM-dd}";
-        var stats = new List<DashboardStat> { Count("Receipts", payments.Count, link) };
-        stats.AddRange(payments.GroupBy(x => x.Currency ?? "KES").OrderByDescending(g => g.Count())
-            .Select(g => new DashboardStat("Received", g.Sum(x => x.Amount), "money", g.Key, link)));
-        return new Result(stats, []);
-    }
-
-    private async Task<Result> TaxWithheldAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
-    {
-        var rows = await dbContext.WithholdingCertificates.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && x.Status == "Confirmed" && x.CertificateDate >= clock.MonthStart && x.CertificateDate <= clock.Today)
-            .Select(x => new { x.TaxType, x.Amount, Currency = x.Invoice!.Currency })
-            .ToListAsync(ct);
-        var stats = new List<DashboardStat> { Count("Certificates", rows.Count, "/finance/receipts") };
-        stats.AddRange(rows.GroupBy(x => new { x.TaxType, x.Currency }).OrderBy(g => g.Key.TaxType)
-            .Select(g => new DashboardStat(g.Key.TaxType == WithholdingTaxTypes.Vat ? "VAT withheld" : "Income tax withheld", g.Sum(x => x.Amount), "money", g.Key.Currency, "/finance/receipts")));
-        return new Result(stats, []);
-    }
-
-    private async Task<Result> InvoicesToSendAsync(DashboardQueryViewer viewer, CancellationToken ct)
-    {
-        var drafts = dbContext.TenantInvoices.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && x.DocumentType == "Invoice" && x.Status == "Draft");
-        var count = await drafts.CountAsync(ct);
-        var oldest = await drafts.OrderBy(x => x.InvoiceDate).Take(ListLimit)
-            .Select(x => new { x.Id, x.InvoiceNumber, Client = x.Client!.ClientName, x.TotalAmount, x.Currency })
-            .ToListAsync(ct);
-        return new Result(
-            [Count("Drafts", count, "/finance/invoices?status=Draft", "warning")],
-            [.. oldest.Select(x => new DashboardListItem($"{x.InvoiceNumber} {x.Client}", null, x.TotalAmount, "money", x.Currency, $"/finance/invoices/{x.Id}"))]);
     }
 
     // ── Activities ───────────────────────────────────────────────────────────

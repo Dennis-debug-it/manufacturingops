@@ -13,20 +13,9 @@ interface FinanceNavGroup {
   items: FinanceNavItem[]
 }
 
-const overview: FinanceNavItem = { to: '/finance', label: 'Overview' }
+const overview: FinanceNavItem = { to: '/finance', label: 'Pricing' }
 
 const financeNavGroups: FinanceNavGroup[] = [
-  {
-    label: 'Documents',
-    to: '/finance/documents',
-    items: [
-      { to: '/finance/documents', label: 'Documents' },
-      { to: '/finance/quotes', label: 'Quotes' },
-      { to: '/finance/invoices', label: 'Invoices' },
-      { to: '/finance/credit-notes', label: 'Credit Notes' },
-      { to: '/finance/receipts', label: 'Receipts' },
-    ],
-  },
   {
     label: 'Pricing',
     to: '/finance/rate-cards',
@@ -34,24 +23,6 @@ const financeNavGroups: FinanceNavGroup[] = [
       { to: '/finance/rate-cards', label: 'Rate Cards' },
       { to: '/finance/preferential-rates', label: 'Preferential Rates' },
       { to: '/finance/exchange-rates', label: 'Exchange Rates' },
-    ],
-  },
-  {
-    label: 'Control',
-    to: '/finance/invoice-approvals',
-    items: [
-      { to: '/finance/invoice-approvals', label: 'Approvals' },
-      { to: '/finance/credit-control', label: 'Credit Control' },
-      { to: '/finance/aging', label: 'Aging' },
-    ],
-  },
-  {
-    label: 'Reports',
-    to: '/finance/reports',
-    items: [
-      { to: '/finance/reports', label: 'Reports' },
-      { to: '/finance/expenses', label: 'Expenses' },
-      { to: '/finance/payables', label: 'Payables' },
     ],
   },
 ]

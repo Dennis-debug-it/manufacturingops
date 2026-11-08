@@ -51,17 +51,11 @@ public static class DashboardWidgetCatalog
     public const string MaterialsLowStock = "materials.low-stock";
     public const string MaterialsPendingIssues = "materials.pending-issues";
     public const string PurchaseOrdersOpen = "purchase-orders.open";
-    public const string FinanceReceivablesOverdue = "finance.receivables-overdue";
-    public const string FinanceReceivablesAgeing = "finance.receivables-ageing";
-    public const string FinanceCashReceived = "finance.cash-received";
-    public const string FinanceTaxWithheld = "finance.tax-withheld";
-    public const string FinanceInvoicesToSend = "finance.invoices-to-send";
     public const string ActionItemsDue = "action-items.due";
 
     private static readonly string[] Ops = [ServiceOpsPlans.Operations];
     private static readonly string[] Mnt = [ServiceOpsPlans.Maintenance];
     private static readonly string[] Inv = [ServiceOpsPlans.Inventory];
-    private static readonly string[] Fin = [ServiceOpsPlans.Finance];
 
     private static readonly string[] ViewWorkOrders = [PermissionNames.CanViewWorkOrders];
     private static readonly string[] Dispatch = [PermissionNames.CanAssignWorkOrders];
@@ -70,13 +64,11 @@ public static class DashboardWidgetCatalog
         PermissionNames.CanViewMaterials, PermissionNames.CanRequestMaterials, PermissionNames.CanManageMaterials,
         PermissionNames.CanApproveMaterials, PermissionNames.CanIssueMaterials,
     ];
-    private static readonly string[] ViewFinance = [PermissionNames.FinanceView];
 
     private static readonly string[] WorkOrderData = [DashboardDataAreas.WorkOrders];
     private static readonly string[] PmData = [DashboardDataAreas.Maintenance, DashboardDataAreas.WorkOrders];
     private static readonly string[] ContractData = [DashboardDataAreas.Contracts];
     private static readonly string[] MaterialData = [DashboardDataAreas.Materials];
-    private static readonly string[] FinanceData = [DashboardDataAreas.Finance];
     private static readonly string[] ActivityData = [DashboardDataAreas.Activities];
 
     public static readonly IReadOnlyList<DashboardWidgetDefinition> All =
@@ -103,16 +95,6 @@ public static class DashboardWidgetCatalog
             Inv, [PermissionNames.CanIssueMaterials, PermissionNames.CanApproveMaterials, PermissionNames.CanManageMaterials], DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, MaterialData),
         new(PurchaseOrdersOpen, "Open purchase orders", "Purchase orders not yet fully received, and those past their expected date.",
             Inv, [PermissionNames.CanViewMaterials, PermissionNames.CanManageMaterials], DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, MaterialData),
-        new(FinanceReceivablesOverdue, "Receivables overdue", "Unpaid invoice balances past their due date.",
-            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
-        new(FinanceReceivablesAgeing, "Receivables ageing", "Unpaid invoice balances by days past due.",
-            Fin, ViewFinance, DashboardWidgetSizes.Wide, DashboardWidgetScope.Tenant, FinanceData),
-        new(FinanceCashReceived, "Cash received this month", "Confirmed receipts since the first of the month.",
-            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
-        new(FinanceTaxWithheld, "Tax withheld this month", "Withholding certificates dated this month.",
-            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
-        new(FinanceInvoicesToSend, "Invoices to send", "Draft invoices not yet issued.",
-            Fin, ViewFinance, DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, FinanceData),
         new(ActionItemsDue, "My action items", "Your open action items: overdue, and due in the next seven days.",
             [], [PermissionNames.ActivitiesView], DashboardWidgetSizes.Small, DashboardWidgetScope.User, ActivityData),
     ];
@@ -140,7 +122,6 @@ public static class DashboardRoleDefaults
         DashboardWidgetCatalog.TechniciansWorkload,
         DashboardWidgetCatalog.MaintenancePmCompliance,
         DashboardWidgetCatalog.ContractsExpiring,
-        DashboardWidgetCatalog.FinanceReceivablesOverdue,
     ];
 
     private static readonly string[] Dispatcher =
@@ -153,10 +134,8 @@ public static class DashboardRoleDefaults
 
     private static readonly string[] Finance =
     [
-        DashboardWidgetCatalog.FinanceReceivablesAgeing,
-        DashboardWidgetCatalog.FinanceCashReceived,
-        DashboardWidgetCatalog.FinanceTaxWithheld,
-        DashboardWidgetCatalog.FinanceInvoicesToSend,
+        DashboardWidgetCatalog.PurchaseOrdersOpen,
+        DashboardWidgetCatalog.ActionItemsDue,
     ];
 
     private static readonly string[] ProjectManagerWidgets =

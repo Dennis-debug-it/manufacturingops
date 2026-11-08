@@ -649,10 +649,10 @@ public sealed class ClientsController(
             await dbContext.Assets.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
             await dbContext.Systems.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
             await dbContext.Contracts.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
-            await dbContext.TenantInvoices.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
-            await dbContext.TenantPayments.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
-            await dbContext.CreditNotes.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
-            await dbContext.TenantQuotations.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
+            0,
+            0,
+            0,
+            0,
             await dbContext.Sites.CountAsync(x => x.TenantId == TenantId && x.ClientId == client.Id, cancellationToken),
             0);
     }

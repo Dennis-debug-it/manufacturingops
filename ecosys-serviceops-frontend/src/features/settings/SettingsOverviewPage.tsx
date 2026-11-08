@@ -62,7 +62,6 @@ const groups: SettingsGroup[] = [
     items: [
       { to: '/settings/finance-defaults', label: 'Finance Defaults', description: 'Default tax rate, payment terms, and approval rules.', icon: Percent },
       { to: '/settings/payments', label: 'Payments', description: 'M-Pesa, Stripe, and bank transfer settings.', icon: CreditCard },
-      { to: '/settings/credit-control', label: 'Credit Control', description: 'Payment terms and credit limits.', icon: ShieldCheck },
       { to: '/settings/approval-matrix', label: 'Approval Matrix', description: 'Amount-based approval chains for POs and expenses.', icon: GitBranch },
     ],
   },

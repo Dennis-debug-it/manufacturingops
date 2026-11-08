@@ -47,9 +47,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<PurchaseOrderLine> PurchaseOrderLines => Set<PurchaseOrderLine>();
     public DbSet<PurchaseOrderReceiptEvent> PurchaseOrderReceiptEvents => Set<PurchaseOrderReceiptEvent>();
     public DbSet<ExchangeRate> ExchangeRates => Set<ExchangeRate>();
-    public DbSet<Expense> Expenses => Set<Expense>();
-    public DbSet<SupplierBill> SupplierBills => Set<SupplierBill>();
-    public DbSet<SupplierBillPayment> SupplierBillPayments => Set<SupplierBillPayment>();
     public DbSet<WhatsAppSetting> WhatsAppSettings => Set<WhatsAppSetting>();
     public DbSet<WhatsAppConversation> WhatsAppConversations => Set<WhatsAppConversation>();
     public DbSet<WhatsAppMessage> WhatsAppMessages => Set<WhatsAppMessage>();
@@ -229,21 +226,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<ContractRateRule> ContractRateRules => Set<ContractRateRule>();
     public DbSet<ContractPmEntitlement> ContractPmEntitlements => Set<ContractPmEntitlement>();
     public DbSet<ContractRenewal> ContractRenewals => Set<ContractRenewal>();
-    public DbSet<WorkOrderBillableItem> WorkOrderBillableItems => Set<WorkOrderBillableItem>();
     public DbSet<WorkOrderTimeLog> WorkOrderTimeLogs => Set<WorkOrderTimeLog>();
     public DbSet<WorkOrderVisit> WorkOrderVisits => Set<WorkOrderVisit>();
     public DbSet<PartsReturn> PartsReturns => Set<PartsReturn>();
     public DbSet<PartsReturnLine> PartsReturnLines => Set<PartsReturnLine>();
-    public DbSet<TenantInvoice> TenantInvoices => Set<TenantInvoice>();
-    public DbSet<TenantInvoiceLine> TenantInvoiceLines => Set<TenantInvoiceLine>();
-    public DbSet<TenantPayment> TenantPayments => Set<TenantPayment>();
-    public DbSet<PaymentAllocation> PaymentAllocations => Set<PaymentAllocation>();
-    public DbSet<CreditNote> CreditNotes => Set<CreditNote>();
-    public DbSet<CreditNoteLine> CreditNoteLines => Set<CreditNoteLine>();
-    public DbSet<TenantQuotation> TenantQuotations => Set<TenantQuotation>();
-    public DbSet<TenantQuotationLine> TenantQuotationLines => Set<TenantQuotationLine>();
     public DbSet<ClientContact> ClientContacts => Set<ClientContact>();
-    public DbSet<CreditTerm> CreditTerms => Set<CreditTerm>();
     public DbSet<ScheduledReport> ScheduledReports => Set<ScheduledReport>();
     public DbSet<Activity> Activities => Set<Activity>();
     public DbSet<ActivityAttendee> ActivityAttendees => Set<ActivityAttendee>();
@@ -251,7 +238,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<ActionItem> ActionItems => Set<ActionItem>();
     public DbSet<ActivityReminderLog> ActivityReminderLogs => Set<ActivityReminderLog>();
     public DbSet<CalendarFeedToken> CalendarFeedTokens => Set<CalendarFeedToken>();
-    public DbSet<WithholdingCertificate> WithholdingCertificates => Set<WithholdingCertificate>();
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -639,12 +625,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.SlaDefinition)
                 .WithMany(x => x.Clients)
                 .HasForeignKey(x => x.SlaDefinitionId)
-                .OnDelete(DeleteBehavior.SetNull);
-            entity.Property(x => x.CreditLimit).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.CurrentBalance).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
-            entity.HasOne(x => x.DefaultCreditTerm)
-                .WithMany(x => x.Clients)
-                .HasForeignKey(x => x.DefaultCreditTermId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -1115,7 +1095,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.PreviousStatus).HasMaxLength(50);
             entity.HasIndex(x => new { x.TenantId, x.WorkOrderNumber }).IsUnique();
             entity.HasIndex(x => x.TrackingToken).IsUnique().HasFilter("\"TrackingToken\" IS NOT NULL");
-            entity.HasIndex(x => x.QuoteId);
             entity.HasIndex(x => x.ParentWorkOrderId);
             entity.HasIndex(x => x.FollowUpOfWorkOrderId);
             entity.HasOne(x => x.Tenant)
@@ -1177,10 +1156,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne(x => x.WorkOrderTemplate)
                 .WithMany(x => x.WorkOrders)
                 .HasForeignKey(x => x.WorkOrderTemplateId)
-                .OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.Quote)
-                .WithMany()
-                .HasForeignKey(x => x.QuoteId)
                 .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.ParentWorkOrder)
                 .WithMany(x => x.ChildWorkOrders)
@@ -3918,37 +3893,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         });
         ApplyTenantFilter<RateCard>(modelBuilder);
 
-        modelBuilder.Entity<WorkOrderBillableItem>(entity =>
-        {
-            entity.ToTable("work_order_billable_items");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.ItemType).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
-            entity.Property(x => x.Quantity).HasPrecision(18, 4).IsRequired();
-            entity.Property(x => x.Unit).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.UnitRate).HasPrecision(18, 4).IsRequired();
-            entity.Property(x => x.LineTotal).HasPrecision(18, 2).IsRequired();
-            entity.Property(x => x.TaxRate).HasPrecision(8, 4).IsRequired();
-            entity.Property(x => x.TaxAmount).HasPrecision(18, 2).IsRequired();
-            entity.Property(x => x.GrandTotal).HasPrecision(18, 2).IsRequired();
-            entity.Property(x => x.Notes).HasMaxLength(1000);
-            entity.HasIndex(x => new { x.TenantId, x.WorkOrderId });
-            entity.HasIndex(x => new { x.TenantId, x.IsBilled });
-            entity.HasOne(x => x.Tenant)
-                .WithMany()
-                .HasForeignKey(x => x.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.WorkOrder)
-                .WithMany(x => x.BillableItems)
-                .HasForeignKey(x => x.WorkOrderId)
-                .OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.RateCard)
-                .WithMany()
-                .HasForeignKey(x => x.RateCardId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
-        ApplyTenantFilter<WorkOrderBillableItem>(modelBuilder);
-
         modelBuilder.Entity<WorkOrderTimeLog>(entity =>
         {
             entity.ToTable("work_order_time_logs");
@@ -4148,153 +4092,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         });
 
         // ── TenantInvoice ────────────────────────────────────────────────────
-        modelBuilder.Entity<TenantInvoice>(entity =>
-        {
-            entity.ToTable("tenant_invoices");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.InvoiceNumber).HasMaxLength(60).IsRequired();
-            entity.Property(x => x.DocumentType).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Notes).HasMaxLength(2000);
-            entity.Property(x => x.TermsAndConditions).HasMaxLength(4000);
-            entity.Property(x => x.Subtotal).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.TaxAmount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.TotalAmount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.AmountPaid).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Balance).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired();
-            entity.Property(x => x.DepositAmount).HasColumnType("numeric(18,2)");
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Client).WithMany(x => x.Invoices).HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.CreditTerm).WithMany(x => x.Invoices).HasForeignKey(x => x.CreditTermId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => new { x.TenantId, x.InvoiceNumber }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.DocumentType });
-            entity.HasIndex(x => new { x.TenantId, x.Status });
-            entity.HasIndex(x => new { x.TenantId, x.ClientId });
-        });
-        ApplyTenantFilter<TenantInvoice>(modelBuilder);
-
-        modelBuilder.Entity<TenantInvoiceLine>(entity =>
-        {
-            entity.ToTable("tenant_invoice_lines");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
-            entity.Property(x => x.ItemType).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Unit).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Quantity).HasColumnType("numeric(18,4)");
-            entity.Property(x => x.UnitRate).HasColumnType("numeric(18,4)");
-            entity.Property(x => x.LineTotal).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.TaxRate).HasColumnType("numeric(8,4)");
-            entity.Property(x => x.TaxAmount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.GrandTotal).HasColumnType("numeric(18,2)");
-            entity.HasOne(x => x.Invoice).WithMany(x => x.Lines).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.BillableItem).WithMany().HasForeignKey(x => x.BillableItemId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => x.InvoiceId);
-        });
-
         // ── TenantPayment ────────────────────────────────────────────────────
-        modelBuilder.Entity<TenantPayment>(entity =>
-        {
-            entity.ToTable("tenant_payments");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.PaymentNumber).HasMaxLength(60).IsRequired();
-            entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Method).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Reference).HasMaxLength(200);
-            entity.Property(x => x.Notes).HasMaxLength(1000);
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Invoice).WithMany(x => x.Payments).HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(x => new { x.TenantId, x.PaymentNumber }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.InvoiceId });
-        });
-        ApplyTenantFilter<TenantPayment>(modelBuilder);
-
         // ── PaymentAllocation ────────────────────────────────────────────────
-        modelBuilder.Entity<PaymentAllocation>(entity =>
-        {
-            entity.ToTable("payment_allocations");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.SourceType).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.Amount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(x => new { x.TenantId, x.InvoiceId, x.Status });
-            entity.HasIndex(x => new { x.TenantId, x.SourceType, x.SourceId });
-        });
-        ApplyTenantFilter<PaymentAllocation>(modelBuilder);
-
         // ── CreditNote ───────────────────────────────────────────────────────
-        modelBuilder.Entity<CreditNote>(entity =>
-        {
-            entity.ToTable("credit_notes");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.CreditNoteNumber).HasMaxLength(60).IsRequired();
-            entity.Property(x => x.Reason).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Notes).HasMaxLength(2000);
-            entity.Property(x => x.Subtotal).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.TaxAmount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.TotalAmount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.AmountApplied).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Balance).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired();
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => new { x.TenantId, x.CreditNoteNumber }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.Status });
-            entity.HasIndex(x => new { x.TenantId, x.ClientId });
-        });
-        ApplyTenantFilter<CreditNote>(modelBuilder);
-
-        modelBuilder.Entity<CreditNoteLine>(entity =>
-        {
-            entity.ToTable("credit_note_lines");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
-            entity.Property(x => x.ItemType).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Unit).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Quantity).HasColumnType("numeric(18,4)");
-            entity.Property(x => x.UnitRate).HasColumnType("numeric(18,4)");
-            entity.Property(x => x.LineTotal).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.TaxRate).HasColumnType("numeric(8,4)");
-            entity.Property(x => x.TaxAmount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.GrandTotal).HasColumnType("numeric(18,2)");
-            entity.HasOne(x => x.CreditNote).WithMany(x => x.Lines).HasForeignKey(x => x.CreditNoteId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(x => x.CreditNoteId);
-        });
-
         // ── TenantQuotation ──────────────────────────────────────────────────
-        modelBuilder.Entity<TenantQuotation>(entity =>
-        {
-            entity.ToTable("tenant_quotations");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.QuoteNumber).HasMaxLength(60).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.AcceptedByName).HasMaxLength(150);
-            entity.Property(x => x.AcceptedByTitle).HasMaxLength(120);
-            entity.Property(x => x.AcceptedFromIp).HasMaxLength(64);
-            entity.Property(x => x.Subject).HasMaxLength(300);
-            entity.Property(x => x.Notes).HasMaxLength(2000);
-            entity.Property(x => x.RejectionReason).HasMaxLength(500);
-            entity.Property(x => x.Subtotal).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.TaxAmount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.TotalAmount).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired();
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.Site).WithMany().HasForeignKey(x => x.SiteId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.ConvertedToInvoice).WithMany().HasForeignKey(x => x.ConvertedToInvoiceId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasOne(x => x.ConvertedToWorkOrder).WithMany().HasForeignKey(x => x.ConvertedToWorkOrderId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => new { x.TenantId, x.QuoteNumber }).IsUnique();
-            entity.HasIndex(x => new { x.TenantId, x.Status });
-        });
-        ApplyTenantFilter<TenantQuotation>(modelBuilder);
-
         // ── Sales CRM ────────────────────────────────────────────────────────
         modelBuilder.Entity<ClientContact>(entity =>
         {
@@ -4312,42 +4113,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         });
         ApplyTenantFilter<ClientContact>(modelBuilder);
 
-        modelBuilder.Entity<TenantQuotationLine>(entity =>
-        {
-            entity.ToTable("tenant_quotation_lines");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Description).HasMaxLength(500).IsRequired();
-            entity.Property(x => x.ItemType).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Unit).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Quantity).HasColumnType("numeric(18,4)");
-            entity.Property(x => x.UnitRate).HasColumnType("numeric(18,4)");
-            entity.Property(x => x.LineTotal).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.TaxRate).HasColumnType("numeric(8,4)");
-            entity.Property(x => x.GrandTotal).HasColumnType("numeric(18,2)");
-            entity.HasOne(x => x.Quotation).WithMany(x => x.Lines).HasForeignKey(x => x.QuotationId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.RateCard).WithMany().HasForeignKey(x => x.RateCardId).OnDelete(DeleteBehavior.SetNull);
-            entity.HasIndex(x => x.QuotationId);
-        });
-
         // ── CreditTerm ───────────────────────────────────────────────────────
-        modelBuilder.Entity<CreditTerm>(entity =>
-        {
-            entity.ToTable("credit_terms");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
-            entity.Property(x => x.Code).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.NetDays).HasDefaultValue(30);
-            entity.Property(x => x.DepositPercent).HasColumnType("numeric(5,2)");
-            entity.Property(x => x.CreditLimit).HasColumnType("numeric(18,2)");
-            entity.Property(x => x.Description).HasMaxLength(500);
-            entity.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
-            entity.HasOne(x => x.Tenant)
-                .WithMany()
-                .HasForeignKey(x => x.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<CreditTerm>(modelBuilder);
-
         // ── ScheduledReport ──────────────────────────────────────────────────
         modelBuilder.Entity<ScheduledReport>(entity =>
         {
@@ -4565,52 +4331,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .OnDelete(DeleteBehavior.Cascade);
         });
         ApplyTenantFilter<ExchangeRate>(modelBuilder);
-
-        modelBuilder.Entity<Expense>(entity =>
-        {
-            entity.ToTable("expenses");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.ClaimNumber).HasMaxLength(60).IsRequired();
-            entity.Property(x => x.SubmittedByName).HasMaxLength(200);
-            entity.Property(x => x.Category).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.Amount).HasPrecision(18, 2);
-            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired().HasDefaultValue("KES");
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired().HasDefaultValue("Submitted");
-            entity.Property(x => x.Description).HasMaxLength(2000);
-            entity.Property(x => x.ApprovedByName).HasMaxLength(200);
-            entity.HasIndex(x => new { x.TenantId, x.Status });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<Expense>(modelBuilder);
-
-        modelBuilder.Entity<SupplierBill>(entity =>
-        {
-            entity.ToTable("supplier_bills");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.BillNumber).HasMaxLength(60).IsRequired();
-            entity.Property(x => x.Amount).HasPrecision(18, 2);
-            entity.Property(x => x.AmountPaid).HasPrecision(18, 2);
-            entity.Property(x => x.Currency).HasMaxLength(10).IsRequired().HasDefaultValue("KES");
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired().HasDefaultValue("Open");
-            entity.Property(x => x.Notes).HasMaxLength(2000);
-            entity.HasIndex(x => new { x.TenantId, x.Status });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
-        });
-        ApplyTenantFilter<SupplierBill>(modelBuilder);
-
-        modelBuilder.Entity<SupplierBillPayment>(entity =>
-        {
-            entity.ToTable("supplier_bill_payments");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Amount).HasPrecision(18, 2);
-            entity.Property(x => x.Method).HasMaxLength(60).IsRequired();
-            entity.Property(x => x.Reference).HasMaxLength(120);
-            entity.HasIndex(x => x.SupplierBillId);
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.SupplierBill).WithMany(x => x.Payments).HasForeignKey(x => x.SupplierBillId).OnDelete(DeleteBehavior.Cascade);
-        });
-        ApplyTenantFilter<SupplierBillPayment>(modelBuilder);
 
         modelBuilder.Entity<WhatsAppSetting>(entity =>
         {
@@ -4853,27 +4573,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         });
         ApplyTenantFilter<CalendarFeedToken>(modelBuilder);
 
-        modelBuilder.Entity<WithholdingCertificate>(entity =>
-        {
-            entity.ToTable("withholding_certificates", tableBuilder =>
-            {
-                tableBuilder.HasCheckConstraint("CK_withholding_certificates_amount", "\"Amount\" > 0");
-                tableBuilder.HasCheckConstraint("CK_withholding_certificates_tax_type", "\"TaxType\" IN ('VAT', 'IncomeTax')");
-            });
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.TaxType).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.RatePercent).HasPrecision(5, 2);
-            entity.Property(x => x.Amount).HasPrecision(18, 2);
-            entity.Property(x => x.CertificateNumber).HasMaxLength(100).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
-            entity.Property(x => x.Notes).HasMaxLength(1000);
-            entity.HasIndex(x => new { x.TenantId, x.InvoiceId });
-            entity.HasIndex(x => new { x.TenantId, x.ClientId, x.CertificateNumber });
-            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne(x => x.Client).WithMany().HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.Invoice).WithMany().HasForeignKey(x => x.InvoiceId).OnDelete(DeleteBehavior.Restrict);
-        });
-        ApplyTenantFilter<WithholdingCertificate>(modelBuilder);
     }
 
     private void ApplyTenantFilter<TEntity>(ModelBuilder modelBuilder)

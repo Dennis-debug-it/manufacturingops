@@ -181,7 +181,7 @@ public sealed class RoleDashboardTests
         var saved = await dispatcher.SaveLayoutAsync(
         [
             new(DashboardWidgetCatalog.TechniciansOnSite, "wide"),
-            new(DashboardWidgetCatalog.FinanceCashReceived, "small"),   // no finance.view
+            new(DashboardWidgetCatalog.PurchaseOrdersOpen, "small"),   // no materials.view
             new("made-up", "small"),
             new(DashboardWidgetCatalog.TechniciansOnSite, "small"),     // duplicate
             new(DashboardWidgetCatalog.WorkOrdersUnassigned, "huge"),   // bad size → default
@@ -190,9 +190,9 @@ public sealed class RoleDashboardTests
         Assert.True(saved.IsCustomized);
         Assert.Equal([new DashboardLayoutItem(DashboardWidgetCatalog.TechniciansOnSite, "wide"), new DashboardLayoutItem(DashboardWidgetCatalog.WorkOrdersUnassigned, "small")], saved.Items);
         var stored = DashboardLayoutRules.Parse((await harness.Db.UserDashboardLayouts.SingleAsync()).LayoutJson)!;
-        Assert.DoesNotContain(stored.Items, x => x.Key == DashboardWidgetCatalog.FinanceCashReceived);
+        Assert.DoesNotContain(stored.Items, x => x.Key == DashboardWidgetCatalog.PurchaseOrdersOpen);
         // The layout can't open the widget either.
-        await Assert.ThrowsAsync<ForbiddenException>(() => dispatcher.GetWidgetAsync(DashboardWidgetCatalog.FinanceCashReceived, null, false));
+        await Assert.ThrowsAsync<ForbiddenException>(() => dispatcher.GetWidgetAsync(DashboardWidgetCatalog.PurchaseOrdersOpen, null, false));
     }
 
     [Fact]
@@ -200,11 +200,11 @@ public sealed class RoleDashboardTests
     {
         var harness = await Harness.CreateAsync();
         var before = harness.Service(harness.ManagerId, AppRoles.Manager, permissions: PermissionNames.All);
-        await before.SaveLayoutAsync([new(DashboardWidgetCatalog.FinanceCashReceived, "small"), new(DashboardWidgetCatalog.ContractsExpiring, "small")]);
+        await before.SaveLayoutAsync([new(DashboardWidgetCatalog.PurchaseOrdersOpen, "small"), new(DashboardWidgetCatalog.ContractsExpiring, "small")]);
 
         var after = harness.Service(harness.ManagerId, AppRoles.Manager, permissions: [PermissionNames.CanViewWorkOrders]);
         var layout = await after.GetLayoutAsync();
-        Assert.DoesNotContain(layout.Items, x => x.Key == DashboardWidgetCatalog.FinanceCashReceived);
+        Assert.DoesNotContain(layout.Items, x => x.Key == DashboardWidgetCatalog.PurchaseOrdersOpen);
         Assert.Equal(DashboardWidgetCatalog.ContractsExpiring, layout.Items[0].Key);
     }
 
@@ -230,7 +230,7 @@ public sealed class RoleDashboardTests
         var harness = await Harness.CreateAsync();
         var manager = harness.Service(harness.ManagerId, AppRoles.Manager, permissions: PermissionNames.All);
         var defaults = DashboardRoleDefaults.For(AppRoles.Manager);
-        // A layout saved before "receivables overdue" joined the manager default.
+        // A layout saved before "contracts expiring" joined the manager default.
         harness.Db.UserDashboardLayouts.Add(new UserDashboardLayout
         {
             TenantId = harness.TenantId,
@@ -238,13 +238,13 @@ public sealed class RoleDashboardTests
             LayoutJson = DashboardLayoutRules.Serialize(new StoredDashboardLayout
             {
                 Items = [new(DashboardWidgetCatalog.MaterialsLowStock, "small")],
-                SeenDefaults = [.. defaults.Where(x => x != DashboardWidgetCatalog.FinanceReceivablesOverdue)],
+                SeenDefaults = [.. defaults.Where(x => x != DashboardWidgetCatalog.ContractsExpiring)],
             }),
         });
         await harness.Db.SaveChangesAsync();
 
         var layout = await manager.GetLayoutAsync();
-        Assert.Equal([DashboardWidgetCatalog.MaterialsLowStock, DashboardWidgetCatalog.FinanceReceivablesOverdue], layout.Items.Select(x => x.Key));
+        Assert.Equal([DashboardWidgetCatalog.MaterialsLowStock, DashboardWidgetCatalog.ContractsExpiring], layout.Items.Select(x => x.Key));
 
         // The user removes it; it does not come back.
         await manager.SaveLayoutAsync([new(DashboardWidgetCatalog.MaterialsLowStock, "small")]);
@@ -454,32 +454,6 @@ public sealed class RoleDashboardTests
     }
 
     [Fact]
-    public void InvoiceAgeFilter_MatchesWhatTheFinanceWidgetsCount()
-    {
-        var today = new DateTime(2026, 10, 20, 21, 0, 0, DateTimeKind.Utc);
-        TenantInvoice Invoice(string number, double dueDaysAgo, string status = "Sent", decimal balance = 100, string type = "Invoice") =>
-            new() { InvoiceNumber = number, Status = status, Balance = balance, DocumentType = type, DueDate = today.AddDays(-dueDaysAgo) };
-        var rows = new[]
-        {
-            Invoice("future", -3), Invoice("hours", 0.5), Invoice("d30", 30), Invoice("d31", 30.2), Invoice("d61", 61), Invoice("d95", 95),
-            Invoice("draft", 40, status: "Draft"), Invoice("void", 40, status: "Void"), Invoice("paid", 40, balance: 0), Invoice("proforma", 40, type: "ProformaInvoice"),
-        }.AsQueryable();
-        string[] Age(string age) => [.. ReceivableAges.Apply(rows, age, today).Select(x => x.InvoiceNumber)];
-
-        Assert.Equal(["hours", "d30", "d31", "d61", "d95"], Age("overdue"));
-        Assert.Equal(["future"], Age(" Current "));
-        Assert.Equal(["hours", "d30"], Age("1-30"));
-        Assert.Equal(["d31"], Age("31-60"));
-        Assert.Equal(["d61"], Age("61-90"));
-        Assert.Equal(["d95"], Age("90-plus"));
-        // Every receivable lands in exactly the bucket the ageing widget puts it in.
-        foreach (var invoice in ReceivableAges.Receivables(rows))
-            Assert.Contains(invoice.InvoiceNumber, Age(ReceivableAges.BucketOf(invoice.DueDate, today)));
-        Assert.Equal(1, ReceivableAges.DaysOverdue(today.AddHours(-1), today));
-        Assert.Throws<BusinessRuleException>(() => Age("120"));
-    }
-
-    [Fact]
     public void PurchaseOrderStateFilter_MatchesWhatTheDashboardCounts()
     {
         var today = new DateTime(2026, 10, 20, 21, 0, 0, DateTimeKind.Utc);
@@ -506,11 +480,6 @@ public sealed class RoleDashboardTests
         async Task<string> Link(string key, string label) =>
             (await admin.GetWidgetAsync(key, null, true)).Stats.First(x => x.Label == label).Link;
 
-        Assert.Equal("/finance/invoices?age=overdue", await Link(DashboardWidgetCatalog.FinanceReceivablesOverdue, "Overdue invoices"));
-        Assert.Equal("/finance/invoices?age=overdue&currency=KES", await Link(DashboardWidgetCatalog.FinanceReceivablesOverdue, "Overdue balance"));
-        Assert.Equal("/finance/invoices?age=31-60&currency=KES", await Link(DashboardWidgetCatalog.FinanceReceivablesAgeing, "31–60 days"));
-        Assert.Equal("/finance/invoices?status=Draft", await Link(DashboardWidgetCatalog.FinanceInvoicesToSend, "Drafts"));
-        Assert.StartsWith("/finance/receipts?status=Confirmed&from=", await Link(DashboardWidgetCatalog.FinanceCashReceived, "Receipts"));
         Assert.Equal("/inventory/purchase-orders?state=late", await Link(DashboardWidgetCatalog.PurchaseOrdersOpen, "Past expected date"));
         Assert.Equal("/inventory/requests?stage=Requested", await Link(DashboardWidgetCatalog.MaterialsPendingIssues, "Awaiting approval"));
         Assert.Equal("/contracts?expiring=30", await Link(DashboardWidgetCatalog.ContractsExpiring, "Within 30 days"));
@@ -723,26 +692,6 @@ public sealed class RoleDashboardTests
             });
             AddWorkOrder(null, "WO-101");
             Db.MaterialItems.Add(new MaterialItem { TenantId = TenantId, ItemCode = "FLT-1", ItemName = "Filter", UnitOfMeasure = "pc", QuantityOnHand = 1, ReorderLevel = 5, IsActive = true });
-            var invoice = new TenantInvoice
-            {
-                TenantId = TenantId, ClientId = ClientId, InvoiceNumber = "INV-001", Status = "Sent", InvoiceDate = DateTime.UtcNow.AddDays(-50),
-                DueDate = DateTime.UtcNow.AddDays(-40), Subtotal = 1000, TotalAmount = 1160, TaxAmount = 160, Balance = 1160, Currency = "KES",
-            };
-            Db.TenantInvoices.Add(invoice);
-            Db.TenantInvoices.Add(new TenantInvoice
-            {
-                TenantId = TenantId, ClientId = ClientId, InvoiceNumber = "INV-002", Status = "Draft", InvoiceDate = DateTime.UtcNow,
-                DueDate = DateTime.UtcNow.AddDays(30), TotalAmount = 500, Balance = 500, Currency = "KES",
-            });
-            Db.TenantPayments.Add(new TenantPayment
-            {
-                TenantId = TenantId, ClientId = ClientId, InvoiceId = invoice.Id, PaymentNumber = "RCT-1", Amount = 100, PaymentDate = DateTime.UtcNow, Status = "Confirmed",
-            });
-            Db.WithholdingCertificates.Add(new WithholdingCertificate
-            {
-                TenantId = TenantId, ClientId = ClientId, InvoiceId = invoice.Id, Amount = 20, CertificateNumber = "WHT-1",
-                CertificateDate = DateOnly.FromDateTime(DateTime.UtcNow), RecordedByUserId = AdminId,
-            });
             await Db.SaveChangesAsync();
         }
     }

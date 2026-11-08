@@ -9,7 +9,6 @@ import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import { ClientFormDrawer } from '../clients/components/ClientFormDrawer'
 import { NewWorkOrderForm } from '../work-orders/components/NewWorkOrderForm'
-import { NewInvoiceFormDrawer } from '../finance/components/NewInvoiceFormDrawer'
 import { NewUserFormDrawer } from '../team/components/NewUserFormDrawer'
 import { StarterPacks } from '../settings/components/StarterPacks'
 
@@ -19,9 +18,8 @@ export function OnboardingPage() {
   const { hasModule, planName, isLoading } = useEntitlements()
   const canAddCustomer = usePermission('clients.edit')
   const canCreateWorkOrder = usePermission('work-orders.create')
-  const canCreateInvoice = usePermission('finance.manage')
   const canInviteTeam = usePermission('team.manage')
-  const [action, setAction] = useState<'customer' | 'work-order' | 'invoice' | 'team' | null>(null)
+  const [action, setAction] = useState<'customer' | 'work-order' | 'team' | null>(null)
   const profile = useQuery({
     queryKey: ['tenant-profile', tenant?.tenantId],
     queryFn: () => api.get<{ serviceOpsEmail?: string | null }>(endpoints.tenant.profile),
@@ -46,7 +44,6 @@ export function OnboardingPage() {
         <div className="mt-6 flex flex-wrap gap-3">
           {canAddCustomer ? <button className={buttonClass} onClick={() => setAction('customer')}>Add Customer</button> : null}
           {hasModule('operations') && canCreateWorkOrder ? <button className={buttonClass} onClick={() => setAction('work-order')}>Create Work Order</button> : null}
-          {hasModule('finance') && canCreateInvoice ? <button className={buttonClass} onClick={() => setAction('invoice')}>Create Invoice</button> : null}
           {canInviteTeam ? <button className={buttonClass} onClick={() => setAction('team')}>Invite Team</button> : null}
           {!isLoading ? <Link to={hasModule('operations') ? '/dashboard' : '/finance'} className="inline-flex min-h-11 items-center justify-center rounded-lg bg-slate-900 px-4 py-3 text-sm font-medium text-white hover:bg-slate-800">Go to Dashboard</Link> : null}
         </div>
@@ -59,7 +56,6 @@ export function OnboardingPage() {
       ) : null}
       {action === 'customer' && canAddCustomer ? <ClientFormDrawer open onClose={() => setAction(null)} /> : null}
       {action === 'work-order' && hasModule('operations') && canCreateWorkOrder ? <NewWorkOrderForm open onClose={() => setAction(null)} /> : null}
-      {action === 'invoice' && hasModule('finance') && canCreateInvoice ? <NewInvoiceFormDrawer open onClose={() => setAction(null)} /> : null}
       {action === 'team' && canInviteTeam ? <NewUserFormDrawer open onClose={() => setAction(null)} /> : null}
     </div>
   )

@@ -101,13 +101,10 @@ public static class ClientMatching
             throw new BusinessRuleException("Only a prospect can be merged into another client.");
         var hasHistory = await dbContext.WorkOrders.AnyAsync(x => x.TenantId == tenantId && x.ClientId == sourceId, cancellationToken)
             || await dbContext.Assets.AnyAsync(x => x.TenantId == tenantId && x.ClientId == sourceId, cancellationToken)
-            || await dbContext.Contracts.AnyAsync(x => x.TenantId == tenantId && x.ClientId == sourceId, cancellationToken)
-            || await dbContext.TenantInvoices.AnyAsync(x => x.TenantId == tenantId && x.ClientId == sourceId, cancellationToken)
-            || await dbContext.TenantPayments.AnyAsync(x => x.TenantId == tenantId && x.ClientId == sourceId, cancellationToken);
+            || await dbContext.Contracts.AnyAsync(x => x.TenantId == tenantId && x.ClientId == sourceId, cancellationToken);
         if (hasHistory)
-            throw new BusinessRuleException($"{source.ClientName} already has jobs, assets, contracts or invoices, so it cannot be merged automatically.");
+            throw new BusinessRuleException($"{source.ClientName} already has jobs, assets or contracts, so it cannot be merged automatically.");
 
-        await dbContext.TenantQuotations.Where(x => x.TenantId == tenantId && x.ClientId == sourceId).ForEachAsync(x => x.ClientId = targetId, cancellationToken);
         await dbContext.Sites.Where(x => x.TenantId == tenantId && x.ClientId == sourceId).ForEachAsync(x => x.ClientId = targetId, cancellationToken);
         await dbContext.ClientPortalUsers.Where(x => x.TenantId == tenantId && x.ClientId == sourceId).ForEachAsync(x => x.ClientId = targetId, cancellationToken);
 

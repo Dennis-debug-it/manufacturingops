@@ -48,9 +48,7 @@ public sealed class ServiceOpsPlanTests
     [Theory]
     // Essentials: the whole work-order-to-invoice loop.
     [InlineData("essentials", "WorkOrders", "/api/workorders", true)]
-    [InlineData("essentials", "TenantInvoice", "/api/invoices", true)]
-    [InlineData("essentials", "TenantQuotation", "/api/quotations/123/convert-to-work-order", true)]
-    [InlineData("essentials", "TenantInvoice", "/api/work-orders/123/generate-invoice", true)]
+    [InlineData("essentials", "TenantFinance", "/api/finance/rate-cards", true)]
     [InlineData("essentials", "Clients", "/api/clients", true)]
     // Professional adds maintenance, inventory, projects and the advanced tools.
     [InlineData("essentials", "PreventiveMaintenance", "/api/preventive-maintenance", false)]
@@ -58,13 +56,11 @@ public sealed class ServiceOpsPlanTests
     [InlineData("essentials", "Contracts", "/api/contracts", false)]
     [InlineData("essentials", "Materials", "/api/materials", false)]
     [InlineData("essentials", "PurchaseOrders", "/api/purchase-orders", false)]
-    [InlineData("essentials", "ExpensesPayables", "/api/expenses", false)]
     [InlineData("essentials", "ApprovalMatrix", "/api/approvals/pending", false)]
     [InlineData("essentials", "Settings", "/api/settings/email-intake", false)]
     [InlineData("essentials", "AdvancedSettings", "/api/settings/inventory", false)]
     [InlineData("professional", "PreventiveMaintenance", "/api/preventive-maintenance", true)]
     [InlineData("professional", "Materials", "/api/materials", true)]
-    [InlineData("professional", "ExpensesPayables", "/api/expenses", true)]
     [InlineData("professional", "ApprovalMatrix", "/api/approvals/pending", true)]
     [InlineData("professional", "Settings", "/api/settings/email-intake", true)]
     // Enterprise adds API keys, webhooks and monitoring.

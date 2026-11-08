@@ -78,24 +78,9 @@ import { CalendarPage as MyCalendarPage } from '../features/activities/CalendarP
 import { CalendarFeedPage } from '../features/activities/CalendarFeedPage'
 import { ActivityDetailPage } from '../features/activities/ActivityDetailPage'
 import { ActionItemsPage } from '../features/activities/ActionItemsPage'
-import { InvoicesPage } from '../features/finance/InvoicesPage'
-import { DocumentsPage } from '../features/finance/DocumentsPage'
-import { InvoiceDetailPage } from '../features/finance/InvoiceDetailPage'
-import { FinanceOverviewPage } from '../features/finance/FinanceOverviewPage'
-import { QuotesPage } from '../features/finance/QuotesPage'
-import { QuoteDetailPage } from '../features/finance/QuoteDetailPage'
-import { AgingPage as FinanceAgingPageReal } from '../features/finance/AgingPage'
-import { CreditControlPage } from '../features/finance/CreditControlPage'
-import { ReceiptsPage } from '../features/finance/ReceiptsPage'
-import { CreditNotesPage } from '../features/finance/CreditNotesPage'
-import { CreditNoteDetailPage } from '../features/finance/CreditNoteDetailPage'
-import { ExpensesPage, ExpenseDetailPage } from '../features/finance/ExpensesPage'
-import { PayablesPage, PayableDetailPage } from '../features/finance/PayablesPage'
-import { InvoiceApprovalsPage } from '../features/finance/InvoiceApprovalsPage'
 import { RateCardsPage as FinanceRateCardsPageReal } from '../features/finance/RateCardsPage'
 import { PreferentialRatesPage as FinancePreferentialRatesPageReal } from '../features/finance/PreferentialRatesPage'
 import { ExchangeRatesPage as FinanceExchangeRatesPageReal } from '../features/finance/ExchangeRatesPage'
-import { FinanceReportsPage as FinanceReportsPageReal } from '../features/finance/FinanceReportsPage'
 import { ReportsPage as ReportsPageReal } from '../features/reports/ReportsPage'
 import { OnboardingPage as OnboardingPageReal } from '../features/onboarding/OnboardingPage'
 import { ClientsPage } from '../features/clients/ClientsPage'
@@ -145,7 +130,6 @@ import { AccountSettingsPage as SettingsAccountPageReal } from '../features/sett
 import { DocumentTemplatesSettingsPage as SettingsTemplatesPageReal } from '../features/settings/DocumentTemplatesSettingsPage'
 import { EmailIntakeSettingsPage as SettingsEmailIntakePageReal } from '../features/settings/EmailIntakeSettingsPage'
 import { MonitoringIntakeSettingsPage as SettingsMonitoringIntakePageReal } from '../features/settings/MonitoringIntakeSettingsPage'
-import { CreditControlSettingsPage as SettingsCreditControlPageReal } from '../features/settings/CreditControlSettingsPage'
 import { SettingsOverviewPage as SettingsOverviewPageReal } from '../features/settings/SettingsOverviewPage'
 import { TimeAttendanceSettingsPage as SettingsTimeAttendancePageReal } from '../features/settings/TimeAttendanceSettingsPage'
 import { InventorySettingsPage as SettingsInventoryPageReal } from '../features/settings/InventorySettingsPage'
@@ -209,22 +193,9 @@ const TimeAttendanceLeavePage = LeavePage
 const ContractsPage = ContractsPageReal
 const ContractDetailPage = ContractDetailPageReal
 
-const FinanceQuotesPage = QuotesPage
-const FinanceQuoteDetailPage = QuoteDetailPage
-const FinanceInvoicesPage = InvoicesPage
-const FinanceInvoiceDetailPage = InvoiceDetailPage
-const FinanceInvoiceApprovalsPage = InvoiceApprovalsPage
-const FinanceReceiptsPage = ReceiptsPage
-const FinanceExpensesPage = ExpensesPage
-const FinanceExpenseDetailPage = ExpenseDetailPage
-const FinancePayablesPage = PayablesPage
-const FinancePayableDetailPage = PayableDetailPage
 const FinanceRateCardsPage = FinanceRateCardsPageReal
 const FinancePreferentialRatesPage = FinancePreferentialRatesPageReal
 const FinanceExchangeRatesPage = FinanceExchangeRatesPageReal
-const FinanceCreditControlPage = CreditControlPage
-const FinanceAgingPage = FinanceAgingPageReal
-const FinanceReportsPage = FinanceReportsPageReal
 
 const ReportsPage = ReportsPageReal
 
@@ -240,7 +211,6 @@ const SettingsEmailIntakePage = SettingsEmailIntakePageReal
 const SettingsMonitoringIntakePage = SettingsMonitoringIntakePageReal
 const SettingsWhatsAppPage = SettingsWhatsAppPageReal
 const SettingsPaymentsPage = SettingsPaymentsPageReal
-const SettingsCreditControlPage = SettingsCreditControlPageReal
 const SettingsNotificationsPage = SettingsNotificationsPageReal
 const SettingsIntegrationsPage = SettingsIntegrationsPageReal
 const SettingsSecurityPage = SettingsSecurityPageReal
@@ -415,26 +385,10 @@ export function AppRouter() {
       ['/calendar/feed', CalendarFeedPage],
       ['/activities/:id', ActivityDetailPage],
       ['/action-items', ActionItemsPage],
-      ['/finance', FinanceOverviewPage],
-      ['/finance/documents', DocumentsPage],
-      ['/finance/quotes', FinanceQuotesPage],
-      ['/finance/quotes/:id', FinanceQuoteDetailPage],
-      ['/finance/invoices', FinanceInvoicesPage],
-      ['/finance/invoices/:id', FinanceInvoiceDetailPage],
-      ['/finance/invoice-approvals', FinanceInvoiceApprovalsPage],
-      ['/finance/receipts', FinanceReceiptsPage],
-      ['/finance/credit-notes', CreditNotesPage],
-      ['/finance/credit-notes/:id', CreditNoteDetailPage],
-      ['/finance/expenses', FinanceExpensesPage],
-      ['/finance/expenses/:id', FinanceExpenseDetailPage],
-      ['/finance/payables', FinancePayablesPage],
-      ['/finance/payables/:id', FinancePayableDetailPage],
+      ['/finance', FinanceRateCardsPage],
       ['/finance/rate-cards', FinanceRateCardsPage],
       ['/finance/preferential-rates', FinancePreferentialRatesPage],
       ['/finance/exchange-rates', FinanceExchangeRatesPage],
-      ['/finance/credit-control', FinanceCreditControlPage],
-      ['/finance/aging', FinanceAgingPage],
-      ['/finance/reports', FinanceReportsPage],
       ['/reports', ReportsPage],
       ['/whatsapp', WhatsAppInboxPage],
       ['/whatsapp/inbox', WhatsAppInboxPage],
@@ -461,7 +415,6 @@ export function AppRouter() {
       ['/settings/whatsapp', SettingsWhatsAppPage],
       ['/settings/whatsapp-reminders', WhatsAppRemindersSettingsPage],
       ['/settings/payments', SettingsPaymentsPage],
-      ['/settings/credit-control', SettingsCreditControlPage],
       ['/settings/notifications', MyNotificationSettingsPage],
       ['/settings/workspace-notifications', SettingsNotificationsPage],
       ['/settings/integrations', SettingsIntegrationsPage],

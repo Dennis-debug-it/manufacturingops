@@ -20,9 +20,8 @@ import { Spinner } from '../../shared/components/Spinner'
 import { SectionHeader } from '../../shared/components/SectionHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { StatusBadge } from '../../shared/components/StatusBadge'
-import { formatCurrency, formatNumber, formatPercent } from '../../shared/utils/format'
+import { formatNumber, formatPercent } from '../../shared/utils/format'
 import { cn } from '../../shared/utils/cn'
-import { useRevenueReport, type RevenueReportRow } from '../finance/api'
 import { usePmComplianceReport } from '../maintenance/api'
 import type { DashboardSummary } from './types'
 
@@ -92,11 +91,6 @@ export function ExecutiveDashboardPage() {
     staleTime: 30_000,
   })
 
-  // Top clients by revenue: `/api/finance/reports/revenue?groupBy=client` already returns exactly
-  // this — one row per client, ordered by amount invoiced descending (TenantFinanceController
-  // `GetRevenueReport`). The panel that used to sit here claimed no such endpoint existed.
-  const revenueByClient = useRevenueReport({ from: from.toISOString(), to: to.toISOString(), groupBy: 'client' })
-
   // PM compliance: `/api/reports/pm-compliance` (ReportsController `PmCompliance`). Also already
   // real, and already typed and hooked for the Reports module — it was never called from here.
   const pmCompliance = usePmComplianceReport({ from: from.toISOString(), to: to.toISOString() })
@@ -105,18 +99,6 @@ export function ExecutiveDashboardPage() {
     { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     { key: 'count', header: 'Count', cell: (row) => formatNumber(row.count) },
   ]
-
-  const topClientColumns: DataTableColumn<RevenueReportRow & { id: string }>[] = [
-    { key: 'group', header: 'Client', cell: (row) => <span className="font-medium text-slate-900">{row.group}</span>, sortValue: (row) => row.group },
-    { key: 'invoiced', header: 'Invoiced', cell: (row) => formatCurrency(row.invoiced), sortValue: (row) => row.invoiced },
-    { key: 'collected', header: 'Collected', cell: (row) => formatCurrency(row.collected), sortValue: (row) => row.collected },
-    { key: 'outstanding', header: 'Outstanding', cell: (row) => formatCurrency(row.outstanding), sortValue: (row) => row.outstanding },
-  ]
-
-  const topClients = useMemo(
-    () => (revenueByClient.data ?? []).slice(0, 10).map((row) => ({ id: row.group, ...row })),
-    [revenueByClient.data],
-  )
 
   const isLoading = summaryLoading || performanceLoading
 
@@ -236,25 +218,6 @@ export function ExecutiveDashboardPage() {
 
 
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-              <SectionHeader title="Top 10 Clients" description="Ranked by amount invoiced in the selected period." />
-              {revenueByClient.isError ? (
-                <ErrorState
-                  title="Client revenue unavailable"
-                  description="We couldn’t load the revenue breakdown, so no ranking is shown — an empty list here would be indistinguishable from a failed request."
-                  onRetry={() => void revenueByClient.refetch()}
-                />
-              ) : (
-                <DataTable
-                  columns={topClientColumns}
-                  data={topClients}
-                  loading={revenueByClient.isLoading}
-                  emptyTitle="No invoiced revenue in this period"
-                  emptyDescription="Adjust the period selector, or raise an invoice to see clients ranked here."
-                />
-              )}
-            </section>
-
             <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
               <SectionHeader title="PM Compliance" description="Preventive maintenance plans due and completed on time in the selected period." />
               {pmCompliance.isError ? (

@@ -87,7 +87,7 @@ public static class ServiceOpsPlans
     };
     private static readonly HashSet<string> AdvancedControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ApprovalMatrix", "CreditTerms", "ExpensesPayables", "Intake", "IntakeProtocols", "ScheduledReports",
+        "ApprovalMatrix", "Intake", "IntakeProtocols", "ScheduledReports",
         "TimeAttendance", "Workflows"
     };
     private static readonly HashSet<string> WhatsAppBusinessControllers = new(StringComparer.OrdinalIgnoreCase)
@@ -96,7 +96,7 @@ public static class ServiceOpsPlans
     };
     private static readonly HashSet<string> FinanceControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ExchangeRates", "TenantCreditNote", "TenantFinance", "TenantInvoice", "TenantQuotation", "WithholdingCertificates"
+        "ExchangeRates", "TenantFinance"
     };
 
     private static readonly HashSet<string> ProjectsControllers = new(StringComparer.OrdinalIgnoreCase)
@@ -138,7 +138,7 @@ public static class ServiceOpsPlans
     /// <summary>Controllers whose module requirement is decided per route inside <see cref="RequiredModules"/>.</summary>
     public static readonly IReadOnlySet<string> RouteClassifiedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "WorkOrderBilling", "Import", "Settings"
+        "Import", "Settings"
     };
 
     public static bool IsClassified(string controller) =>
@@ -149,10 +149,6 @@ public static class ServiceOpsPlans
     public static IReadOnlyList<string> RequiredModules(string? controller, string path)
     {
         var route = path.ToLowerInvariant();
-        if (controller == "WorkOrderBilling" || route.Contains("/generate-invoice") || route.Contains("/convert-to-work-order") || route.EndsWith("/from-quote"))
-            return [Operations, Finance];
-        // Every Projects route needs only Projects: the editions that include it include everything its
-        // tabs touch (finance, inventory, maintenance contracts).
         if (controller is not null && ModuleControllers.FirstOrDefault(x => x.Controllers.Contains(controller)) is { Module: { } module })
             return [module];
         if (route.StartsWith("/api/settings/"))

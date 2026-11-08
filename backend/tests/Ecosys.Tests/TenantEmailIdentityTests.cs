@@ -379,10 +379,6 @@ public sealed class TenantEmailIdentityTests
     }
 
     [Theory]
-    [InlineData("Revenue", "accounts@melop.co.ke")]
-    [InlineData("Aging", "accounts@melop.co.ke")]
-    [InlineData("ClientStatement", "accounts@melop.co.ke")]
-    [InlineData("Invoices", "accounts@melop.co.ke")]
     [InlineData("WorkOrderSummary", "service@melop.co.ke")]
     public async Task ScheduledReports_TakeTheReplyToOfTheirArea_FromTheTenantAddress(string reportType, string expectedReplyTo)
     {

@@ -225,19 +225,6 @@ internal sealed class ApprovalWorkflowService(
     {
         switch (request.DocumentType)
         {
-            case ApprovalDocumentTypes.Expense:
-            {
-                var expense = await dbContext.Expenses
-                    .SingleOrDefaultAsync(x => x.TenantId == request.TenantId && x.Id == request.DocumentId, cancellationToken);
-                if (expense is not null && expense.Status is "Submitted" or "Draft")
-                {
-                    expense.Status = approved ? "Approved" : "Rejected";
-                    expense.ApprovedByUserId = tenantContext.UserId;
-                    expense.ApprovedByName = approverName;
-                    expense.ApprovedAt = DateTime.UtcNow;
-                }
-                break;
-            }
             case ApprovalDocumentTypes.PurchaseOrder:
             {
                 // A PO stays Draft on approval (now cleared to be Sent); a rejection cancels it.

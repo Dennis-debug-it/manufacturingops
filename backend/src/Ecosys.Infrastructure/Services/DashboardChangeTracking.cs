@@ -39,9 +39,6 @@ public static class DashboardDataAreas
         [typeof(MaterialIssue)] = Materials,
         [typeof(PurchaseOrder)] = Materials,
         [typeof(Supplier)] = Materials,
-        [typeof(TenantInvoice)] = Finance,
-        [typeof(TenantPayment)] = Finance,
-        [typeof(WithholdingCertificate)] = Finance,
         [typeof(ActionItem)] = Activities,
     };
 

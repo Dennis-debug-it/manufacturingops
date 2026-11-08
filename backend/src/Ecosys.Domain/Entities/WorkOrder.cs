@@ -65,7 +65,6 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public int? PmTemplateVersionSnapshot { get; set; }
     public Guid? WorkOrderTemplateId { get; set; }
     public string? PlannedMaterialsJson { get; set; }
-    public Guid? QuoteId { get; set; }
     /// <summary>The CRM deal this job was won through, when it came from sales.</summary>
     public Guid? ParentWorkOrderId { get; set; }
     /// <summary>
@@ -161,7 +160,6 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public PreventiveMaintenancePlan? PreventiveMaintenancePlan { get; set; }
     public PmTemplate? PmTemplate { get; set; }
     public WorkOrderTemplate? WorkOrderTemplate { get; set; }
-    public TenantQuotation? Quote { get; set; }
     public WorkOrder? ParentWorkOrder { get; set; }
     public ICollection<WorkOrder> ChildWorkOrders { get; set; } = new List<WorkOrder>();
     public WorkOrder? FollowUpOfWorkOrder { get; set; }
@@ -179,9 +177,5 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public ICollection<WorkOrderMaterialUsage> MaterialUsages { get; set; } = new List<WorkOrderMaterialUsage>();
     public ICollection<MaterialIssue> MaterialIssues { get; set; } = new List<MaterialIssue>();
 
-    // Billing
-    public string BillingStatus { get; set; } = "Unbilled"; // Unbilled|PartiallyBilled|Billed|NotBillable
-    public bool IsBillable { get; set; } = true;
-    public ICollection<WorkOrderBillableItem> BillableItems { get; set; } = new List<WorkOrderBillableItem>();
     public ICollection<WorkOrderTimeLog> TimeLogs { get; set; } = new List<WorkOrderTimeLog>();
 }

@@ -62,21 +62,17 @@ public sealed class ScheduledReportService(
     }
 
     private static readonly HashSet<string> ValidReportTypes = new(StringComparer.OrdinalIgnoreCase)
-        { "Revenue", "Aging", "ClientStatement", "WorkOrderSummary", "Invoices", FactoryKpiReportType };
+        { "WorkOrderSummary", FactoryKpiReportType };
 
     /// <summary>The factory maintenance board report: every KPI category for a group, factory or section.</summary>
     public const string FactoryKpiReportType = "FactoryKpis";
-
-    private static readonly HashSet<string> FinanceReportTypes = new(StringComparer.OrdinalIgnoreCase)
-        { "Revenue", "Aging", "ClientStatement", "Invoices" };
 
     /// <summary>
     /// The event key carries the report's area so the email takes the tenant's finance or operations
     /// Reply-To (see TenantEmailIdentity.Categorize); the template key stays "scheduled-report".
     /// </summary>
     internal static string ResolveReportEventKey(string reportType) =>
-        FinanceReportTypes.Contains(reportType) ? "scheduled-report.finance"
-        : string.Equals(reportType, "WorkOrderSummary", StringComparison.OrdinalIgnoreCase) || string.Equals(reportType, FactoryKpiReportType, StringComparison.OrdinalIgnoreCase) ? "scheduled-report.operations"
+        string.Equals(reportType, "WorkOrderSummary", StringComparison.OrdinalIgnoreCase) || string.Equals(reportType, FactoryKpiReportType, StringComparison.OrdinalIgnoreCase) ? "scheduled-report.operations"
         : "scheduled-report";
 
     private static readonly HashSet<string> ValidFrequencies = new(StringComparer.OrdinalIgnoreCase)
@@ -240,11 +236,7 @@ public sealed class ScheduledReportService(
 
         return report.ReportType switch
         {
-            "Revenue" => await GenerateRevenueReportAsync(report, start, end, ct),
-            "Aging" => await GenerateAgingReportAsync(report, start, end, ct),
-            "ClientStatement" => await GenerateClientStatementAsync(report, start, end, ct),
             "WorkOrderSummary" => await GenerateWorkOrderSummaryAsync(report, start, end, ct),
-            "Invoices" => await GenerateInvoicesReportAsync(report, start, end, ct),
             FactoryKpiReportType => await GenerateFactoryKpiReportAsync(report, start, end, ct),
             _ => throw new InvalidOperationException($"Unknown report type: {report.ReportType}")
         };
@@ -266,91 +258,6 @@ public sealed class ScheduledReportService(
         var kpis = await factoryKpis.KpisAsync(report.TenantId, nodes, scopeName, start, end, ct);
         var company = await db.Tenants.AsNoTracking().Where(x => x.Id == report.TenantId).Select(x => x.CompanyName ?? x.Name).SingleOrDefaultAsync(ct) ?? string.Empty;
         return Factory.FactoryPdfs.KpiReport(company, kpis);
-    }
-
-    private async Task<byte[]> GenerateRevenueReportAsync(ScheduledReport report, DateTime start, DateTime end, CancellationToken ct)
-    {
-        var invoices = await db.TenantInvoices
-            .Include(x => x.Client)
-            .Where(x => x.TenantId == report.TenantId && x.Status != "Void"
-                && x.InvoiceDate >= start && x.InvoiceDate <= end)
-            .ToListAsync(ct);
-
-        var groupBy = report.GroupBy ?? "month";
-        var rows = groupBy.ToLower() switch
-        {
-            "client" => invoices.GroupBy(x => x.Client?.ClientName ?? "Unknown")
-                .Select(g => new ReportTableRow(g.Key, g.Sum(x => x.TotalAmount), g.Sum(x => x.AmountPaid), g.Sum(x => x.Balance), g.Count()))
-                .OrderByDescending(r => r.Invoiced).ToList(),
-            _ => invoices.GroupBy(x => $"{x.InvoiceDate.Year}-{x.InvoiceDate.Month:D2}")
-                .Select(g => new ReportTableRow(g.Key, g.Sum(x => x.TotalAmount), g.Sum(x => x.AmountPaid), g.Sum(x => x.Balance), g.Count()))
-                .OrderBy(r => r.Group).ToList()
-        };
-
-        return await BuildTablePdfAsync(report.TenantId, ct,
-            $"Revenue Report — {FormatDateRange(start, end)}",
-            new[] { "Period/Group", "Invoiced", "Collected", "Outstanding", "Count" },
-            rows.Select(r => new[] { r.Group, $"{r.Invoiced:N2}", $"{r.Collected:N2}", $"{r.Outstanding:N2}", r.Count.ToString() }).ToList(),
-            $"Date range: {FormatDateRange(start, end)}  |  Group by: {groupBy}");
-    }
-
-    private async Task<byte[]> GenerateAgingReportAsync(ScheduledReport report, DateTime start, DateTime end, CancellationToken ct)
-    {
-        var now = DateTime.UtcNow;
-        var invoices = await db.TenantInvoices
-            .Include(x => x.Client)
-            .Where(x => x.TenantId == report.TenantId && x.Balance > 0 && x.Status != "Void" && x.Status != "Paid")
-            .ToListAsync(ct);
-
-        var rows = invoices
-            .GroupBy(x => x.Client?.ClientName ?? "Unknown")
-            .Select(g =>
-            {
-                var current = g.Where(x => x.DueDate >= now).Sum(x => x.Balance);
-                var d1to30 = g.Where(x => x.DueDate < now && (now - x.DueDate).TotalDays <= 30).Sum(x => x.Balance);
-                var d31to60 = g.Where(x => (now - x.DueDate).TotalDays > 30 && (now - x.DueDate).TotalDays <= 60).Sum(x => x.Balance);
-                var d61to90 = g.Where(x => (now - x.DueDate).TotalDays > 60 && (now - x.DueDate).TotalDays <= 90).Sum(x => x.Balance);
-                var d90plus = g.Where(x => (now - x.DueDate).TotalDays > 90).Sum(x => x.Balance);
-                return new[] { g.Key, $"{current:N2}", $"{d1to30:N2}", $"{d31to60:N2}", $"{d61to90:N2}", $"{d90plus:N2}", $"{current + d1to30 + d31to60 + d61to90 + d90plus:N2}" };
-            })
-            .OrderByDescending(r => decimal.TryParse(r[6], out var v) ? v : 0)
-            .ToList();
-
-        return await BuildTablePdfAsync(report.TenantId, ct,
-            $"Aging Analysis — {now:yyyy-MM-dd}",
-            new[] { "Client", "Current", "1–30 days", "31–60 days", "61–90 days", "90+ days", "Total" },
-            rows,
-            $"As of {now:yyyy-MM-dd}. Amounts in KES.");
-    }
-
-    private async Task<byte[]> GenerateClientStatementAsync(ScheduledReport report, DateTime start, DateTime end, CancellationToken ct)
-    {
-        var tenantId = report.TenantId;
-        IQueryable<TenantInvoice> invQuery = db.TenantInvoices
-            .Include(x => x.Client)
-            .Where(x => x.TenantId == tenantId && x.InvoiceDate >= start && x.InvoiceDate <= end);
-
-        if (Guid.TryParse(report.ClientId, out var clientGuid))
-            invQuery = invQuery.Where(x => x.ClientId == clientGuid);
-
-        var invoices = await invQuery.OrderBy(x => x.InvoiceDate).ToListAsync(ct);
-        var rows = invoices.Select(x => new[]
-        {
-            x.InvoiceDate.ToString("yyyy-MM-dd"),
-            x.InvoiceNumber,
-            x.Client?.ClientName ?? "",
-            x.Status,
-            $"{x.TotalAmount:N2}",
-            $"{x.AmountPaid:N2}",
-            $"{x.Balance:N2}"
-        }).ToList();
-
-        var clientLabel = invoices.FirstOrDefault()?.Client?.ClientName ?? "All Clients";
-        return await BuildTablePdfAsync(report.TenantId, ct,
-            $"Client Statement — {clientLabel} — {FormatDateRange(start, end)}",
-            new[] { "Date", "Invoice #", "Client", "Status", "Total", "Paid", "Balance" },
-            rows,
-            $"Date range: {FormatDateRange(start, end)}  |  Total invoiced: {invoices.Sum(x => x.TotalAmount):N2}  |  Balance: {invoices.Sum(x => x.Balance):N2}");
     }
 
     private async Task<byte[]> GenerateWorkOrderSummaryAsync(ScheduledReport report, DateTime start, DateTime end, CancellationToken ct)
@@ -386,32 +293,6 @@ public sealed class ScheduledReportService(
             new[] { "Metric", "Value", "" },
             summaryRows,
             $"Date range: {FormatDateRange(start, end)}");
-    }
-
-    private async Task<byte[]> GenerateInvoicesReportAsync(ScheduledReport report, DateTime start, DateTime end, CancellationToken ct)
-    {
-        var invoices = await db.TenantInvoices
-            .Include(x => x.Client)
-            .Where(x => x.TenantId == report.TenantId && x.InvoiceDate >= start && x.InvoiceDate <= end)
-            .OrderBy(x => x.InvoiceDate)
-            .ToListAsync(ct);
-
-        var rows = invoices.Select(x => new[]
-        {
-            x.InvoiceDate.ToString("yyyy-MM-dd"),
-            x.InvoiceNumber,
-            x.Client?.ClientName ?? "",
-            x.Status,
-            $"{x.TotalAmount:N2}",
-            $"{x.AmountPaid:N2}",
-            $"{x.Balance:N2}"
-        }).ToList();
-
-        return await BuildTablePdfAsync(report.TenantId, ct,
-            $"Invoice List — {FormatDateRange(start, end)}",
-            new[] { "Date", "Invoice #", "Client", "Status", "Total", "Paid", "Balance" },
-            rows,
-            $"Date range: {FormatDateRange(start, end)}  |  Count: {invoices.Count}  |  Total: {invoices.Sum(x => x.TotalAmount):N2}");
     }
 
     // ── Email dispatch ───────────────────────────────────────────────────────

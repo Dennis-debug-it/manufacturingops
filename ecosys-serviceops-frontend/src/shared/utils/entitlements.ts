@@ -17,7 +17,7 @@ export type ServiceOpsModule =
 const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
   ['maintenance', ['/maintenance', '/assets', '/systems', '/contracts', '/settings/pm-templates', '/settings/running-checks', '/settings/asset-categories', '/settings/escalation-rules', '/settings/sla-policies']],
   ['inventory', ['/inventory', '/settings/inventory']],
-  ['advanced', ['/approvals', '/finance/expenses', '/finance/payables', '/finance/credit-control', '/finance/invoice-approvals', '/team/time-attendance', '/settings/time-attendance', '/settings/email-intake', '/settings/workflows', '/settings/credit-control', '/settings/approval-matrices', '/settings/approval-matrix']],
+  ['advanced', ['/approvals', '/team/time-attendance', '/settings/time-attendance', '/settings/email-intake', '/settings/workflows', '/settings/approval-matrices', '/settings/approval-matrix']],
   ['enterprise_tools', ['/settings/integrations', '/settings/monitoring-intake', '/settings/monitoring']],
   ['whatsapp_business', ['/whatsapp', '/settings/whatsapp']],
   ['operations', ['/dashboard', '/work-orders', '/sites', '/reports', '/team/technicians', '/team/skills', '/team/groups', '/settings/notification-templates', '/settings/wo-templates', '/settings/executive-dashboard']],

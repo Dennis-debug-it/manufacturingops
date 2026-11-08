@@ -860,23 +860,6 @@ public sealed class PlatformTenantsController(
         return Ok(entries);
     }
 
-    [HttpGet("{tenantId:guid}/finance-summary")]
-    public async Task<ActionResult<PlatformTenantFinanceSummaryResponse>> GetFinanceSummary(Guid tenantId, CancellationToken cancellationToken)
-    {
-        _ = await LoadManagedTenantAsync(tenantId, cancellationToken);
-
-        var invoices = await dbContext.TenantInvoices
-            .Where(x => x.TenantId == tenantId && x.Status != "Void")
-            .ToListAsync(cancellationToken);
-
-        var totalInvoiced = invoices.Sum(x => x.TotalAmount);
-        var totalPaid = invoices.Sum(x => x.AmountPaid);
-        var outstandingBalance = invoices.Sum(x => x.Balance);
-        var overdueCount = invoices.Count(x => x.Balance > 0 && x.DueDate < DateTime.UtcNow);
-
-        return Ok(new PlatformTenantFinanceSummaryResponse(invoices.Count, totalInvoiced, totalPaid, outstandingBalance, overdueCount));
-    }
-
     [HttpGet("{tenantId:guid}/module-settings")]
     public async Task<ActionResult<IReadOnlyCollection<PlatformTenantModuleSettingResponse>>> GetModuleSettings(Guid tenantId, CancellationToken cancellationToken)
     {
@@ -2136,7 +2119,6 @@ public sealed record PlatformTenantNumberingResponse(Guid Id, string DocumentTyp
 
 public sealed record PlatformTenantDocumentDesignResponse(string DocumentType, bool IsCustomised);
 
-public sealed record PlatformTenantFinanceSummaryResponse(int InvoiceCount, decimal TotalInvoiced, decimal TotalPaid, decimal OutstandingBalance, int OverdueCount);
 
 public sealed record PlatformTenantModuleSettingResponse(string ModuleKey, DateTime UpdatedAt);
 

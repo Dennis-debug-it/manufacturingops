@@ -61,34 +61,6 @@ public sealed class ClientDeletionTests
     }
 
     [Fact]
-    public async Task DeletePermanent_BlockedByPaidInvoice()
-    {
-        var databaseName = $"ecosys-client-delete-{Guid.NewGuid():N}";
-        var tenantId = Guid.NewGuid();
-        var clientId = await SeedClientAsync(databaseName, tenantId, seed: (db, client) =>
-        {
-            db.TenantInvoices.Add(new TenantInvoice
-            {
-                TenantId = tenantId,
-                ClientId = client.Id,
-                InvoiceNumber = "INV-001",
-                Status = "Paid",
-                InvoiceDate = DateTime.UtcNow,
-                DueDate = DateTime.UtcNow.AddDays(30)
-            });
-        });
-
-        var tenantContext = new FakeTenantContext(tenantId, Guid.NewGuid());
-        await using var dbContext = CreateDbContext(databaseName, tenantContext);
-        var controller = new ClientsController(dbContext, tenantContext, new AllowAllUserAccessService(), new NoOpAuditLogService());
-
-        var exception = await Assert.ThrowsAsync<ConflictException>(
-            () => controller.DeletePermanent(clientId, CancellationToken.None));
-
-        Assert.Contains("1 invoice", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
     public async Task DeletePermanent_AllowedWhenOnlyCascadingSitesExist()
     {
         var databaseName = $"ecosys-client-delete-{Guid.NewGuid():N}";

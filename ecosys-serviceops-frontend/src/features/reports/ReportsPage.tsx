@@ -9,13 +9,11 @@ import { StatCard } from '../../shared/components/StatCard'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { Spinner } from '../../shared/components/Spinner'
 import { cn } from '../../shared/utils/cn'
-import { usePermission } from '../../shared/hooks/usePermission'
-import { formatCurrency, formatPercent } from '../../shared/utils/format'
+import { formatPercent } from '../../shared/utils/format'
 import { apiClient } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import { useWorkOrders } from '../work-orders/api'
 import { toWorkOrderListFilters } from '../work-orders/listModel'
-import { useFinanceDashboard } from '../finance/api'
 import { usePmComplianceReport } from '../maintenance/api'
 import { useAssetReliability, useTechnicianProductivity, useWorkOrderPerformance } from './api'
 
@@ -23,7 +21,6 @@ const tabs = [
   { id: 'wo-performance', label: 'Work Order' },
   { id: 'sla', label: 'SLA' },
   { id: 'pm-compliance', label: 'PM Compliance' },
-  { id: 'finance', label: 'Finance' },
   { id: 'technician', label: 'Technician Performance' },
 ] as const
 
@@ -37,14 +34,10 @@ export function ReportsPage() {
   const technicianQuery = useTechnicianProductivity({ from, to })
   const { data: assetReliability } = useAssetReliability({ from, to })
   const pmQuery = usePmComplianceReport({ from, to })
-  // The finance figures are only for people who can see finance.
-  const canViewFinance = usePermission('finance.view')
-  const financeQuery = useFinanceDashboard({ enabled: canViewFinance })
 
   const { data: performance } = performanceQuery
   const { data: technicianReport } = technicianQuery
   const { data: pmCompliance } = pmQuery
-  const { data: financeDashboard } = financeQuery
 
   /**
    * The SLA tab needs the same 30-day window as every other tab and nothing else, so it goes
@@ -99,7 +92,7 @@ export function ReportsPage() {
       <PageHeader title="Reports" subtitle="Operational analytics for the last 30 days." />
 
       <div className="flex flex-wrap gap-2">
-        {tabs.filter((option) => option.id !== 'finance' || canViewFinance).map((option) => (
+        {tabs.map((option) => (
           <button
             key={option.id}
             type="button"
@@ -187,23 +180,6 @@ export function ReportsPage() {
               <StatCard label="Compliance Rate" value={formatPercent(pmCompliance?.complianceRate ?? 0)} />
             </div>
             <p className="text-sm text-slate-600">See <a className="underline" href="/maintenance/compliance">Maintenance → PM Compliance</a> for the full breakdown by client, category, and technician.</p>
-          </div>
-        )
-      ) : null}
-
-      {tab === 'finance' ? (
-        financeQuery.isError ? (
-          <ErrorState
-            title="Finance summary unavailable"
-            description="We couldn’t load the finance dashboard. A zero balance here would be indistinguishable from a failed request."
-            onRetry={() => void financeQuery.refetch()}
-          />
-        ) : financeQuery.isLoading ? <Spinner label="Loading report" /> : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Invoiced (YTD)" value={formatCurrency(financeDashboard?.totalInvoicedYtd ?? 0)} />
-            <StatCard label="Collected (YTD)" value={formatCurrency(financeDashboard?.totalCollectedYtd ?? 0)} tone="success" />
-            <StatCard label="Outstanding" value={formatCurrency(financeDashboard?.outstandingBalance ?? 0)} tone="warning" />
-            <StatCard label="Overdue" value={formatCurrency(financeDashboard?.overdueBalance ?? 0)} tone="danger" />
           </div>
         )
       ) : null}
