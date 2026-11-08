@@ -112,6 +112,8 @@ public sealed class FactorySettings : AuditableEntity, ITenantEntity
     public bool RequireWorkOrderApproval { get; set; } = true;
     /// <summary>Breakdowns skip approval: the machine is already down.</summary>
     public bool AutoApproveBreakdowns { get; set; } = true;
+    /// <summary>Verifying a job also closes it, one step instead of two. Off keeps Close separate (e.g. to finish costing first).</summary>
+    public bool CloseJobsOnVerify { get; set; } = true;
     /// <summary>The same fault on the same asset within this many days is flagged as rework.</summary>
     public int ReworkWindowDays { get; set; } = 30;
 

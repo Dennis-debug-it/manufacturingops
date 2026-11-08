@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { ChevronDown } from 'lucide-react'
 import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { useDebounce } from '../../../shared/hooks/useDebounce'
+import { cn } from '../../../shared/utils/cn'
 import { useAssetSearch } from '../api'
 import { Field, LocationSelect, inputClass, primaryButton, secondaryButton, textareaClass } from '../components/ui'
 import { useFactoryLinks } from '../links'
@@ -23,6 +25,7 @@ export function NewJobDrawer({ open, onClose, asset, breakdown = false }: {
   const create = useCreateJob()
   const [form, setForm] = useState({ title: '', description: '', workType: 'Corrective', priority: 'Medium', isBreakdown: breakdown, needsLineStop: false, orgNodeId: '', dueDate: '', jobPlanId: '' })
   const [chosen, setChosen] = useState<AssetChoice | null>(asset ?? null)
+  const [more, setMore] = useState(false)
   const [search, setSearch] = useState('')
   const debounced = useDebounce(search, 250)
   const results = useAssetSearch(debounced, debounced.trim().length >= 2)
@@ -32,6 +35,7 @@ export function NewJobDrawer({ open, onClose, asset, breakdown = false }: {
     if (open) {
       setForm((current) => ({ ...current, title: '', description: '', isBreakdown: breakdown, jobPlanId: '' }))
       setChosen(asset ?? null)
+      setMore(false)
     }
   }, [open, asset, breakdown])
 
@@ -101,28 +105,43 @@ export function NewJobDrawer({ open, onClose, asset, breakdown = false }: {
         <Field label="What is wrong, or what needs doing" required className="sm:col-span-2">
           <input className={inputClass} value={form.title} onChange={(event) => set('title', event.target.value)} />
         </Field>
-        <Field label="Details" className="sm:col-span-2"><textarea className={textareaClass} value={form.description} onChange={(event) => set('description', event.target.value)} /></Field>
-        <Field label="Type">
-          <select className={inputClass} value={form.workType} onChange={(event) => set('workType', event.target.value)}>
-            {WORK_TYPES.map((type) => <option key={type}>{type}</option>)}
-          </select>
-        </Field>
-        <Field label="Priority" hint={form.isBreakdown ? 'Breakdowns are at least High.' : undefined}>
-          <select className={inputClass} value={form.priority} onChange={(event) => set('priority', event.target.value)}>
-            {PRIORITIES.map((priority) => <option key={priority}>{priority}</option>)}
-          </select>
-        </Field>
-        <Field label="Job plan" hint="Copies its steps, hours and tools onto the job.">
-          <select className={inputClass} value={form.jobPlanId} onChange={(event) => set('jobPlanId', event.target.value)}>
-            <option value="">None</option>
-            {(plans.data ?? []).map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Needed by" hint="Blank uses the response and repair targets."><input type="date" className={inputClass} value={form.dueDate} onChange={(event) => set('dueDate', event.target.value)} /></Field>
-        <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
-          <input type="checkbox" checked={form.needsLineStop} onChange={(event) => set('needsLineStop', event.target.checked)} />
-          Needs the line stopped (do it in the weekly window)
-        </label>
+        {/* Everything else has a sensible default, so it waits behind "More details". */}
+        <button type="button" className="flex items-center gap-1 text-sm font-medium text-[var(--app-primary)] sm:col-span-2" aria-expanded={more} onClick={() => setMore((current) => !current)}>
+          <ChevronDown className={cn('h-4 w-4 transition-transform', more ? '' : '-rotate-90')} />
+          {more ? 'Fewer details' : form.isBreakdown ? 'Add details' : 'More details (type, priority, job plan, date)'}
+        </button>
+        {more ? (
+          <>
+            <Field label="Details" className="sm:col-span-2"><textarea className={textareaClass} value={form.description} onChange={(event) => set('description', event.target.value)} /></Field>
+            {form.isBreakdown ? null : (
+              <>
+                <Field label="Type">
+                  <select className={inputClass} value={form.workType} onChange={(event) => set('workType', event.target.value)}>
+                    {WORK_TYPES.map((type) => <option key={type}>{type}</option>)}
+                  </select>
+                </Field>
+                <Field label="Priority">
+                  <select className={inputClass} value={form.priority} onChange={(event) => set('priority', event.target.value)}>
+                    {PRIORITIES.map((priority) => <option key={priority}>{priority}</option>)}
+                  </select>
+                </Field>
+                {(plans.data ?? []).length > 0 ? (
+                  <Field label="Job plan" hint="Copies its steps, hours and tools onto the job.">
+                    <select className={inputClass} value={form.jobPlanId} onChange={(event) => set('jobPlanId', event.target.value)}>
+                      <option value="">None</option>
+                      {(plans.data ?? []).map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
+                    </select>
+                  </Field>
+                ) : null}
+                <Field label="Needed by" hint="Blank uses the response and repair targets."><input type="date" className={inputClass} value={form.dueDate} onChange={(event) => set('dueDate', event.target.value)} /></Field>
+                <label className="flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
+                  <input type="checkbox" checked={form.needsLineStop} onChange={(event) => set('needsLineStop', event.target.checked)} />
+                  Needs the line stopped (do it in the weekly window)
+                </label>
+              </>
+            )}
+          </>
+        ) : null}
       </div>
     </FormDrawer>
   )

@@ -20,6 +20,10 @@ export const ACTION_LABELS: Record<JobAction, string> = {
   reopen: 'Reopen',
 }
 
+/** The button label; verifying also closes the job when the factory has that on. */
+export const actionLabel = (action: JobAction, closeOnVerify: boolean | undefined) =>
+  action === 'verify' && closeOnVerify ? 'Verify and close' : ACTION_LABELS[action]
+
 /** Actions a supervisor or planner takes; the rest are the technician's. */
 export const SUPERVISORY: JobAction[] = ['approve', 'reject', 'plan', 'assign', 'verify', 'return', 'close', 'cancel', 'reopen']
 

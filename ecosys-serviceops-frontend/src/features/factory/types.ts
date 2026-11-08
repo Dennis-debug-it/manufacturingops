@@ -53,6 +53,9 @@ export interface FactorySettings {
   lowCropEndMonth: number | null
   tagPrefix: string
   nextTagNumber: number
+  requireWorkOrderApproval: boolean
+  autoApproveBreakdowns: boolean
+  closeJobsOnVerify: boolean
 }
 
 export type UpdateFactorySettingsPayload = Omit<FactorySettings, 'nextTagNumber'>

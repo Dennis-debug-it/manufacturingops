@@ -11,13 +11,14 @@ import { cn } from '../../../shared/utils/cn'
 import { CriticalityBadge, Field, inputClass, primaryButton, secondaryButton, textareaClass } from '../components/ui'
 import { useFactoryLinks } from '../links'
 import { useJob, useJobActions, useSplitJob } from './api'
+import { useFactorySettings } from '../api'
 import { ActionDialog } from './ActionDialog'
 import { DeferToOverhaulDrawer } from '../planning/OverhaulPage'
 import { JobSafetyCard } from '../people/JobSafetyCard'
 import { JobContractorCard, JobSparesCard } from '../stores/JobSparesCard'
 import { JobCostsCard } from '../performance/JobCostsCard'
 import { JobStatusBadge } from './JobStatusBadge'
-import { ACTION_LABELS, SUPERVISORY, isTickStep, type JobAction, type JobDetail, type JobStep } from './types'
+import { actionLabel, SUPERVISORY, isTickStep, type JobAction, type JobDetail, type JobStep } from './types'
 
 export function FactoryJobDetailPage() {
   const { id = '' } = useParams()
@@ -26,6 +27,7 @@ export function FactoryJobDetailPage() {
   const canSupervise = usePermission('work-orders.assign')
   const [action, setAction] = useState<JobAction | null>(null)
   const [deferring, setDeferring] = useState(false)
+  const closeOnVerify = useFactorySettings().data?.closeJobsOnVerify
 
   if (isLoading) return <p className="p-6 text-sm text-slate-500">Loading…</p>
   if (isError || !job) return <ErrorState title="Job not found" description="It may be in a factory you don't have access to." />
@@ -40,11 +42,11 @@ export function FactoryJobDetailPage() {
         subtitle={[job.workOrderNumber, job.workType, `${job.priority} priority`, job.orgNodeName].filter(Boolean).join(' · ')}
         breadcrumbs={[{ label: 'Jobs', to: links.jobs() }, { label: job.workOrderNumber }]}
         titleAdornment={<JobStatusBadge status={job.status} holdReason={job.holdReason} />}
-        primaryAction={primary ? <button type="button" className={primaryButton} onClick={() => setAction(primary)}>{ACTION_LABELS[primary]}</button> : undefined}
+        primaryAction={primary ? <button type="button" className={primaryButton} onClick={() => setAction(primary)}>{actionLabel(primary, closeOnVerify)}</button> : undefined}
         secondaryActions={
           <div className="flex flex-wrap gap-2">
             {available.filter((x) => x !== primary).map((x) => (
-              <button key={x} type="button" className={secondaryButton} onClick={() => setAction(x)}>{ACTION_LABELS[x]}</button>
+              <button key={x} type="button" className={secondaryButton} onClick={() => setAction(x)}>{actionLabel(x, closeOnVerify)}</button>
             ))}
             {canSupervise && !links.tech && isOpen(job) && !['Requested', 'Completed', 'Verified'].includes(job.status) ? (
               <button type="button" className={secondaryButton} onClick={() => setDeferring(true)}>Defer to overhaul</button>

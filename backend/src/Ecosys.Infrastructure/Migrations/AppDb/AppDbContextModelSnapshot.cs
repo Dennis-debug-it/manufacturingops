@@ -4541,6 +4541,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("CloseJobsOnVerify")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 

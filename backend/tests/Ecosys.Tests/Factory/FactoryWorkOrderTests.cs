@@ -50,12 +50,34 @@ public sealed class FactoryWorkOrderTests
         Assert.Equal("Peter Fitter", job.Signature?.SignerName);
 
         await Assert.ThrowsAsync<BusinessRuleException>(() => Act(jobs, job.Id, FactoryWorkOrderActions.ReturnForRework));
+        // Verifying closes the job too (the default), one step for the supervisor.
         job = await Act(jobs, job.Id, FactoryWorkOrderActions.Verify, new FactoryActionRequest(Reason: "Running quietly"));
-        job = await Act(jobs, job.Id, FactoryWorkOrderActions.Close);
         Assert.Equal(WorkOrderStatuses.Closed, job.Status);
+        Assert.NotNull(job.VerifiedAt);
         Assert.Equal(
             ["Requested", "Approved", "Planned", "Assigned", "In Progress", "On Hold", "In Progress", "Completed", "Verified", "Closed"],
             job.History.Where(x => x.Type is "Created" or "StatusChanged").Reverse().Select(x => x.ToStatus ?? string.Empty).ToArray());
+    }
+
+    [Fact]
+    public async Task WithCloseOnVerifyOff_VerifiedJobsWaitForAnExplicitClose()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var site = await SeedAsync(db);
+        (await FactoryTestSupport.Settings(db).GetOrCreateAsync(site.TenantId)).CloseJobsOnVerify = false;
+        await db.SaveChangesAsync();
+        var jobs = Controller(db, site.Admin);
+
+        var job = await CreateAsync(jobs, new CreateFactoryWorkOrderRequest("Dryer tripped", AssetId: site.Dryer.Id, IsBreakdown: true, Priority: "High"));
+        job = await Act(jobs, job.Id, FactoryWorkOrderActions.Assign, new FactoryActionRequest(TechnicianIds: [site.Fitter.Id]));
+        job = await Act(jobs, job.Id, FactoryWorkOrderActions.Start);
+        job = await Act(jobs, job.Id, FactoryWorkOrderActions.Complete, new FactoryActionRequest(
+            WorkDone: "Reset the burner", ProblemCodeId: site.Code("NOI"), CauseCodeId: site.Code("2.4"), RemedyCodeId: site.Code("REP")));
+        job = await Act(jobs, job.Id, FactoryWorkOrderActions.Verify);
+        Assert.Equal(WorkOrderStatuses.Verified, job.Status);
+        Assert.Null(job.ClosedAt);
+        job = await Act(jobs, job.Id, FactoryWorkOrderActions.Close);
+        Assert.Equal(WorkOrderStatuses.Closed, job.Status);
     }
 
     [Fact]

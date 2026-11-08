@@ -297,6 +297,21 @@ function SettingsForm({ settings, canManage }: { settings: FactorySettings; canM
         <Field label="Tag number prefix" hint={`Next tag: ${form.tagPrefix}-${String(settings.nextTagNumber).padStart(6, '0')}`}>
           <input className={cn(inputClass, 'font-mono uppercase')} maxLength={10} value={form.tagPrefix} onChange={(event) => set('tagPrefix', event.target.value.toUpperCase())} />
         </Field>
+        <fieldset className="space-y-2 rounded-lg border border-slate-200 p-3 sm:col-span-2 lg:col-span-3">
+          <legend className="px-1 text-sm font-semibold text-slate-900">Jobs</legend>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={form.requireWorkOrderApproval} onChange={(event) => set('requireWorkOrderApproval', event.target.checked)} />
+            New jobs need a supervisor's approval before they are planned
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={form.autoApproveBreakdowns} disabled={!form.requireWorkOrderApproval} onChange={(event) => set('autoApproveBreakdowns', event.target.checked)} />
+            Breakdowns skip approval (the machine is already down)
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={form.closeJobsOnVerify} onChange={(event) => set('closeJobsOnVerify', event.target.checked)} />
+            Verifying a job also closes it (one step instead of two)
+          </label>
+        </fieldset>
         <label className="inline-flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={form.useGroupLevel} onChange={(event) => set('useGroupLevel', event.target.checked)} />
           Use groups (several factories under one group)

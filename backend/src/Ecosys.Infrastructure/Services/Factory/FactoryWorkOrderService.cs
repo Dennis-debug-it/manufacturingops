@@ -391,6 +391,13 @@ internal sealed class FactoryWorkOrderService(
                 workOrder.VerifiedByUserId = actor.UserId;
                 workOrder.VerificationNotes = string.IsNullOrWhiteSpace(transition.Reason) ? null : transition.Reason.Trim();
                 SetStatus(workOrder, actor, WorkOrderStatuses.Verified, workOrder.VerificationNotes is null ? "Work checked and accepted." : $"Work checked and accepted: {workOrder.VerificationNotes}");
+                if ((await factorySettingsService.GetOrCreateAsync(workOrder.TenantId, cancellationToken)).CloseJobsOnVerify)
+                {
+                    workOrder.ClosedAt = now;
+                    workOrder.ClosedByUserId = actor.UserId;
+                    SetStatus(workOrder, actor, WorkOrderStatuses.Closed, "Closed on verification.");
+                }
+
                 break;
 
             case FactoryWorkOrderActions.ReturnForRework:

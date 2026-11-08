@@ -4,13 +4,15 @@ import { FormDrawer } from '../../../shared/components/FormDrawer'
 import { SignaturePad } from '../../../shared/components/SignaturePad'
 import { Field, inputClass, primaryButton, secondaryButton, textareaClass } from '../components/ui'
 import { useFailureCodes, useJobActions, useTechnicianOptions } from './api'
-import { ACTION_LABELS, HOLD_REASONS, type ActionPayload, type JobAction, type JobDetail } from './types'
+import { useFactorySettings } from '../api'
+import { actionLabel, HOLD_REASONS, type ActionPayload, type JobAction, type JobDetail } from './types'
 
 const NEEDS_REASON: JobAction[] = ['reject', 'cancel', 'return', 'reopen']
 
 /** Collects what one action needs, then sends it (queued when offline). */
 export function ActionDialog({ job, action, onClose }: { job: JobDetail; action: JobAction; onClose: () => void }) {
   const actions = useJobActions(job)
+  const label = actionLabel(action, useFactorySettings().data?.closeJobsOnVerify)
   const technicians = useTechnicianOptions()
   const codes = useFailureCodes(job.assetCategoryId)
   const [busy, setBusy] = useState(false)
@@ -52,7 +54,7 @@ export function ActionDialog({ job, action, onClose }: { job: JobDetail; action:
     setBusy(true)
     try {
       const result = await actions.act(action, payload)
-      toast.success(result.queued ? `${ACTION_LABELS[action]}: saved, will sync when online` : `${ACTION_LABELS[action]}: done`)
+      toast.success(result.queued ? `${label}: saved, will sync when online` : `${label}: done`)
       onClose()
     } catch {
       // The API client shows the error.
@@ -62,10 +64,10 @@ export function ActionDialog({ job, action, onClose }: { job: JobDetail; action:
   }
 
   return (
-    <FormDrawer open title={`${ACTION_LABELS[action]} · ${job.workOrderNumber}`} onClose={onClose} footer={
+    <FormDrawer open title={`${label} · ${job.workOrderNumber}`} onClose={onClose} footer={
       <div className="flex justify-end gap-2">
         <button type="button" className={secondaryButton} onClick={onClose}>Back</button>
-        <button type="button" className={primaryButton} disabled={!ready || busy} onClick={() => void submit()}>{ACTION_LABELS[action]}</button>
+        <button type="button" className={primaryButton} disabled={!ready || busy} onClick={() => void submit()}>{label}</button>
       </div>
     }>
       <div className="grid gap-4">

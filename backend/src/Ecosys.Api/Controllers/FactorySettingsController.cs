@@ -91,6 +91,7 @@ public sealed class FactorySettingsController(
 
         settings.RequireWorkOrderApproval = request.RequireWorkOrderApproval ?? settings.RequireWorkOrderApproval;
         settings.AutoApproveBreakdowns = request.AutoApproveBreakdowns ?? settings.AutoApproveBreakdowns;
+        settings.CloseJobsOnVerify = request.CloseJobsOnVerify ?? settings.CloseJobsOnVerify;
         settings.ReworkWindowDays = request.ReworkWindowDays ?? settings.ReworkWindowDays;
         settings.OperatorReportingEnabled = request.OperatorReportingEnabled ?? settings.OperatorReportingEnabled;
         if (request.Shifts is { } shifts)
@@ -207,6 +208,7 @@ public sealed class FactorySettingsController(
         settings.NextTagNumber,
         settings.RequireWorkOrderApproval,
         settings.AutoApproveBreakdowns,
+        settings.CloseJobsOnVerify,
         settings.ReworkWindowDays,
         settings.OperatorReportingEnabled,
         // The key authorises anonymous reports, so only admins see it.
@@ -230,6 +232,7 @@ public sealed record FactorySettingsResponse(
     int NextTagNumber,
     bool RequireWorkOrderApproval,
     bool AutoApproveBreakdowns,
+    bool CloseJobsOnVerify,
     int ReworkWindowDays,
     bool OperatorReportingEnabled,
     string? OperatorReportKey,
@@ -252,6 +255,7 @@ public sealed record UpdateFactorySettingsRequest(
     string? TagPrefix = null,
     bool? RequireWorkOrderApproval = null,
     bool? AutoApproveBreakdowns = null,
+    bool? CloseJobsOnVerify = null,
     int? ReworkWindowDays = null,
     bool? OperatorReportingEnabled = null,
     IReadOnlyCollection<ShiftDto>? Shifts = null);
