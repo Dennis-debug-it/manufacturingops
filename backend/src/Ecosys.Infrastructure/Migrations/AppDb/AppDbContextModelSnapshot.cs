@@ -4874,6 +4874,66 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("food_safety_records", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.FuelLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("Cost")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("FilledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("FullTank")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("Litres")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal?>("OdometerKm")
+                        .HasPrecision(18, 1)
+                        .HasColumnType("numeric(18,1)");
+
+                    b.Property<string>("RecordedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("RecordedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Station")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("TenantId", "AssetId", "FilledAt");
+
+                    b.ToTable("fuel_logs", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.GlassRegisterItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -11464,6 +11524,60 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("technician_skills", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.TelematicsConnection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptedPassword")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastSyncAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastSyncError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("LastSyncVehicles")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Username")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId")
+                        .IsUnique();
+
+                    b.ToTable("telematics_connections", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.Tenant", b =>
                 {
                     b.Property<Guid>("Id")
@@ -13052,6 +13166,121 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("TenantId", "UserId", "LoginAt");
 
                     b.ToTable("user_sessions", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.VehicleProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DriverName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("DriverPhone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("EngineHoursMeterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FuelType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("InspectionExpiresOn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("InsuranceExpiresOn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("LastLatitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<double?>("LastLongitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime?>("LastPositionAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastPositionSource")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<decimal?>("LastSpeedKph")
+                        .HasPrecision(8, 1)
+                        .HasColumnType("numeric(8,1)");
+
+                    b.Property<string>("Make")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("OdometerMeterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal?>("PayloadKg")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("RegistrationNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Route")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("SpeedGovernorExpiresOn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TrackerDeviceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VehicleModel")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("VehicleType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int?>("Year")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId")
+                        .IsUnique();
+
+                    b.HasIndex("EngineHoursMeterId");
+
+                    b.HasIndex("OdometerMeterId");
+
+                    b.HasIndex("TenantId", "RegistrationNumber")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "TrackerDeviceId")
+                        .IsUnique()
+                        .HasFilter("\"TrackerDeviceId\" IS NOT NULL");
+
+                    b.ToTable("vehicle_profiles", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.VendorCatalogueItem", b =>
@@ -16574,6 +16803,23 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Factory");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.FuelLog", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.GlassRegisterItem", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.OrgNode", "Factory")
@@ -18605,6 +18851,17 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Technician");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.TelematicsConnection", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.TenantApiKey", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
@@ -19051,6 +19308,37 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Tenant");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.VehicleProfile", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Meter", "EngineHoursMeter")
+                        .WithMany()
+                        .HasForeignKey("EngineHoursMeterId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.Meter", "OdometerMeter")
+                        .WithMany()
+                        .HasForeignKey("OdometerMeterId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("EngineHoursMeter");
+
+                    b.Navigation("OdometerMeter");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.VendorCatalogueItem", b =>

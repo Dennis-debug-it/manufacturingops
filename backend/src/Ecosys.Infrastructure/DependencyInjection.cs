@@ -71,6 +71,10 @@ public static class DependencyInjection
         services.AddScoped<Services.Factory.IConditionMonitor, Services.Factory.ConditionMonitor>();
         services.AddScoped<Services.Factory.ISensorFeed, Services.Factory.SensorFeed>();
         services.AddScoped<Services.Factory.IReliabilityService, Services.Factory.ReliabilityService>();
+        services.AddScoped<Services.Factory.IFleetService, Services.Factory.FleetService>();
+        services.AddScoped<Services.Factory.ITelematicsProvider, Services.Factory.TraccarProvider>();
+        services.AddScoped<Services.Factory.ITelematicsSync, Services.Factory.TelematicsSync>();
+        services.AddScoped<Services.Factory.IFleetAlertRunner, Services.Factory.FleetAlertRunner>();
         services.AddScoped<Services.Factory.IAssetTagNumberService, Services.Factory.AssetTagNumberService>();
         services.AddScoped<Services.Factory.IAssetClassService, Services.Factory.AssetClassService>();
         services.AddScoped<Services.Factory.IAssetAlertRunner, Services.Factory.AssetAlertRunner>();
@@ -203,6 +207,7 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<ActivityReminderWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.AssetAlertWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.MqttSensorListener>();
+        services.AddSingleInstanceHostedService<Services.Factory.FleetWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.RunningCheckWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.FactoryPmWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.ComplianceWorker>();

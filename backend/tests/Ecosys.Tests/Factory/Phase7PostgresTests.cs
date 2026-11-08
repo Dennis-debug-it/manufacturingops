@@ -116,5 +116,44 @@ public sealed class Phase7PostgresTests
         });
     }
 
+    [Fact]
+    public async Task Postgres_Fleet_AllTranslate()
+    {
+        await FactoryPostgres.RunAsync("fleet", async connection =>
+        {
+            var (db, context) = await FactoryPostgres.SeedAsync(connection);
+            await using var _ = db;
+            var tenantId = context.TenantId!.Value;
+            var factory = new OrgNode { TenantId = tenantId, Level = OrgNodeLevels.Factory, Name = "Chelal", Code = "CHL" };
+            db.OrgNodes.Add(factory);
+            await db.SaveChangesAsync();
+            var fleet = new FleetService(db, new MeterReadingService(db), FactoryTestSupport.Monitor(db, context));
+            var controller = FactoryAssetRegisterTests.WithHttp(new FleetController(db, context, FactoryTestSupport.Access(context), FactoryTestSupport.Scope(db, context), fleet,
+                new SecretEncryptionService(new Microsoft.AspNetCore.DataProtection.EphemeralDataProtectionProvider()), FactoryTestSupport.Audit(db)));
+
+            var vehicle = Ok(await controller.Create(new SaveVehicleRequest("KCA 123A", VehicleTypes.Lorry, factory.Id, "Isuzu", "FVR", 2019, 7000,
+                InsuranceExpiresOn: DateTime.UtcNow.Date.AddDays(5), TrackerDeviceId: "3596321", TrackEngineHours: true), default));
+            Ok(await controller.AddFuel(vehicle.AssetId, new AddFuelRequest(null, 60, 11000, 1200), default));
+            await fleet.ApplyPositionsAsync(tenantId, [new VehiclePosition("3596321", DateTime.UtcNow.AddMinutes(1), -0.37, 35.28, 40, 1210, 10)], "Traccar");
+            db.WorkOrders.Add(new WorkOrder { TenantId = tenantId, AssetId = vehicle.AssetId, WorkOrderNumber = "WO-1", Title = "Tyre", Status = WorkOrderStatuses.Approved });
+            await db.SaveChangesAsync();
+
+            var row = Assert.Single(Ok(await controller.List(factory.Id, default)));
+            // The tracker moved the vehicle; its odometer came within 15 minutes of the fill-up's reading, so that one stands.
+            Assert.Equal((1200m, 1, "Traccar"), (row.OdometerKm, row.OpenJobs, row.LastPositionSource));
+            Assert.Single(Ok(await controller.Get(vehicle.AssetId, default)).FuelLogs);
+
+            await using var anonymous = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
+            var dispatcher = new NoDispatcher();
+            Assert.True(await new FleetAlertRunner(anonymous, dispatcher, Microsoft.Extensions.Logging.Abstractions.NullLogger<FleetAlertRunner>.Instance).RunAsync(DateTime.UtcNow) >= 0);
+            Assert.Equal(1, await anonymous.ActivityReminderLogs.CountAsync());
+        });
+    }
+
+    private sealed class NoDispatcher : INotificationDispatcher
+    {
+        public Task NotifyAsync(NotificationRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
     private static T Ok<T>(ActionResult<T> result) => Assert.IsAssignableFrom<T>(Assert.IsType<OkObjectResult>(result.Result).Value);
 }

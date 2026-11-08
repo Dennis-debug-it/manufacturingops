@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck, Repeat } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, ListChecks, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck, Repeat, Truck } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -14,6 +14,7 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'dashboard.view', icon: LayoutDashboard },
   { label: 'Work Orders', to: '/work-orders', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], permission: 'work-orders.view', icon: ClipboardList },
   { label: 'Factory overview', to: '/maintenance/overview', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: Factory },
+  { label: 'Fleet', to: '/maintenance/fleet', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Truck },
   { label: 'Condition', to: '/maintenance/condition', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Activity },
   { label: 'Reliability', to: '/maintenance/reliability', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: Repeat },
   { label: 'Performance', to: '/maintenance/performance', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: TrendingUp },

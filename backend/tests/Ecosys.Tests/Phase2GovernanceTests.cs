@@ -46,6 +46,7 @@ public sealed class Phase2GovernanceTests
                 "factory-check.missed",
                 "factory-job.reported",
                 "factory-window.carryover",
+                "fleet.document-expiring",
                 "inventory.low-stock",
                 "inventory.request-decided",
                 "inventory.request-dispatched",

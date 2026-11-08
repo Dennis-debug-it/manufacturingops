@@ -85,6 +85,7 @@ public static class NotificationKeyDescriptor
         Inbox("people.certificate-expiring", "A technician's licence or ticket is expiring", "Work Orders"),
         Urgent("safety.incident-reported", "An incident or near miss was reported", "Work Orders"),
         Inbox("safety.permit-requested", "A permit to work is waiting for authorisation", "Work Orders"),
+        Inbox("fleet.document-expiring", "A vehicle's insurance or inspection is about to expire", "Assets"),
         Inbox("asset.warranty-expiring", "An asset's warranty is about to expire", "Assets"),
         Inbox("asset.meter-out-of-range", "A meter reading is outside its limits", "Assets"),
         EmailOnly("invoice.sent",         "Invoice sent to client",            "Finance"),

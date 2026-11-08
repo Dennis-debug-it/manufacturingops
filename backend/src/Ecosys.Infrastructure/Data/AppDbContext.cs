@@ -26,6 +26,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<ConditionEvent> ConditionEvents => Set<ConditionEvent>();
     public DbSet<SensorGateway> SensorGateways => Set<SensorGateway>();
+    public DbSet<VehicleProfile> VehicleProfiles => Set<VehicleProfile>();
+    public DbSet<FuelLog> FuelLogs => Set<FuelLog>();
+    public DbSet<TelematicsConnection> TelematicsConnections => Set<TelematicsConnection>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
@@ -915,6 +918,59 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.UpdatedAt });
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<VehicleProfile>(entity =>
+        {
+            entity.ToTable("vehicle_profiles");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RegistrationNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.VehicleType).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Make).HasMaxLength(100);
+            entity.Property(x => x.VehicleModel).HasMaxLength(100);
+            entity.Property(x => x.PayloadKg).HasPrecision(18, 2);
+            entity.Property(x => x.FuelType).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Route).HasMaxLength(500);
+            entity.Property(x => x.DriverName).HasMaxLength(150);
+            entity.Property(x => x.DriverPhone).HasMaxLength(30);
+            entity.Property(x => x.TrackerDeviceId).HasMaxLength(100);
+            entity.Property(x => x.LastSpeedKph).HasPrecision(8, 1);
+            entity.Property(x => x.LastPositionSource).HasMaxLength(150);
+            entity.HasIndex(x => x.AssetId).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.RegistrationNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.TrackerDeviceId }).IsUnique().HasFilter("\"TrackerDeviceId\" IS NOT NULL");
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.OdometerMeter).WithMany().HasForeignKey(x => x.OdometerMeterId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.EngineHoursMeter).WithMany().HasForeignKey(x => x.EngineHoursMeterId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<FuelLog>(entity =>
+        {
+            entity.ToTable("fuel_logs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Litres).HasPrecision(10, 2);
+            entity.Property(x => x.Cost).HasPrecision(18, 2);
+            entity.Property(x => x.OdometerKm).HasPrecision(18, 1);
+            entity.Property(x => x.Station).HasMaxLength(150);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.RecordedByName).HasMaxLength(200);
+            entity.HasIndex(x => new { x.TenantId, x.AssetId, x.FilledAt });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TelematicsConnection>(entity =>
+        {
+            entity.ToTable("telematics_connections");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Provider).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.BaseUrl).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Username).HasMaxLength(200);
+            entity.Property(x => x.EncryptedPassword).HasMaxLength(4000);
+            entity.Property(x => x.LastSyncError).HasMaxLength(1000);
+            entity.HasIndex(x => x.TenantId).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SensorGateway>(entity =>
