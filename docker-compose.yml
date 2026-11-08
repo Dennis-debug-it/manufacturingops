@@ -64,6 +64,14 @@ services:
       WhatsApp__WebhookVerifyToken: ${ECOSYS_WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
       WhatsApp__DisplayPhoneNumber: ${ECOSYS_WHATSAPP_DISPLAY_NUMBER:-}
       WhatsApp__MonthlyCapPerTenant: ${ECOSYS_WHATSAPP_MONTHLY_CAP:-1000}
+      # Sensor feed over MQTT (optional; the HTTP feed needs nothing). See docs/DEPLOYMENT.md §1.
+      Mqtt__Enabled: ${ECOSYS_MQTT_ENABLED:-false}
+      Mqtt__Host: ${ECOSYS_MQTT_HOST:-}
+      Mqtt__Port: ${ECOSYS_MQTT_PORT:-1883}
+      Mqtt__UseTls: ${ECOSYS_MQTT_USE_TLS:-false}
+      Mqtt__Username: ${ECOSYS_MQTT_USERNAME:-}
+      Mqtt__Password: ${ECOSYS_MQTT_PASSWORD:-}
+      Mqtt__TopicPrefix: ${ECOSYS_MQTT_TOPIC_PREFIX:-ecosys/sensors}
       # File storage inside the container (mapped to the `uploads` volume).
       Storage__LocalBasePath: /app/storage/uploads
       Storage__BaseUrl: ${ECOSYS_PUBLIC_URL}/files

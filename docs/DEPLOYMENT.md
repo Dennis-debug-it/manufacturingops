@@ -78,6 +78,9 @@ log after changing this.
 | `ECOSYS_BACKUP_RETENTION_DAYS` | `14` | Prune dumps older than this; `0` keeps everything |
 | `ECOSYS_SMTP_HOST` / `_PORT` / `_USE_SSL` / `_USERNAME` / `_PASSWORD` | *(unset)* | Outbound email. With no host configured the app runs but sends nothing — including password-reset mail |
 | `ECOSYS_SELF_SIGNUP_ENABLED` | `true` | The public **Start free trial** page (`/signup`). A company enters its details, confirms its email from the link, and lands in a 14-day Suite trial workspace; each sign-up appears under Platform → Leads as "Converted to Workspace". Needs SMTP; without it the page tells people to request a demo. `false` turns it off |
+| `ECOSYS_MQTT_ENABLED` | `false` | Subscribe to an MQTT broker for sensor readings (Settings → Sensors). The HTTP feed, `POST /api/sensors/readings` with an `X-Sensor-Key` header, works without it |
+| `ECOSYS_MQTT_HOST` / `_PORT` / `_USE_TLS` / `_USERNAME` / `_PASSWORD` | *(unset)* / `1883` | The broker. Only one API instance subscribes at a time (the background-work lease), so readings are stored once |
+| `ECOSYS_MQTT_TOPIC_PREFIX` | `ecosys/sensors` | Readings arrive on `{prefix}/{gatewayId}/{tag}`. Use the broker's ACLs to let each gateway publish only under its own id; a gateway that does not trust the broker must also put its key in each message |
 
 `ASPNETCORE_ENVIRONMENT` is pinned to `Production` by the compose file and the Dockerfile.
 That is what disables Swagger and test seeding and enables HSTS; do not override it.

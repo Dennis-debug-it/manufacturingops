@@ -76,7 +76,7 @@ public static class ServiceOpsPlans
     };
     private static readonly HashSet<string> MaintenanceControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Assets", "AssetCategories", "AssetContracts", "AssetLifecycle", "AssetTags", "AssetDocuments", "Meters", "ConditionMonitoring", "FactoryAssetImport", "FactoryWorkOrders", "JobPlans", "RunningChecks", "FactoryDashboard", "FactoryPm", "MaintenanceWindows", "Overhaul", "Compliance", "FactoryPeople", "Safety", "Contractors", "FactoryCosts", "FactoryKpis", "ComplianceFramework", "DataProtection", "Contracts", "EscalationRules", "PreventiveMaintenance", "PmTemplates",
+        "Assets", "AssetCategories", "AssetContracts", "AssetLifecycle", "AssetTags", "AssetDocuments", "Meters", "ConditionMonitoring", "SensorGateways", "FactoryAssetImport", "FactoryWorkOrders", "JobPlans", "RunningChecks", "FactoryDashboard", "FactoryPm", "MaintenanceWindows", "Overhaul", "Compliance", "FactoryPeople", "Safety", "Contractors", "FactoryCosts", "FactoryKpis", "ComplianceFramework", "DataProtection", "Contracts", "EscalationRules", "PreventiveMaintenance", "PmTemplates",
         "SlaDefinitions", "SlaPolicies", "Systems"
     };
     private static readonly HashSet<string> InventoryControllers = new(StringComparer.OrdinalIgnoreCase)
@@ -126,7 +126,7 @@ public static class ServiceOpsPlans
     {
         "AccessControl", "ActionItems", "Activities", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "Calendar", "CalendarFeed", "ClientPortalContacts",
         "Clients", "ClientContacts", "Dev", "Integrations", "Notifications",
-        "PublicWorkOrder", "OperatorFaultReport", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
+        "PublicWorkOrder", "OperatorFaultReport", "Sensors", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
         // Factory hierarchy and settings: the backbone every factory module hangs off.
         "OrgNodes", "FactorySettings",

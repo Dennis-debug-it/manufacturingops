@@ -24,6 +24,7 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' was not found.");
 
         services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.SectionName));
+        services.Configure<Services.Factory.MqttSensorOptions>(configuration.GetSection(Services.Factory.MqttSensorOptions.SectionName));
         services.Configure<WebPushOptions>(configuration.GetSection(WebPushOptions.SectionName));
         services.Configure<WhatsAppOptions>(configuration.GetSection(WhatsAppOptions.SectionName));
         services.Configure<PlatformFeatureOptions>(configuration.GetSection(PlatformFeatureOptions.SectionName));
@@ -68,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<Services.Factory.IAssetLifecycleService, Services.Factory.AssetLifecycleService>();
         services.AddScoped<Services.Factory.IMeterReadingService, Services.Factory.MeterReadingService>();
         services.AddScoped<Services.Factory.IConditionMonitor, Services.Factory.ConditionMonitor>();
+        services.AddScoped<Services.Factory.ISensorFeed, Services.Factory.SensorFeed>();
         services.AddScoped<Services.Factory.IAssetTagNumberService, Services.Factory.AssetTagNumberService>();
         services.AddScoped<Services.Factory.IAssetClassService, Services.Factory.AssetClassService>();
         services.AddScoped<Services.Factory.IAssetAlertRunner, Services.Factory.AssetAlertRunner>();
@@ -199,6 +201,7 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<NotificationHousekeepingWorker>();
         services.AddSingleInstanceHostedService<ActivityReminderWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.AssetAlertWorker>();
+        services.AddSingleInstanceHostedService<Services.Factory.MqttSensorListener>();
         services.AddSingleInstanceHostedService<Services.Factory.RunningCheckWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.FactoryPmWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.ComplianceWorker>();

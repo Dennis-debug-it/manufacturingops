@@ -105,6 +105,7 @@ const StatutoryPage = lazy(async () => ({ default: (await import('../features/fa
 const PeoplePage = lazy(async () => ({ default: (await import('../features/factory/people/PeoplePage')).PeoplePage }))
 const SafetyPage = lazy(async () => ({ default: (await import('../features/factory/people/SafetyPage')).SafetyPage }))
 const StoresPage = lazy(async () => ({ default: (await import('../features/factory/stores/StoresPage')).StoresPage }))
+const SensorsPage = lazy(async () => ({ default: (await import('../features/factory/sensors/SensorsPage')).SensorsPage }))
 const ConditionPage = lazy(async () => ({ default: (await import('../features/factory/condition/ConditionPage')).ConditionPage }))
 const PerformancePage = lazy(async () => ({ default: (await import('../features/factory/performance/PerformancePage')).PerformancePage }))
 const CostsPage = lazy(async () => ({ default: (await import('../features/factory/performance/CostsPage')).CostsPage }))
@@ -420,6 +421,7 @@ export function AppRouter() {
       ['/settings/notifications', MyNotificationSettingsPage],
       ['/settings/workspace-notifications', SettingsNotificationsPage],
       ['/settings/integrations', SettingsIntegrationsPage],
+      ['/settings/sensors', SensorsPage],
       ['/settings/security', SettingsSecurityPage],
       ['/settings/executive-dashboard', SettingsExecutiveDashboardPage],
       ['/settings/dashboards', SettingsDashboardsPage],

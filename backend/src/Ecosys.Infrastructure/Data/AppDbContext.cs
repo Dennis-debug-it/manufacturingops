@@ -25,6 +25,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<AssetDocumentVersion> AssetDocumentVersions => Set<AssetDocumentVersion>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
     public DbSet<ConditionEvent> ConditionEvents => Set<ConditionEvent>();
+    public DbSet<SensorGateway> SensorGateways => Set<SensorGateway>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
@@ -914,6 +915,22 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.UpdatedAt });
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SensorGateway>(entity =>
+        {
+            entity.ToTable("sensor_gateways");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.KeyPrefix).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.KeyHash).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.SampleSeconds).HasDefaultValue(300);
+            entity.Property(x => x.LastError).HasMaxLength(500);
+            entity.HasIndex(x => x.KeyPrefix);
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.OrgNode).WithMany().HasForeignKey(x => x.OrgNodeId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ConditionEvent>(entity =>

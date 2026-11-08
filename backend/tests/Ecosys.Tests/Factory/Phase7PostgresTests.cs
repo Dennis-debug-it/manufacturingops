@@ -1,5 +1,6 @@
 using Ecosys.Api.Controllers;
 using Ecosys.Domain.Entities;
+using Ecosys.Infrastructure.Data;
 using Ecosys.Infrastructure.Services.Factory;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,37 @@ public sealed class Phase7PostgresTests
             var detail = Ok(await condition.MeterCondition(meter.Id, 30, default));
             Assert.Equal(7, detail.Readings.Count);
             Assert.Equal(7, detail.Trend.Readings);
+        });
+    }
+
+    [Fact]
+    public async Task Postgres_SensorFeed_AllTranslate()
+    {
+        await FactoryPostgres.RunAsync("sensors", async connection =>
+        {
+            var (db, context) = await FactoryPostgres.SeedAsync(connection);
+            await using var _ = db;
+            var tenantId = context.TenantId!.Value;
+            var factory = new OrgNode { TenantId = tenantId, Level = OrgNodeLevels.Factory, Name = "Chelal", Code = "CHL" };
+            var asset = new Asset { TenantId = tenantId, AssetName = "Boiler", AssetCode = "CHL-BLR", OrgNodeId = factory.Id, Status = "Active" };
+            db.AddRange(factory, asset, new Meter { TenantId = tenantId, AssetId = asset.Id, Name = "Steam pressure", MeterType = MeterTypes.Pressure, Unit = "bar", IsCumulative = false, ExternalId = "BLR.P", MaxThreshold = 10m });
+            await db.SaveChangesAsync();
+
+            var gateways = FactoryAssetRegisterTests.WithHttp(new SensorGatewaysController(db, context, FactoryTestSupport.Access(context), FactoryTestSupport.Audit(db)));
+            var created = Assert.IsType<SensorGatewayCreatedResponse>(Assert.IsType<OkObjectResult>((await gateways.Create(new SaveSensorGatewayRequest("PLC", OrgNodeId: factory.Id, SampleSeconds: 0), default)).Result).Value);
+
+            // The feed runs without a session: a fresh context with no tenant.
+            await using var anonymous = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);
+            var feed = new SensorFeed(anonymous, new MeterReadingService(anonymous), FactoryTestSupport.Monitor(anonymous, context), FactoryTestSupport.Scope(anonymous, context));
+            var gateway = await feed.AuthenticateAsync(created.Key);
+            Assert.NotNull(gateway);
+            var result = await feed.IngestAsync(gateway!, [new SensorSample("BLR.P", 8m, DateTime.UtcNow.AddMinutes(-2)), new SensorSample("BLR.P", 11m, DateTime.UtcNow.AddMinutes(-1))]);
+            Assert.Equal(2, result.Accepted);
+            Assert.Equal(1, await anonymous.ConditionEvents.CountAsync());
+
+            var meters = Ok(await gateways.Meters(created.Gateway.Id, default, FactoryTestSupport.Scope(db, context)));
+            Assert.NotNull(Assert.Single(meters).LastSensorReadingAt);
+            Assert.Equal(2, Assert.Single(Ok(await gateways.List(default))).AcceptedCount);
         });
     }
 

@@ -9850,6 +9850,82 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("scheduled_reports", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.SensorGateway", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("AcceptedCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("KeyHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("KeyPrefix")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("LastErrorAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("MqttTrustBroker")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("OrgNodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("RejectedCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("SampleSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(300);
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KeyPrefix");
+
+                    b.HasIndex("OrgNodeId");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("sensor_gateways", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.Site", b =>
                 {
                     b.Property<Guid>("Id")
@@ -17939,6 +18015,24 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Tenant");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.SensorGateway", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.OrgNode", "OrgNode")
+                        .WithMany()
+                        .HasForeignKey("OrgNodeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("OrgNode");
 
                     b.Navigation("Tenant");
                 });

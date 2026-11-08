@@ -155,6 +155,20 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             }));
 
+    // Each call carries up to 500 readings; a gateway posting every few seconds stays well inside this.
+    options.AddPolicy(Ecosys.Api.Controllers.SensorsController.SensorFeedRateLimitPolicy, httpContext =>
+    {
+        var key = Ecosys.Api.Controllers.SensorsController.KeyFrom(httpContext.Request);
+        var partition = key is { Length: >= 11 } ? $"sensor-key:{key[..11]}" : $"sensor-ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+        return RateLimitPartition.GetFixedWindowLimiter(partition, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 120,
+            Window = TimeSpan.FromSeconds(60),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
+    });
+
     options.AddPolicy("AuthEndpoints", httpContext =>
     {
         var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";

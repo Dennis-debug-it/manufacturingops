@@ -55,6 +55,7 @@ const groups: SettingsGroup[] = [
       { to: '/settings/monitoring', label: 'Monitoring Intake', description: 'Alert webhook routing.', icon: Radio },
       ...(WHATSAPP_ENABLED ? [{ to: '/settings/whatsapp', label: 'WhatsApp', description: 'WhatsApp Business integration.', icon: MessageCircle }] : []),
       { to: '/settings/integrations', label: 'Integrations', description: 'API access and outbound webhooks.', icon: Plug },
+      { to: '/settings/sensors', label: 'Sensors', description: 'PLC, SCADA and tracker feeds into meters, over HTTP or MQTT.', icon: Radio },
     ],
   },
   {
