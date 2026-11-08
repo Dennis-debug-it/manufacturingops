@@ -67,6 +67,7 @@ public static class DependencyInjection
         services.AddScoped<Services.Factory.IFactorySettingsService, Services.Factory.FactorySettingsService>();
         services.AddScoped<Services.Factory.IAssetLifecycleService, Services.Factory.AssetLifecycleService>();
         services.AddScoped<Services.Factory.IMeterReadingService, Services.Factory.MeterReadingService>();
+        services.AddScoped<Services.Factory.IConditionMonitor, Services.Factory.ConditionMonitor>();
         services.AddScoped<Services.Factory.IAssetTagNumberService, Services.Factory.AssetTagNumberService>();
         services.AddScoped<Services.Factory.IAssetClassService, Services.Factory.AssetClassService>();
         services.AddScoped<Services.Factory.IAssetAlertRunner, Services.Factory.AssetAlertRunner>();

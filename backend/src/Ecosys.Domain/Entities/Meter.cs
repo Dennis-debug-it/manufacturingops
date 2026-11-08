@@ -68,9 +68,30 @@ public sealed class Meter : AuditableEntity, ITenantEntity
     public decimal? CurrentValue { get; set; }
     public DateTime? LastReadingAt { get; set; }
 
-    /// <summary>Gauges: a reading outside these limits is flagged and raises an alert.</summary>
+    /// <summary>Alarm limits: a reading outside them is flagged out of range and raises an alarm.</summary>
     public decimal? MinThreshold { get; set; }
     public decimal? MaxThreshold { get; set; }
+
+    /// <summary>Warning band, inside the alarm limits: early notice that a reading is drifting.</summary>
+    public decimal? WarningMin { get; set; }
+    public decimal? WarningMax { get; set; }
+
+    /// <summary>What an alarm does: alert asset managers, or also raise a job (<see cref="ConditionActions"/>).</summary>
+    public string ConditionAction { get; set; } = ConditionActions.Alert;
+
+    /// <summary>Readings in a row outside the limits before it counts (sensors are noisy; one spike is not a fault).</summary>
+    public int TriggerAfterReadings { get; set; } = 1;
+
+    /// <summary>Priority, and optional job plan, of the job an alarm raises.</summary>
+    public string AlarmPriority { get; set; } = "High";
+    public Guid? AlarmJobPlanId { get; set; }
+
+    /// <summary>The meter's current condition, from its latest reading, and since when.</summary>
+    public string ConditionState { get; set; } = ConditionLevels.Normal;
+    public DateTime? ConditionSince { get; set; }
+
+    /// <summary>Latest readings in a row outside the limits; reset by a normal one.</summary>
+    public int AbnormalStreak { get; set; }
 
     public string? ExternalId { get; set; }
     public string? ExternalSystem { get; set; }
@@ -94,7 +115,10 @@ public sealed class MeterReading : AuditableEntity, ITenantEntity
 
     /// <summary>Counter was reset or replaced; the value may be lower than the previous one.</summary>
     public bool IsReset { get; set; }
+    /// <summary>Past an alarm limit (<see cref="Condition"/> is Alarm).</summary>
     public bool IsOutOfRange { get; set; }
+    /// <summary>Normal, Warning or Alarm, judged against the meter's limits when the reading was taken.</summary>
+    public string Condition { get; set; } = ConditionLevels.Normal;
     public string? Notes { get; set; }
     public Guid? RecordedByUserId { get; set; }
     public string? RecordedByName { get; set; }

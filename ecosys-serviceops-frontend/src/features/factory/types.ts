@@ -211,7 +211,21 @@ export interface Meter {
   lastReadingAt: string | null
   minThreshold: number | null
   maxThreshold: number | null
+  externalId: string | null
+  externalSystem: string | null
+  warningMin: number | null
+  warningMax: number | null
+  /** Alert, or WorkOrder: also raise a job when the alarm limit is crossed. */
+  conditionAction: ConditionAction
+  triggerAfterReadings: number
+  alarmPriority: string
+  alarmJobPlanId: string | null
+  conditionState: ConditionLevel
+  conditionSince: string | null
 }
+
+export type ConditionLevel = 'Normal' | 'Warning' | 'Alarm'
+export type ConditionAction = 'Alert' | 'WorkOrder'
 
 export interface UpsertMeterPayload {
   name: string
@@ -222,6 +236,14 @@ export interface UpsertMeterPayload {
   minThreshold?: number | null
   maxThreshold?: number | null
   initialValue?: number | null
+  warningMin?: number | null
+  warningMax?: number | null
+  conditionAction?: ConditionAction | null
+  triggerAfterReadings?: number | null
+  alarmPriority?: string | null
+  alarmJobPlanId?: string | null
+  externalId?: string | null
+  externalSystem?: string | null
 }
 
 export interface MeterReading {
@@ -235,6 +257,7 @@ export interface MeterReading {
   isOutOfRange: boolean
   notes: string | null
   recordedByName: string | null
+  condition: ConditionLevel
 }
 
 export interface AssetTag {

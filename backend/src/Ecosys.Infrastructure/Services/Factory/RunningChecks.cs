@@ -36,8 +36,12 @@ internal sealed class RunningCheckService(
     IFactorySettingsService factorySettingsService,
     ITenantTimeZoneService timeZoneService,
     IMeterReadingService meterReadingService,
-    IFactoryWorkOrderService workOrderService) : IRunningCheckService
+    IFactoryWorkOrderService workOrderService,
+    IConditionMonitor? conditionMonitor = null) : IRunningCheckService
 {
+    /// <summary>Readings this submission put on meters, judged once the run is saved.</summary>
+    private readonly List<(Meter Meter, MeterReading Reading)> fedReadings = [];
+
     private static readonly string[] PassValues = ["pass", "yes", "true", "ok", "good"];
     private static readonly string[] FailValues = ["fail", "no", "false", "poor", "bad", "failed", "not ok"];
 
@@ -215,6 +219,14 @@ internal sealed class RunningCheckService(
         run.FailedCount = answers.Count(x => x.Passed == false);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        if (conditionMonitor is not null)
+        {
+            foreach (var (meter, reading) in fedReadings)
+            {
+                await conditionMonitor.EvaluateAsync(meter, reading, actor, cancellationToken);
+            }
+        }
+
         var raised = new List<string>();
         foreach (var group in answers.Where(x => x.Passed == false && x.FailAction != CheckFailActions.None).GroupBy(x => x.FailAction))
         {
@@ -293,7 +305,8 @@ internal sealed class RunningCheckService(
 
         try
         {
-            await meterReadingService.RecordAsync(meter, new NewMeterReading(reading, at, MeterReadingSources.Manual, Notes: "Running check", UserId: actor.UserId, UserName: actor.Name), cancellationToken);
+            var recorded = await meterReadingService.RecordAsync(meter, new NewMeterReading(reading, at, MeterReadingSources.Manual, Notes: "Running check", UserId: actor.UserId, UserName: actor.Name), cancellationToken);
+            fedReadings.Add((meter, recorded));
             return null;
         }
         catch (BusinessRuleException ex)

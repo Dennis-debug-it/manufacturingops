@@ -24,6 +24,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<AssetDocument> AssetDocuments => Set<AssetDocument>();
     public DbSet<AssetDocumentVersion> AssetDocumentVersions => Set<AssetDocumentVersion>();
     public DbSet<MeterReading> MeterReadings => Set<MeterReading>();
+    public DbSet<ConditionEvent> ConditionEvents => Set<ConditionEvent>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
@@ -899,12 +900,40 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.CurrentValue).HasPrecision(18, 4);
             entity.Property(x => x.MinThreshold).HasPrecision(18, 4);
             entity.Property(x => x.MaxThreshold).HasPrecision(18, 4);
+            entity.Property(x => x.WarningMin).HasPrecision(18, 4);
+            entity.Property(x => x.WarningMax).HasPrecision(18, 4);
+            entity.Property(x => x.ConditionAction).HasMaxLength(20).IsRequired().HasDefaultValue(ConditionActions.Alert);
+            entity.Property(x => x.TriggerAfterReadings).HasDefaultValue(1);
+            entity.Property(x => x.AlarmPriority).HasMaxLength(20).IsRequired().HasDefaultValue("High");
+            entity.Property(x => x.ConditionState).HasMaxLength(20).IsRequired().HasDefaultValue(ConditionLevels.Normal);
+            entity.HasOne<JobPlan>().WithMany().HasForeignKey(x => x.AlarmJobPlanId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasIndex(x => new { x.TenantId, x.ConditionState });
             entity.Property(x => x.ExternalId).HasMaxLength(100);
             entity.Property(x => x.ExternalSystem).HasMaxLength(50);
             entity.HasIndex(x => new { x.TenantId, x.AssetId, x.Name }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.UpdatedAt });
             entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ConditionEvent>(entity =>
+        {
+            entity.ToTable("condition_events");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Level).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Direction).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.PeakValue).HasPrecision(18, 4);
+            entity.Property(x => x.AcknowledgedByName).HasMaxLength(200);
+            entity.Property(x => x.AcknowledgementNote).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.Status, x.StartedAt });
+            entity.HasIndex(x => new { x.TenantId, x.MeterId, x.StartedAt });
+            // At most one open excursion per meter.
+            entity.HasIndex(x => x.MeterId).IsUnique().HasFilter("\"Status\" = 'Open'");
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Meter).WithMany().HasForeignKey(x => x.MeterId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.WorkOrder).WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<MeterReading>(entity =>
@@ -914,6 +943,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Value).HasPrecision(18, 4);
             entity.Property(x => x.Delta).HasPrecision(18, 4);
             entity.Property(x => x.Source).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Condition).HasMaxLength(20).IsRequired().HasDefaultValue(ConditionLevels.Normal);
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.Property(x => x.RecordedByName).HasMaxLength(200);
             entity.HasIndex(x => new { x.TenantId, x.MeterId, x.ReadAt });

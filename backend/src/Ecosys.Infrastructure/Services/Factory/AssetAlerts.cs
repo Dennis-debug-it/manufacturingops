@@ -57,11 +57,15 @@ public static class AssetAlerts
         }).ToList();
     }
 
-    /// <summary>Tells the asset's managers about a reading outside the meter's limits. Never throws.</summary>
-    public static async Task NotifyMeterOutOfRangeAsync(
-        INotificationDispatcher? dispatcher, AppDbContext dbContext, Meter meter, Asset asset, MeterReading reading, CancellationToken cancellationToken)
+    /// <summary>
+    /// Tells the asset's managers that a meter's excursion was confirmed or got worse: a warning
+    /// (drifting) or an alarm (past its limit), with the job raised for it, if any.
+    /// </summary>
+    public static async Task NotifyConditionAsync(
+        INotificationDispatcher? dispatcher, AppDbContext dbContext, Meter meter, Asset asset, MeterReading reading,
+        ConditionEvent conditionEvent, string? raisedWorkOrderNumber, CancellationToken cancellationToken)
     {
-        if (dispatcher is null || !reading.IsOutOfRange)
+        if (dispatcher is null)
         {
             return;
         }
@@ -75,19 +79,24 @@ public static class AssetAlerts
             return;
         }
 
+        var alarm = conditionEvent.Level == ConditionLevels.Alarm;
         var location = asset.OrgNodeId.HasValue
             ? await dbContext.OrgNodes.Where(x => x.Id == asset.OrgNodeId).Select(x => x.Name).SingleOrDefaultAsync(cancellationToken)
             : null;
         var value = $"{reading.Value:0.##} {meter.Unit}".Trim();
-        var limits = string.Join(" to ", new[] { meter.MinThreshold, meter.MaxThreshold }.Select(x => x.HasValue ? $"{x:0.##}" : "—"));
+        var limits = alarm
+            ? ConditionMonitor.Limits(meter.MinThreshold, meter.MaxThreshold, meter.Unit)
+            : ConditionMonitor.Limits(meter.WarningMin, meter.WarningMax, meter.Unit);
+        var what = alarm ? "past its alarm limit" : "outside its normal band";
+        var job = raisedWorkOrderNumber is null ? string.Empty : $" Job {raisedWorkOrderNumber} raised.";
 
         await dispatcher.NotifyAsync(new NotificationRequest(
             asset.TenantId,
             MeterOutOfRange,
             recipients,
-            $"{asset.AssetName}: {meter.Name} {value}",
-            $"{asset.AssetCode} read {value}, outside its limits ({limits} {meter.Unit}).",
-            $"/assets/{asset.Id}?tab=meters",
+            $"{(alarm ? "Alarm" : "Warning")}: {asset.AssetName} {meter.Name} {value}",
+            $"{asset.AssetCode} read {value}, {what} ({limits}).{job}",
+            $"/maintenance/condition?meter={meter.Id}",
             nameof(Asset),
             asset.Id,
             new Dictionary<string, string?>
@@ -97,10 +106,12 @@ public static class AssetAlerts
                 ["Location"] = location ?? "—",
                 ["MeterName"] = meter.Name,
                 ["Value"] = value,
-                ["Limits"] = $"{limits} {meter.Unit}".Trim(),
-                ["RecordedBy"] = reading.RecordedByName ?? "—",
+                ["Limits"] = limits,
+                ["Level"] = conditionEvent.Level,
+                ["WorkOrderNumber"] = raisedWorkOrderNumber ?? "—",
+                ["RecordedBy"] = reading.RecordedByName ?? reading.Source,
             },
-            NotificationSeverities.Warning), cancellationToken);
+            alarm ? NotificationSeverities.Critical : NotificationSeverities.Warning), cancellationToken);
     }
 }
 

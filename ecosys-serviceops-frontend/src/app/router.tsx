@@ -105,6 +105,7 @@ const StatutoryPage = lazy(async () => ({ default: (await import('../features/fa
 const PeoplePage = lazy(async () => ({ default: (await import('../features/factory/people/PeoplePage')).PeoplePage }))
 const SafetyPage = lazy(async () => ({ default: (await import('../features/factory/people/SafetyPage')).SafetyPage }))
 const StoresPage = lazy(async () => ({ default: (await import('../features/factory/stores/StoresPage')).StoresPage }))
+const ConditionPage = lazy(async () => ({ default: (await import('../features/factory/condition/ConditionPage')).ConditionPage }))
 const PerformancePage = lazy(async () => ({ default: (await import('../features/factory/performance/PerformancePage')).PerformancePage }))
 const CostsPage = lazy(async () => ({ default: (await import('../features/factory/performance/CostsPage')).CostsPage }))
 const CompliancePage = lazy(async () => ({ default: (await import('../features/factory/performance/CompliancePage')).CompliancePage }))
@@ -313,6 +314,7 @@ export function AppRouter() {
       ['/maintenance/safety', SafetyPage],
       ['/maintenance/stores', StoresPage],
       ['/maintenance/contractors', ContractorsPage],
+      ['/maintenance/condition', ConditionPage],
       ['/maintenance/performance', PerformancePage],
       ['/maintenance/costs', CostsPage],
       ['/maintenance/compliance', CompliancePage],

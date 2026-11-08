@@ -140,5 +140,6 @@ public sealed class MeterTests
             FactoryTestSupport.Scope(db, context),
             FactoryTestSupport.Settings(db),
             new MeterReadingService(db),
+            FactoryTestSupport.Monitor(db, context),
             FactoryTestSupport.Audit(db)));
 }

@@ -92,12 +92,12 @@ internal sealed class MeterReadingService(AppDbContext dbContext) : IMeterReadin
             ReadAt = readAt,
             Source = source,
             IsReset = reading.IsReset,
-            IsOutOfRange = (meter.MinThreshold.HasValue && reading.Value < meter.MinThreshold.Value)
-                || (meter.MaxThreshold.HasValue && reading.Value > meter.MaxThreshold.Value),
+            Condition = ConditionRules.Classify(meter, reading.Value).Level,
             Notes = string.IsNullOrWhiteSpace(reading.Notes) ? null : reading.Notes.Trim(),
             RecordedByUserId = reading.UserId,
             RecordedByName = reading.UserName
         };
+        entry.IsOutOfRange = entry.Condition == ConditionLevels.Alarm;
         dbContext.MeterReadings.Add(entry);
 
         if (next is null)

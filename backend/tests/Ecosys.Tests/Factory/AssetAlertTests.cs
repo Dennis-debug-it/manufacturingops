@@ -51,7 +51,7 @@ public sealed class AssetAlertTests
         var dispatcher = new RecordingDispatcher();
         var context = new FactoryTenantContext(site.TenantId, site.AdminId);
         var meters = FactoryAssetRegisterTests.WithHttp(new MetersController(db, context, FactoryTestSupport.Access(context), FactoryTestSupport.Scope(db, context),
-            FactoryTestSupport.Settings(db), new MeterReadingService(db), FactoryTestSupport.Audit(db), dispatcher));
+            FactoryTestSupport.Settings(db), new MeterReadingService(db), FactoryTestSupport.Monitor(db, context, dispatcher), FactoryTestSupport.Audit(db)));
 
         await meters.Record(meter.Id, new RecordMeterReadingRequest(65m, null), CancellationToken.None);
         Assert.Empty(dispatcher.Sent);
@@ -59,7 +59,7 @@ public sealed class AssetAlertTests
         await meters.Record(meter.Id, new RecordMeterReadingRequest(92.5m, null), CancellationToken.None);
         var alert = Assert.Single(dispatcher.Sent);
         Assert.Equal(AssetAlerts.MeterOutOfRange, alert.Key);
-        Assert.Equal("Our dryer: Bearing temperature 92.5 °C", alert.Title);
+        Assert.Equal("Alarm: Our dryer Bearing temperature 92.5 °C", alert.Title);
         Assert.Contains(site.AdminId, alert.UserIds);
         Assert.Contains(site.EngineerId, alert.UserIds);
         Assert.Equal("Drying", alert.TemplateValues["Location"]);

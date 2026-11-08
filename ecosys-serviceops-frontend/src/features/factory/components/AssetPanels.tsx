@@ -32,7 +32,7 @@ import { CriticalityBadge, Field, OperationalBadge, formatNumber, inputClass, pr
 export function MetersPanel({ asset, canManage, canRecord }: { asset: FactoryAsset; canManage: boolean; canRecord: boolean }) {
   const { data: meters, isLoading } = useMeters(asset.id)
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [adding, setAdding] = useState(false)
+  const [editing, setEditing] = useState<Meter | 'new' | null>(null)
   const selected = meters?.find((meter) => meter.id === selectedId) ?? meters?.[0]
 
   if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>
@@ -51,16 +51,16 @@ export function MetersPanel({ asset, canManage, canRecord }: { asset: FactoryAss
             <span className="text-slate-600">{formatNumber(meter.currentValue, meter.unit)}</span>
           </button>
         ))}
-        {canManage ? <button type="button" className={secondaryButton} onClick={() => setAdding(true)}><Plus className="h-4 w-4" />Add meter</button> : null}
+        {canManage ? <button type="button" className={secondaryButton} onClick={() => setEditing('new')}><Plus className="h-4 w-4" />Add meter</button> : null}
       </div>
       {(meters ?? []).length === 0 ? <p className="text-sm text-slate-500">No meters yet. Add run hours, production, temperature or any other reading you track.</p> : null}
-      {selected ? <MeterDetail asset={asset} meter={selected} canRecord={canRecord} /> : null}
-      {adding ? <AddMeterDrawer assetId={asset.id} onClose={() => setAdding(false)} /> : null}
+      {selected ? <MeterDetail asset={asset} meter={selected} canRecord={canRecord} onEdit={canManage ? () => setEditing(selected) : null} /> : null}
+      {editing ? <MeterDrawer assetId={asset.id} meter={editing === 'new' ? null : editing} onClose={() => setEditing(null)} /> : null}
     </div>
   )
 }
 
-function MeterDetail({ asset, meter, canRecord }: { asset: FactoryAsset; meter: Meter; canRecord: boolean }) {
+function MeterDetail({ asset, meter, canRecord, onEdit }: { asset: FactoryAsset; meter: Meter; canRecord: boolean; onEdit: (() => void) | null }) {
   const { data: readings } = useReadings(meter.id)
   const record = useRecordReading(asset.id)
   const [value, setValue] = useState('')
@@ -70,7 +70,9 @@ function MeterDetail({ asset, meter, canRecord }: { asset: FactoryAsset; meter: 
   const submit = async () => {
     try {
       const reading = await record.mutateAsync({ meterId: meter.id, value: Number(value), readAt: readAt || null, isReset })
-      toast[reading.isOutOfRange ? 'error' : 'success'](reading.isOutOfRange ? `Recorded. ${formatNumber(reading.value, meter.unit)} is outside the limits; asset managers have been told.` : 'Reading recorded')
+      if (reading.condition === 'Alarm') toast.error(`Recorded. ${formatNumber(reading.value, meter.unit)} is past the alarm limit.`)
+      else if (reading.condition === 'Warning') toast(`Recorded. ${formatNumber(reading.value, meter.unit)} is in the warning band.`, { icon: '⚠️' })
+      else toast.success('Reading recorded')
       setValue('')
       setReadAt('')
       setIsReset(false)
@@ -80,16 +82,25 @@ function MeterDetail({ asset, meter, canRecord }: { asset: FactoryAsset; meter: 
   }
 
   const limits = [meter.minThreshold, meter.maxThreshold].some((x) => x !== null)
-    ? `Limits ${formatNumber(meter.minThreshold)} to ${formatNumber(meter.maxThreshold)} ${meter.unit}`
+    ? `Alarm ${formatNumber(meter.minThreshold)} to ${formatNumber(meter.maxThreshold)}`
+    : null
+  const warning = [meter.warningMin, meter.warningMax].some((x) => x !== null)
+    ? `warning ${formatNumber(meter.warningMin)} to ${formatNumber(meter.warningMax)}`
     : null
 
   return (
     <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="flex items-center gap-2 font-semibold text-slate-900"><Gauge className="h-4 w-4 text-slate-400" />{meter.name}</h3>
-        <span className="text-xs text-slate-500">{meter.isCumulative ? 'Counter' : 'Measurement'} · {meter.unit}{limits ? ` · ${limits}` : ''}</span>
+        <h3 className="flex items-center gap-2 font-semibold text-slate-900">
+          <Gauge className="h-4 w-4 text-slate-400" />{meter.name}
+          {meter.conditionState !== 'Normal' ? <Badge tone={meter.conditionState === 'Alarm' ? 'danger' : 'warning'} size="sm">{meter.conditionState}</Badge> : null}
+        </h3>
+        <span className="flex items-center gap-2 text-xs text-slate-500">
+          {meter.isCumulative ? 'Counter' : 'Measurement'} · {meter.unit}{limits ? ` · ${limits}` : ''}{warning ? ` · ${warning}` : ''}
+          {onEdit ? <button type="button" className="font-medium text-[var(--app-primary)] hover:underline" onClick={onEdit}>Edit</button> : null}
+        </span>
       </div>
-      <ReadingsChart readings={readings ?? []} unit={meter.unit} min={meter.minThreshold} max={meter.maxThreshold} />
+      <ReadingsChart readings={readings ?? []} unit={meter.unit} min={meter.minThreshold} max={meter.maxThreshold} warnMin={meter.warningMin} warnMax={meter.warningMax} />
       {canRecord ? (
         <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
           <Field label={`New reading (${meter.unit})`}><input type="number" inputMode="decimal" className={inputClass} value={value} onChange={(event) => setValue(event.target.value)} /></Field>
@@ -112,7 +123,10 @@ function MeterDetail({ asset, meter, canRecord }: { asset: FactoryAsset; meter: 
                 <td className="font-medium text-slate-900">{formatNumber(reading.value, meter.unit)}</td>
                 {meter.isCumulative ? <td className="text-slate-600">{reading.isReset ? 'Reset' : reading.delta !== null ? `+${formatNumber(reading.delta)}` : '—'}</td> : null}
                 <td className="text-slate-600">{reading.recordedByName ?? reading.source}</td>
-                <td>{reading.isOutOfRange ? <Badge tone="danger" size="sm"><AlertTriangle className="h-3 w-3" />Outside limits</Badge> : null}</td>
+                <td>
+                  {reading.condition === 'Alarm' || reading.isOutOfRange ? <Badge tone="danger" size="sm"><AlertTriangle className="h-3 w-3" />Alarm</Badge>
+                    : reading.condition === 'Warning' ? <Badge tone="warning" size="sm">Warning</Badge> : null}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -122,27 +136,55 @@ function MeterDetail({ asset, meter, canRecord }: { asset: FactoryAsset; meter: 
   )
 }
 
-function AddMeterDrawer({ assetId, onClose }: { assetId: string; onClose: () => void }) {
+const num = (value: string) => (value === '' ? null : Number(value))
+const text = (value: number | null | undefined) => (value === null || value === undefined ? '' : String(value))
+
+/** Adds a meter, or edits one: its limits, the warning band and what an alarm does. */
+function MeterDrawer({ assetId, meter, onClose }: { assetId: string; meter: Meter | null; onClose: () => void }) {
   const { data: types } = useMeterTypes()
   const save = useSaveMeter(assetId)
-  const [form, setForm] = useState({ name: '', meterType: 'RunHours', unit: '', isPrimary: false, minThreshold: '', maxThreshold: '', initialValue: '' })
+  const [form, setForm] = useState({
+    name: meter?.name ?? '',
+    meterType: meter?.meterType ?? 'RunHours',
+    unit: meter?.unit ?? '',
+    isPrimary: meter?.isPrimary ?? false,
+    minThreshold: text(meter?.minThreshold),
+    maxThreshold: text(meter?.maxThreshold),
+    warningMin: text(meter?.warningMin),
+    warningMax: text(meter?.warningMax),
+    conditionAction: meter?.conditionAction ?? 'Alert',
+    triggerAfterReadings: String(meter?.triggerAfterReadings ?? 1),
+    alarmPriority: meter?.alarmPriority ?? 'High',
+    externalId: meter?.externalId ?? '',
+    initialValue: '',
+  })
   const type = types?.find((item) => item.meterType === form.meterType)
   const set = (key: keyof typeof form, value: string | boolean) => setForm((current) => ({ ...current, [key]: value }))
 
   const submit = async () => {
     try {
       await save.mutateAsync({
+        id: meter?.id,
         payload: {
           name: form.name,
           meterType: form.meterType,
           unit: form.unit || null,
           isPrimary: form.isPrimary,
-          minThreshold: form.minThreshold === '' ? null : Number(form.minThreshold),
-          maxThreshold: form.maxThreshold === '' ? null : Number(form.maxThreshold),
-          initialValue: form.initialValue === '' ? null : Number(form.initialValue),
+          minThreshold: num(form.minThreshold),
+          maxThreshold: num(form.maxThreshold),
+          warningMin: num(form.warningMin),
+          warningMax: num(form.warningMax),
+          conditionAction: form.conditionAction,
+          triggerAfterReadings: Number(form.triggerAfterReadings) || 1,
+          alarmPriority: form.alarmPriority,
+          externalId: form.externalId.trim() || null,
+          // Not edited here: sent back unchanged so saving keeps them.
+          externalSystem: meter?.externalSystem ?? null,
+          alarmJobPlanId: meter?.alarmJobPlanId ?? null,
+          initialValue: meter ? null : num(form.initialValue),
         },
       })
-      toast.success('Meter added')
+      toast.success(meter ? 'Meter saved' : 'Meter added')
       onClose()
     } catch {
       // The API client shows the error.
@@ -150,10 +192,10 @@ function AddMeterDrawer({ assetId, onClose }: { assetId: string; onClose: () => 
   }
 
   return (
-    <FormDrawer open title="Add meter" onClose={onClose} footer={
+    <FormDrawer open title={meter ? `Edit ${meter.name}` : 'Add meter'} onClose={onClose} footer={
       <div className="flex justify-end gap-2">
         <button type="button" className={secondaryButton} onClick={onClose}>Cancel</button>
-        <button type="button" className={primaryButton} disabled={!form.name.trim() || save.isPending} onClick={() => void submit()}>Add meter</button>
+        <button type="button" className={primaryButton} disabled={!form.name.trim() || save.isPending} onClick={() => void submit()}>{meter ? 'Save' : 'Add meter'}</button>
       </div>
     }>
       <div className="grid gap-4 sm:grid-cols-2">
@@ -164,9 +206,34 @@ function AddMeterDrawer({ assetId, onClose }: { assetId: string; onClose: () => 
           </select>
         </Field>
         <Field label="Unit" hint={type ? `Blank uses ${type.defaultUnit || 'no unit'}.` : undefined}><input className={inputClass} value={form.unit} onChange={(event) => set('unit', event.target.value)} /></Field>
-        <Field label="First reading"><input type="number" className={inputClass} value={form.initialValue} onChange={(event) => set('initialValue', event.target.value)} /></Field>
-        <Field label="Low limit" hint="Readings below it alert asset managers."><input type="number" className={inputClass} value={form.minThreshold} onChange={(event) => set('minThreshold', event.target.value)} /></Field>
-        <Field label="High limit"><input type="number" className={inputClass} value={form.maxThreshold} onChange={(event) => set('maxThreshold', event.target.value)} /></Field>
+        {meter ? <span /> : <Field label="First reading"><input type="number" className={inputClass} value={form.initialValue} onChange={(event) => set('initialValue', event.target.value)} /></Field>}
+        <div className="sm:col-span-2">
+          <h4 className="text-sm font-semibold text-slate-900">Condition monitoring</h4>
+          <p className="text-xs text-slate-500">Readings past an alarm limit alert asset managers. The warning band, inside the alarm limits, gives early notice of drift.</p>
+        </div>
+        <Field label="Alarm low"><input type="number" className={inputClass} value={form.minThreshold} onChange={(event) => set('minThreshold', event.target.value)} /></Field>
+        <Field label="Alarm high"><input type="number" className={inputClass} value={form.maxThreshold} onChange={(event) => set('maxThreshold', event.target.value)} /></Field>
+        <Field label="Warning low"><input type="number" className={inputClass} value={form.warningMin} onChange={(event) => set('warningMin', event.target.value)} /></Field>
+        <Field label="Warning high"><input type="number" className={inputClass} value={form.warningMax} onChange={(event) => set('warningMax', event.target.value)} /></Field>
+        <Field label="On alarm">
+          <select className={inputClass} value={form.conditionAction} onChange={(event) => set('conditionAction', event.target.value)}>
+            <option value="Alert">Alert asset managers</option>
+            <option value="WorkOrder">Alert and raise a job</option>
+          </select>
+        </Field>
+        <Field label="Readings in a row first" hint="Ignore single spikes from noisy sensors.">
+          <input type="number" min={1} max={50} className={inputClass} value={form.triggerAfterReadings} onChange={(event) => set('triggerAfterReadings', event.target.value)} />
+        </Field>
+        {form.conditionAction === 'WorkOrder' ? (
+          <Field label="Job priority">
+            <select className={inputClass} value={form.alarmPriority} onChange={(event) => set('alarmPriority', event.target.value)}>
+              {['Low', 'Medium', 'High', 'Critical'].map((priority) => <option key={priority}>{priority}</option>)}
+            </select>
+          </Field>
+        ) : null}
+        <Field label="Sensor tag" hint="How a sensor feed names this meter (see Settings → Sensors).">
+          <input className={inputClass} value={form.externalId} onChange={(event) => set('externalId', event.target.value)} placeholder="e.g. BLR1.STEAM.PRESSURE" />
+        </Field>
         {type?.isCumulative ? (
           <label className="inline-flex items-center gap-2 text-sm text-slate-700 sm:col-span-2">
             <input type="checkbox" checked={form.isPrimary} onChange={(event) => set('isPrimary', event.target.checked)} />

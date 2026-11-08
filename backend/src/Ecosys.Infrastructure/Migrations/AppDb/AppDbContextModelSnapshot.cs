@@ -2555,6 +2555,92 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("compliance_standards", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.ConditionEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AcknowledgedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AcknowledgedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("AcknowledgedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AcknowledgementNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("AssetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ClearedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("LastReadingAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Level")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("MeterId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("PeakValue")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<int>("ReadingCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("WorkOrderId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssetId");
+
+                    b.HasIndex("MeterId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 'Open'");
+
+                    b.HasIndex("WorkOrderId");
+
+                    b.HasIndex("TenantId", "MeterId", "StartedAt");
+
+                    b.HasIndex("TenantId", "Status", "StartedAt");
+
+                    b.ToTable("condition_events", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.ConsentRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6489,8 +6575,38 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("AbnormalStreak")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("AlarmJobPlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AlarmPriority")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("High");
+
                     b.Property<Guid>("AssetId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ConditionAction")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Alert");
+
+                    b.Property<DateTime?>("ConditionSince")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ConditionState")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Normal");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -6540,6 +6656,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("TriggerAfterReadings")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<string>("Unit")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -6548,9 +6669,21 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("WarningMax")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<decimal?>("WarningMin")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
                     b.HasKey("Id");
 
+                    b.HasIndex("AlarmJobPlanId");
+
                     b.HasIndex("AssetId");
+
+                    b.HasIndex("TenantId", "ConditionState");
 
                     b.HasIndex("TenantId", "UpdatedAt");
 
@@ -6568,6 +6701,13 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<Guid>("AssetId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Condition")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Normal");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -15646,6 +15786,38 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Item");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.ConditionEvent", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Asset", "Asset")
+                        .WithMany()
+                        .HasForeignKey("AssetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Meter", "Meter")
+                        .WithMany()
+                        .HasForeignKey("MeterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.WorkOrder", "WorkOrder")
+                        .WithMany()
+                        .HasForeignKey("WorkOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Asset");
+
+                    b.Navigation("Meter");
+
+                    b.Navigation("WorkOrder");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.ConsentRecord", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Technician", null)
@@ -16867,6 +17039,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
             modelBuilder.Entity("Ecosys.Domain.Entities.Meter", b =>
                 {
+                    b.HasOne("Ecosys.Domain.Entities.JobPlan", null)
+                        .WithMany()
+                        .HasForeignKey("AlarmJobPlanId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Ecosys.Domain.Entities.Asset", "Asset")
                         .WithMany()
                         .HasForeignKey("AssetId")

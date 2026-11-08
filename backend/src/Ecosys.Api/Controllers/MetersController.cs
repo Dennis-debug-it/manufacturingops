@@ -21,8 +21,8 @@ public sealed class MetersController(
     IOrgScopeService orgScopeService,
     IFactorySettingsService factorySettingsService,
     IMeterReadingService meterReadingService,
-    IAuditLogService auditLogService,
-    INotificationDispatcher? notificationDispatcher = null) : TenantAwareControllerBase(tenantContext)
+    IConditionMonitor conditionMonitor,
+    IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
 {
     private const int MaxReadingsPage = 1000;
 
@@ -68,12 +68,18 @@ public sealed class MetersController(
         await ApplyAsync(meter, request, cancellationToken);
         dbContext.Meters.Add(meter);
 
+        MeterReading? initial = null;
         if (request.InitialValue.HasValue)
         {
-            await meterReadingService.RecordAsync(meter, new NewMeterReading(request.InitialValue.Value, null, Notes: "Initial reading", UserId: UserId, UserName: UserDisplayName), cancellationToken);
+            initial = await meterReadingService.RecordAsync(meter, new NewMeterReading(request.InitialValue.Value, null, Notes: "Initial reading", UserId: UserId, UserName: UserDisplayName), cancellationToken);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+        if (initial is not null)
+        {
+            await conditionMonitor.EvaluateAsync(meter, initial, new FactoryActor(UserId, UserDisplayName), cancellationToken);
+        }
+
         await auditLogService.LogAsync(TenantId, UserId, "meter.created", nameof(Meter), meter.Id.ToString(),
             $"Added {meter.MeterType} meter '{meter.Name}' to asset '{asset.AssetName}'.", cancellationToken);
 
@@ -159,7 +165,7 @@ public sealed class MetersController(
             UserId,
             UserDisplayName), cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await AssetAlerts.NotifyMeterOutOfRangeAsync(notificationDispatcher, dbContext, meter, meter.Asset!, reading, cancellationToken);
+        await conditionMonitor.EvaluateAsync(meter, reading, new FactoryActor(UserId, UserDisplayName), cancellationToken);
         return Ok(Map(reading));
     }
 
@@ -175,6 +181,31 @@ public sealed class MetersController(
             throw new BusinessRuleException("The low limit must be below the high limit.");
         }
 
+        if (request.WarningMin.HasValue && request.WarningMax.HasValue && request.WarningMin > request.WarningMax)
+        {
+            throw new BusinessRuleException("The low warning limit must be below the high warning limit.");
+        }
+
+        if ((request.WarningMin.HasValue && request.MinThreshold.HasValue && request.WarningMin < request.MinThreshold)
+            || (request.WarningMax.HasValue && request.MaxThreshold.HasValue && request.WarningMax > request.MaxThreshold))
+        {
+            throw new BusinessRuleException("The warning band must sit inside the alarm limits.");
+        }
+
+        var action = request.ConditionAction is null ? meter.ConditionAction : ConditionActions.Find(request.ConditionAction)
+            ?? throw new BusinessRuleException($"Alarm action must be one of: {string.Join(", ", ConditionActions.All)}.");
+        var priority = request.AlarmPriority is null ? meter.AlarmPriority : FactoryPriorities.Find(request.AlarmPriority)
+            ?? throw new BusinessRuleException($"Alarm job priority must be one of: {string.Join(", ", FactoryPriorities.All)}.");
+        if (request.TriggerAfterReadings is < 1 or > 50)
+        {
+            throw new BusinessRuleException("Readings in a row before an alert must be between 1 and 50.");
+        }
+
+        if (request.AlarmJobPlanId is { } planId && !await dbContext.JobPlans.AnyAsync(x => x.TenantId == TenantId && x.Id == planId, cancellationToken))
+        {
+            throw new BusinessRuleException("Job plan was not found.");
+        }
+
         var name = request.Name.Trim();
         if (await dbContext.Meters.AnyAsync(x => x.TenantId == TenantId && x.AssetId == meter.AssetId && x.Id != meter.Id && x.Name.ToLower() == name.ToLower(), cancellationToken))
         {
@@ -184,6 +215,12 @@ public sealed class MetersController(
         meter.Name = name;
         meter.MinThreshold = request.MinThreshold;
         meter.MaxThreshold = request.MaxThreshold;
+        meter.WarningMin = request.WarningMin;
+        meter.WarningMax = request.WarningMax;
+        meter.ConditionAction = action;
+        meter.AlarmPriority = priority;
+        meter.TriggerAfterReadings = request.TriggerAfterReadings ?? meter.TriggerAfterReadings;
+        meter.AlarmJobPlanId = request.AlarmJobPlanId;
         meter.ExternalId = string.IsNullOrWhiteSpace(request.ExternalId) ? null : request.ExternalId.Trim();
         meter.ExternalSystem = string.IsNullOrWhiteSpace(request.ExternalSystem) ? null : request.ExternalSystem.Trim();
 
@@ -236,7 +273,15 @@ public sealed class MetersController(
         meter.MinThreshold,
         meter.MaxThreshold,
         meter.ExternalId,
-        meter.ExternalSystem);
+        meter.ExternalSystem,
+        meter.WarningMin,
+        meter.WarningMax,
+        meter.ConditionAction,
+        meter.TriggerAfterReadings,
+        meter.AlarmPriority,
+        meter.AlarmJobPlanId,
+        meter.ConditionState,
+        meter.ConditionSince);
 
     private static MeterReadingResponse Map(MeterReading reading) => new(
         reading.Id,
@@ -248,7 +293,8 @@ public sealed class MetersController(
         reading.IsReset,
         reading.IsOutOfRange,
         reading.Notes,
-        reading.RecordedByName);
+        reading.RecordedByName,
+        reading.Condition);
 }
 
 public sealed record MeterTypeResponse(string MeterType, string DefaultUnit, bool IsCumulative);
@@ -263,7 +309,13 @@ public sealed record UpsertMeterRequest(
     decimal? MaxThreshold = null,
     decimal? InitialValue = null,
     [StringLength(100)] string? ExternalId = null,
-    [StringLength(50)] string? ExternalSystem = null);
+    [StringLength(50)] string? ExternalSystem = null,
+    decimal? WarningMin = null,
+    decimal? WarningMax = null,
+    [StringLength(20)] string? ConditionAction = null,
+    int? TriggerAfterReadings = null,
+    [StringLength(20)] string? AlarmPriority = null,
+    Guid? AlarmJobPlanId = null);
 
 public sealed record MeterResponse(
     Guid Id,
@@ -279,7 +331,15 @@ public sealed record MeterResponse(
     decimal? MinThreshold,
     decimal? MaxThreshold,
     string? ExternalId,
-    string? ExternalSystem);
+    string? ExternalSystem,
+    decimal? WarningMin,
+    decimal? WarningMax,
+    string ConditionAction,
+    int TriggerAfterReadings,
+    string AlarmPriority,
+    Guid? AlarmJobPlanId,
+    string ConditionState,
+    DateTime? ConditionSince);
 
 public sealed record RecordMeterReadingRequest(
     decimal Value,
@@ -298,4 +358,5 @@ public sealed record MeterReadingResponse(
     bool IsReset,
     bool IsOutOfRange,
     string? Notes,
-    string? RecordedByName);
+    string? RecordedByName,
+    string Condition = ConditionLevels.Normal);

@@ -55,6 +55,16 @@ internal static class FactoryTestSupport
     public static AuditLogService Audit(AppDbContext dbContext) => new(dbContext, new HttpContextAccessor());
 
     public static UserAccessService Access(ITenantContext context) => new(context);
+
+    public static FactoryWorkOrderService WorkOrders(AppDbContext dbContext, ITenantContext context)
+    {
+        var scope = Scope(dbContext, context);
+        return new FactoryWorkOrderService(dbContext, new DocumentNumberingService(dbContext), Settings(dbContext), new AssetLifecycleService(dbContext, scope),
+            scope, new FactorySlaService(dbContext), new FactoryPmProgress(dbContext), new FactoryJobGuards(dbContext));
+    }
+
+    public static ConditionMonitor Monitor(AppDbContext dbContext, ITenantContext context, INotificationDispatcher? dispatcher = null) =>
+        new(dbContext, WorkOrders(dbContext, context), Microsoft.Extensions.Logging.Abstractions.NullLogger<ConditionMonitor>.Instance, dispatcher);
 }
 
 /// <summary>License checks always pass; licensing is not what these tests are about.</summary>

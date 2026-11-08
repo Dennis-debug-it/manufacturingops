@@ -27,6 +27,8 @@ public static class FactoryRequestSources
     public const string Operator = "Operator";
     public const string RunningCheck = "RunningCheck";
     public const string Preventive = "Preventive";
+    /// <summary>Raised by a meter crossing its alarm limit (condition monitoring).</summary>
+    public const string Condition = "Condition";
 }
 
 public static class FactoryPriorities

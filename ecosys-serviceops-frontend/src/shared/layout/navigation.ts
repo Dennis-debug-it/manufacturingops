@@ -14,6 +14,7 @@ export const tenantNavItems: NavItem[] = [
   { label: 'Dashboard', to: '/dashboard', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'dashboard.view', icon: LayoutDashboard },
   { label: 'Work Orders', to: '/work-orders', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer', 'materials_controller'], permission: 'work-orders.view', icon: ClipboardList },
   { label: 'Factory overview', to: '/maintenance/overview', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: Factory },
+  { label: 'Condition', to: '/maintenance/condition', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Activity },
   { label: 'Performance', to: '/maintenance/performance', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: TrendingUp },
   { label: 'Maintenance jobs', to: '/maintenance/jobs', roles: ['admin', 'manager', 'dispatcher', 'technician', 'viewer'], permission: 'work-orders.view', icon: Wrench },
   { label: 'Planned maintenance', to: '/maintenance/pm', roles: ['admin', 'manager', 'dispatcher', 'viewer'], permission: 'work-orders.view', icon: Gauge },
