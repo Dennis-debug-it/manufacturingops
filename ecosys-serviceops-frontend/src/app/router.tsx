@@ -106,6 +106,7 @@ const PeoplePage = lazy(async () => ({ default: (await import('../features/facto
 const SafetyPage = lazy(async () => ({ default: (await import('../features/factory/people/SafetyPage')).SafetyPage }))
 const StoresPage = lazy(async () => ({ default: (await import('../features/factory/stores/StoresPage')).StoresPage }))
 const SensorsPage = lazy(async () => ({ default: (await import('../features/factory/sensors/SensorsPage')).SensorsPage }))
+const ReliabilityPage = lazy(async () => ({ default: (await import('../features/factory/reliability/ReliabilityPage')).ReliabilityPage }))
 const ConditionPage = lazy(async () => ({ default: (await import('../features/factory/condition/ConditionPage')).ConditionPage }))
 const PerformancePage = lazy(async () => ({ default: (await import('../features/factory/performance/PerformancePage')).PerformancePage }))
 const CostsPage = lazy(async () => ({ default: (await import('../features/factory/performance/CostsPage')).CostsPage }))
@@ -316,6 +317,7 @@ export function AppRouter() {
       ['/maintenance/stores', StoresPage],
       ['/maintenance/contractors', ContractorsPage],
       ['/maintenance/condition', ConditionPage],
+      ['/maintenance/reliability', ReliabilityPage],
       ['/maintenance/performance', PerformancePage],
       ['/maintenance/costs', CostsPage],
       ['/maintenance/compliance', CompliancePage],

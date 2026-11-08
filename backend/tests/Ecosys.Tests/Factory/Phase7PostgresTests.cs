@@ -1,6 +1,7 @@
 using Ecosys.Api.Controllers;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
+using Ecosys.Infrastructure.Services;
 using Ecosys.Infrastructure.Services.Factory;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -75,6 +76,43 @@ public sealed class Phase7PostgresTests
             var meters = Ok(await gateways.Meters(created.Gateway.Id, default, FactoryTestSupport.Scope(db, context)));
             Assert.NotNull(Assert.Single(meters).LastSensorReadingAt);
             Assert.Equal(2, Assert.Single(Ok(await gateways.List(default))).AcceptedCount);
+        });
+    }
+
+    [Fact]
+    public async Task Postgres_Reliability_AllTranslate()
+    {
+        await FactoryPostgres.RunAsync("reliability", async connection =>
+        {
+            var (db, context) = await FactoryPostgres.SeedAsync(connection);
+            await using var _ = db;
+            var tenantId = context.TenantId!.Value;
+            var now = DateTime.UtcNow;
+            var factory = new OrgNode { TenantId = tenantId, Level = OrgNodeLevels.Factory, Name = "Chelal", Code = "CHL" };
+            var pump = new Asset { TenantId = tenantId, AssetName = "Feed pump", AssetCode = "CHL-P1", OrgNodeId = factory.Id, Status = "Active" };
+            var seal = new FailureCode { TenantId = tenantId, Kind = FailureCodeKinds.Problem, Code = "SEAL", Name = "Seal leak" };
+            var hours = new Meter { TenantId = tenantId, AssetId = pump.Id, Name = "Run hours", MeterType = MeterTypes.RunHours, Unit = "h", IsCumulative = true, IsPrimary = true, CurrentValue = 900 };
+            db.AddRange(factory, pump, seal, hours);
+            var i = 0;
+            foreach (var daysAgo in new[] { 120, 90, 60, 30 })
+            {
+                var at = now.AddDays(-daysAgo);
+                db.MeterReadings.Add(new MeterReading { TenantId = tenantId, MeterId = hours.Id, AssetId = pump.Id, Value = i * 300, ReadAt = at.AddHours(-1), Source = MeterReadingSources.Manual });
+                db.WorkOrders.Add(new WorkOrder { TenantId = tenantId, AssetId = pump.Id, OrgNodeId = factory.Id, WorkOrderNumber = $"WO-{++i}", Title = "Leak", IsBreakdown = true,
+                    Status = WorkOrderStatuses.Closed, CreatedAt = at, DowntimeStartedAt = at, DowntimeEndedAt = at.AddHours(2), FailureProblemCodeId = seal.Id });
+            }
+
+            await db.SaveChangesAsync();
+            var scope = FactoryTestSupport.Scope(db, context);
+            var service = new ReliabilityService(db, new FactoryPmService(db, FactoryTestSupport.WorkOrders(db, context), FactoryTestSupport.Settings(db)));
+            var controller = FactoryAssetRegisterTests.WithHttp(new ReliabilityController(context, FactoryTestSupport.Access(context), scope, service, FactoryTestSupport.Settings(db), FactoryTestSupport.Audit(db)));
+
+            var assets = Ok(await controller.Assets(factory.Id, 365, default));
+            Assert.Equal((4, 300m), (assets[0].Failures, assets[0].MeanRunBetween));
+            var suggestion = Assert.Single(Ok(await controller.Suggestions(null, 365, default)));
+            Assert.Equal(PmTriggerTypes.Meter, suggestion.TriggerType);
+            Assert.Equal(PmTriggerTypes.Meter, Ok(await controller.Apply(pump.Id, 365, default)).TriggerType);
+            Assert.Equal(3, Ok(await controller.RepeatFailures(factory.Id, 365, 45, default)).Summary.Repeats);
         });
     }
 

@@ -188,14 +188,7 @@ public sealed class ConditionMonitoringController(
     private async Task<IReadOnlySet<Guid>?> VisibleNodesAsync(Guid? orgNodeId, CancellationToken cancellationToken)
     {
         userAccessService.EnsureTenantOperationalAccess();
-        var scope = await orgScopeService.GetScopeAsync(TenantId, UserId, cancellationToken);
-        if (orgNodeId is not { } node)
-            return scope.Nodes;
-
-        if (!scope.Allows(node))
-            throw new NotFoundException("Location was not found.");
-        var subtree = await orgScopeService.GetSubtreeAsync(TenantId, node, cancellationToken);
-        return scope.Nodes is null ? subtree : subtree.Where(scope.Nodes.Contains).ToHashSet();
+        return await orgScopeService.VisibleNodesAsync(TenantId, UserId, orgNodeId, cancellationToken);
     }
 }
 

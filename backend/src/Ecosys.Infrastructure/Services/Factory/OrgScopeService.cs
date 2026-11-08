@@ -27,6 +27,13 @@ public interface IOrgScopeService
 
     /// <summary>The node and all of its descendants, active or not.</summary>
     Task<IReadOnlySet<Guid>> GetSubtreeAsync(Guid tenantId, Guid orgNodeId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// For a report filtered to a location: the nodes under it the user may see, or, with no
+    /// location chosen, the user's whole scope. Null means unrestricted. A location outside the
+    /// user's scope is not found.
+    /// </summary>
+    Task<IReadOnlySet<Guid>?> VisibleNodesAsync(Guid tenantId, Guid userId, Guid? orgNodeId, CancellationToken cancellationToken = default);
 }
 
 internal sealed class OrgScopeService(AppDbContext dbContext, ITenantContext tenantContext) : IOrgScopeService
@@ -65,6 +72,23 @@ internal sealed class OrgScopeService(AppDbContext dbContext, ITenantContext ten
     {
         var edges = await LoadEdgesAsync(tenantId, cancellationToken);
         return Descendants(edges, [orgNodeId]);
+    }
+
+    public async Task<IReadOnlySet<Guid>?> VisibleNodesAsync(Guid tenantId, Guid userId, Guid? orgNodeId, CancellationToken cancellationToken = default)
+    {
+        var scope = await GetScopeAsync(tenantId, userId, cancellationToken);
+        if (orgNodeId is not { } node)
+        {
+            return scope.Nodes;
+        }
+
+        if (!scope.Allows(node) || !await dbContext.OrgNodes.AnyAsync(x => x.TenantId == tenantId && x.Id == node, cancellationToken))
+        {
+            throw new NotFoundException("Location was not found.");
+        }
+
+        var subtree = await GetSubtreeAsync(tenantId, node, cancellationToken);
+        return scope.Nodes is null ? subtree : subtree.Where(scope.Nodes.Contains).ToHashSet();
     }
 
     private async Task<List<(Guid Id, Guid? ParentId)>> LoadEdgesAsync(Guid tenantId, CancellationToken cancellationToken) =>
