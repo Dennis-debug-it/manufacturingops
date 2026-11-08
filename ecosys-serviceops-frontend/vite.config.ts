@@ -20,7 +20,7 @@ export default defineConfig({
         id: '/',
         name: 'ECOSYS',
         short_name: 'Ecosys',
-        description: 'Field service operations: work orders, technicians, assets and billing.',
+        description: 'Factory maintenance: assets, jobs, planned maintenance, spares and the leaf fleet.',
         start_url: '/',
         scope: '/',
         display: 'standalone',

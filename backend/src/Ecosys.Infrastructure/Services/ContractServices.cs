@@ -1646,7 +1646,7 @@ internal sealed class ContractReminderWorker(
                                 "contract-reminder",
                                 recipient.Email!,
                                 recipient.FullName,
-                                "Ecosys ServiceOps",
+                                "Ecosys Factory Maintenance",
                                 null,
                                 null,
                                 message.subject,

@@ -68,7 +68,7 @@ export interface PlatformTenantListItem {
   createdAt: string
   /** Office + field seats (what the backend enforces). Always set once the tenant has a license. */
   seatLimit?: number | null
-  /** ServiceOps modules the edition (and WhatsApp Business add-on) entitles. */
+  /** Ecosys modules the edition (and WhatsApp Business add-on) entitles. */
   modules?: string[]
   licenseExpiresAt?: string | null
   primaryAdminEmail?: string | null

@@ -71,7 +71,7 @@ internal sealed class TestDataSeeder(
             City        = "Nairobi",
             Status      = "Active",
             LicenseStatus = "Trial",
-            PlanName    = "Ecosys ServiceOps Suite",
+            PlanName    = "Ecosys Factory Maintenance Professional",
             MaxUsers    = 5,
             MaxBranches = 1,
             IsActive    = true,

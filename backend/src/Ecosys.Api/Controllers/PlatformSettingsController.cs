@@ -704,11 +704,11 @@ public sealed class PlatformSettingsController(
         var setting = await dbContext.PlatformSettings.SingleOrDefaultAsync(x => x.Category == PlatformGeneralCategory, cancellationToken);
         if (setting is null)
         {
-            return new PlatformGeneralRecord("Kenya", "Africa/Nairobi", "Ecosys ServiceOps Platform", null, null, "en");
+            return new PlatformGeneralRecord("Kenya", "Africa/Nairobi", "Ecosys Factory Maintenance", null, null, "en");
         }
 
         return JsonSerializer.Deserialize<PlatformGeneralRecord>(setting.JsonValue, JsonOptions)
-            ?? new PlatformGeneralRecord("Kenya", "Africa/Nairobi", "Ecosys ServiceOps Platform", null, null, "en");
+            ?? new PlatformGeneralRecord("Kenya", "Africa/Nairobi", "Ecosys Factory Maintenance", null, null, "en");
     }
 
     private async Task<PlatformBrandingExtendedRecord> LoadBrandingExtendedAsync(CancellationToken cancellationToken)

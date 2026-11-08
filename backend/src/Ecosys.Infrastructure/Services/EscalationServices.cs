@@ -294,7 +294,7 @@ internal sealed class EscalationRuleService(
                     "escalation-rule-fired",
                     toEmail,
                     toName,
-                    "Ecosys ServiceOps",
+                    "Ecosys Factory Maintenance",
                     null,
                     null,
                     $"Escalation: {rule.Name} for {workOrder.WorkOrderNumber}",

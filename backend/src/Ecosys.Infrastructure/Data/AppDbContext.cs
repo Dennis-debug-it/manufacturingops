@@ -2736,9 +2736,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             // Operations/Finance/Suite plans were retired by the MoveToEditionsAndSeatTypes migration.
             var seededAt = new DateTime(2026, 10, 24, 0, 0, 0, DateTimeKind.Utc);
             entity.HasData(
-                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555561"), PlanCode = "essentials", DisplayName = "Ecosys ServiceOps Essentials", MinOfficeSeats = 2, IsActive = true, CreatedAt = seededAt },
-                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555562"), PlanCode = "professional", DisplayName = "Ecosys ServiceOps Professional", MinOfficeSeats = 3, IsActive = true, CreatedAt = seededAt },
-                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555563"), PlanCode = "enterprise", DisplayName = "Ecosys ServiceOps Enterprise", MinOfficeSeats = 10, IsActive = true, CreatedAt = seededAt });
+                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555561"), PlanCode = "essentials", DisplayName = "Ecosys Factory Maintenance Essentials", MinOfficeSeats = 2, IsActive = true, CreatedAt = seededAt },
+                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555562"), PlanCode = "professional", DisplayName = "Ecosys Factory Maintenance Professional", MinOfficeSeats = 3, IsActive = true, CreatedAt = seededAt },
+                new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555563"), PlanCode = "enterprise", DisplayName = "Ecosys Factory Maintenance Enterprise", MinOfficeSeats = 10, IsActive = true, CreatedAt = seededAt });
         });
 
         modelBuilder.Entity<LicenseAddOn>(entity =>

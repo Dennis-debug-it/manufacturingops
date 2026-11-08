@@ -243,7 +243,7 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "Ecosys ServiceOps API",
+        Title = "Ecosys Factory Maintenance API",
         Version = "v1"
     });
 

@@ -60,7 +60,7 @@ for (const modules of [['operations'], ['finance'], ['operations', 'finance']]) 
   test(`welcome actions respect ${modules.join('+')} entitlement`, async ({ page }) => {
     await session(page, 'admin', modules)
     await page.goto('/onboarding')
-    await expect(page.getByRole('heading', { name: 'Welcome to Ecosys ServiceOps' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Welcome to Ecosys Factory Maintenance' })).toBeVisible()
     await expect(page.getByText('acme@serviceops.ecosysdigital.co.ke', { exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Add Customer', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Create Work Order', exact: true })).toHaveCount(modules.includes('operations') ? 1 : 0)
@@ -73,7 +73,7 @@ for (const modules of [['operations'], ['finance'], ['operations', 'finance']]) 
 for (const status of ['EXPIRED', 'SUPERSEDED', 'REVOKED', 'INVALID', 'USED']) {
   test(`invitation ${status} comes from server and offers appropriate recovery`, async ({ page }) => {
     await page.route('**/api/auth/validate-invitation', (route) => route.fulfill(respond({ status })))
-    await page.route('**/api/auth/resend-invitation', (route) => route.fulfill(respond({ message: 'If a pending ServiceOps invitation exists for this email, a new invitation has been sent.' })))
+    await page.route('**/api/auth/resend-invitation', (route) => route.fulfill(respond({ message: 'If a pending Ecosys invitation exists for this email, a new invitation has been sent.' })))
     await page.goto('/reset-password?mode=invite&token=opaque-token')
     await expect(page.getByLabel('New password', { exact: true })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Back to sign in' })).toBeVisible()
@@ -83,7 +83,7 @@ for (const status of ['EXPIRED', 'SUPERSEDED', 'REVOKED', 'INVALID', 'USED']) {
     } else {
       await page.getByLabel('Your email address').fill('john@acme.test')
       await page.getByRole('button', { name: 'Request new invitation' }).click()
-      await expect(page.getByRole('status')).toContainText('If a pending ServiceOps invitation exists')
+      await expect(page.getByRole('status')).toContainText('If a pending Ecosys invitation exists')
     }
   })
 }
@@ -195,5 +195,5 @@ test('the workspace admin still lands on workspace setup after accepting an invi
   await session(page, 'admin')
   await page.goto('/login?welcome=1')
   await expect(page).toHaveURL(/\/onboarding$/)
-  await expect(page.getByRole('heading', { name: 'Welcome to Ecosys ServiceOps' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome to Ecosys Factory Maintenance' })).toBeVisible()
 })

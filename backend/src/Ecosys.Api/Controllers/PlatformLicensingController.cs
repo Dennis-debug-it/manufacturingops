@@ -142,7 +142,7 @@ public sealed class PlatformLicensingController(
         var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == request.TenantId, cancellationToken)
             ?? throw new NotFoundException("Tenant was not found.");
         if (request.TenantId == PlatformConstants.RootTenantId)
-            throw new BusinessRuleException("The platform root tenant cannot receive a commercial ServiceOps subscription.");
+            throw new BusinessRuleException("The platform root tenant cannot receive a commercial Ecosys subscription.");
 
         var plan = await dbContext.LicensePlans.SingleOrDefaultAsync(x => x.Id == request.PlanId, cancellationToken)
             ?? throw new NotFoundException("License plan was not found.");
@@ -210,7 +210,7 @@ public sealed class PlatformLicensingController(
         var tenant = await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == request.TenantId, cancellationToken)
             ?? throw new NotFoundException("Tenant was not found.");
         if (request.TenantId == PlatformConstants.RootTenantId)
-            throw new BusinessRuleException("The platform root tenant cannot receive a commercial ServiceOps subscription.");
+            throw new BusinessRuleException("The platform root tenant cannot receive a commercial Ecosys subscription.");
         if (!plan.IsActive || !ServiceOpsPlans.IsEdition(plan.PlanCode))
             throw new BusinessRuleException("Only an active edition can be assigned.");
 

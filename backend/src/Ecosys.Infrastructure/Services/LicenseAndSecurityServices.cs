@@ -424,7 +424,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
         var normalized = moduleName.Trim().ToLowerInvariant();
         if (!ServiceOpsPlans.EditionModules(ServiceOpsPlans.Enterprise).Contains(normalized) && normalized != ServiceOpsPlans.WhatsAppBusiness)
         {
-            throw new BusinessRuleException("Unknown ServiceOps module.");
+            throw new BusinessRuleException("Unknown Ecosys module.");
         }
 
         var snapshot = await GetSnapshotAsync(tenantId, cancellationToken);

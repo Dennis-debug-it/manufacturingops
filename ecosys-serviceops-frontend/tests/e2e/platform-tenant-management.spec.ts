@@ -16,14 +16,14 @@ function tenantDetail(state: TenantState) {
   return {
     tenantId: 't1', name: 'Acme Engineering', slug: 'acme', contactName: 'John Kamau', contactEmail: 'john@acme.test',
     contactPhone: null, country: 'Kenya', county: null, city: null, address: null, taxPin: null,
-    status: state.status, planName: 'Ecosys ServiceOps Professional', licenseStatus: state.licenseStatus,
+    status: state.status, planName: 'Ecosys Factory Maintenance Professional', licenseStatus: state.licenseStatus,
     maxUsers: state.seatLimit, maxBranches: null, trialStartsAt: null, trialEndsAt: null, trialExtensionUsed: true,
     trialExtendedAt: null, trialDaysRemaining: null, trialStatus: 'PaidActive', subscriptionStartsAt: '2026-01-01T00:00:00Z',
     subscriptionEndsAt: '2027-01-01T00:00:00Z', createdAt: '2026-01-01T00:00:00Z', updatedAt: null, suspendedAt: null,
     deactivatedAt: null, createdByUserId: null, updatedByUserId: null, userCount: 3, branchCount: 1, workOrderCount: 12,
     activeUsersNow: 0, lastActivityAt: null, initialAdminInvitationSent: null, initialAdminInvitationMessage: null,
     timeZoneId: 'Africa/Nairobi', currency: 'KES', serviceOpsEmail: 'acme@serviceops.ecosysdigital.co.ke',
-    seatsUsed: 3, seatLimit: state.seatLimit, modules: ['operations', 'finance', 'maintenance', 'inventory', 'projects', 'advanced'], planCode: 'professional',
+    seatsUsed: 3, seatLimit: state.seatLimit, modules: ['operations', 'finance', 'maintenance', 'inventory', 'advanced'], planCode: 'professional',
     officeSeats: state.seatLimit, fieldSeats: state.fieldSeats ?? 0, officeSeatsUsed: 1, fieldSeatsUsed: 0, whatsAppAddOn: null,
     licenseExpiresAt: '2027-01-01T00:00:00Z', isPerpetual: false, suspensionReason: state.suspensionReason,
   }

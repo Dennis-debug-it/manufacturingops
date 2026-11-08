@@ -67,7 +67,7 @@ export function SignupPage() {
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8 text-slate-900 sm:px-6 lg:px-10">
       <div className="mx-auto max-w-3xl">
-        <PageHeader title="Start your free trial" subtitle="14 days of the full Ecosys ServiceOps Suite. No card needed." />
+        <PageHeader title="Start your free trial" subtitle="14 days of Ecosys Factory Maintenance, every module included. No card needed." />
         <form
           className="mt-8 space-y-4 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"
           noValidate

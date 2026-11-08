@@ -281,7 +281,7 @@ export function TenantsPage() {
             </Field>
           </div>
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4" aria-live="polite">
-            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">ServiceOps Email</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">Workspace email</p>
             <p className="mt-1 break-all text-sm font-medium text-emerald-950">{suggestSlug(createForm.slug) || '{tenant-slug}'}@serviceops.ecosysdigital.co.ke</p>
             <p className="mt-1 text-xs text-emerald-800">Automatically provisioned. The server confirms the final address.</p>
           </div>

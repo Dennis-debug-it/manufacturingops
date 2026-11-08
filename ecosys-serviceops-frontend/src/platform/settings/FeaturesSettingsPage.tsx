@@ -38,7 +38,7 @@ export function FeaturesSettingsPage() {
             <thead className="bg-slate-50">
               <tr>
                 <th className="px-4 py-3 font-medium text-slate-600">Feature</th>
-                {(data ?? []).map((plan) => <th key={plan.id} className="px-4 py-3 text-center font-medium text-slate-600">{plan.name.replace('Ecosys ServiceOps ', '')}</th>)}
+                {(data ?? []).map((plan) => <th key={plan.id} className="px-4 py-3 text-center font-medium text-slate-600">{plan.name.replace(/^Ecosys (ServiceOps |Factory Maintenance )?/, '')}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

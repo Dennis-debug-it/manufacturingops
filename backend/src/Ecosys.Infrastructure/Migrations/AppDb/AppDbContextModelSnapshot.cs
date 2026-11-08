@@ -5811,7 +5811,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555561"),
                             CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayName = "Ecosys ServiceOps Essentials",
+                            DisplayName = "Ecosys Factory Maintenance Essentials",
                             FieldSeatAnnualPrice = 0m,
                             FieldSeatMonthlyPrice = 0m,
                             IsActive = true,
@@ -5824,7 +5824,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555562"),
                             CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayName = "Ecosys ServiceOps Professional",
+                            DisplayName = "Ecosys Factory Maintenance Professional",
                             FieldSeatAnnualPrice = 0m,
                             FieldSeatMonthlyPrice = 0m,
                             IsActive = true,
@@ -5837,7 +5837,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         {
                             Id = new Guid("55555555-5555-5555-5555-555555555563"),
                             CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DisplayName = "Ecosys ServiceOps Enterprise",
+                            DisplayName = "Ecosys Factory Maintenance Enterprise",
                             FieldSeatAnnualPrice = 0m,
                             FieldSeatMonthlyPrice = 0m,
                             IsActive = true,

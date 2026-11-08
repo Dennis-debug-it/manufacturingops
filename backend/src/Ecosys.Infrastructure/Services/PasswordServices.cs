@@ -218,7 +218,7 @@ public sealed class PasswordResetService(
 
     public async Task<string> ResendInvitationAsync(string email, CancellationToken cancellationToken = default)
     {
-        const string message = "If a pending ServiceOps invitation exists for this email, a new invitation has been sent.";
+        const string message = "If a pending Ecosys invitation exists for this email, a new invitation has been sent.";
         if (string.IsNullOrWhiteSpace(email)) return message;
         var normalized = email.Trim().ToLowerInvariant();
         var user = await dbContext.Users.Include(x => x.Tenant)

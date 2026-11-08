@@ -40,9 +40,9 @@ public static class ServiceOpsPlans
 
     public static string DisplayName(string code) => code switch
     {
-        Essentials => "Ecosys ServiceOps Essentials",
-        Professional => "Ecosys ServiceOps Professional",
-        Enterprise => "Ecosys ServiceOps Enterprise",
+        Essentials => "Ecosys Factory Maintenance Essentials",
+        Professional => "Ecosys Factory Maintenance Professional",
+        Enterprise => "Ecosys Factory Maintenance Enterprise",
         _ => throw new BusinessRuleException("Select Essentials, Professional, or Enterprise.")
     };
 
@@ -163,6 +163,6 @@ public static class ServiceOpsPlans
     {
         foreach (var module in required)
             if (!enabled.Contains(module, StringComparer.OrdinalIgnoreCase))
-                throw new LicenseException($"Your ServiceOps edition does not include {module}. Contact your account manager to upgrade.", $"license_module_{module}", 403);
+                throw new LicenseException($"Your Ecosys edition does not include {module}. Contact your account manager to upgrade.", $"license_module_{module}", 403);
     }
 }

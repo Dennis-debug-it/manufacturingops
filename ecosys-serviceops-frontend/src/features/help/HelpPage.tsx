@@ -68,7 +68,7 @@ export function HelpPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Help & User Guide" subtitle="How to do things in Ecosys ServiceOps, section by section." />
+      <PageHeader title="Help & User Guide" subtitle="How to do things in Ecosys Factory Maintenance, section by section." />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <nav aria-label="Guides" className="space-y-2 rounded-2xl border border-slate-200 bg-white p-3 lg:sticky lg:top-20 lg:self-start">
           <label className="flex items-center gap-2 rounded-lg border border-slate-200 px-2">

@@ -4,7 +4,7 @@ import { E2E_API_URL } from './helpers/test-data'
 
 const editionModules = {
   essentials: ['operations', 'finance'],
-  professional: ['operations', 'finance', 'maintenance', 'inventory', 'projects', 'advanced'],
+  professional: ['operations', 'finance', 'maintenance', 'inventory', 'advanced'],
   enterprise: ['operations', 'finance', 'maintenance', 'inventory', 'projects', 'advanced', 'enterprise_tools'],
 } as const
 
@@ -23,7 +23,7 @@ async function openWorkspace(page: Page, code: keyof typeof editionModules) {
   await page.route(`${E2E_API_URL}/api/**`, async (route) => {
     const path = new URL(route.request().url()).pathname
     if (!path.startsWith('/api/')) { await route.continue(); return }
-    const body = path === '/api/auth/me' ? session : path === '/api/tenant/license' ? { planCode: code, planName: `Ecosys ServiceOps ${code}`, modules } : []
+    const body = path === '/api/auth/me' ? session : path === '/api/tenant/license' ? { planCode: code, planName: `Ecosys Factory Maintenance ${code}`, modules } : []
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body), headers: { 'Access-Control-Allow-Origin': '*' } })
   })
   await page.goto('/settings')
@@ -44,7 +44,7 @@ for (const code of ['essentials', 'professional', 'enterprise'] as const) {
     await expect(page.getByRole('link', { name: /PM Templates Preventive/ })).toHaveCount(code === 'essentials' ? 0 : 1)
     if (code === 'essentials') {
       await page.goto('/maintenance/schedules')
-      await expect(page.getByText('This feature is unavailable on your ServiceOps plan.')).toBeVisible()
+      await expect(page.getByText('This feature is not included in your Ecosys edition.')).toBeVisible()
     }
   })
 }
