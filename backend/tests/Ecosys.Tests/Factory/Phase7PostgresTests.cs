@@ -63,6 +63,8 @@ public sealed class Phase7PostgresTests
 
             var gateways = FactoryAssetRegisterTests.WithHttp(new SensorGatewaysController(db, context, FactoryTestSupport.Access(context), FactoryTestSupport.Audit(db)));
             var created = Assert.IsType<SensorGatewayCreatedResponse>(Assert.IsType<OkObjectResult>((await gateways.Create(new SaveSensorGatewayRequest("PLC", OrgNodeId: factory.Id, SampleSeconds: 0), default)).Result).Value);
+            // 0 ("keep every reading") must survive the insert, not turn into a column default.
+            Assert.Equal(0, (await db.SensorGateways.AsNoTracking().SingleAsync()).SampleSeconds);
 
             // The feed runs without a session: a fresh context with no tenant.
             await using var anonymous = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options);

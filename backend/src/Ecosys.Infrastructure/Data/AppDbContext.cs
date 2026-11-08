@@ -981,7 +981,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Description).HasMaxLength(1000);
             entity.Property(x => x.KeyPrefix).HasMaxLength(20).IsRequired();
             entity.Property(x => x.KeyHash).HasMaxLength(128).IsRequired();
-            entity.Property(x => x.SampleSeconds).HasDefaultValue(300);
             entity.Property(x => x.LastError).HasMaxLength(500);
             entity.HasIndex(x => x.KeyPrefix);
             entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();

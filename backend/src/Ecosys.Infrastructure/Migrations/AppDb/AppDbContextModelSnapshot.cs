@@ -9964,9 +9964,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasColumnType("bigint");
 
                     b.Property<int>("SampleSeconds")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(300);
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid");

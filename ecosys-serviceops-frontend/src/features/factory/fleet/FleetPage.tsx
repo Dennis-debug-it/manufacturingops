@@ -94,7 +94,7 @@ function FleetTable({ rows, onOpen }: { rows: FleetVehicle[]; onOpen: (assetId: 
                   {row.servicePlanName ? <div className="text-xs font-normal text-slate-500">{row.servicePlanName}</div> : null}
                 </td>
                 <td className="px-3 py-2">
-                  {paper ? <Badge tone={paper.daysLeft <= 7 ? 'danger' : 'warning'} size="sm">{paper.label} {paper.daysLeft <= 0 ? 'ends today' : `in ${paper.daysLeft} d`}</Badge>
+                  {paper ? <Badge tone={paper.daysLeft <= 7 ? 'danger' : 'warning'} size="sm" className="whitespace-nowrap">{paper.label} {paper.daysLeft <= 0 ? 'ends today' : `in ${paper.daysLeft} days`}</Badge>
                     : row.documents.length === 0 ? <span className="text-xs text-slate-400">Not recorded</span> : <span className="text-xs text-emerald-700">Current</span>}
                 </td>
                 <td className={cn('px-3 py-2 text-right tabular-nums', row.fuel.usingMore && 'font-medium text-amber-700')}>
@@ -204,7 +204,7 @@ function VehicleDetailDrawer({ assetId, onClose, onEdit }: { assetId: string; on
   const canFuel = useAnyPermission('assets.manage', 'work-orders.complete')
   const links = useFactoryLinks()
   return (
-    <FormDrawer open title={data ? `${data.vehicle.registrationNumber} · ${data.vehicle.assetName}` : 'Vehicle'} onClose={onClose}>
+    <FormDrawer open title={data ? [data.vehicle.registrationNumber, data.vehicle.make, data.vehicle.model].filter(Boolean).join(' · ') : 'Vehicle'} onClose={onClose}>
       {isLoading || !data ? <Spinner label="Loading vehicle" /> : (
         <div className="space-y-5 text-sm">
           <div className="flex flex-wrap gap-2">
@@ -224,14 +224,14 @@ function VehicleDetailDrawer({ assetId, onClose, onEdit }: { assetId: string; on
             <h3 className="mb-2 font-semibold text-slate-900">Fill-ups</h3>
             {data.fuelLogs.length === 0 ? <p className="text-slate-500">None logged yet.</p> : (
               <table className="w-full">
-                <thead className="text-left text-xs text-slate-500"><tr><th className="py-1">When</th><th className="text-right">Litres</th><th className="text-right">Odometer</th><th>Where</th></tr></thead>
+                <thead className="text-left text-xs text-slate-500"><tr><th className="py-1">When</th><th className="text-right">Litres</th><th className="text-right">Odometer</th><th className="pl-4">Where</th></tr></thead>
                 <tbody className="divide-y divide-slate-100">
                   {data.fuelLogs.map((log) => (
                     <tr key={log.id}>
                       <td className="py-1.5">{formatDateTime(log.filledAt)}{log.fullTank ? '' : <span className="ml-1 text-xs text-slate-500">part</span>}</td>
                       <td className="text-right tabular-nums">{formatNumber(log.litres)}</td>
                       <td className="text-right tabular-nums">{formatNumber(log.odometerKm, 'km')}</td>
-                      <td className="text-slate-600">{log.station ?? '—'}</td>
+                      <td className="pl-4 text-slate-600">{log.station ?? '—'}</td>
                     </tr>
                   ))}
                 </tbody>
