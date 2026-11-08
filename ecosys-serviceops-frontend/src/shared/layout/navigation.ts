@@ -79,6 +79,8 @@ export const platformNavItems: NavItem[] = [
   // path prefix, so a bare `/platform` matched every platform route and kept Overview highlighted.
   { label: 'Overview', to: '/platform/overview', roles: ['super_admin', 'platform_sales'], permission: 'platform.dashboard.view', icon: ShieldCheck },
   { label: 'Tenants', to: '/platform/tenants', roles: ['super_admin', 'platform_sales'], permission: 'platform.tenants.view', icon: Building2 },
+  // The demo endpoints are platform-admin only (PlatformAdminAccess).
+  { label: 'Demo workspace', to: '/platform/demo', roles: ['super_admin'], permission: 'platform.tenants.view', icon: Factory },
   { label: 'Finance', to: '/platform/finance', roles: ['super_admin'], permission: 'platform.finance.view', icon: Wallet },
   { label: 'Users', to: '/platform/users', roles: ['super_admin'], permission: 'platform.users.view', icon: Users },
   { label: 'Licensing', to: '/platform/licensing', roles: ['super_admin'], permission: 'platform.licensing.view', icon: FileText },

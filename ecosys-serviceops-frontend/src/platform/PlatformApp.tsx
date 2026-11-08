@@ -27,6 +27,7 @@ import { AuditSettingsPage } from './settings/AuditSettingsPage'
 import { AnnouncementsSettingsPage } from './settings/AnnouncementsSettingsPage'
 import { SupportSettingsPage } from './settings/SupportSettingsPage'
 import { HealthSettingsPage } from './settings/HealthSettingsPage'
+import { DemoWorkspacePage } from './DemoWorkspacePage'
 
 /**
  * The roles allowed to open each platform section, keyed by the section's nav `to` path.
@@ -83,6 +84,7 @@ export function PlatformApp() {
           <Route path="dashboard" element={<Navigate to="/platform/overview" replace />} />
 
           <Route path="tenants" element={<RequirePlatformSection navPath="/platform/tenants"><TenantsPage /></RequirePlatformSection>} />
+          <Route path="demo" element={<RequirePlatformSection navPath="/platform/demo"><DemoWorkspacePage /></RequirePlatformSection>} />
           <Route path="tenants/:id" element={<RequirePlatformSection navPath="/platform/tenants"><TenantDetailPage /></RequirePlatformSection>} />
 
 

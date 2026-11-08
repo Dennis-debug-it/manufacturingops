@@ -20,18 +20,19 @@ const steps = [
 ]
 
 export function FirstLoginModal() {
-  const { user } = useAuth()
+  const { user, isImpersonating } = useAuth()
   const [step, setStep] = useState(0)
   const [dismissed, setDismissed] = useState(true)
 
   useEffect(() => {
-    if (!user) return
+    // Platform staff looking into a workspace (support or the demo) are not this user's first sign-in.
+    if (!user || isImpersonating) return
     const key = `ecosys.first-login-shown.${user.userId}`
     if (!localStorage.getItem(key)) {
       setDismissed(false)
       localStorage.setItem(key, '1')
     }
-  }, [user])
+  }, [user, isImpersonating])
 
   if (dismissed || !user) {
     return null
