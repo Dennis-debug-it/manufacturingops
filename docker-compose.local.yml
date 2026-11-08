@@ -1,0 +1,16 @@
+# Local trial on your own machine (e.g. WSL), at http://localhost:8080. NOT for production.
+#
+#   cp .env.local.example .env
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# Runs the API in Development mode, which:
+#   * accepts a plain-HTTP localhost public URL (production insists on a real HTTPS domain);
+#   * seeds a demo workspace: manager@demo.co.ke / Manager@1234, tech@demo.co.ke / Tech@1234;
+#   * serves the API docs (Swagger) at http://localhost:5000/swagger.
+services:
+  api:
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    ports:
+      # Swagger UI at http://localhost:5000/swagger. Bound to this machine only.
+      - "127.0.0.1:5000:5000"
