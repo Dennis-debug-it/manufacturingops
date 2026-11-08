@@ -14,7 +14,7 @@ namespace Ecosys.Tests;
 public sealed class ServiceOpsPlanTests
 {
     [Theory]
-    [InlineData("essentials", "operations,finance")]
+    [InlineData("essentials", "operations,finance,maintenance")]
     [InlineData("professional", "operations,finance,maintenance,inventory,advanced")]
     [InlineData("enterprise", "operations,finance,maintenance,inventory,advanced,enterprise_tools")]
     [InlineData("suite", "")]
@@ -50,10 +50,11 @@ public sealed class ServiceOpsPlanTests
     [InlineData("essentials", "WorkOrders", "/api/workorders", true)]
     [InlineData("essentials", "TenantFinance", "/api/finance/rate-cards", true)]
     [InlineData("essentials", "Clients", "/api/clients", true)]
-    // Professional adds maintenance, inventory and the advanced tools.
-    [InlineData("essentials", "PreventiveMaintenance", "/api/preventive-maintenance", false)]
-    [InlineData("essentials", "Assets", "/api/assets", false)]
-    [InlineData("essentials", "Contracts", "/api/contracts", false)]
+    // Maintenance is in every edition: it is the product.
+    [InlineData("essentials", "PreventiveMaintenance", "/api/preventive-maintenance", true)]
+    [InlineData("essentials", "Assets", "/api/assets", true)]
+    [InlineData("essentials", "Contracts", "/api/contracts", true)]
+    // Professional adds inventory and the advanced tools.
     [InlineData("essentials", "Materials", "/api/materials", false)]
     [InlineData("essentials", "PurchaseOrders", "/api/purchase-orders", false)]
     [InlineData("essentials", "ApprovalMatrix", "/api/approvals/pending", false)]

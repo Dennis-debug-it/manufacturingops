@@ -8,7 +8,7 @@ import { tenantNavItems, type NavItem } from './navigation'
 import { useEntitlements } from '../hooks/useEntitlements'
 
 const technicianNav = [
-  { label: 'Jobs', to: '/work-orders', icon: ClipboardList },
+  { label: 'Jobs', to: '/maintenance/jobs', icon: ClipboardList },
   { label: 'My Time', to: '/my-time', icon: Watch },
   { label: 'Today', to: '/maintenance/calendar', icon: CalendarDays },
   { label: 'Profile', to: '/me', icon: UserCircle2 },
@@ -18,7 +18,8 @@ function isActive(pathname: string, to: string) {
   return pathname === to || pathname.startsWith(`${to}/`)
 }
 
-function MoreSheet({ items, onClose }: { items: Pick<NavItem, 'label' | 'to' | 'icon'>[]; onClose: () => void }) {
+function MoreSheet({ items, onClose }: { items: Pick<NavItem, 'label' | 'to' | 'icon' | 'group'>[]; onClose: () => void }) {
+  const groups = [...new Set(items.map((item) => item.group ?? 'More'))]
   const location = useLocation()
 
   return (
@@ -28,33 +29,38 @@ function MoreSheet({ items, onClose }: { items: Pick<NavItem, 'label' | 'to' | '
       <button type="button" aria-label="Close menu" className="absolute inset-0 bg-[var(--app-primary)]/30 backdrop-blur-[2px]" onClick={onClose} />
       <div className="relative w-full rounded-t-2xl border-t border-[var(--glass-border)] bg-[var(--glass-white-strong)] p-4 pb-24 shadow-2xl backdrop-blur-[var(--glass-blur-lg)]">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-slate-900">All modules</span>
+          <span className="text-sm font-semibold text-slate-900">Menu</span>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
-          {items.map((item) => {
-            const Icon = item.icon
-            const active = isActive(location.pathname, item.to)
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={onClose}
-                className={cn(
-                  'flex flex-col items-center gap-1.5 rounded-xl px-2 py-3 text-xs font-medium transition',
-                  active
-                    ? 'bg-[var(--app-primary)] text-white'
-                    : 'text-slate-600 hover:bg-[var(--app-primary-soft)] hover:text-[var(--app-primary)]',
-                )}
-              >
-                <Icon className="h-5 w-5" />
-                <span className="truncate">{item.label}</span>
-              </Link>
-            )
-          })}
-        </div>
+        {groups.map((group) => (
+          <div key={group} className="mt-3">
+            {groups.length > 1 ? <div className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{group}</div> : null}
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {items.filter((item) => (item.group ?? 'More') === group).map((item) => {
+                const Icon = item.icon
+                const active = isActive(location.pathname, item.to)
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={onClose}
+                    className={cn(
+                      'flex flex-col items-center gap-1.5 rounded-xl px-2 py-3 text-xs font-medium transition',
+                      active
+                        ? 'bg-[var(--app-primary)] text-white'
+                        : 'text-slate-600 hover:bg-[var(--app-primary-soft)] hover:text-[var(--app-primary)]',
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

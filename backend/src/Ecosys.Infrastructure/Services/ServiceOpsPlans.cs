@@ -15,11 +15,11 @@ public static class ServiceOpsPlans
     public const string Professional = "professional";
     public const string Enterprise = "enterprise";
 
-    // Modules. Essentials: Operations + Finance.
+    // Modules. Essentials: Operations, Maintenance and Finance (the core maintenance system).
     public const string Operations = "operations";
     public const string Finance = "finance";
-    // Professional adds these.
     public const string Maintenance = "maintenance";
+    // Professional adds these.
     public const string Inventory = "inventory";
     public const string Advanced = "advanced";
     // Enterprise adds this: multiple branches, API keys and webhooks, monitoring (settings routes and limits).
@@ -48,7 +48,7 @@ public static class ServiceOpsPlans
 
     public static IReadOnlyList<string> EditionModules(string? planCode) => planCode switch
     {
-        Essentials => [Operations, Finance],
+        Essentials => [Operations, Finance, Maintenance],
         Professional => [Operations, Finance, Maintenance, Inventory, Advanced],
         Enterprise => [Operations, Finance, Maintenance, Inventory, Advanced, EnterpriseModule],
         _ => []

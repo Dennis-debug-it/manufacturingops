@@ -22,7 +22,7 @@ async function session(page: Page, role = 'admin', modules = ['operations', 'fin
     const path = new URL(route.request().url()).pathname
     if (!path.startsWith('/api/')) { await route.continue(); return }
     const body = path === '/api/auth/me' ? data
-      : path === '/api/tenant/license' ? { modules, planCode: 'essentials', planName: 'ServiceOps Essentials' }
+      : path === '/api/tenant/license' ? { modules, planCode: 'essentials', planName: 'Ecosys Factory Maintenance Essentials' }
       : path === '/api/tenant/profile' ? { serviceOpsEmail: 'acme@serviceops.ecosysdigital.co.ke' }
       : path === '/api/platform/tenants' || path.endsWith('/branches') || path.endsWith('/notifications') ? [] : {}
     await route.fulfill(respond(body))
@@ -56,17 +56,20 @@ test('tenant creation asks only essential fields and sends stable plan code', as
   expect((await request).postDataJSON()).toEqual({ companyName: 'Acme Engineering Limited', slug: 'acme', planCode: 'essentials', officeSeats: 15, fieldSeats: 4, adminFullName: 'John Kamau', adminEmail: 'john@acme.test', country: 'Nigeria', timeZoneId: 'Africa/Nairobi' })
 })
 
-for (const modules of [['operations'], ['finance'], ['operations', 'finance']]) {
-  test(`welcome actions respect ${modules.join('+')} entitlement`, async ({ page }) => {
+for (const modules of [['operations', 'finance', 'maintenance'], ['operations', 'finance']]) {
+  test(`welcome checklist respects ${modules.join('+')} entitlement`, async ({ page }) => {
     await session(page, 'admin', modules)
     await page.goto('/onboarding')
     await expect(page.getByRole('heading', { name: 'Welcome to Ecosys Factory Maintenance' })).toBeVisible()
     await expect(page.getByText('acme@serviceops.ecosysdigital.co.ke', { exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Add Customer', exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Create Work Order', exact: true })).toHaveCount(modules.includes('operations') ? 1 : 0)
-    await expect(page.getByRole('button', { name: 'Create Invoice', exact: true })).toHaveCount(modules.includes('finance') ? 1 : 0)
-    await expect(page.getByRole('link', { name: 'Go to Dashboard', exact: true })).toHaveAttribute('href', modules.includes('operations') ? '/dashboard' : '/finance')
-    await expect(page.getByText('Required Steps')).toHaveCount(0)
+    const factorySteps = modules.includes('maintenance') ? 1 : 0
+    await expect(page.getByRole('link', { name: /Lay out your factory/ })).toHaveCount(factorySteps)
+    await expect(page.getByRole('link', { name: /Add your assets/ })).toHaveCount(factorySteps)
+    await expect(page.getByRole('link', { name: /Plan preventive maintenance/ })).toHaveCount(factorySteps)
+    await expect(page.getByRole('button', { name: /Invite your team/ })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Go to Dashboard', exact: true })).toHaveAttribute('href', '/dashboard')
+    // No service-company actions on a factory workspace.
+    await expect(page.getByRole('button', { name: 'Add Customer', exact: true })).toHaveCount(0)
   })
 }
 

@@ -319,7 +319,7 @@ public sealed partial class AuthEmailSafetyTests
 
         Assert.Equal(7, created.SeatLimit);
         Assert.Equal(1, created.SeatsUsed);
-        Assert.Equal([ServiceOpsPlans.Operations, ServiceOpsPlans.Finance], created.Modules);
+        Assert.Equal([ServiceOpsPlans.Operations, ServiceOpsPlans.Finance, ServiceOpsPlans.Maintenance], created.Modules);
 
         var list = Assert.IsAssignableFrom<IReadOnlyCollection<PlatformTenantListResponse>>(
             Assert.IsType<OkObjectResult>((await controller.GetAll(CancellationToken.None)).Result).Value);

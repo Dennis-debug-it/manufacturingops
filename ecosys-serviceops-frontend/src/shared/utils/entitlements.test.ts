@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { canAccessModulePath, requiredModulesForPath } from './entitlements'
 
-const essentials = ['operations', 'finance']
-const professional = [...essentials, 'maintenance', 'inventory', 'advanced']
+const essentials = ['operations', 'finance', 'maintenance']
+const professional = [...essentials, 'inventory', 'advanced']
 const enterprise = [...professional, 'enterprise_tools']
 
 describe('edition entitlements', () => {
-  it('gives Essentials the work order to invoice loop', () => {
-    for (const path of ['/work-orders', '/finance/rate-cards', '/clients']) {
+  it('gives Essentials the whole maintenance system', () => {
+    for (const path of ['/maintenance/jobs', '/maintenance/pm', '/assets', '/maintenance/fleet', '/work-orders', '/finance/rate-cards']) {
       expect(canAccessModulePath(path, essentials)).toBe(true)
     }
   })
 
-  it('keeps maintenance, inventory and the advanced tools in Professional', () => {
-    for (const path of ['/maintenance/schedules', '/assets', '/contracts', '/inventory/stock', '/approvals', '/settings/email-intake']) {
+  it('keeps inventory and the advanced tools in Professional', () => {
+    for (const path of ['/inventory/stock', '/inventory/purchase-orders', '/approvals', '/settings/email-intake']) {
       expect(canAccessModulePath(path, essentials)).toBe(false)
       expect(canAccessModulePath(path, professional)).toBe(true)
     }

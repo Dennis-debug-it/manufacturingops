@@ -41,16 +41,19 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
     if (entitlements.isLoading && !planCheckStuck) return <div className="p-6">Loading workspace…</div>
     if (location.pathname === '/dashboard' && !entitlements.hasModule('operations') && entitlements.hasModule('finance'))
       return <Navigate to="/finance" replace />
-    // The stores' home is the stock page, not the field-service dashboard.
-    if (location.pathname === '/dashboard' && user.role === 'materials_controller' && entitlements.canAccessPath('/inventory'))
-      return <Navigate to="/inventory" replace />
-    // Likewise Finance starts on Finance, not on the field-service dashboard.
-    if (location.pathname === '/dashboard' && user.role === 'finance' && entitlements.canAccessPath('/finance'))
-      return <Navigate to="/finance" replace />
+    // The stores' home is Stores and spares, not the maintenance dashboard.
+    if (location.pathname === '/dashboard' && user.role === 'materials_controller' && entitlements.canAccessPath('/maintenance/stores') && canOpenPath(user, '/maintenance/stores'))
+      return <Navigate to="/maintenance/stores" replace />
+    // Finance starts on maintenance costs (falling back to the rate cards on a plan without maintenance).
+    if (location.pathname === '/dashboard' && user.role === 'finance')
+      if (entitlements.canAccessPath('/maintenance/costs') && canOpenPath(user, '/maintenance/costs')) return <Navigate to="/maintenance/costs" replace />
+      else if (entitlements.canAccessPath('/finance')) return <Navigate to="/finance" replace />
     if (!entitlements.canAccessPath(location.pathname) && planCheckStuck && !entitlements.data) {
       return <div className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-amber-800">You're offline. This page needs a connection; it will load when you're back online.</div>
     }
     if (!entitlements.canAccessPath(location.pathname)) return <div className="rounded-xl border border-slate-200 bg-white p-6">This feature is not included in your Ecosys edition. Contact your account manager to upgrade.</div>
+    // Workspace setup is the admin's; anyone else who follows the invitation there just goes home.
+    if (location.pathname === '/onboarding' && !canOpenPath(user, '/onboarding')) return <Navigate to="/dashboard" replace />
     // Technician-app users are sent from any office address to the matching /tech screen instead.
     if (!isTechnicianWorkspaceUser(user) && !canOpenPath(user, location.pathname)) {
       return (

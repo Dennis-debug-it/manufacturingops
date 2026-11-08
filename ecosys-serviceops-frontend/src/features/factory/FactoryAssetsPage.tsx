@@ -47,7 +47,8 @@ export function FactoryAssetsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [selectionKey, setSelectionKey] = useState(0)
   const [showForm, setShowForm] = useState(false)
-  const [showImport, setShowImport] = useState(false)
+  // ?import=1 (from the welcome checklist) opens the import straight away.
+  const [showImport, setShowImport] = useState(() => params.get('import') === '1')
   const [labelLayout, setLabelLayout] = useState('a4-24')
   const [printing, setPrinting] = useState(false)
   const bulkIssue = useBulkIssueTags()

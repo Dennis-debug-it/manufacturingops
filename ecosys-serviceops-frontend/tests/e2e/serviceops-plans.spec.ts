@@ -3,9 +3,9 @@ import { canAccessModulePath } from '../../src/shared/utils/entitlements'
 import { E2E_API_URL } from './helpers/test-data'
 
 const editionModules = {
-  essentials: ['operations', 'finance'],
+  essentials: ['operations', 'finance', 'maintenance'],
   professional: ['operations', 'finance', 'maintenance', 'inventory', 'advanced'],
-  enterprise: ['operations', 'finance', 'maintenance', 'inventory', 'projects', 'advanced', 'enterprise_tools'],
+  enterprise: ['operations', 'finance', 'maintenance', 'inventory', 'advanced', 'enterprise_tools'],
 } as const
 
 async function openWorkspace(page: Page, code: keyof typeof editionModules) {
@@ -17,6 +17,8 @@ async function openWorkspace(page: Page, code: keyof typeof editionModules) {
     branches: [],
   }
   await page.addInitScript((value) => {
+    // Skip the first-login welcome tour; this spec looks at the page behind it.
+    localStorage.setItem(`ecosys.first-login-shown.${value.user.userId}`, '1')
     localStorage.setItem('ecosys.serviceops.session', JSON.stringify(value))
     localStorage.setItem('ecosys.serviceops.token', value.token)
   }, session)
@@ -34,28 +36,29 @@ for (const code of ['essentials', 'professional', 'enterprise'] as const) {
   test(`${code} navigation and settings reflect the edition`, async ({ page }) => {
     await openWorkspace(page, code)
     const nav = page.locator('aside nav')
-    await expect(nav.getByRole('link', { name: 'Clients', exact: true })).toBeVisible()
-    await expect(nav.getByRole('link', { name: 'Users & Access' })).toBeVisible()
-    // Every edition runs the whole work order to invoice loop.
-    await expect(nav.getByRole('link', { name: 'Work Orders', exact: true })).toHaveCount(1)
-    await expect(nav.getByRole('link', { name: 'Finance', exact: true })).toHaveCount(1)
-    await expect(nav.getByRole('link', { name: 'Sales', exact: true })).toHaveCount(1)
-    await expect(page.getByRole('link', { name: /Payments M-Pesa/ })).toHaveCount(1)
-    await expect(page.getByRole('link', { name: /PM Templates Preventive/ })).toHaveCount(code === 'essentials' ? 0 : 1)
-    if (code === 'essentials') {
-      await page.goto('/maintenance/schedules')
-      await expect(page.getByText('This feature is not included in your Ecosys edition.')).toBeVisible()
+    // The maintenance system is in every edition; the sidebar is grouped into sections.
+    for (const section of ['Daily work', 'Planning', 'Assets', 'Compliance', 'Team and admin']) {
+      await expect(nav.getByRole('button', { name: section })).toBeVisible()
     }
+    await expect(nav.getByRole('link', { name: 'Jobs', exact: true })).toBeVisible()
+    await expect(nav.getByRole('link', { name: 'Planned maintenance' })).toBeVisible()
+    await expect(nav.getByRole('link', { name: 'Users and access' })).toBeVisible()
+    // Service-company screens are not in the sidebar.
+    for (const name of ['Work Orders', 'Clients', 'Contracts', 'Sales']) {
+      await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0)
+    }
+    // Stores purchasing comes with Professional.
+    await expect(nav.getByRole('link', { name: 'Purchasing' })).toHaveCount(code === 'essentials' ? 0 : 1)
+    // A section folds away and stays folded.
+    await nav.getByRole('button', { name: 'Planning' }).click()
+    await expect(nav.getByRole('link', { name: 'Planned maintenance' })).toHaveCount(0)
+    await page.reload()
+    await expect(nav.getByRole('link', { name: 'Planned maintenance' })).toHaveCount(0)
   })
 }
 
-test('cross-module workflow paths require both modules and shared settings stay accessible', () => {
-  expect(canAccessModulePath('/finance/billable-work', ['finance'])).toBe(false)
-  expect(canAccessModulePath('/finance/billable-work', ['operations'])).toBe(false)
-  expect(canAccessModulePath('/finance/billable-work', ['operations', 'finance'])).toBe(true)
+test('shared settings stay reachable on every edition', () => {
   expect(canAccessModulePath('/settings/numbering', ['operations'])).toBe(true)
   expect(canAccessModulePath('/clients', ['finance'])).toBe(true)
-  expect(canAccessModulePath('/crm/tenders', ['operations'])).toBe(false)
-  expect(canAccessModulePath('/crm', ['finance'])).toBe(false)
-  expect(canAccessModulePath('/crm', ['operations', 'finance'])).toBe(true)
+  expect(canAccessModulePath('/maintenance/jobs', ['operations', 'finance', 'maintenance'])).toBe(true)
 })

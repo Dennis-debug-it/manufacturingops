@@ -1,6 +1,6 @@
 /**
  * Ecosys modules. An edition is a fixed list of them (the backend's ServiceOpsPlans.EditionModules):
- * Essentials = operations + finance; Professional adds maintenance, inventory and advanced;
+ * Essentials = operations, finance and maintenance; Professional adds inventory and advanced;
  * Enterprise adds enterprise_tools. The WhatsApp Business add-on adds whatsapp_business on any edition.
  */
 export type ServiceOpsModule =
