@@ -258,8 +258,9 @@ export function useVisitorReport(factoryId: string, days: number) {
 /** The gate checks for one person with what has been ticked so far. Nothing is saved. */
 export function useGateCheck(attendeeId: string | null, confirmation: GateConfirmation) {
   return useQuery({
-    queryKey: [...KEY, 'check', attendeeId, confirmation],
-    queryFn: () => api.post<GateCheck>(`/api/visitors/attendees/${attendeeId}/check`, confirmation),
+    // Outside KEY on purpose: refreshing visits after a check-in must not re-run the check for someone now inside.
+    queryKey: ['visitor-gate-check', attendeeId, confirmation],
+    queryFn: () => api.post<GateCheck>(`/api/visitors/attendees/${attendeeId}/check`, confirmation, { suppressGlobalErrorToast: true }),
     enabled: Boolean(attendeeId),
     retry: false,
     placeholderData: (previous) => previous,

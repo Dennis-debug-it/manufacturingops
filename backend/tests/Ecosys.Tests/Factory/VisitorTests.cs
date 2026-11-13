@@ -207,7 +207,7 @@ public sealed class VisitorTests
         var noPermit = await visitors.CreateAsync(site.TenantId, new NewVisit(site.FactoryId, "Contractor work", [new VisitorDetails("Ali Noor")], ZoneIds: [substation.Id]), site.Host);
         var a = await db.VisitAttendees.SingleAsync(x => x.VisitId == noPermit.Id);
         var confirmed = new GateConfirmation(PpeConfirmed: true, RecordInduction: true, EscortUserId: site.Host.UserId);
-        Assert.Contains("need a permit", Assert.Single((await visitors.CheckAsync(site.TenantId, a.Id, confirmed, DateTime.UtcNow)).Issues).Message);
+        Assert.Contains("needs a permit", Assert.Single((await visitors.CheckAsync(site.TenantId, a.Id, confirmed, DateTime.UtcNow)).Issues).Message);
 
         var withPermit = await visitors.CreateAsync(site.TenantId,
             new NewVisit(site.FactoryId, "Contractor work", [new VisitorDetails("Ali Noor")], ZoneIds: [substation.Id], WorkOrderId: job.Id, WorkPermitId: permit.Id), site.Host);

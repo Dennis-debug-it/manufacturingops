@@ -500,12 +500,12 @@ internal sealed class VisitorService(
         if (ppe.Count > 0 && !confirmation.PpeConfirmed)
             issues.Add(new GateIssue("ppe", $"Confirm {visitor.FullName} has: {string.Join(", ", ppe)}.", true));
         if (escortZones.Count > 0 && confirmation.EscortUserId is null)
-            issues.Add(new GateIssue("escort", $"{string.Join(", ", escortZones)} need an escort; name who will escort {visitor.FullName}.", false));
+            issues.Add(new GateIssue("escort", $"{string.Join(", ", escortZones)} {(escortZones.Count == 1 ? "needs" : "need")} an escort; name who will escort {visitor.FullName}.", false));
         if (permitZones.Count > 0)
         {
             var permit = visit.WorkPermitId is { } pid ? await dbContext.WorkPermits.AsNoTracking().SingleOrDefaultAsync(x => x.Id == pid, cancellationToken) : null;
             if (permit is null)
-                issues.Add(new GateIssue("permit", $"{string.Join(", ", permitZones)} need a permit to work on the visit.", false));
+                issues.Add(new GateIssue("permit", $"{string.Join(", ", permitZones)} {(permitZones.Count == 1 ? "needs" : "need")} a permit to work on the visit.", false));
             else if (permit.Status != PermitStatuses.Approved)
                 issues.Add(new GateIssue("permit", $"Permit {permit.PermitNumber} is {permit.Status.ToLowerInvariant()}, not approved.", false));
             else if (utcNow < permit.ValidFrom || utcNow > permit.ValidTo)

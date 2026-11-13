@@ -179,7 +179,8 @@ export function VisitForm({ walkIn, canGate, defaultFactoryId, onClose }: { walk
           {canGate ? <p className="text-xs text-slate-500">ID numbers are not stored: only the last four characters and a fingerprint to recognise the person next time.</p> : null}
         </section>
 
-        <Field label="Zones they may enter" hint="Public areas (reception, car park) are always allowed. Restricted zones may need an induction, PPE, an escort or a permit at the gate.">
+        <fieldset className="space-y-1">
+          <legend className="text-sm font-medium text-slate-700">Zones they may enter</legend>
           {selectableZones.length === 0 ? (
             <p className="text-sm text-slate-500">{factoryId ? 'This factory has no controlled zones set up.' : 'Choose the factory first.'}</p>
           ) : (
@@ -193,7 +194,8 @@ export function VisitForm({ walkIn, canGate, defaultFactoryId, onClose }: { walk
               ))}
             </div>
           )}
-        </Field>
+          <span className="block text-xs text-slate-500">Public areas (reception, car park) are always allowed. Restricted zones may need an induction, PPE, an escort or a permit at the gate.</span>
+        </fieldset>
 
         {contractorWork ? (
           <div className="grid gap-3 sm:grid-cols-2">
