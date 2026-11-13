@@ -1,7 +1,8 @@
 /**
  * Ecosys modules. An edition is a fixed list of them (the backend's ServiceOpsPlans.EditionModules):
  * Essentials = operations, finance and maintenance; Professional adds inventory and advanced;
- * Enterprise adds enterprise_tools. The WhatsApp Business add-on adds whatsapp_business on any edition.
+ * Enterprise adds enterprise_tools. The WhatsApp Business add-on adds whatsapp_business on any edition,
+ * and the Factory Operations add-ons add visitors (Visitor Management) and security (Security Patrol).
  */
 export type ServiceOpsModule =
   | 'operations'
@@ -11,6 +12,8 @@ export type ServiceOpsModule =
   | 'advanced'
   | 'enterprise_tools'
   | 'whatsapp_business'
+  | 'visitors'
+  | 'security'
 
 // Checked in order, so a more specific prefix (/finance/expenses) wins over a broader one (/finance).
 const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
@@ -19,6 +22,7 @@ const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
   ['advanced', ['/approvals', '/team/time-attendance', '/settings/time-attendance', '/settings/email-intake', '/settings/workflows', '/settings/approval-matrices', '/settings/approval-matrix']],
   ['enterprise_tools', ['/settings/integrations', '/settings/monitoring-intake', '/settings/monitoring']],
   ['whatsapp_business', ['/whatsapp', '/settings/whatsapp']],
+  ['visitors', ['/visitors']],
   ['operations', ['/dashboard', '/work-orders', '/sites', '/reports', '/team/technicians', '/team/skills', '/team/groups', '/settings/notification-templates', '/settings/wo-templates', '/settings/executive-dashboard']],
   ['finance', ['/finance']],
 ]

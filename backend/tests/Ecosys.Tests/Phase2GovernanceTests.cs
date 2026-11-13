@@ -68,6 +68,8 @@ public sealed class Phase2GovernanceTests
                 "tenant.onboarding",
                 "user.password-reset.admin",
                 "users.invited",
+                "visitor.approval-requested",
+                "visitor.arrived",
                 "work-order.assigned",
                 "work-order.cancelled",
                 "work-order.closed",

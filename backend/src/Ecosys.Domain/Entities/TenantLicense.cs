@@ -78,6 +78,12 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
     /// <summary>Whether any WhatsApp add-on is on: reminders may be sent.</summary>
     public bool WhatsAppEnabled => WhatsAppAddOn is not null;
 
+    /// <summary>
+    /// Factory Operations modules taken with the edition, comma separated: <c>visitors</c> (Visitor
+    /// Management) and <c>security</c> (Security Patrol). Null for none.
+    /// </summary>
+    public string? OperationsAddOns { get; set; }
+
     public Tenant? Tenant { get; set; }
     public LicensePlan? LicensePlan { get; set; }
 }

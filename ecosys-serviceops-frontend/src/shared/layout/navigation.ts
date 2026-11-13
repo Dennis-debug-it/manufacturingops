@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck, Repeat, Truck } from 'lucide-react'
+import { LayoutDashboard, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck, Repeat, Truck, DoorOpen } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -13,7 +13,7 @@ export interface NavItem {
 }
 
 /** Sidebar sections, in display order. A section with nothing the person may open is not shown. */
-export const navGroups = ['Daily work', 'Planning', 'Assets', 'Stores', 'Compliance', 'Insights', 'Team and admin'] as const
+export const navGroups = ['Daily work', 'Site security', 'Planning', 'Assets', 'Stores', 'Compliance', 'Insights', 'Team and admin'] as const
 export type NavGroup = (typeof navGroups)[number]
 
 const office: AppRole[] = ['admin', 'manager', 'dispatcher', 'viewer']
@@ -32,6 +32,10 @@ export const tenantNavItems: NavItem[] = [
   { group: 'Daily work', label: 'Running checks', to: '/maintenance/checks', roles: floor, permission: 'work-orders.view', icon: ClipboardCheck },
   { group: 'Daily work', label: 'Scan', to: '/scan', roles: [...floor, 'materials_controller'], icon: ScanLine },
   { group: 'Daily work', label: 'Approvals', to: '/approvals', roles: ['admin', 'manager', 'finance', 'materials_controller'], icon: CheckSquare },
+
+  // Factory Operations add-ons. Visitors: any staff member hosts; gate staff get the desk. Stores and
+  // finance users can still open /visitors to host, but it is kept out of their short sidebars.
+  { group: 'Site security', label: 'Visitors', to: '/visitors', roles: floor, icon: DoorOpen },
 
   { group: 'Planning', label: 'Planned maintenance', to: '/maintenance/pm', roles: office, permission: 'work-orders.view', icon: Gauge },
   { group: 'Planning', label: 'Weekly window', to: '/maintenance/windows', roles: floor, permission: 'work-orders.view', icon: CalendarRange },

@@ -29,6 +29,10 @@ public static class PermissionNames
     public const string ActivitiesManage = "activities.manage";
     /// <summary>The team view of the calendar (other people's items).</summary>
     public const string CalendarTeam = "calendar.team";
+    /// <summary>Gate desk: register visitors, check them in and out, see who is on site, run a roll call.</summary>
+    public const string VisitorsGate = "visitors.gate";
+    /// <summary>Set up access zones, block and unblock visitors, approve any visit, and override a failed gate check.</summary>
+    public const string VisitorsManage = "visitors.manage";
 
     /// <summary>
     /// Capabilities with no column in the legacy role/user permission tables. Their baseline comes
@@ -39,7 +43,9 @@ public static class PermissionNames
     [
         ActivitiesView,
         ActivitiesManage,
-        CalendarTeam
+        CalendarTeam,
+        VisitorsGate,
+        VisitorsManage
     ];
 
     public static readonly string[] All =
@@ -67,6 +73,8 @@ public static class PermissionNames
         AttendanceManage,
         ActivitiesView,
         ActivitiesManage,
-        CalendarTeam
+        CalendarTeam,
+        VisitorsGate,
+        VisitorsManage
     ];
 }

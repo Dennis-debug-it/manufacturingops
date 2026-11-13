@@ -65,6 +65,68 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("access_scopes", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.AccessZone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("FactoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Level")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid?>("OrgNodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequiredPpe")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("RequiresEscort")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RequiresInduction")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("RequiresPermit")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FactoryId");
+
+                    b.HasIndex("OrgNodeId");
+
+                    b.HasIndex("TenantId", "FactoryId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("access_zones", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.ActionItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4648,6 +4710,21 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasPrecision(5, 2)
                         .HasColumnType("numeric(5,2)")
                         .HasDefaultValue(16m);
+
+                    b.Property<int>("VisitOverstayGraceMinutes")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(30);
+
+                    b.Property<int>("VisitorRetentionMonths")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(12);
+
+                    b.Property<bool>("WalkInsNeedHostApproval")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("WeeklyWindowDay")
                         .HasColumnType("integer");
@@ -11872,6 +11949,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<int>("OfficeSeats")
                         .HasColumnType("integer");
 
+                    b.Property<string>("OperationsAddOns")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime?>("OverdueWarningSentAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -13256,6 +13337,316 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("TenantId", "MaterialItemId");
 
                     b.ToTable("vendor_catalogue_items", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.Visit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ContractorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DecidedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("DecidedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("ExpectedFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpectedTo")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FactoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("HostName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("HostUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VehicleRegistration")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("VisitNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("WorkOrderId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("WorkPermitId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContractorId");
+
+                    b.HasIndex("FactoryId");
+
+                    b.HasIndex("HostUserId");
+
+                    b.HasIndex("WorkOrderId");
+
+                    b.HasIndex("WorkPermitId");
+
+                    b.HasIndex("TenantId", "VisitNumber")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "FactoryId", "Status", "ExpectedFrom");
+
+                    b.ToTable("visits", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.VisitAttendee", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AccountedForAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AccountedForByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("BadgeNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("BadgeToken")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("CheckedInAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CheckedInByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("CheckedOutAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CheckedOutByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EscortName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("EscortUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IdVerified")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("InductionConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("OverriddenByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("OverrideReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("PpeConfirmed")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("VisitId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("VisitorId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BadgeToken")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("VisitorId");
+
+                    b.HasIndex("VisitId", "VisitorId")
+                        .IsUnique();
+
+                    b.ToTable("visit_attendees", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.VisitZone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AccessZoneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("VisitId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccessZoneId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("VisitId", "AccessZoneId")
+                        .IsUnique();
+
+                    b.ToTable("visit_zones", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.Visitor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AnonymisedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("BlockedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("BlockedReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Company")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("ContractorId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("IdNumberHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("IdNumberMasked")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("IdType")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<bool>("IsBlocked")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastVisitAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ContractorId");
+
+                    b.HasIndex("TenantId", "IdNumberHash");
+
+                    b.HasIndex("TenantId", "Phone");
+
+                    b.ToTable("visitors", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.WasteDisposal", b =>
@@ -15218,6 +15609,30 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("PermissionGroup");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.AccessZone", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.OrgNode", "Factory")
+                        .WithMany()
+                        .HasForeignKey("FactoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.OrgNode", "OrgNode")
+                        .WithMany()
+                        .HasForeignKey("OrgNodeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Factory");
+
+                    b.Navigation("OrgNode");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.ActionItem", b =>
@@ -19265,6 +19680,116 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Supplier");
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.Visit", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Contractor", "Contractor")
+                        .WithMany()
+                        .HasForeignKey("ContractorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.OrgNode", "Factory")
+                        .WithMany()
+                        .HasForeignKey("FactoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("HostUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.WorkOrder", "WorkOrder")
+                        .WithMany()
+                        .HasForeignKey("WorkOrderId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.WorkPermit", "WorkPermit")
+                        .WithMany()
+                        .HasForeignKey("WorkPermitId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Contractor");
+
+                    b.Navigation("Factory");
+
+                    b.Navigation("WorkOrder");
+
+                    b.Navigation("WorkPermit");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.VisitAttendee", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Visit", "Visit")
+                        .WithMany("Attendees")
+                        .HasForeignKey("VisitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Visitor", "Visitor")
+                        .WithMany()
+                        .HasForeignKey("VisitorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Visit");
+
+                    b.Navigation("Visitor");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.VisitZone", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.AccessZone", "AccessZone")
+                        .WithMany()
+                        .HasForeignKey("AccessZoneId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Visit", "Visit")
+                        .WithMany("Zones")
+                        .HasForeignKey("VisitId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AccessZone");
+
+                    b.Navigation("Visit");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.Visitor", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.Contractor", "Contractor")
+                        .WithMany()
+                        .HasForeignKey("ContractorId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Contractor");
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.WasteDisposal", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Attachment", null)
@@ -20517,6 +21042,13 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Navigation("Sessions");
 
                     b.Navigation("TechnicianProfile");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.Visit", b =>
+                {
+                    b.Navigation("Attendees");
+
+                    b.Navigation("Zones");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.WhatsAppConversation", b =>

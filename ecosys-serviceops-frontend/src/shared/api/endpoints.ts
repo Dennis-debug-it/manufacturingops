@@ -456,6 +456,7 @@ export const endpoints = {
   },
   platform: {
     summary: '/api/platform/summary',
+    operationsModules: (tenantId: string) => `/api/platform/operations-modules/tenants/${tenantId}`,
     dashboardSummary: '/api/platform/dashboard/summary',
     tenants: '/api/platform/tenants',
     tenant: (id: string) => `/api/platform/tenants/${id}`,

@@ -498,7 +498,7 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     {
         NormalizeUtc(tenantLicense);
         var plan = tenantLicense.LicensePlan ?? throw new InvalidOperationException("Tenant license plan was not loaded.");
-        var modules = ServiceOpsPlans.Modules(plan, tenantLicense.WhatsAppAddOn);
+        var modules = ServiceOpsPlans.Modules(plan, tenantLicense.WhatsAppAddOn, tenantLicense.OperationsAddOns);
         var isEnterprise = modules.Contains(ServiceOpsPlans.EnterpriseModule);
         var now = DateTime.UtcNow;
         var effectiveExpiry = tenantLicense.ExpiresAt ?? tenantLicense.TrialEndsAt;

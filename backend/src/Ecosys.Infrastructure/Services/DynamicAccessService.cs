@@ -67,7 +67,17 @@ internal sealed class DynamicAccessService(AppDbContext dbContext, IRolePermissi
 /// </summary>
 internal static class CapabilityRoleDefaults
 {
-    public static IReadOnlyList<string> For(string? role) => ActivityDefaults(role);
+    public static IReadOnlyList<string> For(string? role) => [.. ActivityDefaults(role), .. VisitorDefaults(role)];
+
+    /// <summary>
+    /// Managers run Visitor Management by default. Gate officers and security staff are given
+    /// <see cref="PermissionNames.VisitorsGate"/> through a permission group or a per-user grant.
+    /// Every staff member can host a visit without either capability.
+    /// </summary>
+    private static IReadOnlyList<string> VisitorDefaults(string? role) =>
+        string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)
+            ? [PermissionNames.VisitorsGate, PermissionNames.VisitorsManage]
+            : [];
 
     /// <summary>
     /// Every staff role sees meetings and action items and can organise its own; managers organise any

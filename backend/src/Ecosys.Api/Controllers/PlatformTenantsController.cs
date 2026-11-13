@@ -1370,7 +1370,7 @@ public sealed class PlatformTenantsController(
             OfficeSeatsUsed = officeSeatsUsed,
             FieldSeatsUsed = fieldSeatsUsed,
             WhatsAppAddOn = license?.WhatsAppAddOn,
-            Modules = license?.LicensePlan is { } plan ? ServiceOpsPlans.Modules(plan, license.WhatsAppAddOn) : [],
+            Modules = license?.LicensePlan is { } plan ? ServiceOpsPlans.Modules(plan, license.WhatsAppAddOn, license.OperationsAddOns) : [],
             PlanCode = license?.LicensePlan?.PlanCode,
             LicenseExpiresAt = license?.ExpiresAt,
             IsPerpetual = license?.IsPerpetual ?? false,
@@ -1469,7 +1469,7 @@ public sealed class PlatformTenantsController(
             tenant.CreatedAt)
         {
             SeatLimit = EffectiveSeatLimit(license),
-            Modules = license?.LicensePlan is { } plan ? ServiceOpsPlans.Modules(plan, license.WhatsAppAddOn) : [],
+            Modules = license?.LicensePlan is { } plan ? ServiceOpsPlans.Modules(plan, license.WhatsAppAddOn, license.OperationsAddOns) : [],
             LicenseExpiresAt = license?.ExpiresAt,
         };
     }

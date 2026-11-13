@@ -31,10 +31,15 @@ public static class ServiceOpsPlans
     public const string WhatsAppNotificationsAddOn = "whatsapp_notifications";
     public const string WhatsAppBusinessAddOn = "whatsapp_business";
 
+    // Factory Operations add-ons (TenantLicense.OperationsAddOns), taken with any edition.
+    public const string Visitors = "visitors";
+    public const string Security = "security";
+    public static readonly IReadOnlyList<string> OperationsAddOnModules = [Visitors, Security];
+
     public static readonly IReadOnlyList<string> Editions = [Essentials, Professional, Enterprise];
 
     /// <summary>Every module a sales pipeline can be tied to.</summary>
-    public static readonly IReadOnlyList<string> AllModules = [Operations, Finance, Maintenance, Inventory, Advanced, EnterpriseModule];
+    public static readonly IReadOnlyList<string> AllModules = [Operations, Finance, Maintenance, Inventory, Advanced, EnterpriseModule, Visitors, Security];
 
     public static bool IsEdition(string? code) => code is Essentials or Professional or Enterprise;
 
@@ -54,9 +59,31 @@ public static class ServiceOpsPlans
         _ => []
     };
 
-    /// <summary>The tenant's modules: its edition's, plus the WhatsApp Business add-on's.</summary>
-    public static IReadOnlyList<string> Modules(LicensePlan plan, string? whatsAppAddOn = null) =>
-        whatsAppAddOn == WhatsAppBusinessAddOn ? [.. EditionModules(plan.PlanCode), WhatsAppBusiness] : EditionModules(plan.PlanCode);
+    /// <summary>The tenant's modules: its edition's, plus the WhatsApp Business add-on's and any Factory Operations add-ons.</summary>
+    public static IReadOnlyList<string> Modules(LicensePlan plan, string? whatsAppAddOn = null, string? operationsAddOns = null)
+    {
+        IReadOnlyList<string> modules = whatsAppAddOn == WhatsAppBusinessAddOn ? [.. EditionModules(plan.PlanCode), WhatsAppBusiness] : EditionModules(plan.PlanCode);
+        var extra = ParseOperationsAddOns(operationsAddOns);
+        return extra.Count == 0 ? modules : [.. modules, .. extra];
+    }
+
+    /// <summary>The Factory Operations add-on modules in a stored list, ignoring anything unknown.</summary>
+    public static IReadOnlyList<string> ParseOperationsAddOns(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? []
+            : OperationsAddOnModules.Where(module => value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Contains(module, StringComparer.OrdinalIgnoreCase)).ToList();
+
+    /// <summary>Validates and stores a set of Factory Operations add-ons; null for none.</summary>
+    public static string? NormalizeOperationsAddOns(IEnumerable<string>? modules)
+    {
+        var requested = (modules ?? []).Select(x => x?.Trim().ToLowerInvariant()).Where(x => !string.IsNullOrEmpty(x)).Distinct().ToList();
+        var unknown = requested.Where(x => !OperationsAddOnModules.Contains(x!)).ToList();
+        if (unknown.Count > 0)
+            throw new BusinessRuleException($"Factory Operations add-ons must be among: {string.Join(", ", OperationsAddOnModules)}.");
+        var ordered = OperationsAddOnModules.Where(requested.Contains).ToList();
+        return ordered.Count == 0 ? null : string.Join(",", ordered);
+    }
 
     /// <summary>Validates a WhatsApp add-on code; blank means none.</summary>
     public static string? NormalizeWhatsAppAddOn(string? value)
@@ -93,6 +120,11 @@ public static class ServiceOpsPlans
     {
         "WhatsApp"
     };
+    private static readonly HashSet<string> VisitorsControllers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Visits"
+    };
+
     private static readonly HashSet<string> FinanceControllers = new(StringComparer.OrdinalIgnoreCase)
     {
         "ExchangeRates", "TenantFinance"
@@ -107,6 +139,7 @@ public static class ServiceOpsPlans
         (Inventory, InventoryControllers),
         (Advanced, AdvancedControllers),
         (WhatsAppBusiness, WhatsAppBusinessControllers),
+        (Visitors, VisitorsControllers),
     ];
 
     /// <summary>
@@ -123,6 +156,8 @@ public static class ServiceOpsPlans
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
         // Factory hierarchy and settings: the backbone every factory module hangs off.
         "OrgNodes", "FactorySettings",
+        // Access zones of a factory: used by Visitor Management and Security Patrol alike.
+        "AccessZones",
         // WhatsApp reminders (Release 3 design 6): every edition, gated by the WhatsApp add-on.
         // The two-way inbox (WhatsApp controller) needs the WhatsApp Business add-on.
         "MyWhatsApp", "WhatsAppNotifications", "ClientWhatsAppConsent", "WhatsAppWebhook"

@@ -144,5 +144,12 @@ public sealed class FactorySettings : AuditableEntity, ITenantEntity
     /// <summary>Where the tenant's data is hosted, stated for data protection notices.</summary>
     public string? DataResidency { get; set; }
 
+    /// <summary>Visitor Management: a visit raised at the gate waits for the host to approve it.</summary>
+    public bool WalkInsNeedHostApproval { get; set; } = true;
+    /// <summary>A visitor still inside this many minutes after the visit's expected end is flagged as overstaying.</summary>
+    public int VisitOverstayGraceMinutes { get; set; } = 30;
+    /// <summary>Visitors not seen for this many months have their personal details removed (counts are kept).</summary>
+    public int VisitorRetentionMonths { get; set; } = 12;
+
     public Tenant? Tenant { get; set; }
 }
