@@ -70,6 +70,8 @@ export function isOfflineQueryKey(key: QueryKey): boolean {
   if (scope === 'picker') return second === 'materials' && third === ''
   // The asset register copy that lets a tag be scanned with no signal, and the factory tree.
   // Plus the shift's running checks and each check's questions, and the technician's factory jobs.
+  // The gate's copy of today's visitors and passes, so badges scan with no signal.
+  if (scope === 'visitors') return second === 'gate-index'
   if (scope === 'factory') return ['scan-index', 'org-nodes', 'checks-due', 'check-run', 'job', 'jobs', 'failure-codes', 'windows', 'window', 'window-pack'].includes(String(second))
   return false
 }

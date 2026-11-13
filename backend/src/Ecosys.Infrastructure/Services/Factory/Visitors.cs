@@ -95,6 +95,9 @@ public interface IVisitorService
     /// <summary>Removes the personal details of visitors not seen within the retention period. Blocked visitors are kept.</summary>
     Task<int> AnonymiseAsync(Guid tenantId, DateTime utcNow, CancellationToken cancellationToken = default);
 
+    /// <summary>Finds a returning visitor (by ID, or phone and name) or adds a new one, updating their details. Not saved.</summary>
+    Task<Visitor> FindOrAddVisitorAsync(Guid tenantId, VisitorDetails person, Guid? contractorId, CancellationToken cancellationToken = default);
+
     /// <summary>Adds the usual tea factory zones to a factory that has none yet.</summary>
     Task<int> SeedZonesAsync(Guid tenantId, Guid factoryId, CancellationToken cancellationToken = default);
 }
@@ -164,11 +167,10 @@ internal sealed class VisitorService(
             ? hostRaisedIt || !settings.WalkInsNeedHostApproval
             : hostRaisedIt || actor.CanManage;
 
-        var count = await dbContext.Visits.CountAsync(x => x.TenantId == tenantId, cancellationToken);
         var visit = new Visit
         {
             TenantId = tenantId,
-            VisitNumber = $"VIS-{count + 1:000000}",
+            VisitNumber = await NextVisitNumberAsync(dbContext, tenantId, cancellationToken),
             FactoryId = factory.Id,
             Purpose = purpose,
             HostUserId = host.Id,
@@ -315,6 +317,17 @@ internal sealed class VisitorService(
         attendee.AccountedForByName = null;
         visitor.LastVisitAt = now;
         visit.Status = VisitStatuses.OnSite;
+        if (visit.VehicleRegistration is { } registration
+            && !await dbContext.VehicleMovements.AnyAsync(x => x.TenantId == tenantId && x.FactoryId == visit.FactoryId && x.Registration == registration && x.ExitedAt == null, cancellationToken))
+        {
+            // The vehicle came in with them: open its entry in the vehicle log.
+            dbContext.VehicleMovements.Add(new VehicleMovement
+            {
+                TenantId = tenantId, FactoryId = visit.FactoryId, Registration = registration, VisitId = visit.Id,
+                Purpose = visit.Purpose == VisitPurposes.ContractorWork ? VehiclePurposes.Contractor : visit.Purpose == VisitPurposes.Delivery ? VehiclePurposes.Delivery : VehiclePurposes.Visitor,
+                DriverName = visitor.FullName, DriverPhone = visitor.Phone, EnteredAt = now, EnteredByName = actor.Name,
+            });
+        }
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var factory = await dbContext.OrgNodes.AsNoTracking().Where(x => x.Id == visit.FactoryId).Select(x => x.Name).SingleAsync(cancellationToken);
@@ -332,7 +345,9 @@ internal sealed class VisitorService(
         var attendee = await LoadAttendeeAsync(tenantId, attendeeId, cancellationToken);
         if (attendee.CheckedInAt is null) throw new BusinessRuleException($"{attendee.Visitor!.FullName} has not come in.");
         if (attendee.CheckedOutAt is not null) throw new BusinessRuleException($"{attendee.Visitor!.FullName} already left at {Local(attendee.CheckedOutAt.Value):HH:mm}.");
-        var now = DateTime.UtcNow;
+        // A badge scanned out at the gate with no signal is synced later, dated when it was scanned.
+        var now = OccurredAt.UtcNow;
+        if (now < attendee.CheckedInAt) now = attendee.CheckedInAt.Value;
         attendee.CheckedOutAt = now;
         attendee.CheckedOutByName = actor.Name;
         attendee.Visitor!.LastVisitAt = now;
@@ -526,6 +541,17 @@ internal sealed class VisitorService(
         return records.Any(company => company is null || visitor.Company is null || string.Equals(company.Trim(), visitor.Company.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 
+    public Task<Visitor> FindOrAddVisitorAsync(Guid tenantId, VisitorDetails person, Guid? contractorId, CancellationToken cancellationToken = default) =>
+        ResolveVisitorAsync(tenantId, person, contractorId, cancellationToken);
+
+    /// <summary>The next visit number. Counted across every visit of the tenant, whatever raised it.</summary>
+    internal static async Task<string> NextVisitNumberAsync(AppDbContext dbContext, Guid tenantId, CancellationToken cancellationToken)
+    {
+        var count = await dbContext.Visits.CountAsync(x => x.TenantId == tenantId, cancellationToken)
+            + dbContext.ChangeTracker.Entries<Visit>().Count(x => x.State == EntityState.Added && x.Entity.TenantId == tenantId);
+        return $"VIS-{count + 1:000000}";
+    }
+
     private async Task<Visitor> ResolveVisitorAsync(Guid tenantId, VisitorDetails person, Guid? contractorId, CancellationToken cancellationToken)
     {
         Visitor? visitor = null;
@@ -596,7 +622,7 @@ internal sealed class VisitorService(
     }
 
     /// <summary>Visit times are shown in East Africa Time (UTC+3), the factories' zone.</summary>
-    private static DateTime Local(DateTime utc) => utc.AddHours(3);
+    internal static DateTime Local(DateTime utc) => utc.AddHours(3);
 
     internal static string NewBadgeToken() =>
         Convert.ToBase64String(RandomNumberGenerator.GetBytes(16)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
@@ -623,14 +649,14 @@ internal sealed class VisitorService(
         return "+" + digits;
     }
 
-    private static string? NormaliseRegistration(string? value)
+    internal static string? NormaliseRegistration(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         var compact = new string(value.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
         return compact.Length is >= 3 and <= 20 ? compact : throw new BusinessRuleException("Enter the vehicle's registration, e.g. KCA 123A.");
     }
 
-    private static string? Trim(string? value, int max) =>
+    internal static string? Trim(string? value, int max) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim().Length > max ? value.Trim()[..max] : value.Trim();
 }
 

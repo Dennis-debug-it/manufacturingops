@@ -25,7 +25,8 @@ public sealed class VisitsController(
     IVisitorService visitorService,
     IFactorySettingsService settingsService,
     IAuditLogService auditLogService,
-    IVisitorBadgePdfRenderer? badgeRenderer = null) : TenantAwareControllerBase(tenantContext)
+    IVisitorBadgePdfRenderer? badgeRenderer = null,
+    IVisitorPassService? passService = null) : TenantAwareControllerBase(tenantContext)
 {
     private bool CanManage => IsAdmin || HasPermission(PermissionNames.VisitorsManage);
     private bool CanGate => CanManage || HasPermission(PermissionNames.VisitorsGate);
@@ -56,13 +57,18 @@ public sealed class VisitsController(
             .ToListAsync(cancellationToken);
         var rows = await MapAsync(visits, now, cancellationToken);
         var people = rows.SelectMany(x => x.Attendees).ToList();
+        var nodes = await orgScopeService.VisibleNodesAsync(TenantId, UserId, factoryId, cancellationToken);
+        var vehiclesInside = CanGate
+            ? await dbContext.VehicleMovements.CountAsync(x => x.TenantId == TenantId && x.ExitedAt == null && (nodes == null || nodes.Contains(x.FactoryId)), cancellationToken)
+            : 0;
         return Ok(new VisitBoardResponse(
             rows,
             people.Count(x => x.State == AttendeeStates.OnSite || x.State == AttendeeStates.Overstayed),
             people.Count(x => x.State == AttendeeStates.Expected),
             rows.Count(x => x.Status == VisitStatuses.PendingApproval),
             people.Count(x => x.State == AttendeeStates.Overstayed),
-            people.Count(x => x.State == AttendeeStates.Left && x.CheckedOutAt >= dayStart)));
+            people.Count(x => x.State == AttendeeStates.Left && x.CheckedOutAt >= dayStart),
+            vehiclesInside));
     }
 
     /// <summary>The visitor register: every visit in a period, searchable by name, company, phone, number or vehicle.</summary>
@@ -192,12 +198,50 @@ public sealed class VisitsController(
     public async Task<ActionResult<BadgeResponse>> Badge(string token, CancellationToken cancellationToken)
     {
         EnsureGate();
-        var attendee = await visitorService.FindBadgeAsync(TenantId, token, cancellationToken)
-            ?? throw new NotFoundException("This badge is not one of ours.");
+        var attendee = await visitorService.FindBadgeAsync(TenantId, token, cancellationToken);
+        if (attendee is null && passService is not null && await passService.FindByTokenAsync(TenantId, token, cancellationToken) is { } pass)
+        {
+            // A standing pass: its holder is at the gate, so this is their place on today's visit (raised now if need be).
+            await orgScopeService.EnsureCanAccessAsync(TenantId, UserId, pass.FactoryId, cancellationToken);
+            attendee = await passService.TodayAsync(TenantId, pass.Id, Actor, cancellationToken);
+        }
+
+        if (attendee is null) throw new NotFoundException("This badge is not one of ours.");
         var visible = await orgScopeService.VisibleNodesAsync(TenantId, UserId, null, cancellationToken);
         if (visible is not null && !visible.Contains(attendee.Visit!.FactoryId)) throw new NotFoundException("This badge is not one of ours.");
         var row = await GetRowAsync(attendee.VisitId, cancellationToken);
         return Ok(new BadgeResponse(row.Attendees.Single(x => x.Id == attendee.Id), row));
+    }
+
+    /// <summary>
+    /// What the gate device keeps so badges scan with no signal: everyone expected, waiting or inside today,
+    /// and the standing passes good today. A badge found here can be checked out offline (queued and synced
+    /// with the time it was scanned); checking in needs a connection, because the gate checks run on the server.
+    /// </summary>
+    [HttpGet("gate-index")]
+    public async Task<ActionResult<GateIndexResponse>> GateIndex([FromQuery] Guid? factoryId, CancellationToken cancellationToken)
+    {
+        EnsureGate();
+        var now = DateTime.UtcNow;
+        var dayStart = EatDayStart(now);
+        var nodes = await orgScopeService.VisibleNodesAsync(TenantId, UserId, factoryId, cancellationToken);
+        var people = await dbContext.VisitAttendees.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.CheckedOutAt == null && (nodes == null || nodes.Contains(x.Visit!.FactoryId))
+                && (x.CheckedInAt != null
+                    || ((x.Visit!.Status == VisitStatuses.Approved || x.Visit.Status == VisitStatuses.PendingApproval) && x.Visit.ExpectedTo >= dayStart && x.Visit.ExpectedFrom < dayStart.AddDays(1))))
+            .Select(x => new GateIndexPerson(x.Id, x.BadgeToken, x.Visitor!.FullName, x.Visitor.Company, x.Visitor.IsBlocked, x.BadgeNumber, x.Visit!.VisitNumber,
+                x.Visit.Status, x.Visit.Factory!.Name, x.Visit.HostName, x.Visit.Purpose, x.Visit.ExpectedTo, x.CheckedInAt,
+                x.Visit.Zones.Select(z => z.AccessZone!.Name).ToList()))
+            .Take(2000)
+            .ToListAsync(cancellationToken);
+        var today = now.AddHours(3).Date;
+        var passes = await dbContext.VisitorPasses.AsNoTracking()
+            .Where(x => x.TenantId == TenantId && x.Status == VisitorPassStatuses.Active && x.ValidFrom <= today && x.ValidTo >= today && (nodes == null || nodes.Contains(x.FactoryId)))
+            .Select(x => new GateIndexPass(x.Id, x.BadgeToken, x.PassNumber, x.Visitor!.FullName, x.Visitor.Company, x.Visitor.IsBlocked, x.Factory!.Name, x.HostName,
+                x.Zones.Select(z => z.AccessZone!.Name).ToList()))
+            .Take(2000)
+            .ToListAsync(cancellationToken);
+        return Ok(new GateIndexResponse(now, people, passes));
     }
 
     /// <summary>Everyone inside now: the emergency roll call list.</summary>
@@ -445,9 +489,18 @@ public sealed record VisitRow(
     string CreatedByName, string? DecidedByName, DateTime? DecidedAt, string? DecisionNote, DateTime? CompletedAt,
     IReadOnlyList<ZoneRef> Zones, IReadOnlyList<AttendeeRow> Attendees);
 
-public sealed record VisitBoardResponse(IReadOnlyList<VisitRow> Visits, int OnSite, int Expected, int AwaitingApproval, int Overstayed, int LeftToday);
+public sealed record VisitBoardResponse(IReadOnlyList<VisitRow> Visits, int OnSite, int Expected, int AwaitingApproval, int Overstayed, int LeftToday, int VehiclesInside = 0);
 
 public sealed record BadgeResponse(AttendeeRow Attendee, VisitRow Visit);
+
+public sealed record GateIndexPerson(
+    Guid AttendeeId, string BadgeToken, string FullName, string? Company, bool IsBlocked, string BadgeNumber, string VisitNumber, string VisitStatus,
+    string FactoryName, string HostName, string Purpose, DateTime ExpectedTo, DateTime? CheckedInAt, IReadOnlyList<string> Zones);
+
+public sealed record GateIndexPass(
+    Guid PassId, string BadgeToken, string PassNumber, string FullName, string? Company, bool IsBlocked, string FactoryName, string HostName, IReadOnlyList<string> Zones);
+
+public sealed record GateIndexResponse(DateTime GeneratedAt, IReadOnlyList<GateIndexPerson> People, IReadOnlyList<GateIndexPass> Passes);
 
 public sealed record OnSiteRow(
     Guid AttendeeId, Guid VisitId, string VisitNumber, Guid FactoryId, string FactoryName, string FullName, string? Company, string? Phone, string HostName, string Purpose,

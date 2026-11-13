@@ -52,7 +52,7 @@ export interface Visit {
   expectedFrom: string
   expectedTo: string
   status: VisitStatus
-  source: 'PreRegistered' | 'WalkIn'
+  source: 'PreRegistered' | 'WalkIn' | 'Pass'
   workOrderId: string | null
   workOrderNumber: string | null
   workPermitId: string | null
@@ -70,7 +70,7 @@ export interface Visit {
   attendees: Attendee[]
 }
 
-export interface VisitBoard { visits: Visit[]; onSite: number; expected: number; awaitingApproval: number; overstayed: number; leftToday: number }
+export interface VisitBoard { visits: Visit[]; onSite: number; expected: number; awaitingApproval: number; overstayed: number; leftToday: number; vehiclesInside: number }
 
 export interface GateIssue { code: string; message: string; overridable: boolean }
 export interface GateCheck {
@@ -332,4 +332,183 @@ export const STATE_LABEL: Record<AttendeeState, string> = {
 export function toLocalInput(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+/* ── Vehicle log ─────────────────────────────────────────────────────────── */
+
+export const VEHICLE_PURPOSES = ['Visitor', 'Delivery', 'Contractor', 'Collection', 'Staff', 'Other'] as const
+
+export interface VehicleMovement {
+  id: string
+  factoryId: string
+  factoryName: string
+  registration: string
+  purpose: string
+  description: string | null
+  driverName: string | null
+  driverPhone: string | null
+  visitId: string | null
+  visitNumber: string | null
+  enteredAt: string
+  enteredByName: string
+  exitedAt: string | null
+  exitedByName: string | null
+  notes: string | null
+  exitNotes: string | null
+  minutesInside: number
+  /** Still inside although the visit it came with is over. */
+  visitOver: boolean
+}
+
+export interface VehicleEntryPayload {
+  factoryId: string
+  registration: string
+  purpose: string
+  driverName: string | null
+  driverPhone: string | null
+  description: string | null
+  notes: string | null
+}
+
+export function useVehicles(factoryId: string, insideOnly: boolean, q: string) {
+  return useQuery({
+    queryKey: [...KEY, 'vehicles', factoryId, insideOnly, q],
+    queryFn: () => api.get<VehicleMovement[]>('/api/visitors/vehicles', { factoryId: factoryId || undefined, insideOnly: insideOnly || undefined, q: q.trim() || undefined }),
+    refetchInterval: 30_000,
+  })
+}
+
+export const useVehicleEntry = () => useVisitorMutation((payload: VehicleEntryPayload) => api.post<VehicleMovement>('/api/visitors/vehicles', payload))
+export const useVehicleExit = () => useVisitorMutation(({ id, notes }: { id: string; notes: string | null }) => api.post<VehicleMovement>(`/api/visitors/vehicles/${id}/exit`, { notes }))
+
+/* ── Standing passes ─────────────────────────────────────────────────────── */
+
+export interface VisitorPass {
+  id: string
+  passNumber: string
+  factoryId: string
+  factoryName: string
+  visitorId: string
+  fullName: string
+  company: string | null
+  phone: string | null
+  isBlocked: boolean
+  contractorId: string | null
+  contractorName: string | null
+  hostUserId: string
+  hostName: string
+  purpose: string
+  validFrom: string
+  validTo: string
+  days: number[]
+  daysLabel: string
+  dailyFrom: string
+  dailyTo: string
+  zones: ZoneRef[]
+  vehicleRegistration: string | null
+  notes: string | null
+  status: 'Active' | 'Revoked'
+  issuedByName: string
+  issuedAt: string
+  revokedByName: string | null
+  revokedReason: string | null
+  usableNow: boolean
+  notUsableReason: string | null
+}
+
+export interface CreatePassPayload {
+  factoryId: string
+  person: VisitorDetailsPayload
+  hostUserId: string | null
+  validFrom: string
+  validTo: string
+  days: number[]
+  dailyFrom: string
+  dailyTo: string
+  zoneIds: string[]
+  contractorId: string | null
+  purpose: string
+  vehicleRegistration: string | null
+  notes: string | null
+}
+
+export function usePasses(factoryId: string, includeEnded: boolean, q: string) {
+  return useQuery({
+    queryKey: [...KEY, 'passes', factoryId, includeEnded, q],
+    queryFn: () => api.get<VisitorPass[]>('/api/visitors/passes', { factoryId: factoryId || undefined, includeEnded: includeEnded || undefined, q: q.trim() || undefined }),
+  })
+}
+
+export const useCreatePass = () => useVisitorMutation((payload: CreatePassPayload) => api.post<VisitorPass>('/api/visitors/passes', payload))
+export const useRevokePass = () => useVisitorMutation(({ id, reason }: { id: string; reason: string }) => api.post<VisitorPass>(`/api/visitors/passes/${id}/revoke`, { reason }))
+export const usePassToday = () => useVisitorMutation((id: string) => api.post<{ visitId: string; attendeeId: string }>(`/api/visitors/passes/${id}/today`, {}))
+
+export async function downloadPassBadge(pass: VisitorPass) {
+  const response = await apiClient.get(`/api/visitors/passes/${pass.id}/badge`, { responseType: 'blob' })
+  const url = URL.createObjectURL(response.data as Blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `pass-${pass.passNumber}.pdf`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+/* ── Offline gate index ──────────────────────────────────────────────────── */
+
+export interface GateIndexPerson {
+  attendeeId: string
+  badgeToken: string
+  fullName: string
+  company: string | null
+  isBlocked: boolean
+  badgeNumber: string
+  visitNumber: string
+  visitStatus: VisitStatus
+  factoryName: string
+  hostName: string
+  purpose: string
+  expectedTo: string
+  checkedInAt: string | null
+  zones: string[]
+}
+
+export interface GateIndexPass {
+  passId: string
+  badgeToken: string
+  passNumber: string
+  fullName: string
+  company: string | null
+  isBlocked: boolean
+  factoryName: string
+  hostName: string
+  zones: string[]
+}
+
+export interface GateIndex { generatedAt: string; people: GateIndexPerson[]; passes: GateIndexPass[] }
+
+/** Kept on the gate device (see tech/offline/persist.ts) so badges scan with no signal. */
+export const GATE_INDEX_KEY = [...KEY, 'gate-index'] as const
+
+export function useGateIndex(enabled: boolean) {
+  return useQuery({
+    queryKey: GATE_INDEX_KEY,
+    queryFn: () => api.get<GateIndex>('/api/visitors/gate-index', undefined, { suppressGlobalErrorToast: true }),
+    enabled,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  })
+}
+
+export type OfflineBadge =
+  | { kind: 'person'; person: GateIndexPerson }
+  | { kind: 'pass'; pass: GateIndexPass }
+
+/** Finds a scanned badge in the device's copy of the gate index. */
+export function findOfflineBadge(index: GateIndex | undefined, code: string): OfflineBadge | null {
+  if (!index) return null
+  const token = badgeToken(code)
+  const person = index.people.find((x) => x.badgeToken === token)
+  if (person) return { kind: 'person', person }
+  const pass = index.passes.find((x) => x.badgeToken === token)
+  return pass ? { kind: 'pass', pass } : null
 }

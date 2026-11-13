@@ -34,6 +34,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<Visit> Visits => Set<Visit>();
     public DbSet<VisitAttendee> VisitAttendees => Set<VisitAttendee>();
     public DbSet<VisitZone> VisitZones => Set<VisitZone>();
+    public DbSet<VehicleMovement> VehicleMovements => Set<VehicleMovement>();
+    public DbSet<VisitorPass> VisitorPasses => Set<VisitorPass>();
+    public DbSet<VisitorPassZone> VisitorPassZones => Set<VisitorPassZone>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
@@ -1011,6 +1014,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.VehicleRegistration).HasMaxLength(20);
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.Property(x => x.CreatedByName).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => new { x.PassId, x.ExpectedFrom });
+            entity.HasOne<VisitorPass>().WithMany().HasForeignKey(x => x.PassId).OnDelete(DeleteBehavior.SetNull);
             entity.Property(x => x.DecidedByName).HasMaxLength(200);
             entity.Property(x => x.DecisionNote).HasMaxLength(500);
             entity.HasIndex(x => new { x.TenantId, x.VisitNumber }).IsUnique();
@@ -1040,6 +1045,60 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Visit).WithMany(x => x.Attendees).HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Visitor).WithMany().HasForeignKey(x => x.VisitorId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<VehicleMovement>(entity =>
+        {
+            entity.ToTable("vehicle_movements");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Registration).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Purpose).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(200);
+            entity.Property(x => x.DriverName).HasMaxLength(200);
+            entity.Property(x => x.DriverPhone).HasMaxLength(30);
+            entity.Property(x => x.EnteredByName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ExitedByName).HasMaxLength(200);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.ExitNotes).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.ExitedAt });
+            entity.HasIndex(x => new { x.TenantId, x.Registration, x.EnteredAt });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Visit).WithMany().HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<VisitorPass>(entity =>
+        {
+            entity.ToTable("visitor_passes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PassNumber).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.HostName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Purpose).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Days).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.BadgeToken).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.VehicleRegistration).HasMaxLength(20);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.Property(x => x.IssuedByName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.RevokedByName).HasMaxLength(200);
+            entity.Property(x => x.RevokedReason).HasMaxLength(500);
+            entity.HasIndex(x => new { x.TenantId, x.PassNumber }).IsUnique();
+            entity.HasIndex(x => x.BadgeToken).IsUnique();
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Visitor).WithMany().HasForeignKey(x => x.VisitorId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Contractor).WithMany().HasForeignKey(x => x.ContractorId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.HostUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<VisitorPassZone>(entity =>
+        {
+            entity.ToTable("visitor_pass_zones");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.PassId, x.AccessZoneId }).IsUnique();
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Pass).WithMany(x => x.Zones).HasForeignKey(x => x.PassId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.AccessZone).WithMany().HasForeignKey(x => x.AccessZoneId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<VisitZone>(entity =>

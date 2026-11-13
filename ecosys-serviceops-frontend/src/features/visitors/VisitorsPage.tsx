@@ -11,19 +11,26 @@ import { FormDrawer } from '../../shared/components/FormDrawer'
 import { formatDate, formatDateTime, formatTime } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
 import { Field, inputClass, primaryButton, secondaryButton, textareaClass } from '../factory/components/ui'
-import { CameraScanner } from '../factory/components/CameraScanner'
 import {
-  STATE_LABEL, STATUS_LABEL, ZONE_LEVELS, downloadBadges, lookupBadge, useAccounted, useBlockVisitor, useCancelVisit, useCheckOut, useDecideVisit, useOnSite,
+  STATE_LABEL, STATUS_LABEL, ZONE_LEVELS, downloadBadges, useAccounted, useGateIndex, useBlockVisitor, useCancelVisit, useCheckOut, useDecideVisit, useOnSite,
   useResetRollCall, useSaveZone, useSeedZones, useVisitBoard, useVisitRegister, useVisitorAccess, useVisitorPeople, useVisitorReport, useZones,
   type AccessZone, type Attendee, type AttendeeState, type Visit, type VisitStatus, type ZoneLevel,
 } from './api'
 import { GateDrawer } from './GateDrawer'
 import { VisitForm } from './VisitForm'
 import { FactorySelect, useOnlyFactory } from './FactorySelect'
+import { BadgeScanDrawer } from './BadgeScan'
+import { PassesTab, VehiclesTab } from './GateTabs'
+import { useAuth } from '../../shared/hooks/useAuth'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { api } from '../../shared/api/apiClient'
+import { startOfflinePersistence } from '../tech/offline/persist'
 
 const TABS = [
   { id: 'today', label: 'Today', gate: false },
   { id: 'register', label: 'Register', gate: false },
+  { id: 'vehicles', label: 'Vehicles', gate: true },
+  { id: 'passes', label: 'Passes', gate: true },
   { id: 'roll-call', label: 'Roll call', gate: true },
   { id: 'people', label: 'People', gate: true },
   { id: 'zones', label: 'Zones', gate: true },
@@ -55,6 +62,13 @@ export function VisitorsPage() {
   const tab = (tabs.find((x) => x.id === params.get('tab'))?.id ?? 'today') as Tab
 
   useEffect(() => { if (onlyFactory && !factoryId) setFactoryId(onlyFactory) }, [onlyFactory, factoryId])
+  const [checkIn, setCheckIn] = useState<{ visitId: string; attendeeId: string } | null>(null)
+  // The gate keeps today's badges on the device, so scanning works with no signal.
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const userId = user?.userId
+  useEffect(() => (canGate && userId ? startOfflinePersistence(queryClient, userId) : undefined), [canGate, queryClient, userId])
+  useGateIndex(canGate)
 
   if (access.isLoading) return <Spinner label="Loading" />
 
@@ -89,6 +103,8 @@ export function VisitorsPage() {
 
       {tab === 'today' ? <TodayTab factoryId={factoryId} canGate={canGate} canManage={canManage} />
         : tab === 'register' ? <RegisterTab factoryId={factoryId} canGate={canGate} canManage={canManage} />
+          : tab === 'vehicles' ? <VehiclesTab factoryId={factoryId || onlyFactory} />
+          : tab === 'passes' ? <PassesTab factoryId={factoryId || onlyFactory} canManage={canManage} onCheckIn={(visitId, attendeeId) => setCheckIn({ visitId, attendeeId })} />
           : tab === 'roll-call' ? <RollCallTab factoryId={factoryId} />
             : tab === 'people' ? <PeopleTab canManage={canManage} />
               : tab === 'zones' ? <ZonesTab factoryId={factoryId || onlyFactory} canManage={canManage} />
@@ -96,8 +112,23 @@ export function VisitorsPage() {
 
       {form ? <VisitForm walkIn={form === 'walk-in'} canGate={canGate} defaultFactoryId={factoryId || onlyFactory} onClose={() => setForm(null)} /> : null}
       {scanning ? <BadgeScanDrawer canManage={canManage} onClose={() => setScanning(false)} /> : null}
+      {checkIn ? <CheckInById {...checkIn} canManage={canManage} onClose={() => setCheckIn(null)} /> : null}
     </div>
   )
+}
+
+/** Opens the gate checks for someone by id (a pass holder who just arrived). */
+function CheckInById({ visitId, attendeeId, canManage, onClose }: { visitId: string; attendeeId: string; canManage: boolean; onClose: () => void }) {
+  const visit = useQuery({ queryKey: ['visitors', 'visit', visitId], queryFn: () => api.get<Visit>(`/api/visitors/visits/${visitId}`) })
+  const attendee = visit.data?.attendees.find((x) => x.id === attendeeId)
+  const notExpected = attendee !== undefined && attendee.state !== 'Expected'
+  useEffect(() => {
+    if (!attendee || !notExpected) return
+    toast(`${attendee.fullName} is already ${STATE_LABEL[attendee.state].toLowerCase()}.`)
+    onClose()
+  }, [attendee, notExpected, onClose])
+  if (!visit.data || !attendee || notExpected) return null
+  return <GateDrawer visit={visit.data} attendee={attendee} canManage={canManage} onClose={onClose} />
 }
 
 /* ── Today ───────────────────────────────────────────────────────────────── */
@@ -111,12 +142,13 @@ function TodayTab({ factoryId, canGate, canManage }: { factoryId: string; canGat
   const rest = data.visits.filter((x) => x.status !== 'PendingApproval')
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className={cn('grid grid-cols-2 gap-3', canGate ? 'lg:grid-cols-6' : 'lg:grid-cols-5')}>
         <StatCard label="On site now" value={data.onSite} icon={<Users className="h-4 w-4 text-emerald-600" />} />
         <StatCard label="Still expected" value={data.expected} icon={<Clock className="h-4 w-4 text-slate-400" />} />
         <StatCard label="Awaiting host" value={data.awaitingApproval} tone={data.awaitingApproval > 0 ? 'warning' : 'default'} />
         <StatCard label="Overstayed" value={data.overstayed} tone={data.overstayed > 0 ? 'danger' : 'default'} icon={<AlertTriangle className="h-4 w-4 text-rose-500" />} />
         <StatCard label="Left today" value={data.leftToday} icon={<LogOut className="h-4 w-4 text-slate-400" />} />
+        {canGate ? <StatCard label="Vehicles inside" value={data.vehiclesInside} icon={<Car className="h-4 w-4 text-slate-400" />} /> : null}
       </div>
       {data.visits.length === 0 ? (
         <EmptyState title="No visits today" description={canGate ? 'Register a walk-in when someone arrives, or ask hosts to invite their visitors ahead.' : 'Invite your visitors ahead so the gate has their details and badges ready.'} />
@@ -251,68 +283,6 @@ function ReasonDrawer({ visit, mode, onClose }: { visit: Visit; mode: 'reject' |
       <Field label="Reason" required={mode === 'reject'} hint="The gate sees this if the visitor turns up.">
         <textarea className={textareaClass} value={reason} onChange={(e) => setReason(e.target.value)} />
       </Field>
-    </FormDrawer>
-  )
-}
-
-/* ── Badge scan ──────────────────────────────────────────────────────────── */
-
-function BadgeScanDrawer({ canManage, onClose }: { canManage: boolean; onClose: () => void }) {
-  const [code, setCode] = useState('')
-  const [result, setResult] = useState<{ attendee: Attendee; visit: Visit } | null>(null)
-  const [cameraOff, setCameraOff] = useState<string | null>(null)
-  const [checkingIn, setCheckingIn] = useState(false)
-  const checkOut = useCheckOut()
-
-  const find = async (value: string) => {
-    if (!value.trim()) return
-    try {
-      setResult(await lookupBadge(value))
-    } catch {
-      setResult(null)
-    }
-  }
-  const leave = async () => {
-    if (!result) return
-    try {
-      const visit = await checkOut.mutateAsync(result.attendee.id)
-      toast.success(`${result.attendee.fullName} checked out`)
-      setResult({ visit, attendee: visit.attendees.find((x) => x.id === result.attendee.id) ?? result.attendee })
-    } catch { /* shown by the API client */ }
-  }
-
-  return (
-    <FormDrawer open title="Scan a visitor badge" onClose={onClose}>
-      <div className="space-y-4">
-        {result ? null : cameraOff ? <p className="text-sm text-slate-500">{cameraOff} Type the code under the QR instead.</p>
-          : <CameraScanner onCode={(value) => { setCode(value); void find(value) }} onUnavailable={setCameraOff} />}
-        <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void find(code) }}>
-          <input className={inputClass} placeholder="Badge code" value={code} onChange={(e) => setCode(e.target.value)} />
-          <button type="submit" className={secondaryButton}>Find</button>
-        </form>
-        {result ? (
-          <div className="space-y-3 rounded-lg border border-slate-200 p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-lg font-semibold text-slate-900">{result.attendee.fullName}</span>
-              <Badge tone={STATE_TONE[result.attendee.state]}>{STATE_LABEL[result.attendee.state]}</Badge>
-              {result.attendee.isBlocked ? <Badge tone="danger">Blocked</Badge> : null}
-            </div>
-            <div className="text-sm text-slate-600">{[result.attendee.company, result.visit.purpose].filter(Boolean).join(' · ')}</div>
-            <div className="text-sm">Host <span className="font-medium">{result.visit.hostName}</span> · {result.visit.factoryName}</div>
-            <div className="text-sm">Valid until {formatDateTime(result.visit.expectedTo)}</div>
-            <div className="text-sm">May enter: {result.visit.zones.length === 0 ? 'public areas only' : `public areas, ${result.visit.zones.map((z) => z.name).join(', ')}`}</div>
-            {result.attendee.escortName ? <div className="text-sm">Escort: {result.attendee.escortName}</div> : null}
-            <div className="flex gap-2">
-              {result.attendee.state === 'OnSite' || result.attendee.state === 'Overstayed'
-                ? <button type="button" className={primaryButton} disabled={checkOut.isPending} onClick={() => void leave()}><LogOut className="h-4 w-4" />Check out</button> : null}
-              {result.attendee.state === 'Expected'
-                ? <button type="button" className={primaryButton} onClick={() => setCheckingIn(true)}><LogIn className="h-4 w-4" />Check in</button> : null}
-              <button type="button" className={secondaryButton} onClick={() => { setResult(null); setCode('') }}>Scan another</button>
-            </div>
-          </div>
-        ) : null}
-      </div>
-      {checkingIn && result ? <GateDrawer visit={result.visit} attendee={result.attendee} canManage={canManage} onClose={() => { setCheckingIn(false); setResult(null) }} /> : null}
     </FormDrawer>
   )
 }

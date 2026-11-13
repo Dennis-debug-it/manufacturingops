@@ -20,6 +20,8 @@ export type OutboxKind =
   | 'factory-job'
   /** A completed running check. */
   | 'running-check'
+  /** A visitor checked out at the gate (badge scanned), possibly with no signal. */
+  | 'visitor-checkout'
 
 export interface OutboxFile {
   blob: Blob

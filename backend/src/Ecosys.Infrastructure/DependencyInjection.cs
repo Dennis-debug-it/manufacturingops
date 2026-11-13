@@ -73,6 +73,8 @@ public static class DependencyInjection
         services.AddScoped<Services.Factory.IReliabilityService, Services.Factory.ReliabilityService>();
         services.AddScoped<Services.Factory.IFleetService, Services.Factory.FleetService>();
         services.AddScoped<Services.Factory.IVisitorService, Services.Factory.VisitorService>();
+        services.AddScoped<Services.Factory.IVehicleLogService, Services.Factory.VehicleLogService>();
+        services.AddScoped<Services.Factory.IVisitorPassService, Services.Factory.VisitorPassService>();
         services.AddSingleton<Services.Factory.IVisitorBadgePdfRenderer, Services.Factory.VisitorBadgePdfRenderer>();
         services.AddScoped<Services.Factory.ITelematicsProvider, Services.Factory.TraccarProvider>();
         services.AddScoped<Services.Factory.ITelematicsSync, Services.Factory.TelematicsSync>();

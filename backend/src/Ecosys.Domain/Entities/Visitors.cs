@@ -106,6 +106,8 @@ public static class VisitSources
     public const string PreRegistered = "PreRegistered";
     /// <summary>Raised at the gate when the visitor arrived.</summary>
     public const string WalkIn = "WalkIn";
+    /// <summary>Raised from a standing pass when its holder arrived.</summary>
+    public const string Pass = "Pass";
 }
 
 /// <summary>A visit to one factory by one or more people, for a host, within an expected time.</summary>
@@ -127,6 +129,8 @@ public sealed class Visit : AuditableEntity, ITenantEntity
     public Guid? WorkPermitId { get; set; }
     public Guid? ContractorId { get; set; }
     public string? VehicleRegistration { get; set; }
+    /// <summary>The standing pass this visit was raised from.</summary>
+    public Guid? PassId { get; set; }
     public string? Notes { get; set; }
     public string CreatedByName { get; set; } = string.Empty;
     public Guid? DecidedByUserId { get; set; }
@@ -178,5 +182,97 @@ public sealed class VisitZone : AuditableEntity, ITenantEntity
     public Guid VisitId { get; set; }
     public Guid AccessZoneId { get; set; }
     public Visit? Visit { get; set; }
+    public AccessZone? AccessZone { get; set; }
+}
+
+public static class VehiclePurposes
+{
+    public const string Visitor = "Visitor";
+    public const string Delivery = "Delivery";
+    public const string Contractor = "Contractor";
+    /// <summary>Collecting made tea, firewood suppliers, waste removal.</summary>
+    public const string Collection = "Collection";
+    public const string Staff = "Staff";
+    public const string Other = "Other";
+
+    public static readonly IReadOnlyList<string> All = [Visitor, Delivery, Contractor, Collection, Staff, Other];
+
+    public static string? Find(string? value) => All.FirstOrDefault(x => string.Equals(x, value?.Trim(), StringComparison.OrdinalIgnoreCase));
+}
+
+/// <summary>A vehicle coming in through a factory gate and, later, going out.</summary>
+public sealed class VehicleMovement : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid FactoryId { get; set; }
+    /// <summary>Normalised, e.g. "KCA123A".</summary>
+    public string Registration { get; set; } = string.Empty;
+    public string Purpose { get; set; } = VehiclePurposes.Visitor;
+    public string? Description { get; set; }
+    public string? DriverName { get; set; }
+    public string? DriverPhone { get; set; }
+    /// <summary>The visit the vehicle came with, when there is one.</summary>
+    public Guid? VisitId { get; set; }
+    public DateTime EnteredAt { get; set; }
+    public string EnteredByName { get; set; } = string.Empty;
+    public DateTime? ExitedAt { get; set; }
+    public string? ExitedByName { get; set; }
+    /// <summary>What the gate saw: load, seal number, search done.</summary>
+    public string? Notes { get; set; }
+    public string? ExitNotes { get; set; }
+    public OrgNode? Factory { get; set; }
+    public Visit? Visit { get; set; }
+}
+
+public static class VisitorPassStatuses
+{
+    public const string Active = "Active";
+    public const string Revoked = "Revoked";
+}
+
+/// <summary>
+/// A standing pass for someone who comes regularly (a contractor on an annual agreement, a supplier's
+/// driver): on the days and hours it allows, scanning its badge raises the day's visit, already
+/// approved. Every gate check still runs each day: papers, induction, permit, blocklist.
+/// </summary>
+public sealed class VisitorPass : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public string PassNumber { get; set; } = string.Empty;
+    public Guid VisitorId { get; set; }
+    public Guid FactoryId { get; set; }
+    public Guid HostUserId { get; set; }
+    public string HostName { get; set; } = string.Empty;
+    public Guid? ContractorId { get; set; }
+    public string Purpose { get; set; } = VisitPurposes.ContractorWork;
+    /// <summary>First and last day (factory local dates).</summary>
+    public DateTime ValidFrom { get; set; }
+    public DateTime ValidTo { get; set; }
+    /// <summary>ISO weekdays it is good for, comma separated: 1 = Monday … 7 = Sunday.</summary>
+    public string Days { get; set; } = "1,2,3,4,5";
+    /// <summary>Daily hours in factory local time.</summary>
+    public TimeOnly DailyFrom { get; set; } = new(7, 0);
+    public TimeOnly DailyTo { get; set; } = new(17, 0);
+    /// <summary>Random value in the pass badge's QR code.</summary>
+    public string BadgeToken { get; set; } = string.Empty;
+    public string Status { get; set; } = VisitorPassStatuses.Active;
+    public string? VehicleRegistration { get; set; }
+    public string? Notes { get; set; }
+    public string IssuedByName { get; set; } = string.Empty;
+    public DateTime? RevokedAt { get; set; }
+    public string? RevokedByName { get; set; }
+    public string? RevokedReason { get; set; }
+    public Visitor? Visitor { get; set; }
+    public OrgNode? Factory { get; set; }
+    public Contractor? Contractor { get; set; }
+    public ICollection<VisitorPassZone> Zones { get; set; } = new List<VisitorPassZone>();
+}
+
+public sealed class VisitorPassZone : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid PassId { get; set; }
+    public Guid AccessZoneId { get; set; }
+    public VisitorPass? Pass { get; set; }
     public AccessZone? AccessZone { get; set; }
 }

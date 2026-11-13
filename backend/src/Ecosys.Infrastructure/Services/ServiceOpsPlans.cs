@@ -122,7 +122,7 @@ public static class ServiceOpsPlans
     };
     private static readonly HashSet<string> VisitorsControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Visits"
+        "Visits", "VisitorGate"
     };
 
     private static readonly HashSet<string> FinanceControllers = new(StringComparer.OrdinalIgnoreCase)

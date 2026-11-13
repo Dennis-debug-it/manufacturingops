@@ -438,9 +438,9 @@ public sealed class VisitorTests
 
     // ------------------------------------------------------------------ helpers
 
-    private sealed record Site(Guid TenantId, Guid FactoryId, VisitActor Host, VisitActor Gate, VisitActor Manager, FactoryTenantContext Context);
+    internal sealed record Site(Guid TenantId, Guid FactoryId, VisitActor Host, VisitActor Gate, VisitActor Manager, FactoryTenantContext Context);
 
-    private static async Task<Site> SeedAsync(AppDbContext db, bool seedZones = true)
+    internal static async Task<Site> SeedAsync(AppDbContext db, bool seedZones = true)
     {
         var (tenant, admin) = await FactoryTestSupport.SeedTenantAsync(db);
         var host = FactoryTestSupport.NewUser(tenant.Id, "grace@kericho.test");
@@ -457,16 +457,16 @@ public sealed class VisitorTests
             new FactoryTenantContext(tenant.Id, admin.Id));
     }
 
-    private static VisitorService Service(AppDbContext db, INotificationDispatcher? dispatcher = null)
+    internal static VisitorService Service(AppDbContext db, INotificationDispatcher? dispatcher = null)
     {
         var context = new FactoryTenantContext(Guid.Empty, Guid.Empty);
         return new VisitorService(db, FactoryTestSupport.Settings(db), new ContractorService(db, FactoryTestSupport.WorkOrders(db, context)), dispatcher);
     }
 
-    private static VisitsController Controller(AppDbContext db, ITenantContext context) =>
+    internal static VisitsController Controller(AppDbContext db, ITenantContext context) =>
         WithUser(new VisitsController(db, context, FactoryTestSupport.Scope(db, context), Service(db), FactoryTestSupport.Settings(db), FactoryTestSupport.Audit(db)));
 
-    private static T WithUser<T>(T controller) where T : ControllerBase
+    internal static T WithUser<T>(T controller) where T : ControllerBase
     {
         controller.ControllerContext = new ControllerContext
         {
@@ -475,7 +475,7 @@ public sealed class VisitorTests
         return controller;
     }
 
-    private static T Ok<T>(ActionResult<T> result) => Assert.IsAssignableFrom<T>(Assert.IsType<OkObjectResult>(result.Result).Value);
+    internal static T Ok<T>(ActionResult<T> result) => Assert.IsAssignableFrom<T>(Assert.IsType<OkObjectResult>(result.Result).Value);
 
     private sealed class RecordingDispatcher : INotificationDispatcher
     {
