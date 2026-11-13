@@ -25,30 +25,6 @@ public static class ComplianceStatuses
 
 public sealed record ComplianceTemplate(string Key, string Name, string Kind, string Regulation, int IntervalMonths, IReadOnlyList<string>? AssetClassCodes, int? RaiseJobDaysBefore = 30);
 
-/// <summary>
-/// The statutory items a Kenyan tea factory tracks (scope Phase 3). Intervals are the usual
-/// legal or recommended ones; each factory checks them against its own certificates.
-/// </summary>
-public static class ComplianceTemplates
-{
-    public static readonly IReadOnlyList<ComplianceTemplate> TeaKenya =
-    [
-        new("boiler-exam", "Boiler examination by an approved person", ComplianceKinds.StatutoryInspection, "OSHA 2007 s.67 (DOSH)", 14, ["TEA-BLR"]),
-        new("boiler-hydro", "Boiler hydraulic test", ComplianceKinds.StatutoryInspection, "OSHA 2007 s.67 (DOSH)", 24, ["TEA-BLR"]),
-        new("air-receiver", "Air receiver (pressure vessel) examination", ComplianceKinds.StatutoryInspection, "OSHA 2007 s.69–70 (DOSH)", 24, ["TEA-CMP"]),
-        new("lifting-appliances", "Lifting appliances examination (hoists, chain blocks, cranes)", ComplianceKinds.StatutoryInspection, "OSHA 2007 s.63 (DOSH)", 12, null),
-        new("lifting-tackle", "Chains, ropes and lifting tackle examination", ComplianceKinds.StatutoryInspection, "OSHA 2007 s.64 (DOSH)", 6, null),
-        new("weighbridge", "Weighbridge verification", ComplianceKinds.Calibration, "Weights and Measures Act (Cap 513)", 12, ["TEA-WB"]),
-        new("scales", "Scale verification and calibration", ComplianceKinds.Calibration, "Weights and Measures Act (Cap 513)", 12, ["TEA-SCL"]),
-        new("metal-detector", "Metal detector calibration and test", ComplianceKinds.Calibration, "ISO 22000 / customer requirement", 6, null),
-        new("fire-extinguishers", "Fire extinguishers service", ComplianceKinds.FireSafety, "Fire Risk Reduction Rules 2007", 12, null),
-        new("fire-audit", "Fire safety audit", ComplianceKinds.FireSafety, "Fire Risk Reduction Rules 2007", 12, null),
-        new("osh-audit", "Occupational safety and health audit", ComplianceKinds.Certificate, "OSHA 2007 s.11", 12, null),
-        new("workplace-registration", "Workplace registration certificate", ComplianceKinds.Certificate, "OSHA 2007 s.44", 12, null, null),
-        new("medical-exam", "Medical examination of exposed workers", ComplianceKinds.Certificate, "Medical Examination Rules 2005", 12, null, null),
-    ];
-}
-
 public sealed record ComplianceRecordInput(DateTime DoneAt, string Result, DateTime? ValidUntil, string? CertificateNumber, string? Examiner, string? Notes, Guid? CertificateAttachmentId);
 
 public interface IComplianceService
@@ -56,7 +32,7 @@ public interface IComplianceService
     /// <summary>Records an inspection, calibration or renewal and moves the item's due date on (a fail makes it due now).</summary>
     Task<ComplianceRecord> RecordAsync(ComplianceItem item, ComplianceRecordInput input, FactoryActor actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Adds a factory's statutory items from the template (those it doesn't have). Returns how many.</summary>
+    /// <summary>Adds a factory's statutory items from its industry pack (those it doesn't have). Returns how many.</summary>
     Task<int> InstallAsync(Guid tenantId, Guid factoryId, CancellationToken cancellationToken = default);
 
     /// <summary>Raises the jobs that fall due and sends due-soon and overdue alerts. Returns (jobs raised, alerts sent).</summary>
@@ -158,8 +134,9 @@ internal sealed class ComplianceService(
             .Where(x => x.TenantId == tenantId && x.TemplateKey != null && subtree.Contains(x.OrgNodeId))
             .Select(x => new { x.TemplateKey, x.AssetId }).ToListAsync(cancellationToken);
 
+        var industry = await IndustryTemplates.ForFactoryAsync(dbContext, tenantId, factory.Id, cancellationToken);
         var added = 0;
-        foreach (var template in ComplianceTemplates.TeaKenya)
+        foreach (var template in industry.Compliance)
         {
             if (template.AssetClassCodes is null)
             {

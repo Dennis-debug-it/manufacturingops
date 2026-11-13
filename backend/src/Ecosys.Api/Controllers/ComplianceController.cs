@@ -139,11 +139,15 @@ public sealed class ComplianceController(
         return File(stream, attachment.MimeType, attachment.FileName, enableRangeProcessing: true);
     }
 
+    /// <summary>The standard statutory items for a factory's industry (the tenant's industry when no factory is given).</summary>
     [HttpGet("templates")]
-    public ActionResult<IReadOnlyCollection<ComplianceTemplate>> Templates()
+    public async Task<ActionResult<IReadOnlyCollection<ComplianceTemplate>>> Templates([FromQuery] Guid? factoryId, CancellationToken cancellationToken)
     {
         EnsureCanView();
-        return Ok(ComplianceTemplates.TeaKenya);
+        var industry = factoryId is { } id
+            ? await IndustryTemplates.ForFactoryAsync(dbContext, TenantId, id, cancellationToken)
+            : await IndustryTemplates.ForTenantAsync(dbContext, TenantId, cancellationToken);
+        return Ok(industry.Compliance);
     }
 
     /// <summary>Adds the factory's standard statutory items (boilers, air receivers, lifting, weighing, fire, audits).</summary>

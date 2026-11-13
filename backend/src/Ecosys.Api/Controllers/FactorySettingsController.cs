@@ -213,7 +213,11 @@ public sealed class FactorySettingsController(
         settings.OperatorReportingEnabled,
         // The key authorises anonymous reports, so only admins see it.
         IsAdmin ? settings.OperatorReportKey : null,
-        ShiftCalendar.Parse(settings.ShiftsJson).Select(x => new ShiftDto(x.Name, x.Start.ToString("HH:mm"), x.End.ToString("HH:mm"))).ToList());
+        ShiftCalendar.Parse(settings.ShiftsJson).Select(x => new ShiftDto(x.Name, x.Start.ToString("HH:mm"), x.End.ToString("HH:mm"))).ToList())
+    {
+        // The industry's pack, so screens can use its words (low-crop vs off-season…).
+        Industry = IndustryTemplateResponse.From(IndustryTemplates.Find(settings.IndustryTemplate) ?? IndustryTemplates.Default),
+    };
 }
 
 public sealed record FactorySettingsResponse(
@@ -236,7 +240,10 @@ public sealed record FactorySettingsResponse(
     int ReworkWindowDays,
     bool OperatorReportingEnabled,
     string? OperatorReportKey,
-    IReadOnlyCollection<ShiftDto> Shifts);
+    IReadOnlyCollection<ShiftDto> Shifts)
+{
+    public IndustryTemplateResponse? Industry { get; init; }
+}
 
 public sealed record ShiftDto(string Name, string Start, string End);
 

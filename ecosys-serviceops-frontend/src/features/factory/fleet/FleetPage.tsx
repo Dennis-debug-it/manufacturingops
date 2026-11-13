@@ -1,3 +1,4 @@
+import { useIndustry } from '../industry'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -22,8 +23,9 @@ const dateInput = (value: string | null | undefined) => (value ? value.slice(0, 
 const num = (value: string) => (value.trim() === '' ? null : Number(value))
 const text = (value: string) => value.trim() || null
 
-/** The leaf collection fleet: each vehicle's odometer, next service, papers, fuel use and last position. */
+/** The supply fleet (leaf collection, cane haulage, milk tankers): each vehicle's odometer, next service, papers, fuel use and last position. */
 export function FleetPage() {
+  const { vocabulary } = useIndustry()
   const [orgNodeId, setOrgNodeId] = useState('')
   const { data: vehicles, isLoading } = useFleet(orgNodeId)
   const canManage = usePermission('assets.manage')
@@ -35,8 +37,8 @@ export function FleetPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Leaf collection fleet"
-        subtitle="Lorries, pickups and tractors that bring green leaf in: service by the kilometre, papers, fuel use and where each one is."
+        title={vocabulary.supplyFleet}
+        subtitle={`${vocabulary.supplyFleetDescription}: service by the kilometre, papers, fuel use and where each one is.`}
         primaryAction={canManage ? <button type="button" className={primaryButton} onClick={() => setEditing('new')}><Plus className="h-4 w-4" />Add vehicle</button> : undefined}
         secondaryActions={<div className="w-56"><LocationSelect value={orgNodeId} onChange={setOrgNodeId} emptyLabel="All locations" includeGroups /></div>}
       />
@@ -49,7 +51,7 @@ export function FleetPage() {
       </div>
 
       {isLoading ? <Spinner label="Loading the fleet" /> : rows.length === 0 ? (
-        <EmptyState title="No vehicles yet" description="Add each leaf collection vehicle. It becomes an asset, so jobs, PM by the kilometre, daily checks and driver fault reports work for it too." />
+        <EmptyState title="No vehicles yet" description="Add each vehicle. It becomes an asset, so jobs, PM by the kilometre, daily checks and driver fault reports work for it too." />
       ) : <FleetTable rows={rows} onOpen={setOpen} />}
 
       {canSettings ? <TrackingCard /> : null}

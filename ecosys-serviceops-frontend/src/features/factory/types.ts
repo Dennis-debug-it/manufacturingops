@@ -30,17 +30,45 @@ export interface UpsertOrgNodePayload {
   isActive?: boolean | null
   externalId?: string | null
   externalSystem?: string | null
+  /** Factories only: this factory's own industry; blank for the workspace's. */
+  industry?: string | null
 }
 
+export interface IndustryVocabulary {
+  /** The yearly long shutdown, e.g. "low-crop shutdown", "off-season shutdown". */
+  overhaulSeason: string
+  /** The quiet months it happens in, e.g. "Low-crop season", "Off-season". */
+  lowSeason: string
+  /** The vehicles that bring the raw material in, e.g. "Leaf collection fleet". */
+  supplyFleet: string
+  supplyFleetDescription: string
+  /** e.g. "green leaf", "cane", "raw milk". */
+  rawMaterial: string
+}
+
+/** An industry pack: what Ecosys sets up for a tea factory, a sugar mill, a dairy… */
 export interface IndustryTemplate {
   key: string
   name: string
+  description: string
   productionUnit: string
+  productionUnitShort: string
+  vocabulary: IndustryVocabulary
+  lowSeasonStartMonth: number | null
+  lowSeasonEndMonth: number | null
   sections: { code: string; name: string; description: string }[]
+  assetClasses: number
+  runningChecks: number
+  windowRoutines: number
+  statutoryItems: number
+  zones: number
+  checkpoints: number
 }
 
 export interface FactorySettings {
   industryTemplate: string
+  /** The workspace industry's pack (its words and defaults). */
+  industry?: IndustryTemplate
   productionUnit: string
   productionUnitShort: string
   useGroupLevel: boolean

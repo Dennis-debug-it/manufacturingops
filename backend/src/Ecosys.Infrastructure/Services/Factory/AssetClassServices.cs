@@ -28,20 +28,27 @@ internal sealed class AssetClassService(AppDbContext dbContext) : IAssetClassSer
     public async Task<InstallAssetClassesResult> InstallAsync(Guid tenantId, string templateKey, CancellationToken cancellationToken = default)
     {
         var template = IndustryTemplates.Find(templateKey) ?? throw new BusinessRuleException("Unknown industry template.");
-        var existing = (await dbContext.AssetCategories
-                .Where(x => x.TenantId == tenantId)
-                .Select(x => x.Name)
-                .ToListAsync(cancellationToken))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var order = existing.Count;
+        var current = await dbContext.AssetCategories
+            .Where(x => x.TenantId == tenantId)
+            .Select(x => new { x.Name, x.Code })
+            .ToListAsync(cancellationToken);
+        var names = current.Select(x => x.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var codes = current.Where(x => x.Code != null).Select(x => x.Code!).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var order = current.Count;
 
         var created = 0;
-        foreach (var item in template.AssetClasses.Where(x => !existing.Contains(x.Name)))
+        // Matched by code, so a group adding a second industry gets that industry's classes too. A class the
+        // tenant made by hand under the same name (no code) is kept instead of the template's.
+        foreach (var item in template.AssetClasses.Where(x => !codes.Contains(x.Code)
+            && !current.Any(c => c.Code == null && string.Equals(c.Name, x.Name, StringComparison.OrdinalIgnoreCase))))
         {
+            // Another industry's class already uses the name ("Electric motor"): add whose it is.
+            var name = names.Contains(item.Name) ? $"{item.Name} ({template.Name})" : item.Name;
+            names.Add(name);
             var category = new AssetCategory
             {
                 TenantId = tenantId,
-                Name = item.Name,
+                Name = name,
                 Code = item.Code,
                 ParentCategoryName = item.Group,
                 Description = $"{template.Name} template",
@@ -107,7 +114,7 @@ internal sealed class AssetClassService(AppDbContext dbContext) : IAssetClassSer
         var productionUnit = await dbContext.FactorySettings
             .Where(x => x.TenantId == asset.TenantId)
             .Select(x => x.ProductionUnit)
-            .SingleOrDefaultAsync(cancellationToken) ?? IndustryTemplates.Tea.ProductionUnit;
+            .SingleOrDefaultAsync(cancellationToken) ?? IndustryTemplates.Default.ProductionUnit;
         var hasPrimary = await dbContext.Meters.AnyAsync(x => x.AssetId == asset.Id && x.IsPrimary, cancellationToken);
 
         foreach (var type in types)

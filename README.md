@@ -18,6 +18,7 @@ It moves factories from reactive, paper-based maintenance to planned, traceable,
 
 - [Requirements](docs/requirements.md)
 - [Scope of work](docs/scope.md)
+- [Industry packs](docs/industry-packs.md) (tea, sugar, dairy, general; how to add one)
 - [Factory Operations spec: Visitor Management and Security Patrol](docs/operations-platform-spec.md)
 - [ServiceOps provenance](docs/serviceops-provenance.md) (fork point and ported fixes)
 - [Deployment](docs/DEPLOYMENT.md), [VPS setup](docs/VPS_SETUP.md), [WhatsApp setup](docs/WHATSAPP_SETUP.md)

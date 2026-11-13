@@ -64,7 +64,7 @@ export function OrganisationSettingsPage() {
           <EmptyState
             icon={Factory}
             title="No factories yet"
-            description="Add your first factory, then add its sections from the tea template or by hand."
+            description="Add your first factory, then add its sections from your industry's template or by hand."
             actionLabel={canManage ? 'Add factory' : undefined}
             onAction={canManage ? () => setEditor({ parent: null }) : undefined}
           />
@@ -119,6 +119,7 @@ function TreeRow({ node, canManage, settings, onEdit, onAdd }: {
         <span className="font-medium text-slate-900">{node.name}</span>
         <span className="font-mono text-xs text-slate-500">{node.code}</span>
         <Badge size="sm">{LEVEL_LABELS[node.level]}</Badge>
+        {node.level === 'Factory' && node.templateKey && node.templateKey !== settings?.industryTemplate ? <Badge size="sm" tone="info"><IndustryName industryKey={node.templateKey} /></Badge> : null}
         {!node.isActive ? <Badge size="sm" tone="warning">Inactive</Badge> : null}
         {node.assetCount > 0 ? <span className="text-xs text-slate-500">{node.assetCount} asset{node.assetCount === 1 ? '' : 's'}</span> : null}
         <span className="ml-auto flex flex-wrap gap-1">
@@ -164,7 +165,10 @@ function NodeEditor({ state, settings, onClose }: { state: EditorState; settings
     displayOrder: node?.displayOrder ?? 0,
     externalId: node?.externalId ?? '',
     externalSystem: node?.externalSystem ?? '',
+    industry: node?.templateKey && node.templateKey !== settings?.industryTemplate ? node.templateKey : '',
   })
+  const { data: templates } = useIndustryTemplates()
+  const workspaceIndustry = templates?.find((x) => x.key === settings?.industryTemplate)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [key]: value }))
 
   const submit = async () => {
@@ -181,6 +185,8 @@ function NodeEditor({ state, settings, onClose }: { state: EditorState; settings
           displayOrder: form.displayOrder,
           externalId: form.externalId || null,
           externalSystem: form.externalSystem || null,
+          // Blank means the workspace's industry.
+          industry: form.level === 'Factory' ? form.industry : null,
         },
       })
       toast.success(node ? 'Saved' : `${LEVEL_LABELS[form.level]} added`)
@@ -233,6 +239,14 @@ function NodeEditor({ state, settings, onClose }: { state: EditorState; settings
           <input className={cn(inputClass, 'font-mono uppercase')} value={form.code} onChange={(event) => set('code', event.target.value.toUpperCase())} />
         </Field>
         <Field label="Display order"><input type="number" className={inputClass} value={form.displayOrder} onChange={(event) => set('displayOrder', Number(event.target.value))} /></Field>
+        {form.level === 'Factory' ? (
+          <Field label="Industry" className="sm:col-span-2" hint="For a group with different kinds of factory. Sets its default sections, checks, statutory items, zones and checkpoints.">
+            <select className={inputClass} value={form.industry} onChange={(event) => set('industry', event.target.value)}>
+              <option value="">Same as the workspace{workspaceIndustry ? ` (${workspaceIndustry.name})` : ''}</option>
+              {(templates ?? []).filter((x) => x.key !== settings?.industryTemplate).map((x) => <option key={x.key} value={x.key}>{x.name}</option>)}
+            </select>
+          </Field>
+        ) : null}
         <Field label="Location" className="sm:col-span-2" hint="Town or address, for factories."><input className={inputClass} value={form.location} onChange={(event) => set('location', event.target.value)} /></Field>
         <Field label="Description" className="sm:col-span-2"><textarea className={textareaClass} value={form.description} onChange={(event) => set('description', event.target.value)} /></Field>
         <Field label="ERP ID" hint="This place's ID in your ERP, if any."><input className={inputClass} value={form.externalId} onChange={(event) => set('externalId', event.target.value)} /></Field>
@@ -248,6 +262,16 @@ function SettingsForm({ settings, canManage }: { settings: FactorySettings; canM
   const [form, setForm] = useState<UpdateFactorySettingsPayload>(settings)
   useEffect(() => setForm(settings), [settings])
   const set = <K extends keyof UpdateFactorySettingsPayload>(key: K, value: UpdateFactorySettingsPayload[K]) => setForm((current) => ({ ...current, [key]: value }))
+  const chosen = templates?.find((x) => x.key === form.industryTemplate)
+  const vocabulary = chosen?.vocabulary ?? settings.industry?.vocabulary
+  // Choosing another industry brings its production unit and quiet season; they stay editable.
+  const chooseIndustry = (key: string) => {
+    const pack = templates?.find((x) => x.key === key)
+    setForm((current) => pack && key !== current.industryTemplate ? {
+      ...current, industryTemplate: key, productionUnit: pack.productionUnit, productionUnitShort: pack.productionUnitShort,
+      lowCropStartMonth: pack.lowSeasonStartMonth ?? current.lowCropStartMonth, lowCropEndMonth: pack.lowSeasonEndMonth ?? current.lowCropEndMonth,
+    } : { ...current, industryTemplate: key })
+  }
 
   const submit = async () => {
     try {
@@ -265,12 +289,22 @@ function SettingsForm({ settings, canManage }: { settings: FactorySettings; canM
         <p className="text-sm text-slate-500">Apply to every factory unless a factory sets its own.</p>
       </div>
       <fieldset disabled={!canManage} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Field label="Industry template" hint="Default sections and asset classes come from this.">
-          <select className={inputClass} value={form.industryTemplate} onChange={(event) => set('industryTemplate', event.target.value)}>
+        <Field label="Industry" hint="A factory can have its own (Edit the factory). Existing data is not changed.">
+          <select className={inputClass} value={form.industryTemplate} onChange={(event) => chooseIndustry(event.target.value)}>
             {(templates ?? []).map((template) => <option key={template.key} value={template.key}>{template.name}</option>)}
           </select>
         </Field>
-        <Field label="Production unit" hint="Used for downtime cost and KPIs, e.g. kg made tea.">
+        {chosen ? (
+          <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 sm:col-span-2 lg:col-span-3">
+            <p className="text-sm text-slate-700">{chosen.description}</p>
+            <p className="mt-1">
+              Its template brings {chosen.sections.length} sections, {chosen.assetClasses} asset classes, {chosen.runningChecks} shift checks, {chosen.windowRoutines} weekly-window routines,
+              {' '}{chosen.statutoryItems} statutory items, {chosen.zones} visitor zones and {chosen.checkpoints} patrol checkpoints. Each is added when you use it (Add default sections,
+              the asset class pack, compliance, zones, checkpoints) and can be changed after.
+            </p>
+          </div>
+        ) : null}
+        <Field label="Production unit" hint={`Used for downtime cost and KPIs, e.g. ${chosen?.productionUnit ?? 'kg made tea'}.`}>
           <input className={inputClass} value={form.productionUnit} onChange={(event) => set('productionUnit', event.target.value)} />
         </Field>
         <Field label="Short form"><input className={inputClass} value={form.productionUnitShort} onChange={(event) => set('productionUnitShort', event.target.value)} /></Field>
@@ -282,13 +316,13 @@ function SettingsForm({ settings, canManage }: { settings: FactorySettings; canM
         </Field>
         <Field label="Window starts"><input type="time" className={inputClass} value={form.weeklyWindowStart} disabled={!form.weeklyWindowEnabled} onChange={(event) => set('weeklyWindowStart', event.target.value)} /></Field>
         <Field label="Window ends"><input type="time" className={inputClass} value={form.weeklyWindowEnd} disabled={!form.weeklyWindowEnabled} onChange={(event) => set('weeklyWindowEnd', event.target.value)} /></Field>
-        <Field label="Low-crop season starts" hint="When the annual overhaul usually happens.">
+        <Field label={`${vocabulary?.lowSeason ?? 'Low-crop season'} starts`} hint="When the annual overhaul usually happens.">
           <select className={inputClass} value={form.lowCropStartMonth ?? ''} onChange={(event) => set('lowCropStartMonth', event.target.value ? Number(event.target.value) : null)}>
             <option value="">Not set</option>
             {MONTHS.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
           </select>
         </Field>
-        <Field label="Low-crop season ends">
+        <Field label={`${vocabulary?.lowSeason ?? 'Low-crop season'} ends`}>
           <select className={inputClass} value={form.lowCropEndMonth ?? ''} onChange={(event) => set('lowCropEndMonth', event.target.value ? Number(event.target.value) : null)}>
             <option value="">Not set</option>
             {MONTHS.map((month, index) => <option key={month} value={index + 1}>{month}</option>)}
@@ -328,4 +362,9 @@ function SettingsForm({ settings, canManage }: { settings: FactorySettings; canM
       ) : null}
     </section>
   )
+}
+
+function IndustryName({ industryKey }: { industryKey: string }) {
+  const { data: templates } = useIndustryTemplates()
+  return <>{templates?.find((x) => x.key === industryKey)?.name ?? industryKey}</>
 }

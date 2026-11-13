@@ -1,3 +1,4 @@
+import { useIndustry } from '../industry'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -222,6 +223,7 @@ function ComplianceTab({ orgNodeId, onOpen }: { orgNodeId: string; onOpen: (id: 
 const EVENT_LABELS: Record<string, string> = { Generated: 'Job raised', Completed: 'Done', Skipped: 'Skipped', Deferred: 'Deferred' }
 
 function PlanDetailDrawer({ id, canPlan, onClose, onEdit }: { id: string | null; canPlan: boolean; onClose: () => void; onEdit: (plan: PmPlanDetail) => void }) {
+  const { vocabulary } = useIndustry()
   const links = useFactoryLinks()
   const { data } = usePmPlan(id)
   const action = usePmAction(id ?? '')
@@ -271,7 +273,7 @@ function PlanDetailDrawer({ id, canPlan, onClose, onEdit }: { id: string | null;
           {plan.deferReason ? (
             <p className={cn('rounded-lg p-3', plan.deferRisk ? 'bg-rose-50 text-rose-900' : 'bg-amber-50 text-amber-900')}>
               {plan.deferRisk ? <AlertTriangle className="mr-1 inline h-4 w-4" /> : null}
-              Deferred{plan.deferredAt ? ` on ${formatDate(plan.deferredAt)}` : ''}: {plan.deferReason}{plan.deferRisk ? ' — an A-class asset put off to low crop.' : ''}
+              Deferred{plan.deferredAt ? ` on ${formatDate(plan.deferredAt)}` : ''}: {plan.deferReason}{plan.deferRisk ? ` — an A-class asset put off to the ${vocabulary.lowSeason.toLowerCase()}.` : ''}
             </p>
           ) : null}
 
@@ -283,7 +285,7 @@ function PlanDetailDrawer({ id, canPlan, onClose, onEdit }: { id: string | null;
                   <Field label={`New due reading (${plan.meterUnit ?? ''})`}><input type="number" className={inputClass} value={meter} onChange={(event) => setMeter(event.target.value)} /></Field>
                 ) : (
                   <>
-                    <label className="flex items-center gap-2"><input type="checkbox" checked={lowCrop} onChange={(event) => setLowCrop(event.target.checked)} />Until the low-crop season</label>
+                    <label className="flex items-center gap-2"><input type="checkbox" checked={lowCrop} onChange={(event) => setLowCrop(event.target.checked)} />Until the {vocabulary.lowSeason.toLowerCase()}</label>
                     {!lowCrop ? <Field label="New due date"><input type="date" className={inputClass} value={date} onChange={(event) => setDate(event.target.value)} /></Field> : null}
                   </>
                 )
@@ -331,6 +333,7 @@ const EMPTY: SavePmPlan = {
 }
 
 function PlanFormDrawer({ plan, onClose, onSaved }: { plan: PmPlanDetail | 'new' | null; onClose: () => void; onSaved: (id: string) => void }) {
+  const { productionUnit } = useIndustry()
   const save = useSavePmPlan()
   const templates = useChecklistTemplates()
   const existing = plan && plan !== 'new' ? plan : null
@@ -407,7 +410,7 @@ function PlanFormDrawer({ plan, onClose, onSaved }: { plan: PmPlanDetail | 'new'
         <Field label="Due by">
           <select className={inputClass} value={form.triggerType} onChange={(event) => set('triggerType', event.target.value as SavePmPlan['triggerType'])}>
             <option value="Calendar">Date</option>
-            <option value="Meter">Meter (run hours, kg made tea…)</option>
+            <option value="Meter">Meter (run hours, {productionUnit}…)</option>
           </select>
         </Field>
         <Field label="Schedule" hint={form.scheduleMode === 'Fixed' ? 'Keeps its dates, however late the last one was.' : 'Counts from when it was last done.'}>

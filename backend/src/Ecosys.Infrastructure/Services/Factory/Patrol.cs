@@ -74,7 +74,7 @@ public interface IPatrolService
 
     Task<ShiftHandover> AcknowledgeHandoverAsync(Guid tenantId, Guid handoverId, PatrolActor actor, CancellationToken cancellationToken = default);
 
-    /// <summary>The usual tea factory checkpoints and a night round of them every two hours, for a factory with none.</summary>
+    /// <summary>The usual checkpoints of the factory's industry and a night round of them every two hours, for a factory with none.</summary>
     Task<int> SeedCheckpointsAsync(Guid tenantId, Guid factoryId, CancellationToken cancellationToken = default);
 }
 
@@ -541,8 +541,9 @@ internal sealed class PatrolService(
         var next = await dbContext.Checkpoints.CountAsync(x => x.TenantId == tenantId, cancellationToken);
         var route = new PatrolRoute { TenantId = tenantId, FactoryId = factoryId, Name = "Night round", Ordered = true, MaxDurationMinutes = 60, MinGapSeconds = 20 };
         dbContext.PatrolRoutes.Add(route);
+        var industry = await IndustryTemplates.ForFactoryAsync(dbContext, tenantId, factoryId, cancellationToken);
         var sequence = 0;
-        foreach (var (name, zone, questions) in TeaCheckpoints)
+        foreach (var (name, zone, questions) in industry.Checkpoints)
         {
             var checkpoint = new Checkpoint
             {
@@ -556,25 +557,8 @@ internal sealed class PatrolService(
 
         dbContext.PatrolSchedules.Add(new PatrolSchedule { TenantId = tenantId, RouteId = route.Id, EveryMinutes = 120, WindowFrom = new TimeOnly(18, 0), WindowTo = new TimeOnly(6, 0), GraceMinutes = 15 });
         await dbContext.SaveChangesAsync(cancellationToken);
-        return TeaCheckpoints.Length;
+        return industry.Checkpoints.Count;
     }
-
-    /// <summary>The usual checkpoints of a tea factory, in walking order (spec §5).</summary>
-    internal static readonly (string Name, string? Zone, string? Questions)[] TeaCheckpoints =
-    [
-        ("Main entrance", null, "Gate locked?\nGuard house manned?"),
-        ("Administration block", "Reception and offices", "Doors and windows locked?"),
-        ("Weighbridge", "Weighbridge", "Weighbridge office locked?"),
-        ("Green leaf receiving", "Green leaf receiving", null),
-        ("Processing hall", "Processing hall", "No machines left running unattended?"),
-        ("Boiler house", "Boiler house", "Boiler attendant present?"),
-        ("Generator room", null, "Door locked?"),
-        ("Fuel and firewood store", "Fuel and firewood store", "Padlock intact?\nNo fuel leaks?"),
-        ("Finished goods warehouse", "Packing and finished goods", "Doors locked and sealed?"),
-        ("Electrical substation", "Electrical substation", "Fence and gate intact?"),
-        ("Water treatment plant", null, null),
-        ("Perimeter fence", null, "Fence intact, no breaches?\nSecurity lights working?"),
-    ];
 
     // ── Helpers ───────────────────────────────────────────────────────────────────────────────
 

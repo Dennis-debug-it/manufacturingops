@@ -64,11 +64,10 @@ public sealed class OrgNodesController(
         return Ok(await MapAsync(node, cancellationToken));
     }
 
+    /// <summary>The industries Ecosys has packs for, with what each pack brings.</summary>
     [HttpGet("templates")]
     public ActionResult<IReadOnlyCollection<IndustryTemplateResponse>> Templates() =>
-        Ok(IndustryTemplates.All
-            .Select(x => new IndustryTemplateResponse(x.Key, x.Name, x.ProductionUnit, x.Sections.Select(s => new SectionTemplateResponse(s.Code, s.Name, s.Description)).ToList()))
-            .ToList());
+        Ok(IndustryTemplates.All.Select(IndustryTemplateResponse.From).ToList());
 
     [HttpPost]
     public async Task<ActionResult<OrgNodeResponse>> Create([FromBody] UpsertOrgNodeRequest request, CancellationToken cancellationToken)
@@ -89,7 +88,8 @@ public sealed class OrgNodesController(
             DisplayOrder = request.DisplayOrder ?? 0,
             IsActive = request.IsActive ?? true,
             ExternalId = Normalize(request.ExternalId),
-            ExternalSystem = Normalize(request.ExternalSystem)
+            ExternalSystem = Normalize(request.ExternalSystem),
+            TemplateKey = IndustryKey(level, request.Industry)
         };
 
         dbContext.OrgNodes.Add(node);
@@ -137,6 +137,7 @@ public sealed class OrgNodesController(
         node.IsActive = request.IsActive ?? node.IsActive;
         node.ExternalId = Normalize(request.ExternalId);
         node.ExternalSystem = Normalize(request.ExternalSystem);
+        if (level == OrgNodeLevels.Factory && request.Industry is not null) node.TemplateKey = IndustryKey(level, request.Industry);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, moved ? "org-node.moved" : "org-node.updated", nameof(OrgNode), node.Id.ToString(),
@@ -193,9 +194,18 @@ public sealed class OrgNodesController(
             throw new BusinessRuleException("Default sections can only be added to a factory.");
         }
 
-        var settings = await factorySettingsService.GetOrCreateAsync(TenantId, cancellationToken);
-        var template = IndustryTemplates.Find(request.TemplateKey ?? settings.IndustryTemplate)
-            ?? throw new BusinessRuleException("Unknown industry template.");
+        await factorySettingsService.GetOrCreateAsync(TenantId, cancellationToken);
+        IndustryTemplate template;
+        if (request.TemplateKey is { } key)
+        {
+            template = IndustryTemplates.Find(key) ?? throw new BusinessRuleException("Unknown industry template.");
+            // Applying an industry's sections makes the factory that industry.
+            factory.TemplateKey = template.Key;
+        }
+        else
+        {
+            template = await IndustryTemplates.ForFactoryAsync(dbContext, TenantId, factory.Id, cancellationToken);
+        }
 
         var existingNames = await dbContext.OrgNodes
             .Where(x => x.TenantId == TenantId && x.ParentId == id)
@@ -420,6 +430,16 @@ public sealed class OrgNodesController(
     };
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// A factory's own industry, when it differs from the tenant's (a group with mixed factories). Blank
+    /// means "the tenant's industry"; other levels never carry one.
+    /// </summary>
+    private static string? IndustryKey(string level, string? industry)
+    {
+        if (level != OrgNodeLevels.Factory || string.IsNullOrWhiteSpace(industry)) return null;
+        return (IndustryTemplates.Find(industry) ?? throw new BusinessRuleException($"Industry must be one of: {string.Join(", ", IndustryTemplates.All.Select(x => x.Key))}.")).Key;
+    }
 }
 
 public sealed record UpsertOrgNodeRequest(
@@ -432,7 +452,8 @@ public sealed record UpsertOrgNodeRequest(
     int? DisplayOrder = null,
     bool? IsActive = null,
     string? ExternalId = null,
-    string? ExternalSystem = null);
+    string? ExternalSystem = null,
+    string? Industry = null);
 
 public sealed record OrgNodeResponse(
     Guid Id,
@@ -457,4 +478,17 @@ public sealed record ApplyTemplateResponse(int Created, int Skipped);
 
 public sealed record SectionTemplateResponse(string Code, string Name, string Description);
 
-public sealed record IndustryTemplateResponse(string Key, string Name, string ProductionUnit, IReadOnlyCollection<SectionTemplateResponse> Sections);
+public sealed record IndustryVocabularyResponse(string OverhaulSeason, string LowSeason, string SupplyFleet, string SupplyFleetDescription, string RawMaterial);
+
+/// <summary>An industry pack and what installing it brings.</summary>
+public sealed record IndustryTemplateResponse(
+    string Key, string Name, string Description, string ProductionUnit, string ProductionUnitShort, IndustryVocabularyResponse Vocabulary,
+    int? LowSeasonStartMonth, int? LowSeasonEndMonth, IReadOnlyCollection<SectionTemplateResponse> Sections,
+    int AssetClasses, int RunningChecks, int WindowRoutines, int StatutoryItems, int Zones, int Checkpoints)
+{
+    public static IndustryTemplateResponse From(IndustryTemplate x) => new(
+        x.Key, x.Name, x.Description, x.ProductionUnit, x.ProductionUnitShort,
+        new(x.Vocabulary.OverhaulSeason, x.Vocabulary.LowSeason, x.Vocabulary.SupplyFleet, x.Vocabulary.SupplyFleetDescription, x.Vocabulary.RawMaterial),
+        x.LowSeasonStartMonth, x.LowSeasonEndMonth, x.Sections.Select(s => new SectionTemplateResponse(s.Code, s.Name, s.Description)).ToList(),
+        x.AssetClasses.Count, x.RunningChecks.Count, x.WindowRoutines.Count, x.Compliance.Count, x.Zones.Count, x.Checkpoints.Count);
+}

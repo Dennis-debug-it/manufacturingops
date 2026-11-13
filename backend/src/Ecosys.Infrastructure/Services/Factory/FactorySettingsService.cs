@@ -26,7 +26,7 @@ public sealed class FactorySettingsService(AppDbContext dbContext) : IFactorySet
             return settings;
         }
 
-        var template = IndustryTemplates.Tea;
+        var template = IndustryTemplates.Default;
         settings = new FactorySettings
         {
             TenantId = tenantId,

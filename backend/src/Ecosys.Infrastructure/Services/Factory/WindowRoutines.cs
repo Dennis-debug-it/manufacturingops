@@ -5,67 +5,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Infrastructure.Services.Factory;
 
-internal sealed record RoutineTemplate(string Name, IReadOnlyList<string> AssetClassCodes, bool Route, decimal Hours, IReadOnlyList<(string Prompt, string Type, string? Unit)> Steps);
-
 /// <summary>
-/// The standard weekly-window routines for a tea factory (scope Phase 3): lubrication, belt and
-/// chain tension, CTC segment inspection, dryer and fluid bed cleaning, fan checks, panel
-/// inspections and boiler checks. Each is set up as a weekly line-stop PM plan on the factory's
-/// matching assets, so it is raised ahead of every window and queued into it.
+/// The standard weekly-window routines (scope Phase 3), from the factory's industry pack
+/// (<see cref="IndustryTemplate.WindowRoutines"/>): for tea, lubrication, belt and chain tension, CTC
+/// segments, dryer cleaning, fans, panels and boilers. Each is set up as a weekly line-stop PM plan on
+/// the factory's matching assets, so it is raised ahead of every window and queued into it.
 /// </summary>
 public static class WindowRoutines
 {
     public const string WorkType = "WindowRoutine";
     public const string Category = "Weekly window";
-
-    internal static readonly IReadOnlyList<RoutineTemplate> Tea =
-    [
-        new("Weekly lubrication round", ["TEA-CTC", "TEA-RV", "TEA-CFU", "TEA-CNV", "TEA-WFN", "TEA-SRT"], true, 3,
-        [
-            ("Grease bearings to the lubrication chart", "checkbox", null),
-            ("Gearbox oil levels topped up", "checkbox", null),
-            ("Chains oiled; no dry or seized links", "checkbox", null),
-            ("Note any leaking seals", "text", null),
-        ]),
-        new("Belt and chain tension check", ["TEA-CNV", "TEA-WFN", "TEA-CTC", "TEA-RV"], true, 2,
-        [
-            ("Belts: tension and wear checked, guards refitted", "checkbox", null),
-            ("Chains: tension and sprocket wear checked", "checkbox", null),
-            ("Belts or chains to replace", "text", null),
-        ]),
-        new("CTC segment inspection", ["TEA-CTC"], false, 2,
-        [
-            ("Segment teeth: wear and chipping checked", "checkbox", null),
-            ("Roller gap", "number", "mm"),
-            ("Segments to re-cut or replace", "text", null),
-        ]),
-        new("Dryer and fluid bed cleaning", ["TEA-FBD"], false, 4,
-        [
-            ("Perforated bed and chambers cleaned", "checkbox", null),
-            ("Cyclones and ducts cleared of fluff", "checkbox", null),
-            ("Heat exchanger tubes inspected", "checkbox", null),
-            ("Fan impellers clean and balanced", "checkbox", null),
-        ]),
-        new("Withering fan check", ["TEA-WFN"], true, 1.5m,
-        [
-            ("Blades and hub tight, no cracks", "checkbox", null),
-            ("Motor mounting and cable glands secure", "checkbox", null),
-            ("Motor current on trial run", "number", "A"),
-        ]),
-        new("Electrical panel inspection", ["TEA-TRF", "TEA-GEN", "TEA-MTR"], true, 2,
-        [
-            ("Panels dust-free and doors closing", "checkbox", null),
-            ("No hot spots or burnt terminals", "checkbox", null),
-            ("Earthing and covers in place", "checkbox", null),
-        ]),
-        new("Boiler weekly checks", ["TEA-BLR"], false, 3,
-        [
-            ("Water level gauges blown down and clear", "checkbox", null),
-            ("Safety valves tested (lift)", "checkbox", null),
-            ("Fire tubes and grate cleaned", "checkbox", null),
-            ("Working pressure on restart", "number", "bar"),
-        ]),
-    ];
 
     /// <summary>
     /// Adds the routine checklists and, for one factory, a weekly line-stop PM plan per routine on
@@ -74,7 +23,8 @@ public static class WindowRoutines
     /// </summary>
     public static async Task<int> InstallAsync(AppDbContext dbContext, IFactoryPmService pmService, Guid tenantId, Guid factoryId, DateTime firstDue, CancellationToken cancellationToken = default)
     {
-        var templates = await EnsureTemplatesAsync(dbContext, tenantId, cancellationToken);
+        var industry = await IndustryTemplates.ForFactoryAsync(dbContext, tenantId, factoryId, cancellationToken);
+        var templates = await EnsureTemplatesAsync(dbContext, tenantId, industry.WindowRoutines, cancellationToken);
         var subtree = await SubtreeAsync(dbContext, tenantId, factoryId, cancellationToken);
         var assets = await dbContext.Assets.AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.ClientId == null && x.OrgNodeId != null && subtree.Contains(x.OrgNodeId.Value)
@@ -87,7 +37,7 @@ public static class WindowRoutines
             .Select(x => x.Name!).ToListAsync(cancellationToken);
 
         var added = 0;
-        foreach (var routine in Tea)
+        foreach (var routine in industry.WindowRoutines)
         {
             var matching = assets.Where(x => routine.AssetClassCodes.Contains(x.Code)).ToList();
             if (matching.Count == 0)
@@ -115,11 +65,11 @@ public static class WindowRoutines
         return added;
     }
 
-    private static async Task<Dictionary<string, Guid>> EnsureTemplatesAsync(AppDbContext dbContext, Guid tenantId, CancellationToken cancellationToken)
+    private static async Task<Dictionary<string, Guid>> EnsureTemplatesAsync(AppDbContext dbContext, Guid tenantId, IReadOnlyList<RoutineTemplate> routines, CancellationToken cancellationToken)
     {
         var existing = await dbContext.PmTemplates.Where(x => x.TenantId == tenantId && x.WorkType == WorkType && x.DeletedAt == null)
             .ToDictionaryAsync(x => x.Name, x => x.Id, StringComparer.OrdinalIgnoreCase, cancellationToken);
-        foreach (var routine in Tea.Where(x => !existing.ContainsKey(x.Name)))
+        foreach (var routine in routines.Where(x => !existing.ContainsKey(x.Name)))
         {
             var template = new PmTemplate { TenantId = tenantId, Name = routine.Name, Category = Category, WorkType = WorkType, Description = "Weekly window routine", EstimatedDurationHours = routine.Hours, IsActive = true };
             foreach (var (step, index) in routine.Steps.Select((s, i) => (s, i)))

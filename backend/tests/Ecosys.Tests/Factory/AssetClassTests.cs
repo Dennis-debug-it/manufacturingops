@@ -48,9 +48,13 @@ public sealed class AssetClassTests
         var again = Ok(await controller.ApplyIndustryPack(new ApplyIndustryPackRequest("tea"), CancellationToken.None));
         Assert.Equal(0, again.Created);
 
-        // Another industry's classes can be added alongside.
+        // Another industry's classes are added alongside (a group with mixed factories); where a name is
+        // taken by the tea class, the new one says whose it is.
         var generic = Ok(await controller.ApplyIndustryPack(new ApplyIndustryPackRequest("generic"), CancellationToken.None));
-        Assert.Equal(0, generic.Created); // all generic class names already exist from the tea pack
+        Assert.Equal(IndustryTemplates.Generic.AssetClasses.Count - 1, generic.Created); // not its Boiler: the tenant made its own
+        Assert.True(await db.AssetCategories.AnyAsync(x => x.Code == "GEN-MTR" && x.Name == "Electric motor (General manufacturing)"));
+        Assert.True(await db.AssetCategories.AnyAsync(x => x.Code == "GEN-LIN" && x.Name == "Production machine"));
+        Assert.Equal(0, Ok(await controller.ApplyIndustryPack(new ApplyIndustryPackRequest("generic"), CancellationToken.None)).Created);
     }
 
     [Fact]

@@ -19,6 +19,7 @@ import {
   useSecurityIncidents, useSeedCheckpoints, useUpdateIncident, type CheckpointRow, type RouteRow, type RunStatus, type ScheduleRow, type SecurityIncident,
 } from './api'
 import { nfcSupported, useNfcReader } from './device'
+import { useFactoryIndustry } from '../factory/industry'
 
 const TABS = [
   { id: 'board', label: 'Board' },
@@ -251,6 +252,7 @@ function IncidentDrawer({ incident, onClose }: { incident: SecurityIncident; onC
 function CheckpointsTab({ factoryId }: { factoryId: string }) {
   const checkpoints = useCheckpoints(factoryId, true)
   const seed = useSeedCheckpoints()
+  const industry = useFactoryIndustry(factoryId)
   const [editing, setEditing] = useState<CheckpointRow | 'new' | null>(null)
   const rows = checkpoints.data ?? []
   return (
@@ -260,8 +262,8 @@ function CheckpointsTab({ factoryId }: { factoryId: string }) {
         {factoryId ? <button type="button" className={primaryButton} onClick={() => setEditing('new')}><Plus className="h-4 w-4" />Add checkpoint</button> : null}
       </div>
       {checkpoints.isLoading ? <Spinner /> : rows.length === 0 ? (
-        <EmptyState title="No checkpoints yet" description={factoryId ? 'Checkpoints are the points guards must reach. Start with the usual tea factory set and a night round every two hours.' : 'Choose a factory.'}
-          actionLabel={factoryId ? 'Add the standard tea factory checkpoints' : undefined}
+        <EmptyState title="No checkpoints yet" description={factoryId ? `Checkpoints are the points guards must reach. Start with the usual ${(industry?.name ?? 'factory').toLowerCase()} set and a night round every two hours.` : 'Choose a factory.'}
+          actionLabel={factoryId ? `Add the standard ${(industry?.name ?? 'factory').toLowerCase()} checkpoints` : undefined}
           onAction={factoryId ? () => void seed.mutateAsync(factoryId).then(() => toast.success('Checkpoints and a night round added')).catch(() => undefined) : undefined} />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">

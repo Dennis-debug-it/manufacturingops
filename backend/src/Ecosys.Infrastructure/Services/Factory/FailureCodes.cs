@@ -7,9 +7,9 @@ namespace Ecosys.Infrastructure.Services.Factory;
 public sealed record FailureCodeTemplate(string Kind, string Code, string Name, string? AssetClassCode = null);
 
 /// <summary>
-/// The default failure codes: problems (failure modes), causes (failure mechanisms) and remedies
-/// (maintenance activities) following ISO 14224's codes, plus tea-machinery problems tied to their
-/// asset class. Tenants edit their own copy.
+/// The failure codes every industry gets: problems (failure modes), causes (failure mechanisms) and
+/// remedies (maintenance activities) following ISO 14224. Each industry pack adds its machinery's
+/// problems tied to their asset classes (<see cref="IndustryTemplate.FailureCodes"/>). Tenants edit their own copy.
 /// </summary>
 public static class FailureCodeTemplates
 {
@@ -17,7 +17,7 @@ public static class FailureCodeTemplates
     private const string C = FailureCodeKinds.Cause;
     private const string R = FailureCodeKinds.Remedy;
 
-    public static readonly IReadOnlyList<FailureCodeTemplate> Default =
+    public static readonly IReadOnlyList<FailureCodeTemplate> Iso =
     [
         // Failure modes (ISO 14224 Annex B)
         new(P, "BRD", "Breakdown"),
@@ -38,17 +38,6 @@ public static class FailureCodeTemplates
         new(P, "PDE", "Parameter deviation"),
         new(P, "SER", "Minor in-service problem"),
         new(P, "OTH", "Other"),
-        // Tea machinery
-        new(P, "CTC-TTH", "Roller teeth blunt or worn", "TEA-CTC"),
-        new(P, "CTC-GAP", "Roller gap out of setting", "TEA-CTC"),
-        new(P, "RV-CHK", "Rotorvane choking", "TEA-RV"),
-        new(P, "FBD-FIRE", "Fire in dryer chamber", "TEA-FBD"),
-        new(P, "FBD-BED", "Uneven or choked fluid bed", "TEA-FBD"),
-        new(P, "WTR-MESH", "Trough mesh torn", "TEA-WTR"),
-        new(P, "WF-IMP", "Fan impeller damaged or unbalanced", "TEA-WFN"),
-        new(P, "BLR-LOW", "Low steam pressure", "TEA-BLR"),
-        new(P, "BLR-WTR", "Low water level trip", "TEA-BLR"),
-        new(P, "WB-CAL", "Weighbridge reading out of calibration", "TEA-WB"),
 
         // Failure mechanisms (ISO 14224 Table B.2)
         new(C, "1.1", "Leakage"),
@@ -99,7 +88,7 @@ public static class FailureCodeTemplates
 
 public interface IFailureCodeService
 {
-    /// <summary>Gives a tenant the default codes the first time it needs them.</summary>
+    /// <summary>Gives a tenant the ISO codes and its industries' codes: all of them the first time, and later any an added industry brings.</summary>
     Task EnsureSeededAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }
 
@@ -107,7 +96,15 @@ internal sealed class FailureCodeService(AppDbContext dbContext) : IFailureCodeS
 {
     public async Task EnsureSeededAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
-        if (await dbContext.FailureCodes.AnyAsync(x => x.TenantId == tenantId, cancellationToken))
+        var industries = await IndustryTemplates.InUseAsync(dbContext, tenantId, cancellationToken);
+        var existing = (await dbContext.FailureCodes.Where(x => x.TenantId == tenantId).Select(x => new { x.Kind, x.Code }).ToListAsync(cancellationToken))
+            .Select(x => (x.Kind, x.Code)).ToHashSet();
+        var wanted = (existing.Count == 0 ? FailureCodeTemplates.Iso : [])
+            .Concat(industries.SelectMany(x => x.FailureCodes))
+            .Where(x => !existing.Contains((x.Kind, x.Code)))
+            .DistinctBy(x => (x.Kind, x.Code))
+            .ToList();
+        if (wanted.Count == 0)
         {
             return;
         }
@@ -116,8 +113,8 @@ internal sealed class FailureCodeService(AppDbContext dbContext) : IFailureCodeS
             .Where(x => x.TenantId == tenantId && x.Code != null)
             .ToDictionaryAsync(x => x.Code!, x => x.Id, cancellationToken);
 
-        var order = 0;
-        foreach (var template in FailureCodeTemplates.Default)
+        var order = existing.Count;
+        foreach (var template in wanted)
         {
             dbContext.FailureCodes.Add(new FailureCode
             {

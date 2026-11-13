@@ -98,7 +98,7 @@ public interface IVisitorService
     /// <summary>Finds a returning visitor (by ID, or phone and name) or adds a new one, updating their details. Not saved.</summary>
     Task<Visitor> FindOrAddVisitorAsync(Guid tenantId, VisitorDetails person, Guid? contractorId, CancellationToken cancellationToken = default);
 
-    /// <summary>Adds the usual tea factory zones to a factory that has none yet.</summary>
+    /// <summary>Adds the usual zones of the factory's industry to a factory that has none yet.</summary>
     Task<int> SeedZonesAsync(Guid tenantId, Guid factoryId, CancellationToken cancellationToken = default);
 }
 
@@ -448,34 +448,20 @@ internal sealed class VisitorService(
             throw new BusinessRuleException("Choose a factory.");
         if (await dbContext.AccessZones.AnyAsync(x => x.TenantId == tenantId && x.FactoryId == factoryId, cancellationToken))
             throw new BusinessRuleException("This factory already has zones; add or edit them one by one.");
+        var industry = await IndustryTemplates.ForFactoryAsync(dbContext, tenantId, factoryId, cancellationToken);
         var order = 0;
-        foreach (var (name, level, escort, induction, permit, ppe) in TeaZones)
+        foreach (var zone in industry.Zones)
         {
             dbContext.AccessZones.Add(new AccessZone
             {
-                TenantId = tenantId, FactoryId = factoryId, Name = name, Level = level, RequiresEscort = escort,
-                RequiresInduction = induction, RequiresPermit = permit, RequiredPpe = ppe, DisplayOrder = ++order,
+                TenantId = tenantId, FactoryId = factoryId, Name = zone.Name, Level = zone.Level, RequiresEscort = zone.Escort,
+                RequiresInduction = zone.Induction, RequiresPermit = zone.Permit, RequiredPpe = zone.Ppe, DisplayOrder = ++order,
             });
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
-        return TeaZones.Length;
+        return industry.Zones.Count;
     }
-
-    /// <summary>The usual zones of a tea factory, from public to restricted.</summary>
-    internal static readonly (string Name, string Level, bool Escort, bool Induction, bool Permit, string? Ppe)[] TeaZones =
-    [
-        ("Reception and offices", AccessZoneLevels.Public, false, false, false, null),
-        ("Car park", AccessZoneLevels.Public, false, false, false, null),
-        ("Weighbridge", AccessZoneLevels.Controlled, false, true, false, "Reflective vest"),
-        ("Green leaf receiving", AccessZoneLevels.Controlled, false, true, false, "Reflective vest, Safety boots"),
-        ("Stores and workshop", AccessZoneLevels.Controlled, false, true, false, "Safety boots"),
-        ("Processing hall", AccessZoneLevels.Restricted, true, true, false, "Hairnet, Dust coat, Safety boots"),
-        ("Packing and finished goods", AccessZoneLevels.Restricted, true, true, false, "Hairnet, Dust coat"),
-        ("Boiler house", AccessZoneLevels.Restricted, true, true, false, "Safety boots, Ear protection"),
-        ("Fuel and firewood store", AccessZoneLevels.Restricted, true, true, false, "Safety boots"),
-        ("Electrical substation", AccessZoneLevels.Restricted, true, true, true, "Safety boots, Insulated gloves"),
-    ];
 
     private async Task<GateCheckResult> EvaluateAsync(VisitAttendee attendee, GateConfirmation confirmation, DateTime utcNow, CancellationToken cancellationToken)
     {

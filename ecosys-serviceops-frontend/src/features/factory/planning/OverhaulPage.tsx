@@ -1,3 +1,4 @@
+import { useIndustry } from '../industry'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
@@ -27,6 +28,7 @@ function useFactories() {
 
 /** The overhaul list built through the season, and each factory's overhauls. */
 export function OverhaulPage() {
+  const { vocabulary } = useIndustry()
   const links = useFactoryLinks()
   const navigate = useNavigate()
   const canPlan = usePermission('work-orders.assign')
@@ -40,7 +42,7 @@ export function OverhaulPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Overhaul" subtitle="Work saved up for the low-crop shutdown: deferred jobs, window carryovers and findings, then each overhaul's scope, budget and progress."
+      <PageHeader title="Overhaul" subtitle={`Work saved up for the ${vocabulary.overhaulSeason}: deferred jobs, window carryovers and findings, then each overhaul's scope, budget and progress.`}
         primaryAction={canPlan ? <button type="button" className={primaryButton} onClick={() => setEditing('new')}><Plus className="h-4 w-4" />Add to the list</button> : undefined}
         secondaryActions={canPlan ? <button type="button" className={secondaryButton} onClick={() => setNewPlan(true)}>New overhaul</button> : undefined} />
 
@@ -229,14 +231,15 @@ function ItemDrawer({ item, factories, onClose, plans }: { item: OverhaulItem | 
 }
 
 function PlanDrawer({ open, plan, factories, onClose, onSaved }: { open: boolean; plan: OverhaulPlan | null; factories: { id: string; name: string }[]; onClose: () => void; onSaved: (id: string) => void }) {
+  const { vocabulary } = useIndustry()
   const action = useOverhaulAction()
   const [form, setForm] = useState({ factoryId: '', name: '', start: '', end: '', budget: '', notes: '' })
   useEffect(() => {
     if (!open) return
     setForm(plan
       ? { factoryId: plan.factoryId, name: plan.name, start: plan.plannedStart.slice(0, 10), end: plan.plannedEnd.slice(0, 10), budget: plan.budget?.toString() ?? '', notes: plan.notes ?? '' }
-      : { factoryId: factories.length === 1 ? factories[0]!.id : '', name: `${new Date().getFullYear() + 1} low-crop overhaul`, start: '', end: '', budget: '', notes: '' })
-  }, [open, plan, factories])
+      : { factoryId: factories.length === 1 ? factories[0]!.id : '', name: `${new Date().getFullYear() + 1} ${vocabulary.overhaulSeason}`, start: '', end: '', budget: '', notes: '' })
+  }, [open, plan, factories, vocabulary.overhaulSeason])
   const submit = async () => {
     try {
       const body = { factoryId: form.factoryId, name: form.name, plannedStart: form.start, plannedEnd: form.end, budget: form.budget ? Number(form.budget) : null, notes: form.notes || null }
@@ -368,6 +371,7 @@ function Tile({ label, value, hint, warn }: { label: string; value: string; hint
 
 /** On a job: put it off until the overhaul (it leaves the weekly window queue). */
 export function DeferToOverhaulDrawer({ open, workOrderId, workOrderNumber, onClose }: { open: boolean; workOrderId: string; workOrderNumber: string; onClose: () => void }) {
+  const { vocabulary } = useIndustry()
   const action = useOverhaulAction()
   const [reason, setReason] = useState('')
   useEffect(() => { if (open) setReason('') }, [open])
@@ -378,7 +382,7 @@ export function DeferToOverhaulDrawer({ open, workOrderId, workOrderNumber, onCl
           onClick={() => void action.mutateAsync({ path: '/items/from-job', body: { workOrderId, reason } }).then(() => { toast.success('Added to the overhaul list'); onClose() }).catch(() => undefined)}>Defer</button></div>
     }>
       <div className="space-y-3">
-        <p className="text-sm text-slate-600">The job stays open but waits for the low-crop shutdown instead of the weekly window.</p>
+        <p className="text-sm text-slate-600">The job stays open but waits for the {vocabulary.overhaulSeason} instead of the weekly window.</p>
         <Field label="Why it waits" required><textarea className={textareaClass} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Needs a three-day stop" /></Field>
       </div>
     </FormDrawer>

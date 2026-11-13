@@ -20,6 +20,7 @@ import { GateDrawer } from './GateDrawer'
 import { VisitForm } from './VisitForm'
 import { FactorySelect, useOnlyFactory } from './FactorySelect'
 import { BadgeScanDrawer } from './BadgeScan'
+import { useFactoryIndustry } from '../factory/industry'
 import { PassesTab, VehiclesTab } from './GateTabs'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -448,6 +449,7 @@ function ZonesTab({ factoryId, canManage }: { factoryId: string; canManage: bool
   const [picked, setPicked] = useState('')
   const factory = picked || factoryId
   const setFactory = setPicked
+  const industry = useFactoryIndustry(factory)
   const zones = useZones(factory, true)
   const seed = useSeedZones()
   const [editing, setEditing] = useState<AccessZone | 'new' | null>(null)
@@ -460,7 +462,7 @@ function ZonesTab({ factoryId, canManage }: { factoryId: string; canManage: bool
       </div>
       {zones.isLoading ? <Spinner /> : rows.length === 0 ? (
         <EmptyState title="No zones yet" description={factory ? 'Zones say where visitors may go and what they need: an induction, PPE, an escort or a permit.' : 'Choose a factory to set up its zones.'}
-          actionLabel={canManage && factory ? 'Add the standard tea factory zones' : undefined}
+          actionLabel={canManage && factory ? `Add the standard ${(industry?.name ?? 'factory').toLowerCase()} zones` : undefined}
           onAction={canManage && factory ? () => void seed.mutateAsync(factory).then(() => toast.success('Standard zones added')).catch(() => undefined) : undefined} />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
