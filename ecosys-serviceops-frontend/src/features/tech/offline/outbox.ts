@@ -22,6 +22,8 @@ export type OutboxKind =
   | 'running-check'
   /** A visitor checked out at the gate (badge scanned), possibly with no signal. */
   | 'visitor-checkout'
+  /** A checkpoint scanned on patrol, often with no signal. */
+  | 'patrol-scan'
 
 export interface OutboxFile {
   blob: Blob

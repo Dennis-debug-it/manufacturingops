@@ -104,6 +104,9 @@ const SafetyPage = lazy(async () => ({ default: (await import('../features/facto
 const StoresPage = lazy(async () => ({ default: (await import('../features/factory/stores/StoresPage')).StoresPage }))
 const SensorsPage = lazy(async () => ({ default: (await import('../features/factory/sensors/SensorsPage')).SensorsPage }))
 const ReliabilityPage = lazy(async () => ({ default: (await import('../features/factory/reliability/ReliabilityPage')).ReliabilityPage }))
+const SecurityPage = lazy(async () => ({ default: (await import('../features/security/SecurityPage')).SecurityPage }))
+const PatrolGuardPage = lazy(async () => ({ default: (await import('../features/security/PatrolGuardPage')).PatrolGuardPage }))
+const TechPatrolPage = lazy(async () => ({ default: (await import('../features/security/PatrolGuardPage')).TechPatrolPage }))
 const VisitorsPage = lazy(async () => ({ default: (await import('../features/visitors/VisitorsPage')).VisitorsPage }))
 const FleetPage = lazy(async () => ({ default: (await import('../features/factory/fleet/FleetPage')).FleetPage }))
 const ConditionPage = lazy(async () => ({ default: (await import('../features/factory/condition/ConditionPage')).ConditionPage }))
@@ -315,6 +318,8 @@ export function AppRouter() {
       ['/maintenance/condition', ConditionPage],
       ['/maintenance/fleet', FleetPage],
       ['/visitors', VisitorsPage],
+      ['/security', SecurityPage],
+      ['/patrol', PatrolGuardPage],
       ['/maintenance/reliability', ReliabilityPage],
       ['/maintenance/performance', PerformancePage],
       ['/maintenance/costs', CostsPage],
@@ -481,6 +486,7 @@ export function AppRouter() {
           <Route path="maintenance/checks/:id" element={<CheckRunPage />} />
           <Route path="maintenance/windows" element={<WindowsPage />} />
           <Route path="maintenance/safety" element={<SafetyPage />} />
+          <Route path="patrol" element={<TechPatrolPage />} />
           <Route path="maintenance/windows/:id" element={<WindowDetailPage />} />
           <Route path="maintenance/windows/:id/pack" element={<WindowPackPage />} />
           <Route path="help" element={<TechHelpPage />} />

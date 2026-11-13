@@ -35,6 +35,10 @@ Stack: .NET 10 + PostgreSQL + React PWA.
   costs, KPIs and evidence packs.
 - **Phase 7 (in progress):** condition monitoring, sensor feeds, predictive groundwork and
   leaf collection fleet maintenance.
-- **Factory Operations add-ons** ([spec](docs/operations-platform-spec.md)): Visitor Management is
-  built (access zones, host approval, gate checks, badges, roll call, register and report), switched
-  on per tenant from Platform → Tenants. Security Patrol is next.
+- **Factory Operations add-ons** ([spec](docs/operations-platform-spec.md)), switched on per tenant
+  from Platform → Tenants:
+  - **Visitor Management** (built): access zones, host approval, gate checks, badges, roll call,
+    vehicle in/out log, standing passes for regular contractors, offline badge scanning at the gate.
+  - **Security Patrol** (built): checkpoints (QR, NFC, GPS), routes and schedules, the offline guard
+    app, verified scans, missed-patrol alerts, security incidents, panic button, shift handover,
+    supervisor board and reports.

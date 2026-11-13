@@ -72,6 +72,8 @@ export function isOfflineQueryKey(key: QueryKey): boolean {
   // Plus the shift's running checks and each check's questions, and the technician's factory jobs.
   // The gate's copy of today's visitors and passes, so badges scan with no signal.
   if (scope === 'visitors') return second === 'gate-index'
+  // The guard's patrols, routes and checkpoints, so a patrol works with no signal.
+  if (scope === 'security') return second === 'guard'
   if (scope === 'factory') return ['scan-index', 'org-nodes', 'checks-due', 'check-run', 'job', 'jobs', 'failure-codes', 'windows', 'window', 'window-pack'].includes(String(second))
   return false
 }

@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck, Repeat, Truck, DoorOpen } from 'lucide-react'
+import { LayoutDashboard, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck, Repeat, Truck, DoorOpen, Shield, Footprints } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -36,6 +36,9 @@ export const tenantNavItems: NavItem[] = [
   // Factory Operations add-ons. Visitors: any staff member hosts; gate staff get the desk. Stores and
   // finance users can still open /visitors to host, but it is kept out of their short sidebars.
   { group: 'Site security', label: 'Visitors', to: '/visitors', roles: floor, icon: DoorOpen },
+  // Security Patrol add-on: guards walk patrols; supervisors watch the board and set up checkpoints.
+  { group: 'Site security', label: 'Patrol', to: '/patrol', roles: office, permission: 'security.patrol', icon: Footprints },
+  { group: 'Site security', label: 'Security', to: '/security', roles: office, permission: 'security.manage', icon: Shield },
 
   { group: 'Planning', label: 'Planned maintenance', to: '/maintenance/pm', roles: office, permission: 'work-orders.view', icon: Gauge },
   { group: 'Planning', label: 'Weekly window', to: '/maintenance/windows', roles: floor, permission: 'work-orders.view', icon: CalendarRange },

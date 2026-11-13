@@ -23,6 +23,7 @@ const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
   ['enterprise_tools', ['/settings/integrations', '/settings/monitoring-intake', '/settings/monitoring']],
   ['whatsapp_business', ['/whatsapp', '/settings/whatsapp']],
   ['visitors', ['/visitors']],
+  ['security', ['/security', '/patrol', '/tech/patrol']],
   ['operations', ['/dashboard', '/work-orders', '/sites', '/reports', '/team/technicians', '/team/skills', '/team/groups', '/settings/notification-templates', '/settings/wo-templates', '/settings/executive-dashboard']],
   ['finance', ['/finance']],
 ]

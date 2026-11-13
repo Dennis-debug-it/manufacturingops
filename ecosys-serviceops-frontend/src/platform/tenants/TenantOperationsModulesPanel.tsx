@@ -12,7 +12,7 @@ interface PlatformOperationsModules {
 
 const LABELS: Record<string, { label: string; description: string }> = {
   visitors: { label: 'Visitor Management', description: 'Visits, host approval, gate checks, badges and the roll call.' },
-  security: { label: 'Security Patrol', description: 'Guard patrols, checkpoints and security incidents (coming next).' },
+  security: { label: 'Security Patrol', description: 'Guard patrols checked at checkpoints, missed-patrol alerts, incidents and the panic button.' },
 }
 
 /** The Factory Operations add-ons a tenant takes with its edition. Each switch adds its module. */

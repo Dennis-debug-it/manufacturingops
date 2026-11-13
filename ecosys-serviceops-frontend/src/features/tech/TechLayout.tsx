@@ -1,9 +1,11 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { CalendarClock, CalendarRange, ClipboardCheck, ClipboardList, Factory, LogOut, UserRound, ScanLine } from 'lucide-react'
+import { CalendarClock, CalendarRange, ClipboardCheck, ClipboardList, Factory, Footprints, LogOut, UserRound, ScanLine } from 'lucide-react'
 import { Logo } from '../../shared/components/Logo'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { useEntitlements } from '../../shared/hooks/useEntitlements'
+import { hasPermission } from '../../shared/hooks/usePermission'
 import { isDemoTenant } from '../../shared/demoWorkspace'
 import { cn } from '../../shared/utils/cn'
 import { usePendingActions } from './offline/hooks'
@@ -20,6 +22,8 @@ const SECTIONS = [
   { to: '/tech/maintenance/jobs', label: 'Factory', icon: Factory, match: (path: string) => path.startsWith('/tech/maintenance/jobs') },
   { to: '/tech/maintenance/windows', label: 'Window', icon: CalendarRange, match: (path: string) => path.startsWith('/tech/maintenance/windows') },
   { to: '/tech/maintenance/checks', label: 'Checks', icon: ClipboardCheck, match: (path: string) => path.startsWith('/tech/maintenance/checks') },
+  // Guards: only shown with the Security Patrol add-on and patrol access.
+  { to: '/tech/patrol', label: 'Patrol', icon: Footprints, match: (path: string) => path.startsWith('/tech/patrol') },
   { to: '/tech/scan', label: 'Scan', icon: ScanLine, match: (path: string) => path.startsWith('/tech/scan') || path.startsWith('/tech/assets') },
   { to: '/tech/time', label: 'Time & Leave', icon: CalendarClock, match: (path: string) => path.startsWith('/tech/time') },
   { to: '/tech/account', label: 'Me', icon: UserRound, match: (path: string) => path.startsWith('/tech/account') },
@@ -33,7 +37,8 @@ export function TechLayout() {
   const queryClient = useQueryClient()
   const pending = usePendingActions()
   const userId = user?.userId
-  const sections = SECTIONS
+  const { canAccessPath } = useEntitlements()
+  const sections = SECTIONS.filter((x) => x.to !== '/tech/patrol' || (canAccessPath('/tech/patrol') && hasPermission(user, 'security.patrol')))
 
   // Keep this technician's jobs on the phone so the app works without a signal.
   useEffect(() => (userId ? startOfflinePersistence(queryClient, userId) : undefined), [queryClient, userId])

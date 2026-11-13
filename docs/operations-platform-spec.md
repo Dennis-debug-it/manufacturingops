@@ -388,6 +388,28 @@ Turnstile/barrier and CCTV integration, ANPR, kiosk hardware, native iOS app, Fi
 
 ---
 
+## 10a. Build status (Nov 13, 2026)
+
+S1–S3 and most of S4 are built and tested (unit, PostgreSQL and a browser run against the demo
+workspace, including scans and gate check-outs made with the network off).
+
+Built differently from this spec:
+
+- Roles: two permissions per module (`visitors.gate` / `visitors.manage`, `security.patrol` /
+  `security.manage`), granted to people or permission groups, instead of new Security Officer and
+  Security Supervisor roles. Managers get all four by default.
+- Add-ons: stored on the licence as a list (`OperationsAddOns`); the WhatsApp add-on was left as it is.
+- No standalone Security edition yet: the add-ons are taken with a Maintenance edition.
+- Badge scanning offline identifies the person and queues check-outs; check-in still needs a signal,
+  because the gate checks run on the server.
+
+Not built yet:
+
+- Secure-message NFC tags (NTAG 424 DNA counter and MAC check); NFC checks the tag serial only.
+- Detecting a phone clock set back (only a clock running ahead is flagged).
+- Lone-worker alerts during a patrol; device registration and binding.
+- Visitor self-registration links, turnstile/CCTV/ANPR integration, a native iOS app.
+
 ## 11. Decisions needed
 
 | # | Question | Recommendation |

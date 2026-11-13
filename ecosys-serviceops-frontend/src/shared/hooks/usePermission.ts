@@ -178,6 +178,8 @@ const capabilityActions = new Set([
   'calendar.team',
   'visitors.gate',
   'visitors.manage',
+  'security.patrol',
+  'security.manage',
 ])
 
 /** The same check as usePermission, for code that isn't a component (e.g. route access rules). */

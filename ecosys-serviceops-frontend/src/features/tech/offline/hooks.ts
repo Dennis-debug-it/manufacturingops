@@ -23,6 +23,8 @@ export function refreshAfterSync(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ['work-orders'] })
   void queryClient.invalidateQueries({ queryKey: ['attendance'] })
   void queryClient.invalidateQueries({ queryKey: ['picker', 'materials'] })
+  void queryClient.invalidateQueries({ queryKey: ['visitors'] })
+  void queryClient.invalidateQueries({ queryKey: ['security'] })
 }
 
 export function useTechJobsView() {
