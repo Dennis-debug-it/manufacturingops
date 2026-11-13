@@ -14066,6 +14066,26 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<Guid?>("CardId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CardIssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CardIssuedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("CardNotReturned")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("CardNumber")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("CardReturnedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("CheckedInAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -14123,6 +14143,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("BadgeToken")
                         .IsUnique();
+
+                    b.HasIndex("CardId");
 
                     b.HasIndex("TenantId");
 
@@ -14240,6 +14262,84 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("TenantId", "Phone");
 
                     b.ToTable("visitors", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.VisitorCard", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CardNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("ChipSerial")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Colour")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FactoryId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("HolderAttendeeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("LastReturnedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FactoryId");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "CardNumber")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "ChipSerial")
+                        .IsUnique()
+                        .HasFilter("\"ChipSerial\" IS NOT NULL");
+
+                    b.HasIndex("TenantId", "FactoryId", "Status");
+
+                    b.ToTable("visitor_cards", (string)null);
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.VisitorPass", b =>
@@ -20667,6 +20767,11 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
             modelBuilder.Entity("Ecosys.Domain.Entities.VisitAttendee", b =>
                 {
+                    b.HasOne("Ecosys.Domain.Entities.VisitorCard", "Card")
+                        .WithMany()
+                        .HasForeignKey("CardId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Ecosys.Domain.Entities.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
@@ -20684,6 +20789,8 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasForeignKey("VisitorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.Navigation("Card");
 
                     b.Navigation("Visit");
 
@@ -20729,6 +20836,23 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired();
 
                     b.Navigation("Contractor");
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.VisitorCard", b =>
+                {
+                    b.HasOne("Ecosys.Domain.Entities.OrgNode", "Factory")
+                        .WithMany()
+                        .HasForeignKey("FactoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Ecosys.Domain.Entities.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Factory");
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.VisitorPass", b =>

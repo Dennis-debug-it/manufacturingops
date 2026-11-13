@@ -58,20 +58,31 @@ export function BadgeScanDrawer({ canManage, onClose }: { canManage: boolean; on
     }
   }
 
+  /** The code scanned was their access card itself, so the card is in the guard's hand. */
+  const scannedCard = (cardNumber: string | null | undefined) => {
+    const value = code.trim().toUpperCase()
+    return value.startsWith('CARD:') || (Boolean(cardNumber) && value === cardNumber!.toUpperCase())
+  }
+  /** Whether a card they hold came back: certain when the card was scanned, otherwise the guard says. */
+  const cardBack = (cardNumber: string | null | undefined) =>
+    !cardNumber || scannedCard(cardNumber) || window.confirm(`Has card ${cardNumber} been handed back? OK if yes, Cancel if they left with it.`)
+
   const leave = async () => {
     if (!result) return
     try {
-      const visit = await checkOut.mutateAsync(result.attendee.id)
+      const cardReturned = result.attendee.cardOut ? cardBack(result.attendee.cardNumber) : true
+      const visit = await checkOut.mutateAsync({ attendeeId: result.attendee.id, cardReturned })
       toast.success(`${result.attendee.fullName} checked out`)
       setResult({ visit, attendee: visit.attendees.find((x) => x.id === result.attendee.id) ?? result.attendee })
     } catch { /* shown by the API client */ }
   }
 
-  const leaveOffline = async (attendeeId: string, name: string) => {
+  const leaveOffline = async (attendeeId: string, name: string, cardNumber?: string | null) => {
     try {
+      const cardReturned = cardBack(cardNumber)
       const outcome = await performAction({
         kind: 'visitor-checkout', label: `${name} checked out at the gate`, workOrderId: null, method: 'POST',
-        url: `/api/visitors/attendees/${attendeeId}/check-out`, body: {},
+        url: `/api/visitors/attendees/${attendeeId}/check-out`, body: { cardReturned },
       }, () => refreshAfterSync(queryClient))
       // Show them as gone on this device until the next refresh.
       queryClient.setQueryData<GateIndex>(GATE_INDEX_KEY, (current) => current ? { ...current, people: current.people.filter((x) => x.attendeeId !== attendeeId) } : current)
@@ -105,6 +116,7 @@ export function BadgeScanDrawer({ canManage, onClose }: { canManage: boolean; on
             <div className="text-sm">Valid until {formatDateTime(result.visit.expectedTo)}</div>
             <div className="text-sm">May enter: {result.visit.zones.length === 0 ? 'public areas only' : `public areas, ${result.visit.zones.map((z) => z.name).join(', ')}`}</div>
             {result.attendee.escortName ? <div className="text-sm">Escort: {result.attendee.escortName}</div> : null}
+            {result.attendee.cardOut ? <div className="text-sm">Holding access card <span className="font-mono font-semibold">{result.attendee.cardNumber}</span></div> : null}
             <div className="flex gap-2">
               {result.attendee.state === 'OnSite' || result.attendee.state === 'Overstayed'
                 ? <button type="button" className={primaryButton} disabled={checkOut.isPending} onClick={() => void leave()}><LogOut className="h-4 w-4" />Check out</button> : null}
@@ -132,7 +144,7 @@ export function BadgeScanDrawer({ canManage, onClose }: { canManage: boolean; on
                 {queuedOut ? <p className="text-sm font-medium text-emerald-800">{queuedOut}</p> : (
                   <div className="flex gap-2">
                     {offline.person.checkedInAt
-                      ? <button type="button" className={primaryButton} onClick={() => void leaveOffline(offline.person.attendeeId, offline.person.fullName)}><LogOut className="h-4 w-4" />Check out</button>
+                      ? <button type="button" className={primaryButton} onClick={() => void leaveOffline(offline.person.attendeeId, offline.person.fullName, offline.person.cardNumber)}><LogOut className="h-4 w-4" />Check out</button>
                       : <p className="text-sm text-slate-600">Checking in needs a signal: the gate checks run on the server. Call the host or wait for the connection.</p>}
                   </div>
                 )}

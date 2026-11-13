@@ -38,6 +38,12 @@ export interface Attendee {
   overrideReason: string | null
   overriddenByName: string | null
   accountedForAt: string | null
+  /** The access card they were given, if any. */
+  cardNumber?: string | null
+  /** They hold it now. */
+  cardOut?: boolean
+  /** They left without handing it back. */
+  cardNotReturned?: boolean
 }
 
 export interface Visit {
@@ -86,6 +92,8 @@ export interface GateConfirmation {
   recordInduction: boolean
   escortUserId: string | null
   overrideReason: string | null
+  /** An access card handed over at check-in: its number, QR or chip serial. */
+  cardCode?: string | null
 }
 
 export interface OnSitePerson {
@@ -108,6 +116,7 @@ export interface OnSitePerson {
   zones: string[]
   accountedForAt: string | null
   accountedForByName: string | null
+  cardNumber?: string | null
 }
 
 export interface VisitorPerson {
@@ -278,7 +287,10 @@ export const useDecideVisit = () => useVisitorMutation(({ id, approve, note }: {
 export const useCancelVisit = () => useVisitorMutation(({ id, reason }: { id: string; reason: string | null }) => api.post<Visit>(`/api/visitors/visits/${id}/cancel`, { reason }))
 export const useCheckIn = () => useVisitorMutation(({ attendeeId, confirmation }: { attendeeId: string; confirmation: GateConfirmation }) =>
   api.post<Visit>(`/api/visitors/attendees/${attendeeId}/check-in`, confirmation))
-export const useCheckOut = () => useVisitorMutation((attendeeId: string) => api.post<Visit>(`/api/visitors/attendees/${attendeeId}/check-out`, {}))
+export const useCheckOut = () => useVisitorMutation((input: string | { attendeeId: string; cardReturned: boolean }) =>
+  typeof input === 'string'
+    ? api.post<Visit>(`/api/visitors/attendees/${input}/check-out`, {})
+    : api.post<Visit>(`/api/visitors/attendees/${input.attendeeId}/check-out`, { cardReturned: input.cardReturned }))
 export const useAccounted = () => useVisitorMutation(({ attendeeId, accounted }: { attendeeId: string; accounted: boolean }) =>
   api.post<void>(`/api/visitors/attendees/${attendeeId}/accounted`, { accounted }))
 export const useResetRollCall = () => useVisitorMutation((factoryId: string | null) => api.post<number>('/api/visitors/roll-call/reset', { factoryId }))
@@ -470,6 +482,10 @@ export interface GateIndexPerson {
   expectedTo: string
   checkedInAt: string | null
   zones: string[]
+  /** The access card they hold, so it scans with no signal too. */
+  cardNumber?: string | null
+  cardToken?: string | null
+  cardChip?: string | null
 }
 
 export interface GateIndexPass {
@@ -506,9 +522,70 @@ export type OfflineBadge =
 /** Finds a scanned badge in the device's copy of the gate index. */
 export function findOfflineBadge(index: GateIndex | undefined, code: string): OfflineBadge | null {
   if (!index) return null
+  const raw = code.trim()
+  // An access card: its QR ("CARD:<token>"), printed number or chip serial.
+  const cardToken = raw.toUpperCase().startsWith('CARD:') ? raw.slice(5) : null
+  const serial = raw.replace(/[^0-9a-f]/gi, '').toUpperCase()
+  const byCard = index.people.find((x) => (cardToken !== null && x.cardToken === cardToken)
+    || (x.cardNumber != null && x.cardNumber.toUpperCase() === raw.toUpperCase())
+    || (x.cardChip != null && serial.length >= 8 && x.cardChip === serial))
+  if (byCard) return { kind: 'person', person: byCard }
   const token = badgeToken(code)
   const person = index.people.find((x) => x.badgeToken === token)
   if (person) return { kind: 'person', person }
   const pass = index.passes.find((x) => x.badgeToken === token)
   return pass ? { kind: 'pass', pass } : null
+}
+
+/* ── Access cards ────────────────────────────────────────────────────────── */
+
+export const CARD_KINDS = ['Visitor', 'Contractor', 'VIP', 'Escorted'] as const
+export type CardStatus = 'Available' | 'Issued' | 'Missing' | 'Retired'
+
+export interface VisitorCard {
+  id: string
+  cardNumber: string
+  factoryId: string
+  factoryName: string
+  kind: string
+  colour: string | null
+  status: CardStatus
+  hasChip: boolean
+  holderName: string | null
+  holderCompany: string | null
+  visitNumber: string | null
+  visitId: string | null
+  hostName: string | null
+  issuedAt: string | null
+  lastReturnedAt: string | null
+  lastHolderName: string | null
+  lastHolderPhone: string | null
+  notes: string | null
+}
+
+export function useCards(factoryId: string, status: string, q: string) {
+  return useQuery({
+    queryKey: [...KEY, 'cards', factoryId, status, q],
+    queryFn: () => api.get<VisitorCard[]>('/api/visitors/cards', { factoryId: factoryId || undefined, status: status || undefined, q: q.trim() || undefined }),
+    refetchInterval: 30_000,
+  })
+}
+
+export const useAddCards = () => useVisitorMutation((payload: { factoryId: string; prefix: string; from: number; to: number; kind: string; colour: string | null }) =>
+  api.post<{ added: number; skipped: number }>('/api/visitors/cards/batch', payload))
+export const useCardStatus = () => useVisitorMutation(({ id, status, notes }: { id: string; status: CardStatus; notes: string | null }) =>
+  api.post<unknown>(`/api/visitors/cards/${id}/status`, { status, notes }))
+export const useCardChip = () => useVisitorMutation(({ id, serial }: { id: string; serial: string | null }) => api.post<unknown>(`/api/visitors/cards/${id}/chip`, { serial }))
+export const useIssueCard = () => useVisitorMutation(({ attendeeId, cardCode }: { attendeeId: string; cardCode: string }) =>
+  api.post<unknown>(`/api/visitors/attendees/${attendeeId}/card`, { cardCode }))
+export const useReturnCard = () => useVisitorMutation((attendeeId: string) => api.post<unknown>(`/api/visitors/attendees/${attendeeId}/card/return`, {}))
+
+export async function downloadCardLabels(factoryId: string, cardIds?: string[]) {
+  const response = await apiClient.post('/api/visitors/cards/labels', { factoryId: factoryId || null, cardIds: cardIds ?? null }, { responseType: 'blob' })
+  const url = URL.createObjectURL(response.data as Blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'access-cards.pdf'
+  link.click()
+  URL.revokeObjectURL(url)
 }

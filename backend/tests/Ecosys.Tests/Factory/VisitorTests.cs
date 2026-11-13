@@ -425,7 +425,7 @@ public sealed class VisitorTests
             Assert.Single(Ok(await visits.People(null, true, default)));
             Assert.NotEmpty(Ok(await visits.Staff("adm", default)));
 
-            Ok(await visits.CheckOut(amina.Id, default));
+            Ok(await visits.CheckOut(amina.Id, null, default));
             var report = Ok(await visits.Report(null, null, null, default));
             Assert.Equal((1, 0), (report.Entries, report.Overstays));
             Assert.Equal("Audit", Assert.Single(report.ByPurpose).Purpose);

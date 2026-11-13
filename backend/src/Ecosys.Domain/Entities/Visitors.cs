@@ -171,7 +171,16 @@ public sealed class VisitAttendee : AuditableEntity, ITenantEntity
     /// <summary>Emergency roll call: marked as accounted for at the assembly point.</summary>
     public DateTime? AccountedForAt { get; set; }
     public string? AccountedForByName { get; set; }
+    /// <summary>The reusable access card handed over at the gate, if any; the number is kept for the register.</summary>
+    public Guid? CardId { get; set; }
+    public string? CardNumber { get; set; }
+    public DateTime? CardIssuedAt { get; set; }
+    public string? CardIssuedByName { get; set; }
+    public DateTime? CardReturnedAt { get; set; }
+    /// <summary>They left without handing the card back.</summary>
+    public bool CardNotReturned { get; set; }
     public Visit? Visit { get; set; }
+    public VisitorCard? Card { get; set; }
     public Visitor? Visitor { get; set; }
 }
 
@@ -275,4 +284,57 @@ public sealed class VisitorPassZone : AuditableEntity, ITenantEntity
     public Guid AccessZoneId { get; set; }
     public VisitorPass? Pass { get; set; }
     public AccessZone? AccessZone { get; set; }
+}
+
+public static class VisitorCardStatuses
+{
+    /// <summary>In the box at the gate, ready to hand out.</summary>
+    public const string Available = "Available";
+    /// <summary>With someone on site.</summary>
+    public const string Issued = "Issued";
+    /// <summary>Its holder left without handing it back; it does not open anything until found.</summary>
+    public const string Missing = "Missing";
+    /// <summary>Damaged or withdrawn for good.</summary>
+    public const string Retired = "Retired";
+
+    public static readonly IReadOnlyList<string> All = [Available, Issued, Missing, Retired];
+}
+
+public static class VisitorCardKinds
+{
+    public const string Visitor = "Visitor";
+    public const string Contractor = "Contractor";
+    public const string Vip = "VIP";
+    public const string Escorted = "Escorted";
+
+    public static readonly IReadOnlyList<string> All = [Visitor, Contractor, Vip, Escorted];
+
+    public static string? Find(string? value) => All.FirstOrDefault(x => string.Equals(x, value?.Trim(), StringComparison.OrdinalIgnoreCase));
+}
+
+/// <summary>
+/// A reusable access card or visitor tag kept at a factory gate: numbered, with a QR code on it and
+/// optionally an RFID/NFC chip. Handed to a visitor at check-in and collected when they leave; while
+/// issued, scanning or tapping it finds who holds it.
+/// </summary>
+public sealed class VisitorCard : AuditableEntity, ITenantEntity
+{
+    public Guid TenantId { get; set; }
+    public Guid FactoryId { get; set; }
+    /// <summary>Printed on the card, e.g. "V-012". Unique in the tenant.</summary>
+    public string CardNumber { get; set; } = string.Empty;
+    public string Kind { get; set; } = VisitorCardKinds.Visitor;
+    /// <summary>The card's colour or band, so a guard can tell at a glance (e.g. "Red: escorted only").</summary>
+    public string? Colour { get; set; }
+    /// <summary>Random value in the card's QR code ("CARD:&lt;token&gt;").</summary>
+    public string Token { get; set; } = string.Empty;
+    /// <summary>Serial of the card's RFID/NFC chip, once registered.</summary>
+    public string? ChipSerial { get; set; }
+    public string Status { get; set; } = VisitorCardStatuses.Available;
+    /// <summary>Who has it now (an attendee on a visit).</summary>
+    public Guid? HolderAttendeeId { get; set; }
+    public DateTime? IssuedAt { get; set; }
+    public DateTime? LastReturnedAt { get; set; }
+    public string? Notes { get; set; }
+    public OrgNode? Factory { get; set; }
 }

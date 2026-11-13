@@ -35,6 +35,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<VisitAttendee> VisitAttendees => Set<VisitAttendee>();
     public DbSet<VisitZone> VisitZones => Set<VisitZone>();
     public DbSet<VehicleMovement> VehicleMovements => Set<VehicleMovement>();
+    public DbSet<VisitorCard> VisitorCards => Set<VisitorCard>();
     public DbSet<VisitorPass> VisitorPasses => Set<VisitorPass>();
     public DbSet<VisitorPassZone> VisitorPassZones => Set<VisitorPassZone>();
     public DbSet<Checkpoint> Checkpoints => Set<Checkpoint>();
@@ -1047,6 +1048,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.OverrideReason).HasMaxLength(500);
             entity.Property(x => x.OverriddenByName).HasMaxLength(200);
             entity.Property(x => x.AccountedForByName).HasMaxLength(200);
+            entity.Property(x => x.CardNumber).HasMaxLength(30);
+            entity.Property(x => x.CardIssuedByName).HasMaxLength(200);
+            entity.HasIndex(x => x.CardId);
+            entity.HasOne(x => x.Card).WithMany().HasForeignKey(x => x.CardId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(x => x.BadgeToken).IsUnique();
             entity.HasIndex(x => new { x.VisitId, x.VisitorId }).IsUnique();
             entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
@@ -1149,6 +1154,25 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.OpenIssues).HasMaxLength(4000);
             entity.Property(x => x.KeysAndEquipment).HasMaxLength(2000);
             entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.HandedOverAt });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<VisitorCard>(entity =>
+        {
+            entity.ToTable("visitor_cards");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CardNumber).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Colour).HasMaxLength(50);
+            entity.Property(x => x.Token).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.ChipSerial).HasMaxLength(64);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.HasIndex(x => new { x.TenantId, x.CardNumber }).IsUnique();
+            entity.HasIndex(x => x.Token).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.ChipSerial }).IsUnique().HasFilter("\"ChipSerial\" IS NOT NULL");
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.Status });
             entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
         });

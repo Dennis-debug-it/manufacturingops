@@ -24,7 +24,9 @@ public sealed class VisitorGateController(
     IVehicleLogService vehicleLog,
     IVisitorPassService passService,
     IAuditLogService auditLogService,
-    IVisitorBadgePdfRenderer? badgeRenderer = null) : TenantAwareControllerBase(tenantContext)
+    IVisitorBadgePdfRenderer? badgeRenderer = null,
+    IVisitorCardService? cardService = null,
+    IAssetLabelPdfRenderer? labelRenderer = null) : TenantAwareControllerBase(tenantContext)
 {
     private bool CanManage => IsAdmin || HasPermission(PermissionNames.VisitorsManage);
     private bool CanGate => CanManage || HasPermission(PermissionNames.VisitorsGate);
@@ -177,6 +179,135 @@ public sealed class VisitorGateController(
         return File(pdf, "application/pdf", $"pass-{pass.PassNumber}.pdf");
     }
 
+    // ── Access cards ──────────────────────────────────────────────────────────────────────────
+
+    private IVisitorCardService Cards => cardService ?? throw new InvalidOperationException("Access cards are not set up.");
+
+    /// <summary>The gate's access cards: each one's status and, when out, who has it and since when.</summary>
+    [HttpGet("cards")]
+    public async Task<ActionResult<IReadOnlyList<VisitorCardRow>>> CardList([FromQuery] Guid? factoryId, [FromQuery] string? status, [FromQuery] string? q, CancellationToken cancellationToken)
+    {
+        EnsureGate();
+        var nodes = await orgScopeService.VisibleNodesAsync(TenantId, UserId, factoryId, cancellationToken);
+        var query = dbContext.VisitorCards.AsNoTracking().Where(x => x.TenantId == TenantId && (nodes == null || nodes.Contains(x.FactoryId)));
+        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToUpper();
+            query = query.Where(x => x.CardNumber.Contains(term));
+        }
+
+        var cards = await query.OrderBy(x => x.CardNumber).Take(1000).ToListAsync(cancellationToken);
+        var holderIds = cards.Where(x => x.HolderAttendeeId != null).Select(x => x.HolderAttendeeId!.Value).ToList();
+        var cardIds = cards.Select(x => x.Id).ToList();
+        var holders = await dbContext.VisitAttendees.AsNoTracking().Where(x => holderIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.Visitor!.FullName, x.Visitor.Company, x.Visit!.VisitNumber, x.VisitId, x.Visit.HostName, x.CardIssuedAt })
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        // Who had a missing card last, so the gate knows whom to call.
+        var lastHolders = (await dbContext.VisitAttendees.AsNoTracking().Where(x => x.CardId != null && cardIds.Contains(x.CardId.Value) && x.CardNotReturned)
+                .OrderByDescending(x => x.CheckedOutAt)
+                .Select(x => new { CardId = x.CardId!.Value, x.Visitor!.FullName, x.Visitor.Phone, x.Visit!.VisitNumber, x.CheckedOutAt })
+                .ToListAsync(cancellationToken))
+            .GroupBy(x => x.CardId).ToDictionary(x => x.Key, x => x.First());
+        var factories = await dbContext.OrgNodes.AsNoTracking().Where(x => x.TenantId == TenantId && x.Level == OrgNodeLevels.Factory).ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+        return Ok(cards.Select(c =>
+        {
+            var holder = c.HolderAttendeeId is { } h ? holders.GetValueOrDefault(h) : null;
+            var last = lastHolders.GetValueOrDefault(c.Id);
+            return new VisitorCardRow(c.Id, c.CardNumber, c.FactoryId, factories.GetValueOrDefault(c.FactoryId) ?? "", c.Kind, c.Colour, c.Status, c.ChipSerial != null,
+                holder?.FullName, holder?.Company, holder?.VisitNumber, holder?.VisitId, holder?.HostName, c.IssuedAt, c.LastReturnedAt,
+                c.Status == VisitorCardStatuses.Missing ? last?.FullName : null, c.Status == VisitorCardStatuses.Missing ? last?.Phone : null, c.Notes);
+        }).ToList());
+    }
+
+    /// <summary>Adds numbered cards to a gate's stock, e.g. V-001 to V-050.</summary>
+    [HttpPost("cards/batch")]
+    public async Task<ActionResult<CardBatchResponse>> AddCards([FromBody] AddCardsRequest request, CancellationToken cancellationToken)
+    {
+        EnsureManage();
+        await orgScopeService.EnsureCanAccessAsync(TenantId, UserId, request.FactoryId, cancellationToken);
+        var added = await Cards.AddBatchAsync(TenantId, new NewCardBatch(request.FactoryId, request.Prefix ?? "V-", request.From, request.To, request.Kind ?? VisitorCardKinds.Visitor, request.Colour), cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "visitors.cards.added", nameof(VisitorCard), request.FactoryId.ToString(), $"{added} access cards added ({request.Prefix}{request.From}–{request.To}).", cancellationToken);
+        return Ok(new CardBatchResponse(added, request.To - request.From + 1 - added));
+    }
+
+    /// <summary>Retires a card, reports it missing, or puts a found card back in the box (Available).</summary>
+    [HttpPost("cards/{id:guid}/status")]
+    public async Task<ActionResult<VisitorCard>> SetCardStatus(Guid id, [FromBody] CardStatusRequest request, CancellationToken cancellationToken)
+    {
+        EnsureGate();
+        await EnsureCardVisibleAsync(id, cancellationToken);
+        if (request.Status is not null && !string.Equals(request.Status, VisitorCardStatuses.Available, StringComparison.OrdinalIgnoreCase)) EnsureManage();
+        var card = await Cards.SetStatusAsync(TenantId, id, request.Status ?? "", request.Notes, Actor, cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "visitors.card.status", nameof(VisitorCard), id.ToString(), $"Card {card.CardNumber}: {card.Status}.", cancellationToken);
+        return Ok(card);
+    }
+
+    /// <summary>Registers the card's RFID/NFC chip (tap it on the phone or a desk reader); null clears it.</summary>
+    [HttpPost("cards/{id:guid}/chip")]
+    public async Task<ActionResult<VisitorCard>> SetCardChip(Guid id, [FromBody] CardChipRequest request, CancellationToken cancellationToken)
+    {
+        EnsureManage();
+        await EnsureCardVisibleAsync(id, cancellationToken);
+        return Ok(await Cards.SetChipAsync(TenantId, id, request.Serial, cancellationToken));
+    }
+
+    /// <summary>Labels to stick on the cards: number, QR code and factory. All of a factory's cards, or the ones given.</summary>
+    [HttpPost("cards/labels")]
+    public async Task<IActionResult> CardLabels([FromBody] CardLabelsRequest request, CancellationToken cancellationToken)
+    {
+        EnsureGate();
+        var nodes = await orgScopeService.VisibleNodesAsync(TenantId, UserId, request.FactoryId, cancellationToken);
+        var ids = request.CardIds ?? [];
+        var cards = await dbContext.VisitorCards.AsNoTracking().Include(x => x.Factory)
+            .Where(x => x.TenantId == TenantId && x.Status != VisitorCardStatuses.Retired && (nodes == null || nodes.Contains(x.FactoryId)) && (ids.Count == 0 || ids.Contains(x.Id)))
+            .OrderBy(x => x.CardNumber).ToListAsync(cancellationToken);
+        var company = await dbContext.Tenants.Where(x => x.Id == TenantId).Select(x => x.CompanyName).SingleOrDefaultAsync(cancellationToken) ?? string.Empty;
+        var labels = cards.Select(x => new AssetLabel(x.CardNumber, $"{VisitorCardRules.QrPrefix}{x.Token}", x.Kind == VisitorCardKinds.Visitor ? "VISITOR" : x.Kind.ToUpperInvariant(),
+            x.Colour ?? "Return this card at the gate", x.Factory?.Name, null)).ToList();
+        var pdf = (labelRenderer ?? throw new InvalidOperationException("Label printing is not set up.")).Render(company, labels, string.IsNullOrWhiteSpace(request.Layout) ? AssetLabelLayouts.Large : request.Layout);
+        return File(pdf, "application/pdf", "access-cards.pdf");
+    }
+
+    /// <summary>Gives someone already inside an access card (or a replacement).</summary>
+    [HttpPost("attendees/{id:guid}/card")]
+    public async Task<ActionResult<VisitorCard>> IssueCard(Guid id, [FromBody] IssueCardRequest request, CancellationToken cancellationToken)
+    {
+        EnsureGate();
+        await EnsureAttendeeVisibleAsync(id, cancellationToken);
+        var card = await Cards.IssueAsync(TenantId, id, request.CardCode ?? "", Actor, cancellationToken);
+        await auditLogService.LogAsync(TenantId, UserId, "visitors.card.issued", nameof(VisitAttendee), id.ToString(), $"Card {card.CardNumber} issued.", cancellationToken);
+        return Ok(card);
+    }
+
+    /// <summary>Takes a card back from someone still inside.</summary>
+    [HttpPost("attendees/{id:guid}/card/return")]
+    public async Task<ActionResult<VisitorCard>> ReturnCard(Guid id, CancellationToken cancellationToken)
+    {
+        EnsureGate();
+        await EnsureAttendeeVisibleAsync(id, cancellationToken);
+        return Ok(await Cards.ReturnAsync(TenantId, id, Actor, cancellationToken));
+    }
+
+    private void EnsureManage()
+    {
+        if (!CanManage) throw new ForbiddenException("Only visitor managers can do this.");
+    }
+
+    private async Task EnsureCardVisibleAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var factoryId = await dbContext.VisitorCards.AsNoTracking().Where(x => x.TenantId == TenantId && x.Id == id).Select(x => (Guid?)x.FactoryId).SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Card not found.");
+        await orgScopeService.EnsureCanAccessAsync(TenantId, UserId, factoryId, cancellationToken);
+    }
+
+    private async Task EnsureAttendeeVisibleAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var factoryId = await dbContext.VisitAttendees.AsNoTracking().Where(x => x.TenantId == TenantId && x.Id == id).Select(x => (Guid?)x.Visit!.FactoryId).SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Visitor not found on any visit.");
+        await orgScopeService.EnsureCanAccessAsync(TenantId, UserId, factoryId, cancellationToken);
+    }
+
     private void EnsureGate()
     {
         if (!CanGate) throw new ForbiddenException("This is for gate and security staff.");
@@ -258,3 +389,20 @@ public sealed record CreateVisitorPassRequest(
 public sealed record RevokeVisitorPassRequest(string? Reason);
 
 public sealed record PassTodayResponse(Guid VisitId, Guid AttendeeId);
+
+public sealed record VisitorCardRow(
+    Guid Id, string CardNumber, Guid FactoryId, string FactoryName, string Kind, string? Colour, string Status, bool HasChip,
+    string? HolderName, string? HolderCompany, string? VisitNumber, Guid? VisitId, string? HostName, DateTime? IssuedAt, DateTime? LastReturnedAt,
+    string? LastHolderName, string? LastHolderPhone, string? Notes);
+
+public sealed record AddCardsRequest(Guid FactoryId, int From, int To, string? Prefix = "V-", string? Kind = null, string? Colour = null);
+
+public sealed record CardBatchResponse(int Added, int Skipped);
+
+public sealed record CardStatusRequest(string? Status, string? Notes = null);
+
+public sealed record CardChipRequest(string? Serial);
+
+public sealed record CardLabelsRequest(Guid? FactoryId = null, IReadOnlyList<Guid>? CardIds = null, string? Layout = null);
+
+public sealed record IssueCardRequest(string? CardCode);

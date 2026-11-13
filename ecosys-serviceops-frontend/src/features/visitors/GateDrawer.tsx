@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { AlertTriangle, CheckCircle2, ShieldAlert } from 'lucide-react'
 import { FormDrawer } from '../../shared/components/FormDrawer'
@@ -7,13 +7,20 @@ import { Spinner } from '../../shared/components/Spinner'
 import { formatDateTime } from '../../shared/utils/dates'
 import { Field, inputClass, primaryButton, secondaryButton, textareaClass } from '../factory/components/ui'
 import { useCheckIn, useGateCheck, useStaff, type Attendee, type GateConfirmation, type Visit } from './api'
+import { CardInput } from './CardInput'
 
 /**
  * The gate desk for one person: what their zones need (ID, PPE, induction, escort, permit), what is
  * still missing, and the check-in. A supervisor can let someone in past an overridable check with a reason.
  */
 export function GateDrawer({ visit, attendee, canManage, onClose }: { visit: Visit; attendee: Attendee; canManage: boolean; onClose: () => void }) {
-  const [confirmation, setConfirmation] = useState<GateConfirmation>({ idVerified: false, ppeConfirmed: false, recordInduction: false, escortUserId: null, overrideReason: null })
+  const [confirmation, setConfirmation] = useState<GateConfirmation>({ idVerified: false, ppeConfirmed: false, recordInduction: false, escortUserId: null, overrideReason: null, cardCode: null })
+  // The card is checked once typing pauses, not on every key.
+  const [card, setCard] = useState('')
+  useEffect(() => {
+    const timer = window.setTimeout(() => setConfirmation((current) => ({ ...current, cardCode: card.trim() || null })), 400)
+    return () => window.clearTimeout(timer)
+  }, [card])
   // The reason does not change the checks; leaving it out stops a request on every keystroke.
   const check = useGateCheck(attendee.id, { ...confirmation, overrideReason: null })
   const staff = useStaff('')
@@ -23,7 +30,8 @@ export function GateDrawer({ visit, attendee, canManage, onClose }: { visit: Vis
   const hard = useMemo(() => result?.issues.filter((x) => !x.overridable) ?? [], [result])
   const soft = useMemo(() => result?.issues.filter((x) => x.overridable) ?? [], [result])
   const canOverride = canManage && result !== undefined && !result.canEnter && result.overridable
-  const ready = result !== undefined && (result.canEnter || (canOverride && Boolean(confirmation.overrideReason?.trim())))
+  const ready = result !== undefined && (card.trim() || null) === (confirmation.cardCode ?? null)
+    && (result.canEnter || (canOverride && Boolean(confirmation.overrideReason?.trim())))
 
   const submit = async () => {
     try {
@@ -101,6 +109,9 @@ export function GateDrawer({ visit, attendee, canManage, onClose }: { visit: Vis
               </select>
             </Field>
           ) : null}
+          <Field label="Access card" hint="Optional. The card they wear inside and hand back at the gate.">
+            <CardInput value={card} onChange={setCard} />
+          </Field>
         </fieldset>
 
         {check.isLoading ? <Spinner label="Checking" /> : result ? (

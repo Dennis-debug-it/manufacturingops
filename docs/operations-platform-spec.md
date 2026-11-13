@@ -140,6 +140,14 @@ QR code holding `BadgeToken`. The QR contains no personal data. Scanning a badge
 way out checks the attendee out. Scanning anywhere else (a guard on patrol) shows who the person is,
 their host and whether they are allowed in this zone. This is the patrol ↔ visitor link (§6).
 
+**Reusable access cards / visitor tags.** Alongside (or instead of) the printed badge, the gate can
+hand out numbered physical cards (`VisitorCard`: number such as `V-012`, kind (visitor, contractor,
+VIP, vehicle), colour, a QR holding `CARD:<token>` and an optional RFID/NFC chip serial). Cards are
+added in batches, labels printed as a PDF, and a chip registered by tapping it. A card is given at
+check-in or later; scanning, typing or tapping it finds the holder (offline too, from the gate index).
+At check-out the guard records whether it came back; one that didn't is marked Missing against the
+last holder until it turns up (Found) or is retired. The roll call shows who holds which card.
+
 ### 4.5 Pre-registration and self-registration
 
 - **Host invite**: the host creates the visit. The visitor gets a WhatsApp/SMS/email link

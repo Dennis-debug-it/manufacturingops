@@ -31,4 +31,15 @@ describe('visitor helpers', () => {
     expect(findOfflineBadge(index, 'VISITOR:somethingElse123')).toBeNull()
     expect(findOfflineBadge(undefined, 'VISITOR:personToken12345')).toBeNull()
   })
+
+  it('finds the holder of an access card with no signal, by its QR, number or chip', () => {
+    const person = { attendeeId: 'a1', badgeToken: 'personToken12345', fullName: 'Ann One', company: null, isBlocked: false, badgeNumber: 'VIS-000001-1', visitNumber: 'VIS-000001',
+      visitStatus: 'OnSite' as const, factoryName: 'Chelal', hostName: 'Grace', purpose: 'Meeting', expectedTo: '2026-11-13T14:00:00Z', checkedInAt: '2026-11-13T07:00:00Z', zones: [],
+      cardNumber: 'V-012', cardToken: 'cardToken1234567', cardChip: '04A22B9C1180' }
+    const index = { generatedAt: '2026-11-13T08:00:00Z', people: [person], passes: [] }
+    expect(findOfflineBadge(index, 'CARD:cardToken1234567')).toEqual({ kind: 'person', person })
+    expect(findOfflineBadge(index, 'v-012')).toEqual({ kind: 'person', person })
+    expect(findOfflineBadge(index, '04:a2:2b:9c:11:80')).toEqual({ kind: 'person', person })
+    expect(findOfflineBadge(index, 'V-013')).toBeNull()
+  })
 })

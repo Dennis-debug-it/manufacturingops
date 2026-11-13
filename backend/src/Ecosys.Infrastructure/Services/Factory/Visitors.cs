@@ -41,12 +41,14 @@ public sealed record VisitActor(Guid UserId, string Name, bool CanManage = false
 
 /// <summary>What the gate confirmed for one person.</summary>
 /// <param name="RecordInduction">The induction was given at the gate now; it is recorded as a training record.</param>
+/// <param name="CardCode">An access card handed over at check-in: its number, QR or chip serial.</param>
 public sealed record GateConfirmation(
     bool IdVerified = false,
     bool PpeConfirmed = false,
     bool RecordInduction = false,
     Guid? EscortUserId = null,
-    string? OverrideReason = null);
+    string? OverrideReason = null,
+    string? CardCode = null);
 
 /// <summary>A gate check that is not met. An overridable one can be waived by a supervisor with a reason.</summary>
 public sealed record GateIssue(string Code, string Message, bool Overridable);
@@ -79,8 +81,11 @@ public interface IVisitorService
     /// <summary>Lets a person in. Fails with every unmet check unless the remaining ones are overridable and a supervisor gave a reason.</summary>
     Task<VisitAttendee> CheckInAsync(Guid tenantId, Guid attendeeId, GateConfirmation confirmation, VisitActor actor, CancellationToken cancellationToken = default);
 
-    /// <summary>Records a person leaving; the visit completes when nobody on it is left inside.</summary>
-    Task<VisitAttendee> CheckOutAsync(Guid tenantId, Guid attendeeId, VisitActor actor, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Records a person leaving; the visit completes when nobody on it is left inside. Their access card comes back
+    /// to the box, unless <paramref name="cardReturned"/> is false: then it is marked missing.
+    /// </summary>
+    Task<VisitAttendee> CheckOutAsync(Guid tenantId, Guid attendeeId, VisitActor actor, CancellationToken cancellationToken = default, bool cardReturned = true);
 
     Task<VisitAttendee?> FindBadgeAsync(Guid tenantId, string token, CancellationToken cancellationToken = default);
 
@@ -283,6 +288,14 @@ internal sealed class VisitorService(
             attendee.OverriddenByName = actor.Name;
         }
 
+        VisitorCard? card = null;
+        if (!string.IsNullOrWhiteSpace(confirmation.CardCode))
+        {
+            card = await VisitorCardRules.FindAsync(dbContext, tenantId, confirmation.CardCode, cancellationToken)
+                ?? throw new BusinessRuleException("That is not one of our access cards.");
+            VisitorCardService.EnsureCanIssue(card, visit.FactoryId);
+        }
+
         if (result.Requirements.NeedsInduction && !result.Requirements.HasCurrentInduction && confirmation.RecordInduction)
         {
             dbContext.TrainingRecords.Add(new TrainingRecord
@@ -313,6 +326,16 @@ internal sealed class VisitorService(
         attendee.InductionConfirmed = !result.Requirements.NeedsInduction || result.Requirements.HasCurrentInduction || confirmation.RecordInduction;
         attendee.CheckedInAt = now;
         attendee.CheckedInByName = actor.Name;
+        if (card is not null)
+        {
+            card.Status = VisitorCardStatuses.Issued;
+            card.HolderAttendeeId = attendee.Id;
+            card.IssuedAt = now;
+            attendee.CardId = card.Id;
+            attendee.CardNumber = card.CardNumber;
+            attendee.CardIssuedAt = now;
+            attendee.CardIssuedByName = actor.Name;
+        }
         attendee.AccountedForAt = null;
         attendee.AccountedForByName = null;
         visitor.LastVisitAt = now;
@@ -340,7 +363,7 @@ internal sealed class VisitorService(
         return attendee;
     }
 
-    public async Task<VisitAttendee> CheckOutAsync(Guid tenantId, Guid attendeeId, VisitActor actor, CancellationToken cancellationToken = default)
+    public async Task<VisitAttendee> CheckOutAsync(Guid tenantId, Guid attendeeId, VisitActor actor, CancellationToken cancellationToken = default, bool cardReturned = true)
     {
         var attendee = await LoadAttendeeAsync(tenantId, attendeeId, cancellationToken);
         if (attendee.CheckedInAt is null) throw new BusinessRuleException($"{attendee.Visitor!.FullName} has not come in.");
@@ -351,6 +374,9 @@ internal sealed class VisitorService(
         attendee.CheckedOutAt = now;
         attendee.CheckedOutByName = actor.Name;
         attendee.Visitor!.LastVisitAt = now;
+        if (attendee.CardId is { } cardId && attendee.CardReturnedAt is null && !attendee.CardNotReturned
+            && await dbContext.VisitorCards.SingleOrDefaultAsync(x => x.Id == cardId, cancellationToken) is { } card)
+            VisitorCardRules.TakeBack(attendee, card, cardReturned, now);
 
         var visit = attendee.Visit!;
         var others = await dbContext.VisitAttendees.Where(x => x.VisitId == visit.Id && x.Id != attendee.Id).ToListAsync(cancellationToken);
@@ -368,6 +394,17 @@ internal sealed class VisitorService(
 
     public async Task<VisitAttendee?> FindBadgeAsync(Guid tenantId, string token, CancellationToken cancellationToken = default)
     {
+        // An access card that is out: whoever holds it.
+        if (await VisitorCardRules.FindAsync(dbContext, tenantId, token, cancellationToken) is { } card)
+        {
+            if (card.HolderAttendeeId is not { } holder) return null;
+            return await dbContext.VisitAttendees
+                .Include(x => x.Visit).ThenInclude(x => x!.Zones).ThenInclude(x => x.AccessZone)
+                .Include(x => x.Visit).ThenInclude(x => x!.Factory)
+                .Include(x => x.Visitor)
+                .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == holder, cancellationToken);
+        }
+
         var value = token.Trim();
         // A scanned badge carries "VISITOR:<token>"; a typed or linked one may be a whole link.
         if (value.StartsWith("VISITOR:", StringComparison.OrdinalIgnoreCase)) value = value["VISITOR:".Length..];
@@ -511,6 +548,17 @@ internal sealed class VisitorService(
                 issues.Add(new GateIssue("permit", $"Permit {permit.PermitNumber} is {permit.Status.ToLowerInvariant()}, not approved.", false));
             else if (utcNow < permit.ValidFrom || utcNow > permit.ValidTo)
                 issues.Add(new GateIssue("permit", $"Permit {permit.PermitNumber} is valid {Local(permit.ValidFrom):dd MMM HH:mm} to {Local(permit.ValidTo):dd MMM HH:mm}, not now.", false));
+        }
+
+        if (!string.IsNullOrWhiteSpace(confirmation.CardCode))
+        {
+            var card = await VisitorCardRules.FindAsync(dbContext, visit.TenantId, confirmation.CardCode, cancellationToken);
+            if (card is null) issues.Add(new GateIssue("card", "That is not one of our access cards.", false));
+            else
+            {
+                try { VisitorCardService.EnsureCanIssue(card, visit.FactoryId); }
+                catch (BusinessRuleException ex) { issues.Add(new GateIssue("card", ex.Message, false)); }
+            }
         }
 
         return new GateCheckResult(new GateRequirements(inductionZones.Count > 0, hasInduction, ppe, escortZones.Count > 0, permitZones.Count > 0), issues);

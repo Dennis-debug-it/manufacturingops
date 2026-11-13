@@ -163,11 +163,11 @@ public sealed class VisitsController(
     }
 
     [HttpPost("attendees/{id:guid}/check-out")]
-    public async Task<ActionResult<VisitRow>> CheckOut(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<VisitRow>> CheckOut(Guid id, [FromBody] CheckOutRequest? request, CancellationToken cancellationToken)
     {
         EnsureGate();
         await EnsureAttendeeVisibleAsync(id, cancellationToken);
-        var attendee = await visitorService.CheckOutAsync(TenantId, id, Actor, cancellationToken);
+        var attendee = await visitorService.CheckOutAsync(TenantId, id, Actor, cancellationToken, request?.CardReturned ?? true);
         await auditLogService.LogAsync(TenantId, UserId, "visitors.checked-out", nameof(VisitAttendee), id.ToString(),
             $"{attendee.Visitor!.FullName} left ({attendee.Visit!.VisitNumber}).", cancellationToken);
         return Ok(await GetRowAsync(attendee.VisitId, cancellationToken));
@@ -231,7 +231,13 @@ public sealed class VisitsController(
                     || ((x.Visit!.Status == VisitStatuses.Approved || x.Visit.Status == VisitStatuses.PendingApproval) && x.Visit.ExpectedTo >= dayStart && x.Visit.ExpectedFrom < dayStart.AddDays(1))))
             .Select(x => new GateIndexPerson(x.Id, x.BadgeToken, x.Visitor!.FullName, x.Visitor.Company, x.Visitor.IsBlocked, x.BadgeNumber, x.Visit!.VisitNumber,
                 x.Visit.Status, x.Visit.Factory!.Name, x.Visit.HostName, x.Visit.Purpose, x.Visit.ExpectedTo, x.CheckedInAt,
-                x.Visit.Zones.Select(z => z.AccessZone!.Name).ToList()))
+                x.Visit.Zones.Select(z => z.AccessZone!.Name).ToList())
+            {
+                // A card that is out finds its holder at a gate with no signal too.
+                CardNumber = x.CardReturnedAt == null && !x.CardNotReturned && x.Card != null ? x.Card.CardNumber : null,
+                CardToken = x.CardReturnedAt == null && !x.CardNotReturned && x.Card != null ? x.Card.Token : null,
+                CardChip = x.CardReturnedAt == null && !x.CardNotReturned && x.Card != null ? x.Card.ChipSerial : null,
+            })
             .Take(2000)
             .ToListAsync(cancellationToken);
         var today = now.AddHours(3).Date;
@@ -260,10 +266,11 @@ public sealed class VisitsController(
                 x.Id, x.VisitId, x.Visit!.VisitNumber, x.Visit.FactoryId, Factory = x.Visit.Factory!.Name, x.Visitor!.FullName, x.Visitor.Company, x.Visitor.Phone,
                 x.Visit.HostName, x.Visit.Purpose, x.Visit.VehicleRegistration, x.BadgeNumber, CheckedInAt = x.CheckedInAt!.Value, x.Visit.ExpectedTo, x.EscortName,
                 x.AccountedForAt, x.AccountedForByName, Zones = x.Visit.Zones.Select(z => z.AccessZone!.Name).ToList(),
+                CardNumber = x.CardReturnedAt == null && !x.CardNotReturned ? x.CardNumber : null,
             })
             .ToListAsync(cancellationToken);
         return Ok(rows.Select(x => new OnSiteRow(x.Id, x.VisitId, x.VisitNumber, x.FactoryId, x.Factory, x.FullName, x.Company, x.Phone, x.HostName, x.Purpose,
-            x.VehicleRegistration, x.BadgeNumber, x.CheckedInAt, x.ExpectedTo, now > x.ExpectedTo.AddMinutes(grace), x.EscortName, x.Zones, x.AccountedForAt, x.AccountedForByName)).ToList());
+            x.VehicleRegistration, x.BadgeNumber, x.CheckedInAt, x.ExpectedTo, now > x.ExpectedTo.AddMinutes(grace), x.EscortName, x.Zones, x.AccountedForAt, x.AccountedForByName) { CardNumber = x.CardNumber }).ToList());
     }
 
     [HttpPost("attendees/{id:guid}/accounted")]
@@ -449,7 +456,12 @@ public sealed class VisitsController(
                     : overdue || v.Status == VisitStatuses.Completed ? AttendeeStates.NoShow
                     : AttendeeStates.Expected,
                 a.CheckedInAt, a.CheckedInByName, a.CheckedOutAt, a.CheckedOutByName, a.IdVerified, a.InductionConfirmed, a.PpeConfirmed, a.EscortName,
-                a.OverrideReason, a.OverriddenByName, a.AccountedForAt)).ToList();
+                a.OverrideReason, a.OverriddenByName, a.AccountedForAt)
+            {
+                CardNumber = a.CardNumber,
+                CardOut = a.CardId != null && a.CardReturnedAt == null && !a.CardNotReturned,
+                CardNotReturned = a.CardNotReturned,
+            }).ToList();
             return new VisitRow(
                 v.Id, v.VisitNumber, v.FactoryId, factories.GetValueOrDefault(v.FactoryId) ?? "", v.Purpose, v.HostUserId, v.HostName, v.HostUserId == me,
                 v.ExpectedFrom, v.ExpectedTo, v.Status, v.Source, v.WorkOrderId, v.WorkOrderId is { } j ? jobs.GetValueOrDefault(j) : null,
@@ -480,7 +492,15 @@ public sealed record AttendeeRow(
     Guid Id, Guid VisitorId, string FullName, string? Company, string? Phone, string? IdType, string? IdNumberMasked, bool IsBlocked, string? BlockedReason,
     string? ContractorName, string BadgeNumber, string BadgeToken, string State,
     DateTime? CheckedInAt, string? CheckedInByName, DateTime? CheckedOutAt, string? CheckedOutByName,
-    bool IdVerified, bool InductionConfirmed, bool PpeConfirmed, string? EscortName, string? OverrideReason, string? OverriddenByName, DateTime? AccountedForAt);
+    bool IdVerified, bool InductionConfirmed, bool PpeConfirmed, string? EscortName, string? OverrideReason, string? OverriddenByName, DateTime? AccountedForAt)
+{
+    /// <summary>The access card they were given, if any.</summary>
+    public string? CardNumber { get; init; }
+    /// <summary>They hold it now.</summary>
+    public bool CardOut { get; init; }
+    /// <summary>They left without handing it back.</summary>
+    public bool CardNotReturned { get; init; }
+}
 
 public sealed record VisitRow(
     Guid Id, string VisitNumber, Guid FactoryId, string FactoryName, string Purpose, Guid HostUserId, string HostName, bool IAmHost,
@@ -495,7 +515,12 @@ public sealed record BadgeResponse(AttendeeRow Attendee, VisitRow Visit);
 
 public sealed record GateIndexPerson(
     Guid AttendeeId, string BadgeToken, string FullName, string? Company, bool IsBlocked, string BadgeNumber, string VisitNumber, string VisitStatus,
-    string FactoryName, string HostName, string Purpose, DateTime ExpectedTo, DateTime? CheckedInAt, IReadOnlyList<string> Zones);
+    string FactoryName, string HostName, string Purpose, DateTime ExpectedTo, DateTime? CheckedInAt, IReadOnlyList<string> Zones)
+{
+    public string? CardNumber { get; init; }
+    public string? CardToken { get; init; }
+    public string? CardChip { get; init; }
+}
 
 public sealed record GateIndexPass(
     Guid PassId, string BadgeToken, string PassNumber, string FullName, string? Company, bool IsBlocked, string FactoryName, string HostName, IReadOnlyList<string> Zones);
@@ -505,7 +530,10 @@ public sealed record GateIndexResponse(DateTime GeneratedAt, IReadOnlyList<GateI
 public sealed record OnSiteRow(
     Guid AttendeeId, Guid VisitId, string VisitNumber, Guid FactoryId, string FactoryName, string FullName, string? Company, string? Phone, string HostName, string Purpose,
     string? VehicleRegistration, string BadgeNumber, DateTime CheckedInAt, DateTime ExpectedTo, bool Overstayed, string? EscortName, IReadOnlyList<string> Zones,
-    DateTime? AccountedForAt, string? AccountedForByName);
+    DateTime? AccountedForAt, string? AccountedForByName)
+{
+    public string? CardNumber { get; init; }
+}
 
 public sealed record VisitorRow(
     Guid Id, string FullName, string? Phone, string? Email, string? Company, string? IdType, string? IdNumberMasked, Guid? ContractorId, string? ContractorName,
@@ -546,9 +574,10 @@ public sealed record DecideVisitRequest(bool Approve, string? Note = null);
 
 public sealed record CancelVisitRequest(string? Reason = null);
 
-public sealed record GateConfirmationRequest(bool IdVerified = false, bool PpeConfirmed = false, bool RecordInduction = false, Guid? EscortUserId = null, string? OverrideReason = null)
+public sealed record GateConfirmationRequest(
+    bool IdVerified = false, bool PpeConfirmed = false, bool RecordInduction = false, Guid? EscortUserId = null, string? OverrideReason = null, string? CardCode = null)
 {
-    public GateConfirmation ToConfirmation() => new(IdVerified, PpeConfirmed, RecordInduction, EscortUserId, OverrideReason);
+    public GateConfirmation ToConfirmation() => new(IdVerified, PpeConfirmed, RecordInduction, EscortUserId, OverrideReason, CardCode);
 }
 
 public sealed record AccountedRequest(bool Accounted);
@@ -556,3 +585,6 @@ public sealed record AccountedRequest(bool Accounted);
 public sealed record ResetRollCallRequest(Guid? FactoryId = null);
 
 public sealed record BlockVisitorRequest(bool Blocked, string? Reason = null);
+
+/// <summary>Check-out at the gate. <paramref name="CardReturned"/>: false when they left without handing their access card back.</summary>
+public sealed record CheckOutRequest(bool CardReturned = true);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { AlertTriangle, BadgeCheck, Ban, Car, Clock, DoorOpen, LogIn, LogOut, Plus, Printer, QrCode, RefreshCw, Siren, UserCheck, Users } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, Ban, Car, Clock, CreditCard, DoorOpen, LogIn, LogOut, Plus, Printer, QrCode, RefreshCw, Siren, UserCheck, Users } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { StatCard } from '../../shared/components/StatCard'
 import { Badge, type BadgeTone } from '../../shared/components/Badge'
@@ -12,16 +12,17 @@ import { formatDate, formatDateTime, formatTime } from '../../shared/utils/dates
 import { cn } from '../../shared/utils/cn'
 import { Field, inputClass, primaryButton, secondaryButton, textareaClass } from '../factory/components/ui'
 import {
-  STATE_LABEL, STATUS_LABEL, ZONE_LEVELS, downloadBadges, useAccounted, useGateIndex, useBlockVisitor, useCancelVisit, useCheckOut, useDecideVisit, useOnSite,
+  STATE_LABEL, STATUS_LABEL, ZONE_LEVELS, downloadBadges, useAccounted, useGateIndex, useBlockVisitor, useCancelVisit, useCheckOut, useDecideVisit, useIssueCard, useOnSite,
   useResetRollCall, useSaveZone, useSeedZones, useVisitBoard, useVisitRegister, useVisitorAccess, useVisitorPeople, useVisitorReport, useZones,
   type AccessZone, type Attendee, type AttendeeState, type Visit, type VisitStatus, type ZoneLevel,
 } from './api'
 import { GateDrawer } from './GateDrawer'
+import { CardInput } from './CardInput'
 import { VisitForm } from './VisitForm'
 import { FactorySelect, useOnlyFactory } from './FactorySelect'
 import { BadgeScanDrawer } from './BadgeScan'
 import { useFactoryIndustry } from '../factory/industry'
-import { PassesTab, VehiclesTab } from './GateTabs'
+import { CardsTab, PassesTab, VehiclesTab } from './GateTabs'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../shared/api/apiClient'
@@ -32,6 +33,7 @@ const TABS = [
   { id: 'register', label: 'Register', gate: false },
   { id: 'vehicles', label: 'Vehicles', gate: true },
   { id: 'passes', label: 'Passes', gate: true },
+  { id: 'cards', label: 'Cards', gate: true },
   { id: 'roll-call', label: 'Roll call', gate: true },
   { id: 'people', label: 'People', gate: true },
   { id: 'zones', label: 'Zones', gate: true },
@@ -105,6 +107,7 @@ export function VisitorsPage() {
       {tab === 'today' ? <TodayTab factoryId={factoryId} canGate={canGate} canManage={canManage} />
         : tab === 'register' ? <RegisterTab factoryId={factoryId} canGate={canGate} canManage={canManage} />
           : tab === 'vehicles' ? <VehiclesTab factoryId={factoryId || onlyFactory} />
+          : tab === 'cards' ? <CardsTab factoryId={factoryId || onlyFactory} canManage={canManage} />
           : tab === 'passes' ? <PassesTab factoryId={factoryId || onlyFactory} canManage={canManage} onCheckIn={(visitId, attendeeId) => setCheckIn({ visitId, attendeeId })} />
           : tab === 'roll-call' ? <RollCallTab factoryId={factoryId} />
             : tab === 'people' ? <PeopleTab canManage={canManage} />
@@ -187,7 +190,11 @@ function VisitCard({ visit, canGate, canManage }: { visit: Visit; canGate: boole
       toast.success(`${visit.visitNumber} approved`)
     } catch { /* shown by the API client */ }
   }
+  const [leaving, setLeaving] = useState<Attendee | null>(null)
+  const [givingCard, setGivingCard] = useState<Attendee | null>(null)
   const leave = async (attendee: Attendee) => {
+    // Holding a card: ask whether it came back before they go.
+    if (attendee.cardOut) return setLeaving(attendee)
     try {
       await checkOut.mutateAsync(attendee.id)
       toast.success(`${attendee.fullName} checked out`)
@@ -235,6 +242,11 @@ function VisitCard({ visit, canGate, canManage }: { visit: Visit; canGate: boole
                 <Badge size="sm" tone={STATE_TONE[attendee.state]}>{STATE_LABEL[attendee.state]}</Badge>
                 {attendee.isBlocked ? <Badge size="sm" tone="danger"><Ban className="mr-1 inline h-3 w-3" />Blocked</Badge> : null}
                 {attendee.overrideReason ? <Badge size="sm" tone="warning">Override</Badge> : null}
+                {attendee.cardNumber ? (
+                  <Badge size="sm" tone={attendee.cardNotReturned ? 'danger' : attendee.cardOut ? 'info' : 'neutral'}>
+                    <CreditCard className="mr-1 inline h-3 w-3" />{attendee.cardNumber}{attendee.cardNotReturned ? ' not returned' : attendee.cardOut ? '' : ' returned'}
+                  </Badge>
+                ) : null}
               </div>
               <div className="text-xs text-slate-500">
                 {[attendee.company, attendee.phone, attendee.badgeNumber].filter(Boolean).join(' · ')}
@@ -249,6 +261,9 @@ function VisitCard({ visit, canGate, canManage }: { visit: Visit; canGate: boole
                 {attendee.state === 'Expected' && (visit.status === 'Approved' || visit.status === 'OnSite' || visit.status === 'PendingApproval') ? (
                   <button type="button" className={secondaryButton} onClick={() => setCheckingIn(attendee)}><LogIn className="h-4 w-4" />Check in</button>
                 ) : null}
+                {(attendee.state === 'OnSite' || attendee.state === 'Overstayed') && !attendee.cardOut ? (
+                  <button type="button" className={secondaryButton} onClick={() => setGivingCard(attendee)}><CreditCard className="h-4 w-4" />Give card</button>
+                ) : null}
                 {attendee.state === 'OnSite' || attendee.state === 'Overstayed' ? (
                   <button type="button" className={secondaryButton} disabled={checkOut.isPending} onClick={() => void leave(attendee)}><LogOut className="h-4 w-4" />Check out</button>
                 ) : null}
@@ -260,7 +275,51 @@ function VisitCard({ visit, canGate, canManage }: { visit: Visit; canGate: boole
 
       {checkingIn ? <GateDrawer visit={visit} attendee={checkingIn} canManage={canManage} onClose={() => setCheckingIn(null)} /> : null}
       {deciding ? <ReasonDrawer visit={visit} mode={deciding} onClose={() => setDeciding(null)} /> : null}
+      {leaving ? <CardBackDrawer attendee={leaving} onClose={() => setLeaving(null)} /> : null}
+      {givingCard ? <GiveCardDrawer attendee={givingCard} onClose={() => setGivingCard(null)} /> : null}
     </article>
+  )
+}
+
+/** Check-out for someone holding an access card: did it come back? */
+export function CardBackDrawer({ attendee, onClose }: { attendee: Attendee; onClose: () => void }) {
+  const checkOut = useCheckOut()
+  const go = async (cardReturned: boolean) => {
+    try {
+      await checkOut.mutateAsync({ attendeeId: attendee.id, cardReturned })
+      if (cardReturned) toast.success(`${attendee.fullName} checked out; card ${attendee.cardNumber} back in the box`)
+      else toast.error(`${attendee.fullName} checked out; card ${attendee.cardNumber} marked missing`)
+      onClose()
+    } catch { /* shown by the API client */ }
+  }
+  return (
+    <FormDrawer open title={`Check out ${attendee.fullName}`} onClose={onClose}
+      footer={<div className="flex flex-wrap justify-end gap-2">
+        <button type="button" className={secondaryButton} disabled={checkOut.isPending} onClick={() => void go(false)}>Left without the card</button>
+        <button type="button" className={primaryButton} disabled={checkOut.isPending} onClick={() => void go(true)}><CreditCard className="h-4 w-4" />Card handed back</button>
+      </div>}>
+      <p className="text-sm text-slate-700">Collect access card <span className="font-mono font-semibold">{attendee.cardNumber}</span> before they leave.</p>
+      <p className="mt-2 text-xs text-slate-500">A card not handed back is marked missing: it opens nothing and can't be given out until it is found.</p>
+    </FormDrawer>
+  )
+}
+
+function GiveCardDrawer({ attendee, onClose }: { attendee: Attendee; onClose: () => void }) {
+  const issue = useIssueCard()
+  const [card, setCard] = useState('')
+  const submit = async () => {
+    try {
+      await issue.mutateAsync({ attendeeId: attendee.id, cardCode: card.trim() })
+      toast.success(`Card given to ${attendee.fullName}`)
+      onClose()
+    } catch { /* shown by the API client */ }
+  }
+  return (
+    <FormDrawer open title={`Give ${attendee.fullName} an access card`} onClose={onClose}
+      footer={<div className="flex justify-end gap-2"><button type="button" className={secondaryButton} onClick={onClose}>Cancel</button>
+        <button type="button" className={primaryButton} disabled={issue.isPending || !card.trim()} onClick={() => void submit()}>Give card</button></div>}>
+      <Field label="Access card"><CardInput value={card} onChange={setCard} /></Field>
+    </FormDrawer>
   )
 }
 
@@ -356,7 +415,7 @@ function RollCallTab({ factoryId }: { factoryId: string }) {
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
-              <tr><th className="px-3 py-2">Accounted</th><th className="px-3 py-2">Person</th><th className="px-3 py-2">Host · purpose</th><th className="px-3 py-2">Zones</th><th className="px-3 py-2">In since</th><th className="px-3 py-2">Vehicle</th></tr>
+              <tr><th className="px-3 py-2">Accounted</th><th className="px-3 py-2">Person</th><th className="px-3 py-2">Host · purpose</th><th className="px-3 py-2">Zones</th><th className="px-3 py-2">In since</th><th className="px-3 py-2">Card</th><th className="px-3 py-2">Vehicle</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((row) => (
@@ -373,6 +432,7 @@ function RollCallTab({ factoryId }: { factoryId: string }) {
                   <td className="px-3 py-2 text-slate-600">{row.hostName}<div className="text-xs text-slate-500">{row.purpose} · {row.factoryName}</div></td>
                   <td className="px-3 py-2 text-slate-600">{row.zones.length === 0 ? 'Public areas' : row.zones.join(', ')}{row.escortName ? <div className="text-xs">Escort {row.escortName}</div> : null}</td>
                   <td className={cn('px-3 py-2', row.overstayed ? 'font-medium text-rose-700' : 'text-slate-600')}>{formatTime(row.checkedInAt)}{row.overstayed ? <div className="text-xs">Overstayed</div> : null}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-slate-600">{row.cardNumber ?? '—'}</td>
                   <td className="px-3 py-2 font-mono text-xs text-slate-600">{row.vehicleRegistration ?? '—'}</td>
                 </tr>
               ))}

@@ -10,10 +10,11 @@ import { cn } from '../../shared/utils/cn'
 import { Field, inputClass, primaryButton, secondaryButton, textareaClass } from '../factory/components/ui'
 import { useContractors } from '../factory/stores/api'
 import {
-  ID_TYPES, VEHICLE_PURPOSES, VISIT_PURPOSES, downloadPassBadge, useCreatePass, usePassToday, usePasses, useRevokePass, useStaff, useVehicleEntry, useVehicleExit,
+  CARD_KINDS, ID_TYPES, VEHICLE_PURPOSES, VISIT_PURPOSES, downloadCardLabels, downloadPassBadge, useAddCards, useCardChip, useCardStatus, useCards, type CardStatus, type VisitorCard, useCreatePass, usePassToday, usePasses, useRevokePass, useStaff, useVehicleEntry, useVehicleExit,
   useVehicles, useZones, type VisitorPass,
 } from './api'
 import { FactorySelect } from './FactorySelect'
+import { nfcSupported, useNfcReader } from '../security/device'
 
 const text = (value: string) => value.trim() || null
 
@@ -288,6 +289,138 @@ function PassDrawer({ factoryId, onClose }: { factoryId: string; onClose: () => 
         <Field label="Vehicle registration"><input className={inputClass} placeholder="KCA 123A" value={form.vehicle} onChange={(e) => set({ vehicle: e.target.value })} /></Field>
         <Field label="Notes"><textarea className={textareaClass} value={form.notes} onChange={(e) => set({ notes: e.target.value })} /></Field>
       </div>
+    </FormDrawer>
+  )
+}
+
+/* ── Access cards ────────────────────────────────────────────────────────── */
+
+const CARD_TONE: Record<CardStatus, 'success' | 'info' | 'danger' | 'neutral'> = { Available: 'success', Issued: 'info', Missing: 'danger', Retired: 'neutral' }
+
+export function CardsTab({ factoryId, canManage }: { factoryId: string; canManage: boolean }) {
+  const [status, setStatus] = useState('')
+  const [query, setQuery] = useState('')
+  const cards = useCards(factoryId, status, useDebounced(query))
+  const setCardStatus = useCardStatus()
+  const [adding, setAdding] = useState(false)
+  const [chipFor, setChipFor] = useState<VisitorCard | null>(null)
+  const rows = cards.data ?? []
+  const counts = (s: CardStatus) => rows.filter((x) => x.status === s).length
+
+  const change = async (card: VisitorCard, next: CardStatus) => {
+    const notes = next === 'Available' ? null : window.prompt(next === 'Missing' ? `What happened to card ${card.cardNumber}?` : `Why is card ${card.cardNumber} retired?`)
+    if (next !== 'Available' && notes === null) return
+    try {
+      await setCardStatus.mutateAsync({ id: card.id, status: next, notes })
+      toast.success(next === 'Available' ? `Card ${card.cardNumber} back in the box` : `Card ${card.cardNumber}: ${next.toLowerCase()}`)
+    } catch { /* shown by the API client */ }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <input className={cn(inputClass, 'w-48 font-mono uppercase')} placeholder="Card number" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Find a card" />
+          <select className={cn(inputClass, 'w-44')} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
+            <option value="">All cards</option>
+            {(['Available', 'Issued', 'Missing', 'Retired'] as const).map((x) => <option key={x} value={x}>{x === 'Issued' ? 'Out (issued)' : x}</option>)}
+          </select>
+          {status === '' && rows.length > 0 ? <span className="text-sm text-slate-600">{counts('Available')} in the box · {counts('Issued')} out · <span className={cn(counts('Missing') > 0 && 'font-medium text-rose-700')}>{counts('Missing')} missing</span></span> : null}
+        </div>
+        <div className="flex gap-2">
+          {rows.length > 0 ? <button type="button" className={secondaryButton} onClick={() => void downloadCardLabels(factoryId)}><Printer className="h-4 w-4" />Print card labels</button> : null}
+          {canManage && factoryId ? <button type="button" className={primaryButton} onClick={() => setAdding(true)}><Plus className="h-4 w-4" />Add cards</button> : null}
+        </div>
+      </div>
+      {cards.isLoading ? <Spinner /> : rows.length === 0 ? (
+        <EmptyState title="No access cards" description={canManage ? 'Add the numbered cards kept at the gate (e.g. V-001 to V-050), then print a QR label for each. Visitors get one at check-in and hand it back when they leave.' : 'Visitor managers add the gate\'s cards.'} />
+      ) : (
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table className="w-full min-w-[820px] text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr><th className="px-3 py-2">Card</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">With</th><th className="px-3 py-2">Since</th><th className="px-3 py-2" /></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((card) => (
+                <tr key={card.id} className={cn(card.status === 'Retired' && 'text-slate-400')}>
+                  <td className="px-3 py-2">
+                    <span className="font-mono font-semibold">{card.cardNumber}</span>
+                    <div className="text-xs text-slate-500">{[card.kind, card.colour, card.hasChip ? 'chip registered' : null, factoryId ? null : card.factoryName].filter(Boolean).join(' · ')}</div>
+                  </td>
+                  <td className="px-3 py-2"><Badge size="sm" tone={CARD_TONE[card.status]}>{card.status === 'Issued' ? 'Out' : card.status}</Badge></td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {card.status === 'Issued' ? <>{card.holderName}<div className="text-xs text-slate-500">{[card.holderCompany, card.visitNumber, card.hostName ? `host ${card.hostName}` : null].filter(Boolean).join(' · ')}</div></>
+                      : card.status === 'Missing' && card.lastHolderName ? <span className="text-rose-700">Last with {card.lastHolderName}{card.lastHolderPhone ? ` (${card.lastHolderPhone})` : ''}</span>
+                        : card.notes ? <span className="text-xs">{card.notes}</span> : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-xs text-slate-600">{card.status === 'Issued' && card.issuedAt ? formatDateTime(card.issuedAt) : card.lastReturnedAt ? `back ${formatDate(card.lastReturnedAt)}` : '—'}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex justify-end gap-3 text-sm font-medium">
+                      {card.status === 'Missing' || card.status === 'Retired' ? <button type="button" className="text-[var(--app-primary)] hover:underline" onClick={() => void change(card, 'Available')}>Found</button> : null}
+                      {card.status !== 'Missing' && card.status !== 'Retired' && canManage ? <button type="button" className="text-rose-700 hover:underline" onClick={() => void change(card, 'Missing')}>Missing</button> : null}
+                      {card.status !== 'Retired' && canManage ? <button type="button" className="text-slate-600 hover:underline" onClick={() => void change(card, 'Retired')}>Retire</button> : null}
+                      {canManage && nfcSupported() ? <button type="button" className="text-slate-600 hover:underline" onClick={() => setChipFor(card)}>{card.hasChip ? 'Replace chip' : 'Register chip'}</button> : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {adding ? <AddCardsDrawer factoryId={factoryId} onClose={() => setAdding(false)} /> : null}
+      {chipFor ? <ChipDrawer card={chipFor} onClose={() => setChipFor(null)} /> : null}
+    </div>
+  )
+}
+
+function AddCardsDrawer({ factoryId, onClose }: { factoryId: string; onClose: () => void }) {
+  const add = useAddCards()
+  const [form, setForm] = useState({ factoryId, prefix: 'V-', from: '1', to: '50', kind: 'Visitor', colour: '' })
+  const from = Number(form.from)
+  const to = Number(form.to)
+  const valid = form.factoryId && from >= 1 && to >= from && to - from < 500
+  const pad = (n: number) => String(n).padStart(Math.max(3, String(to).length), '0')
+  const submit = async () => {
+    try {
+      const result = await add.mutateAsync({ factoryId: form.factoryId, prefix: form.prefix, from, to, kind: form.kind, colour: form.colour.trim() || null })
+      toast.success(`${result.added} cards added${result.skipped ? ` (${result.skipped} already there)` : ''}`)
+      onClose()
+    } catch { /* shown by the API client */ }
+  }
+  return (
+    <FormDrawer open title="Add access cards" onClose={onClose}
+      footer={<div className="flex justify-end gap-2"><button type="button" className={secondaryButton} onClick={onClose}>Cancel</button>
+        <button type="button" className={primaryButton} disabled={add.isPending || !valid} onClick={() => void submit()}>Add {valid ? to - from + 1 : ''} cards</button></div>}>
+      <div className="space-y-4">
+        <Field label="Factory gate" required><FactorySelect value={form.factoryId} onChange={(value) => setForm({ ...form, factoryId: value })} /></Field>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Prefix"><input className={cn(inputClass, 'font-mono uppercase')} value={form.prefix} onChange={(e) => setForm({ ...form, prefix: e.target.value.toUpperCase() })} /></Field>
+          <Field label="From"><input className={inputClass} inputMode="numeric" value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })} /></Field>
+          <Field label="To"><input className={inputClass} inputMode="numeric" value={form.to} onChange={(e) => setForm({ ...form, to: e.target.value })} /></Field>
+        </div>
+        {valid ? <p className="text-sm text-slate-600">Cards <span className="font-mono">{form.prefix}{pad(from)}</span> to <span className="font-mono">{form.prefix}{pad(to)}</span>.</p> : null}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Type"><select className={inputClass} value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>{CARD_KINDS.map((x) => <option key={x}>{x}</option>)}</select></Field>
+          <Field label="Colour or band" hint="So a guard can tell at a glance, e.g. Red: escorted only."><input className={inputClass} value={form.colour} onChange={(e) => setForm({ ...form, colour: e.target.value })} /></Field>
+        </div>
+        <p className="text-xs text-slate-500">Each card gets its own QR code; print the labels and stick them on the cards. Cards with an RFID/NFC chip can have it registered afterwards.</p>
+      </div>
+    </FormDrawer>
+  )
+}
+
+function ChipDrawer({ card, onClose }: { card: VisitorCard; onClose: () => void }) {
+  const chip = useCardChip()
+  const [listening, setListening] = useState(true)
+  useNfcReader(listening, (serial) => {
+    setListening(false)
+    void chip.mutateAsync({ id: card.id, serial }).then(() => { toast.success(`Chip registered to ${card.cardNumber}`); onClose() }).catch(() => undefined)
+  }, (reason) => { toast.error(reason); setListening(false) })
+  return (
+    <FormDrawer open title={`Register the chip in card ${card.cardNumber}`} onClose={onClose}>
+      <p className="text-sm text-slate-700">{listening ? 'Hold the card against the back of the phone…' : 'Close and try again.'}</p>
+      <p className="mt-2 text-xs text-slate-500">After this, tapping the card finds whoever holds it, as scanning its QR does.</p>
     </FormDrawer>
   )
 }
