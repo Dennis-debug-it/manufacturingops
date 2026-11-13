@@ -271,3 +271,13 @@ public static class VisitorPassRules
 {
     public static PassWindow Window(VisitorPass pass, DateTime utcNow) => VisitorPassService.Window(pass, utcNow);
 }
+
+/// <summary>Small text helpers shared by the gate and patrol screens.</summary>
+public static class GateText
+{
+    /// <summary>Trimmed, cut to <paramref name="max"/>, null when blank.</summary>
+    public static string? Trim(string? value, int max) => VisitorService.Trim(value, max);
+
+    /// <summary>A random, URL-safe token for a QR label or badge.</summary>
+    public static string NewToken() => VisitorService.NewBadgeToken();
+}

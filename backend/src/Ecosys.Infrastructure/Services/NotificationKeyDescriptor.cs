@@ -75,6 +75,8 @@ public static class NotificationKeyDescriptor
         Urgent("safety.incident-reported", "An incident or near miss was reported", "Work Orders"),
         Inbox("safety.permit-requested", "A permit to work is waiting for authorisation", "Work Orders"),
         Urgent("visitor.approval-requested", "A visitor is waiting for me to approve their visit", "Visitors", whatsApp: false),
+        Urgent("security.patrol-missed", "A security patrol was missed or left incomplete", "Security", whatsApp: true),
+        Urgent("security.incident-reported", "A guard reported a security incident or pressed the panic button", "Security", whatsApp: true),
         Inbox("visitor.arrived", "My visitor has arrived at the gate", "Visitors", NotificationChannels.InApp | NotificationChannels.Push),
         Inbox("fleet.document-expiring", "A vehicle's insurance or inspection is about to expire", "Assets"),
         Inbox("asset.warranty-expiring", "An asset's warranty is about to expire", "Assets"),

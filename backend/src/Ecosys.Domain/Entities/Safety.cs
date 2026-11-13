@@ -165,6 +165,21 @@ public sealed class Incident : AuditableEntity, ITenantEntity
     public DateTime? ClosedAt { get; set; }
     public string? ClosedByName { get; set; }
 
+    /// <summary>Safety (accidents, near misses) or Security (theft, intrusion, patrol findings). One register for both.</summary>
+    public string Category { get; set; } = IncidentCategories.Safety;
+    /// <summary>Security: who is dealing with it.</summary>
+    public Guid? OwnerUserId { get; set; }
+    public string? OwnerName { get; set; }
+    /// <summary>Security: Reported → Responding → Contained → Closed.</summary>
+    public string? ResponseStatus { get; set; }
+    public Guid? CheckpointId { get; set; }
+    public Guid? PatrolRunId { get; set; }
+    public Guid? VisitId { get; set; }
+    /// <summary>Kenya Police Occurrence Book number, when it was reported to the police.</summary>
+    public string? PoliceObNumber { get; set; }
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+
     public OrgNode? OrgNode { get; set; }
     public Asset? Asset { get; set; }
     public WorkOrder? CorrectiveWorkOrder { get; set; }

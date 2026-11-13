@@ -63,6 +63,8 @@ public sealed class Phase2GovernanceTests
                 "quotation.sent",
                 "safety.incident-reported",
                 "safety.permit-requested",
+                "security.incident-reported",
+                "security.patrol-missed",
                 "service-report.sent",
                 "spares.critical-low",
                 "tenant.onboarding",

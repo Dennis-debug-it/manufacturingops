@@ -125,6 +125,11 @@ public static class ServiceOpsPlans
         "Visits", "VisitorGate"
     };
 
+    private static readonly HashSet<string> SecurityControllers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Patrol", "PatrolSetup"
+    };
+
     private static readonly HashSet<string> FinanceControllers = new(StringComparer.OrdinalIgnoreCase)
     {
         "ExchangeRates", "TenantFinance"
@@ -140,6 +145,7 @@ public static class ServiceOpsPlans
         (Advanced, AdvancedControllers),
         (WhatsAppBusiness, WhatsAppBusinessControllers),
         (Visitors, VisitorsControllers),
+        (Security, SecurityControllers),
     ];
 
     /// <summary>

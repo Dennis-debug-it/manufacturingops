@@ -37,6 +37,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<VehicleMovement> VehicleMovements => Set<VehicleMovement>();
     public DbSet<VisitorPass> VisitorPasses => Set<VisitorPass>();
     public DbSet<VisitorPassZone> VisitorPassZones => Set<VisitorPassZone>();
+    public DbSet<Checkpoint> Checkpoints => Set<Checkpoint>();
+    public DbSet<PatrolRoute> PatrolRoutes => Set<PatrolRoute>();
+    public DbSet<PatrolRouteCheckpoint> PatrolRouteCheckpoints => Set<PatrolRouteCheckpoint>();
+    public DbSet<PatrolSchedule> PatrolSchedules => Set<PatrolSchedule>();
+    public DbSet<PatrolRun> PatrolRuns => Set<PatrolRun>();
+    public DbSet<CheckpointScan> CheckpointScans => Set<CheckpointScan>();
+    public DbSet<ShiftHandover> ShiftHandovers => Set<ShiftHandover>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserBranchAssignment> UserBranchAssignments => Set<UserBranchAssignment>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
@@ -1045,6 +1052,105 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Visit).WithMany(x => x.Attendees).HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Visitor).WithMany().HasForeignKey(x => x.VisitorId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Checkpoint>(entity =>
+        {
+            entity.ToTable("checkpoints");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.Property(x => x.Method).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.TagToken).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.NfcSerial).HasMaxLength(64);
+            entity.Property(x => x.Instructions).HasMaxLength(1000);
+            entity.Property(x => x.Questions).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.Code }).IsUnique();
+            entity.HasIndex(x => x.TagToken).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.NfcSerial }).IsUnique().HasFilter("\"NfcSerial\" IS NOT NULL");
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.AccessZone).WithMany().HasForeignKey(x => x.AccessZoneId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<PatrolRoute>(entity =>
+        {
+            entity.ToTable("patrol_routes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.Name }).IsUnique();
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PatrolRouteCheckpoint>(entity =>
+        {
+            entity.ToTable("patrol_route_checkpoints");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.RouteId, x.CheckpointId }).IsUnique();
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Route).WithMany(x => x.Checkpoints).HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Checkpoint).WithMany().HasForeignKey(x => x.CheckpointId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PatrolSchedule>(entity =>
+        {
+            entity.ToTable("patrol_schedules");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FixedTimes).HasMaxLength(200);
+            entity.Property(x => x.Days).HasMaxLength(20).IsRequired();
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Route).WithMany().HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<User>().WithMany().HasForeignKey(x => x.AssignedUserId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<PatrolRun>(entity =>
+        {
+            entity.ToTable("patrol_runs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.GuardName).HasMaxLength(200);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.HasIndex(x => new { x.ScheduleId, x.DueFrom }).IsUnique().HasFilter("\"ScheduleId\" IS NOT NULL");
+            entity.HasIndex(x => new { x.TenantId, x.Status, x.CloseAt });
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.DueFrom });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Route).WithMany().HasForeignKey(x => x.RouteId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<PatrolSchedule>().WithMany().HasForeignKey(x => x.ScheduleId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<CheckpointScan>(entity =>
+        {
+            entity.ToTable("checkpoint_scans");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.GuardName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.DeviceId).HasMaxLength(100);
+            entity.Property(x => x.Method).HasMaxLength(10).IsRequired();
+            entity.Property(x => x.NfcSerial).HasMaxLength(64);
+            entity.Property(x => x.Validation).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ValidationNote).HasMaxLength(500);
+            entity.Property(x => x.AnswersJson).HasMaxLength(4000);
+            entity.Property(x => x.Note).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.ClientScanId }).IsUnique();
+            entity.HasIndex(x => new { x.RunId, x.ScannedAt });
+            entity.HasIndex(x => new { x.TenantId, x.CheckpointId, x.ScannedAt });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Run).WithMany(x => x.Scans).HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Checkpoint).WithMany().HasForeignKey(x => x.CheckpointId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ShiftHandover>(entity =>
+        {
+            entity.ToTable("shift_handovers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ShiftName).HasMaxLength(50);
+            entity.Property(x => x.OutgoingName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.IncomingName).HasMaxLength(200);
+            entity.Property(x => x.OpenIssues).HasMaxLength(4000);
+            entity.Property(x => x.KeysAndEquipment).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.HandedOverAt });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<VehicleMovement>(entity =>
@@ -2190,6 +2296,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne<WorkOrder>().WithMany().HasForeignKey(x => x.WorkOrderId).OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(x => new { x.TenantId, x.IncidentNumber }).IsUnique();
             entity.HasIndex(x => new { x.TenantId, x.OccurredAt });
+            entity.Property(x => x.Category).HasMaxLength(20).IsRequired().HasDefaultValue(IncidentCategories.Safety);
+            entity.Property(x => x.OwnerName).HasMaxLength(200);
+            entity.Property(x => x.ResponseStatus).HasMaxLength(20);
+            entity.Property(x => x.PoliceObNumber).HasMaxLength(50);
+            entity.HasIndex(x => new { x.TenantId, x.Category, x.Status });
+            entity.HasOne<Checkpoint>().WithMany().HasForeignKey(x => x.CheckpointId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<PatrolRun>().WithMany().HasForeignKey(x => x.PatrolRunId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<Visit>().WithMany().HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<TrainingRecord>(entity =>

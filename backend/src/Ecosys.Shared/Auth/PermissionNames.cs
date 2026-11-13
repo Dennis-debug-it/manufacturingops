@@ -33,6 +33,10 @@ public static class PermissionNames
     public const string VisitorsGate = "visitors.gate";
     /// <summary>Set up access zones, block and unblock visitors, approve any visit, and override a failed gate check.</summary>
     public const string VisitorsManage = "visitors.manage";
+    /// <summary>Walk patrols: scan checkpoints, report security incidents, use the panic button, hand over a shift.</summary>
+    public const string SecurityPatrol = "security.patrol";
+    /// <summary>Set up checkpoints, routes and schedules; watch the patrol board; manage security incidents.</summary>
+    public const string SecurityManage = "security.manage";
 
     /// <summary>
     /// Capabilities with no column in the legacy role/user permission tables. Their baseline comes
@@ -45,7 +49,9 @@ public static class PermissionNames
         ActivitiesManage,
         CalendarTeam,
         VisitorsGate,
-        VisitorsManage
+        VisitorsManage,
+        SecurityPatrol,
+        SecurityManage
     ];
 
     public static readonly string[] All =
@@ -75,6 +81,8 @@ public static class PermissionNames
         ActivitiesManage,
         CalendarTeam,
         VisitorsGate,
-        VisitorsManage
+        VisitorsManage,
+        SecurityPatrol,
+        SecurityManage
     ];
 }

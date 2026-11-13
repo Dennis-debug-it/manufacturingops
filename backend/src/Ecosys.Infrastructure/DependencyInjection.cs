@@ -75,6 +75,7 @@ public static class DependencyInjection
         services.AddScoped<Services.Factory.IVisitorService, Services.Factory.VisitorService>();
         services.AddScoped<Services.Factory.IVehicleLogService, Services.Factory.VehicleLogService>();
         services.AddScoped<Services.Factory.IVisitorPassService, Services.Factory.VisitorPassService>();
+        services.AddScoped<Services.Factory.IPatrolService, Services.Factory.PatrolService>();
         services.AddSingleton<Services.Factory.IVisitorBadgePdfRenderer, Services.Factory.VisitorBadgePdfRenderer>();
         services.AddScoped<Services.Factory.ITelematicsProvider, Services.Factory.TraccarProvider>();
         services.AddScoped<Services.Factory.ITelematicsSync, Services.Factory.TelematicsSync>();
@@ -214,6 +215,7 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<Services.Factory.MqttSensorListener>();
         services.AddSingleInstanceHostedService<Services.Factory.FleetWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.VisitorRetentionWorker>();
+        services.AddSingleInstanceHostedService<Services.Factory.PatrolWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.RunningCheckWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.FactoryPmWorker>();
         services.AddSingleInstanceHostedService<Services.Factory.ComplianceWorker>();

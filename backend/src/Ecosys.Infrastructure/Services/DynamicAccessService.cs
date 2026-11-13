@@ -76,7 +76,7 @@ internal static class CapabilityRoleDefaults
     /// </summary>
     private static IReadOnlyList<string> VisitorDefaults(string? role) =>
         string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)
-            ? [PermissionNames.VisitorsGate, PermissionNames.VisitorsManage]
+            ? [PermissionNames.VisitorsGate, PermissionNames.VisitorsManage, PermissionNames.SecurityPatrol, PermissionNames.SecurityManage]
             : [];
 
     /// <summary>
