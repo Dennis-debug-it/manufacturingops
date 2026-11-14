@@ -74,6 +74,8 @@ export interface GuardCheckpoint {
   radiusM: number
   instructions: string | null
   questions: string[]
+  /** The guard takes a photo here with each scan. */
+  requirePhoto: boolean
 }
 export interface GuardBundle { generatedAt: string; runs: GuardRun[]; routes: GuardRoute[]; checkpoints: GuardCheckpoint[] }
 
@@ -147,6 +149,8 @@ export interface RunDetail {
     id: string; checkpointId: string; code: string; name: string; guardName: string; method: string; scannedAt: string; receivedAt: string
     latitude: number | null; longitude: number | null; accuracyM: number | null; distanceM: number | null; validation: Validation; note: string | null
     answersJson: string | null; guardNote: string | null
+    /** The checkpoint asked for a photo; the photo arrives after the scan, so it may be missing until the phone syncs. */
+    photoRequired: boolean; photoUrl: string | null
   }[]
 }
 
@@ -204,6 +208,7 @@ export interface CheckpointRow {
   radiusM: number
   instructions: string | null
   questions: string | null
+  requirePhoto: boolean
   displayOrder: number
   isActive: boolean
   lastScanAt: string | null
@@ -220,6 +225,7 @@ export interface SaveCheckpointPayload {
   radiusM: number
   instructions: string | null
   questions: string | null
+  requirePhoto: boolean
   isActive: boolean
 }
 

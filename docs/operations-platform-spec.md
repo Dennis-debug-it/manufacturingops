@@ -410,6 +410,9 @@ Built differently from this spec:
 - No standalone Security edition yet: the add-ons are taken with a Maintenance edition.
 - Badge scanning offline identifies the person and queues check-outs; check-in still needs a signal,
   because the gate checks run on the server.
+- Checkpoint photos: a checkpoint can require a photo with each scan. The phone shrinks it, sends it
+  after the scan (queued behind it with no signal) and the supervisor sees it in the patrol, or
+  "no photo yet" while it is still on the phone.
 
 Not built yet:
 

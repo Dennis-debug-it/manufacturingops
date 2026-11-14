@@ -66,3 +66,24 @@ export function useNfcReader(active: boolean, onSerial: (serial: string) => void
     return () => { abort.abort(); reader.removeEventListener('reading', onReading) }
   }, [active])
 }
+
+/**
+ * Shrinks a phone photo before it is stored or sent: phone cameras take 3–8 MB pictures, which the
+ * upload limit refuses and a weak rural signal struggles with. The longest side becomes 1280 px, as
+ * a JPEG. If the browser cannot decode it, the original is used.
+ */
+export async function shrinkPhoto(file: Blob, maxSide = 1280, quality = 0.75): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height))
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.round(bitmap.width * scale)
+    canvas.height = Math.round(bitmap.height * scale)
+    canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+    bitmap.close()
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality))
+    return blob && blob.size > 0 ? blob : file
+  } catch {
+    return file
+  }
+}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { AlertOctagon, ArrowRightLeft, CheckCircle2, Circle, CircleDot, CloudOff, MapPin, Nfc, Play, QrCode, ShieldAlert, TriangleAlert } from 'lucide-react'
+import { AlertOctagon, ArrowRightLeft, Camera, CheckCircle2, Circle, CircleDot, CloudOff, MapPin, Nfc, Play, QrCode, ShieldAlert, TriangleAlert } from 'lucide-react'
 import { Badge, type BadgeTone } from '../../shared/components/Badge'
 import { Spinner } from '../../shared/components/Spinner'
 import { EmptyState } from '../../shared/components/EmptyState'
@@ -19,7 +19,7 @@ import {
   GUARD_KEY, INCIDENT_KINDS, RUN_LABEL, SEVERITIES, VALIDATION_LABEL, deviceId, findCheckpoint, stopStates, useGuardBundle, useHandOver, usePanic, usePatrolAccess,
   useReportIncident, useStartOwnPatrol, useStartRun, type GuardBundle, type GuardCheckpoint, type GuardRun, type RunStatus, type ScanPayload, type ScanResult, type StopState,
 } from './api'
-import { freshPosition, nfcSupported, useGeoWatch, useNfcReader } from './device'
+import { freshPosition, nfcSupported, shrinkPhoto, useGeoWatch, useNfcReader } from './device'
 
 const RUN_TONE: Record<RunStatus, BadgeTone> = { Due: 'info', InProgress: 'warning', Completed: 'success', Partial: 'warning', Missed: 'danger' }
 
@@ -183,7 +183,7 @@ function ActivePatrol({ run, bundle, position, geoError, pendingIds, onLeave }: 
   const queryClient = useQueryClient()
   const route = bundle.routes.find((x) => x.id === run.routeId)
   const [mode, setMode] = useState<'qr' | 'nfc' | null>(null)
-  const [asking, setAsking] = useState<{ checkpoint: GuardCheckpoint; code: string; byNfc: boolean } | null>(null)
+  const [asking, setAsking] = useState<{ checkpoint: GuardCheckpoint; code: string; byNfc: boolean; at: string } | null>(null)
   const [last, setLast] = useState<{ text: string; tone: 'ok' | 'warn' | 'queued' } | null>(null)
   const [cameraOff, setCameraOff] = useState<string | null>(null)
   // The checkpoint just recorded and when, so the same label still in view is not recorded twice.
@@ -205,13 +205,14 @@ function ActivePatrol({ run, bundle, position, geoError, pendingIds, onLeave }: 
     if (checkpoint) setRecent({ checkpointId: checkpoint.id, at: Date.now() })
     // The camera stays on for the next checkpoint; NFC listens again on the next tap.
     if (byNfc) setMode(null)
-    if (checkpoint && checkpoint.questions.length > 0) setAsking({ checkpoint, code, byNfc })
+    if (checkpoint && (checkpoint.questions.length > 0 || checkpoint.requirePhoto)) setAsking({ checkpoint, code, byNfc, at: new Date().toISOString() })
     else void send(checkpoint, code, byNfc, null, null)
   }
 
-  async function send(checkpoint: GuardCheckpoint | null, code: string, byNfc: boolean, answers: { question: string; ok: boolean }[] | null, note: string | null) {
+  async function send(checkpoint: GuardCheckpoint | null, code: string, byNfc: boolean, answers: { question: string; ok: boolean }[] | null, note: string | null,
+    photo: Blob | null = null, scannedAt = new Date().toISOString()) {
     const payload: ScanPayload = {
-      clientScanId: crypto.randomUUID(), code, scannedAt: new Date().toISOString(), runId: run.id,
+      clientScanId: crypto.randomUUID(), code, scannedAt, runId: run.id,
       latitude: position?.latitude ?? null, longitude: position?.longitude ?? null, accuracyM: position ? Math.round(position.accuracyM) : null,
       deviceId: deviceId(), answers, note, byNfc,
     }
@@ -221,6 +222,13 @@ function ActivePatrol({ run, bundle, position, geoError, pendingIds, onLeave }: 
         kind: 'patrol-scan', label: `${label} scanned on ${run.routeName}`, workOrderId: null, method: 'POST', url: '/api/security/scans', body: payload,
         meta: { checkpointId: checkpoint?.id ?? null, runId: run.id },
       }, () => refreshAfterSync(queryClient))
+      if (photo) {
+        // Sent after the scan (queued behind it with no signal), and found by the scan's id.
+        void performAction({
+          kind: 'patrol-photo', label: `Photo at ${label}`, workOrderId: null, method: 'POST', url: `/api/security/scans/${payload.clientScanId}/photo`,
+          file: { blob: photo, name: `${checkpoint?.code ?? 'checkpoint'}.jpg`, fields: {} }, meta: { checkpointId: checkpoint?.id ?? null, runId: run.id },
+        }, () => refreshAfterSync(queryClient)).catch(() => toast.error('The photo could not be sent.'))
+      }
       if (outcome.queued || !outcome.data) {
         setLast({ text: `${label}: saved on the phone, sent when there is signal.`, tone: 'queued' })
       } else {
@@ -262,7 +270,7 @@ function ActivePatrol({ run, bundle, position, geoError, pendingIds, onLeave }: 
         </div>
       ) : null}
 
-      {mode === 'qr' ? (
+      {mode === 'qr' && !asking ? (
         cameraOff ? <p className="text-sm text-slate-500">{cameraOff}</p> : (
           <div className="space-y-1">
             <CameraScanner onCode={(code) => onCode(code, false)} onUnavailable={setCameraOff} />
@@ -300,8 +308,8 @@ function ActivePatrol({ run, bundle, position, geoError, pendingIds, onLeave }: 
       </ol>
 
       {asking ? (
-        <QuestionSheet checkpoint={asking.checkpoint} onCancel={() => setAsking(null)}
-          onDone={(answers, note) => { const a = asking; setAsking(null); void send(a.checkpoint, a.code, a.byNfc, answers, note) }} />
+        <CheckpointSheet checkpoint={asking.checkpoint} onCancel={() => setAsking(null)}
+          onDone={(answers, note, photo) => { const a = asking; setAsking(null); void send(a.checkpoint, a.code, a.byNfc, answers.length ? answers : null, note, photo, a.at) }} />
       ) : null}
     </section>
   )
@@ -311,18 +319,40 @@ function resultVibration(validation: string | undefined): number | number[] {
   return validation && validation !== 'Valid' ? [80, 60, 80] : 60
 }
 
-function QuestionSheet({ checkpoint, onCancel, onDone }: {
-  checkpoint: GuardCheckpoint; onCancel: () => void; onDone: (answers: { question: string; ok: boolean }[], note: string | null) => void
+/** What a checkpoint asks for after the scan: its yes/no questions and, where set, a photo taken there. */
+function CheckpointSheet({ checkpoint, onCancel, onDone }: {
+  checkpoint: GuardCheckpoint; onCancel: () => void; onDone: (answers: { question: string; ok: boolean }[], note: string | null, photo: Blob | null) => void
 }) {
   const [answers, setAnswers] = useState<Record<string, boolean>>({})
   const [note, setNote] = useState('')
-  const complete = checkpoint.questions.every((q) => answers[q] !== undefined)
+  const [photo, setPhoto] = useState<Blob | null>(null)
+  const [preparing, setPreparing] = useState(false)
+  const preview = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo])
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
+  const complete = checkpoint.questions.every((q) => answers[q] !== undefined) && (!checkpoint.requirePhoto || photo !== null)
   const anyNo = Object.values(answers).some((x) => x === false)
+  const take = async (file: File | undefined) => {
+    if (!file) return
+    setPreparing(true)
+    setPhoto(await shrinkPhoto(file))
+    setPreparing(false)
+  }
   return (
     <FormDrawer open title={`${checkpoint.code} ${checkpoint.name}`} onClose={onCancel}
-      footer={<button type="button" className={cn(primaryButton, 'h-12 w-full text-base')} disabled={!complete} onClick={() => onDone(checkpoint.questions.map((q) => ({ question: q, ok: answers[q]! })), note.trim() || null)}>Record checkpoint</button>}>
+      footer={<button type="button" className={cn(primaryButton, 'h-12 w-full text-base')} disabled={!complete || preparing} onClick={() => onDone(checkpoint.questions.map((q) => ({ question: q, ok: answers[q]! })), note.trim() || null, photo)}>Record checkpoint</button>}>
       <div className="space-y-4">
         {checkpoint.instructions ? <p className="text-sm text-slate-600">{checkpoint.instructions}</p> : null}
+        {checkpoint.requirePhoto ? (
+          <div className="space-y-2">
+            <div className="text-sm font-medium text-slate-800">Photo of the checkpoint <span className="text-rose-600">*</span></div>
+            {preview ? <img src={preview} alt="Photo taken at the checkpoint" className="max-h-56 w-full rounded-lg object-cover" /> : null}
+            <label className={cn(preview ? secondaryButton : primaryButton, 'h-12 w-full cursor-pointer text-base')}>
+              <Camera className="h-5 w-5" />{preparing ? 'Preparing…' : preview ? 'Take it again' : 'Take photo'}
+              <input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(e) => { void take(e.target.files?.[0]); e.target.value = '' }} />
+            </label>
+            <p className="text-xs text-slate-500">Show the label or tag in its place, as the supervisor sees it with the scan.</p>
+          </div>
+        ) : null}
         {checkpoint.questions.map((question) => (
           <fieldset key={question} className="space-y-2">
             <legend className="text-sm font-medium text-slate-800">{question}</legend>

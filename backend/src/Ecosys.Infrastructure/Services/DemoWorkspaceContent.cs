@@ -496,8 +496,11 @@ internal sealed partial class DemoWorkspaceService
                 {
                     odometer += 1_050m + _random.Next(0, 220);
                     var litres = Math.Round(odometer / 1m % 1 + 210m + _random.Next(0, 40), 0);
+                    // 07:00 UTC, or an hour ago when a reset runs before then (a fill-up may not be in the future).
+                    var filledAt = _now.Date.AddDays(-14 * fill).AddHours(7);
+                    if (filledAt > _now) filledAt = _now.AddHours(-1);
                     await service.FleetServiceRef.AddFuelAsync(_tenantId, profile.AssetId, new NewFuelLog(
-                        _now.Date.AddDays(-14 * fill).AddHours(7), litres, litres * 182m, odometer, true, "Kericho Rubis", null), Admin, ct);
+                        filledAt, litres, litres * 182m, odometer, true, "Kericho Rubis", null), Admin, ct);
                 }
             }
 

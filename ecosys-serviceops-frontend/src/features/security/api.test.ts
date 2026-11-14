@@ -6,8 +6,8 @@ const bundle: GuardBundle = {
   runs: [],
   routes: [],
   checkpoints: [
-    { id: 'c1', code: 'CP-001', name: 'Main gate', factoryId: 'f', method: 'QrOrNfc', tagToken: 'tokenGate1234567', nfcSerial: '04A22B9C1180', latitude: null, longitude: null, radiusM: 50, instructions: null, questions: [] },
-    { id: 'c2', code: 'CP-002', name: 'Fuel store', factoryId: 'f', method: 'Qr', tagToken: 'tokenFuel1234567', nfcSerial: null, latitude: null, longitude: null, radiusM: 50, instructions: null, questions: ['Padlock intact?'] },
+    { id: 'c1', code: 'CP-001', name: 'Main gate', factoryId: 'f', method: 'QrOrNfc', tagToken: 'tokenGate1234567', nfcSerial: '04A22B9C1180', latitude: null, longitude: null, radiusM: 50, instructions: null, questions: [], requirePhoto: false },
+    { id: 'c2', code: 'CP-002', name: 'Fuel store', factoryId: 'f', method: 'Qr', tagToken: 'tokenFuel1234567', nfcSerial: null, latitude: null, longitude: null, radiusM: 50, instructions: null, questions: ['Padlock intact?'], requirePhoto: false },
   ],
 }
 

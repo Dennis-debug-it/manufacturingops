@@ -2170,6 +2170,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<int>("RadiusM")
                         .HasColumnType("integer");
 
+                    b.Property<bool>("RequirePhoto")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("TagToken")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -2255,6 +2258,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<string>("Note")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("PhotoAttachmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("PhotoRequired")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("ReceivedAt")
                         .HasColumnType("timestamp with time zone");

@@ -1,3 +1,4 @@
+using Ecosys.Api.Common;
 using System.Text.Json;
 using Ecosys.Domain.Entities;
 using Ecosys.Infrastructure.Data;
@@ -23,8 +24,12 @@ public sealed class PatrolController(
     ITenantContext tenantContext,
     IOrgScopeService orgScopeService,
     IPatrolService patrolService,
-    IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
+    IAuditLogService auditLogService,
+    IFileStorageService? fileStorageService = null) : TenantAwareControllerBase(tenantContext)
 {
+    private const long MaxPhotoBytes = 5 * 1024 * 1024;
+    private static readonly HashSet<string> PhotoTypes = new(StringComparer.OrdinalIgnoreCase) { "image/jpeg", "image/png", "image/webp" };
+
     private bool CanManage => IsAdmin || HasPermission(PermissionNames.SecurityManage);
     private bool CanPatrol => CanManage || HasPermission(PermissionNames.SecurityPatrol);
     private PatrolActor Actor => new(UserId, UserDisplayName);
@@ -67,7 +72,7 @@ public sealed class PatrolController(
             routes.Select(r => new GuardRoute(r.Id, r.Name, r.FactoryId, r.Ordered, r.MinGapSeconds,
                 r.Checkpoints.OrderBy(c => c.Sequence).Select(c => new GuardRouteStop(c.CheckpointId, c.Sequence, c.Required)).ToList())).ToList(),
             checkpoints.Select(c => new GuardCheckpoint(c.Id, c.Code, c.Name, c.FactoryId, c.Method, c.TagToken, c.NfcSerial, c.Latitude, c.Longitude, c.RadiusM,
-                c.Instructions, SplitQuestions(c.Questions))).ToList()));
+                c.Instructions, SplitQuestions(c.Questions)) { RequirePhoto = c.RequirePhoto }).ToList()));
     }
 
     [HttpPost("runs/{id:guid}/start")]
@@ -106,6 +111,41 @@ public sealed class PatrolController(
             outcome.Scan.ScannedAt, outcome.Scan.Validation, outcome.Scan.ValidationNote, outcome.Scan.DistanceM,
             run?.Id, run?.Status, run?.ValidCount, run?.RequiredCount, outcome.IncidentId));
     }
+
+    /// <summary>
+    /// The photo taken at a checkpoint, sent after its scan (from the phone's queue when there was no signal).
+    /// Keyed by the phone's scan id, so it finds the scan however late it syncs; a second photo for the same scan is ignored.
+    /// </summary>
+    [HttpPost("scans/{clientScanId:guid}/photo")]
+    [RequestSizeLimit(6_000_000)]
+    public async Task<ActionResult<ScanPhotoResponse>> ScanPhoto(Guid clientScanId, IFormFile? file, CancellationToken cancellationToken)
+    {
+        EnsurePatrol();
+        if (file is null || file.Length == 0) throw new BusinessRuleException("Take a photo of the checkpoint.");
+        if (!PhotoTypes.Contains(file.ContentType ?? "")) throw new BusinessRuleException("The photo must be a JPG, PNG or WebP image.");
+        if (await UploadedFileRules.CheckAsync(file, MaxPhotoBytes, cancellationToken) is { } problem) throw new BusinessRuleException(problem);
+        var scan = await dbContext.CheckpointScans.Include(x => x.Checkpoint)
+            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.ClientScanId == clientScanId, cancellationToken)
+            ?? throw new NotFoundException("The scan this photo belongs to has not arrived.");
+        if (scan.GuardUserId != UserId && !CanManage) throw new ForbiddenException("Only the guard who scanned the checkpoint can add its photo.");
+        if (scan.PhotoAttachmentId is { } existing) return Ok(new ScanPhotoResponse(scan.Id, AttachmentUrl(existing)));
+
+        var storage = fileStorageService ?? throw new InvalidOperationException("File storage is not set up.");
+        await using var stream = file.OpenReadStream();
+        var upload = await storage.UploadAsync(stream, string.IsNullOrWhiteSpace(file.FileName) ? "checkpoint.jpg" : file.FileName, file.ContentType!, TenantId, cancellationToken);
+        var attachment = new Attachment
+        {
+            TenantId = TenantId, EntityType = nameof(CheckpointScan), EntityId = scan.Id, FileName = $"{scan.Checkpoint!.Code}-{scan.ScannedAt:yyyyMMdd-HHmm}.jpg",
+            FileSize = upload.FileSize, MimeType = file.ContentType!, StoragePath = upload.StoragePath, UploadedByUserId = UserId,
+        };
+        attachment.PublicUrl = AttachmentUrl(attachment.Id);
+        dbContext.Attachments.Add(attachment);
+        scan.PhotoAttachmentId = attachment.Id;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(new ScanPhotoResponse(scan.Id, attachment.PublicUrl));
+    }
+
+    private static string AttachmentUrl(Guid id) => $"/api/attachments/{id}/download";
 
     [HttpPost("incidents")]
     public async Task<ActionResult<SecurityIncidentRow>> Report([FromBody] ReportSecurityIncidentRequest request, CancellationToken cancellationToken)
@@ -218,7 +258,8 @@ public sealed class PatrolController(
             .ToListAsync(cancellationToken);
         var scans = await dbContext.CheckpointScans.AsNoTracking().Where(x => x.RunId == id).OrderBy(x => x.ScannedAt)
             .Select(x => new RunScan(x.Id, x.CheckpointId, x.Checkpoint!.Code, x.Checkpoint.Name, x.GuardName, x.Method, x.ScannedAt, x.ReceivedAt, x.Latitude, x.Longitude,
-                x.AccuracyM, x.DistanceM, x.Validation, x.ValidationNote, x.AnswersJson, x.Note))
+                x.AccuracyM, x.DistanceM, x.Validation, x.ValidationNote, x.AnswersJson, x.Note)
+            { PhotoRequired = x.PhotoRequired, PhotoUrl = x.PhotoAttachmentId == null ? null : "/api/attachments/" + x.PhotoAttachmentId + "/download" })
             .ToListAsync(cancellationToken);
         return Ok(new RunDetail(row, stops, scans));
     }
@@ -386,7 +427,12 @@ public sealed record GuardRoute(Guid Id, string Name, Guid FactoryId, bool Order
 
 public sealed record GuardCheckpoint(
     Guid Id, string Code, string Name, Guid FactoryId, string Method, string TagToken, string? NfcSerial, double? Latitude, double? Longitude, int RadiusM,
-    string? Instructions, IReadOnlyList<string> Questions);
+    string? Instructions, IReadOnlyList<string> Questions)
+{
+    public bool RequirePhoto { get; init; }
+}
+
+public sealed record ScanPhotoResponse(Guid ScanId, string PhotoUrl);
 
 public sealed record GuardBundle(DateTime GeneratedAt, IReadOnlyList<GuardRun> Runs, IReadOnlyList<GuardRoute> Routes, IReadOnlyList<GuardCheckpoint> Checkpoints);
 
@@ -408,7 +454,12 @@ public sealed record RunStop(Guid CheckpointId, string Code, string Name, int Se
 
 public sealed record RunScan(
     Guid Id, Guid CheckpointId, string Code, string Name, string GuardName, string Method, DateTime ScannedAt, DateTime ReceivedAt, double? Latitude, double? Longitude,
-    double? AccuracyM, double? DistanceM, string Validation, string? Note, string? AnswersJson, string? GuardNote);
+    double? AccuracyM, double? DistanceM, string Validation, string? Note, string? AnswersJson, string? GuardNote)
+{
+    /// <summary>The checkpoint asked for a photo with this scan.</summary>
+    public bool PhotoRequired { get; init; }
+    public string? PhotoUrl { get; init; }
+}
 
 public sealed record RunDetail(RunRow Run, IReadOnlyList<RunStop> Stops, IReadOnlyList<RunScan> Scans);
 

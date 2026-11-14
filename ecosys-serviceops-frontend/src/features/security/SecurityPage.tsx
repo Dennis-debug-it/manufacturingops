@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Crosshair, MapPin, Nfc, Plus, Printer, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, Camera, CheckCircle2, Crosshair, MapPin, Nfc, Plus, Printer, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react'
+import { AuthenticatedImage } from '../../shared/components/AuthenticatedImage'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { StatCard } from '../../shared/components/StatCard'
 import { Badge, type BadgeTone } from '../../shared/components/Badge'
@@ -163,6 +164,11 @@ function RunDrawer({ id, onClose }: { id: string; onClose: () => void }) {
                       <MapPin className="h-3 w-3" />{x.distanceM !== null ? `${Math.round(x.distanceM)} m away` : 'where'}{x.method === 'Nfc' ? ' · NFC' : ''}
                     </a>
                   ) : null)}
+                  {scans.filter((x) => x.photoUrl).map((x) => (
+                    <AuthenticatedImage key={`p-${x.id}`} src={x.photoUrl!} alt={`Photo at ${stop.code} ${stop.name}, ${formatTime(x.scannedAt)}`} className="mt-2 h-32 w-full rounded-lg object-cover" />
+                  ))}
+                  {scans.some((x) => x.photoRequired && !x.photoUrl)
+                    ? <div className="mt-1 flex items-center gap-1 text-xs text-amber-700"><Camera className="h-3 w-3" />No photo yet: it arrives when the guard's phone has signal.</div> : null}
                   {scans.some((x) => new Date(x.receivedAt).getTime() - new Date(x.scannedAt).getTime() > 5 * 60_000)
                     ? <div className="mt-1 text-xs text-slate-500">Scanned with no signal, synced later.</div> : null}
                 </li>
@@ -277,7 +283,7 @@ function CheckpointsTab({ factoryId }: { factoryId: string }) {
                   <td className="px-3 py-2"><span className="font-mono text-xs text-slate-500">{x.code}</span> <span className="font-medium">{x.name}</span><div className="text-xs text-slate-500">{x.zoneName ?? x.factoryName}{x.isActive ? '' : ' · inactive'}</div></td>
                   <td className="px-3 py-2 text-xs">{CHECKPOINT_METHODS.find((m) => m.value === x.method)?.label}{x.nfcSerial ? <div className="text-emerald-700">NFC tag registered</div> : x.method !== 'Qr' ? <div className="text-amber-700">No NFC tag yet</div> : null}</td>
                   <td className="px-3 py-2 text-xs">{x.latitude !== null && x.longitude !== null ? <a className="text-[var(--app-primary)] hover:underline" href={mapLink(x.latitude, x.longitude)} target="_blank" rel="noreferrer">Set · {x.radiusM} m</a> : <span className="text-slate-400">Not set</span>}</td>
-                  <td className="px-3 py-2 text-xs text-slate-600">{x.questions ? x.questions.split('\n').length : '—'}</td>
+                  <td className="px-3 py-2 text-xs text-slate-600">{x.questions ? x.questions.split('\n').length : '—'}{x.requirePhoto ? <div className="flex items-center gap-1"><Camera className="h-3 w-3" />Photo</div> : null}</td>
                   <td className="px-3 py-2 text-xs text-slate-600">{x.lastScanAt ? formatDateTime(x.lastScanAt) : '—'}</td>
                   <td className="px-3 py-2 text-right"><button type="button" className="text-sm font-medium text-[var(--app-primary)] hover:underline" onClick={() => setEditing(x)}>Edit</button></td>
                 </tr>
@@ -301,7 +307,7 @@ function CheckpointDrawer({ checkpoint, factoryId, onClose }: { checkpoint: Chec
   const [form, setForm] = useState({
     name: checkpoint?.name ?? '', method: checkpoint?.method ?? 'QrOrNfc', accessZoneId: checkpoint?.accessZoneId ?? '', radiusM: String(checkpoint?.radiusM ?? 50),
     latitude: checkpoint?.latitude?.toString() ?? '', longitude: checkpoint?.longitude?.toString() ?? '', instructions: checkpoint?.instructions ?? '',
-    questions: checkpoint?.questions ?? '', isActive: checkpoint?.isActive ?? true,
+    questions: checkpoint?.questions ?? '', requirePhoto: checkpoint?.requirePhoto ?? false, isActive: checkpoint?.isActive ?? true,
   })
   useNfcReader(listening, (serial) => {
     setListening(false)
@@ -315,7 +321,7 @@ function CheckpointDrawer({ checkpoint, factoryId, onClose }: { checkpoint: Chec
         id: checkpoint?.id, payload: {
           factoryId: checkpoint?.factoryId ?? factoryId, name: form.name.trim(), method: form.method, accessZoneId: form.accessZoneId || null,
           latitude: form.latitude ? Number(form.latitude) : null, longitude: form.longitude ? Number(form.longitude) : null, radiusM: Number(form.radiusM) || 50,
-          instructions: form.instructions.trim() || null, questions: form.questions.trim() || null, isActive: form.isActive,
+          instructions: form.instructions.trim() || null, questions: form.questions.trim() || null, requirePhoto: form.requirePhoto, isActive: form.isActive,
         },
       })
       toast.success('Checkpoint saved')
@@ -360,6 +366,10 @@ function CheckpointDrawer({ checkpoint, factoryId, onClose }: { checkpoint: Chec
         ) : null}
         <Field label="What the guard checks here"><textarea className={textareaClass} value={form.instructions} onChange={(e) => setForm({ ...form, instructions: e.target.value })} /></Field>
         <Field label="Yes/no questions" hint="One per line, up to six. A 'No' raises an incident, e.g. 'Padlock intact?'"><textarea className={textareaClass} value={form.questions} onChange={(e) => setForm({ ...form, questions: e.target.value })} /></Field>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5" checked={form.requirePhoto} onChange={(e) => setForm({ ...form, requirePhoto: e.target.checked })} />
+          <span>Photo required with each scan<span className="block text-xs text-slate-500">The guard takes a picture at the point; you see it in the patrol. Worth it where only a QR label is used, as a photo of a label can be scanned anywhere.</span></span>
+        </label>
         {checkpoint ? <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />Active</label> : null}
       </div>
     </FormDrawer>

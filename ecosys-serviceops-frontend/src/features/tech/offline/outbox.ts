@@ -24,6 +24,8 @@ export type OutboxKind =
   | 'visitor-checkout'
   /** A checkpoint scanned on patrol, often with no signal. */
   | 'patrol-scan'
+  /** The photo taken at a checkpoint, sent after its scan. */
+  | 'patrol-photo'
 
 export interface OutboxFile {
   blob: Blob

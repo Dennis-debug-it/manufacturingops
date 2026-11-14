@@ -38,7 +38,7 @@ public sealed class PatrolSetupController(
             .Select(x => new CheckpointRow(x.Id, x.Code, x.Name, x.FactoryId, x.Factory!.Name, x.AccessZoneId, x.AccessZone != null ? x.AccessZone.Name : null, x.Method,
                 x.NfcSerial, x.Latitude, x.Longitude, x.RadiusM, x.Instructions, x.Questions, x.DisplayOrder, x.IsActive,
                 dbContext.CheckpointScans.Where(s => s.CheckpointId == x.Id).Max(s => (DateTime?)s.ScannedAt),
-                dbContext.CheckpointScans.Count(s => s.CheckpointId == x.Id && s.ScannedAt >= since)))
+                dbContext.CheckpointScans.Count(s => s.CheckpointId == x.Id && s.ScannedAt >= since)) { RequirePhoto = x.RequirePhoto })
             .ToListAsync(cancellationToken));
     }
 
@@ -242,6 +242,7 @@ public sealed class PatrolSetupController(
             checkpoint.Longitude = request.Longitude;
         }
 
+        checkpoint.RequirePhoto = request.RequirePhoto;
         checkpoint.Instructions = GateText.Trim(request.Instructions, 1000);
         var questions = PatrolController.SplitQuestions(request.Questions);
         if (questions.Count > 6) throw new BusinessRuleException("Keep it to six questions or fewer at a checkpoint.");
@@ -325,17 +326,20 @@ public sealed class PatrolSetupController(
     private async Task<CheckpointRow> CheckpointRowAsync(Guid id, CancellationToken cancellationToken) =>
         await dbContext.Checkpoints.AsNoTracking().Where(x => x.Id == id)
             .Select(x => new CheckpointRow(x.Id, x.Code, x.Name, x.FactoryId, x.Factory!.Name, x.AccessZoneId, x.AccessZone != null ? x.AccessZone.Name : null, x.Method,
-                x.NfcSerial, x.Latitude, x.Longitude, x.RadiusM, x.Instructions, x.Questions, x.DisplayOrder, x.IsActive, null, 0))
+                x.NfcSerial, x.Latitude, x.Longitude, x.RadiusM, x.Instructions, x.Questions, x.DisplayOrder, x.IsActive, null, 0) { RequirePhoto = x.RequirePhoto })
             .SingleAsync(cancellationToken);
 }
 
 public sealed record CheckpointRow(
     Guid Id, string Code, string Name, Guid FactoryId, string FactoryName, Guid? AccessZoneId, string? ZoneName, string Method, string? NfcSerial,
-    double? Latitude, double? Longitude, int RadiusM, string? Instructions, string? Questions, int DisplayOrder, bool IsActive, DateTime? LastScanAt, int ScansLast30Days);
+    double? Latitude, double? Longitude, int RadiusM, string? Instructions, string? Questions, int DisplayOrder, bool IsActive, DateTime? LastScanAt, int ScansLast30Days)
+{
+    public bool RequirePhoto { get; init; }
+}
 
 public sealed record SaveCheckpointRequest(
     Guid FactoryId, string? Name, string? Method = null, Guid? AccessZoneId = null, double? Latitude = null, double? Longitude = null, int? RadiusM = null,
-    string? Instructions = null, string? Questions = null, int? DisplayOrder = null, bool IsActive = true);
+    string? Instructions = null, string? Questions = null, int? DisplayOrder = null, bool IsActive = true, bool RequirePhoto = false);
 
 public sealed record CheckpointPositionRequest(double Latitude, double Longitude, double? AccuracyM = null);
 

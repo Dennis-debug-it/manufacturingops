@@ -239,6 +239,7 @@ internal sealed class PatrolService(
         {
             TenantId = tenantId,
             ClientScanId = request.ClientScanId,
+            PhotoRequired = checkpoint.RequirePhoto,
             RunId = run?.Id,
             CheckpointId = checkpoint.Id,
             GuardUserId = actor.UserId,

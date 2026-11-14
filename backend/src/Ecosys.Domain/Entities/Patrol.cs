@@ -38,6 +38,8 @@ public sealed class Checkpoint : AuditableEntity, ITenantEntity
     public string? Instructions { get; set; }
     /// <summary>Yes/no questions answered at the point, one per line (e.g. "Padlock intact?"). A "no" raises a security incident.</summary>
     public string? Questions { get; set; }
+    /// <summary>The guard must take a photo at the point with each scan: proof for QR-only sites, where a label could be photographed and scanned elsewhere.</summary>
+    public bool RequirePhoto { get; set; }
     public int DisplayOrder { get; set; }
     public bool IsActive { get; set; } = true;
     public OrgNode? Factory { get; set; }
@@ -176,6 +178,10 @@ public sealed class CheckpointScan : AuditableEntity, ITenantEntity
     /// <summary>Answers to the checkpoint's questions, JSON [{"question":…,"ok":true}].</summary>
     public string? AnswersJson { get; set; }
     public string? Note { get; set; }
+    /// <summary>Whether the checkpoint asked for a photo when this scan was made.</summary>
+    public bool PhotoRequired { get; set; }
+    /// <summary>The photo taken at the point (an <see cref="Attachment"/>); it is uploaded after the scan, so it may arrive later.</summary>
+    public Guid? PhotoAttachmentId { get; set; }
     public PatrolRun? Run { get; set; }
     public Checkpoint? Checkpoint { get; set; }
 }

@@ -221,6 +221,50 @@ public sealed class PatrolTests
     }
 
     [Fact]
+    public async Task ACheckpointThatAsksForAPhoto_TakesItAfterTheScan_AndTheSupervisorSeesIt()
+    {
+        await using var db = FactoryTestSupport.CreateDbContext();
+        var (site, route, points) = await RouteAsync(db);
+        points[1].RequirePhoto = true;
+        await db.SaveChangesAsync();
+        var run = await DueRunAsync(db, site, route);
+        var storage = new MemoryStorage();
+        PatrolController As(Guid userId, string permission)
+        {
+            var context = new FactoryTenantContext(site.TenantId, userId, isAdmin: false, permission);
+            return WithUser(new PatrolController(db, context, FactoryTestSupport.Scope(db, context), new PatrolService(db), FactoryTestSupport.Audit(db), storage));
+        }
+        var guard = As(site.Gate.UserId, PermissionNames.SecurityPatrol);
+
+        var bundle = Ok(await guard.Guard(null, default));
+        Assert.Equal([false, true, false], points.Select(p => bundle.Checkpoints.Single(x => x.Id == p.Id).RequirePhoto));
+
+        var t = DateTime.UtcNow.AddMinutes(-10);
+        var scanId = Guid.NewGuid();
+        await Assert.ThrowsAsync<NotFoundException>(() => guard.ScanPhoto(scanId, Jpeg(), default));
+        Ok(await guard.Scan(new ScanRequest(scanId, $"CHECKPOINT:{points[1].TagToken}", t, run.Id, points[1].Latitude, points[1].Longitude, 5), default));
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => guard.ScanPhoto(scanId, Photo("fake.jpg", "image/jpeg", "<script>"u8.ToArray()), default));
+        var other = As(site.Host.UserId, PermissionNames.SecurityPatrol);
+        await Assert.ThrowsAsync<ForbiddenException>(() => other.ScanPhoto(scanId, Jpeg(), default));
+
+        var photo = Ok(await guard.ScanPhoto(scanId, Jpeg(), default));
+        // Sent again from the phone's queue: the first photo stands.
+        Assert.Equal(photo.PhotoUrl, Ok(await guard.ScanPhoto(scanId, Jpeg(), default)).PhotoUrl);
+        var attachment = Assert.Single(await db.Attachments.ToListAsync());
+        Assert.Equal(("CheckpointScan", "CP-002"), (attachment.EntityType, attachment.FileName[..6]));
+
+        var supervisor = As(site.Manager.UserId, PermissionNames.SecurityManage);
+        var scan = Assert.Single(Ok(await supervisor.Run(run.Id, default)).Scans);
+        Assert.Equal((true, photo.PhotoUrl), (scan.PhotoRequired, scan.PhotoUrl));
+    }
+
+    private static Microsoft.AspNetCore.Http.IFormFile Jpeg() => Photo("checkpoint.jpg", "image/jpeg", [0xFF, 0xD8, 0xFF, 0xE0, 0, 0x10, (byte)'J', (byte)'F', (byte)'I', (byte)'F', 0, 1]);
+
+    private static Microsoft.AspNetCore.Http.IFormFile Photo(string name, string type, byte[] content) =>
+        new Microsoft.AspNetCore.Http.FormFile(new MemoryStream(content), 0, content.Length, "file", name) { Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(), ContentType = type };
+
+    [Fact]
     public void Patrol_IsTheSecurityAddOn()
     {
         Assert.Equal([ServiceOpsPlans.Security], ServiceOpsPlans.RequiredModules("Patrol", "/api/security/guard"));
