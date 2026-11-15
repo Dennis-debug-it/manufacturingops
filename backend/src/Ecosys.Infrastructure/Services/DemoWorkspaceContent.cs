@@ -491,13 +491,15 @@ internal sealed partial class DemoWorkspaceService
                     null, null), Admin, ct);
 
                 // Fortnightly full-tank fill-ups with the odometer, oldest first so the readings climb.
+                // The latest is yesterday morning: "today 07:00" is still in the future before 07:00 UTC,
+                // and the fuel log rejects future fill-ups, which would fail the whole reset.
                 var odometer = v.Odo - 9 * 1_150m;
                 for (var fill = 8; fill >= 0; fill--)
                 {
                     odometer += 1_050m + _random.Next(0, 220);
                     var litres = Math.Round(odometer / 1m % 1 + 210m + _random.Next(0, 40), 0);
                     await service.FleetServiceRef.AddFuelAsync(_tenantId, profile.AssetId, new NewFuelLog(
-                        _now.Date.AddDays(-14 * fill).AddHours(7), litres, litres * 182m, odometer, true, "Kericho Rubis", null), Admin, ct);
+                        _now.Date.AddDays(-14 * fill - 1).AddHours(7), litres, litres * 182m, odometer, true, "Kericho Rubis", null), Admin, ct);
                 }
             }
 
