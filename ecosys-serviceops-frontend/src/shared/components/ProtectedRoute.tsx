@@ -3,7 +3,7 @@ import { canOpenPath } from '../utils/routeAccess'
 import type { ReactNode } from 'react'
 import { Link, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import type { AppRole } from '../types/auth'
+import { type AppRole, isPlatformRole } from '../types/auth'
 import { useEntitlements } from '../hooks/useEntitlements'
 
 export interface ProtectedRouteProps {
@@ -34,7 +34,7 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
     return <Navigate to="/403" replace />
   }
 
-  if (user.role !== 'super_admin' && user.role !== 'platform_sales') {
+  if (!isPlatformRole(user.role)) {
     // Offline with nothing stored yet, the plan check can't finish; don't hold the screen on it
     // (screens that need a module still say so below, and the API enforces the plan anyway).
     const planCheckStuck = entitlements.fetchStatus === 'paused' || entitlements.isError

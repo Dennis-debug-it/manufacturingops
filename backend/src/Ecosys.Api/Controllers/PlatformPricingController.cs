@@ -20,8 +20,11 @@ public sealed class PlatformPricingController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     IAuditLogService auditLogService,
-    ILicenseGuardService licenseGuardService) : ControllerBase
+    ILicenseGuardService licenseGuardService,
+    IPlatformInvoicingService? invoicingService = null) : ControllerBase
 {
+    private IPlatformInvoicingService Invoicing => invoicingService ?? throw new InvalidOperationException("Invoicing is not set up.");
+
     private const string Vendor = "Ecosys";
 
     // ── Price book ───────────────────────────────────────────────────────────
@@ -241,6 +244,25 @@ public sealed class PlatformPricingController(
         return Ok(await TenantTermsAsync(tenantId, cancellationToken));
     }
 
+    /// <summary>
+    /// Raises a draft invoice in Platform finance from an accepted quote: year one (the year's subscription,
+    /// implementation and hardware, less a paid pilot when credited) or the pilot. Asking again returns the same invoice.
+    /// </summary>
+    [HttpPost("quotes/{id:guid}/invoice")]
+    public async Task<ActionResult<QuoteDetail>> InvoiceQuote(Guid id, [FromBody] InvoiceQuoteRequest request, CancellationToken cancellationToken)
+    {
+        var quote = await dbContext.PriceQuotes.SingleOrDefaultAsync(x => x.Id == id, cancellationToken) ?? throw new NotFoundException("Quote not found.");
+        var purpose = string.Equals(request.Purpose, PlatformInvoicePurposes.Pilot, StringComparison.OrdinalIgnoreCase) ? PlatformInvoicePurposes.Pilot
+            : string.Equals(request.Purpose, PlatformInvoicePurposes.YearOne, StringComparison.OrdinalIgnoreCase) ? PlatformInvoicePurposes.YearOne
+            : throw new BusinessRuleException("Invoice year one or the pilot.");
+        var before = purpose == PlatformInvoicePurposes.Pilot ? quote.PilotInvoiceId : quote.InvoiceId;
+        var invoice = await Invoicing.FromQuoteAsync(quote, purpose, cancellationToken);
+        if (before != invoice.Id)
+            await auditLogService.LogAsync(quote.TenantId, tenantContext.GetRequiredUserId(), "platform.pricing.quote.invoiced", nameof(PlatformInvoice), invoice.Id.ToString(),
+                $"Draft invoice {invoice.InvoiceNumber} ({(purpose == PlatformInvoicePurposes.Pilot ? "pilot" : "year one")}, {invoice.Currency} {invoice.Total:N0}) raised from {quote.QuoteNumber}.", cancellationToken);
+        return Ok(await MapDetailAsync(quote, cancellationToken));
+    }
+
     private async Task ApplyAsync(PriceQuote quote, SaveQuoteRequest request, PriceBook book, CancellationToken cancellationToken)
     {
         var customer = request.CustomerName?.Trim();
@@ -288,7 +310,10 @@ public sealed class PlatformPricingController(
     private async Task<QuoteDetail> MapDetailAsync(PriceQuote quote, CancellationToken cancellationToken)
     {
         var tenants = await TenantNamesAsync([quote.TenantId], cancellationToken);
-        return new QuoteDetail(MapRow(quote, tenants), SaveQuoteRequest.From(quote), FactoryPricing.Parse<PricingResult>(quote.ResultJson));
+        var ids = new[] { quote.InvoiceId, quote.PilotInvoiceId }.OfType<Guid>().ToList();
+        var invoices = ids.Count == 0 ? [] : await dbContext.PlatformInvoices.AsNoTracking().Where(x => ids.Contains(x.Id))
+            .Select(x => new QuoteInvoice(x.Id, x.InvoiceNumber, x.Purpose ?? "", x.Status, x.Total, x.Balance)).ToListAsync(cancellationToken);
+        return new QuoteDetail(MapRow(quote, tenants), SaveQuoteRequest.From(quote), FactoryPricing.Parse<PricingResult>(quote.ResultJson)) { Invoices = invoices };
     }
 
     private static QuoteRow MapRow(PriceQuote x, IReadOnlyDictionary<Guid, string> tenants) => new(
@@ -368,11 +393,35 @@ public sealed class PlatformPricingController(
         catch (BusinessRuleException ex) { problem = ex.Message; }
         var whatsApp = await dbContext.LicenseAddOns.AsNoTracking().SingleOrDefaultAsync(x => x.Code == license.WhatsAppAddOn, cancellationToken);
         var (officeUsed, fieldUsed) = await SeatsUsedAsync(tenantId, cancellationToken);
+        RenewalPreview? renewal = null;
+        if (invoicingService is not null && !license.IsPerpetual && license.LicensePlan is not null)
+        {
+            try { renewal = await invoicingService.PreviewRenewalAsync(license, cancellationToken); }
+            catch (BusinessRuleException) { renewal = null; }
+        }
+
         return new TenantFactoryPricingResponse(
             tenantId, license.PricingBasis, license.LicensePlan?.PlanCode, license.LicensePlan?.DisplayName, addOns.Contains(ServiceOpsPlans.Visitors), addOns.Contains(ServiceOpsPlans.Security),
             license.LicensedFactories, factoriesInWorkspace, license.FactoryAnnualPriceOverride, license.ExtraOfficeUsers, license.ExtraFieldUsers,
             license.OfficeSeats, license.FieldSeats, officeUsed, fieldUsed, license.BillingCycle,
-            LicensePricing.MonthlyValue(license, whatsApp is null ? [] : [whatsApp], book), result, problem);
+            LicensePricing.MonthlyValue(license, whatsApp is null ? [] : [whatsApp], book), result, problem)
+        {
+            Status = license.Status,
+            NextBillingDate = license.NextBillingDate,
+            IsPerpetual = license.IsPerpetual,
+            Renewal = renewal,
+        };
+    }
+
+    /// <summary>Raises the draft renewal invoice for the licence's next billing period now (the daily job does it 14 days ahead).</summary>
+    [HttpPost("tenants/{tenantId:guid}/renewal-invoice")]
+    public async Task<ActionResult<TenantFactoryPricingResponse>> RaiseRenewal(Guid tenantId, CancellationToken cancellationToken)
+    {
+        var license = await LicenseAsync(tenantId, cancellationToken);
+        var invoice = await Invoicing.RaiseRenewalAsync(license, cancellationToken);
+        await auditLogService.LogAsync(tenantId, tenantContext.GetRequiredUserId(), "platform.invoice.renewal", nameof(PlatformInvoice), invoice.Id.ToString(),
+            $"Draft renewal invoice {invoice.InvoiceNumber}: {invoice.Currency} {invoice.Total:N0}, {invoice.CoversFrom:dd MMM yyyy} to {invoice.CoversTo?.AddDays(-1):dd MMM yyyy}.", cancellationToken);
+        return Ok(await TenantTermsAsync(tenantId, cancellationToken));
     }
 
     private async Task<(int Office, int Field)> SeatsUsedAsync(Guid tenantId, CancellationToken cancellationToken)
@@ -425,7 +474,15 @@ public sealed record QuoteRow(
     Guid Id, string QuoteNumber, string CustomerName, string? ContactName, Guid? TenantId, string? TenantName, string? Edition, bool Visitors, bool Security,
     int Factories, bool IncludePilot, string Status, DateTime ValidUntil, bool Expired, decimal AnnualSubscription, decimal YearOneTotal, string? PreparedByName, DateTime CreatedAt);
 
-public sealed record QuoteDetail(QuoteRow Quote, SaveQuoteRequest Request, PricingResult? Result);
+public sealed record QuoteDetail(QuoteRow Quote, SaveQuoteRequest Request, PricingResult? Result)
+{
+    /// <summary>Invoices raised from the quote (year one, pilot).</summary>
+    public IReadOnlyList<QuoteInvoice> Invoices { get; init; } = [];
+}
+
+public sealed record QuoteInvoice(Guid Id, string InvoiceNumber, string Purpose, string Status, decimal Total, decimal Balance);
+
+public sealed record InvoiceQuoteRequest(string? Purpose);
 
 public sealed record TenantFactoryTermsRequest(string? PricingBasis, int? LicensedFactories = null, decimal? FactoryAnnualPriceOverride = null, int ExtraOfficeUsers = 0, int ExtraFieldUsers = 0);
 
@@ -433,4 +490,11 @@ public sealed record TenantFactoryPricingResponse(
     Guid TenantId, string PricingBasis, string? Edition, string? EditionName, bool Visitors, bool Security,
     int? LicensedFactories, int FactoriesInWorkspace, decimal? FactoryAnnualPriceOverride, int ExtraOfficeUsers, int ExtraFieldUsers,
     int OfficeSeats, int FieldSeats, int OfficeSeatsUsed, int FieldSeatsUsed, string BillingCycle,
-    decimal MonthlyValue, PricingResult? PerFactoryPrice, string? Problem);
+    decimal MonthlyValue, PricingResult? PerFactoryPrice, string? Problem)
+{
+    public string? Status { get; init; }
+    public DateTime? NextBillingDate { get; init; }
+    public bool IsPerpetual { get; init; }
+    /// <summary>The next renewal invoice: its period, lines and total, and the invoice when already raised.</summary>
+    public RenewalPreview? Renewal { get; init; }
+}

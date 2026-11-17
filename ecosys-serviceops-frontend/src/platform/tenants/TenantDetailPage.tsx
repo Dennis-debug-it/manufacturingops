@@ -8,6 +8,7 @@ import { EmptyState } from '../../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { ConfirmDialog } from '../../shared/components/ConfirmDialog'
 import { DetailLayout } from '../../shared/components/DetailLayout'
+import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate, formatDateTime } from '../../shared/utils/dates'
 import { formatCurrency } from '../../shared/utils/format'
 import { api } from '../../shared/api/apiClient'
@@ -110,7 +111,9 @@ export function TenantDetailPage() {
   const { data: documentDesigns, isLoading: documentDesignsLoading } = useTenantDocumentDesigns(id)
   const { data: financeSummary, isLoading: financeSummaryLoading } = useTenantFinanceSummary(id)
   const { data: moduleSettings, isLoading: moduleSettingsLoading } = useTenantModuleSettings(id)
-  const { data: communication } = useTenantCommunicationSettings(id)
+  // Support, finance and auditor staff read the tenant; only platform admins change it (the server enforces the same).
+  const canManage = usePermission('platform.tenants.edit')
+  const { data: communication } = useTenantCommunicationSettings(canManage ? id : undefined)
   const activate = useActivateTenant(id ?? '')
   const renewLicense = useRenewTenantLicense(id ?? '')
   const extendLicense = useExtendTenantLicense(id ?? '')
@@ -299,7 +302,7 @@ export function TenantDetailPage() {
       key: 'actions',
       header: '',
       cell: (row) =>
-        row.mustChangePassword ? (
+        !canManage ? null : row.mustChangePassword ? (
           <button
             type="button"
             onClick={() => void handleResendInvitation(row)}
@@ -349,7 +352,7 @@ export function TenantDetailPage() {
     {
       key: 'actions',
       header: '',
-      cell: (row) => (
+      cell: (row) => (!canManage ? null :
         <button
           type="button"
           className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
@@ -376,10 +379,12 @@ export function TenantDetailPage() {
           title="Seats"
           description="Technicians take a field seat; viewers are free; every other active user, including invitees who have not signed in yet, takes an office seat. Deactivated users and client-portal contacts take none."
         />
-        <button type="button" className={secondaryButton} onClick={openSeatsDialog}>
-          <Users className="h-4 w-4" />
-          Edit seats
-        </button>
+        {canManage ? (
+          <button type="button" className={secondaryButton} onClick={openSeatsDialog}>
+            <Users className="h-4 w-4" />
+            Edit seats
+          </button>
+        ) : null}
       </div>
       <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {seatPool('Office seats', 'tenant-seats-office', officeSeats)}
@@ -433,19 +438,21 @@ export function TenantDetailPage() {
       content: (
         <div className="space-y-5">
           {seatsPanel}
-          {tenant.tenantId ? <TenantOperationsModulesPanel tenantId={tenant.tenantId} className={panelClass} /> : null}
+          {tenant.tenantId ? <TenantOperationsModulesPanel tenantId={tenant.tenantId} className={panelClass} readOnly={!canManage} /> : null}
           {WHATSAPP_ENABLED && tenant.tenantId ? <TenantWhatsAppPanel tenantId={tenant.tenantId} className={panelClass} /> : null}
           <section className={panelClass}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <SectionTitle title="Workspace users" description="Accounts inside this tenant. Resend a lapsed setup link here — it is the only recovery path for an admin who has never signed in. Ecosys staff accounts live under Platform → Users." />
-              <button
-                type="button"
-                onClick={() => setShowAddWorkspaceUser(true)}
-                className={primaryButton}
-              >
-                <UserPlus className="h-4 w-4" />
-                Add workspace user
-              </button>
+              {canManage ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAddWorkspaceUser(true)}
+                  className={primaryButton}
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Add workspace user
+                </button>
+              ) : null}
             </div>
             <div className="mt-4">
               <DataTable<PlatformTenantUser>
@@ -553,13 +560,14 @@ export function TenantDetailPage() {
             ) : (
               <p className="mt-4 text-sm text-slate-500">This tenant has no edition yet. Activate it first, then set its pricing.</p>
             )}
-            {pricing && pricing.pricingBasis !== 'PerFactory' ? (
+            {canManage && pricing && pricing.pricingBasis !== 'PerFactory' ? (
               <div className="mt-4">
                 <button type="button" className={secondaryButton} onClick={openPricingDialog}>Set pricing</button>
               </div>
             ) : null}
           </section>
-          {tenant.tenantId && pricing ? <TenantFactoryPricingPanel tenantId={tenant.tenantId} className={panelClass} /> : null}
+          {canManage && tenant.tenantId && pricing ? <TenantFactoryPricingPanel tenantId={tenant.tenantId} className={panelClass} /> : null}
+{canManage ? (
           <div className="flex flex-wrap gap-2" data-testid="tenant-lifecycle-actions">
             {isTrial || isInactive ? <button type="button" className={primaryButton} onClick={() => setShowActivateDialog(true)}>Activate</button> : null}
             {isSuspended ? (
@@ -589,6 +597,7 @@ export function TenantDetailPage() {
             <button type="button" className={secondaryButton} onClick={openSeatsDialog}>Edit seats</button>
             {isActive || isTrial ? <button type="button" className={warningButton} onClick={() => setShowSuspend(true)}>Suspend</button> : null}
           </div>
+          ) : null}
         </div>
       ),
     },
@@ -810,7 +819,7 @@ export function TenantDetailPage() {
             }
           />
         }
-        tabs={tabs.map((tab) => ({ id: tab.id, label: tab.label, content: tab.content }))}
+        tabs={tabs.filter((tab) => canManage || (tab.id !== 'communication' && tab.id !== 'account')).map((tab) => ({ id: tab.id, label: tab.label, content: tab.content }))}
         defaultTabId="overview"
       />
 

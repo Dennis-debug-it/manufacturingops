@@ -50,7 +50,7 @@ public sealed class AuthController(
             result.CompanyName,
             result.Role,
             result.JobTitle,
-            MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId))));
+            MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId), AppRoles.IsPlatformAdminRole(result.Role))));
     }
 
     /// <summary>"Start free trial": checks the form and emails a link to confirm the address.</summary>
@@ -86,7 +86,7 @@ public sealed class AuthController(
     private static LoginResponse ToLoginResponse(LoginResult result, string timeZoneId) =>
         new(
             result.Token,
-            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId)), result.Username, result.HasEmail, result.Permissions.Capabilities),
+            new LoginUserDto(result.UserId, result.FullName, result.Email, result.Role, result.JobTitle, result.Department, result.MustChangePassword, MapPermissions(result.Permissions, IsPlatformUser(result.Role, result.TenantId), AppRoles.IsPlatformAdminRole(result.Role)), result.Username, result.HasEmail, result.Permissions.Capabilities),
             new LoginTenantDto(
                 result.TenantId,
                 result.CompanyName,
@@ -247,7 +247,7 @@ public sealed class AuthController(
                     user.HasAllBranchAccess,
                     user.DefaultBranchId,
                     user.MustChangePassword,
-                    MapPermissions(permissions, true),
+                    MapPermissions(permissions, true, AppRoles.IsPlatformAdminRole(user.Role)),
                     user.Username,
                     user.HasEmail,
                     permissions.Capabilities),
@@ -287,7 +287,7 @@ public sealed class AuthController(
                 user.HasAllBranchAccess,
                 user.DefaultBranchId,
                 user.MustChangePassword,
-                MapPermissions(permissions, isPlatformUser),
+                MapPermissions(permissions, isPlatformUser, AppRoles.IsPlatformAdminRole(user.Role)),
                 user.Username,
                 user.HasEmail,
                 permissions.Capabilities),
@@ -304,7 +304,11 @@ public sealed class AuthController(
             impersonation));
     }
 
-    private static PermissionResponse MapPermissions(UserPermissionsModel permissions, bool isPlatformOwner) =>
+    /// <summary>
+    /// Every platform user may view tenants; only the platform admin roles may create, change or deactivate
+    /// them, matching the PlatformAdminAccess policy on those endpoints.
+    /// </summary>
+    private static PermissionResponse MapPermissions(UserPermissionsModel permissions, bool isPlatformUser, bool isPlatformAdmin) =>
         new()
         {
             CanViewWorkOrders = permissions.CanViewWorkOrders,
@@ -326,11 +330,11 @@ public sealed class AuthController(
             CanViewFinanceApprovals = permissions.CanViewFinanceApprovals,
             CanManageFinanceApprovals = permissions.CanManageFinanceApprovals,
             CanOverrideMaterialStock = permissions.CanOverrideMaterialStock,
-            CanViewPlatformTenants = isPlatformOwner,
-            CanCreatePlatformTenants = isPlatformOwner,
-            CanEditPlatformTenants = isPlatformOwner,
-            CanUpdatePlatformTenantStatus = isPlatformOwner,
-            CanDeactivatePlatformTenants = isPlatformOwner
+            CanViewPlatformTenants = isPlatformUser,
+            CanCreatePlatformTenants = isPlatformUser && isPlatformAdmin,
+            CanEditPlatformTenants = isPlatformUser && isPlatformAdmin,
+            CanUpdatePlatformTenantStatus = isPlatformUser && isPlatformAdmin,
+            CanDeactivatePlatformTenants = isPlatformUser && isPlatformAdmin
         };
 
     /// <summary>

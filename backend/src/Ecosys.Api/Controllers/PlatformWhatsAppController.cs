@@ -34,6 +34,7 @@ public sealed class PlatformWhatsAppController(
         Ok(await BuildAsync(tenantId, cancellationToken));
 
     [HttpPut]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformTenantWhatsAppResponse>> Set(Guid tenantId, [FromBody] SetPlatformTenantWhatsAppRequest request, CancellationToken cancellationToken)
     {
         if (tenantId == PlatformConstants.RootTenantId)

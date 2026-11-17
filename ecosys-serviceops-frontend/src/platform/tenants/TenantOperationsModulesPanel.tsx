@@ -16,7 +16,7 @@ const LABELS: Record<string, { label: string; description: string }> = {
 }
 
 /** The Factory Operations add-ons a tenant takes with its edition. Each switch adds its module. */
-export function TenantOperationsModulesPanel({ tenantId, className }: { tenantId: string; className: string }) {
+export function TenantOperationsModulesPanel({ tenantId, className, readOnly = false }: { tenantId: string; className: string; readOnly?: boolean }) {
   const queryClient = useQueryClient()
   const queryKey = ['platform', 'tenants', tenantId, 'operations-modules']
   const { data, isLoading, isError } = useQuery({
@@ -53,7 +53,7 @@ export function TenantOperationsModulesPanel({ tenantId, className }: { tenantId
                 role="switch"
                 aria-checked={on}
                 aria-label={info.label}
-                disabled={save.isPending}
+                disabled={save.isPending || readOnly}
                 onClick={() => save.mutate(on ? data.enabled.filter((x) => x !== module) : [...data.enabled, module])}
                 className={cn('relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-60', on ? 'bg-[var(--app-primary)]' : 'bg-slate-300')}
               >

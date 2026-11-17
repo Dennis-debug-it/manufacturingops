@@ -10,6 +10,7 @@ import { LicenseWarningBanner } from '../components/LicenseWarningBanner'
 import { ConnectivityBanner } from '../components/ConnectivityBanner'
 import { Crystal } from '../components/Crystal'
 import { crystalForScreen } from './crystalForScreen'
+import { isPlatformRole } from '../types/auth'
 
 export interface AppShellProps {
   children?: ReactNode
@@ -19,7 +20,7 @@ export function AppShell({ children }: AppShellProps) {
   const { user } = useAuth()
   const location = useLocation()
 
-  if (user?.role === 'super_admin' || user?.role === 'platform_sales') {
+  if (isPlatformRole(user?.role)) {
     return <>{children}</>
   }
 

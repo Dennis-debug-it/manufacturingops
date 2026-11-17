@@ -8811,6 +8811,12 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<DateTime?>("CoversFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("CoversTo")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -8851,6 +8857,13 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<Guid?>("PriceQuoteId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Purpose")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<Guid?>("QuotationId")
                         .HasColumnType("uuid");
 
@@ -8888,7 +8901,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.HasIndex("QuotationId");
 
-                    b.HasIndex("TenantId");
+                    b.HasIndex("TenantId", "Purpose", "CoversFrom");
 
                     b.ToTable("platform_invoices", (string)null);
                 });
@@ -9945,12 +9958,18 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("IncludePilot")
                         .HasColumnType("boolean");
 
+                    b.Property<Guid?>("InvoiceId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
                     b.Property<bool>("OnPremises")
                         .HasColumnType("boolean");
+
+                    b.Property<Guid?>("PilotInvoiceId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("PreparedByName")
                         .HasMaxLength(200)

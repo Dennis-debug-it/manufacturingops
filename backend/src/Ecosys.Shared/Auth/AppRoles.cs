@@ -55,6 +55,15 @@ public static class AppRoles
         Auditor
     ];
 
+    /// <summary>
+    /// Platform staff who run the platform: tenants, licences, pricing, users and settings. The other platform
+    /// roles (support, finance, auditors) read, and finance also bills; see the Platform* policies in Program.cs.
+    /// </summary>
+    public static readonly string[] PlatformAdminRoles = [SuperAdmin, PlatformOwner, PlatformSuperAdmin, PlatformAdmin];
+
+    public static bool IsPlatformAdminRole(string? role) =>
+        role is not null && Array.Exists(PlatformAdminRoles, candidate => string.Equals(candidate, role, StringComparison.OrdinalIgnoreCase));
+
     public static readonly string[] TenantRoles =
     [
         Admin,

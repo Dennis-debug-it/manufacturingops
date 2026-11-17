@@ -300,6 +300,11 @@ export interface PlatformInvoice {
   lines: PlatformInvoiceLine[]
   createdAt: string
   updatedAt: string | null
+  /** Renewal, YearOne or Pilot when the platform raised it. */
+  purpose?: string | null
+  coversFrom?: string | null
+  coversTo?: string | null
+  priceQuoteId?: string | null
 }
 
 export interface PlatformPayment {

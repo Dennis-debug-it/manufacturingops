@@ -102,6 +102,27 @@ const rolePermissions: Record<AppRole, string[]> = {
     'platform.tenants.view',
     'platform.finance.view',
   ],
+  // Ecosys finance staff bill tenants: Platform finance, plus read access to tenants, reports and the audit log.
+  platform_finance: [
+    'platform.dashboard.view',
+    'platform.tenants.view',
+    'platform.finance.view',
+    'platform.finance.manage',
+    'platform.reports.view',
+    'platform.audit.view',
+  ],
+  platform_support: [
+    'platform.dashboard.view',
+    'platform.tenants.view',
+    'platform.reports.view',
+    'platform.audit.view',
+  ],
+  platform_auditor: [
+    'platform.dashboard.view',
+    'platform.tenants.view',
+    'platform.reports.view',
+    'platform.audit.view',
+  ],
 }
 
 /** Action strings backed by a real per-user `PermissionSet` field from the backend. */

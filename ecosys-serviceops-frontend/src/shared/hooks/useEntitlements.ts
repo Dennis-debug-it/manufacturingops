@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '../api/apiClient'
 import { useAuth } from './useAuth'
 import { canAccessModulePath, type ServiceOpsModule } from '../utils/entitlements'
+import { isPlatformRole } from '../types/auth'
 
 export function useEntitlements() {
   const { user, tenant, isAuthenticated } = useAuth()
-  const isPlatform = user?.role === 'super_admin' || user?.role === 'platform_sales'
+  const isPlatform = isPlatformRole(user?.role)
   const query = useQuery({
     queryKey: ['tenant-license', tenant?.tenantId],
     queryFn: () => api.get<{ planCode: string; planName: string; modules: ServiceOpsModule[]; officeSeats?: number | null; fieldSeats?: number | null; whatsAppAddOn?: string | null }>('/api/tenant/license'),

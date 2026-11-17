@@ -8,6 +8,7 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { brand } from '../../shared/config/brand'
 import { resolveErrorMessage } from '../../shared/api/apiError'
 import { Logo } from '../../shared/components/Logo'
+import { isPlatformRole } from '../../shared/types/auth'
 
 const loginSchema = z
   .object({
@@ -90,7 +91,7 @@ export function LoginPage() {
         navigate('/change-password', { replace: true })
         return
       }
-      navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : destinationFor(session.user.role), { replace: true })
+      navigate(isPlatformRole(session.user.role) ? '/platform/dashboard' : destinationFor(session.user.role), { replace: true })
     } catch (error) {
       setSubmitError(resolveErrorMessage(error))
     }

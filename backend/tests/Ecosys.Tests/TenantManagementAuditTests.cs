@@ -211,6 +211,9 @@ public sealed partial class AuthEmailSafetyTests
     [InlineData(typeof(PlatformLicensingController))]
     [InlineData(typeof(PlatformUsersController))]
     [InlineData(typeof(PlatformSupportToolsController))]
+    [InlineData(typeof(PlatformOperationsModulesController))]
+    [InlineData(typeof(PlatformWhatsAppController))]
+    [InlineData(typeof(PlatformPricingController))]
     public void Audit_TenantLifecycleMutations_RequireAnAdminLevelPlatformPolicy(Type controllerType)
     {
         var classPolicies = controllerType.GetCustomAttributes<AuthorizeAttribute>().Select(x => x.Policy);

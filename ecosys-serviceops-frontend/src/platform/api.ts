@@ -564,11 +564,12 @@ export interface LicenseUsageSnapshot {
   daysRemaining: number | null
 }
 
-export function useLicensePlans() {
+export function useLicensePlans(enabled = true) {
   return useQuery({
     queryKey: ['platform', 'licensing', 'plans'],
     queryFn: () => api.get<PlatformLicensePlan[]>(endpoints.platformLicensing.plans),
     staleTime: 30_000,
+    enabled,
   })
 }
 

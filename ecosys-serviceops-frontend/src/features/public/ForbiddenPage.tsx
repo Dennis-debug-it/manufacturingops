@@ -2,10 +2,11 @@ import { Link } from 'react-router-dom'
 import { ShieldAlert } from 'lucide-react'
 import { EmptyState } from '../../shared/components/EmptyState'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { isPlatformRole } from '../../shared/types/auth'
 
 export function ForbiddenPage() {
   const { user } = useAuth()
-  const isPlatformUser = user?.role === 'super_admin' || user?.role === 'platform_sales'
+  const isPlatformUser = isPlatformRole(user?.role)
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-2xl">

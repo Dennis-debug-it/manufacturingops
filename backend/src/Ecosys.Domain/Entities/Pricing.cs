@@ -102,6 +102,10 @@ public sealed class PriceQuote : AuditableEntity
     public decimal AnnualSubscription { get; set; }
     public decimal YearOneTotal { get; set; }
     public string? PreparedByName { get; set; }
+    /// <summary>The year-one invoice raised from this quote.</summary>
+    public Guid? InvoiceId { get; set; }
+    /// <summary>The pilot invoice raised from this quote.</summary>
+    public Guid? PilotInvoiceId { get; set; }
 }
 
 public static class PricingBases

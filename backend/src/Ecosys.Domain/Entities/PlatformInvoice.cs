@@ -2,6 +2,16 @@ using Ecosys.Domain.Common;
 
 namespace Ecosys.Domain.Entities;
 
+public static class PlatformInvoicePurposes
+{
+    /// <summary>A subscription renewal for one billing period.</summary>
+    public const string Renewal = "Renewal";
+    /// <summary>Year one from an accepted quote: a year's subscription plus implementation and hardware.</summary>
+    public const string YearOne = "YearOne";
+    /// <summary>A paid pilot from an accepted quote.</summary>
+    public const string Pilot = "Pilot";
+}
+
 public sealed class PlatformInvoice : AuditableEntity
 {
     public string InvoiceNumber { get; set; } = string.Empty;
@@ -22,6 +32,16 @@ public sealed class PlatformInvoice : AuditableEntity
     public DateTime IssueDate { get; set; } = DateTime.UtcNow;
     public DateTime? DueDate { get; set; }
     public string? Notes { get; set; }
+
+    /// <summary>
+    /// What the invoice is for: <see cref="PlatformInvoicePurposes"/>. Subscription invoices carry the period
+    /// they pay for, and paying one extends the licence by that period rather than by one billing cycle.
+    /// </summary>
+    public string? Purpose { get; set; }
+    public DateTime? CoversFrom { get; set; }
+    public DateTime? CoversTo { get; set; }
+    /// <summary>The price-book quote it was raised from, when there is one.</summary>
+    public Guid? PriceQuoteId { get; set; }
 
     public Tenant? Tenant { get; set; }
     public PlatformQuotation? Quotation { get; set; }

@@ -45,7 +45,8 @@ export interface LicenseTermDialogProps {
  * internal license flag. Shared between Activate and Renew, which need the identical field set.
  */
 export function LicenseTermDialog({ open, title, tenantName, confirmLabel, onCancel, onConfirm, submitting, currentPlanId }: LicenseTermDialogProps) {
-  const { data: plans } = useLicensePlans()
+  // Only fetched while the dialog is open (the page is also shown to staff who cannot change licences).
+  const { data: plans } = useLicensePlans(open)
   const [planId, setPlanId] = useState<string>('')
   const [startsAt, setStartsAt] = useState(todayIso())
   const [expiresAt, setExpiresAt] = useState(() => addMonthsIso(todayIso(), 12))

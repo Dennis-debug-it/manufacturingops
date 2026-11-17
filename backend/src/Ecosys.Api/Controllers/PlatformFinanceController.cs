@@ -17,7 +17,8 @@ public sealed class PlatformFinanceController(
     AppDbContext dbContext,
     ITenantContext tenantContext,
     IAuditLogService auditLogService,
-    IPlatformBillingLifecycleService billingLifecycleService) : ControllerBase
+    IPlatformBillingLifecycleService billingLifecycleService,
+    IPlatformInvoicingService? invoicingService = null) : ControllerBase
 {
     private const string TaxSettingsCategory = "platform-finance-taxes";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -155,7 +156,7 @@ public sealed class PlatformFinanceController(
         await dbContext.SaveChangesAsync(cancellationToken);
         quotation.ConvertedInvoiceId = invoice.Id;
         await dbContext.SaveChangesAsync(cancellationToken);
-        await billingLifecycleService.QueueInvoiceIssuedEmailAsync(invoice, tenantContext.UserId, cancellationToken);
+        // The invoice starts as a draft; it is emailed when it is sent.
         return Ok(MapInvoice(invoice));
     }
 
@@ -180,7 +181,8 @@ public sealed class PlatformFinanceController(
         await ApplyInvoiceAsync(invoice, request, true, cancellationToken);
         dbContext.PlatformInvoices.Add(invoice);
         await dbContext.SaveChangesAsync(cancellationToken);
-        await billingLifecycleService.QueueInvoiceIssuedEmailAsync(invoice, tenantContext.UserId, cancellationToken);
+        // A draft is not emailed; it goes to the customer when it is sent (or when created already sent).
+        if (invoice.Status != "Draft") await billingLifecycleService.QueueInvoiceIssuedEmailAsync(invoice, tenantContext.UserId, cancellationToken);
         return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id }, MapInvoice(invoice));
     }
 
@@ -193,8 +195,20 @@ public sealed class PlatformFinanceController(
         return Ok(MapInvoice(invoice));
     }
 
+    /// <summary>Sends the invoice: marks it sent and emails it to the customer (once; sending again does not email again).</summary>
     [HttpPost("invoices/{id:guid}/send")]
-    public Task<ActionResult<PlatformInvoiceResponse>> SendInvoice(Guid id, CancellationToken cancellationToken) => UpdateInvoiceStatusAsync(id, "Sent", cancellationToken);
+    public async Task<ActionResult<PlatformInvoiceResponse>> SendInvoice(Guid id, CancellationToken cancellationToken)
+    {
+        var invoice = await LoadInvoiceAsync(id, cancellationToken);
+        if (invoice.Status is "Void" or "Paid") throw new BusinessRuleException($"This invoice is {invoice.Status.ToLowerInvariant()}.");
+        var firstSend = invoice.Status == "Draft";
+        if (firstSend) invoice.Status = "Sent";
+        await dbContext.SaveChangesAsync(cancellationToken);
+        if (firstSend) await billingLifecycleService.QueueInvoiceIssuedEmailAsync(invoice, tenantContext.UserId, cancellationToken);
+        await auditLogService.LogAsync(invoice.TenantId, tenantContext.GetRequiredUserId(), "platform.invoice.sent", nameof(PlatformInvoice), invoice.Id.ToString(),
+            $"Invoice {invoice.InvoiceNumber} sent to {invoice.CustomerEmail ?? invoice.CustomerName}.", cancellationToken: cancellationToken);
+        return Ok(MapInvoice(invoice));
+    }
 
     [HttpPost("invoices/{id:guid}/mark-paid")]
     public async Task<ActionResult<PlatformInvoiceResponse>> MarkInvoicePaid(Guid id, [FromBody] MarkInvoicePaidRequest? request, CancellationToken cancellationToken)
@@ -203,19 +217,16 @@ public sealed class PlatformFinanceController(
         var amount = request?.AmountPaid ?? invoice.Balance;
         if (amount <= 0) throw new BusinessRuleException("Paid amount must be greater than zero.");
 
-        invoice.AmountPaid += amount;
-        if (invoice.AmountPaid >= invoice.Total)
+        // Marking paid records a receipt and runs the same steps as a payment: the tenant's licence is
+        // extended (by the period the invoice covers) and a receipt is emailed.
+        if (invoicingService is not null)
         {
-            invoice.AmountPaid = invoice.Total;
-            invoice.Balance = 0;
-            invoice.Status = "Paid";
-        }
-        else
-        {
-            invoice.Balance = invoice.Total - invoice.AmountPaid;
-            invoice.Status = "PartiallyPaid";
+            await invoicingService.RecordPaymentAsync(invoice, amount, NormalizePaymentMethod(request?.Method), NormalizeOptional(request?.Reference), null,
+                tenantContext.UserId, cancellationToken);
+            return Ok(MapInvoice(invoice));
         }
 
+        PlatformInvoicePayments.Apply(invoice, amount);
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(MapInvoice(invoice));
     }
@@ -265,18 +276,7 @@ public sealed class PlatformFinanceController(
 
         if (invoice is not null)
         {
-            invoice.AmountPaid += payment.Amount;
-            if (invoice.AmountPaid >= invoice.Total)
-            {
-                invoice.AmountPaid = invoice.Total;
-                invoice.Balance = 0;
-                invoice.Status = "Paid";
-            }
-            else
-            {
-                invoice.Balance = invoice.Total - invoice.AmountPaid;
-                invoice.Status = "PartiallyPaid";
-            }
+            PlatformInvoicePayments.Apply(invoice, payment.Amount);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -580,6 +580,7 @@ public sealed class PlatformFinanceController(
 
     private async Task<string> GenerateDocumentNumberAsync(string documentType, string defaultPrefix, CancellationToken cancellationToken)
     {
+        if (invoicingService is not null) return await invoicingService.NextNumberAsync(documentType, defaultPrefix, cancellationToken);
         var setting = await dbContext.NumberingSettings.SingleOrDefaultAsync(
             x => x.TenantId == PlatformConstants.RootTenantId && x.BranchId == null && x.DocumentType == documentType,
             cancellationToken);
@@ -650,7 +651,13 @@ public sealed class PlatformFinanceController(
             x.Id, x.InvoiceNumber, x.TenantId, x.QuotationId, x.CustomerName, x.CustomerEmail, x.Currency, x.Subtotal, x.DiscountRate, x.DiscountAmount,
             x.TaxRate, x.TaxAmount, x.Total, x.AmountPaid, x.Balance, x.Status, x.IssueDate, x.DueDate, x.Notes,
             x.Lines.Select(y => new PlatformInvoiceLineResponse(y.Id, y.Description, y.Quantity, y.UnitPrice, y.Taxable, y.LineTotal)).ToList(),
-            x.CreatedAt, x.UpdatedAt);
+            x.CreatedAt, x.UpdatedAt)
+        {
+            Purpose = x.Purpose,
+            CoversFrom = x.CoversFrom,
+            CoversTo = x.CoversTo,
+            PriceQuoteId = x.PriceQuoteId,
+        };
 
     private static PlatformPaymentResponse MapPayment(PlatformPayment x) =>
         new(x.Id, x.PaymentNumber, x.InvoiceId, x.TenantId, x.Amount, x.Currency, x.Method, x.Status, x.Reference, x.PaidAt, x.Notes, x.CreatedAt, x.UpdatedAt);
@@ -827,13 +834,20 @@ public sealed record UpsertPlatformTemplateRequest(
     bool? ShowLogo,
     bool? ShowTenantBranding,
     bool? ShowPoweredByEcosys);
-public sealed record MarkInvoicePaidRequest(decimal? AmountPaid);
+public sealed record MarkInvoicePaidRequest(decimal? AmountPaid, string? Method = null, string? Reference = null);
 
 public sealed record FinanceAging(decimal Current, decimal Days1To30, decimal Days31To60, decimal Days61To90, decimal Days90Plus);
 public sealed record PlatformFinanceDashboardResponse(decimal TotalRevenue, decimal OutstandingInvoices, decimal OverdueInvoices, decimal ExpensesThisMonth, decimal ProfitEstimate, decimal QuotationConversionRate, IReadOnlyCollection<PlatformPaymentResponse> RecentPayments, IReadOnlyCollection<PlatformInvoiceResponse> RecentInvoices, IReadOnlyCollection<PlatformInvoiceResponse> OverdueAccounts, FinanceAging Aging);
 public sealed record PlatformQuotationResponse(Guid Id, string QuotationNumber, Guid? TenantId, string CustomerName, string? CustomerEmail, string Currency, decimal Subtotal, decimal DiscountRate, decimal DiscountAmount, decimal TaxRate, decimal TaxAmount, decimal Total, string Status, DateTime? ValidUntil, string? Notes, Guid? ConvertedInvoiceId, IReadOnlyCollection<PlatformQuotationLineResponse> Lines, DateTime CreatedAt, DateTime? UpdatedAt);
 public sealed record PlatformQuotationLineResponse(Guid Id, string Description, decimal Quantity, decimal UnitPrice, bool Taxable, decimal LineTotal);
-public sealed record PlatformInvoiceResponse(Guid Id, string InvoiceNumber, Guid? TenantId, Guid? QuotationId, string CustomerName, string? CustomerEmail, string Currency, decimal Subtotal, decimal DiscountRate, decimal DiscountAmount, decimal TaxRate, decimal TaxAmount, decimal Total, decimal AmountPaid, decimal Balance, string Status, DateTime IssueDate, DateTime? DueDate, string? Notes, IReadOnlyCollection<PlatformInvoiceLineResponse> Lines, DateTime CreatedAt, DateTime? UpdatedAt);
+public sealed record PlatformInvoiceResponse(Guid Id, string InvoiceNumber, Guid? TenantId, Guid? QuotationId, string CustomerName, string? CustomerEmail, string Currency, decimal Subtotal, decimal DiscountRate, decimal DiscountAmount, decimal TaxRate, decimal TaxAmount, decimal Total, decimal AmountPaid, decimal Balance, string Status, DateTime IssueDate, DateTime? DueDate, string? Notes, IReadOnlyCollection<PlatformInvoiceLineResponse> Lines, DateTime CreatedAt, DateTime? UpdatedAt)
+{
+    /// <summary>Renewal, YearOne or Pilot when raised by the platform; null for one entered by hand.</summary>
+    public string? Purpose { get; init; }
+    public DateTime? CoversFrom { get; init; }
+    public DateTime? CoversTo { get; init; }
+    public Guid? PriceQuoteId { get; init; }
+}
 public sealed record PlatformInvoiceLineResponse(Guid Id, string Description, decimal Quantity, decimal UnitPrice, bool Taxable, decimal LineTotal);
 public sealed record PlatformPaymentResponse(Guid Id, string PaymentNumber, Guid? InvoiceId, Guid? TenantId, decimal Amount, string Currency, string Method, string Status, string? Reference, DateTime PaidAt, string? Notes, DateTime CreatedAt, DateTime? UpdatedAt);
 public sealed record PlatformExpenseResponse(Guid Id, DateTime ExpenseDate, string Category, string? Vendor, string Description, decimal Amount, decimal TaxAmount, decimal TotalAmount, string Currency, string PaymentMethod, string? AttachmentUrl, string Status, DateTime? ApprovedAt, Guid? TenantId, DateTime CreatedAt, DateTime? UpdatedAt);

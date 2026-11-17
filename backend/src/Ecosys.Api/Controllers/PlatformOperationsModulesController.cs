@@ -33,6 +33,7 @@ public sealed class PlatformOperationsModulesController(
     }
 
     [HttpPut]
+    [Authorize(Policy = "PlatformAdminAccess")]
     public async Task<ActionResult<PlatformOperationsModulesResponse>> Set(Guid tenantId, [FromBody] SetPlatformOperationsModulesRequest request, CancellationToken cancellationToken)
     {
         if (tenantId == PlatformConstants.RootTenantId)

@@ -104,7 +104,22 @@ export interface SaveQuote {
   terms: QuoteTerms
 }
 
-export interface QuoteDetail { quote: QuoteRow; request: SaveQuote; result: PricingResult | null }
+export interface QuoteInvoice { id: string; invoiceNumber: string; purpose: string; status: string; total: number; balance: number }
+export interface QuoteDetail { quote: QuoteRow; request: SaveQuote; result: PricingResult | null; invoices: QuoteInvoice[] }
+
+export interface RenewalPreview {
+  coversFrom: string
+  coversTo: string
+  months: number
+  currency: string
+  lines: { description: string; quantity: number; unitPrice: number; taxable: boolean }[]
+  subtotal: number
+  taxRate: number
+  tax: number
+  total: number
+  existingInvoiceId: string | null
+  existingInvoiceNumber: string | null
+}
 
 export type PricingBasis = 'PerSeat' | 'PerFactory'
 export interface TenantFactoryPricing {
@@ -127,6 +142,10 @@ export interface TenantFactoryPricing {
   monthlyValue: number
   perFactoryPrice: PricingResult | null
   problem: string | null
+  status?: string | null
+  nextBillingDate?: string | null
+  isPerpetual?: boolean
+  renewal?: RenewalPreview | null
 }
 export interface TenantFactoryTerms {
   pricingBasis: PricingBasis
@@ -182,6 +201,20 @@ export const useSaveQuote = () => useQuoteMutation(({ id, quote }: { id?: string
   id ? api.put<QuoteDetail>(`${BASE}/quotes/${id}`, quote) : api.post<QuoteDetail>(`${BASE}/quotes`, quote))
 export const useQuoteStatus = () => useQuoteMutation(({ id, status }: { id: string; status: QuoteStatus }) => api.post<QuoteDetail>(`${BASE}/quotes/${id}/status`, { status }))
 export const useCopyQuote = () => useQuoteMutation((id: string) => api.post<QuoteDetail>(`${BASE}/quotes/${id}/copy`))
+
+export const useInvoiceQuote = () => useQuoteMutation(({ id, purpose }: { id: string; purpose: 'YearOne' | 'Pilot' }) =>
+  api.post<QuoteDetail>(`${BASE}/quotes/${id}/invoice`, { purpose }))
+
+export function useRaiseRenewal(tenantId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post<TenantFactoryPricing>(`${BASE}/tenants/${tenantId}/renewal-invoice`),
+    onSuccess: (result) => {
+      queryClient.setQueryData([...KEY, 'tenant', tenantId], result)
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'finance'] })
+    },
+  })
+}
 
 export function useDeleteQuote() {
   const queryClient = useQueryClient()

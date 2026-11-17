@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { AlertTriangle, ArrowLeft, Building2, Copy, Download, Save, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { AlertTriangle, ArrowLeft, Building2, Copy, Download, FileText, Save, Trash2 } from 'lucide-react'
 import { Spinner } from '../../shared/components/Spinner'
 import { StatusBadge } from '../../shared/components/StatusBadge'
 import { formatDate } from '../../shared/utils/dates'
@@ -8,7 +9,7 @@ import { cn } from '../../shared/utils/cn'
 import { Field, dangerButton, inputClass, primaryButton, secondaryButton, textareaClass } from '../../features/factory/components/ui'
 import { useTenants } from '../api'
 import {
-  EDITION_LABEL, downloadQuotePdf, money, newTerms, useApplyQuote, useCopyQuote, useDeleteQuote, usePreview, usePriceBook, useQuote, useQuoteStatus, useSaveQuote,
+  EDITION_LABEL, downloadQuotePdf, money, newTerms, useApplyQuote, useCopyQuote, useDeleteQuote, useInvoiceQuote, usePreview, usePriceBook, useQuote, useQuoteStatus, useSaveQuote,
   type PricingResult, type QuoteStatus, type QuoteTerms, type SaveQuote,
 } from './api'
 
@@ -32,6 +33,15 @@ function QuoteForm({ id, initial, onOpen, onClose }: { id: string | null; initia
   const copy = useCopyQuote()
   const remove = useDeleteQuote()
   const apply = useApplyQuote()
+  const invoice = useInvoiceQuote()
+  const invoices = detail.data?.invoices ?? []
+  const raise = (purpose: 'YearOne' | 'Pilot') => {
+    if (!id) return
+    void invoice.mutateAsync({ id, purpose }).then((d) => {
+      const raised = d.invoices.find((x) => x.purpose === purpose)
+      toast.success(raised ? `Draft invoice ${raised.invoiceNumber} raised; send it from Finance` : 'Invoice raised')
+    }).catch(() => undefined)
+  }
   const [form, setForm] = useState<SaveQuote>(initial)
   const [dirty, setDirty] = useState(false)
   const terms = form.terms
@@ -100,6 +110,17 @@ function QuoteForm({ id, initial, onOpen, onClose }: { id: string | null; initia
               </button>
             ) : <span className="text-slate-500">Link it to a workspace (copy, then choose one) to bill from it.</span>
           ) : null}
+          {quote.status === 'Accepted' ? (
+            <>
+              {!invoices.some((x) => x.purpose === 'YearOne') ? <button type="button" className={secondaryButton} disabled={invoice.isPending} onClick={() => raise('YearOne')}><FileText className="h-4 w-4" />Invoice year one</button> : null}
+              {detail.data?.result?.pilot && !invoices.some((x) => x.purpose === 'Pilot') ? <button type="button" className={secondaryButton} disabled={invoice.isPending} onClick={() => raise('Pilot')}><FileText className="h-4 w-4" />Invoice the pilot</button> : null}
+            </>
+          ) : null}
+          {invoices.map((x) => (
+            <Link key={x.id} to="/platform/finance" className="inline-flex items-center gap-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700 hover:bg-slate-100">
+              <FileText className="h-3.5 w-3.5" />{x.purpose === 'Pilot' ? 'Pilot' : 'Year one'}: {x.invoiceNumber} · {x.status} · {money(x.total)}
+            </Link>
+          ))}
         </div>
       ) : null}
 

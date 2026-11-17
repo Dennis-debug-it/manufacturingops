@@ -3706,6 +3706,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
         {
             entity.ToTable("platform_invoices");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Purpose).HasMaxLength(20);
+            entity.HasIndex(x => new { x.TenantId, x.Purpose, x.CoversFrom });
             entity.Property(x => x.InvoiceNumber).HasMaxLength(60).IsRequired();
             entity.Property(x => x.CustomerName).HasMaxLength(200).IsRequired();
             entity.Property(x => x.CustomerEmail).HasMaxLength(256);

@@ -83,9 +83,12 @@ internal sealed class PlatformBillingLifecycleService(
             return;
         }
 
-        // An unrecognized or Custom cycle (no fixed length) falls back to a monthly-equivalent step.
+        // An invoice that names the period it pays for (a renewal, year one, a pilot) extends the licence by
+        // that period. Otherwise one billing cycle; an unrecognized or Custom cycle falls back to a month.
         BillingCycles.TryGetFixedCycleDays(BillingCycles.Monthly, out var monthlyDays);
-        var cycleDays = BillingCycles.TryGetFixedCycleDays(license.BillingCycle, out var days) ? days : monthlyDays;
+        var cycleDays = invoice is { CoversFrom: { } from, CoversTo: { } to } && to > from
+            ? (to - from).TotalDays
+            : BillingCycles.TryGetFixedCycleDays(license.BillingCycle, out var days) ? days : monthlyDays;
         var invoiceTotal = invoice?.Total ?? payment.Amount;
         var fraction = invoiceTotal <= 0 ? 1d : Math.Min(1d, (double)(payment.Amount / invoiceTotal));
         var extensionDays = cycleDays * fraction;
@@ -103,6 +106,20 @@ internal sealed class PlatformBillingLifecycleService(
         license.ExpiresAt = newExpiry;
         license.NextBillingDate = newExpiry;
         license.OverdueWarningSentAt = null;
+
+        // A renewal draft for a period this payment has now covered (e.g. year one was paid after the renewal
+        // was raised) would bill the same months twice. Drafts were never sent, so they are voided; a sent one is
+        // left for finance to deal with.
+        var staleDrafts = await dbContext.PlatformInvoices
+            .Where(x => x.TenantId == tenantId.Value && x.Purpose == PlatformInvoicePurposes.Renewal && x.Status == "Draft" && x.AmountPaid == 0
+                && x.CoversFrom != null && x.CoversFrom < newExpiry.Date && (invoice == null || x.Id != invoice.Id))
+            .ToListAsync(cancellationToken);
+        foreach (var stale in staleDrafts)
+        {
+            stale.Status = "Void";
+            stale.Balance = 0;
+            stale.Notes = $"{stale.Notes} Voided: this period was paid by {(invoice?.InvoiceNumber ?? payment.PaymentNumber)}.".Trim();
+        }
 
         // Payment converts any trial (including a lapsed TrialExpired one — TM-P1-05), an expired term and
         // a non-payment suspension to Active. A manual suspension is an operator decision that payment

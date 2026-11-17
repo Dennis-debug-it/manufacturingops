@@ -181,6 +181,7 @@ public static class DependencyInjection
         services.AddScoped<IScheduledReportService, ScheduledReportService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
         services.AddScoped<IPlatformBillingLifecycleService, PlatformBillingLifecycleService>();
+        services.AddScoped<IPlatformInvoicingService, PlatformInvoicingService>();
         // Every one of these ten workers generates work orders, sends customer email or writes
         // snapshots on a timer. Registered plainly they ran on every replica, so `--scale api=2`
         // produced duplicate preventive-maintenance work orders and duplicate customer emails. The
@@ -209,6 +210,7 @@ public static class DependencyInjection
         services.AddSingleInstanceHostedService<AttendanceAutoClockOutWorker>();
         services.AddSingleInstanceHostedService<EscalationRuleWorker>();
         services.AddSingleInstanceHostedService<SubscriptionLifecycleWorker>();
+        services.AddSingleInstanceHostedService<RenewalInvoiceWorker>();
         services.AddSingleInstanceHostedService<NotificationPushWorker>();
         services.AddSingleInstanceHostedService<NotificationHousekeepingWorker>();
         services.AddSingleInstanceHostedService<ActivityReminderWorker>();

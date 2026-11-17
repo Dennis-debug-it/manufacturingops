@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Plus, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../shared/components/PageHeader'
 import { AsyncPanel } from '../shared/components/AsyncPanel'
 import { LastUpdated } from '../shared/components/LastUpdated'
@@ -32,6 +33,9 @@ const tabs: Array<{ id: TabId; label: string }> = [
 type FinanceAction = 'send' | 'mark-paid' | 'void' | 'convert' | 'approve'
 
 export function FinancePage() {
+  const queryClient = useQueryClient()
+  // Every action and new record changes the lists, totals and dashboard: reload them all.
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['platform', 'finance'] })
   const dashboard = useFinanceDashboard()
   const quotations = useFinanceQuotations()
   const invoices = useFinanceInvoices()
@@ -88,6 +92,14 @@ export function FinancePage() {
   const invoiceColumns: DataTableColumn<PlatformInvoice>[] = [
     { key: 'invoiceNumber', header: 'Invoice', cell: (row) => row.invoiceNumber },
     { key: 'customerName', header: 'Customer', cell: (row) => row.customerName },
+    {
+      key: 'for', header: 'For', cell: (row) => (row.purpose ? (
+        <span className="text-xs">
+          {row.purpose === 'YearOne' ? 'Year one' : row.purpose}
+          {row.coversFrom && row.coversTo ? <span className="block text-slate-500">{formatDate(row.coversFrom)} – {formatDate(new Date(new Date(row.coversTo).getTime() - 86_400_000).toISOString())}</span> : null}
+        </span>
+      ) : '—'),
+    },
     { key: 'total', header: 'Total', cell: (row) => formatCurrency(row.total, row.currency) },
     { key: 'paid', header: 'Paid', cell: (row) => formatCurrency(row.amountPaid, row.currency) },
     { key: 'balance', header: 'Balance', cell: (row) => formatCurrency(row.balance, row.currency) },
@@ -98,15 +110,21 @@ export function FinancePage() {
       header: 'Actions',
       cell: (row) => (
         <div className="flex flex-wrap gap-2">
-          <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'send')}>
-            Send
-          </button>
-          <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'mark-paid')}>
-            Mark paid
-          </button>
-          <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'void')}>
-            Void
-          </button>
+          {row.status === 'Draft' ? (
+            <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'send')}>
+              Send
+            </button>
+          ) : null}
+          {row.status !== 'Paid' && row.status !== 'Void' ? (
+            <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'mark-paid')}>
+              Mark paid
+            </button>
+          ) : null}
+          {row.status !== 'Void' && row.amountPaid === 0 ? (
+            <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'void')}>
+              Void
+            </button>
+          ) : null}
         </div>
       ),
     },
@@ -156,9 +174,10 @@ export function FinancePage() {
       } else if ('expenseDate' in actionTarget) {
         if (action === 'approve') await api.post(endpoints.platformFinance.expenseApprove(actionTarget.id))
       }
-      toast.success('Finance action completed')
+      toast.success(action === 'send' ? 'Sent' : action === 'mark-paid' ? 'Marked paid; receipt recorded' : action === 'void' ? 'Voided' : action === 'convert' ? 'Draft invoice created' : 'Done')
       setActionTarget(null)
       setAction(null)
+      void refresh()
     } catch {
       // handled by interceptor
     }
@@ -317,14 +336,14 @@ export function FinancePage() {
           </div>
         )}
       >
-        <CreateFinanceForm kind={createKind} formId={createFormId} onSaved={() => setCreateKind(null)} />
+        <CreateFinanceForm kind={createKind} formId={createFormId} onSaved={() => { setCreateKind(null); void refresh() }} />
       </FormDrawer>
 
       <ConfirmDialog
         open={actionTarget !== null && action !== null}
-        title="Confirm finance action"
-        message="This will call the live platform finance API."
-        confirmLabel="Confirm"
+        title={actionTitle(action)}
+        message={actionMessage(action, actionTarget)}
+        confirmLabel={actionTitle(action)}
         onCancel={() => {
           setActionTarget(null)
           setAction(null)
@@ -544,4 +563,23 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
       <div className="mt-4">{children}</div>
     </section>
   )
+}
+
+const ACTION_TITLE: Record<FinanceAction, string> = { send: 'Send', 'mark-paid': 'Mark paid', void: 'Void', convert: 'Convert to invoice', approve: 'Approve' }
+
+function actionTitle(action: FinanceAction | null) {
+  return action ? ACTION_TITLE[action] : 'Confirm'
+}
+
+/** Says what the action does, in particular what reaches the customer and what happens to their subscription. */
+function actionMessage(action: FinanceAction | null, target: PlatformInvoice | PlatformQuotation | PlatformExpense | null) {
+  const number = target && 'invoiceNumber' in target ? target.invoiceNumber : target && 'quotationNumber' in target ? String(target.quotationNumber) : 'this'
+  switch (action) {
+    case 'send': return `Email invoice ${number} to the customer and mark it sent?`
+    case 'mark-paid': return `Record the outstanding balance of ${number} as paid? A receipt is emailed, and the tenant's subscription is extended by the period the invoice covers.`
+    case 'void': return `Void ${number}? It stays on record with nothing owing.`
+    case 'convert': return `Turn quotation ${number} into a draft invoice? It is emailed when you send it.`
+    case 'approve': return 'Approve this expense?'
+    default: return ''
+  }
 }

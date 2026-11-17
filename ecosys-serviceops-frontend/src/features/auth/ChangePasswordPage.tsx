@@ -8,6 +8,7 @@ import { endpoints } from '../../shared/api/endpoints'
 import { resolveErrorMessage } from '../../shared/api/apiError'
 import { Logo } from '../../shared/components/Logo'
 import { useAuth } from '../../shared/hooks/useAuth'
+import { isPlatformRole } from '../../shared/types/auth'
 
 const changePasswordSchema = z
   .object({
@@ -56,7 +57,7 @@ export function ChangePasswordPage() {
         password: values.newPassword,
         ...(user.hasEmail ? {} : { workspace: tenant?.companyName ?? '' }),
       })
-      navigate(session.user.role === 'super_admin' || session.user.role === 'platform_sales' ? '/platform/dashboard' : '/', { replace: true })
+      navigate(isPlatformRole(session.user.role) ? '/platform/dashboard' : '/', { replace: true })
     } catch {
       // The password is changed either way; fall back to a normal sign-in.
       await logout()

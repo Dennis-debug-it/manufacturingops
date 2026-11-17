@@ -84,16 +84,16 @@ export const tenantNavItems: NavItem[] = [
 export const platformNavItems: NavItem[] = [
   // `/platform/overview` rather than `/platform`: the shell's active-state test treats `to` as a
   // path prefix, so a bare `/platform` matched every platform route and kept Overview highlighted.
-  { label: 'Overview', to: '/platform/overview', roles: ['super_admin', 'platform_sales'], permission: 'platform.dashboard.view', icon: ShieldCheck },
-  { label: 'Tenants', to: '/platform/tenants', roles: ['super_admin', 'platform_sales'], permission: 'platform.tenants.view', icon: Building2 },
+  { label: 'Overview', to: '/platform/overview', roles: ['super_admin', 'platform_sales', 'platform_finance', 'platform_support', 'platform_auditor'], permission: 'platform.dashboard.view', icon: ShieldCheck },
+  { label: 'Tenants', to: '/platform/tenants', roles: ['super_admin', 'platform_sales', 'platform_finance', 'platform_support', 'platform_auditor'], permission: 'platform.tenants.view', icon: Building2 },
   // The demo endpoints are platform-admin only (PlatformAdminAccess).
   { label: 'Demo workspace', to: '/platform/demo', roles: ['super_admin'], permission: 'platform.tenants.view', icon: Factory },
-  { label: 'Finance', to: '/platform/finance', roles: ['super_admin'], permission: 'platform.finance.view', icon: Wallet },
+  { label: 'Finance', to: '/platform/finance', roles: ['super_admin', 'platform_finance'], permission: 'platform.finance.view', icon: Wallet },
   { label: 'Users', to: '/platform/users', roles: ['super_admin'], permission: 'platform.users.view', icon: Users },
   { label: 'Licensing', to: '/platform/licensing', roles: ['super_admin'], permission: 'platform.licensing.view', icon: FileText },
   { label: 'Pricing', to: '/platform/pricing', roles: ['super_admin'], permission: 'platform.licensing.view', icon: Calculator },
-  { label: 'Reports', to: '/platform/reports', roles: ['super_admin'], permission: 'platform.reports.view', icon: BarChart3 },
-  { label: 'Audit Logs', to: '/platform/audit', roles: ['super_admin'], permission: 'platform.audit.view', icon: Settings2 },
+  { label: 'Reports', to: '/platform/reports', roles: ['super_admin', 'platform_finance', 'platform_support', 'platform_auditor'], permission: 'platform.reports.view', icon: BarChart3 },
+  { label: 'Audit Logs', to: '/platform/audit', roles: ['super_admin', 'platform_finance', 'platform_support', 'platform_auditor'], permission: 'platform.audit.view', icon: Settings2 },
   { label: 'System Health', to: '/platform/health', roles: ['super_admin'], permission: 'platform.settings.view', icon: Activity },
   { label: 'Settings', to: '/platform/settings', roles: ['super_admin'], permission: 'platform.settings.view', icon: Settings2 },
 ]

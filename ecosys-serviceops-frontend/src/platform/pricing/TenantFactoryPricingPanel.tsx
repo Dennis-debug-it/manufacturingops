@@ -4,7 +4,8 @@ import toast from 'react-hot-toast'
 import { FormDrawer } from '../../shared/components/FormDrawer'
 import { cn } from '../../shared/utils/cn'
 import { Field, inputClass, primaryButton, secondaryButton } from '../../features/factory/components/ui'
-import { money, useTenantPricing, useSaveTenantPricing, type TenantFactoryPricing, type TenantFactoryTerms } from './api'
+import { formatDate } from '../../shared/utils/dates'
+import { money, useRaiseRenewal, useTenantPricing, useSaveTenantPricing, type TenantFactoryPricing, type TenantFactoryTerms } from './api'
 
 /**
  * How the tenant is billed: per seat (the original model) or per factory from the price book. Per factory,
@@ -47,8 +48,31 @@ export function TenantFactoryPricingPanel({ tenantId, className }: { tenantId: s
       ) : null}
       {perFactory && data.factoryAnnualPriceOverride != null ? <p className="mt-3 text-sm text-slate-600">Agreed price: {money(data.factoryAnnualPriceOverride)} per factory per year.</p> : null}
       {data.problem ? <p className="mt-3 text-sm text-amber-700">{data.problem}</p> : null}
+      <Renewal data={data} />
       {editing ? <TermsDrawer data={data} onClose={() => setEditing(false)} /> : null}
     </section>
+  )
+}
+
+/** The next renewal invoice: raised automatically 14 days ahead as a draft, or now from here. */
+function Renewal({ data }: { data: TenantFactoryPricing }) {
+  const raise = useRaiseRenewal(data.tenantId)
+  const renewal = data.renewal
+  if (data.isPerpetual) return <p className="mt-3 text-sm text-slate-500">This licence never expires, so no renewal invoices are raised.</p>
+  if (!renewal || renewal.subtotal <= 0) return null
+  const last = new Date(new Date(renewal.coversTo).getTime() - 86_400_000).toISOString()
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/70 p-3 text-sm">
+      <div>
+        <div className="font-medium text-slate-900">Next renewal: {formatDate(renewal.coversFrom)} – {formatDate(last)}</div>
+        <div className="text-slate-600">{money(renewal.subtotal, renewal.currency)} plus VAT ({money(renewal.total, renewal.currency)}) for {renewal.months} {renewal.months === 1 ? 'month' : 'months'}.
+          {renewal.existingInvoiceNumber ? null : data.status === 'Active' ? ' Raised as a draft 14 days ahead.' : ' Raised once the subscription is active.'}</div>
+      </div>
+      {renewal.existingInvoiceNumber
+        ? <Link to="/platform/finance" className="text-sm font-medium text-[var(--app-primary)] hover:underline">Invoice {renewal.existingInvoiceNumber} raised</Link>
+        : <button type="button" className={secondaryButton} disabled={raise.isPending}
+            onClick={() => void raise.mutateAsync().then((r) => toast.success(`Draft invoice ${r.renewal?.existingInvoiceNumber ?? ''} raised; send it from Finance`)).catch(() => undefined)}>Raise renewal invoice now</button>}
+    </div>
   )
 }
 

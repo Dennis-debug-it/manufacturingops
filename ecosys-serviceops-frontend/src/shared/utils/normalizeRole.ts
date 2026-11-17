@@ -35,8 +35,6 @@ export function normalizeRole(rawRole: string): AppRole {
     case 'finance':
       return 'finance'
     case 'viewer':
-    case 'auditor':
-    case 'readonlyauditor':
       return 'viewer'
     // Generic tenant staff account with no admin flag — the seeded demo technician
     // account uses this. Default to 'technician' since operational execution access
@@ -45,13 +43,21 @@ export function normalizeRole(rawRole: string): AppRole {
     // usePermission()/PermissionSet rather than relying on this bucket.
     case 'user':
       return 'technician'
+    // Platform staff. The server's platform and tenant role names never coincide, so the name alone says which.
     case 'superadmin':
     case 'platformsuperadmin':
     case 'platformowner':
     case 'platformadmin':
+      return 'super_admin'
     case 'platformfinance':
     case 'financeadmin':
-      return 'super_admin'
+      return 'platform_finance'
+    case 'support':
+    case 'supportadmin':
+      return 'platform_support'
+    case 'auditor':
+    case 'readonlyauditor':
+      return 'platform_auditor'
     case 'platformsales':
       return 'platform_sales'
     default:

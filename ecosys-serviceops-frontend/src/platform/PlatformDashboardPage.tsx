@@ -21,6 +21,7 @@ import {
 } from './api'
 import { licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from './common'
 import type { PlatformTenantListItem } from './types'
+import { usePermission } from '../shared/hooks/usePermission'
 
 // Independent, self-refreshing health pill — deliberately NOT part of the dashboard's combined
 // loading/error gate, so system-health stays visible even if other panels are slow or failing.
@@ -75,6 +76,8 @@ function Kpi({ label, value, icon, tone = 'default' }: { label: string; value: s
 }
 
 export function PlatformDashboardPage() {
+  // System health is an admin page; other platform staff don't get the chip that links to it.
+  const canSeeHealth = usePermission('platform.settings.view')
   const summary = usePlatformDashboardSummary()
   const platform = usePlatformSummary()
   const tenants = useTenants()
@@ -126,7 +129,7 @@ export function PlatformDashboardPage() {
       <PageHeader
         title="Platform Owner Overview"
         subtitle="Operational command centre for tenant lifecycle, licensing, and finance."
-        primaryAction={<div className="flex items-center gap-3"><LastUpdated at={summary.dataUpdatedAt} /><HealthChip /></div>}
+        primaryAction={<div className="flex items-center gap-3"><LastUpdated at={summary.dataUpdatedAt} />{canSeeHealth ? <HealthChip /> : null}</div>}
       />
 
       <section className="relative grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">

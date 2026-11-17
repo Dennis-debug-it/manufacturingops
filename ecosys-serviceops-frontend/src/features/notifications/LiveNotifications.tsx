@@ -7,6 +7,7 @@ import { getAuthToken } from '../../shared/api/sessionStore'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { notificationKeys } from './api'
 import type { UnreadCount } from './types'
+import { isPlatformRole } from '../../shared/types/auth'
 
 // SignalR hands handlers whatever the hub sent; each subscriber types its own arguments.
 type LiveHandler = (...args: never[]) => void
@@ -41,7 +42,7 @@ export function LiveNotificationsProvider({ children }: { children: ReactNode })
   const [live, setLive] = useState(false)
   const connectionRef = useRef<HubConnection | null>(null)
   const listenersRef = useRef(new Set<{ event: string; handler: LiveHandler }>())
-  const userId = isAuthenticated && user && user.role !== 'super_admin' && user.role !== 'platform_sales' ? user.userId : null
+  const userId = isAuthenticated && user && !isPlatformRole(user.role) ? user.userId : null
 
   useEffect(() => {
     if (!userId) return undefined

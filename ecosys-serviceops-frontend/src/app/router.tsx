@@ -21,7 +21,7 @@ import { MyNotificationSettingsPage } from '../features/notifications/Notificati
 import { MyTimePage } from '../features/team/MyTimePage'
 import { AppShell } from '../shared/layout/AppShell'
 import { createModulePage, type ModulePageConfig } from '../shared/pages/ModulePage'
-import type { AppRole } from '../shared/types/auth'
+import { type AppRole, isPlatformRole, PLATFORM_ROLES } from '../shared/types/auth'
 import { DashboardPage } from '../features/dashboard/DashboardPage'
 import { ExecutiveDashboardPage } from '../features/dashboard/ExecutiveDashboardPage'
 import { LoginPage } from '../features/auth/LoginPage'
@@ -155,7 +155,7 @@ import { WhatsAppInboxPage } from '../features/whatsapp/WhatsAppInboxPage'
 import { PlatformApp } from '../platform/PlatformApp'
 
 const tenantRoles: AppRole[] = ['admin', 'manager', 'dispatcher', 'technician', 'materials_controller', 'finance', 'viewer']
-const platformRoles: AppRole[] = ['super_admin', 'platform_sales']
+const platformRoles: AppRole[] = [...PLATFORM_ROLES]
 
 const lazyModulePage = (config: ModulePageConfig) =>
   lazy(async () => ({ default: createModulePage(config) }))
@@ -262,7 +262,7 @@ function InventoryRequestsRedirect() {
 
 function DashboardRoute() {
   const { user } = useAuth()
-  if (user?.role === 'super_admin' || user?.role === 'platform_sales') {
+  if (isPlatformRole(user?.role)) {
     return <Navigate to="/platform/overview" replace />
   }
   if (isTechnicianWorkspaceUser(user)) {
@@ -284,7 +284,7 @@ function HomeRedirect() {
   if (!isAuthenticated || !user) {
     return <Navigate to="/login" replace />
   }
-  if (user.role === 'super_admin' || user.role === 'platform_sales') {
+  if (isPlatformRole(user.role)) {
     return <Navigate to="/platform/overview" replace />
   }
   if (isTechnicianWorkspaceUser(user)) {

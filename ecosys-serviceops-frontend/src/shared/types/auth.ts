@@ -1,5 +1,14 @@
 export type TenantRole = 'admin' | 'manager' | 'dispatcher' | 'technician' | 'materials_controller' | 'finance' | 'viewer'
-export type PlatformRole = 'super_admin' | 'platform_sales'
+/**
+ * Ecosys staff. super_admin runs the platform; the others match the server's platform roles:
+ * finance (PlatformFinance, FinanceAdmin) bills, support (Support, SupportAdmin) and auditor
+ * (Auditor, ReadOnlyAuditor) read. Each only sees the sections the server lets it use.
+ */
+export type PlatformRole = 'super_admin' | 'platform_sales' | 'platform_finance' | 'platform_support' | 'platform_auditor'
+export const PLATFORM_ROLES: readonly PlatformRole[] = ['super_admin', 'platform_sales', 'platform_finance', 'platform_support', 'platform_auditor']
+export function isPlatformRole(role: string | null | undefined): role is PlatformRole {
+  return PLATFORM_ROLES.includes(role as PlatformRole)
+}
 export type AppRole = TenantRole | PlatformRole
 
 export interface PermissionSet {
