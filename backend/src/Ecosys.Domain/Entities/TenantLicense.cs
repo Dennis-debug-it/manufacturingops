@@ -84,6 +84,16 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
     /// </summary>
     public string? OperationsAddOns { get; set; }
 
+    /// <summary>How the subscription is priced: <see cref="PricingBases.PerSeat"/> (default) or <see cref="PricingBases.PerFactory"/>.</summary>
+    public string PricingBasis { get; set; } = PricingBases.PerSeat;
+    /// <summary>Factories licensed when billed per factory.</summary>
+    public int? LicensedFactories { get; set; }
+    /// <summary>A price agreed with this tenant per factory per year, replacing the list prices and group discount. Null uses the price book.</summary>
+    public decimal? FactoryAnnualPriceOverride { get; set; }
+    /// <summary>Users bought beyond those each factory includes, billed monthly at the price book's extra-user price.</summary>
+    public int ExtraOfficeUsers { get; set; }
+    public int ExtraFieldUsers { get; set; }
+
     public Tenant? Tenant { get; set; }
     public LicensePlan? LicensePlan { get; set; }
 }

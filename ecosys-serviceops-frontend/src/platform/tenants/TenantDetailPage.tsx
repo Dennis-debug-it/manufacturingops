@@ -42,6 +42,7 @@ import { LicenseTermDialog } from './LicenseTermDialog'
 import { ClientTemplatesPanel } from './ClientTemplatesPanel'
 import { TenantWhatsAppPanel } from './TenantWhatsAppPanel'
 import { TenantOperationsModulesPanel } from './TenantOperationsModulesPanel'
+import { TenantFactoryPricingPanel } from '../pricing/TenantFactoryPricingPanel'
 import { WHATSAPP_ENABLED } from '../../shared/config/features'
 import { parseLicensedUsers, summarizeSeats } from './licensedUsers'
 import type { PlatformTenantAuditLog } from '../types'
@@ -550,12 +551,13 @@ export function TenantDetailPage() {
             ) : (
               <p className="mt-4 text-sm text-slate-500">This tenant has no edition yet. Activate it first, then set its pricing.</p>
             )}
-            {pricing ? (
+            {pricing && pricing.pricingBasis !== 'PerFactory' ? (
               <div className="mt-4">
                 <button type="button" className={secondaryButton} onClick={openPricingDialog}>Set pricing</button>
               </div>
             ) : null}
           </section>
+          {tenant.tenantId && pricing ? <TenantFactoryPricingPanel tenantId={tenant.tenantId} className={panelClass} /> : null}
           <div className="flex flex-wrap gap-2" data-testid="tenant-lifecycle-actions">
             {isTrial || isInactive ? <button type="button" className={primaryButton} onClick={() => setShowActivateDialog(true)}>Activate</button> : null}
             {isSuspended ? (

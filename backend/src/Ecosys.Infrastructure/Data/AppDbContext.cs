@@ -176,6 +176,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<NumberingSetting> NumberingSettings => Set<NumberingSetting>();
     public DbSet<LicensePlan> LicensePlans => Set<LicensePlan>();
     public DbSet<LicenseAddOn> LicenseAddOns => Set<LicenseAddOn>();
+    public DbSet<PriceBook> PriceBooks => Set<PriceBook>();
+    public DbSet<PriceQuote> PriceQuotes => Set<PriceQuote>();
     public DbSet<TenantLicense> TenantLicenses => Set<TenantLicense>();
     public DbSet<MrrSnapshot> MrrSnapshots => Set<MrrSnapshot>();
     public DbSet<AssignmentGroup> AssignmentGroups => Set<AssignmentGroup>();
@@ -3021,6 +3023,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.OfficeSeatAnnualPrice).HasPrecision(18, 2);
             entity.Property(x => x.FieldSeatMonthlyPrice).HasPrecision(18, 2);
             entity.Property(x => x.FieldSeatAnnualPrice).HasPrecision(18, 2);
+            entity.Property(x => x.FactoryAnnualPrice).HasPrecision(18, 2);
             entity.HasIndex(x => x.PlanCode).IsUnique();
             // The three editions. Prices start at zero ("not priced") and are set on the platform; the
             // Operations/Finance/Suite plans were retired by the MoveToEditionsAndSeatTypes migration.
@@ -3029,6 +3032,41 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555561"), PlanCode = "essentials", DisplayName = "Ecosys Factory Maintenance Essentials", MinOfficeSeats = 2, IsActive = true, CreatedAt = seededAt },
                 new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555562"), PlanCode = "professional", DisplayName = "Ecosys Factory Maintenance Professional", MinOfficeSeats = 3, IsActive = true, CreatedAt = seededAt },
                 new LicensePlan { Id = Guid.Parse("55555555-5555-5555-5555-555555555563"), PlanCode = "enterprise", DisplayName = "Ecosys Factory Maintenance Enterprise", MinOfficeSeats = 10, IsActive = true, CreatedAt = seededAt });
+        });
+
+        modelBuilder.Entity<PriceBook>(entity =>
+        {
+            entity.ToTable("price_books");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            foreach (var money in new[] { nameof(PriceBook.VatPercent), nameof(PriceBook.VisitorsFactoryAnnualPrice), nameof(PriceBook.SecurityFactoryAnnualPrice),
+                nameof(PriceBook.SecuritySuiteFactoryAnnualPrice), nameof(PriceBook.ExtraUserMonthlyPrice), nameof(PriceBook.ImplementationFeeMin), nameof(PriceBook.ImplementationFeeMax),
+                nameof(PriceBook.ImplementationFeeDefault), nameof(PriceBook.OnPremisesMultiplier), nameof(PriceBook.OnPremisesSetupFee), nameof(PriceBook.PilotFee) })
+                entity.Property(money).HasPrecision(18, 2);
+            entity.Property(x => x.DiscountTiersJson).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.HardwareJson).HasMaxLength(8000).IsRequired();
+            entity.Property(x => x.QuoteTerms).HasMaxLength(2000);
+        });
+
+        modelBuilder.Entity<PriceQuote>(entity =>
+        {
+            entity.ToTable("price_quotes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.QuoteNumber).HasMaxLength(30).IsRequired();
+            entity.HasIndex(x => x.QuoteNumber).IsUnique();
+            entity.Property(x => x.CustomerName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.ContactName).HasMaxLength(200);
+            entity.Property(x => x.ContactEmail).HasMaxLength(200);
+            entity.Property(x => x.Edition).HasMaxLength(50);
+            entity.Property(x => x.ImplementationFeePerFactory).HasPrecision(18, 2);
+            entity.Property(x => x.DiscountPercentOverride).HasPrecision(5, 2);
+            entity.Property(x => x.HardwareJson).HasMaxLength(4000);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.AnnualSubscription).HasPrecision(18, 2);
+            entity.Property(x => x.YearOneTotal).HasPrecision(18, 2);
+            entity.Property(x => x.PreparedByName).HasMaxLength(200);
+            entity.HasIndex(x => x.TenantId);
         });
 
         modelBuilder.Entity<LicenseAddOn>(entity =>
@@ -3070,6 +3108,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.Property(x => x.SuspensionReason).HasMaxLength(30);
             entity.Property(x => x.IsPerpetual).HasDefaultValue(false);
+            entity.Property(x => x.PricingBasis).HasMaxLength(20).IsRequired().HasDefaultValue(PricingBases.PerSeat);
+            entity.Property(x => x.FactoryAnnualPriceOverride).HasPrecision(18, 2);
             entity.Property(x => x.WhatsAppAddOn).HasMaxLength(50);
             entity.Property(x => x.OperationsAddOns).HasMaxLength(100);
             entity.Property(x => x.OfficeSeatPriceOverride).HasPrecision(18, 2);

@@ -127,6 +127,8 @@ export interface PlatformTenantPricing {
   officeSeatPrice: number
   fieldSeatPrice: number
   monthlyValue: number
+  /** PerSeat, or PerFactory (billed from the price book; see Pricing). */
+  pricingBasis?: 'PerSeat' | 'PerFactory'
 }
 
 export interface PlatformTenantAuditLog {

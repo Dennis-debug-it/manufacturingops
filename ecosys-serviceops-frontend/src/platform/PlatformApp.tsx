@@ -28,6 +28,7 @@ import { AnnouncementsSettingsPage } from './settings/AnnouncementsSettingsPage'
 import { SupportSettingsPage } from './settings/SupportSettingsPage'
 import { HealthSettingsPage } from './settings/HealthSettingsPage'
 import { DemoWorkspacePage } from './DemoWorkspacePage'
+import { PricingPage } from './pricing/PricingPage'
 
 /**
  * The roles allowed to open each platform section, keyed by the section's nav `to` path.
@@ -90,6 +91,7 @@ export function PlatformApp() {
 
           <Route path="users" element={<RequirePlatformSection navPath="/platform/users"><UsersPage /></RequirePlatformSection>} />
           <Route path="licensing" element={<RequirePlatformSection navPath="/platform/licensing"><LicensingPage /></RequirePlatformSection>} />
+          <Route path="pricing" element={<RequirePlatformSection navPath="/platform/pricing"><PricingPage /></RequirePlatformSection>} />
           <Route path="finance" element={<RequirePlatformSection navPath="/platform/finance"><FinancePage /></RequirePlatformSection>} />
           <Route path="reports" element={<RequirePlatformSection navPath="/platform/reports"><ReportsPage /></RequirePlatformSection>} />
           <Route path="audit" element={<RequirePlatformSection navPath="/platform/audit"><AuditPage /></RequirePlatformSection>} />

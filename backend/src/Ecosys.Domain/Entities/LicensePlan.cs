@@ -16,6 +16,8 @@ public sealed class LicensePlan : AuditableEntity
     public decimal FieldSeatMonthlyPrice { get; set; }
     public decimal FieldSeatAnnualPrice { get; set; }
     public int MinOfficeSeats { get; set; } = 1;
+    /// <summary>Price per factory per year for workspaces billed per factory (see <see cref="PriceBook"/>). Zero means not priced.</summary>
+    public decimal FactoryAnnualPrice { get; set; }
     public bool IsActive { get; set; } = true;
 
     public bool IsPriced => OfficeSeatMonthlyPrice > 0 || OfficeSeatAnnualPrice > 0;

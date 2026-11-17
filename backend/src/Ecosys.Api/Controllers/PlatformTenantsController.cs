@@ -1385,7 +1385,11 @@ public sealed class PlatformTenantsController(
                     license.FieldSeatPriceOverride,
                     LicensePricing.OfficeSeatPrice(license),
                     LicensePricing.FieldSeatPrice(license),
-                    LicensePricing.MonthlyValue(license, await dbContext.LicenseAddOns.AsNoTracking().ToListAsync(cancellationToken))),
+                    LicensePricing.MonthlyValue(license, await dbContext.LicenseAddOns.AsNoTracking().ToListAsync(cancellationToken),
+                        await dbContext.PriceBooks.AsNoTracking().OrderBy(x => x.CreatedAt).FirstOrDefaultAsync(cancellationToken)))
+                {
+                    PricingBasis = license.PricingBasis,
+                },
         };
     }
 
@@ -2029,7 +2033,11 @@ public sealed record PlatformTenantPricingResponse(
     decimal? FieldSeatPriceOverride,
     decimal OfficeSeatPrice,
     decimal FieldSeatPrice,
-    decimal MonthlyValue);
+    decimal MonthlyValue)
+{
+    /// <summary>PerSeat or PerFactory; per-factory terms are managed under /api/platform/pricing.</summary>
+    public string PricingBasis { get; init; } = Ecosys.Domain.Entities.PricingBases.PerSeat;
+}
 
 public sealed record PlatformTenantSummaryResponse(
     Guid TenantId,

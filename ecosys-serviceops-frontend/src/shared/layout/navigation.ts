@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { LayoutDashboard, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck, Repeat, Truck, DoorOpen, Shield, Footprints } from 'lucide-react'
+import { Calculator, LayoutDashboard, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck, Repeat, Truck, DoorOpen, Shield, Footprints } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -91,6 +91,7 @@ export const platformNavItems: NavItem[] = [
   { label: 'Finance', to: '/platform/finance', roles: ['super_admin'], permission: 'platform.finance.view', icon: Wallet },
   { label: 'Users', to: '/platform/users', roles: ['super_admin'], permission: 'platform.users.view', icon: Users },
   { label: 'Licensing', to: '/platform/licensing', roles: ['super_admin'], permission: 'platform.licensing.view', icon: FileText },
+  { label: 'Pricing', to: '/platform/pricing', roles: ['super_admin'], permission: 'platform.licensing.view', icon: Calculator },
   { label: 'Reports', to: '/platform/reports', roles: ['super_admin'], permission: 'platform.reports.view', icon: BarChart3 },
   { label: 'Audit Logs', to: '/platform/audit', roles: ['super_admin'], permission: 'platform.audit.view', icon: Settings2 },
   { label: 'System Health', to: '/platform/health', roles: ['super_admin'], permission: 'platform.settings.view', icon: Activity },

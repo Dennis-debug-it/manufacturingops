@@ -6084,6 +6084,10 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<decimal>("FactoryAnnualPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<decimal>("FieldSeatAnnualPrice")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -6127,6 +6131,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             Id = new Guid("55555555-5555-5555-5555-555555555561"),
                             CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Ecosys Factory Maintenance Essentials",
+                            FactoryAnnualPrice = 0m,
                             FieldSeatAnnualPrice = 0m,
                             FieldSeatMonthlyPrice = 0m,
                             IsActive = true,
@@ -6140,6 +6145,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             Id = new Guid("55555555-5555-5555-5555-555555555562"),
                             CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Ecosys Factory Maintenance Professional",
+                            FactoryAnnualPrice = 0m,
                             FieldSeatAnnualPrice = 0m,
                             FieldSeatMonthlyPrice = 0m,
                             IsActive = true,
@@ -6153,6 +6159,7 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                             Id = new Guid("55555555-5555-5555-5555-555555555563"),
                             CreatedAt = new DateTime(2026, 10, 24, 0, 0, 0, 0, DateTimeKind.Utc),
                             DisplayName = "Ecosys Factory Maintenance Enterprise",
+                            FactoryAnnualPrice = 0m,
                             FieldSeatAnnualPrice = 0m,
                             FieldSeatMonthlyPrice = 0m,
                             IsActive = true,
@@ -9789,6 +9796,209 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("preventive_maintenance_plans", (string)null);
                 });
 
+            modelBuilder.Entity("Ecosys.Domain.Entities.PriceBook", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("DiscountTiersJson")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal>("ExtraUserMonthlyPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("HardwareJson")
+                        .IsRequired()
+                        .HasMaxLength(8000)
+                        .HasColumnType("character varying(8000)");
+
+                    b.Property<decimal>("ImplementationFeeDefault")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ImplementationFeeMax")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ImplementationFeeMin")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("IncludedFieldUsersPerFactory")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("IncludedOfficeUsersPerFactory")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("OnPremisesMultiplier")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("OnPremisesSetupFee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("PilotCreditedToYearOne")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("PilotFee")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("PilotMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("QuoteTerms")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("QuoteValidDays")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("SecurityFactoryAnnualPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("SecuritySuiteFactoryAnnualPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("VatPercent")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("VisitorsFactoryAnnualPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("price_books", (string)null);
+                });
+
+            modelBuilder.Entity("Ecosys.Domain.Entities.PriceQuote", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("AnnualSubscription")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("ContactEmail")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ContactName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal?>("DiscountPercentOverride")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<string>("Edition")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("ExtraFieldUsers")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ExtraOfficeUsers")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Factories")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("HardwareJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<decimal>("ImplementationFeePerFactory")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<bool>("IncludePilot")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<bool>("OnPremises")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PreparedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("QuoteNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Security")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ValidUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Visitors")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal>("YearOneTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuoteNumber")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("price_quotes", (string)null);
+                });
+
             modelBuilder.Entity("Ecosys.Domain.Entities.PurchaseOrder", b =>
                 {
                     b.Property<Guid>("Id")
@@ -12429,6 +12639,16 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("ExtraFieldUsers")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ExtraOfficeUsers")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("FactoryAnnualPriceOverride")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<decimal?>("FieldSeatPriceOverride")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -12446,6 +12666,9 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<Guid>("LicensePlanId")
                         .HasColumnType("uuid");
+
+                    b.Property<int?>("LicensedFactories")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("MaxBranchesOverride")
                         .HasColumnType("integer");
@@ -12473,6 +12696,13 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<DateTime?>("OverdueWarningSentAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PricingBasis")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("PerSeat");
 
                     b.Property<DateTime>("StartsAt")
                         .HasColumnType("timestamp with time zone");

@@ -106,10 +106,23 @@ public static class LicensePricing
         return annual && yearly > 0 ? yearly / 12m : monthly;
     }
 
-    public static decimal MonthlyValue(TenantLicense license, IReadOnlyCollection<LicenseAddOn> addOns)
+    /// <summary>
+    /// The licence's value per month. Per-seat licences count seats; per-factory licences take the yearly
+    /// price from the price book (or the agreed price) over twelve months. The WhatsApp add-on is added either way.
+    /// </summary>
+    public static decimal MonthlyValue(TenantLicense license, IReadOnlyCollection<LicenseAddOn> addOns, PriceBook? book = null)
     {
-        var value = license.OfficeSeats * OfficeSeatPrice(license)
-            + license.FieldSeats * FieldSeatPrice(license);
+        decimal value;
+        if (license.PricingBasis == PricingBases.PerFactory)
+        {
+            var plan = license.LicensePlan ?? throw new InvalidOperationException("Tenant license plan was not loaded.");
+            var prices = new Dictionary<string, decimal> { [plan.PlanCode] = plan.FactoryAnnualPrice };
+            value = FactoryPricing.Calculate(book ?? new PriceBook(), prices, FactoryPricing.InputFor(license)).AnnualSubscription / 12m;
+        }
+        else
+        {
+            value = license.OfficeSeats * OfficeSeatPrice(license) + license.FieldSeats * FieldSeatPrice(license);
+        }
         if (addOns.FirstOrDefault(x => x.Code == license.WhatsAppAddOn) is { } addOn)
         {
             value += PerMonth(license, addOn.MonthlyPrice, addOn.AnnualPrice);
@@ -124,11 +137,12 @@ public static class LicensePricing
         CancellationToken cancellationToken)
     {
         var addOns = await dbContext.LicenseAddOns.AsNoTracking().ToListAsync(cancellationToken);
+        var book = await dbContext.PriceBooks.AsNoTracking().OrderBy(x => x.CreatedAt).FirstOrDefaultAsync(cancellationToken);
         var licenses = await dbContext.TenantLicenses.AsNoTracking().Include(x => x.LicensePlan)
             .Where(x => x.TenantId != PlatformConstants.RootTenantId)
             .Where(filter)
             .ToListAsync(cancellationToken);
-        return licenses.Sum(x => MonthlyValue(x, addOns));
+        return licenses.Sum(x => MonthlyValue(x, addOns, book));
     }
 }
 
