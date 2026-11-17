@@ -240,6 +240,7 @@ export interface PlatformTenantFinanceSummary {
   totalPaid: number
   outstandingBalance: number
   overdueCount: number
+  recent?: { id: string; invoiceNumber: string; issueDate: string; dueDate: string | null; currency: string; total: number; balance: number; status: string; overdue: boolean }[]
 }
 
 export function useTenantFinanceSummary(id: string | undefined) {

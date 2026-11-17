@@ -51,12 +51,14 @@ import type { PlatformTenantNumbering, PlatformTenantUser } from '../api'
 
 const moduleLabels: Record<string, string> = {
   operations: 'Work orders',
-  finance: 'Quotes & invoices',
+  finance: 'Costs & exchange rates',
   maintenance: 'Maintenance',
   inventory: 'Inventory',
   projects: 'Projects',
   advanced: 'Advanced tools',
   enterprise_tools: 'Branches, API & monitoring',
+  visitors: 'Visitor Management',
+  security: 'Security Patrol',
   whatsapp_business: 'WhatsApp inbox',
 }
 
@@ -718,16 +720,29 @@ export function TenantDetailPage() {
         <Spinner label="Loading finance summary" />
       ) : financeSummary ? (
         <section className="space-y-5">
+          <p className="text-sm text-slate-600">
+            What Ecosys has invoiced this tenant (issued invoices; drafts and voided ones are left out). Invoices are raised and paid under{' '}
+            <button type="button" className="font-medium text-[var(--app-primary)] underline" onClick={() => navigate('/platform/finance')}>Platform finance</button>.
+          </p>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <MiniStat label="Invoices" value={financeSummary.invoiceCount} />
             <MiniStat label="Overdue" value={financeSummary.overdueCount} />
             <InfoCard label="Total invoiced" value={formatCurrency(financeSummary.totalInvoiced)} />
             <InfoCard label="Outstanding balance" value={formatCurrency(financeSummary.outstandingBalance)} />
           </div>
-          <p className="text-sm text-slate-600">
-            Summary of the tenant's own invoicing. Individual invoices are managed inside the tenant workspace; Ecosys billing for this tenant is under{' '}
-            <button type="button" className="font-medium text-[var(--app-primary)] underline" onClick={() => navigate('/platform/finance')}>Platform finance</button>.
-          </p>
+          {financeSummary.recent && financeSummary.recent.length > 0 ? (
+            <DataTable
+              columns={[
+                { key: 'number', header: 'Invoice', cell: (row) => <span className="font-mono text-xs">{row.invoiceNumber}</span> },
+                { key: 'issued', header: 'Issued', cell: (row) => formatDate(row.issueDate) },
+                { key: 'due', header: 'Due', cell: (row) => (row.dueDate ? <span className={row.overdue ? 'font-medium text-rose-700' : undefined}>{formatDate(row.dueDate)}{row.overdue ? ' · overdue' : ''}</span> : '—') },
+                { key: 'total', header: 'Total', cell: (row) => formatCurrency(row.total) },
+                { key: 'balance', header: 'Balance', cell: (row) => formatCurrency(row.balance) },
+                { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
+              ]}
+              data={financeSummary.recent}
+            />
+          ) : null}
         </section>
       ) : (
         <EmptyState title="Finance summary unavailable" description="Could not load this tenant's finance summary." />

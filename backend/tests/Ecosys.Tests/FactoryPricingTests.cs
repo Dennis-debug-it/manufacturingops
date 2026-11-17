@@ -160,6 +160,29 @@ public sealed partial class AuthEmailSafetyTests
     }
 
     [Fact]
+    public async Task TheTenantFinanceTab_ShowsWhatEcosysInvoicedThem()
+    {
+        await using var db = CreateDbContext();
+        await SeedPlatformUserAsync(db, "owner@platform.test");
+        var tenantId = Guid.NewGuid();
+        await SeedTenantAsync(db, tenantId, "Chelal Tea", "ops@chelal.test");
+        PlatformInvoice Invoice(string number, string status, decimal total, decimal paid, int dueInDays) => new()
+        {
+            InvoiceNumber = number, TenantId = tenantId, CustomerName = "Chelal Tea", Status = status, Total = total, AmountPaid = paid, Balance = total - paid,
+            IssueDate = DateTime.UtcNow.AddDays(-40), DueDate = DateTime.UtcNow.AddDays(dueInDays),
+        };
+        db.PlatformInvoices.AddRange(Invoice("INV-1", "Paid", 100_000m, 100_000m, -10), Invoice("INV-2", "Sent", 50_000m, 0, -5), Invoice("INV-3", "Draft", 70_000m, 0, 30),
+            Invoice("INV-4", "Void", 10_000m, 0, -1));
+        await db.SaveChangesAsync();
+        var controller = CreatePlatformTenantsController(db, new FakeUserCredentialDeliveryService(db, true, true));
+
+        var summary = PricingOk(await controller.GetFinanceSummary(tenantId, default));
+        Assert.Equal((2, 150_000m, 100_000m, 50_000m, 1), (summary.InvoiceCount, summary.TotalInvoiced, summary.TotalPaid, summary.OutstandingBalance, summary.OverdueCount));
+        Assert.Equal(["INV-1", "INV-2"], summary.Recent.Select(x => x.InvoiceNumber).Order());
+        Assert.True(summary.Recent.Single(x => x.InvoiceNumber == "INV-2").Overdue);
+    }
+
+    [Fact]
     public async Task Postgres_PricingQueries_AllTranslate()
     {
         await FactoryPostgres.RunAsync("pricing", async connection =>

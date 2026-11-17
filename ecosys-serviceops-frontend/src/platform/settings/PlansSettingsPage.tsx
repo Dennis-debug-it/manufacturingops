@@ -8,18 +8,22 @@ import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
+import { Link } from 'react-router-dom'
 import type { PlatformLicenseAddOn, PlatformLicensePlan } from '../types'
+import type { PriceBook } from '../pricing/api'
 
 const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
 
 const moduleLabels: Record<string, string> = {
   operations: 'Work orders',
-  finance: 'Quotes & invoices',
+  finance: 'Costs & exchange rates',
   maintenance: 'Maintenance',
   inventory: 'Inventory',
   projects: 'Projects',
   advanced: 'Advanced tools',
   enterprise_tools: 'Branches, API & monitoring',
+  visitors: 'Visitor Management',
+  security: 'Security Patrol',
 }
 
 function NumberField({ label, value, onChange, min = 0 }: { label: string; value: number; onChange: (value: number) => void; min?: number }) {
@@ -133,17 +137,26 @@ export function PlansSettingsPage() {
     queryFn: () => api.get<PlatformLicenseAddOn[]>(endpoints.platformLicensing.addOns),
     staleTime: 30_000,
   })
+  // Factory customers are priced per factory from the price book (Pricing); shown here so the two are seen together.
+  const book = useQuery({
+    queryKey: ['platform', 'pricing', 'book'],
+    queryFn: () => api.get<PriceBook>('/api/platform/pricing/price-book', undefined, { suppressGlobalErrorToast: true }),
+    staleTime: 30_000,
+    retry: false,
+  })
+  const perFactory = (code: string) => book.data?.editions.find((x) => x.code === code)?.factoryAnnualPrice
   const [editingPlan, setEditingPlan] = useState<PlatformLicensePlan | null>(null)
   const [editingAddOn, setEditingAddOn] = useState<PlatformLicenseAddOn | null>(null)
   const editButton = (onClick: () => void) => (canManage ? <button type="button" onClick={onClick} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">Edit</button> : null)
 
   const planColumns: DataTableColumn<PlatformLicensePlan>[] = [
     { key: 'name', header: 'Edition', cell: (row) => <span className="font-medium text-slate-900">{row.name}</span> },
+    { key: 'factory', header: 'Per factory / yr', cell: (row) => { const price = perFactory(row.code); return price ? money(price) : '—' } },
     { key: 'office', header: 'Office seat / mo', cell: (row) => money(row.officeSeatMonthlyPrice) },
     { key: 'field', header: 'Field seat / mo', cell: (row) => money(row.fieldSeatMonthlyPrice) },
     { key: 'min', header: 'Min office seats', cell: (row) => row.minOfficeSeats },
     { key: 'modules', header: 'Includes', cell: (row) => row.modulesIncluded.map((module) => moduleLabels[module] ?? module).join(', ') },
-    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={!row.isActive ? 'Inactive' : row.isPriced ? 'Active' : 'Not priced'} /> },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={!row.isActive ? 'Inactive' : row.isPriced || (perFactory(row.code) ?? 0) > 0 ? 'Active' : 'Not priced'} /> },
     { key: 'actions', header: '', cell: (row) => editButton(() => setEditingPlan(row)) },
   ]
   const addOnColumns: DataTableColumn<PlatformLicenseAddOn>[] = [
@@ -159,6 +172,10 @@ export function PlansSettingsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Editions & Pricing" subtitle="Seat prices for each edition, and the optional WhatsApp add-ons. Which features each edition includes is fixed." />
+      <p className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600">
+        Factory customers are billed <span className="font-medium">per factory per year</span>: those prices, the add-ons, discounts and fees are in the{' '}
+        <Link className="font-medium text-[var(--app-primary)] hover:underline" to="/platform/pricing?tab=price-book">price book</Link>. The seat prices below apply only to tenants billed per seat.
+      </p>
       <DataTable
         columns={planColumns}
         data={plans.data ?? []}

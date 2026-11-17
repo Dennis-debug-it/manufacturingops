@@ -860,6 +860,28 @@ public sealed class PlatformTenantsController(
         return Ok(entries);
     }
 
+    /// <summary>What Ecosys has invoiced this tenant (platform invoices), with the latest invoices.</summary>
+    [HttpGet("{tenantId:guid}/finance-summary")]
+    public async Task<ActionResult<PlatformTenantFinanceSummaryResponse>> GetFinanceSummary(Guid tenantId, CancellationToken cancellationToken)
+    {
+        _ = await LoadManagedTenantAsync(tenantId, cancellationToken);
+        var invoices = await dbContext.PlatformInvoices.AsNoTracking()
+            .Where(x => x.TenantId == tenantId && x.Status != "Void" && x.Status != "Draft")
+            .OrderByDescending(x => x.IssueDate)
+            .ToListAsync(cancellationToken);
+        var now = DateTime.UtcNow;
+        return Ok(new PlatformTenantFinanceSummaryResponse(
+            invoices.Count,
+            invoices.Sum(x => x.Total),
+            invoices.Sum(x => x.AmountPaid),
+            invoices.Sum(x => x.Balance),
+            invoices.Count(x => x.Balance > 0 && x.DueDate < now))
+        {
+            Recent = invoices.Take(10).Select(x => new PlatformTenantInvoiceRow(x.Id, x.InvoiceNumber, x.IssueDate, x.DueDate, x.Currency, x.Total, x.Balance, x.Status,
+                x.Balance > 0 && x.DueDate < now)).ToList(),
+        });
+    }
+
     [HttpGet("{tenantId:guid}/module-settings")]
     public async Task<ActionResult<IReadOnlyCollection<PlatformTenantModuleSettingResponse>>> GetModuleSettings(Guid tenantId, CancellationToken cancellationToken)
     {
@@ -2116,6 +2138,13 @@ public sealed record PlatformTenantCredentialDeliveryResponse(
 public sealed record PlatformTenantNumberingResponse(Guid Id, string DocumentType, string Prefix, string? Suffix, long NextNumber, int PaddingLength, string ResetFrequency, bool IsActive, DateTime? LastResetAt);
 
 public sealed record PlatformTenantDocumentDesignResponse(string DocumentType, bool IsCustomised);
+
+public sealed record PlatformTenantFinanceSummaryResponse(int InvoiceCount, decimal TotalInvoiced, decimal TotalPaid, decimal OutstandingBalance, int OverdueCount)
+{
+    public IReadOnlyList<PlatformTenantInvoiceRow> Recent { get; init; } = [];
+}
+
+public sealed record PlatformTenantInvoiceRow(Guid Id, string InvoiceNumber, DateTime IssueDate, DateTime? DueDate, string Currency, decimal Total, decimal Balance, string Status, bool Overdue);
 
 
 public sealed record PlatformTenantModuleSettingResponse(string ModuleKey, DateTime UpdatedAt);
