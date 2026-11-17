@@ -436,3 +436,32 @@ then assets, systems, sites, contracts, clients, suppliers, technicians, materia
 - `PublicAppOptions.PublicUrl` still has the vendor domain as its compiled-in C# default.
   It is unreachable in practice (`appsettings.json` always supplies the key, and compose
   overrides it), but it should become `string.Empty` with a startup guard.
+
+## 10. Visitor Management and Security Patrol
+
+These two modules ship in the same images. Nothing extra is installed, but four things decide
+whether they work at a factory:
+
+1. **HTTPS is required.** Browsers only give a web page the camera (QR scanning, checkpoint
+   photos), the location (patrol GPS checks) and NFC on a secure origin. Over plain `http://`
+   on anything but `localhost`, the Scan buttons report that the camera is unavailable. Terminate
+   TLS as in §4 before handing phones to guards.
+2. **Turn the modules on per workspace.** Platform admin → Tenants → the tenant → *Factory Operations
+   add-ons*: tick Visitors and/or Security. Then grant people the permissions
+   (`visitors.gate`, `visitors.manage`, `security.patrol`, `security.manage`); managers have all
+   four by default.
+3. **Migrations run on start.** The API applies pending migrations when it boots, including
+   the visitor, patrol, access-card and checkpoint-photo tables. Take a backup first (§5).
+4. **Photos use the uploads volume.** Checkpoint photos are shrunk on the phone to a few hundred
+   KB and stored with the other attachments, so they are covered by the file-volume backup
+   (§5) and count towards its disk use: a route with ten photo checkpoints walked six times a
+   night adds roughly 30 MB a night.
+
+Phones: any Android or iPhone with a recent browser scans QR labels. Tapping NFC tags and cards
+needs Chrome on Android. Install the app from the browser menu (*Add to Home screen*) and open
+Patrol once with signal at the start of a shift, so the routes and checkpoints are on the phone.
+
+Smoke check after deploying: add two access cards and print their labels; check a walk-in visitor
+in with a card and out again; add the standard checkpoints, mark one *Photo required*, walk a short
+route on a phone with flight mode on, then turn the signal back on and open the patrol on the
+Security board: both scans and the photo should be there.
