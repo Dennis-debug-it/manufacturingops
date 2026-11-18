@@ -8641,6 +8641,13 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AccentColor")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(9)
+                        .HasColumnType("character varying(9)")
+                        .HasDefaultValue("#0f3d3e");
+
                     b.Property<string>("BodyHtml")
                         .HasMaxLength(64000)
                         .HasColumnType("character varying(64000)");
@@ -8664,6 +8671,13 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
 
                     b.Property<bool>("IsDefault")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("Layout")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Classic");
 
                     b.Property<string>("Name")
                         .IsRequired()
