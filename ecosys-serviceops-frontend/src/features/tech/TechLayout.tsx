@@ -13,6 +13,7 @@ import { OfflineStatus } from './offline/OfflineStatus'
 import { startOfflinePersistence } from './offline/persist'
 import { useOfflineScanIndex } from '../factory/api'
 import { NotificationBell } from '../notifications/NotificationBell'
+import { ImpersonationBanner } from '../../shared/components/ImpersonationBanner'
 import { JobAlertsPrompt } from './JobAlerts'
 import { LocationPrompt } from './LocationPrompt'
 import { disablePush, resyncPush } from './push'
@@ -61,6 +62,8 @@ export function TechLayout() {
   return (
     <div className="min-h-screen bg-[var(--app-bg,#f1f5f4)]">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+        {/* A presenter or support agent signed in as this technician needs the way back. */}
+        <ImpersonationBanner />
         <div className="mx-auto flex h-14 max-w-xl items-center justify-between gap-3 px-4">
           <Link to="/tech" className="flex min-w-0 items-center gap-2" aria-label="My jobs">
             <Logo variant="mark" tone="dark" className="h-7 w-7 shrink-0" />

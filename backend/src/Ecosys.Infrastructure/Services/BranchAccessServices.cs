@@ -55,7 +55,10 @@ internal sealed class BranchAccessService(AppDbContext dbContext, ITenantContext
             throw new ForbiddenException("You do not have access to the selected branch.");
         }
 
-        return new BranchQueryScope(true, requestedBranchId, access.AccessibleBranchIds, false);
+        // Records that belong to no branch are visible to everyone in the workspace, as they are to admins: factory jobs,
+        // assets and stores are arranged by the factory hierarchy and carry no branch, so hiding them would hide the
+        // factory from anyone limited to a branch. (Technicians are still limited to their own jobs separately.)
+        return new BranchQueryScope(true, requestedBranchId, access.AccessibleBranchIds, !requestedBranchId.HasValue);
     }
 
     public async Task<Guid?> ResolveBranchIdForWriteAsync(Guid tenantId, Guid? requestedBranchId, CancellationToken cancellationToken = default)

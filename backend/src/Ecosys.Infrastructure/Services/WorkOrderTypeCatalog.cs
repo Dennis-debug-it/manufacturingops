@@ -29,12 +29,14 @@ public static class WorkOrderTypes
             throw new BusinessRuleException("Work type is required.");
         }
 
+        // Factory jobs store their own work types (FactoryWorkTypes); they map onto the four older ones so the screens
+        // and endpoints that still speak those (the technician app among them) can read factory jobs.
         return normalized switch
         {
-            NewInstallation or "New Installation" => WorkOrderType.NewInstallation,
-            PreventiveMaintenance or "Preventive Maintenance" => WorkOrderType.PreventiveMaintenance,
-            CorrectiveMaintenance or "Corrective Maintenance" or "BreakdownCorrective" or "Breakdown / Corrective Maintenance" => WorkOrderType.CorrectiveMaintenance,
-            InspectionAssessment or "Inspection / Assessment" => WorkOrderType.InspectionAssessment,
+            NewInstallation or "New Installation" or "Modification" => WorkOrderType.NewInstallation,
+            PreventiveMaintenance or "Preventive Maintenance" or "Preventive" => WorkOrderType.PreventiveMaintenance,
+            CorrectiveMaintenance or "Corrective Maintenance" or "BreakdownCorrective" or "Breakdown / Corrective Maintenance" or "Corrective" or "Safety" => WorkOrderType.CorrectiveMaintenance,
+            InspectionAssessment or "Inspection / Assessment" or "Inspection" or "Statutory" => WorkOrderType.InspectionAssessment,
             _ => throw new BusinessRuleException("Invalid work type.")
         };
     }
