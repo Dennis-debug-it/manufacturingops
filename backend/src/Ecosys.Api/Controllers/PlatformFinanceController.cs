@@ -327,6 +327,39 @@ public sealed class PlatformFinanceController(
         return Ok(MapExpense(expense));
     }
 
+    [HttpGet("quotations/{id:guid}/pdf")]
+    public async Task<IActionResult> QuotationPdf(Guid id, [FromServices] IWebHostEnvironment environment, CancellationToken cancellationToken)
+    {
+        var quotation = await LoadQuotationAsync(id, cancellationToken);
+        var pdf = await PlatformDocuments.RenderAsync(dbContext, environment, PlatformDocuments.FromQuotation(quotation), cancellationToken);
+        return File(pdf, "application/pdf", PlatformDocuments.FileName(quotation.QuotationNumber, quotation.CustomerName));
+    }
+
+    [HttpGet("invoices/{id:guid}/pdf")]
+    public async Task<IActionResult> InvoicePdf(Guid id, [FromServices] IWebHostEnvironment environment, CancellationToken cancellationToken)
+    {
+        var invoice = await LoadInvoiceAsync(id, cancellationToken);
+        var pdf = await PlatformDocuments.RenderAsync(dbContext, environment, PlatformDocuments.FromInvoice(invoice), cancellationToken);
+        return File(pdf, "application/pdf", PlatformDocuments.FileName(invoice.InvoiceNumber, invoice.CustomerName));
+    }
+
+    /// <summary>The receipt for a payment.</summary>
+    [HttpGet("payments/{id:guid}/pdf")]
+    public async Task<IActionResult> ReceiptPdf(Guid id, [FromServices] IWebHostEnvironment environment, CancellationToken cancellationToken)
+    {
+        var payment = await dbContext.PlatformPayments.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new NotFoundException("Payment was not found.");
+        var invoice = payment.InvoiceId is { } invoiceId
+            ? await dbContext.PlatformInvoices.AsNoTracking().SingleOrDefaultAsync(x => x.Id == invoiceId, cancellationToken)
+            : null;
+        var tenantName = invoice is null && payment.TenantId is { } tenantId
+            ? await dbContext.Tenants.AsNoTracking().IgnoreQueryFilters().Where(x => x.Id == tenantId).Select(x => x.CompanyName).SingleOrDefaultAsync(cancellationToken)
+            : null;
+        var data = PlatformDocuments.FromPayment(payment, invoice, tenantName);
+        var pdf = await PlatformDocuments.RenderAsync(dbContext, environment, data, cancellationToken);
+        return File(pdf, "application/pdf", PlatformDocuments.FileName(payment.PaymentNumber, data.CustomerName));
+    }
+
     [HttpGet("taxes")]
     public async Task<ActionResult<IReadOnlyCollection<PlatformTaxResponse>>> GetTaxes(CancellationToken cancellationToken)
     {
@@ -479,7 +512,9 @@ public sealed class PlatformFinanceController(
         var discountAmount = Math.Round(subtotal * discountRate / 100m, 2);
         var taxableBase = Math.Max(0m, subtotal - discountAmount);
         var taxRate = Math.Max(0m, request.TaxRate);
-        var taxAmount = Math.Round(taxableBase * taxRate / 100m, 2);
+        // Tax is charged on the taxable lines only, after the same discount as the rest.
+        var taxableLines = request.Lines.Where(x => x.Taxable).Sum(x => x.Quantity * x.UnitPrice);
+        var taxAmount = Math.Round(Math.Max(0m, taxableLines * (1m - Math.Min(discountRate, 100m) / 100m)) * taxRate / 100m, 2);
         quotation.Subtotal = subtotal;
         quotation.DiscountRate = discountRate;
         quotation.DiscountAmount = discountAmount;
@@ -521,7 +556,9 @@ public sealed class PlatformFinanceController(
         var discountAmount = Math.Round(subtotal * discountRate / 100m, 2);
         var taxableBase = Math.Max(0m, subtotal - discountAmount);
         var taxRate = Math.Max(0m, request.TaxRate);
-        var taxAmount = Math.Round(taxableBase * taxRate / 100m, 2);
+        // Tax is charged on the taxable lines only, after the same discount as the rest.
+        var taxableLines = request.Lines.Where(x => x.Taxable).Sum(x => x.Quantity * x.UnitPrice);
+        var taxAmount = Math.Round(Math.Max(0m, taxableLines * (1m - Math.Min(discountRate, 100m) / 100m)) * taxRate / 100m, 2);
         var total = taxableBase + taxAmount;
         invoice.Subtotal = subtotal;
         invoice.DiscountRate = discountRate;
