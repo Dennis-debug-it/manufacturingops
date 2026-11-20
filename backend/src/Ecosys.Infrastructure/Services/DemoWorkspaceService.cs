@@ -82,6 +82,9 @@ internal sealed partial class DemoWorkspaceService(
 {
     private static readonly Guid TenantId = DemoWorkspace.TenantId;
 
+    /// <summary>One reset at a time per server: a second click while one runs would race it on the same rows.</summary>
+    private static readonly SemaphoreSlim ResetGate = new(1, 1);
+
     /// <summary>
     /// Tenant-scoped tables the reset leaves alone: the license (so the workspace keeps its perpetual term) and
     /// the platform's own commercial records, which are not the demo's data to erase.
@@ -132,6 +135,23 @@ internal sealed partial class DemoWorkspaceService(
     }
 
     public async Task<DemoWorkspaceResetResult> ResetAsync(Guid? actorUserId, string? actorName, CancellationToken cancellationToken = default)
+    {
+        if (!await ResetGate.WaitAsync(TimeSpan.Zero, cancellationToken))
+        {
+            throw new BusinessRuleException("The demo workspace is already being prepared. Wait a minute, then reload this page.");
+        }
+
+        try
+        {
+            return await ResetCoreAsync(actorUserId, actorName, cancellationToken);
+        }
+        finally
+        {
+            ResetGate.Release();
+        }
+    }
+
+    private async Task<DemoWorkspaceResetResult> ResetCoreAsync(Guid? actorUserId, string? actorName, CancellationToken cancellationToken)
     {
         var password = GeneratePassword();
         var relational = dbContext.Database.IsRelational();

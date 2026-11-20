@@ -65,7 +65,12 @@ export function DemoWorkspacePage() {
       setConfirmReset(false)
       toast.success('Demo factory is ready')
     },
-    onError: () => setConfirmReset(false),
+    onError: () => {
+      setConfirmReset(false)
+      // A proxy can time out while the server carries on and finishes the reset, so show what is there now.
+      // (The new password is only returned by a reset that completes in this request; reset again to see one.)
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'demo-workspace'] })
+    },
   })
 
   // Opens the demo as that role in this tab, with no password: the platform session stays signed in underneath, and

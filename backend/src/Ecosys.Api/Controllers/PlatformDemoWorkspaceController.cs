@@ -2,6 +2,7 @@ using Ecosys.Infrastructure.Services;
 using Ecosys.Shared.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Hosting;
 
 namespace Ecosys.Api.Controllers;
 
@@ -17,16 +18,22 @@ public sealed class PlatformDemoWorkspaceController(
     IDemoWorkspaceService demoWorkspaceService,
     IMvpAuthService authService,
     ITenantTimeZoneService tenantTimeZoneService,
-    ITenantContext tenantContext) : ControllerBase
+    ITenantContext tenantContext,
+    IHostApplicationLifetime applicationLifetime) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<DemoWorkspaceStatus>> Get(CancellationToken cancellationToken) =>
         Ok(await demoWorkspaceService.GetStatusAsync(cancellationToken));
 
-    /// <summary>Creates the workspace on first use; afterwards wipes it and re-seeds. Returns the new shared password once.</summary>
+    /// <summary>
+    /// Creates the workspace on first use; afterwards wipes it and re-seeds. Returns the new shared password once.
+    /// Seeding takes from about 20 seconds to over a minute on a small server, which can outlast a reverse proxy's
+    /// read timeout. The reset therefore ignores the request being aborted (it is one transaction and finishes or
+    /// rolls back as a whole) and stops only when the app shuts down; the page reloads the status afterwards.
+    /// </summary>
     [HttpPost("reset")]
-    public async Task<ActionResult<DemoWorkspaceResetResult>> Reset(CancellationToken cancellationToken) =>
-        Ok(await demoWorkspaceService.ResetAsync(tenantContext.UserId, tenantContext.Email, cancellationToken));
+    public async Task<ActionResult<DemoWorkspaceResetResult>> Reset() =>
+        Ok(await demoWorkspaceService.ResetAsync(tenantContext.UserId, tenantContext.Email, applicationLifetime.ApplicationStopping));
 
     /// <summary>
     /// Opens the demo as one of its logins without a password: an impersonation session, so it stays in the
