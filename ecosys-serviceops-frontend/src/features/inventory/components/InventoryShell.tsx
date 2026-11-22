@@ -49,7 +49,6 @@ export const inventoryNav: NavGroup[] = [
     items: [
       { to: '/inventory/movements', label: 'Movements & transfers' },
       { to: '/inventory/stock-counts', label: 'Stock counts' },
-      { to: '/inventory/locations', label: 'Locations' },
     ],
   },
   {

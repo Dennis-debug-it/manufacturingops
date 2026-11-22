@@ -41,16 +41,7 @@ public sealed class PortalBoundaryTests
     /// </summary>
     public static readonly string[] LeakedRoutes =
     [
-        "/api/clients",
-        "/api/clients/{id}",
-        "/api/clients/{id}/summary",
-        "/api/clients/{clientId}/sites",
-        "/api/clients/{clientId}/contracts",
         "/api/clients/{clientId}/sites/{siteId}/systems",
-        "/api/sites/search",
-        "/api/sites/{siteId}/contracts",
-        "/api/assets/{assetId}/contracts",
-        "/api/contracts",
         "/api/asset-templates",
         "/api/assignment-groups",
         "/api/settings/assignment-groups",
@@ -66,25 +57,7 @@ public sealed class PortalBoundaryTests
         "/api/settings/license"
     ];
 
-    /// <summary>
-    /// The state-changing client routes. Read leakage was only half of EC-001: a portal token also
-    /// reached <c>DELETE /api/clients/{id}</c>, which deactivated the target client and cascaded every
-    /// linked site and asset to Inactive, committed it, and only then hit the authorization failure
-    /// (the response was 403 and no audit row was written — the damage was already durable).
-    /// Kept as its own list so a future edit cannot quietly shrink coverage back to GETs.
-    /// </summary>
-    public static readonly string[] DestructiveClientRoutes =
-    [
-        "/api/clients/{id}",
-        "/api/clients/{id}/permanent",
-        "/api/clients/{id}/deactivate",
-        "/api/clients/{id}/activate",
-        "/api/clients/{id}/validate-deletion"
-    ];
-
     public static TheoryData<string> LeakedRouteCases() => AsCases(LeakedRoutes);
-
-    public static TheoryData<string> DestructiveRouteCases() => AsCases(DestructiveClientRoutes);
 
     private static TheoryData<string> AsCases(IEnumerable<string> routes)
     {
@@ -113,24 +86,6 @@ public sealed class PortalBoundaryTests
                 RequiresTenantStaff(owner),
                 $"{route} is served by {owner.Name}, which does not require the "
                 + $"'{AuthorizationPolicies.TenantStaff}' policy. A portal token would reach it.");
-        }
-    }
-
-    [Theory]
-    [MemberData(nameof(DestructiveRouteCases))]
-    public void EveryDestructiveClientRoute_IsBehindTheTenantStaffPolicy(string route)
-    {
-        var owners = ControllersServing(route);
-
-        Assert.True(owners.Count > 0, $"No controller action serves {route}; the route list is stale.");
-
-        foreach (var owner in owners)
-        {
-            Assert.True(
-                RequiresTenantStaff(owner),
-                $"{route} is served by {owner.Name}, which does not require the "
-                + $"'{AuthorizationPolicies.TenantStaff}' policy. A portal token would reach it and, "
-                + "because the write commits before the audit call that fails, the damage would persist.");
         }
     }
 
@@ -256,62 +211,6 @@ public sealed class PortalBoundaryTests
         }
 
         Assert.Fail($"Expected a ForbiddenException in the exception chain, but got: {exception}");
-    }
-
-    // ── The two proven exploits, replayed against the controller ──────────────
-
-    [Fact]
-    public async Task PortalCaller_CannotReadTheTenantsClientRegister()
-    {
-        var databaseName = $"ecosys-portal-boundary-{Guid.NewGuid():N}";
-        var fixture = await SeedAsync(databaseName);
-        var portalContext = TenantContextFor(PortalPrincipal(fixture.TenantId, fixture.OwnClientId));
-
-        await using var dbContext = CreateDbContext(databaseName, portalContext);
-        var controller = new ClientsController(dbContext, portalContext, UserAccessServiceFor(portalContext), new NoOpAuditLogService());
-
-        // The tenant query filter happily resolves this caller's tenant, so nothing below the guard
-        // would stop the read — the guard is the whole defence.
-        await AssertForbiddenAsync(() =>
-            controller.GetAll(search: null, status: null, page: null, pageSize: null, CancellationToken.None));
-
-        await AssertForbiddenAsync(() =>
-            controller.Get(fixture.RivalClientId, CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task PortalCaller_IsRefusedOnEveryDestructiveClientAction()
-    {
-        var databaseName = $"ecosys-portal-boundary-{Guid.NewGuid():N}";
-        var fixture = await SeedAsync(databaseName);
-        var portalContext = TenantContextFor(PortalPrincipal(fixture.TenantId, fixture.OwnClientId));
-
-        await using (var dbContext = CreateDbContext(databaseName, portalContext))
-        {
-            var controller = new ClientsController(dbContext, portalContext, UserAccessServiceFor(portalContext), new NoOpAuditLogService());
-
-            await AssertForbiddenAsync(() =>
-                controller.Delete(fixture.RivalClientId, CancellationToken.None));
-            await AssertForbiddenAsync(() =>
-                controller.DeletePermanent(fixture.RivalClientId, CancellationToken.None));
-            await AssertForbiddenAsync(() =>
-                controller.Deactivate(fixture.RivalClientId, CancellationToken.None));
-            await AssertForbiddenAsync(() =>
-                controller.Activate(fixture.RivalClientId, CancellationToken.None));
-            await AssertForbiddenAsync(() =>
-                controller.ValidateDeletion(fixture.RivalClientId, CancellationToken.None));
-        }
-
-        // The refusal has to happen BEFORE anything is written. DELETE /api/clients/{id} used to
-        // deactivate the client, cascade its sites and assets to Inactive, commit, and only then throw
-        // on the audit call — a 403 response over a durable, unaudited change. The guard now fires on
-        // the very first TenantId access, above every query. Verified from a fresh context so a
-        // rejected-but-still-committed change cannot hide in the one that made it.
-        await using var verifyContext = CreateDbContext(databaseName);
-        var rival = await verifyContext.Clients.SingleAsync(x => x.Id == fixture.RivalClientId);
-
-        Assert.True(rival.IsActive);
-        Assert.Equal(2, await verifyContext.Clients.CountAsync(x => x.TenantId == fixture.TenantId));
     }
 
     // ── The policy's membership rule ──────────────────────────────────────────

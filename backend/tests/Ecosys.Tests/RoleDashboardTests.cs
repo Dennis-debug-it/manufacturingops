@@ -114,25 +114,25 @@ public sealed class RoleDashboardTests
     {
         var harness = await Harness.CreateAsync();
         var admin = harness.Service(harness.AdminId, AppRoles.Admin, isAdmin: true);
-        var settings = await admin.SetHiddenAsync("manager", [DashboardWidgetCatalog.ContractsExpiring, DashboardWidgetCatalog.ContractsExpiring]);
-        Assert.Equal([DashboardWidgetCatalog.ContractsExpiring], settings.Roles.Single(x => x.Role == AppRoles.Manager).HiddenKeys);
+        var settings = await admin.SetHiddenAsync("manager", [DashboardWidgetCatalog.MaintenancePmCompliance, DashboardWidgetCatalog.MaintenancePmCompliance]);
+        Assert.Equal([DashboardWidgetCatalog.MaintenancePmCompliance], settings.Roles.Single(x => x.Role == AppRoles.Manager).HiddenKeys);
 
         var manager = harness.Service(harness.ManagerId, AppRoles.Manager, permissions: PermissionNames.All);
         var layout = await manager.GetLayoutAsync();
-        Assert.DoesNotContain(layout.Items, x => x.Key == DashboardWidgetCatalog.ContractsExpiring);
-        Assert.DoesNotContain(layout.Available, x => x.Key == DashboardWidgetCatalog.ContractsExpiring);
-        await Assert.ThrowsAsync<ForbiddenException>(() => manager.GetWidgetAsync(DashboardWidgetCatalog.ContractsExpiring, null, false));
+        Assert.DoesNotContain(layout.Items, x => x.Key == DashboardWidgetCatalog.MaintenancePmCompliance);
+        Assert.DoesNotContain(layout.Available, x => x.Key == DashboardWidgetCatalog.MaintenancePmCompliance);
+        await Assert.ThrowsAsync<ForbiddenException>(() => manager.GetWidgetAsync(DashboardWidgetCatalog.MaintenancePmCompliance, null, false));
 
         // Saving it into a personal layout doesn't bring it back.
-        var saved = await manager.SaveLayoutAsync([new(DashboardWidgetCatalog.ContractsExpiring, "wide")]);
+        var saved = await manager.SaveLayoutAsync([new(DashboardWidgetCatalog.MaintenancePmCompliance, "wide")]);
         Assert.Empty(saved.Items);
 
         // Other roles keep it.
-        Assert.Contains((await admin.GetLayoutAsync()).Items, x => x.Key == DashboardWidgetCatalog.ContractsExpiring);
+        Assert.Contains((await admin.GetLayoutAsync()).Items, x => x.Key == DashboardWidgetCatalog.MaintenancePmCompliance);
 
         // Unhiding restores it for the manager.
         await admin.SetHiddenAsync(AppRoles.Manager, []);
-        Assert.Equal(DashboardWidgetCatalog.ContractsExpiring, (await manager.GetWidgetAsync(DashboardWidgetCatalog.ContractsExpiring, null, false)).Key);
+        Assert.Equal(DashboardWidgetCatalog.MaintenancePmCompliance, (await manager.GetWidgetAsync(DashboardWidgetCatalog.MaintenancePmCompliance, null, false)).Key);
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public sealed class RoleDashboardTests
         var viewerLayout = await viewer.GetLayoutAsync();
         Assert.Equal(AppRoles.Viewer, viewerLayout.Role);
         Assert.Equal(
-            [DashboardWidgetCatalog.WorkOrdersOpenOverdue, DashboardWidgetCatalog.WorkOrdersSlaAtRisk, DashboardWidgetCatalog.MaintenancePmCompliance, DashboardWidgetCatalog.ContractsExpiring],
+            [DashboardWidgetCatalog.WorkOrdersOpenOverdue, DashboardWidgetCatalog.WorkOrdersSlaAtRisk, DashboardWidgetCatalog.MaintenancePmCompliance],
             viewerLayout.Items.Select(x => x.Key));
     }
 
@@ -180,15 +180,15 @@ public sealed class RoleDashboardTests
 
         var saved = await dispatcher.SaveLayoutAsync(
         [
-            new(DashboardWidgetCatalog.TechniciansOnSite, "wide"),
+            new(DashboardWidgetCatalog.TechniciansWorkload, "wide"),
             new(DashboardWidgetCatalog.PurchaseOrdersOpen, "small"),   // no materials.view
             new("made-up", "small"),
-            new(DashboardWidgetCatalog.TechniciansOnSite, "small"),     // duplicate
+            new(DashboardWidgetCatalog.TechniciansWorkload, "small"),     // duplicate
             new(DashboardWidgetCatalog.WorkOrdersUnassigned, "huge"),   // bad size → default
         ]);
 
         Assert.True(saved.IsCustomized);
-        Assert.Equal([new DashboardLayoutItem(DashboardWidgetCatalog.TechniciansOnSite, "wide"), new DashboardLayoutItem(DashboardWidgetCatalog.WorkOrdersUnassigned, "small")], saved.Items);
+        Assert.Equal([new DashboardLayoutItem(DashboardWidgetCatalog.TechniciansWorkload, "wide"), new DashboardLayoutItem(DashboardWidgetCatalog.WorkOrdersUnassigned, "small")], saved.Items);
         var stored = DashboardLayoutRules.Parse((await harness.Db.UserDashboardLayouts.SingleAsync()).LayoutJson)!;
         Assert.DoesNotContain(stored.Items, x => x.Key == DashboardWidgetCatalog.PurchaseOrdersOpen);
         // The layout can't open the widget either.
@@ -200,12 +200,12 @@ public sealed class RoleDashboardTests
     {
         var harness = await Harness.CreateAsync();
         var before = harness.Service(harness.ManagerId, AppRoles.Manager, permissions: PermissionNames.All);
-        await before.SaveLayoutAsync([new(DashboardWidgetCatalog.PurchaseOrdersOpen, "small"), new(DashboardWidgetCatalog.ContractsExpiring, "small")]);
+        await before.SaveLayoutAsync([new(DashboardWidgetCatalog.PurchaseOrdersOpen, "small"), new(DashboardWidgetCatalog.MaintenancePmCompliance, "small")]);
 
         var after = harness.Service(harness.ManagerId, AppRoles.Manager, permissions: [PermissionNames.CanViewWorkOrders]);
         var layout = await after.GetLayoutAsync();
         Assert.DoesNotContain(layout.Items, x => x.Key == DashboardWidgetCatalog.PurchaseOrdersOpen);
-        Assert.Equal(DashboardWidgetCatalog.ContractsExpiring, layout.Items[0].Key);
+        Assert.Equal(DashboardWidgetCatalog.MaintenancePmCompliance, layout.Items[0].Key);
     }
 
     [Fact]
@@ -230,7 +230,7 @@ public sealed class RoleDashboardTests
         var harness = await Harness.CreateAsync();
         var manager = harness.Service(harness.ManagerId, AppRoles.Manager, permissions: PermissionNames.All);
         var defaults = DashboardRoleDefaults.For(AppRoles.Manager);
-        // A layout saved before "contracts expiring" joined the manager default.
+        // A layout saved before "PM compliance" joined the manager default.
         harness.Db.UserDashboardLayouts.Add(new UserDashboardLayout
         {
             TenantId = harness.TenantId,
@@ -238,13 +238,13 @@ public sealed class RoleDashboardTests
             LayoutJson = DashboardLayoutRules.Serialize(new StoredDashboardLayout
             {
                 Items = [new(DashboardWidgetCatalog.MaterialsLowStock, "small")],
-                SeenDefaults = [.. defaults.Where(x => x != DashboardWidgetCatalog.ContractsExpiring)],
+                SeenDefaults = [.. defaults.Where(x => x != DashboardWidgetCatalog.MaintenancePmCompliance)],
             }),
         });
         await harness.Db.SaveChangesAsync();
 
         var layout = await manager.GetLayoutAsync();
-        Assert.Equal([DashboardWidgetCatalog.MaterialsLowStock, DashboardWidgetCatalog.ContractsExpiring], layout.Items.Select(x => x.Key));
+        Assert.Equal([DashboardWidgetCatalog.MaterialsLowStock, DashboardWidgetCatalog.MaintenancePmCompliance], layout.Items.Select(x => x.Key));
 
         // The user removes it; it does not come back.
         await manager.SaveLayoutAsync([new(DashboardWidgetCatalog.MaterialsLowStock, "small")]);
@@ -254,13 +254,13 @@ public sealed class RoleDashboardTests
     [Fact]
     public void LayoutRules_HiddenDefaultsAreNotMarkedSeen_SoUnhidingOffersThemAgain()
     {
-        var defaults = new[] { DashboardWidgetCatalog.ContractsExpiring, DashboardWidgetCatalog.MaterialsLowStock };
+        var defaults = new[] { DashboardWidgetCatalog.MaintenancePmCompliance, DashboardWidgetCatalog.MaterialsLowStock };
         var allowed = new HashSet<string> { DashboardWidgetCatalog.MaterialsLowStock };
         var stored = DashboardLayoutRules.Sanitize([new(DashboardWidgetCatalog.MaterialsLowStock, "small")], null, defaults, allowed);
         Assert.Equal([DashboardWidgetCatalog.MaterialsLowStock], stored.SeenDefaults);
 
-        allowed.Add(DashboardWidgetCatalog.ContractsExpiring);
-        Assert.Equal([DashboardWidgetCatalog.MaterialsLowStock, DashboardWidgetCatalog.ContractsExpiring],
+        allowed.Add(DashboardWidgetCatalog.MaintenancePmCompliance);
+        Assert.Equal([DashboardWidgetCatalog.MaterialsLowStock, DashboardWidgetCatalog.MaintenancePmCompliance],
             DashboardLayoutRules.Resolve(stored, defaults, allowed).Select(x => x.Key));
         Assert.Null(DashboardLayoutRules.Parse("not json"));
     }
@@ -350,7 +350,7 @@ public sealed class RoleDashboardTests
         var secondAdmin = second.Service(second.AdminId, AppRoles.Admin, isAdmin: true);
         var firstBefore = await firstAdmin.GetWidgetAsync(DashboardWidgetCatalog.WorkOrdersOpenOverdue, null, false);
         var secondBefore = await secondAdmin.GetWidgetAsync(DashboardWidgetCatalog.WorkOrdersOpenOverdue, null, false);
-        var contractsBefore = await firstAdmin.GetWidgetAsync(DashboardWidgetCatalog.ContractsExpiring, null, false);
+        var stockBefore = await firstAdmin.GetWidgetAsync(DashboardWidgetCatalog.MaterialsLowStock, null, false);
         Assert.Equal(1, firstBefore.Stats.Single(x => x.Label == "Open").Value);
 
         // A new work order for the first tenant, saved through any context (a service, a worker).
@@ -362,7 +362,7 @@ public sealed class RoleDashboardTests
         Assert.Equal(1, firstAfter.Stats.Single(x => x.Label == "Overdue").Value);
         // The other tenant's entry and the first tenant's unrelated widget are still served from cache.
         Assert.Same(secondBefore, await secondAdmin.GetWidgetAsync(DashboardWidgetCatalog.WorkOrdersOpenOverdue, null, false));
-        Assert.Same(contractsBefore, await firstAdmin.GetWidgetAsync(DashboardWidgetCatalog.ContractsExpiring, null, false));
+        Assert.Same(stockBefore, await firstAdmin.GetWidgetAsync(DashboardWidgetCatalog.MaterialsLowStock, null, false));
 
         // The broadcast names the area and goes to the first tenant only.
         var sent = await WaitForBroadcastsAsync(first.Singletons.Notifier, x => x.TenantId == first.TenantId, 1);
@@ -482,7 +482,6 @@ public sealed class RoleDashboardTests
 
         Assert.Equal("/inventory/purchase-orders?state=late", await Link(DashboardWidgetCatalog.PurchaseOrdersOpen, "Past expected date"));
         Assert.Equal("/inventory/requests?stage=Requested", await Link(DashboardWidgetCatalog.MaterialsPendingIssues, "Awaiting approval"));
-        Assert.Equal("/contracts?expiring=30", await Link(DashboardWidgetCatalog.ContractsExpiring, "Within 30 days"));
     }
 
     [Fact]
@@ -537,12 +536,12 @@ public sealed class RoleDashboardTests
                 Assert.Equal(widget.Key, (await manager.GetWidgetAsync(widget.Key, null, true)).Key);
             }
 
-            var saved = await manager.SaveLayoutAsync([new(DashboardWidgetCatalog.ContractsExpiring, "small")]);
-            Assert.Equal(DashboardWidgetCatalog.ContractsExpiring, saved.Items[0].Key);
+            var saved = await manager.SaveLayoutAsync([new(DashboardWidgetCatalog.MaintenancePmCompliance, "small")]);
+            Assert.Equal(DashboardWidgetCatalog.MaintenancePmCompliance, saved.Items[0].Key);
             Assert.True((await manager.GetLayoutAsync()).IsCustomized);
             Assert.False((await manager.ResetLayoutAsync()).IsCustomized);
-            await admin.SetHiddenAsync(AppRoles.Manager, [DashboardWidgetCatalog.ContractsExpiring]);
-            Assert.Equal([DashboardWidgetCatalog.ContractsExpiring], (await admin.GetAdminSettingsAsync()).Roles.Single(x => x.Role == AppRoles.Manager).HiddenKeys);
+            await admin.SetHiddenAsync(AppRoles.Manager, [DashboardWidgetCatalog.MaintenancePmCompliance]);
+            Assert.Equal([DashboardWidgetCatalog.MaintenancePmCompliance], (await admin.GetAdminSettingsAsync()).Roles.Single(x => x.Role == AppRoles.Manager).HiddenKeys);
         });
     }
 

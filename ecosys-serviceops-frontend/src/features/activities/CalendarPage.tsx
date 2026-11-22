@@ -16,7 +16,6 @@ const sourceTone: Record<CalendarSource, string> = {
   'action-items': 'bg-amber-100 text-amber-900 border-amber-200',
   'work-orders': 'bg-emerald-100 text-emerald-900 border-emerald-200',
   maintenance: 'bg-teal-100 text-teal-900 border-teal-200',
-  contracts: 'bg-rose-100 text-rose-900 border-rose-200',
 }
 
 const sourceDot: Record<CalendarSource, string> = {
@@ -24,7 +23,6 @@ const sourceDot: Record<CalendarSource, string> = {
   'action-items': 'bg-amber-500',
   'work-orders': 'bg-emerald-500',
   maintenance: 'bg-teal-500',
-  contracts: 'bg-rose-500',
 }
 
 const initialMode = () => (typeof window === 'undefined' ? 'month' : defaultCalendarMode(window.innerWidth))

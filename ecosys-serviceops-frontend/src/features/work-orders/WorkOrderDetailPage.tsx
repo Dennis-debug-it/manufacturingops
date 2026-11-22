@@ -34,11 +34,9 @@ import { useWorkflowStatuses } from '../settings/workflowsApi'
 import { CompleteWorkOrderDialog } from './components/CompleteWorkOrderDialog'
 import { DocumentsPanel } from './components/DocumentsPanel'
 import { FollowUpsPanel } from './components/FollowUpsPanel'
-import { NewWorkOrderForm } from './components/NewWorkOrderForm'
 import { ReassignDrawer } from './components/ReassignDrawer'
 import { RelatedWorkOrdersPanel } from './components/RelatedWorkOrdersPanel'
 import { SubtasksPanel } from './components/SubtasksPanel'
-import { hasRecordedArrival } from './dispatchGuards'
 import { ActivityTab } from './tabs/ActivityTab'
 import { OverviewTab } from './tabs/OverviewTab'
 import { ReportTab } from './tabs/ReportTab'
@@ -47,13 +45,10 @@ import { WorkTab } from './tabs/WorkTab'
 const holdTypeOptions = [
   { value: 'OnHold', label: 'On Hold (general)' },
   { value: 'WaitingOnParts', label: 'Waiting on Parts' },
-  { value: 'WaitingOnClient', label: 'Waiting on Client' },
 ] as const
 
 const HOLD_STATUSES = ['On Hold', 'Waiting on Parts', 'Waiting on Client']
 const FINAL_STATUSES = ['Completed', 'Closed', 'Cancelled']
-/** Finished work that can get a return visit (the API enforces the same list). */
-const FOLLOW_UP_STATUSES = ['Completed', 'Client Accepted', 'Closed']
 /** Sub-task statuses that no longer block closing the parent. */
 const SUBTASK_DONE_STATUSES = ['Completed', 'Client Accepted', 'Closed', 'Cancelled', 'Rejected']
 const STARTABLE_STATUSES = ['Assigned', 'Scheduled', 'New', 'Open', 'Reopened']
@@ -93,7 +88,6 @@ export function WorkOrderDetailPage() {
   const duplicateWorkOrder = useDuplicateWorkOrder(id ?? '')
   const reopenWorkOrder = useReopenWorkOrder(id ?? '')
   const { data: subtasks } = useWorkOrderChildren(id)
-  const [followUpOpen, setFollowUpOpen] = useState(false)
 
   const [completeOpen, setCompleteOpen] = useState(false)
   const [reassignOpen, setReassignOpen] = useState(false)
@@ -151,8 +145,6 @@ export function WorkOrderDetailPage() {
   const canCompleteNow = canComplete && !isFinal
   const canCloseNow = canClose && status === 'Completed'
   const canCancelNow = canCancel && !isFinal
-  const arrivalRecorded = Boolean(workOrder.arrivalAt) || hasRecordedArrival(workOrder.technicianAssignments)
-  const canFollowUp = canCreate && FOLLOW_UP_STATUSES.includes(status)
   // The server only offers Reopened to callers allowed to make that move (closed jobs: admins only).
   const canReopen = user?.role === 'admin' && (workOrder.availableTransitions ?? []).includes('Reopened')
   const openSubtasks = (subtasks ?? []).filter((child) => !SUBTASK_DONE_STATUSES.includes(child.status))
@@ -190,7 +182,6 @@ export function WorkOrderDetailPage() {
     ...(canPauseNow ? [{ label: 'Put On Hold', onClick: () => setHoldOpen(true) }] : []),
     ...(canResumeNow && mainAction?.label !== 'Resume' ? [{ label: 'Resume', onClick: resume }] : []),
     ...(canAssign && !isFinal && !needsAssignment ? [{ label: 'Reassign', onClick: () => setReassignOpen(true) }] : []),
-    ...(canFollowUp ? [{ label: 'Create Follow-up', onClick: () => setFollowUpOpen(true) }] : []),
     ...(canReopen ? [{ label: 'Reopen', onClick: () => setConfirmAction('reopen') }] : []),
     ...(canCreate ? [{ label: 'Duplicate', onClick: () => void submitDuplicate() }] : []),
     ...(canCancelNow ? [{ label: 'Cancel Work Order', onClick: () => setConfirmAction('cancel'), danger: true }] : []),
@@ -330,11 +321,6 @@ export function WorkOrderDetailPage() {
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             The technician marked a follow-up visit as required on the checklist.
           </p>
-          {canFollowUp ? (
-            <button type="button" onClick={() => setFollowUpOpen(true)} className="inline-flex h-9 items-center rounded-lg bg-sky-700 px-3 text-xs font-semibold text-white hover:bg-sky-800">
-              Create follow-up
-            </button>
-          ) : null}
         </div>
       ) : null}
       {alerts.length > 0 ? (
@@ -353,7 +339,7 @@ export function WorkOrderDetailPage() {
           <>
             <DocumentsPanel workOrderId={id} />
             <SubtasksPanel workOrder={workOrder} />
-            <FollowUpsPanel workOrder={workOrder} onCreate={canFollowUp ? () => setFollowUpOpen(true) : null} />
+            <FollowUpsPanel workOrder={workOrder} onCreate={null} />
             <RelatedWorkOrdersPanel workOrderId={id} />
           </>
         }
@@ -369,13 +355,11 @@ export function WorkOrderDetailPage() {
         open={completeOpen}
         woNumber={workOrder.workOrderNumber}
         submitting={completeWorkOrder.isPending}
-        arrivalRecorded={arrivalRecorded}
-        canAdminOverride={user?.role === 'admin'}
         initialNotes={bundle?.notes.workDone ?? workOrder.workDoneNotes}
         onClose={() => setCompleteOpen(false)}
-        onSubmit={({ workDoneNotes, adminOverride, overrideReason }) => {
+        onSubmit={({ workDoneNotes }) => {
           completeWorkOrder.mutate(
-            { workDoneNotes, adminOverride, overrideReason },
+            { workDoneNotes },
             {
               onSuccess: () => {
                 toast.success('Work order completed')
@@ -388,7 +372,6 @@ export function WorkOrderDetailPage() {
 
       <ReassignDrawer workOrderId={id} open={reassignOpen} onClose={() => setReassignOpen(false)} />
 
-      <NewWorkOrderForm open={followUpOpen} onClose={() => setFollowUpOpen(false)} followUpOf={workOrder} />
 
       <ConfirmDialog
         open={confirmAction !== null}

@@ -43,7 +43,6 @@ test.describe('Customer-facing copy audit', () => {
 
     const routes = [
       '/dashboard',
-      '/clients',
       '/assets',
       '/work-orders',
       '/materials',

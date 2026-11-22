@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { readUrlFilters } from '../../shared/utils/urlFilters'
-import { contractListFilterSpec, filterContracts } from '../contracts/listFilters'
 import { matchesRequestStage, requestStageFromParam, purchaseOrderChoice, purchaseOrderFiltersFor, purchaseOrderListFilterSpec } from '../inventory/listFilters'
-import type { ContractListItem } from '../contracts/types'
 
 /** Each dashboard link (RoleDashboardQueries.cs) read back by the list page it opens. */
 const read = <K extends string>(link: string, spec: Parameters<typeof readUrlFilters<K>>[1]) =>
@@ -25,10 +23,4 @@ describe('dashboard links open filtered lists', () => {
     expect(requestStageFromParam('pending_approval')).toBe('open')
   })
 
-  it('contracts: live ones ending within the window', () => {
-    const contract = (id: string, daysToExpiry: number, status = 'Active') => ({ id, daysToExpiry, status }) as ContractListItem
-    const rows = [contract('soon', 10), contract('later', 60), contract('ended', -2), contract('expired', 5, 'Expired')]
-    expect(filterContracts(rows, read('/contracts?expiring=30', contractListFilterSpec).expiring).map((x) => x.id)).toEqual(['soon'])
-    expect(filterContracts(rows, '90').map((x) => x.id)).toEqual(['soon', 'later'])
-  })
 })

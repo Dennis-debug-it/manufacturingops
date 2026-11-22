@@ -27,7 +27,6 @@ import { formatDate, toWorkspaceDate } from '../../shared/utils/dates'
 import { useGenerateWorkOrderNow, usePmPlans } from './api'
 import type { PmPlan } from './types'
 import { MaintenanceTabNav } from './components/MaintenanceTabNav'
-import { ClientFilterSelect, useMaintenanceClientFilter } from './components/ClientFilter'
 
 type Tone = 'grey' | 'green' | 'blue' | 'amber' | 'red'
 
@@ -64,8 +63,7 @@ export function CalendarPage() {
   const { data, isLoading, isError, refetch } = usePmPlans()
   const generateNow = useGenerateWorkOrderNow(selected?.id ?? '')
 
-  const { clientId, setClientId } = useMaintenanceClientFilter()
-  const plans = useMemo(() => (data ?? []).filter((plan) => !clientId || plan.clientId === clientId), [data, clientId])
+  const plans = useMemo(() => data ?? [], [data])
 
   const days = useMemo(() => {
     if (view === 'week') {
@@ -127,7 +125,6 @@ export function CalendarPage() {
         subtitle="Preventive maintenance schedule across all active plans."
         secondaryActions={
           <div className="flex flex-wrap items-center gap-2">
-            <ClientFilterSelect value={clientId} onChange={setClientId} />
             {(['month', 'week'] as const).map((option) => (
               <button
                 key={option}
@@ -197,7 +194,6 @@ export function CalendarPage() {
               <button type="button" onClick={() => setSelected(null)} className="rounded-lg p-2 hover:bg-slate-100"><X className="h-4 w-4" /></button>
             </div>
             <div className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between"><span className="text-slate-500">Client</span><span className="font-medium text-slate-900">{selected.clientName ?? '—'}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Template</span><span className="font-medium text-slate-900">{selected.pmTemplateName ?? '—'}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Frequency</span><span className="font-medium text-slate-900">{selected.frequency}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Next Due</span><span className="font-medium text-slate-900">{selected.nextPmDate ? formatDate(selected.nextPmDate) : '—'}</span></div>

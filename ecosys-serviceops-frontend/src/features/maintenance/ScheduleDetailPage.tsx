@@ -14,7 +14,6 @@ import { formatDate } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
 import { useGenerateWorkOrderNow, usePmPlans, useSetPmAutoSchedule } from './api'
 import { OnOffSwitch } from '../../shared/components/OnOffSwitch'
-import { ContractLapsePanel } from './components/ContractLapsePanel'
 import { PM_CONTRACT_LAPSED } from './types'
 
 type HistoryOutcome = 'Completed On Time' | 'Completed Late' | 'Missed' | 'In Progress'
@@ -74,7 +73,6 @@ export function ScheduleDetailPage() {
     <div className="space-y-4">
       <PageHeader
         title={plan.assetName ?? 'PM Schedule'}
-        subtitle={plan.clientName ?? undefined}
         breadcrumbs={[{ label: 'PM Schedules', to: '/maintenance/schedules' }, { label: plan.assetName ?? 'Schedule' }]}
         secondaryActions={<StatusBadge status={plan.status === PM_CONTRACT_LAPSED ? 'Contract Lapsed' : plan.status} />}
         primaryAction={
@@ -86,7 +84,6 @@ export function ScheduleDetailPage() {
           ) : undefined
         }
       />
-      <ContractLapsePanel plan={plan} />
     </div>
   )
 
@@ -108,7 +105,6 @@ export function ScheduleDetailPage() {
             <SummarySection title="Schedule Overview" description="Core PM plan fields.">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {[
-                  ['Client', plan.clientName ?? '—'],
                   ['Asset', plan.assetName ?? '—'],
                   ['Branch', plan.branchName ?? '—'],
                   ['Frequency', plan.frequency],

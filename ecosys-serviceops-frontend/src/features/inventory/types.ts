@@ -44,13 +44,6 @@ export interface StockMovement {
   batchOrSerial: string | null
 }
 
-export interface BranchStockSummary {
-  branchId: string
-  partsStocked: number
-  lowStockParts: number
-  stockValue: number
-}
-
 export interface MaterialRequestLine {
   id: string
   materialItemId: string

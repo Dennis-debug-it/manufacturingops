@@ -19,14 +19,9 @@ test.describe('mobile technician mode', () => {
     await expect(page.getByTestId('tech-bottom-bar')).toBeVisible()
     await expect(page.getByTestId('assignment-group-control')).toHaveCount(0)
 
-    // The server requires the technician to accept and record arrival before work can start.
+    // The server requires the technician to accept before work can start.
     await page.getByRole('button', { name: 'Accept Job' }).click()
     await expect(page.getByText(/job accepted/i)).toBeVisible()
-    // Heading out is its own step (it also clocks the technician in on the server).
-    await page.getByRole('button', { name: 'On My Way' }).click()
-    await expect(page.getByText(/on the way/i).first()).toBeVisible()
-    await page.getByRole('button', { name: "I've Arrived" }).click()
-    await expect(page.getByText(/arrival recorded/i)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Start Work' })).toBeVisible()
     await page.getByRole('button', { name: 'Start Work' }).click()
     await expect(page.getByText(/job updated/i)).toBeVisible()
@@ -69,8 +64,8 @@ test.describe('mobile technician mode', () => {
   test('technician reaches time & leave, parts, guides, service report and account from /tech', async ({ page }) => {
     const state = createScenarioState()
     // A job already in progress, so parts can be requested.
-    Object.assign(state.workOrder.technicianAssignments[0]!, { status: 'Arrived', acceptedAt: '2026-05-16T08:20:00.000Z', arrivalAt: '2026-05-16T08:35:00.000Z' })
-    Object.assign(state.workOrder, { status: 'In Progress', arrivalAt: '2026-05-16T08:35:00.000Z', workStartedAt: '2026-05-16T08:40:00.000Z' })
+    Object.assign(state.workOrder.technicianAssignments[0]!, { status: 'Accepted', acceptedAt: '2026-05-16T08:20:00.000Z' })
+    Object.assign(state.workOrder, { status: 'In Progress', workStartedAt: '2026-05-16T08:40:00.000Z' })
     await mockTechnicianMode(page, state)
     const self = await mockTechnicianSelfService(page, state.workOrder.id)
 
@@ -131,18 +126,17 @@ test.describe('mobile technician mode', () => {
     expect(self.preferenceUpdates[0]).toEqual([{ notificationKey: 'workorder.assigned', emailEnabled: false, inAppEnabled: true }])
   })
 
-  test('leaving site offers to clock out; captions and office notes can be edited and sent', async ({ page }) => {
+  test('captions and office notes can be edited and sent', async ({ page }) => {
     const state = createScenarioState()
-    Object.assign(state.workOrder.technicianAssignments[0]!, { status: 'Arrived', acceptedAt: '2026-05-16T08:20:00.000Z', arrivalAt: '2026-05-16T08:35:00.000Z' })
-    Object.assign(state.workOrder, { status: 'In Progress', arrivalAt: '2026-05-16T08:35:00.000Z', workStartedAt: '2026-05-16T08:40:00.000Z' })
+    Object.assign(state.workOrder.technicianAssignments[0]!, { status: 'Accepted', acceptedAt: '2026-05-16T08:20:00.000Z' })
+    Object.assign(state.workOrder, { status: 'In Progress', workStartedAt: '2026-05-16T08:40:00.000Z' })
     state.execution.photos.push({
       id: 'photo-9', attachmentId: 'attachment-9', fileName: 'panel.jpg', publicUrl: 'https://example.test/panel.jpg', caption: 'panel.jpg',
       category: 'During', includeInReport: true, uploadedByUserId: 'user-1', uploadedByName: 'Moses Otieno', uploadedAt: '2026-05-16T09:00:00.000Z',
     })
     await mockTechnicianMode(page, state)
-    const self = await mockTechnicianSelfService(page, state.workOrder.id)
-    self.clockedIn = true
-    const sent = { notes: [] as Array<Record<string, unknown>>, captions: [] as Array<Record<string, unknown>>, clockedOut: false }
+    await mockTechnicianSelfService(page, state.workOrder.id)
+    const sent = { notes: [] as Array<Record<string, unknown>>, captions: [] as Array<Record<string, unknown>> }
     const reply = async (route: import('@playwright/test').Route, body: unknown) => {
       if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS_HEADERS })
       return route.fulfill(json(body))
@@ -159,15 +153,6 @@ test.describe('mobile technician mode', () => {
       }
       await reply(route, state.execution)
     })
-    await page.route(`${E2E_API_URL}/api/workorders/${state.workOrder.id}/departure`, async (route) => {
-      state.workOrder.technicianAssignments[0]!.departureAt = '2026-05-16T11:00:00.000Z'
-      await reply(route, state.workOrder)
-    })
-    await page.route(`${E2E_API_URL}/api/attendance/me/clock-out`, async (route) => {
-      sent.clockedOut = true
-      self.clockedIn = false
-      await reply(route, { ok: true })
-    })
 
     await page.goto(`/tech/jobs/${state.workOrder.id}`)
     await page.getByRole('radio', { name: 'Note to office' }).click()
@@ -182,13 +167,6 @@ test.describe('mobile technician mode', () => {
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(page.getByText('Caption updated')).toBeVisible()
     expect(sent.captions[0]).toMatchObject({ caption: 'PV Panels', category: 'During', includeInReport: true })
-
-    await page.getByLabel('Open more actions').click()
-    await page.getByRole('button', { name: 'Record Departure' }).click()
-    await expect(page.getByRole('heading', { name: 'Clock out for the day?' })).toBeVisible()
-    await page.getByRole('button', { name: 'Clock out', exact: true }).click()
-    await expect(page.getByText('Clocked out for the day')).toBeVisible()
-    expect(sent.clockedOut).toBe(true)
   })
 })
 
@@ -404,26 +382,6 @@ async function mockTechnicianMode(page: Page, state: ReturnType<typeof createSce
     }
     state.workOrder.technicianAssignments[0]!.status = 'Accepted'
     state.workOrder.technicianAssignments[0]!.acceptedAt = '2026-05-16T08:20:00.000Z'
-    await route.fulfill(json(state.workOrder))
-  })
-
-  await page.route(`${baseApi}/api/workorders/${state.workOrder.id}/in-transit`, async (route) => {
-    if (route.request().method() === 'OPTIONS') {
-      await route.fulfill({ status: 204, headers: CORS_HEADERS })
-      return
-    }
-    state.workOrder.technicianAssignments[0]!.status = 'InTransit'
-    await route.fulfill(json(state.workOrder))
-  })
-
-  await page.route(`${baseApi}/api/workorders/${state.workOrder.id}/arrival`, async (route) => {
-    if (route.request().method() === 'OPTIONS') {
-      await route.fulfill({ status: 204, headers: CORS_HEADERS })
-      return
-    }
-    state.workOrder.technicianAssignments[0]!.status = 'Arrived'
-    state.workOrder.technicianAssignments[0]!.arrivalAt = '2026-05-16T08:35:00.000Z'
-    state.workOrder.arrivalAt = '2026-05-16T08:35:00.000Z' as unknown as null
     await route.fulfill(json(state.workOrder))
   })
 

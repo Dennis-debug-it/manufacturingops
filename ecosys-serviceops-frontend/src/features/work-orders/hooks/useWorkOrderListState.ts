@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { WorkOrderFilterValues } from '../listModel'
 
-export type ViewMode = 'table' | 'kanban' | 'calendar' | 'map'
+export type ViewMode = 'table' | 'kanban' | 'calendar'
 
 export interface WorkOrderListState extends WorkOrderFilterValues {
   view: ViewMode
@@ -13,8 +13,6 @@ const PARAM_KEYS: Record<keyof WorkOrderListState, string> = {
   search: 'q',
   status: 'status',
   technicianId: 'technicianId',
-  clientId: 'clientId',
-  siteId: 'siteId',
   priority: 'priority',
   slaStatus: 'slaStatus',
   unassignedOnly: 'unassigned',
@@ -28,8 +26,6 @@ const FILTER_KEYS: (keyof WorkOrderFilterValues)[] = [
   'search',
   'status',
   'technicianId',
-  'clientId',
-  'siteId',
   'priority',
   'slaStatus',
   'unassignedOnly',
@@ -38,7 +34,7 @@ const FILTER_KEYS: (keyof WorkOrderFilterValues)[] = [
   'toDate',
 ]
 
-const VIEW_MODES: ViewMode[] = ['table', 'kanban', 'calendar', 'map']
+const VIEW_MODES: ViewMode[] = ['table', 'kanban', 'calendar']
 
 export function useWorkOrderListState() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -51,8 +47,6 @@ export function useWorkOrderListState() {
       search: searchParams.get(PARAM_KEYS.search) ?? '',
       status: searchParams.get(PARAM_KEYS.status) ?? '',
       technicianId: searchParams.get(PARAM_KEYS.technicianId) ?? '',
-      clientId: searchParams.get(PARAM_KEYS.clientId) ?? '',
-      siteId: searchParams.get(PARAM_KEYS.siteId) ?? '',
       priority: searchParams.get(PARAM_KEYS.priority) ?? '',
       slaStatus: searchParams.get(PARAM_KEYS.slaStatus) ?? '',
       unassignedOnly: searchParams.get(PARAM_KEYS.unassignedOnly) === '1',

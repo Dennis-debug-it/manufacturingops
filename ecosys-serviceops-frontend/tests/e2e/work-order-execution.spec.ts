@@ -60,10 +60,10 @@ test.describe('work order execution vertical slice', () => {
     await page.goto(`/work-orders/${state.workOrder.id}?tab=work`)
 
     const readiness = page.getByLabel('Completion readiness')
-    await expect(readiness.getByRole('button', { name: 'Technician on site' })).toBeVisible()
+    await expect(readiness.getByRole('button', { name: 'Technician accepted' })).toBeVisible()
     await expect(readiness.getByRole('button', { name: 'Work performed' })).toBeVisible()
 
-    // With arrival recorded, the next unfinished step (work performed) is already expanded.
+    // With the technician accepted, the next unfinished step (work performed) is already expanded.
     await page.getByPlaceholder('Describe the work performed…').fill('Reterminated L2 and replaced the transfer contactor.')
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(page.getByText('Work performed notes saved')).toBeVisible()
@@ -90,7 +90,7 @@ test.describe('work order execution vertical slice', () => {
     const state = makeScenario()
     state.events.push({
       id: 'e1', eventType: 'NoteAdded', status: 'Assigned', message: 'Added an internal note.', actorUserId: null, actorUserName: 'Ops Admin',
-      oldStatus: null, newStatus: null, reason: null, note: null, latitude: null, longitude: null, occurredAt: '2026-05-13T08:10:00.000Z', metadataJson: null,
+      oldStatus: null, newStatus: null, reason: null, note: null, occurredAt: '2026-05-13T08:10:00.000Z', metadataJson: null,
     })
     await mockOfficeWorkOrder(page, state)
     await page.goto(`/work-orders/${state.workOrder.id}?tab=activity`)

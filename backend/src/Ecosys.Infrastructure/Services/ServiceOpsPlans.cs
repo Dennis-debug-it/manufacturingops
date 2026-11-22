@@ -96,13 +96,13 @@ public static class ServiceOpsPlans
 
     private static readonly HashSet<string> OperationsControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "AssignmentGroups", "ContractReference", "Dashboard", "EtaNotificationSettings", "Reports", "Sites",
+        "AssignmentGroups", "Dashboard", "Reports",
         "TeamManagement", "Technicians", "TechnicianJobs", "WorkOrderAssignments", "WorkOrderExecution",
         "WorkOrderTemplates", "WorkOrders"
     };
     private static readonly HashSet<string> MaintenanceControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Assets", "AssetCategories", "AssetContracts", "AssetLifecycle", "AssetTags", "AssetDocuments", "Meters", "ConditionMonitoring", "SensorGateways", "Reliability", "Fleet", "FactoryAssetImport", "FactoryWorkOrders", "JobPlans", "RunningChecks", "FactoryDashboard", "FactoryPm", "MaintenanceWindows", "Overhaul", "Compliance", "FactoryPeople", "Safety", "Contractors", "FactoryCosts", "FactoryKpis", "ComplianceFramework", "DataProtection", "Contracts", "EscalationRules", "PreventiveMaintenance", "PmTemplates",
+        "Assets", "AssetCategories", "AssetLifecycle", "AssetTags", "AssetDocuments", "Meters", "ConditionMonitoring", "SensorGateways", "Reliability", "Fleet", "FactoryAssetImport", "FactoryWorkOrders", "JobPlans", "RunningChecks", "FactoryDashboard", "FactoryPm", "MaintenanceWindows", "Overhaul", "Compliance", "FactoryPeople", "Safety", "Contractors", "FactoryCosts", "FactoryKpis", "ComplianceFramework", "DataProtection", "EscalationRules", "PreventiveMaintenance", "PmTemplates",
         "SlaDefinitions", "SlaPolicies", "Systems"
     };
     private static readonly HashSet<string> InventoryControllers = new(StringComparer.OrdinalIgnoreCase)
@@ -156,9 +156,9 @@ public static class ServiceOpsPlans
     /// </summary>
     public static readonly IReadOnlySet<string> SharedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "AccessControl", "ActionItems", "Activities", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "Calendar", "CalendarFeed", "ClientPortalContacts",
-        "Clients", "ClientContacts", "Dev", "Integrations", "Notifications",
-        "PublicWorkOrder", "OperatorFaultReport", "Sensors", "FleetPositions", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
+        "AccessControl", "ActionItems", "Activities", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "Calendar", "CalendarFeed",
+        "Dev", "Integrations", "Notifications",
+        "OperatorFaultReport", "Sensors", "FleetPositions", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
         // Factory hierarchy and settings: the backbone every factory module hangs off.
         "OrgNodes", "FactorySettings",
@@ -195,8 +195,7 @@ public static class ServiceOpsPlans
             if (setting is "whatsapp") return [WhatsAppBusiness];
             if (setting is "tax" or "finance") return [Finance];
         }
-        if (controller == "Import" && route.Contains("/assets")) return [Maintenance];
-        if (controller == "Import" && (route.Contains("/sites") || route.Contains("/technicians"))) return [Operations];
+        if (controller == "Import" && route.Contains("/technicians")) return [Operations];
         return [];
     }
 

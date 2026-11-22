@@ -11,8 +11,6 @@ import {
 } from '@dnd-kit/core'
 import { cn } from '../../../shared/utils/cn'
 import { EmptyState } from '../../../shared/components/EmptyState'
-import { useAuth } from '../../../shared/hooks/useAuth'
-import { COMPLETE_BLOCKED_REASON } from '../dispatchGuards'
 import { KANBAN_STATUSES, type WorkOrderRow } from '../listModel'
 import {
   useAssignWorkOrderById,
@@ -62,8 +60,6 @@ export interface KanbanViewProps {
 }
 
 export function KanbanView({ rows }: KanbanViewProps) {
-  const { user } = useAuth()
-  const isTenantAdmin = user?.role === 'admin'
   const queryClient = useQueryClient()
   const patchStatus = usePatchWorkOrderStatus()
   const assignMutation = useAssignWorkOrderById()
@@ -93,13 +89,7 @@ export function KanbanView({ rows }: KanbanViewProps) {
     }
 
     if (targetStatus === 'Completed') {
-      // Dropping into Completed is the same call as the Complete action, so it answers to the same
-      // arrival guard: without an arrival only a tenant admin can proceed, via the override in the
-      // dialog.
-      if (!row.hasRecordedArrival && !isTenantAdmin) {
-        toast.error(COMPLETE_BLOCKED_REASON)
-        return
-      }
+      // Dropping into Completed is the same call as the Complete action: it asks for the work done.
       setCompleteTarget(row)
       return
     }
@@ -178,13 +168,11 @@ export function KanbanView({ rows }: KanbanViewProps) {
         open={Boolean(completeTarget)}
         woNumber={completeTarget?.woNo}
         submitting={completeMutation.isPending}
-        arrivalRecorded={completeTarget?.hasRecordedArrival ?? false}
-        canAdminOverride={isTenantAdmin}
         onClose={() => setCompleteTarget(null)}
-        onSubmit={({ workDoneNotes, adminOverride, overrideReason }) => {
+        onSubmit={({ workDoneNotes }) => {
           if (!completeTarget) return
           completeMutation.mutate(
-            { id: completeTarget.id, workDoneNotes, adminOverride, overrideReason },
+            { id: completeTarget.id, workDoneNotes },
             {
               onSuccess: () => {
                 toast.success(`${completeTarget.woNo} completed`)

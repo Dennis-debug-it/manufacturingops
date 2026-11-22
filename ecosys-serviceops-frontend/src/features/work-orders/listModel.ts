@@ -1,14 +1,10 @@
 import type { WorkOrderListFilters } from './api'
-import { hasAcceptedTechnician, hasRecordedArrival, readAssignmentGuardState } from './dispatchGuards'
+import { hasAcceptedTechnician, readAssignmentGuardState } from './dispatchGuards'
 
 export interface WorkOrderRow {
   id: string
   woNo: string
   title: string
-  client: string
-  clientId: string
-  site: string
-  siteId: string
   asset: string
   type: string
   priority: string
@@ -22,8 +18,6 @@ export interface WorkOrderRow {
   slaResolutionDeadline: string | null
   slaResponseBreached: boolean
   slaResolutionBreached: boolean
-  latitude: number | null
-  longitude: number | null
   estimatedHours: number
   isUnassigned: boolean
   availableTransitions: string[]
@@ -37,7 +31,6 @@ export interface WorkOrderRow {
   /** Server Start guard: at least one persisted technician assignment in an accepted state. */
   hasAcceptedTechnician: boolean
   /** Server Complete guard: at least one persisted technician assignment with an arrival recorded. */
-  hasRecordedArrival: boolean
 }
 
 /**
@@ -84,10 +77,6 @@ export function normalizeWorkOrders(payload: unknown): WorkOrderRow[] {
       id: asText(row.id ?? row.workOrderId ?? `${index}`),
       woNo: pick(row, ['workOrderNumber', 'woNo', 'woNumber', 'workOrderNo', 'number', 'code']),
       title: pick(row, ['title']),
-      client: pick(row, ['clientName', 'client', 'customerName']),
-      clientId: asId(row.clientId),
-      site: pick(row, ['siteName', 'site']),
-      siteId: asId(row.siteId),
       asset: pick(row, ['assetName', 'asset']),
       type: pick(row, ['workType', 'type']),
       priority: pick(row, ['priority']),
@@ -101,8 +90,6 @@ export function normalizeWorkOrders(payload: unknown): WorkOrderRow[] {
       slaResolutionDeadline: typeof row.slaResolutionDeadline === 'string' ? row.slaResolutionDeadline : null,
       slaResponseBreached: Boolean(row.slaResponseBreached),
       slaResolutionBreached: Boolean(row.slaResolutionBreached),
-      latitude: asNumber(row.siteLatitude),
-      longitude: asNumber(row.siteLongitude),
       estimatedHours: asNumber(row.estimatedLabourHours) ?? 0,
       isUnassigned: Boolean(row.isUnassigned),
       availableTransitions: Array.isArray(row.availableTransitions) ? row.availableTransitions.filter((v): v is string => typeof v === 'string') : [],
@@ -113,7 +100,6 @@ export function normalizeWorkOrders(payload: unknown): WorkOrderRow[] {
       repeatVisitCount: typeof row.repeatVisitCount === 'number' ? row.repeatVisitCount : 0,
       followUpOfWorkOrderNumber: typeof row.followUpOfWorkOrderId === 'string' ? (typeof row.followUpOfWorkOrderNumber === 'string' ? row.followUpOfWorkOrderNumber : '') : null,
       hasAcceptedTechnician: hasAcceptedTechnician(readAssignmentGuardState(row.technicianAssignments)),
-      hasRecordedArrival: hasRecordedArrival(readAssignmentGuardState(row.technicianAssignments)),
     }))
 }
 
@@ -121,8 +107,6 @@ export interface WorkOrderFilterValues {
   search: string
   status: string
   technicianId: string
-  clientId: string
-  siteId: string
   priority: string
   slaStatus: string
   unassignedOnly: boolean
@@ -139,12 +123,12 @@ export const RECENTLY_FINISHED_DAYS = 30
 
 /**
  * The list shows open work and recently finished jobs by default. Anything that is looking for a
- * particular job, or the work of a particular client, site or technician, sees the full history:
+ * particular job, or the work of a particular technician, sees the full history:
  * a search, a status, a related record, a date range, or asking for everything.
  */
 export function showsFullHistory(filters: WorkOrderFilterValues): boolean {
   return Boolean(
-    filters.showAll || filters.search.trim() || filters.status || filters.clientId || filters.siteId
+    filters.showAll || filters.search.trim() || filters.status
       || filters.technicianId || filters.fromDate || filters.toDate,
   )
 }
@@ -157,8 +141,8 @@ export function showsFullHistory(filters: WorkOrderFilterValues): boolean {
  * Two semantics shift with the move to the server and are intentional:
  * - `fromDate`/`toDate` bound `CreatedAt` server-side (the only date the endpoint filters on),
  *   where the old client-side pass used the due date and fell back to created.
- * - `search` matches WO number, title, client, asset and the assignment summary server-side; site
- *   and work type are no longer part of the free-text match.
+ * - `search` matches WO number, title, asset and the assignment summary server-side; work type
+ *   is no longer part of the free-text match.
  *
  * Empty strings are dropped rather than sent, because the server treats a present-but-blank
  * `status`/`priority`/`slaStatus` as a value to normalize and rejects what it cannot parse.
@@ -169,8 +153,6 @@ export function toWorkOrderListFilters(filters: WorkOrderFilterValues): WorkOrde
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.priority ? { priority: filters.priority } : {}),
     ...(filters.technicianId ? { technicianId: filters.technicianId } : {}),
-    ...(filters.clientId ? { clientId: filters.clientId } : {}),
-    ...(filters.siteId ? { siteId: filters.siteId } : {}),
     ...(filters.slaStatus ? { slaStatus: filters.slaStatus } : {}),
     ...(filters.unassignedOnly ? { unassigned: true } : {}),
     ...(filters.state ? { state: filters.state } : {}),

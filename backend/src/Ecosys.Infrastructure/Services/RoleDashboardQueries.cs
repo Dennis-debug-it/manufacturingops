@@ -41,9 +41,7 @@ internal sealed class RoleDashboardQueries(
             DashboardWidgetCatalog.WorkOrdersUnassigned => await UnassignedAsync(viewer, cancellationToken),
             DashboardWidgetCatalog.DispatchTodaysVisits => await TodaysVisitsAsync(viewer, clock, cancellationToken),
             DashboardWidgetCatalog.TechniciansWorkload => await WorkloadAsync(viewer, cancellationToken),
-            DashboardWidgetCatalog.TechniciansOnSite => await OnSiteAsync(viewer, cancellationToken),
             DashboardWidgetCatalog.MaintenancePmCompliance => await PmComplianceAsync(viewer, clock, cancellationToken),
-            DashboardWidgetCatalog.ContractsExpiring => await ContractsExpiringAsync(viewer, clock, cancellationToken),
             DashboardWidgetCatalog.MaterialsLowStock => await LowStockAsync(viewer, cancellationToken),
             DashboardWidgetCatalog.MaterialsPendingIssues => await PendingIssuesAsync(viewer, cancellationToken),
             DashboardWidgetCatalog.PurchaseOrdersOpen => await OpenPurchaseOrdersAsync(viewer, clock, cancellationToken),
@@ -168,17 +166,6 @@ internal sealed class RoleDashboardQueries(
                 x.Active, "number", null, $"/work-orders?state=open&technicianId={x.TechnicianId}"))]);
     }
 
-    private async Task<Result> OnSiteAsync(DashboardQueryViewer viewer, CancellationToken ct)
-    {
-        var rows = await OpenAssignments(viewer).Where(x => x.ArrivalAt != null && x.DepartureAt == null)
-            .OrderBy(x => x.ArrivalAt)
-            .Select(x => new { x.WorkOrderId, x.TechnicianId, Name = x.Technician != null ? x.Technician.FullName : "Technician", Number = x.WorkOrder!.WorkOrderNumber })
-            .ToListAsync(ct);
-        return new Result(
-            [Count("On site", rows.Select(x => x.TechnicianId).Distinct().Count(), "/dispatch/map")],
-            [.. rows.Take(ListLimit).Select(x => new DashboardListItem(x.Name, x.Number, null, null, null, $"/work-orders/{x.WorkOrderId}"))]);
-    }
-
     private async Task<Result> PmComplianceAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
     {
         var plans = dbContext.PreventiveMaintenancePlans.AsNoTracking()
@@ -203,21 +190,6 @@ internal sealed class RoleDashboardQueries(
             ],
             [],
             due == 0 ? "No preventive maintenance fell due in the last 30 days." : null);
-    }
-
-    private async Task<Result> ContractsExpiringAsync(DashboardQueryViewer viewer, Clock clock, CancellationToken ct)
-    {
-        var contracts = dbContext.Contracts.AsNoTracking()
-            .Where(x => x.TenantId == viewer.TenantId && !x.IsArchived && x.EndDate >= clock.TodayStartUtc
-                && x.Status != ContractStatus.Expired && x.Status != ContractStatus.Terminated && x.Status != ContractStatus.Cancelled);
-        var in30 = await contracts.CountAsync(x => x.EndDate < clock.TodayStartUtc.AddDays(31), ct);
-        var in90 = await contracts.CountAsync(x => x.EndDate < clock.TodayStartUtc.AddDays(91), ct);
-        var soonest = await contracts.Where(x => x.EndDate < clock.TodayStartUtc.AddDays(91)).OrderBy(x => x.EndDate).Take(ListLimit)
-            .Select(x => new { x.Id, x.ContractNumber, x.Name, x.EndDate })
-            .ToListAsync(ct);
-        return new Result(
-            [Count("Within 30 days", in30, "/contracts?expiring=30", "warning"), Count("Within 90 days", in90, "/contracts?expiring=90")],
-            [.. soonest.Select(x => new DashboardListItem($"{x.ContractNumber} {x.Name}", $"Ends {x.EndDate:dd MMM yyyy}", null, null, null, $"/contracts/{x.Id}"))]);
     }
 
     private async Task<Result> LowStockAsync(DashboardQueryViewer viewer, CancellationToken ct)

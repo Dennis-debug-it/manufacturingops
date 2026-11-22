@@ -190,7 +190,7 @@ export function ReportQueueTab() {
                 <th className="px-3 py-3">
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleAll} className="h-4 w-4 rounded border-slate-300" aria-label="Select all" />
                 </th>
-                {['SR No', 'WO No', 'Client', 'Site', 'Asset', 'Technician', 'Completed', 'Report Status', 'Days', 'Actions'].map((h) => (
+                {['SR No', 'WO No', 'Asset', 'Technician', 'Completed', 'Report Status', 'Days', 'Actions'].map((h) => (
                   <th key={h} className="whitespace-nowrap px-3 py-3 font-medium text-slate-600">{h}</th>
                 ))}
               </tr>
@@ -203,8 +203,6 @@ export function ReportQueueTab() {
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 font-mono text-xs text-slate-700">{row.srNo ?? '—'}</td>
                   <td className="whitespace-nowrap px-3 py-3"><Link className="font-mono text-slate-900 underline decoration-slate-300 underline-offset-4" to={`/work-orders/${row.workOrderId}`}>{row.woNo}</Link></td>
-                  <td className="px-3 py-3 text-slate-700">{row.client}</td>
-                  <td className="px-3 py-3 text-slate-700">{row.site}</td>
                   <td className="px-3 py-3 text-slate-700">{row.asset}</td>
                   <td className="px-3 py-3 text-slate-700">{row.technician}</td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-700">{row.completedAt ? formatDate(row.completedAt) : '—'}</td>

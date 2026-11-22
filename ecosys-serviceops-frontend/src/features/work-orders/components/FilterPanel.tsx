@@ -1,10 +1,7 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, Funnel, X } from 'lucide-react'
-import { api } from '../../../shared/api/apiClient'
-import { endpoints } from '../../../shared/api/endpoints'
 import { cn } from '../../../shared/utils/cn'
-import { useClientOptions, useTechnicianOptions, type SiteOption } from '../pickerApi'
+import { useTechnicianOptions } from '../pickerApi'
 import { KANBAN_STATUSES, slaStatusLabels, type SlaStatusKey } from '../listModel'
 import type { WorkOrderListState } from '../hooks/useWorkOrderListState'
 
@@ -13,32 +10,6 @@ const SLA_STATUSES: SlaStatusKey[] = ['on-track', 'at-risk', 'breached', 'no-sla
 
 const fieldClass = 'h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1 block text-xs font-medium text-slate-500'
-
-function useSiteFilterOptions(clientId: string) {
-  return useQuery({
-    queryKey: ['picker', 'sites-search', clientId],
-    queryFn: () => api.get<SiteOption[]>(endpoints.sites.search, { clientId: clientId || undefined }),
-    staleTime: 60_000,
-  })
-}
-
-/** Client is the most-used filter, so it sits in the toolbar instead of the collapsed panel. */
-export function ClientQuickFilter({ value, onChange }: { value: string; onChange: (patch: Partial<WorkOrderListState>) => void }) {
-  const { data: clients } = useClientOptions()
-  return (
-    <select
-      aria-label="Filter work orders by client"
-      className="h-11 min-w-[12rem] rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-[var(--app-primary)]"
-      value={value}
-      onChange={(event) => onChange({ clientId: event.target.value, siteId: '' })}
-    >
-      <option value="">All clients</option>
-      {[...(clients ?? [])].sort((a, b) => a.clientName.localeCompare(b.clientName)).map((client) => (
-        <option key={client.id} value={client.id}>{client.clientName}</option>
-      ))}
-    </select>
-  )
-}
 
 export interface FilterPanelProps {
   state: WorkOrderListState
@@ -50,7 +21,6 @@ export interface FilterPanelProps {
 export function FilterPanel({ state, onChange, onClear, activeFilterCount }: FilterPanelProps) {
   const [open, setOpen] = useState(false)
   const { data: technicians } = useTechnicianOptions()
-  const { data: sites } = useSiteFilterOptions(state.clientId)
 
   const chips: Array<{ key: keyof WorkOrderListState; label: string }> = []
   if (state.status) chips.push({ key: 'status', label: `Status: ${state.status}` })
@@ -58,10 +28,6 @@ export function FilterPanel({ state, onChange, onClear, activeFilterCount }: Fil
   if (state.technicianId) {
     const name = technicians?.find((t) => t.id === state.technicianId)?.fullName
     chips.push({ key: 'technicianId', label: `Technician: ${name ?? '—'}` })
-  }
-  if (state.siteId) {
-    const name = sites?.find((s) => s.id === state.siteId)?.siteName
-    chips.push({ key: 'siteId', label: `Site: ${name ?? '—'}` })
   }
   if (state.slaStatus) chips.push({ key: 'slaStatus', label: `SLA: ${slaStatusLabels[state.slaStatus as SlaStatusKey]}` })
   if (state.unassignedOnly) chips.push({ key: 'unassignedOnly', label: 'Unassigned only' })
@@ -142,16 +108,6 @@ export function FilterPanel({ state, onChange, onClear, activeFilterCount }: Fil
               <option value="">All technicians</option>
               {(technicians ?? []).map((technician) => (
                 <option key={technician.id} value={technician.id}>{technician.fullName}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className={labelClass}>Site</label>
-            <select className={fieldClass} value={state.siteId} onChange={(event) => onChange({ siteId: event.target.value })}>
-              <option value="">All sites</option>
-              {(sites ?? []).map((site) => (
-                <option key={site.id} value={site.id}>{site.siteName}</option>
               ))}
             </select>
           </div>

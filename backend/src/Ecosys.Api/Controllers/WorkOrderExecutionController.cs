@@ -104,38 +104,6 @@ public sealed partial class WorkOrderExecutionController(
         return Ok(await BuildExecutionBundleAsync(workOrderId, cancellationToken));
     }
 
-    [HttpPost("in-transit")]
-    public async Task<ActionResult<WorkOrderResponse>> MarkInTransit(Guid workOrderId, [FromBody] MarkInTransitRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureTenantOperationalAccess();
-        var workOrder = await LoadWorkOrderAsync(workOrderId, cancellationToken);
-
-        await assignmentWorkflowService.RecordInTransitAsync(
-            TenantId,
-            workOrderId,
-            UserId,
-            new TechnicianInTransitRequest(request.TechnicianId, request.InTransitAt, request.Notes),
-            cancellationToken);
-
-        var refreshed = await dbContext.WorkOrders
-            .Include(x => x.Client)
-            .Include(x => x.Asset)
-            .Include(x => x.Site)
-            .Include(x => x.System)
-            .Include(x => x.AssignedTechnician)
-            .Include(x => x.LeadTechnician)
-            .Include(x => x.AssignmentGroup)
-            .Include(x => x.Branch)
-            .Include(x => x.Assignments)
-            .Include(x => x.TechnicianAssignments)
-            .ThenInclude(x => x.Technician)
-            .Include(x => x.PmTemplate)
-            .Include(x => x.ChecklistItems)
-            .SingleAsync(x => x.TenantId == TenantId && x.Id == workOrder.Id, cancellationToken);
-
-        return Ok(MapWorkOrderResponse(refreshed));
-    }
-
     [HttpPost("materials-used")]
     public async Task<ActionResult<WorkOrderExecutionBundleResponse>> AddMaterialUsage(Guid workOrderId, [FromBody] AddWorkOrderMaterialUsageRequest request, CancellationToken cancellationToken)
     {
@@ -1497,7 +1465,6 @@ public sealed partial class WorkOrderExecutionController(
 
 public sealed record SaveWorkOrderExecutionNotesRequest(string? Findings, string? WorkDone, string? ProgressComment);
 public sealed record PauseWorkOrderRequest(string? HoldReason, string? Note);
-public sealed record MarkInTransitRequest(Guid TechnicianId, DateTime? InTransitAt, string? Notes);
 /// <param name="BatchOrSerial">Serial or batch number(s) of the units fitted, kept on the stock movement for traceability.</param>
 /// <param name="BoughtDirect">Bought straight from a supplier for this job: may take the branch below zero, and waits to be reconciled with the supplier's invoice.</param>
 /// <param name="SupplierName">Who it was bought from, as typed (or pick <paramref name="SupplierId"/>).</param>

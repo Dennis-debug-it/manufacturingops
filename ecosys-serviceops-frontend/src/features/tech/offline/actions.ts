@@ -37,20 +37,6 @@ export function useTechActions() {
         onJob(job, 'respond', response === 'Accepted' ? 'Accepted job' : 'Declined job', {
           method: 'POST', url: endpoints.workOrders.technicianResponse(job.id), body: { technicianId, response, notes: null },
         }),
-      inTransit: (job: Job, technicianId: string) =>
-        onJob(job, 'in-transit', 'On the way to site', {
-          // Also clocks the technician in against this job if they weren't (the API does it on their own trips).
-          method: 'POST', url: endpoints.workOrders.inTransit(job.id), body: { technicianId, inTransitAt: null, notes: null },
-        }),
-      arrive: (job: Job, technicianId: string) =>
-        onJob(job, 'arrive', 'Arrived on site', {
-          // No arrivedAt: the server dates it from when it was tapped (X-Occurred-At on a replay).
-          method: 'POST', url: endpoints.workOrders.arrival(job.id), body: { technicianId, arrivedAt: null },
-        }),
-      depart: (job: Job, technicianId: string) =>
-        onJob(job, 'depart', 'Left site', {
-          method: 'POST', url: endpoints.workOrders.departure(job.id), body: { technicianId, departedAt: null },
-        }),
       start: (job: Job) => onJob(job, 'start', 'Started work', { method: 'POST', url: endpoints.workOrders.start(job.id) }),
       hold: (job: Job, holdType: string, reason: string | null) =>
         onJob(job, 'hold', 'Put on hold', { method: 'PATCH', url: endpoints.workOrders.hold(job.id), body: { holdType, reason } }),

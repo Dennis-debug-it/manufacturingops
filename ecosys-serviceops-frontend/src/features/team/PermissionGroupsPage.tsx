@@ -324,7 +324,7 @@ export function PermissionGroupsPage() {
             emptyTitle="No permission groups yet"
             emptyDescription={
               canManage
-                ? 'Create a group to bundle capabilities — for example a Finance Approvers group that can approve invoices and view rate cards.'
+                ? 'Create a group to bundle capabilities — for example a Finance Approvers group that can approve purchases and view exchange rates.'
                 : 'No permission groups have been created for this workspace yet.'
             }
             {...(canManage ? { emptyActionLabel: 'New group', onEmptyAction: () => setEditing({ group: null }) } : {})}

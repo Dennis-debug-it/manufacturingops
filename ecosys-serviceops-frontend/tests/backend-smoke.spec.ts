@@ -52,7 +52,6 @@ test('backend smoke: tenant critical endpoints return non-500 responses', async 
   const paths = [
     '/api/auth/me',
     '/api/dashboard/summary',
-    '/api/clients',
     '/api/assets',
     '/api/workorders',
     '/api/materials',

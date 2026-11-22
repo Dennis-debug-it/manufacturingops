@@ -4694,47 +4694,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.ToTable("escalation_rules", (string)null);
                 });
 
-            modelBuilder.Entity("Ecosys.Domain.Entities.EtaNotificationSettings", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("BodyTemplate")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("EventType")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<string>("SubjectTemplate")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "EventType")
-                        .IsUnique();
-
-                    b.ToTable("eta_notification_settings", (string)null);
-                });
-
             modelBuilder.Entity("Ecosys.Domain.Entities.ExchangeRate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -15563,10 +15522,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("TrackingToken")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -15657,10 +15612,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.HasIndex("SiteId");
 
                     b.HasIndex("SystemId");
-
-                    b.HasIndex("TrackingToken")
-                        .IsUnique()
-                        .HasFilter("\"TrackingToken\" IS NOT NULL");
 
                     b.HasIndex("WorkOrderTemplateId");
 
@@ -18161,17 +18112,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                 });
 
             modelBuilder.Entity("Ecosys.Domain.Entities.EscalationRule", b =>
-                {
-                    b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
-                        .WithMany()
-                        .HasForeignKey("TenantId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Tenant");
-                });
-
-            modelBuilder.Entity("Ecosys.Domain.Entities.EtaNotificationSettings", b =>
                 {
                     b.HasOne("Ecosys.Domain.Entities.Tenant", "Tenant")
                         .WithMany()

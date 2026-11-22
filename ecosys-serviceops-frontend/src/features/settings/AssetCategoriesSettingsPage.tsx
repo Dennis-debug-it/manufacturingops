@@ -13,7 +13,7 @@ import {
   useSaveAssetCategoryField,
   type AssetCategory,
   type AssetCategoryField,
-} from '../clients/assetCategoriesApi'
+} from './assetCategoriesApi'
 import { StarterPacks } from './components/StarterPacks'
 
 const inputClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'

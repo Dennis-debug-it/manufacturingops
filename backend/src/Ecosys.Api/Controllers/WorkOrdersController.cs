@@ -404,7 +404,6 @@ public sealed class WorkOrdersController(
             PmTemplateId = request.PmTemplateId,
             NotifyClient = request.NotifyClient,
             ClientContactEmail = request.ClientContactEmail?.Trim(),
-            TrackingToken = TrackingTokenGenerator.Generate(),
             WorkOrderTemplateId = template?.Id,
             ParentWorkOrderId = parentWorkOrder?.Id,
             FollowUpOfWorkOrderId = followUpOf?.Id,
@@ -835,53 +834,6 @@ public sealed class WorkOrdersController(
         return Ok(Map(persisted));
     }
 
-    [HttpPost("{id:guid}/arrive")]
-    public async Task<ActionResult<WorkOrderResponse>> Arrive(Guid id, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureTenantOperationalAccess();
-        await EnsureAssignedExecutionAccessAsync(id, cancellationToken);
-        var workOrder = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
-            ?? throw new NotFoundException("Work order was not found.");
-
-        // Delegates to the assignment-level recorder rather than WorkOrderLifecycleService.ArriveAsync.
-        // That wrote work_orders.ArrivalAt only, which never satisfied the completion guard - the guard
-        // reads work_order_technician_assignments.ArrivalAt - so this endpoint returned 200 while
-        // leaving Complete blocked. RecordArrivalAsync writes the assignment row and rolls the header
-        // up from it, keeping one source of truth.
-        var arrivalTechnicianId = await ResolveDispatchTechnicianIdAsync(workOrder.Id, "Arrival", cancellationToken);
-        await assignmentWorkflowService.RecordArrivalAsync(
-            TenantId,
-            workOrder.Id,
-            UserId,
-            new Infrastructure.Services.TechnicianArrivalRequest(arrivalTechnicianId, null, null),
-            cancellationToken);
-        var persisted = await QueryWorkOrders(await branchAccessService.GetQueryScopeAsync(TenantId, workOrder.BranchId, cancellationToken))
-            .SingleAsync(x => x.Id == workOrder.Id, cancellationToken);
-        return Ok(Map(persisted));
-    }
-
-    [HttpPost("{id:guid}/depart")]
-    public async Task<ActionResult<WorkOrderResponse>> Depart(Guid id, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureTenantOperationalAccess();
-        await EnsureAssignedExecutionAccessAsync(id, cancellationToken);
-        var workOrder = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
-            ?? throw new NotFoundException("Work order was not found.");
-
-        // Same reconciliation as /arrive above: the assignment row is the source of truth and
-        // RecordDepartureAsync rolls the header up from it.
-        var departureTechnicianId = await ResolveDispatchTechnicianIdAsync(workOrder.Id, "Departure", cancellationToken);
-        await assignmentWorkflowService.RecordDepartureAsync(
-            TenantId,
-            workOrder.Id,
-            UserId,
-            new Infrastructure.Services.TechnicianDepartureRequest(departureTechnicianId, null, null),
-            cancellationToken);
-        var persisted = await QueryWorkOrders(await branchAccessService.GetQueryScopeAsync(TenantId, workOrder.BranchId, cancellationToken))
-            .SingleAsync(x => x.Id == workOrder.Id, cancellationToken);
-        return Ok(Map(persisted));
-    }
-
     [HttpGet("{id:guid}/events")]
     public async Task<ActionResult<IReadOnlyCollection<WorkOrderEventResponse>>> GetEvents(Guid id, CancellationToken cancellationToken)
     {
@@ -1126,24 +1078,6 @@ public sealed class WorkOrdersController(
                 cancellationToken);
         }
 
-        if (!await assignmentWorkflowService.HasArrivalAsync(TenantId, workOrder.Id, cancellationToken))
-        {
-            if (!request.AdminOverride)
-            {
-                throw new BusinessRuleException("Completion cannot happen before arrival unless admin override is used.");
-            }
-
-            if (!IsAdmin)
-            {
-                throw new BusinessRuleException("Only admins can use completion override.");
-            }
-
-            if (string.IsNullOrWhiteSpace(request.OverrideReason))
-            {
-                throw new BusinessRuleException("Provide an override reason before completing without arrival.");
-            }
-        }
-
         if (workOrder.PmTemplateId.HasValue || await dbContext.WorkOrderChecklistItems.AnyAsync(x => x.TenantId == TenantId && x.WorkOrderId == workOrder.Id, cancellationToken))
         {
             await pmWorkOrderChecklistService.EnsureRequiredChecklistCompletedAsync(workOrder.Id, TenantId, cancellationToken);
@@ -1370,8 +1304,7 @@ public sealed class WorkOrdersController(
             JobCardNotes = source.JobCardNotes,
             PlannedMaterialsJson = source.PlannedMaterialsJson,
             NotifyClient = source.NotifyClient,
-            ClientContactEmail = source.ClientContactEmail,
-            TrackingToken = TrackingTokenGenerator.Generate()
+            ClientContactEmail = source.ClientContactEmail
         };
 
         if (contractOperationalService is not null)
@@ -1998,7 +1931,6 @@ public sealed class WorkOrdersController(
             workOrder.FinalCharge,
             workOrder.AppliedSlaSource,
             workOrder.AppliedRateSource,
-            workOrder.TrackingToken,
             workOrder.WorkOrderTemplateId,
             null,
             null,
@@ -2184,37 +2116,6 @@ public sealed class WorkOrdersController(
         {
             throw new ForbiddenException("Technicians must use the assigned technician jobs workspace.");
         }
-    }
-
-    /// <summary>
-    /// Resolves the technician whose assignment row the location-only <c>/arrive</c> and <c>/depart</c>
-    /// endpoints act on. They predate the technician dispatch lifecycle and carry no technician id, so
-    /// the caller's own assignment is preferred and a sole assignment is used otherwise. Failing loudly
-    /// beats writing a header timestamp that satisfies no guard.
-    /// </summary>
-    private async Task<Guid> ResolveDispatchTechnicianIdAsync(Guid workOrderId, string action, CancellationToken cancellationToken)
-    {
-        var currentTechnicianId = await ResolveCurrentTechnicianIdAsync(cancellationToken);
-        if (currentTechnicianId.HasValue
-            && await dbContext.WorkOrderTechnicianAssignments.AnyAsync(
-                x => x.TenantId == TenantId && x.WorkOrderId == workOrderId && x.TechnicianId == currentTechnicianId.Value,
-                cancellationToken))
-        {
-            return currentTechnicianId.Value;
-        }
-
-        var technicianIds = await dbContext.WorkOrderTechnicianAssignments
-            .Where(x => x.TenantId == TenantId && x.WorkOrderId == workOrderId)
-            .Select(x => x.TechnicianId)
-            .Take(2)
-            .ToListAsync(cancellationToken);
-
-        return technicianIds.Count switch
-        {
-            1 => technicianIds[0],
-            0 => throw new BusinessRuleException($"{action} cannot be recorded before a technician is assigned to this work order."),
-            _ => throw new BusinessRuleException($"This work order has more than one assigned technician, so {action.ToLowerInvariant()} must be recorded against a specific technician.")
-        };
     }
 
     private async Task EnsureAssignedExecutionAccessAsync(Guid workOrderId, CancellationToken cancellationToken)
@@ -2444,7 +2345,6 @@ public sealed record WorkOrderResponse(
     decimal? FinalCharge = null,
     string? AppliedSlaSource = null,
     string? AppliedRateSource = null,
-    string? TrackingToken = null,
     Guid? WorkOrderTemplateId = null,
     Guid? QuoteId = null,
     string? QuoteNumber = null,

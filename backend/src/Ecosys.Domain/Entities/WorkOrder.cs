@@ -98,7 +98,6 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     // Client notifications
     public bool NotifyClient { get; set; } = true;
     public string? ClientContactEmail { get; set; }
-    public string? TrackingToken { get; set; }
 
     // Repeat visit detection
     public bool IsRepeatVisit { get; set; }

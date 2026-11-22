@@ -48,12 +48,12 @@ public sealed class ServiceOpsPlanTests
     [Theory]
     // Essentials: the whole work-order-to-invoice loop.
     [InlineData("essentials", "WorkOrders", "/api/workorders", true)]
-    [InlineData("essentials", "TenantFinance", "/api/finance/rate-cards", true)]
-    [InlineData("essentials", "Clients", "/api/clients", true)]
+    [InlineData("essentials", "TenantFinance", "/api/finance/approvals", true)]
+    [InlineData("essentials", "Technicians", "/api/technicians", true)]
     // Maintenance is in every edition: it is the product.
     [InlineData("essentials", "PreventiveMaintenance", "/api/preventive-maintenance", true)]
     [InlineData("essentials", "Assets", "/api/assets", true)]
-    [InlineData("essentials", "Contracts", "/api/contracts", true)]
+    [InlineData("essentials", "FactoryPm", "/api/factory/pm", true)]
     // Professional adds inventory and the advanced tools.
     [InlineData("essentials", "Materials", "/api/materials", false)]
     [InlineData("essentials", "PurchaseOrders", "/api/purchase-orders", false)]

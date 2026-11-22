@@ -160,12 +160,6 @@ test.describe('preventive maintenance', () => {
       notes: 'Accepted during PM E2E flow.',
     })
     await apiPost(page, `/api/workorders/${workOrder.id}/start`, null)
-    await apiPost(page, `/api/workorders/${workOrder.id}/arrival`, {
-      technicianId: assignedTechnician.id,
-      latitude: null,
-      longitude: null,
-      arrivedAt: new Date().toISOString(),
-    })
     await apiPost(page, `/api/workorders/${workOrder.id}/signatures`, {
       signatureType: 'Technician',
       signerName: 'E2E Technician',

@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { api } from '../../shared/api/apiClient'
 import { endpoints } from '../../shared/api/endpoints'
 import type { PagedResult } from '../../shared/types/pagination'
-import type { Branch, BranchStockSummary, Material, MaterialStockLocations, MaterialIssue, MaterialRequest, StockLedgerEntry, StockMovement, StockTransfer } from './types'
+import type { Branch, Material, MaterialStockLocations, MaterialIssue, MaterialRequest, StockLedgerEntry, StockMovement, StockTransfer } from './types'
 
 export interface MaterialFilters {
   lowStockOnly?: boolean | undefined
@@ -49,14 +49,6 @@ export function useCatalogueSuggestions() {
   const categories = [...new Set((data ?? []).map((item) => item.category?.trim()).filter((value): value is string => Boolean(value)))].sort()
   const units = [...new Set((data ?? []).map((item) => item.unitOfMeasure.trim()).filter(Boolean))].sort()
   return { categories, units }
-}
-
-export function useBranchStockSummary() {
-  return useQuery({
-    queryKey: ['materials', 'branch-summary'],
-    queryFn: () => api.get<BranchStockSummary[]>(endpoints.materials.branchSummary),
-    staleTime: 30_000,
-  })
 }
 
 export function useMaterialMovements(id: string | undefined, branchId?: string) {

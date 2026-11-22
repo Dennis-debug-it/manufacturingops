@@ -134,7 +134,6 @@ public static class DependencyInjection
         services.AddScoped<ISlaService, SlaService>();
         services.AddScoped<IWorkflowService, WorkflowService>();
         services.AddScoped<IEscalationRuleService, EscalationRuleService>();
-        services.AddScoped<IEtaNotificationService, EtaNotificationService>();
         services.AddScoped<IContractAccessService, ContractAccessService>();
         services.AddScoped<IContractCoverageService, ContractCoverageService>();
         services.AddScoped<IContractPricingService, ContractPricingService>();

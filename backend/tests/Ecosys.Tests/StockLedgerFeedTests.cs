@@ -92,25 +92,6 @@ public sealed class StockLedgerFeedTests
     }
 
     [Fact]
-    public async Task BranchSummaryCountsPartsLowStockAndValuePerBranch()
-    {
-        await using var db = Db();
-        var part = await Seed(db);
-        (await db.BranchMaterialStocks.SingleAsync(x => x.BranchId == otherBranch)).ReorderLevel = 6;
-        await db.SaveChangesAsync();
-        var controller = new MaterialsController(db, new FakeTenantContext(tenantId, userId), new StockLedgerService(db),
-            new NoOpUserAccessService(), new NoOpAuditLogService(), new AllBranches());
-
-        var rows = Assert.IsAssignableFrom<IReadOnlyCollection<BranchStockSummaryResponse>>(Assert.IsType<OkObjectResult>((await controller.GetBranchSummary(default)).Result).Value);
-
-        var main = rows.Single(x => x.BranchId == mainBranch);
-        Assert.Equal((1, 0, 80m), (main.PartsStocked, main.LowStockParts, main.StockValue));
-        var other = rows.Single(x => x.BranchId == otherBranch);
-        Assert.Equal((1, 1, 50m), (other.PartsStocked, other.LowStockParts, other.StockValue));
-        Assert.Equal(10, part.UnitCost);
-    }
-
-    [Fact]
     public async Task DateFiltersAreWholeDaysInTheWorkspaceTimeZone()
     {
         await using var db = Db();

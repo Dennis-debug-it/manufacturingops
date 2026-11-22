@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { MapPin, Phone, UserCog } from 'lucide-react'
+import { UserCog } from 'lucide-react'
 import { Badge } from '../../../shared/components/Badge'
 import { SlaBadge } from '../../../shared/components/SlaBadge'
 import { usePermission } from '../../../shared/hooks/usePermission'
 import { formatDate, formatDateTime, isPast } from '../../../shared/utils/dates'
-import { formatCurrency } from '../../../shared/utils/format'
 import { useWorkOrderSla } from '../api'
 import type { WorkOrder } from '../types'
 
@@ -59,17 +58,10 @@ export function OverviewTab({ workOrder, onReassign }: { workOrder: WorkOrder; o
   const canAssign = usePermission('work-orders.assign')
   const { data: sla } = useWorkOrderSla(workOrder.id)
 
-  const mapUrl = workOrder.siteLatitude != null && workOrder.siteLongitude != null
-    ? `https://www.google.com/maps/search/?api=1&query=${workOrder.siteLatitude},${workOrder.siteLongitude}`
-    : workOrder.siteLocation
-      ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(workOrder.siteLocation)}`
-      : null
-
   const assetModel = [workOrder.assetManufacturer, workOrder.assetModel].filter(Boolean).join(' ')
   const warranty = workOrder.assetWarrantyStatus
     ? `${workOrder.assetWarrantyStatus}${workOrder.assetWarrantyExpiryDate ? ` (until ${formatDate(workOrder.assetWarrantyExpiryDate)})` : ''}`
     : workOrder.assetWarrantyExpiryDate ? `Expires ${formatDate(workOrder.assetWarrantyExpiryDate)}` : null
-  const hasContractOrBilling = Boolean(workOrder.contractId || workOrder.isBillable || workOrder.estimatedCharge != null || workOrder.finalCharge != null)
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -100,31 +92,6 @@ export function OverviewTab({ workOrder, onReassign }: { workOrder: WorkOrder; o
         ]}
       />
 
-      <Section
-        title="Site"
-        rows={[
-          ['Site', workOrder.siteName ? `${workOrder.siteName}${workOrder.siteCode ? ` · ${workOrder.siteCode}` : ''}` : null],
-          ['Client', workOrder.clientName ? <Link to={`/clients/${workOrder.clientId}`} className={linkClass}>{workOrder.clientName}</Link> : null],
-          ['Contact', workOrder.siteContactPerson ?? workOrder.clientContactPerson],
-          ['Phone', (workOrder.siteContactPhone ?? workOrder.clientContactPhone)
-            ? (
-              <a href={`tel:${(workOrder.siteContactPhone ?? workOrder.clientContactPhone)!.replace(/\s+/g, '')}`} className={`${linkClass} inline-flex items-center gap-1`}>
-                <Phone className="h-3.5 w-3.5" />{workOrder.siteContactPhone ?? workOrder.clientContactPhone}
-              </a>
-            )
-            : null],
-          ['Hours', workOrder.siteOperatingHours],
-          ['Access notes', workOrder.siteAccessNotes ? <span className="whitespace-pre-line">{workOrder.siteAccessNotes}</span> : null],
-          ['Location', mapUrl
-            ? (
-              <a href={mapUrl} target="_blank" rel="noreferrer" className={`${linkClass} inline-flex items-center gap-1`}>
-                <MapPin className="h-3.5 w-3.5" />{workOrder.siteLocation || 'Open map'}
-              </a>
-            )
-            : null],
-        ]}
-      />
-
       {workOrder.assetId ? (
         <Section
           title="Asset"
@@ -146,20 +113,6 @@ export function OverviewTab({ workOrder, onReassign }: { workOrder: WorkOrder; o
           <SlaClock label="Resolution" deadline={sla.resolutionDeadline} breached={sla.resolutionBreached} paused={sla.isPaused} />
           {sla.isPaused ? <p className="mt-1 text-xs text-amber-700">Clock paused{sla.pauseReason ? `: ${sla.pauseReason}` : ''}.</p> : null}
         </Section>
-      ) : null}
-
-      {hasContractOrBilling ? (
-        <Section
-          title="Contract & billing"
-          rows={[
-            ['Contract', workOrder.contractId ? <Link to={`/contracts/${workOrder.contractId}`} className={linkClass}>{workOrder.contractNumber ?? 'View contract'}</Link> : 'No contract'],
-            ['Coverage', workOrder.coverageStatus],
-            ['Billing', workOrder.billingModel ?? (workOrder.isBillable ? 'Billable' : null)],
-            ['Rate card', workOrder.rateCardName],
-            ['Estimate', workOrder.estimatedCharge != null ? formatCurrency(workOrder.estimatedCharge) : null],
-            ['Final charge', workOrder.finalCharge != null ? formatCurrency(workOrder.finalCharge) : null],
-          ]}
-        />
       ) : null}
 
       {(workOrder.plannedMaterials ?? []).length > 0 ? (

@@ -2,11 +2,9 @@ import type { LucideIcon } from 'lucide-react'
 import {
   BarChart3,
   Boxes,
-  Building2,
   CheckSquare,
   ClipboardList,
   Clock,
-  FileSignature,
   FileText,
   Inbox,
   Package,
@@ -95,10 +93,10 @@ const usersAccess: Guide = {
       steps: [
         'Admin — full access to everything, including settings and users.',
         'Manager — operations, maintenance, finance figures, approvals and reports.',
-        'Dispatcher — work orders, clients and maintenance.',
+        'Dispatcher — work orders and maintenance.',
         'Technician — the mobile technician app: their jobs, time & leave, guides.',
         'Materials Controller — stores and logistics: stock, issuing parts, purchase orders, suppliers and transfers. Starts on Inventory.',
-        'Finance — rate cards, preferential and exchange rates, approvals and maintenance costs. Starts on Finance.',
+        'Finance — exchange rates, approvals and maintenance costs. Starts on Finance.',
         'Viewer — read-only access to operations and maintenance.',
       ],
     },
@@ -176,7 +174,7 @@ const serviceReports: Guide = {
 const technicianApp: Guide = {
   id: 'technician-app',
   title: 'Technician app',
-  summary: 'What technicians do on their phone, from accepting a job to the client’s signature.',
+  summary: 'What technicians do on their phone, from accepting a job to signing it off.',
   icon: Smartphone,
   sections: [
     {
@@ -188,9 +186,8 @@ const technicianApp: Guide = {
       ],
     },
     {
-      title: 'On site',
+      title: 'Doing the work',
       steps: [
-        'When you get there, tap I’ve Arrived.',
         'Tap Start Work.',
         'Work through the checklist on the Overview tab, and log Materials used.',
         'On the Photos tab, choose Before, During or After, take or choose a photo, add a caption and tap Upload evidence.',
@@ -198,18 +195,14 @@ const technicianApp: Guide = {
       ],
     },
     {
-      title: 'Leaving site and multi-day jobs',
-      steps: [
-        'At the end of the day, open the ⋯ menu and tap Record Departure.',
-        'Next time you come back, tap I’m back on site on the job. Each day is recorded as its own visit.',
-        'Waiting for parts or the client? Use Put On Hold from the ⋯ menu, then Resume.',
-      ],
+      title: 'Waiting for something',
+      text: 'Waiting for parts? Use Put On Hold from the ⋯ menu, then Resume.',
     },
     {
       title: 'Finish the job',
       steps: [
         'Open the Finish tab, check the Problem reported, then write your Findings (what you found and why it failed) and the Work done (what you did). Both go on the service report and are required to complete the job.',
-        'Capture Your signature and the Client signature (with the client’s name and role).',
+        'Capture your signature and the sign-off signature (with the name and role of the person signing).',
         'Tap Complete. An administrator reviews and closes the job.',
       ],
     },
@@ -330,33 +323,23 @@ const workOrders: Guide = {
   sections: [
     {
       title: 'Find work orders',
-      text: 'All Work Orders lists every job. Switch between the Table, Kanban, Calendar and Map views, and use Filters to narrow by status, priority, client, technician or date. Report Queue lists finished jobs whose service report needs attention.',
+      text: 'All Work Orders lists every job. Switch between the Table, Kanban and Calendar views, and use Filters to narrow by status, priority, technician or date. Report Queue lists finished jobs whose service report needs attention.',
     },
     {
-      title: 'Create a work order',
-      steps: [
-        'Click New Work Order.',
-        'Optionally pick a Template to fill in the details, then choose the Client, Site and (if it is about one machine) the Asset.',
-        'Enter the Title, Type, Priority, Due Date and a Description of the problem.',
-        'Click Create Work Order. The SLA clock starts from the priority and the client’s SLA policy.',
-      ],
-      tip: `${EMAIL_INTAKE_ENABLED ? 'Emails to your intake address can create work orders automatically; see the Email intake guide. ' : ''}On Suite, a won sales deal becomes a work order with one click; see the Sales pipeline guide.`,
+      title: 'Create a job',
+      text: 'New jobs are raised from Jobs (or by scanning an asset), against the factory section and asset they are for.',
     },
     {
       title: 'Move a job along',
       steps: [
         'Open the work order. The tabs are Overview, Work, Activity and Report.',
         'The main button changes with the status: Assign, then Start Work, then Complete (add the Work done notes and click Mark complete), then Close.',
-        'Technicians record their arrival, departure, checklist, parts and photos from the technician app; you see it live on the Work tab.',
+        'Technicians record their checklist, parts and photos from the technician app; you see it live on the Work tab.',
       ],
     },
     {
-      title: 'Jobs that take more than one visit',
-      text: 'Each trip to site is recorded as a visit. The crew panel shows whether a technician is On Site or has Left Site, with their first arrival (used for the SLA), latest arrival and latest departure.',
-    },
-    {
       title: 'Other actions',
-      text: 'Under More actions: Put On Hold (On Hold (general), Waiting on Parts or Waiting on Client), Resume, Reassign, Create Follow-up, Reopen, Duplicate and Cancel Work Order.',
+      text: 'Under More actions: Put On Hold (On Hold (general) or Waiting on Parts), Resume, Reassign, Reopen, Duplicate and Cancel Work Order.',
     },
   ],
 }
@@ -474,49 +457,18 @@ const inventory: Guide = {
 const finance: Guide = {
   id: 'finance',
   title: 'Finance',
-  summary: 'Rate cards, preferential rates and exchange rates for costing maintenance work.',
+  summary: 'Exchange rates for parts bought in another currency.',
   icon: Wallet,
   path: '/finance',
   pathLabel: 'Finance',
   sections: [
     {
       title: 'Where to find things',
-      text: 'Finance holds the prices maintenance is costed with: Rate Cards (labour and call-out rates), Preferential Rates (per client or contract) and Exchange Rates (for parts bought in another currency).',
+      text: 'Exchange Rates holds the rates used when parts are bought in another currency. Labour is costed from each technician’s hourly rate, set under Maintenance team.',
     },
     {
       title: 'Costing',
       text: 'Job and asset costs, and the spend against each budget, are under Maintenance → Maintenance costs.',
-    },
-  ],
-}
-
-const contracts: Guide = {
-  id: 'contracts',
-  title: 'Contracts',
-  summary: 'Service contracts: what’s covered, SLA terms, billing, approval and renewal.',
-  icon: FileSignature,
-  path: '/contracts',
-  pathLabel: 'Contracts',
-  sections: [
-    {
-      title: 'Create a contract',
-      steps: [
-        'Click New Contract and choose the client.',
-        'Set what is covered: by asset category or specific assets, and the billing model.',
-        'Click Create Contract. It starts as a Draft.',
-      ],
-    },
-    {
-      title: 'Approve and activate',
-      steps: [
-        'Click Submit for Approval; an approver clicks Approve.',
-        'Click Activate to start it. Near the end date, Start Renewal creates the next term.',
-        'You can also Suspend, Resume, Terminate or Cancel a contract.',
-      ],
-    },
-    {
-      title: 'Contract details',
-      text: 'The tabs are Overview, Covered Sites/Assets, SLA Terms, Preferential Rates, PM Terms, Billing and P&L (what the contract earns against what the work costs).',
     },
   ],
 }
@@ -588,33 +540,6 @@ const approvals: Guide = {
   ],
 }
 
-const clients: Guide = {
-  id: 'clients',
-  title: 'Clients and sites',
-  summary: 'Add clients, their sites and contacts, and see everything you do for them.',
-  icon: Building2,
-  path: '/clients',
-  pathLabel: 'Clients',
-  sections: [
-    {
-      title: 'Add a client',
-      steps: [
-        'Click New Client, fill in the name, contact and billing details, and click Create Client.',
-        'Tick Give this client access to the client portal to invite their contact straight away.',
-        'Have many clients already? Use Import to load them from a spreadsheet.',
-      ],
-    },
-    {
-      title: 'Sites',
-      text: 'A site is a location you work at. On the client’s Sites tab click New Site, enter the address (and map location so jobs show on the Live Map) and click Create Site.',
-    },
-    {
-      title: 'Everything about a client',
-      text: 'The client page has tabs for Overview, Sites, Assets, Contracts, Work Orders, Documents and Client Portal.',
-    },
-  ],
-}
-
 const settings: Guide = {
   id: 'settings',
   title: 'Settings overview',
@@ -643,10 +568,8 @@ export const guides: Guide[] = [
   workOrders,
   serviceReports,
   maintenance,
-  clients,
   assets,
   inventory,
-  contracts,
   finance,
   approvals,
   timeAttendance,

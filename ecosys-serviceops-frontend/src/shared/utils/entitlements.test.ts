@@ -7,7 +7,7 @@ const enterprise = [...professional, 'enterprise_tools']
 
 describe('edition entitlements', () => {
   it('gives Essentials the whole maintenance system', () => {
-    for (const path of ['/maintenance/jobs', '/maintenance/pm', '/assets', '/maintenance/fleet', '/work-orders', '/finance/rate-cards']) {
+    for (const path of ['/maintenance/jobs', '/maintenance/pm', '/assets', '/maintenance/fleet', '/work-orders', '/finance/exchange-rates']) {
       expect(canAccessModulePath(path, essentials)).toBe(true)
     }
   })
@@ -33,7 +33,7 @@ describe('edition entitlements', () => {
 
   it('matches whole path segments only', () => {
     expect(requiredModulesForPath('/projectsish')).toEqual([])
-    expect(requiredModulesForPath('/finance/rate-cards')).toEqual(['finance'])
+    expect(requiredModulesForPath('/finance/exchange-rates')).toEqual(['finance'])
     expect(requiredModulesForPath('/crmx')).toEqual([])
   })
 

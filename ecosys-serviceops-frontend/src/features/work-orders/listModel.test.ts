@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { toWorkOrderListFilters, type WorkOrderFilterValues } from './listModel'
 
 const none: WorkOrderFilterValues = {
-  search: '', status: '', technicianId: '', clientId: '', siteId: '', priority: '', slaStatus: '',
+  search: '', status: '', technicianId: '', priority: '', slaStatus: '',
   unassignedOnly: false, state: '', fromDate: '', toDate: '', showAll: false,
 }
 
@@ -18,8 +18,6 @@ describe('work order list scope', () => {
   it.each<[string, Partial<WorkOrderFilterValues>]>([
     ['a search', { search: 'WO-000123' }],
     ['a status', { status: 'Closed' }],
-    ['a client', { clientId: 'c1' }],
-    ['a site', { siteId: 's1' }],
     ['a technician', { technicianId: 't1' }],
     ['a date range', { fromDate: '2025-01-01' }],
     ['show all', { showAll: true }],

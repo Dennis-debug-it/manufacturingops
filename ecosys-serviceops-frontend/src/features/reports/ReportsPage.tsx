@@ -53,8 +53,6 @@ export function ReportsPage() {
         search: '',
         status: '',
         technicianId: '',
-        clientId: '',
-        siteId: '',
         priority: '',
         slaStatus: '',
         unassignedOnly: false,

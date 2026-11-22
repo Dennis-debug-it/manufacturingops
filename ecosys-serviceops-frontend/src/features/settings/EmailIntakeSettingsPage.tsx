@@ -8,7 +8,6 @@ import { useAuth } from '../../shared/hooks/useAuth'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { Spinner } from '../../shared/components/Spinner'
 import { formatDateTime } from '../../shared/utils/dates'
-import { useClients } from '../clients/api'
 import { useAssignmentGroups } from '../team/api'
 import { IntakeRulesSection } from './components/IntakeRulesSection'
 
@@ -102,7 +101,6 @@ export function EmailIntakeSettingsPage() {
   const messagesKey = ['email-intake-messages', tenant?.tenantId]
   const settings = useQuery({ queryKey: settingsKey, queryFn: () => api.get<EmailIntakeSettings>(URL), enabled: canManage })
   const messages = useQuery({ queryKey: messagesKey, queryFn: () => api.get<IntakeMessage[]>(`${URL}/messages`), enabled: canManage, refetchInterval: 30_000 })
-  const clients = useClients()
   const groups = useAssignmentGroups()
   const [draft, setDraft] = useState<Draft | null>(null)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
@@ -243,21 +241,6 @@ export function EmailIntakeSettingsPage() {
                 <span className="block text-xs text-slate-500">One per line: keyword = Low, Medium, High or Critical. Left blank, "emergency" means Critical and "urgent" means High.</span>
               </label>
             </div>
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={values.createWorkOrderFromUnknownSender} onChange={(event) => set('createWorkOrderFromUnknownSender', event.target.checked)} />
-              Also accept emails from senders who aren't a known client
-            </label>
-            {values.createWorkOrderFromUnknownSender ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="space-y-2 text-sm text-slate-700"><span>Log them under this client</span>
-                  <select required value={values.defaultClientId} onChange={(event) => set('defaultClientId', event.target.value)} className={inputClass}>
-                    <option value="">Choose a client…</option>
-                    {(clients.data ?? []).map((client) => <option key={client.id} value={client.id}>{client.clientName}</option>)}
-                  </select>
-                </label>
-                <label className="space-y-2 text-sm text-slate-700"><span>Only from these domains (optional)</span><input placeholder="acme.com, example.co.ke" value={values.allowedSenderDomains} onChange={(event) => set('allowedSenderDomains', event.target.value)} className={inputClass} /></label>
-              </div>
-            ) : null}
           </section>
 
           <section className={sectionClass}>

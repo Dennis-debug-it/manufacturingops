@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, Funnel, Plus } from 'lucide-react'
+import { AlertTriangle, Funnel } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { DataTable, type DataTableColumn } from '../../shared/components/DataTable'
 import { EmptyState } from '../../shared/components/EmptyState'
@@ -9,18 +9,15 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { SlaBadge } from '../../shared/components/SlaBadge'
 import { useAuth } from '../../shared/hooks/useAuth'
 import { useDebounce } from '../../shared/hooks/useDebounce'
-import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate, formatRelative } from '../../shared/utils/dates'
 import { cn } from '../../shared/utils/cn'
 import toast from 'react-hot-toast'
 import { useAssignWorkOrderById, useCompleteWorkOrderById, useStartWorkOrderById, useWorkOrders, useWorkOrdersPaged } from './api'
-import { NewWorkOrderForm } from './components/NewWorkOrderForm'
 import { ReportQueueTab } from './components/ReportQueueTab'
 import { ViewSwitcher } from './components/ViewSwitcher'
-import { ClientQuickFilter, FilterPanel } from './components/FilterPanel'
+import { FilterPanel } from './components/FilterPanel'
 import { KanbanView } from './components/KanbanView'
 import { CalendarView } from './components/CalendarView'
-import { MapView } from './components/MapView'
 import { BulkActionBar } from './components/BulkActionBar'
 import { QuickActionsMenu } from './components/QuickActionsMenu'
 import { AssignTechnicianDialog } from './components/AssignTechnicianDialog'
@@ -32,9 +29,7 @@ export type { WorkOrderRow }
 
 export function WorkOrdersPage() {
   const { user } = useAuth()
-  const canCreate = usePermission('work-orders.create')
   const [tab, setTab] = useState<'all' | 'queue'>('all')
-  const [showNewForm, setShowNewForm] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [assignTarget, setAssignTarget] = useState<WorkOrderRow | null>(null)
   const [completeTarget, setCompleteTarget] = useState<WorkOrderRow | null>(null)
@@ -54,8 +49,8 @@ export function WorkOrdersPage() {
   const currentOnly = filters.view === 'current'
   useEffect(() => setPage(1), [filterSignature])
 
-  // EC-P2-07: the table pages at the database; the board/calendar/map views operate over the whole
-  // filtered set (grouping, month layout, marker clustering) and so keep the unpaged hook. Only the
+  // EC-P2-07: the table pages at the database; the board/calendar views operate over the whole
+  // filtered set (grouping, month layout) and so keep the unpaged hook. Only the
   // view that is actually on screen fetches.
   const isTableView = state.view === 'table'
   const pagedQuery = useWorkOrdersPaged(filters, page, pageSize, { enabled: tab === 'all' && isTableView })
@@ -104,8 +99,6 @@ export function WorkOrdersPage() {
         </span>
       ),
     },
-    { key: 'client', header: 'Client', cell: (row) => row.client },
-    { key: 'site', header: 'Site', cell: (row) => row.site },
     { key: 'asset', header: 'Asset', cell: (row) => row.asset },
     { key: 'type', header: 'Type', cell: (row) => row.type },
     { key: 'priority', header: 'Priority', cell: (row) => <StatusBadge status={row.priority} /> },
@@ -166,20 +159,7 @@ export function WorkOrdersPage() {
       <PageHeader
         title="Work Orders"
         subtitle="Operational backlog, execution, and service reporting."
-        primaryAction={
-          canCreate ? (
-            <button
-              type="button"
-              onClick={() => setShowNewForm(true)}
-              className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]"
-            >
-              <Plus className="h-4 w-4" />New Work Order
-            </button>
-          ) : undefined
-        }
       />
-
-      <NewWorkOrderForm open={showNewForm} onClose={() => setShowNewForm(false)} />
 
       <div className="flex flex-wrap gap-2">
         {[
@@ -213,14 +193,12 @@ export function WorkOrdersPage() {
               />
             </label>
           </div>
-          <ClientQuickFilter value={state.clientId} onChange={update} />
           <ViewSwitcher value={state.view} onChange={setView} />
         </div>
       ) : null}
 
       {tab === 'all' ? (
-        // The client filter lives in the toolbar, so the panel's badge leaves it out.
-        <FilterPanel state={state} onChange={update} onClear={clearFilters} activeFilterCount={activeFilterCount - (state.clientId ? 1 : 0)} />
+        <FilterPanel state={state} onChange={update} onClear={clearFilters} activeFilterCount={activeFilterCount} />
       ) : null}
 
       {tab === 'all' ? (
@@ -264,7 +242,7 @@ export function WorkOrdersPage() {
                     ? `Nothing is open and nothing was closed in the last ${RECENTLY_FINISHED_DAYS} days. Older work orders are still there.`
                     : 'Raise the first work order to start tracking jobs, technicians, and service reports.'
               }
-              emptyActionLabel={activeFilterCount > 0 || state.search ? 'Clear filters' : currentOnly ? 'Show all' : canCreate ? 'New Work Order' : undefined}
+              emptyActionLabel={activeFilterCount > 0 || state.search ? 'Clear filters' : currentOnly ? 'Show all' : undefined}
               onEmptyAction={
                 activeFilterCount > 0 || state.search
                   ? () => {
@@ -273,9 +251,7 @@ export function WorkOrdersPage() {
                     }
                   : currentOnly
                     ? () => update({ showAll: true })
-                    : canCreate
-                      ? () => setShowNewForm(true)
-                      : undefined
+                    : undefined
               }
               pagination={{
                 page,
@@ -294,10 +270,8 @@ export function WorkOrdersPage() {
           </>
         ) : state.view === 'kanban' ? (
           <KanbanView rows={rows} />
-        ) : state.view === 'calendar' ? (
-          <CalendarView rows={rows} />
         ) : (
-          <MapView rows={rows} />
+          <CalendarView rows={rows} />
         )
       ) : (
         <ReportQueueTab />
@@ -326,13 +300,11 @@ export function WorkOrdersPage() {
         open={Boolean(completeTarget)}
         woNumber={completeTarget?.woNo}
         submitting={completeMutation.isPending}
-        arrivalRecorded={completeTarget?.hasRecordedArrival ?? false}
-        canAdminOverride={user?.role === 'admin'}
         onClose={() => setCompleteTarget(null)}
-        onSubmit={({ workDoneNotes, adminOverride, overrideReason }) => {
+        onSubmit={({ workDoneNotes }) => {
           if (!completeTarget) return
           completeMutation.mutate(
-            { id: completeTarget.id, workDoneNotes, adminOverride, overrideReason },
+            { id: completeTarget.id, workDoneNotes },
             {
               onSuccess: () => {
                 toast.success(`${completeTarget.woNo} completed`)

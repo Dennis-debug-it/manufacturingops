@@ -13,24 +13,6 @@ namespace Ecosys.Tests;
 public sealed class WorkOrderLifecycleStateTests
 {
     [Fact]
-    public async Task CompleteAsync_RejectsCompletionBeforeArrival()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedLifecycleFixtureAsync(dbContext, WorkOrderStatuses.InProgress);
-
-        var service = CreateLifecycleService(dbContext);
-
-        var error = await Assert.ThrowsAsync<BusinessRuleException>(() => service.CompleteAsync(
-            fixture.TenantId,
-            fixture.WorkOrderId,
-            fixture.ActorUserId,
-            new WorkOrderCompletionRequest("Resolved on site."),
-            CancellationToken.None));
-
-        Assert.Contains("arrival", error.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
     public async Task RefreshWorkOrderAsync_DoesNotBreachWhileActiveHoldExtendsDeadline()
     {
         await using var dbContext = CreateDbContext();
@@ -107,7 +89,6 @@ public sealed class WorkOrderLifecycleStateTests
             new StubEmailSubjectRuleService(),
             slaService ?? new NoOpSlaService(),
             new NoOpServiceOpsNotifier(),
-            new NoOpEtaNotificationService(),
             Microsoft.Extensions.Options.Options.Create(new Ecosys.Shared.Options.PublicAppOptions()),
             NullLogger<WorkOrderLifecycleService>.Instance);
 
@@ -304,10 +285,6 @@ public sealed class WorkOrderLifecycleStateTests
         public Task<bool> RefreshWorkOrderAsync(Guid workOrderId, DateTime nowUtc, CancellationToken cancellationToken = default) => Task.FromResult(false);
     }
 
-    private sealed class NoOpEtaNotificationService : IEtaNotificationService
-    {
-        public Task NotifyAsync(Guid tenantId, WorkOrder workOrder, string eventType, string? technicianName, CancellationToken cancellationToken = default) => Task.CompletedTask;
-    }
 
     private sealed class NoOpServiceOpsNotifier : IServiceOpsNotifier
     {

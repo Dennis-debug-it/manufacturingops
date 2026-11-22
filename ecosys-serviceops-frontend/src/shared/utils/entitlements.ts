@@ -17,14 +17,14 @@ export type ServiceOpsModule =
 
 // Checked in order, so a more specific prefix (/finance/expenses) wins over a broader one (/finance).
 const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
-  ['maintenance', ['/maintenance', '/assets', '/systems', '/contracts', '/settings/pm-templates', '/settings/running-checks', '/settings/asset-categories', '/settings/escalation-rules', '/settings/sla-policies']],
+  ['maintenance', ['/maintenance', '/assets', '/systems', '/settings/pm-templates', '/settings/running-checks', '/settings/asset-categories', '/settings/escalation-rules', '/settings/sla-policies']],
   ['inventory', ['/inventory', '/settings/inventory']],
   ['advanced', ['/approvals', '/team/time-attendance', '/settings/time-attendance', '/settings/email-intake', '/settings/workflows', '/settings/approval-matrices', '/settings/approval-matrix']],
   ['enterprise_tools', ['/settings/integrations', '/settings/monitoring-intake', '/settings/monitoring']],
   ['whatsapp_business', ['/whatsapp', '/settings/whatsapp']],
   ['visitors', ['/visitors']],
   ['security', ['/security', '/patrol', '/tech/patrol']],
-  ['operations', ['/dashboard', '/work-orders', '/sites', '/reports', '/team/technicians', '/team/skills', '/team/groups', '/settings/notification-templates', '/settings/wo-templates', '/settings/executive-dashboard']],
+  ['operations', ['/dashboard', '/work-orders', '/reports', '/team/technicians', '/team/skills', '/team/groups', '/settings/wo-templates', '/settings/executive-dashboard']],
   ['finance', ['/finance']],
 ]
 

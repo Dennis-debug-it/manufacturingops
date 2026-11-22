@@ -5,7 +5,6 @@ import { Plus, Trash2 } from 'lucide-react'
 import { api } from '../../../shared/api/apiClient'
 import { endpoints } from '../../../shared/api/endpoints'
 import { formatDateTime } from '../../../shared/utils/dates'
-import { useClients } from '../../clients/api'
 import { useAssignmentGroups } from '../../team/api'
 
 const FIELDS = ['Subject or Body', 'Subject', 'Body', 'Sender Email', 'Sender Domain', 'Sender Name'] as const
@@ -23,7 +22,7 @@ const workTypeLabel = (value?: string | null) => WORK_TYPES.find((type) => type.
 interface Condition { field: string; operator: string; value: string }
 interface RuleGroup { logic?: string; criteria?: Condition[] }
 interface RuleActions {
-  createWorkOrder?: { priority?: string | null; workOrderType?: string | null; clientId?: string | null; assignmentGroupId?: string | null; workOrderTitleTemplate?: string | null } | null
+  createWorkOrder?: { priority?: string | null; workOrderType?: string | null; assignmentGroupId?: string | null; workOrderTitleTemplate?: string | null } | null
   ignore?: { enabled?: boolean } | null
 }
 interface IntakeRule {
@@ -58,7 +57,6 @@ function describe(rule: IntakeRule) {
     create.priority ? `${create.priority} priority` : null,
     create.workOrderType ? workTypeLabel(create.workOrderType) : null,
     create.workOrderTitleTemplate ? `title “${create.workOrderTitleTemplate}”` : null,
-    create.clientId ? 'a set client' : null,
     create.assignmentGroupId ? 'a set team' : null,
   ].filter(Boolean)
   return { when, then: parts.length ? `create a work order with ${parts.join(', ')}` : 'create a work order with the defaults' }
@@ -66,7 +64,6 @@ function describe(rule: IntakeRule) {
 
 function RuleEditor({ rule, onDone }: { rule?: IntakeRule; onDone: () => void }) {
   const queryClient = useQueryClient()
-  const { data: clients } = useClients()
   const { data: groups } = useAssignmentGroups()
   const initialGroup = parse<RuleGroup[]>(rule?.criteriaJson ?? '[]', [])[0]
   const initialActions = parse<RuleActions>(rule?.actionsJson ?? '{}', {})
@@ -77,7 +74,6 @@ function RuleEditor({ rule, onDone }: { rule?: IntakeRule; onDone: () => void })
   const create = initialActions.createWorkOrder ?? {}
   const [priority, setPriority] = useState(create.priority ?? '')
   const [workType, setWorkType] = useState(create.workOrderType ?? '')
-  const [clientId, setClientId] = useState(create.clientId ?? '')
   const [groupId, setGroupId] = useState(create.assignmentGroupId ?? '')
   const [title, setTitle] = useState(create.workOrderTitleTemplate ?? '')
 
@@ -100,7 +96,7 @@ function RuleEditor({ rule, onDone }: { rule?: IntakeRule; onDone: () => void })
       criteriaJson: JSON.stringify([{ logic, criteria: conditions.map((c) => ({ ...c, value: NO_VALUE.has(c.operator) ? '' : c.value.trim() })) }]),
       actionsJson: JSON.stringify(ignore
         ? { ignore: { enabled: true } }
-        : { createWorkOrder: { priority: priority || null, workOrderType: workType || null, clientId: clientId || null, assignmentGroupId: groupId || null, workOrderTitleTemplate: title.trim() || null } }),
+        : { createWorkOrder: { priority: priority || null, workOrderType: workType || null, assignmentGroupId: groupId || null, workOrderTitleTemplate: title.trim() || null } }),
       sourceConfigJson: '{}',
     }
     try {
@@ -165,9 +161,6 @@ function RuleEditor({ rule, onDone }: { rule?: IntakeRule; onDone: () => void })
             </label>
             <label className="space-y-1 text-sm text-slate-700"><span>Team</span>
               <select value={groupId} onChange={(event) => setGroupId(event.target.value)} className={inputClass}><option value="">Workspace default</option>{(groups ?? []).map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select>
-            </label>
-            <label className="space-y-1 text-sm text-slate-700"><span>Client, for senders who aren't contacts</span>
-              <select value={clientId} onChange={(event) => setClientId(event.target.value)} className={inputClass}><option value="">Don't accept unknown senders</option>{(clients ?? []).map((c) => <option key={c.id} value={c.id}>{c.clientName}</option>)}</select>
             </label>
             <label className="space-y-1 text-sm text-slate-700 sm:col-span-2"><span>Title</span>
               <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. [Generator] {{subject}} — leave blank to use the subject" className={inputClass} />

@@ -27,7 +27,7 @@ namespace Ecosys.Tests;
 /// </summary>
 public sealed class RequestDtoBindingTests
 {
-    private static readonly Assembly ApiAssembly = typeof(UpsertClientRequest).Assembly;
+    private static readonly Assembly ApiAssembly = typeof(CreateWorkOrderRequest).Assembly;
 
     [Fact]
     public void EveryFromBodyRequestType_HasValidationOnConstructorParameters_NotOnProperties()
@@ -50,7 +50,6 @@ public sealed class RequestDtoBindingTests
 
     [Theory]
     [InlineData(typeof(CreateWorkOrderRequest))]
-    [InlineData(typeof(UpsertClientRequest))]
     [InlineData(typeof(UpsertAssetRequest))]
     public void KnownRegressionRequests_AreBindable(Type requestType)
     {

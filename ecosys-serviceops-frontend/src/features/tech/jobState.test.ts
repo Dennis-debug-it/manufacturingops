@@ -9,16 +9,14 @@ const assignment = (overrides: Partial<WorkOrderTechnicianAssignment> = {}): Wor
 const job = (status: string, assignments: WorkOrderTechnicianAssignment[]) => ({ status, technicianAssignments: assignments }) as unknown as WorkOrder
 
 describe('jobPhase', () => {
-  it('walks a non-lead technician through accept → arrive → start → work', () => {
+  it('walks a non-lead technician through accept → start → work', () => {
     expect(jobPhase(job('Assigned', []), assignment())).toBe('accept')
-    expect(jobPhase(job('Assigned', []), assignment({ status: 'Accepted' }))).toBe('arrive')
-    expect(jobPhase(job('Assigned', []), assignment({ status: 'InTransit' }))).toBe('en-route')
-    expect(jobPhase(job('Assigned', []), assignment({ status: 'Arrived', arrivalAt: '2026-10-08T09:00:00Z' }))).toBe('start')
-    expect(jobPhase(job('In Progress', []), assignment({ status: 'Arrived', arrivalAt: '2026-10-08T09:00:00Z' }))).toBe('work')
+    expect(jobPhase(job('Assigned', []), assignment({ status: 'Accepted' }))).toBe('start')
+    expect(jobPhase(job('In Progress', []), assignment({ status: 'Accepted' }))).toBe('work')
   })
 
   it('reports holds, declines and finished jobs', () => {
-    expect(jobPhase(job('Waiting on Parts', []), assignment({ status: 'Arrived', arrivalAt: 'x' }))).toBe('on-hold')
+    expect(jobPhase(job('Waiting on Parts', []), assignment({ status: 'Accepted' }))).toBe('on-hold')
     expect(jobPhase(job('Assigned', []), assignment({ status: 'Declined' }))).toBe('declined')
     expect(jobPhase(job('Completed', []), assignment())).toBe('done')
   })

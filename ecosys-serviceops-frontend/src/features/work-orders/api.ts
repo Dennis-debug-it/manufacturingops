@@ -281,28 +281,6 @@ export interface TechnicianResponseVariables {
   notes?: string | null
 }
 
-/** `MarkInTransitRequest(Guid TechnicianId, DateTime? InTransitAt, string? Notes)`. */
-export interface MarkInTransitVariables {
-  id: string
-  technicianId: string
-  inTransitAt?: string | null
-  notes?: string | null
-}
-
-/** `ArrivalActionRequest(Guid TechnicianId, DateTime? ArrivedAt)`. */
-export interface RecordArrivalVariables {
-  id: string
-  technicianId: string
-  arrivedAt?: string | null
-}
-
-/** `DepartureActionRequest(Guid TechnicianId, DateTime? DepartedAt)`. */
-export interface RecordDepartureVariables {
-  id: string
-  technicianId: string
-  departedAt?: string | null
-}
-
 function invalidateDispatchState(queryClient: ReturnType<typeof useQueryClient>, id: string) {
   invalidateWorkOrders(queryClient, id)
   void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'visits'] })
@@ -311,89 +289,11 @@ function invalidateDispatchState(queryClient: ReturnType<typeof useQueryClient>,
   void queryClient.invalidateQueries({ queryKey: ['dispatch'] })
 }
 
-/** One trip to site: travel start → arrival → departure. A multi-day job has one per day/trip. */
-export interface WorkOrderVisit {
-  id: string
-  technicianId: string
-  technicianName: string
-  travelStartedAt: string | null
-  arrivedAt: string | null
-  departedAt: string | null
-  travelMinutes: number
-  onSiteMinutes: number
-  notes: string | null
-}
-
-/** `Idle` → en route → `Travelling` → arrival → `OnSite` → departure → `Idle` (next trip). */
-export type VisitState = 'Idle' | 'Travelling' | 'OnSite'
-
-export interface WorkOrderVisitTechnicianSummary {
-  technicianId: string
-  technicianName: string
-  state: VisitState
-  visitCount: number
-  daysOnJob: number
-  travelMinutes: number
-  onSiteMinutes: number
-}
-
-export interface WorkOrderVisits {
-  visits: WorkOrderVisit[]
-  technicians: WorkOrderVisitTechnicianSummary[]
-  totalTravelMinutes: number
-  totalOnSiteMinutes: number
-}
-
-export function useWorkOrderVisits(id: string) {
-  return useQuery({
-    queryKey: ['work-orders', id, 'visits'],
-    queryFn: () => api.get<WorkOrderVisits>(endpoints.workOrders.visits(id)),
-    enabled: Boolean(id),
-  })
-}
-
 export function useRecordTechnicianResponse() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: ({ id, technicianId, response, notes }: TechnicianResponseVariables) =>
       api.post<WorkOrder>(endpoints.workOrders.technicianResponse(id), { technicianId, response, notes: notes ?? null }),
-    onSuccess: (_data, variables) => invalidateDispatchState(queryClient, variables.id),
-  })
-}
-
-export function useMarkTechnicianInTransit() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, technicianId, inTransitAt, notes }: MarkInTransitVariables) =>
-      api.post<WorkOrder>(endpoints.workOrders.inTransit(id), {
-        technicianId,
-        inTransitAt: inTransitAt ?? null,
-        notes: notes ?? null,
-      }),
-    onSuccess: (_data, variables) => invalidateDispatchState(queryClient, variables.id),
-  })
-}
-
-export function useRecordTechnicianArrival() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, technicianId, arrivedAt }: RecordArrivalVariables) =>
-      api.post<WorkOrder>(endpoints.workOrders.arrival(id), {
-        technicianId,
-        arrivedAt: arrivedAt ?? null,
-      }),
-    onSuccess: (_data, variables) => invalidateDispatchState(queryClient, variables.id),
-  })
-}
-
-export function useRecordTechnicianDeparture() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ id, technicianId, departedAt }: RecordDepartureVariables) =>
-      api.post<WorkOrder>(endpoints.workOrders.departure(id), {
-        technicianId,
-        departedAt: departedAt ?? null,
-      }),
     onSuccess: (_data, variables) => invalidateDispatchState(queryClient, variables.id),
   })
 }

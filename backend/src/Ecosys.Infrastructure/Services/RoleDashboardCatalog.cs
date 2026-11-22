@@ -45,9 +45,7 @@ public static class DashboardWidgetCatalog
     public const string WorkOrdersUnassigned = "work-orders.unassigned";
     public const string DispatchTodaysVisits = "dispatch.todays-visits";
     public const string TechniciansWorkload = "technicians.workload";
-    public const string TechniciansOnSite = "technicians.on-site";
     public const string MaintenancePmCompliance = "maintenance.pm-compliance";
-    public const string ContractsExpiring = "contracts.expiring";
     public const string MaterialsLowStock = "materials.low-stock";
     public const string MaterialsPendingIssues = "materials.pending-issues";
     public const string PurchaseOrdersOpen = "purchase-orders.open";
@@ -67,7 +65,6 @@ public static class DashboardWidgetCatalog
 
     private static readonly string[] WorkOrderData = [DashboardDataAreas.WorkOrders];
     private static readonly string[] PmData = [DashboardDataAreas.Maintenance, DashboardDataAreas.WorkOrders];
-    private static readonly string[] ContractData = [DashboardDataAreas.Contracts];
     private static readonly string[] MaterialData = [DashboardDataAreas.Materials];
     private static readonly string[] ActivityData = [DashboardDataAreas.Activities];
 
@@ -83,12 +80,8 @@ public static class DashboardWidgetCatalog
             Ops, Dispatch, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch, WorkOrderData),
         new(TechniciansWorkload, "Technician workload", "Open work orders per technician, with responses still pending.",
             Ops, Dispatch, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch, WorkOrderData),
-        new(TechniciansOnSite, "Technicians on site", "Technicians who have arrived on a job and not yet left.",
-            Ops, Dispatch, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, WorkOrderData),
         new(MaintenancePmCompliance, "PM compliance", "Preventive maintenance done on time over the last 30 days, and plans overdue.",
             Mnt, [PermissionNames.CanViewWorkOrders, PermissionNames.CanManageSettings], DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, PmData),
-        new(ContractsExpiring, "Contracts expiring", "Contracts ending in the next 30 and 90 days.",
-            Mnt, [], DashboardWidgetSizes.Small, DashboardWidgetScope.Tenant, ContractData),
         new(MaterialsLowStock, "Low stock", "Materials at or below their reorder level.",
             Inv, ViewMaterials, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, MaterialData),
         new(MaterialsPendingIssues, "Pending material issues", "Issues waiting for approval, and approved issues not yet handed out.",
@@ -115,7 +108,6 @@ public static class DashboardRoleDefaults
         DashboardWidgetCatalog.WorkOrdersSlaAtRisk,
         DashboardWidgetCatalog.TechniciansWorkload,
         DashboardWidgetCatalog.MaintenancePmCompliance,
-        DashboardWidgetCatalog.ContractsExpiring,
     ];
 
     private static readonly string[] Dispatcher =
@@ -123,7 +115,6 @@ public static class DashboardRoleDefaults
         DashboardWidgetCatalog.WorkOrdersUnassigned,
         DashboardWidgetCatalog.DispatchTodaysVisits,
         DashboardWidgetCatalog.WorkOrdersSlaAtRisk,
-        DashboardWidgetCatalog.TechniciansOnSite,
     ];
 
     private static readonly string[] Finance =

@@ -16,12 +16,11 @@ public static class CalendarSources
     public const string ActionItems = "action-items";
     public const string WorkOrders = "work-orders";
     public const string Maintenance = "maintenance";
-    public const string Contracts = "contracts";
 
-    public static readonly string[] All = [Activities, ActionItems, WorkOrders, Maintenance, Contracts];
+    public static readonly string[] All = [Activities, ActionItems, WorkOrders, Maintenance];
 
     /// <summary>Sources about the tenant rather than one person; the team view leaves them out.</summary>
-    public static readonly string[] TenantWide = [Maintenance, Contracts];
+    public static readonly string[] TenantWide = [Maintenance];
 }
 
 /// <summary>
@@ -68,8 +67,6 @@ internal sealed class CalendarService(AppDbContext dbContext, ILinkedRecordServi
         var maintenance = viewer.HasModule(ServiceOpsPlans.Maintenance);
         if (maintenance && (viewer.Can(PermissionNames.CanManageSettings) || viewer.Can(PermissionNames.CanAssignWorkOrders)))
             sources.Add(CalendarSources.Maintenance);
-        if (maintenance)
-            sources.Add(CalendarSources.Contracts);
         return sources;
     }
 
@@ -159,30 +156,6 @@ internal sealed class CalendarService(AppDbContext dbContext, ILinkedRecordServi
                 .ToListAsync(cancellationToken);
             items.AddRange(plans.Select(x => Day($"pm-plan-{x.Id}-{x.NextPmDate:yyyyMMdd}", CalendarSources.Maintenance, $"PM due: {x.AssetName ?? "asset"}",
                 DateOnly.FromDateTime(x.NextPmDate!.Value), "/maintenance/calendar", viewer.UserId, x.SiteName)));
-        }
-
-        if (wanted.Contains(CalendarSources.Contracts))
-        {
-            // Contract owners see their own; whoever manages contracts sees every live one.
-            var userId = viewer.UserId;
-            var all = viewer.Can(PermissionNames.CanManageSettings);
-            var noticeHorizon = to.AddDays(366);
-            var contracts = await dbContext.Contracts
-                .Where(x => x.TenantId == tenantId && ContractCalendarRules.Live.Contains(x.Status) && x.EndDate >= from && x.EndDate < noticeHorizon
-                    && (all || x.RenewalOwnerUserId == userId || x.AccountManagerUserId == userId))
-                .Select(x => new { x.Id, x.ContractNumber, x.Name, x.EndDate, x.RenewalNoticeDays })
-                .ToListAsync(cancellationToken);
-            foreach (var contract in contracts)
-            {
-                var expiry = DateOnly.FromDateTime(contract.EndDate);
-                if (expiry >= fromDate && expiry <= toDate)
-                    items.Add(Day($"contract-expiry-{contract.Id}", CalendarSources.Contracts, $"{contract.ContractNumber} expires: {contract.Name}", expiry,
-                        $"/contracts/{contract.Id}", userId));
-                var notice = expiry.AddDays(-Math.Max(0, contract.RenewalNoticeDays));
-                if (contract.RenewalNoticeDays > 0 && notice >= fromDate && notice <= toDate)
-                    items.Add(Day($"contract-renewal-{contract.Id}", CalendarSources.Contracts, $"{contract.ContractNumber} renewal notice: {contract.Name}", notice,
-                        $"/contracts/{contract.Id}", userId));
-            }
         }
 
         return items.OrderBy(x => x.StartsAt).ThenBy(x => x.AllDay ? 0 : 1).ThenBy(x => x.Title).ToList();

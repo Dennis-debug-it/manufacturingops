@@ -40,7 +40,7 @@ public sealed class TenantIsolationTests
     }
 
     [Fact]
-    public async Task Clients_Sites_And_Assets_CannotLoadOtherTenantRecords()
+    public async Task Assets_CannotLoadOtherTenantRecords()
     {
         var databaseName = $"ecosys-tenant-isolation-{Guid.NewGuid():N}";
         var fixture = await SeedFixtureAsync(databaseName);
@@ -48,8 +48,6 @@ public sealed class TenantIsolationTests
 
         await using var dbContext = CreateDbContext(databaseName, tenantContext);
 
-        var clientsController = new ClientsController(dbContext, tenantContext, new NoOpUserAccessService(), new NoOpAuditLogService());
-        var sitesController = new SitesController(dbContext, tenantContext, new NoOpUserAccessService(), new NoOpDocumentNumberingService());
         var assetsController = new AssetsController(
             dbContext,
             tenantContext,
@@ -63,8 +61,6 @@ public sealed class TenantIsolationTests
             new Ecosys.Infrastructure.Services.Factory.AssetLifecycleService(dbContext, new Ecosys.Infrastructure.Services.Factory.OrgScopeService(dbContext, tenantContext)),
             new Ecosys.Infrastructure.Services.Factory.AssetClassService(dbContext));
 
-        await Assert.ThrowsAsync<NotFoundException>(() => clientsController.Get(fixture.TenantBClientId, CancellationToken.None));
-        await Assert.ThrowsAsync<NotFoundException>(() => sitesController.Get(fixture.TenantBClientId, fixture.TenantBSiteId, CancellationToken.None));
         await Assert.ThrowsAsync<NotFoundException>(() => assetsController.Get(fixture.TenantBAssetId, CancellationToken.None));
     }
 
@@ -756,8 +752,6 @@ public sealed class TenantIsolationTests
         public Task<WorkOrder> StartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
         public Task<WorkOrder> HoldAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, string? holdType, string? reason, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
         public Task<WorkOrder> ResumeAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
-        public Task<WorkOrder> ArriveAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
-        public Task<WorkOrder> DepartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
         public Task<WorkOrder> ChangeStatusAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderStatusChangeRequest request, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
         public Task<WorkOrder> CompleteAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderCompletionRequest request, CancellationToken cancellationToken = default) => Task.FromException<WorkOrder>(new NotSupportedException());
         public Task<IReadOnlyCollection<WorkOrderEvent>> GetEventsAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<WorkOrderEvent>>([]);
@@ -767,12 +761,8 @@ public sealed class TenantIsolationTests
     {
         public Task ApplyAssignmentsAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, WorkOrderAssignmentUpdateRequest request, bool isReassignment, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task RecordTechnicianResponseAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, TechnicianDispatchResponseRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task RecordInTransitAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, TechnicianInTransitRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task RecordArrivalAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, TechnicianArrivalRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task RecordDepartureAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, TechnicianDepartureRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyCollection<WorkOrderAssignmentHistory>> GetHistoryAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyCollection<WorkOrderAssignmentHistory>>([]);
         public Task<bool> HasAcceptedTechnicianAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken = default) => Task.FromResult(false);
-        public Task<bool> HasArrivalAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken = default) => Task.FromResult(false);
     }
 
     private sealed class NoOpPmChecklistService : IPmWorkOrderChecklistService

@@ -196,7 +196,7 @@ public sealed class ActivitiesCalendarTests
         // No permission: work orders and activities go too, and an explicit request for them changes nothing.
         var bare = harness.Viewer(harness.Bob, [], [ServiceOpsPlans.Operations, ServiceOpsPlans.Maintenance]);
         Assert.Empty(await harness.Calendar.GetItemsAsync(bare, from, to, [CalendarSources.Activities, CalendarSources.WorkOrders], null));
-        Assert.Equal([CalendarSources.Contracts], harness.Calendar.AvailableSources(bare));
+        Assert.Empty(harness.Calendar.AvailableSources(bare));
 
         // The team view needs calendar.team.
         await Assert.ThrowsAsync<ForbiddenException>(() => harness.Calendar.GetItemsAsync(harness.Viewer(harness.Carol), from, to, null, [harness.Bob]));

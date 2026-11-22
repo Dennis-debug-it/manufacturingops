@@ -6,7 +6,6 @@ import {
   Route,
   Routes,
   useLocation,
-  useParams,
 } from 'react-router-dom'
 import { ProtectedRoute } from '../shared/components/ProtectedRoute'
 import { Spinner } from '../shared/components/Spinner'
@@ -20,7 +19,6 @@ import { NotificationsPage, TechNotificationsPage } from '../features/notificati
 import { MyNotificationSettingsPage } from '../features/notifications/NotificationPreferences'
 import { MyTimePage } from '../features/team/MyTimePage'
 import { AppShell } from '../shared/layout/AppShell'
-import { createModulePage, type ModulePageConfig } from '../shared/pages/ModulePage'
 import { type AppRole, isPlatformRole, PLATFORM_ROLES } from '../shared/types/auth'
 import { DashboardPage } from '../features/dashboard/DashboardPage'
 import { ExecutiveDashboardPage } from '../features/dashboard/ExecutiveDashboardPage'
@@ -32,7 +30,6 @@ import { ImpersonationEntryPage } from '../features/auth/ImpersonationEntryPage'
 import { DemoSignedOutPage } from '../features/auth/DemoSignedOutPage'
 import { SignupPage } from '../features/public/SignupPage'
 import { SignupVerifyPage } from '../features/public/SignupVerifyPage'
-import { TrackJobPage } from '../features/portal/TrackJobPage'
 import { ForbiddenPage } from '../features/public/ForbiddenPage'
 import { NotFoundPage } from '../features/public/NotFoundPage'
 import { WorkOrdersPage } from '../features/work-orders/WorkOrdersPage'
@@ -40,13 +37,10 @@ import { WorkOrderDetailPage } from '../features/work-orders/WorkOrderDetailPage
 import { CalendarPage as MaintenanceCalendarPageReal } from '../features/maintenance/CalendarPage'
 import { SchedulesPage as MaintenanceSchedulesPageReal } from '../features/maintenance/SchedulesPage'
 import { ScheduleDetailPage as MaintenanceScheduleDetailPageReal } from '../features/maintenance/ScheduleDetailPage'
-import { CompliancePage as MaintenanceCompliancePageReal } from '../features/maintenance/CompliancePage'
 import { EnginePage as MaintenanceEnginePageReal } from '../features/maintenance/EnginePage'
 import { PartsPage } from '../features/inventory/PartsPage'
 import { PartDetailPage } from '../features/inventory/PartDetailPage'
 import { StockPage } from '../features/inventory/StockPage'
-import { LocationsPage } from '../features/inventory/LocationsPage'
-import { LocationDetailPage } from '../features/inventory/LocationDetailPage'
 import { MovementsPage } from '../features/inventory/MovementsPage'
 import { PurchaseOrdersPage, PurchaseOrderDetailPage } from '../features/inventory/PurchaseOrdersPage'
 import { SuppliersPage, SupplierDetailPage } from '../features/inventory/SuppliersPage'
@@ -69,19 +63,13 @@ import { AccessSectionPage } from '../features/team/AccessSectionPage'
 import { SkillsPage as TeamSkillsPageReal } from '../features/team/SkillsPage'
 import { GroupsPage as TeamGroupsPageReal } from '../features/team/GroupsPage'
 import { LiveAttendancePage, TimesheetsPage, TimesheetDetailPage, LeavePage, TimeAttendanceReportsPage } from '../features/team/TimeAttendancePages'
-import { ContractsPage as ContractsPageReal } from '../features/contracts/ContractsPage'
-import { ContractDetailPage as ContractDetailPageReal } from '../features/contracts/ContractDetailPage'
 import { CalendarPage as MyCalendarPage } from '../features/activities/CalendarPage'
 import { CalendarFeedPage } from '../features/activities/CalendarFeedPage'
 import { ActivityDetailPage } from '../features/activities/ActivityDetailPage'
 import { ActionItemsPage } from '../features/activities/ActionItemsPage'
-import { RateCardsPage as FinanceRateCardsPageReal } from '../features/finance/RateCardsPage'
-import { PreferentialRatesPage as FinancePreferentialRatesPageReal } from '../features/finance/PreferentialRatesPage'
-import { ExchangeRatesPage as FinanceExchangeRatesPageReal } from '../features/finance/ExchangeRatesPage'
+import { ExchangeRatesPage } from '../features/finance/ExchangeRatesPage'
 import { ReportsPage as ReportsPageReal } from '../features/reports/ReportsPage'
 import { OnboardingPage as OnboardingPageReal } from '../features/onboarding/OnboardingPage'
-import { ClientsPage } from '../features/clients/ClientsPage'
-import { SitesPage } from '../features/clients/SitesPage'
 // Factory pages load on first use so they don't grow the main bundle.
 const FactoryAssetsPage = lazy(async () => ({ default: (await import('../features/factory/FactoryAssetsPage')).FactoryAssetsPage }))
 const FactoryAssetDetailPage = lazy(async () => ({ default: (await import('../features/factory/FactoryAssetDetailPage')).FactoryAssetDetailPage }))
@@ -116,8 +104,6 @@ const CompliancePage = lazy(async () => ({ default: (await import('../features/f
 const ContractorsPage = lazy(async () => ({ default: (await import('../features/factory/stores/ContractorsPage')).ContractorsPage }))
 const OperatorReportPage = lazy(async () => ({ default: (await import('../features/public/OperatorReportPage')).OperatorReportPage }))
 const OrganisationSettingsPage = lazy(async () => ({ default: (await import('../features/factory/OrganisationSettingsPage')).OrganisationSettingsPage }))
-import { ClientDetailPage } from '../features/clients/ClientDetailPage'
-import { SiteDetailPage } from '../features/clients/SiteDetailPage'
 import { CompanySettingsPage as SettingsCompanyPageReal } from '../features/settings/CompanySettingsPage'
 import { BrandingSettingsPage as SettingsBrandingPageReal } from '../features/settings/BrandingSettingsPage'
 import { SecuritySettingsPage as SettingsSecurityPageReal } from '../features/settings/SecuritySettingsPage'
@@ -144,7 +130,6 @@ import { IntegrationsSettingsPage as SettingsIntegrationsPageReal } from '../fea
 import { ExecutiveDashboardSettingsPage as SettingsExecutiveDashboardPageReal } from '../features/settings/ExecutiveDashboardSettingsPage'
 import { SettingsDashboardsPage } from '../features/settings/SettingsDashboardsPage'
 import { ApprovalMatrixSettingsPage } from '../features/settings/ApprovalMatrixSettingsPage'
-import { NotificationTemplatesPage } from '../features/settings/NotificationTemplatesPage'
 import { SlaPoliciesPage } from '../features/settings/SlaPoliciesPage'
 import { WorkflowsSettingsPage } from '../features/settings/WorkflowsSettingsPage'
 import { OperationalDefaultsSettingsPage } from '../features/settings/OperationalDefaultsSettingsPage'
@@ -157,22 +142,14 @@ import { PlatformApp } from '../platform/PlatformApp'
 const tenantRoles: AppRole[] = ['admin', 'manager', 'dispatcher', 'technician', 'materials_controller', 'finance', 'viewer']
 const platformRoles: AppRole[] = [...PLATFORM_ROLES]
 
-const lazyModulePage = (config: ModulePageConfig) =>
-  lazy(async () => ({ default: createModulePage(config) }))
-
 const MaintenanceCalendarPage = MaintenanceCalendarPageReal
 const MaintenanceSchedulesPage = MaintenanceSchedulesPageReal
 const MaintenanceScheduleDetailPage = MaintenanceScheduleDetailPageReal
-const MaintenanceCompliancePage = MaintenanceCompliancePageReal
 const MaintenanceEnginePage = MaintenanceEnginePageReal
-
-const ClientWizardPage = lazyModulePage({ title: 'Client Setup Wizard', subtitle: 'Sites, assets, and contract setup flow.' })
 
 const InventoryPartsPage = PartsPage
 const InventoryPartDetailPage = PartDetailPage
 const InventoryStockPage = StockPage
-const InventoryLocationsPage = LocationsPage
-const InventoryLocationDetailPage = LocationDetailPage
 const InventoryMovementsPage = MovementsPage
 const InventoryPurchaseOrdersPage = PurchaseOrdersPage
 const InventoryPurchaseOrderDetailPage = PurchaseOrderDetailPage
@@ -192,13 +169,6 @@ const TimeAttendanceLivePage = LiveAttendancePage
 const TimeAttendanceTimesheetsPage = TimesheetsPage
 const TimeAttendanceTimesheetDetailPage = TimesheetDetailPage
 const TimeAttendanceLeavePage = LeavePage
-
-const ContractsPage = ContractsPageReal
-const ContractDetailPage = ContractDetailPageReal
-
-const FinanceRateCardsPage = FinanceRateCardsPageReal
-const FinancePreferentialRatesPage = FinancePreferentialRatesPageReal
-const FinanceExchangeRatesPage = FinanceExchangeRatesPageReal
 
 const ReportsPage = ReportsPageReal
 
@@ -221,12 +191,6 @@ const SettingsAccountPage = SettingsAccountPageReal
 const SettingsAuditLogsPage = SettingsAuditLogsPageReal
 const SettingsOverviewPage = SettingsOverviewPageReal
 const OnboardingPage = OnboardingPageReal
-
-/** Old link target: assets are added from the site page, so send it there rather than to a "not found" asset. */
-function SiteAssetsNewRedirect() {
-  const { id } = useParams()
-  return <Navigate to={id ? `/sites/${id}` : '/sites'} replace />
-}
 
 function TenantShellRoute() {
   const { user } = useAuth()
@@ -326,16 +290,8 @@ export function AppRouter() {
       ['/maintenance/compliance', CompliancePage],
       ['/maintenance/calendar', MaintenanceCalendarPage],
       ['/maintenance/schedules', MaintenanceSchedulesPage],
-      ['/maintenance/schedules/new', MaintenanceSchedulesPage],
       ['/maintenance/schedules/:id', MaintenanceScheduleDetailPage],
-      ['/maintenance/compliance', MaintenanceCompliancePage],
       ['/maintenance/engine', MaintenanceEnginePage],
-      ['/clients', ClientsPage],
-      ['/clients/:id', ClientDetailPage],
-      ['/clients/:id/sites/new', ClientWizardPage],
-      ['/sites', SitesPage],
-      ['/sites/:id', SiteDetailPage],
-      ['/sites/:id/assets/new', SiteAssetsNewRedirect],
       ['/assets', FactoryAssetsPage],
       ['/assets/:id', FactoryAssetDetailPage],
       ['/scan', ScanPage],
@@ -345,8 +301,6 @@ export function AppRouter() {
       ['/inventory/parts/new', InventoryPartsPage],
       ['/inventory/parts/:id', InventoryPartDetailPage],
       ['/inventory/stock', InventoryStockPage],
-      ['/inventory/locations', InventoryLocationsPage],
-      ['/inventory/locations/:id', InventoryLocationDetailPage],
       ['/inventory/movements', InventoryMovementsPage],
       ['/inventory/purchase-orders', InventoryPurchaseOrdersPage],
       ['/inventory/purchase-orders/new', InventoryPurchaseOrdersPage],
@@ -387,16 +341,12 @@ export function AppRouter() {
       ['/team/time-attendance/reports', TimeAttendanceReportsPage],
       ['/help', HelpPage],
       ['/help/:guideId', HelpPage],
-      ['/contracts', ContractsPage],
-      ['/contracts/:id', ContractDetailPage],
       ['/calendar', MyCalendarPage],
       ['/calendar/feed', CalendarFeedPage],
       ['/activities/:id', ActivityDetailPage],
       ['/action-items', ActionItemsPage],
-      ['/finance', FinanceRateCardsPage],
-      ['/finance/rate-cards', FinanceRateCardsPage],
-      ['/finance/preferential-rates', FinancePreferentialRatesPage],
-      ['/finance/exchange-rates', FinanceExchangeRatesPage],
+      ['/finance', ExchangeRatesPage],
+      ['/finance/exchange-rates', ExchangeRatesPage],
       ['/reports', ReportsPage],
       ['/whatsapp', WhatsAppInboxPage],
       ['/whatsapp/inbox', WhatsAppInboxPage],
@@ -432,7 +382,6 @@ export function AppRouter() {
       ['/settings/account', SettingsAccountPage],
       ['/settings/audit-logs', SettingsAuditLogsPage],
       ['/settings/approval-matrix', ApprovalMatrixSettingsPage],
-      ['/settings/notification-templates', NotificationTemplatesPage],
       ['/settings/sla-policies', SlaPoliciesPage],
       ['/settings/workflows', WorkflowsSettingsPage],
       ['/settings/operational-defaults', OperationalDefaultsSettingsPage],
@@ -459,7 +408,6 @@ export function AppRouter() {
         <Route path="/demo/signed-out" element={<DemoSignedOutPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/signup/verify" element={<SignupVerifyPage />} />
-        <Route path="/track/:token" element={<TrackJobPage />} />
         <Route path="/t/:tag" element={<OperatorReportPage />} />
         <Route path="/403" element={<ForbiddenPage />} />
         <Route path="/404" element={<NotFoundPage />} />

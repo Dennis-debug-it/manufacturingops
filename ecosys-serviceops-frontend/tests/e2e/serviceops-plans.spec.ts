@@ -59,6 +59,5 @@ for (const code of ['essentials', 'professional', 'enterprise'] as const) {
 
 test('shared settings stay reachable on every edition', () => {
   expect(canAccessModulePath('/settings/numbering', ['operations'])).toBe(true)
-  expect(canAccessModulePath('/clients', ['finance'])).toBe(true)
   expect(canAccessModulePath('/maintenance/jobs', ['operations', 'finance', 'maintenance'])).toBe(true)
 })

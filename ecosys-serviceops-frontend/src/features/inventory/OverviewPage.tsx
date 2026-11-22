@@ -169,7 +169,7 @@ export function OverviewPage() {
         parts: 0,
         low: 0,
         value: 0,
-        to: row.locationType === 'Branch' && row.locationId ? `/inventory/locations/${row.locationId}` : `/inventory/stock?view=location&location=${encodeURIComponent(key)}`,
+        to: `/inventory/stock?view=location&location=${encodeURIComponent(key)}`,
       }
       if (row.quantityOnHand !== 0) entry.parts += 1
       if (row.isLowStock) entry.low += 1

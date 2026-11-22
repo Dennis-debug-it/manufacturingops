@@ -32,6 +32,9 @@ Stack: .NET 10 + PostgreSQL + React PWA.
   client finance (quotations, invoices, credit notes, receipts, withholding, expenses), the sales
   and platform CRM, the client portal, projects, vans and dispatch, CSAT, and Kip AI and the
   knowledge base. The migration history is squashed into one baseline (`InitialBaseline`).
+  A later sweep removed the rest of the field-service screens: clients, sites and contracts, rate
+  cards and preferential rates, the public job-tracking page and client ETA emails, technician
+  location tracking and the travel steps (On My Way / Arrived / Departure), and the work order map.
 - **Phases 1–6 (done):** factory hierarchy and assets, work orders and the technician app,
   preventive maintenance and the weekly window, safety and compliance, spares and contractors,
   costs, KPIs and evidence packs.

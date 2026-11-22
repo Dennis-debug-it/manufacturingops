@@ -58,7 +58,6 @@ public sealed class InventoryPostgresTests
             await materials.Adjust(part.Id, new(branch.Id, -1, "Damaged"), default);
 
             // Reads used by the screens.
-            Assert.Single(Value(await materials.GetBranchSummary(default)));
             Assert.Single(Value(await materials.GetStockLocations(part.Id, default)).Branches);
             Assert.NotEmpty(Value(await materials.GetMovements(part.Id, null, default)));
             Assert.Single(Value(await materials.GetAll(false, null, "123456", null, default)));

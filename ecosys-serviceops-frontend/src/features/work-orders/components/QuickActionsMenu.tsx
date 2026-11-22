@@ -2,9 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircle2, Eye, MoreHorizontal, PlayCircle, UserPlus } from 'lucide-react'
 import { cn } from '../../../shared/utils/cn'
-import { useAuth } from '../../../shared/hooks/useAuth'
 import { usePermission } from '../../../shared/hooks/usePermission'
-import { COMPLETE_BLOCKED_REASON, START_BLOCKED_REASON } from '../dispatchGuards'
+import { START_BLOCKED_REASON } from '../dispatchGuards'
 import type { WorkOrderRow } from '../listModel'
 
 export interface QuickActionsMenuProps {
@@ -19,7 +18,6 @@ export function QuickActionsMenu({ row, onAssign, onStart, onComplete, align = '
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
 
-  const { user } = useAuth()
   const canAssign = usePermission('work-orders.assign')
   const canStart = usePermission('work-orders.start')
   const canComplete = usePermission('work-orders.complete')
@@ -37,10 +35,8 @@ export function QuickActionsMenu({ row, onAssign, onStart, onComplete, align = '
 
   const canStartNow = canStart && row.status !== 'In Progress' && row.status !== 'Completed' && row.status !== 'Closed' && !row.isUnassigned
   const canCompleteNow = canComplete && row.status === 'In Progress'
-  // The server guards on top of the state machine: Start needs an accepted technician assignment,
-  // Complete needs a recorded arrival unless a tenant admin overrides it in the completion dialog.
+  // The server guards on top of the state machine: Start needs an accepted technician assignment.
   const startBlockedReason = row.hasAcceptedTechnician ? null : START_BLOCKED_REASON
-  const completeBlockedReason = row.hasRecordedArrival || user?.role === 'admin' ? null : COMPLETE_BLOCKED_REASON
 
   return (
     <div className="relative inline-block" ref={ref}>
@@ -96,7 +92,7 @@ export function QuickActionsMenu({ row, onAssign, onStart, onComplete, align = '
             <GuardedAction
               icon={CheckCircle2}
               label="Complete"
-              blockedReason={completeBlockedReason}
+              blockedReason={null}
               onSelect={() => {
                 setOpen(false)
                 onComplete(row)

@@ -1,4 +1,4 @@
-import { CalendarDays, Kanban, List, Map as MapIcon } from 'lucide-react'
+import { CalendarDays, Kanban, List } from 'lucide-react'
 import { cn } from '../../../shared/utils/cn'
 import type { ViewMode } from '../hooks/useWorkOrderListState'
 
@@ -6,7 +6,6 @@ const OPTIONS: Array<{ key: ViewMode; label: string; icon: typeof List }> = [
   { key: 'table', label: 'Table', icon: List },
   { key: 'kanban', label: 'Kanban', icon: Kanban },
   { key: 'calendar', label: 'Calendar', icon: CalendarDays },
-  { key: 'map', label: 'Map', icon: MapIcon },
 ]
 
 export interface ViewSwitcherProps {

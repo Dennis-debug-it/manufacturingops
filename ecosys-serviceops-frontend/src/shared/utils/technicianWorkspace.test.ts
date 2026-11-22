@@ -32,7 +32,7 @@ describe('techPathFor', () => {
   })
 
   it('sends any other office page to My Jobs', () => {
-    expect(techPathFor('/finance/rate-cards')).toBe('/tech')
+    expect(techPathFor('/finance/exchange-rates')).toBe('/tech')
     expect(techPathFor('/approvals')).toBe('/tech')
   })
 })

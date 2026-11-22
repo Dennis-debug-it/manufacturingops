@@ -16,7 +16,7 @@ describe('tenant navigation', () => {
 
   it('leaves the service-company screens out of the sidebar', () => {
     const paths = tenantNavItems.map((item) => item.to)
-    for (const path of ['/work-orders', '/clients', '/contracts', '/calendar', '/action-items', '/inventory']) {
+    for (const path of ['/work-orders', '/calendar', '/action-items', '/inventory']) {
       expect(paths).not.toContain(path)
     }
   })

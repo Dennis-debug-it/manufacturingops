@@ -60,8 +60,7 @@ export function KanbanCard({ row, onAssign, onStart, onComplete }: KanbanCardPro
           <QuickActionsMenu row={row} onAssign={onAssign} onStart={onStart} onComplete={onComplete} />
         </div>
       </div>
-      <div className="mt-1 truncate text-xs text-slate-600">{row.client}</div>
-      <div className="truncate text-[11px] text-slate-400">{row.site}</div>
+      <div className="mt-1 truncate text-xs text-slate-600">{row.asset}</div>
       <div className="mt-2.5 flex items-center justify-between gap-2">
         <span
           className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600"

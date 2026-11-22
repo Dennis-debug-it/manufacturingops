@@ -8,7 +8,6 @@ import { FormDrawer } from '../../shared/components/FormDrawer'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { formatDate } from '../../shared/utils/dates'
 import { api } from '../../shared/api/apiClient'
-import { FinanceWorkspaceNav } from './FinanceWorkspaceNav'
 import { getActiveCurrency } from '../../shared/utils/currency'
 
 interface ExchangeRateItem {
@@ -65,7 +64,7 @@ export function ExchangeRatesPage() {
     <div className="space-y-4">
       <PageHeader
         title="Exchange Rates"
-        subtitle="Currency pairs and manual rates used for multi-currency invoicing."
+        subtitle="Currency pairs and manual rates used when parts are bought in another currency."
         primaryAction={
           canEdit ? (
             <button type="button" onClick={() => setShowNewRate(true)} className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)]">
@@ -74,7 +73,6 @@ export function ExchangeRatesPage() {
           ) : undefined
         }
       />
-      <FinanceWorkspaceNav />
       <DataTable
         columns={columns}
         data={data ?? []}

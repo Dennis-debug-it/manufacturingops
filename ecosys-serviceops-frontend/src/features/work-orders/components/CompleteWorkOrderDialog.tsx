@@ -1,25 +1,14 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
-import { CompletionOverrideFields } from './CompletionOverrideFields'
 
 export interface CompleteWorkOrderSubmission {
   workDoneNotes: string
-  adminOverride: boolean
-  overrideReason: string | null
 }
 
 export interface CompleteWorkOrderDialogProps {
   open: boolean
   woNumber?: string | undefined
   submitting?: boolean
-  /**
-   * True once a technician arrival is on record. When false the server refuses completion unless
-   * the payload carries an admin override, so the dialog asks for one instead of firing a request
-   * that is guaranteed to 400.
-   */
-  arrivalRecorded: boolean
-  /** Whether the signed-in user holds the tenant `admin` role the server requires for an override. */
-  canAdminOverride: boolean
   /** Work-done notes already recorded during execution, used to prefill the dialog. */
   initialNotes?: string | null | undefined
   onClose: () => void
@@ -30,34 +19,23 @@ export function CompleteWorkOrderDialog({
   open,
   woNumber,
   submitting,
-  arrivalRecorded,
-  canAdminOverride,
   initialNotes,
   onClose,
   onSubmit,
 }: CompleteWorkOrderDialogProps) {
   const [notes, setNotes] = useState('')
-  const [overrideEnabled, setOverrideEnabled] = useState(false)
-  const [overrideReason, setOverrideReason] = useState('')
 
   useEffect(() => {
     if (open) {
       setNotes(initialNotes ?? '')
     } else {
       setNotes('')
-      setOverrideEnabled(false)
-      setOverrideReason('')
     }
   }, [open, initialNotes])
 
   if (!open) {
     return null
   }
-
-  const overrideOffered = canAdminOverride && !arrivalRecorded
-  // Without an arrival the server needs all three of adminOverride, the admin role and a reason,
-  // so the submit stays disabled until the operator has deliberately supplied the first and third.
-  const overrideSatisfied = arrivalRecorded || (overrideEnabled && overrideReason.trim().length > 0)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
@@ -87,31 +65,15 @@ export function CompleteWorkOrderDialog({
           />
         </div>
 
-        {overrideOffered ? (
-          <div className="mt-4">
-            <CompletionOverrideFields
-              idPrefix="complete-dialog"
-              enabled={overrideEnabled}
-              reason={overrideReason}
-              onEnabledChange={setOverrideEnabled}
-              onReasonChange={setOverrideReason}
-            />
-          </div>
-        ) : null}
-
         <div className="mt-6 flex items-center justify-end gap-2">
           <button type="button" onClick={onClose} className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
             Cancel
           </button>
           <button
             type="button"
-            disabled={!notes.trim() || !overrideSatisfied || submitting}
+            disabled={!notes.trim() || submitting}
             onClick={() =>
-              onSubmit({
-                workDoneNotes: notes.trim(),
-                adminOverride: overrideOffered && overrideEnabled,
-                overrideReason: overrideOffered && overrideEnabled ? overrideReason.trim() : null,
-              })
+              onSubmit({ workDoneNotes: notes.trim() })
             }
             className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:bg-slate-300"
           >

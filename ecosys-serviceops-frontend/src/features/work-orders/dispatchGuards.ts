@@ -1,16 +1,13 @@
 /**
- * Client-side mirror of the two server guards that decide whether Start and Complete are legal.
+ * Client-side mirror of the server guard that decides whether Start is legal.
  *
- * Both live in `WorkOrderAssignmentWorkflowService`:
+ * It lives in `WorkOrderAssignmentWorkflowService`:
  * - `HasAcceptedTechnicianAsync` — a `work_order_technician_assignments` row whose `Status` is one
  *   of Accepted/InTransit/Arrived/InProgress/Completed. `WorkOrdersController.Start` rejects the
  *   transition with "cannot be moved to In Progress before at least one technician accepts" when
  *   no such row exists.
- * - `HasArrivalAsync` — a `work_order_technician_assignments` row with `ArrivalAt` set.
- *   `WorkOrdersController.Complete` rejects completion with "Completion cannot happen before
- *   arrival unless admin override is used" when no such row exists.
  *
- * Mirroring them here lets the UI disable the action and say *why*, instead of firing a request
+ * Mirroring it here lets the UI disable the action and say *why*, instead of firing a request
  * that is guaranteed to come back 400.
  */
 
@@ -21,7 +18,7 @@ const ACCEPTED_ASSIGNMENT_STATUSES = new Set(['Accepted', 'InTransit', 'Arrived'
  * `WorkOrderAssignmentView.Resolve` synthesises a technician-assignment entry for work orders that
  * only ever got the legacy `work_orders.AssignedTechnicianId`, and marks it with an empty Guid
  * because no persisted row backs it. The server-side guards query the real table, so a stand-in
- * must never be read as an acceptance or an arrival — and no dispatch action can target it either
+ * must never be read as an acceptance — and no dispatch action can target it either
  * (the workflow service throws "Technician is not currently assigned to this work order.").
  */
 const LEGACY_STAND_IN_ASSIGNMENT_ID = '00000000-0000-0000-0000-000000000000'
@@ -30,7 +27,6 @@ const LEGACY_STAND_IN_ASSIGNMENT_ID = '00000000-0000-0000-0000-000000000000'
 export interface AssignmentGuardState {
   id: string
   status: string
-  arrivalAt: string | null
 }
 
 export function isPersistedAssignment(assignment: AssignmentGuardState): boolean {
@@ -41,11 +37,7 @@ export function hasAcceptedTechnician(assignments: readonly AssignmentGuardState
   return assignments.some((assignment) => isPersistedAssignment(assignment) && ACCEPTED_ASSIGNMENT_STATUSES.has(assignment.status))
 }
 
-export function hasRecordedArrival(assignments: readonly AssignmentGuardState[]): boolean {
-  return assignments.some((assignment) => isPersistedAssignment(assignment) && Boolean(assignment.arrivalAt))
-}
-
-/** True once the technician has accepted, i.e. the on-site milestones become legal to record. */
+/** True once the technician has accepted the job. */
 export function hasAcceptedAssignment(assignment: AssignmentGuardState): boolean {
   return ACCEPTED_ASSIGNMENT_STATUSES.has(assignment.status)
 }
@@ -60,9 +52,7 @@ export function readAssignmentGuardState(value: unknown): AssignmentGuardState[]
   return value.filter(isRecord).map((entry) => ({
     id: typeof entry.id === 'string' ? entry.id : '',
     status: typeof entry.status === 'string' ? entry.status : '',
-    arrivalAt: typeof entry.arrivalAt === 'string' ? entry.arrivalAt : null,
   }))
 }
 
 export const START_BLOCKED_REASON = 'Waiting for a technician to accept this job.'
-export const COMPLETE_BLOCKED_REASON = 'Arrival on site has not been recorded.'

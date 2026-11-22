@@ -111,7 +111,6 @@ export function makeWorkOrder(overrides: Record<string, unknown> = {}) {
     finalCharge: null,
     appliedSlaSource: null,
     appliedRateSource: null,
-    trackingToken: null,
     workOrderTemplateId: null,
     quoteId: null,
     quoteNumber: null,

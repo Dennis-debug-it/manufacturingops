@@ -91,67 +91,6 @@ public sealed class WorkOrderAssignmentsController(
         return Ok(await LoadResponseAsync(workOrderId, cancellationToken));
     }
 
-    [HttpPost("arrival")]
-    public async Task<ActionResult<WorkOrderResponse>> Arrival(Guid workOrderId, [FromBody] ArrivalActionRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureTenantOperationalAccess();
-        await EnsureAccessibleAsync(workOrderId, cancellationToken);
-        await assignmentWorkflowService.RecordArrivalAsync(TenantId, workOrderId, UserId, new TechnicianArrivalRequest(request.TechnicianId, request.ArrivedAt, null), cancellationToken);
-        return Ok(await LoadResponseAsync(workOrderId, cancellationToken));
-    }
-
-    [HttpPost("departure")]
-    public async Task<ActionResult<WorkOrderResponse>> Departure(Guid workOrderId, [FromBody] DepartureActionRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureTenantOperationalAccess();
-        await EnsureAccessibleAsync(workOrderId, cancellationToken);
-        await assignmentWorkflowService.RecordDepartureAsync(TenantId, workOrderId, UserId, new TechnicianDepartureRequest(request.TechnicianId, request.DepartedAt, null), cancellationToken);
-        await SyncSiteVisitTimestampsAsync(workOrderId, cancellationToken);
-        return Ok(await LoadResponseAsync(workOrderId, cancellationToken));
-    }
-
-    /// <summary>
-    /// Every trip each technician has made to this job (travel start, arrival, departure) with travel
-    /// and on-site totals, so multi-day jobs show the whole history. <c>State</c> per technician drives
-    /// which action the UI offers next: Idle → Travelling → OnSite → Idle.
-    /// </summary>
-    [HttpGet("visits")]
-    public async Task<ActionResult<WorkOrderVisitsResponse>> GetVisits(Guid workOrderId, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureTenantOperationalAccess();
-        await EnsureAccessibleAsync(workOrderId, cancellationToken);
-
-        var visits = await dbContext.WorkOrderVisits
-            .AsNoTracking()
-            .Include(x => x.Technician)
-            .Where(x => x.TenantId == TenantId && x.WorkOrderId == workOrderId)
-            .OrderBy(x => x.TravelStartedAt ?? x.ArrivedAt ?? x.CreatedAt)
-            .ToListAsync(cancellationToken);
-
-        var rows = visits.Select(x => new WorkOrderVisitResponse(
-            x.Id, x.TechnicianId, x.Technician?.FullName ?? "Technician",
-            x.TravelStartedAt, x.ArrivedAt, x.DepartedAt, x.TravelMinutes, x.OnSiteMinutes, x.Notes)).ToList();
-
-        var technicians = visits
-            .GroupBy(x => x.TechnicianId)
-            .Select(group =>
-            {
-                var open = group.Where(x => x.DepartedAt == null).OrderByDescending(x => x.CreatedAt).FirstOrDefault();
-                var state = open is null ? "Idle" : open.ArrivedAt is null ? "Travelling" : "OnSite";
-                return new WorkOrderVisitTechnicianSummary(
-                    group.Key,
-                    group.First().Technician?.FullName ?? "Technician",
-                    state,
-                    group.Count(),
-                    group.Select(x => (x.ArrivedAt ?? x.TravelStartedAt ?? x.CreatedAt).Date).Distinct().Count(),
-                    group.Sum(x => x.TravelMinutes),
-                    group.Sum(x => x.OnSiteMinutes));
-            })
-            .ToList();
-
-        return Ok(new WorkOrderVisitsResponse(rows, technicians, technicians.Sum(x => x.TravelMinutes), technicians.Sum(x => x.OnSiteMinutes)));
-    }
-
     /// <summary>
     /// Rolls the per-technician arrival/departure stamps up onto the work-order header.
     /// <para>
@@ -299,8 +238,6 @@ public sealed record AssignGroupActionRequest(Guid? AssignmentGroupId, string? N
 public sealed record AssignTechniciansActionRequest(IReadOnlyCollection<Guid>? TechnicianIds, Guid? LeadTechnicianId, string? Notes);
 public sealed record ReassignActionRequest(Guid? AssignmentGroupId, IReadOnlyCollection<Guid>? TechnicianIds, Guid? LeadTechnicianId, string? Notes);
 public sealed record TechnicianResponseActionRequest(Guid TechnicianId, string Response, string? Notes);
-public sealed record ArrivalActionRequest(Guid TechnicianId, DateTime? ArrivedAt);
-public sealed record DepartureActionRequest(Guid TechnicianId, DateTime? DepartedAt);
 
 public sealed record WorkOrderAssignmentHistoryItem(
     Guid Id,
@@ -317,17 +254,3 @@ public sealed record WorkOrderAssignmentHistoryItem(
     string? PerformedByUserName,
     DateTime PerformedAt,
     string? Notes);
-
-public sealed record WorkOrderVisitResponse(
-    Guid Id, Guid TechnicianId, string TechnicianName,
-    DateTime? TravelStartedAt, DateTime? ArrivedAt, DateTime? DepartedAt,
-    int TravelMinutes, int OnSiteMinutes, string? Notes);
-
-public sealed record WorkOrderVisitTechnicianSummary(
-    Guid TechnicianId, string TechnicianName, string State, int VisitCount, int DaysOnJob, int TravelMinutes, int OnSiteMinutes);
-
-public sealed record WorkOrderVisitsResponse(
-    IReadOnlyList<WorkOrderVisitResponse> Visits,
-    IReadOnlyList<WorkOrderVisitTechnicianSummary> Technicians,
-    int TotalTravelMinutes,
-    int TotalOnSiteMinutes);

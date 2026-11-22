@@ -9,20 +9,18 @@ import { StatCard } from '../../shared/components/StatCard'
 import { cn } from '../../shared/utils/cn'
 import { usePmPlans, usePmPlansDue } from './api'
 import { MaintenanceTabNav } from './components/MaintenanceTabNav'
-import { ClientFilterSelect, useMaintenanceClientFilter } from './components/ClientFilter'
 
 export function EnginePage() {
   const plansQuery = usePmPlans()
   const dueQuery = usePmPlansDue()
   const { data: plans, isLoading: plansLoading } = plansQuery
   const { data: due, isLoading: dueLoading } = dueQuery
-  const { clientId, setClientId } = useMaintenanceClientFilter()
 
   const activePlans = useMemo(
-    () => (plans ?? []).filter((plan) => plan.status === 'Active' && (!clientId || plan.clientId === clientId)),
-    [plans, clientId],
+    () => (plans ?? []).filter((plan) => plan.status === 'Active'),
+    [plans],
   )
-  const overdueCount = useMemo(() => (due ?? []).filter((plan) => !clientId || plan.clientId === clientId).length, [due, clientId])
+  const overdueCount = due?.length ?? 0
   const healthy = activePlans.length === 0 || overdueCount / activePlans.length < 0.15
 
   if (plansLoading || dueLoading) {
@@ -49,7 +47,6 @@ export function EnginePage() {
       <PageHeader
         title="Engine Status"
         subtitle="Maintenance generation engine health and rules."
-        secondaryActions={<ClientFilterSelect value={clientId} onChange={setClientId} />}
       />
       <MaintenanceTabNav />
 

@@ -18,7 +18,6 @@ const AUTH_STORAGE_KEY = 'ecosys.serviceops.auth'
 
 const tenantPages = [
   { name: 'dashboard', path: '/dashboard', heading: /operational overview/i },
-  { name: 'clients', path: '/clients', heading: /client register/i },
   { name: 'assets', path: '/assets', heading: /asset register/i },
   { name: 'work orders', path: '/work-orders', heading: /work orders/i },
   { name: 'materials', path: '/materials', heading: /materials and stock/i },

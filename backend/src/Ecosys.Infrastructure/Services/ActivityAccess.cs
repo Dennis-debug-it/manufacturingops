@@ -59,7 +59,8 @@ internal sealed class AccessViewerFactory(
 }
 
 /// <summary>A record an activity or action item is linked to, as the viewer sees it.</summary>
-public sealed record LinkedRecord(string EntityType, Guid EntityId, string Label, string Url);
+/// <summary>A record an activity links to. Clients and contracts have no screen of their own, so no Url.</summary>
+public sealed record LinkedRecord(string EntityType, Guid EntityId, string Label, string? Url);
 
 /// <summary>
 /// Linked records (project, client, contract, work order): their labels, and whether a viewer may
@@ -115,12 +116,12 @@ internal sealed class LinkedRecordService(AppDbContext dbContext) : ILinkedRecor
         if (clientIds.Count > 0)
             foreach (var x in await dbContext.Clients.Where(x => x.TenantId == tenantId && clientIds.Contains(x.Id))
                          .Select(x => new { x.Id, x.ClientName }).ToListAsync(cancellationToken))
-                result[(ActivityEntityTypes.Client, x.Id)] = new(ActivityEntityTypes.Client, x.Id, x.ClientName, $"/clients/{x.Id}");
+                result[(ActivityEntityTypes.Client, x.Id)] = new(ActivityEntityTypes.Client, x.Id, x.ClientName, null);
         var contractIds = Ids(ActivityEntityTypes.Contract);
         if (contractIds.Count > 0)
             foreach (var x in await dbContext.Contracts.Where(x => x.TenantId == tenantId && contractIds.Contains(x.Id))
                          .Select(x => new { x.Id, x.ContractNumber, x.Name }).ToListAsync(cancellationToken))
-                result[(ActivityEntityTypes.Contract, x.Id)] = new(ActivityEntityTypes.Contract, x.Id, $"{x.ContractNumber} {x.Name}", $"/contracts/{x.Id}");
+                result[(ActivityEntityTypes.Contract, x.Id)] = new(ActivityEntityTypes.Contract, x.Id, $"{x.ContractNumber} {x.Name}", null);
         var workOrderIds = Ids(ActivityEntityTypes.WorkOrder);
         if (workOrderIds.Count > 0)
             foreach (var x in await dbContext.WorkOrders.Where(x => x.TenantId == tenantId && workOrderIds.Contains(x.Id))
@@ -131,8 +132,3 @@ internal sealed class LinkedRecordService(AppDbContext dbContext) : ILinkedRecor
 
 }
 
-internal static class ContractCalendarRules
-{
-    /// <summary>Contracts whose expiry and renewal-notice dates are still worth showing.</summary>
-    public static readonly ContractStatus[] Live = [ContractStatus.Active, ContractStatus.ExpiringSoon, ContractStatus.RenewalInProgress];
-}

@@ -24,8 +24,6 @@ public interface IWorkOrderLifecycleService
     Task<WorkOrder> AssignAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, Guid? technicianId, Guid? assignmentGroupId, CancellationToken cancellationToken = default);
     Task<WorkOrderEvent> AddCommentAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderCommentRequest request, CancellationToken cancellationToken = default);
     Task<WorkOrder> StartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default);
-    Task<WorkOrder> ArriveAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default);
-    Task<WorkOrder> DepartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<WorkOrder> ChangeStatusAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderStatusChangeRequest request, CancellationToken cancellationToken = default);
     Task<WorkOrder> CompleteAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderCompletionRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<WorkOrderEvent>> GetEventsAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken = default);
@@ -42,7 +40,6 @@ internal sealed class WorkOrderLifecycleService(
     IEmailSubjectRuleService emailSubjectRuleService,
     ISlaService slaService,
     IServiceOpsNotifier serviceOpsNotifier,
-    IEtaNotificationService etaNotificationService,
     IOptions<PublicAppOptions> publicAppOptions,
     ILogger<WorkOrderLifecycleService> logger) : IWorkOrderLifecycleService
 {
@@ -113,7 +110,6 @@ internal sealed class WorkOrderLifecycleService(
         if (technician is not null)
         {
             await TryQueueAssignedEmailAsync(tenantId, workOrder, technician, actorUserId, cancellationToken);
-            await etaNotificationService.NotifyAsync(tenantId, workOrder, EtaNotificationEventTypes.Assigned, technician.FullName, cancellationToken);
         }
 
         await NotifySafeAsync(tenantId, workOrder.Id, cancellationToken);
@@ -157,48 +153,6 @@ internal sealed class WorkOrderLifecycleService(
 
         await TryQueueStartedEmailAsync(tenantId, workOrder, actorUserId, cancellationToken);
         await TryQueueClientStartedEmailAsync(tenantId, workOrder, actorUserId, cancellationToken);
-        return workOrder;
-    }
-
-    public async Task<WorkOrder> ArriveAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default)
-    {
-        var workOrder = await LoadWorkOrderAsync(tenantId, workOrderId, cancellationToken);
-        workOrder.ArrivalAt = OccurredAt.UtcNow;
-
-        if (workOrder.AssignedTechnicianId.HasValue)
-        {
-            await SetActiveWorkOrderAsync(tenantId, workOrder.AssignedTechnicianId.Value, workOrder.Id, cancellationToken);
-        }
-
-        await SaveEventAsync(
-            tenantId,
-            workOrder,
-            actorUserId,
-            "Arrival",
-            NormalizeStatus(workOrder.Status),
-            "Technician marked arrival on site.",
-            cancellationToken: cancellationToken);
-        return workOrder;
-    }
-
-    public async Task<WorkOrder> DepartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default)
-    {
-        var workOrder = await LoadWorkOrderAsync(tenantId, workOrderId, cancellationToken);
-        workOrder.DepartureAt = OccurredAt.UtcNow;
-
-        if (workOrder.AssignedTechnicianId.HasValue)
-        {
-            await SetActiveWorkOrderAsync(tenantId, workOrder.AssignedTechnicianId.Value, null, cancellationToken);
-        }
-
-        await SaveEventAsync(
-            tenantId,
-            workOrder,
-            actorUserId,
-            "Departure",
-            NormalizeStatus(workOrder.Status),
-            "Technician departed from site.",
-            cancellationToken: cancellationToken);
         return workOrder;
     }
 
@@ -611,11 +565,6 @@ internal sealed class WorkOrderLifecycleService(
 
         var workOrder = await LoadWorkOrderAsync(tenantId, workOrderId, cancellationToken);
 
-        if (!workOrder.ArrivalAt.HasValue)
-        {
-            throw new BusinessRuleException("Work order arrival must be recorded before completion.");
-        }
-
         await TransitionAsync(workOrder, actorUserId, WorkOrderStatuses.Completed, "Field work completed", null, cancellationToken);
 
         workOrder.WorkDoneNotes = request.WorkDoneNotes.Trim();
@@ -675,7 +624,6 @@ internal sealed class WorkOrderLifecycleService(
         await slaService.RefreshWorkOrderAsync(workOrder.Id, DateTime.UtcNow, cancellationToken);
         await TryQueueCompletionEmailAsync(tenantId, workOrder, cancellationToken);
         await TryQueueClientCompletedEmailAsync(tenantId, workOrder, cancellationToken);
-        await TryQueueEtaCompletedNotificationAsync(tenantId, workOrder, cancellationToken);
         await NotifySafeAsync(tenantId, workOrder.Id, cancellationToken);
         return workOrder;
     }
@@ -1007,18 +955,6 @@ internal sealed class WorkOrderLifecycleService(
         }
     }
 
-    private async Task TryQueueEtaCompletedNotificationAsync(Guid tenantId, WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        var technicianName = workOrder.AssignedTechnicianId.HasValue
-            ? await dbContext.Technicians
-                .Where(x => x.Id == workOrder.AssignedTechnicianId.Value)
-                .Select(x => x.FullName)
-                .SingleOrDefaultAsync(cancellationToken)
-            : null;
-
-        await etaNotificationService.NotifyAsync(tenantId, workOrder, EtaNotificationEventTypes.Completed, technicianName, cancellationToken);
-    }
-
     // ── Private helpers (state machine) ───────────────────────────────────────
 
     private async Task<WorkOrder> LoadWorkOrderAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken)
@@ -1280,17 +1216,6 @@ internal sealed class WorkOrderLifecycleService(
         }
 
         return message;
-    }
-
-    private async Task SetActiveWorkOrderAsync(Guid tenantId, Guid technicianId, Guid? workOrderId, CancellationToken cancellationToken)
-    {
-        var technician = await dbContext.Technicians
-            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == technicianId, cancellationToken);
-        if (technician is null) return;
-
-        technician.ActiveWorkOrderId = workOrderId;
-
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static decimal? TryExtractMeterReading(IReadOnlyCollection<dynamic> checklistSnapshot)

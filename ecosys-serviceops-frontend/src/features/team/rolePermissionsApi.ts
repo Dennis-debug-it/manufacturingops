@@ -119,8 +119,8 @@ export const capabilityGroups: Array<{ group: string; items: Array<{ key: Capabi
     items: [
       { key: 'canViewFinance', label: 'View finance' },
       { key: 'canManageFinance', label: 'Manage finance' },
-      { key: 'canViewFinanceRates', label: 'View rate cards' },
-      { key: 'canManageFinanceRates', label: 'Manage rate cards' },
+      { key: 'canViewFinanceRates', label: 'View exchange rates' },
+      { key: 'canManageFinanceRates', label: 'Manage exchange rates' },
       { key: 'canViewFinanceApprovals', label: 'View invoice approvals' },
       { key: 'canManageFinanceApprovals', label: 'Manage invoice approvals' },
     ],

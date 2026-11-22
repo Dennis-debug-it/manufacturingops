@@ -47,10 +47,6 @@ test.describe('Responsive layout hardening', () => {
       await expect(page).toHaveURL(/\/work-orders/)
       await expectHeading(page, /work orders/i)
 
-      await openTenantNav(page, /clients/i)
-      await expect(page).toHaveURL(/\/clients/)
-      await expectHeading(page, /client register/i)
-
       await openTenantNav(page, /assets/i)
       await expect(page).toHaveURL(/\/assets/)
       await expectHeading(page, /asset register/i)

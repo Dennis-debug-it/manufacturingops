@@ -164,7 +164,7 @@ export function CalendarView({ rows }: CalendarViewProps) {
                 <div className="flex-1 space-y-1 overflow-hidden">
                   {dayRows.slice(0, mode === 'day' ? dayRows.length : 3).map((row) => (
                     <div key={row.id} className={cn('truncate rounded px-1.5 py-0.5 text-[11px] font-medium', priorityBarClass[row.priority] ?? 'bg-slate-400 text-white')}>
-                      {row.woNo} · {row.client}
+                      {row.woNo} · {row.title}
                     </div>
                   ))}
                   {mode !== 'day' && dayRows.length > 3 ? (
@@ -202,7 +202,7 @@ export function CalendarView({ rows }: CalendarViewProps) {
                         <span className={cn('h-2 w-2 shrink-0 rounded-full', priorityBarClass[row.priority]?.split(' ')[0] ?? 'bg-slate-400')} />
                         <span className="font-medium text-slate-900">{row.woNo}</span>
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-slate-500">{row.client} · {row.site}</div>
+                      <div className="mt-0.5 truncate text-xs text-slate-500">{row.asset || row.title}</div>
                     </div>
                     <StatusBadge status={row.status} />
                   </Link>

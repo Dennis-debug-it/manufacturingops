@@ -123,28 +123,6 @@ public sealed class MaterialsController(
         return Ok(rows.OrderBy(x => x.ItemName).ThenBy(x => x.LocationType).ThenBy(x => x.LocationName).ToList());
     }
 
-    /// <summary>Per-branch stock totals for the branches the user can see: parts held, low stock and value.</summary>
-    [HttpGet("branch-summary")]
-    public async Task<ActionResult<IReadOnlyCollection<BranchStockSummaryResponse>>> GetBranchSummary(CancellationToken cancellationToken)
-    {
-        EnsureMaterialsViewAccess();
-        var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
-        var stocks = await dbContext.BranchMaterialStocks.AsNoTracking()
-            .Where(x => x.TenantId == TenantId && x.Material!.IsActive)
-            .WhereAccessible(scope, x => (Guid?)x.BranchId)
-            .Select(x => new { x.BranchId, x.QuantityOnHand, x.ReorderLevel, UnitCost = x.UnitCost ?? x.Material!.UnitCost })
-            .ToListAsync(cancellationToken);
-
-        return Ok(stocks
-            .GroupBy(x => x.BranchId)
-            .Select(g => new BranchStockSummaryResponse(
-                g.Key,
-                g.Count(x => x.QuantityOnHand != 0),
-                g.Count(x => x.QuantityOnHand <= x.ReorderLevel && (x.QuantityOnHand != 0 || x.ReorderLevel > 0)),
-                Math.Round(g.Sum(x => x.QuantityOnHand * (x.UnitCost ?? 0)), 2)))
-            .ToList());
-    }
-
     [HttpPost]
     public async Task<ActionResult<MaterialItemResponse>> Create([FromBody] UpsertMaterialItemRequest request, CancellationToken cancellationToken)
     {
@@ -727,4 +705,3 @@ public sealed record MaterialBranchStockResponse(Guid BranchId, string BranchNam
 
 public sealed record MaterialStockLocationsResponse(IReadOnlyList<MaterialBranchStockResponse> Branches);
 
-public sealed record BranchStockSummaryResponse(Guid BranchId, int PartsStocked, int LowStockParts, decimal StockValue);

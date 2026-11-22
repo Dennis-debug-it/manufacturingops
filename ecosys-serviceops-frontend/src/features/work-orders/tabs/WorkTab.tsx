@@ -4,14 +4,14 @@ import { cn } from '../../../shared/utils/cn'
 import { useChecklist, useExecutionBundle } from '../api'
 import { usePartsRequestsForWorkOrder } from '../partsRequestsApi'
 import { CrewDispatchPanel } from '../components/CrewDispatchPanel'
-import { hasRecordedArrival } from '../dispatchGuards'
+import { hasAcceptedTechnician } from '../dispatchGuards'
 import type { WorkOrder } from '../types'
 import { ExecutionTab } from './ExecutionTab'
 import { EvidenceTab } from './EvidenceTab'
 import { PartsTab } from './PartsTab'
 import { SignaturesTab } from './SignaturesTab'
 
-type StepId = 'onsite' | 'checklist' | 'photos' | 'parts' | 'signatures'
+type StepId = 'crew' | 'checklist' | 'photos' | 'parts' | 'signatures'
 
 interface Step {
   id: StepId
@@ -31,7 +31,7 @@ export function WorkTab({ workOrder }: { workOrder: WorkOrder }) {
   const { data: bundle } = useExecutionBundle(workOrder.id)
   const { data: partsRequests } = usePartsRequestsForWorkOrder(workOrder.id)
 
-  const arrived = Boolean(workOrder.arrivalAt) || hasRecordedArrival(workOrder.technicianAssignments)
+  const accepted = hasAcceptedTechnician(workOrder.technicianAssignments)
   const checklistItems = checklist ?? []
   const requiredItems = checklistItems.filter((item) => item.isRequired)
   const answeredRequired = requiredItems.filter((item) => item.isCompleted).length
@@ -44,11 +44,11 @@ export function WorkTab({ workOrder }: { workOrder: WorkOrder }) {
 
   const steps: Step[] = [
     {
-      id: 'onsite',
-      label: 'Technician on site',
+      id: 'crew',
+      label: 'Technician accepted',
       required: true,
-      done: arrived,
-      summary: arrived ? 'Arrival recorded' : 'Record arrival',
+      done: accepted,
+      summary: accepted ? 'Accepted' : 'Waiting for a technician to accept',
       content: <CrewDispatchPanel workOrder={workOrder} />,
     },
     {
@@ -119,9 +119,7 @@ export function WorkTab({ workOrder }: { workOrder: WorkOrder }) {
           ))}
         </ul>
         {['Completed', 'Closed', 'Cancelled'].includes(workOrder.status) ? null : <p className="mt-2 text-xs text-slate-500">
-          {arrived
-            ? 'Ready to complete. You will be asked for work-done notes; the other steps are recommended.'
-            : 'Completing needs a recorded arrival (or an admin override) and work-done notes. The other steps are recommended.'}
+          Completing asks for work-done notes. The other steps are recommended.
         </p>}
       </div>
 

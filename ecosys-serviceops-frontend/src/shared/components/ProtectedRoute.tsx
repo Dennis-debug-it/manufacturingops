@@ -44,7 +44,7 @@ export function ProtectedRoute({ allowedRoles, children }: ProtectedRouteProps) 
     // The stores' home is Stores and spares, not the maintenance dashboard.
     if (location.pathname === '/dashboard' && user.role === 'materials_controller' && entitlements.canAccessPath('/maintenance/stores') && canOpenPath(user, '/maintenance/stores'))
       return <Navigate to="/maintenance/stores" replace />
-    // Finance starts on maintenance costs (falling back to the rate cards on a plan without maintenance).
+    // Finance starts on maintenance costs (falling back to exchange rates on a plan without maintenance).
     if (location.pathname === '/dashboard' && user.role === 'finance')
       if (entitlements.canAccessPath('/maintenance/costs') && canOpenPath(user, '/maintenance/costs')) return <Navigate to="/maintenance/costs" replace />
       else if (entitlements.canAccessPath('/finance')) return <Navigate to="/finance" replace />

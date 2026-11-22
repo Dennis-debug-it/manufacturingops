@@ -1,7 +1,6 @@
-import { hasLeftSite, isOnSite } from '../work-orders/types'
 import { useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
-import { CheckCircle2, MapPin, Phone, Star } from 'lucide-react'
+import { CheckCircle2, Star } from 'lucide-react'
 import { cn } from '../../shared/utils/cn'
 import { formatDate, formatDateTime, formatRelative } from '../../shared/utils/dates'
 import type { WorkOrder, WorkOrderChecklistItem } from '../work-orders/types'
@@ -99,11 +98,10 @@ function ChecklistItem({ job, item, editable }: { job: WorkOrder; item: WorkOrde
   )
 }
 
-type UpdateKind = 'progress' | 'office' | 'client'
+type UpdateKind = 'progress' | 'office'
 const UPDATE_KINDS: { value: UpdateKind; label: string; hint: string; placeholder: string }[] = [
   { value: 'progress', label: 'Progress', hint: 'Goes on the service report. Works offline.', placeholder: 'Day 1: Inspected generator, found faulty AVR, awaiting replacement.' },
-  { value: 'office', label: 'Note to office', hint: 'Only staff see this.', placeholder: 'Client asked for a quote to replace the second unit.' },
-  { value: 'client', label: 'Note to client', hint: 'The client can see this (e.g. in their portal).', placeholder: 'Replacement AVR ordered; we will return on Thursday.' },
+  { value: 'office', label: 'Note to office', hint: 'Only staff see this.', placeholder: 'The second unit needs replacing; please raise a job.' },
 ]
 
 export function TechOverview({ job, editable }: { job: WorkOrder; editable: boolean }) {
@@ -115,10 +113,6 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
   const [kind, setKind] = useState<UpdateKind>('progress')
   const kindInfo = UPDATE_KINDS.find((option) => option.value === kind)!
 
-  const phone = job.siteContactPhone ?? job.clientContactPhone
-  const mapUrl = job.siteLatitude != null && job.siteLongitude != null
-    ? `https://www.google.com/maps/dir/?api=1&destination=${job.siteLatitude},${job.siteLongitude}`
-    : job.siteLocation ? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.siteLocation)}` : null
   const answered = job.checklistItems.filter((item) => item.isCompleted).length
 
   const postUpdate = async () => {
@@ -128,9 +122,9 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
       if (kind === 'progress') {
         toast.success(savedMessage('Update saved', await actions.saveNotes(job, { progressComment: content })))
       } else {
-        // Office and client notes go straight to the server (they aren't part of the offline outbox).
-        await addNote.mutateAsync({ content, isClientVisible: kind === 'client' })
-        toast.success(kind === 'client' ? 'Note shared with the client' : 'Note sent to the office')
+        // Office notes go straight to the server (they aren't part of the offline outbox).
+        await addNote.mutateAsync({ content, isClientVisible: false })
+        toast.success('Note sent to the office')
       }
       setUpdate('')
     } catch {
@@ -156,28 +150,6 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
         </Card>
       ) : null}
 
-      <Card title="Site">
-        <Row label="Client">{job.clientName}</Row>
-        <Row label="Site">{job.siteName}</Row>
-        <Row label="Contact">{job.siteContactPerson ?? job.clientContactPerson}</Row>
-        <Row label="Hours">{job.siteOperatingHours}</Row>
-        <Row label="Access">{job.siteAccessNotes}</Row>
-        {phone || mapUrl ? (
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {phone ? (
-              <a href={`tel:${phone.replace(/\s+/g, '')}`} className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-800">
-                <Phone className="h-4 w-4" />Call
-              </a>
-            ) : <span />}
-            {mapUrl ? (
-              <a href={mapUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-800">
-                <MapPin className="h-4 w-4" />Directions
-              </a>
-            ) : null}
-          </div>
-        ) : null}
-      </Card>
-
       {job.assetName ? (
         <Card title="Asset">
           <Row label="Asset">{job.assetName}</Row>
@@ -197,7 +169,7 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
                   {assignment.technicianName ?? 'Technician'}
                   {assignment.isLead ? <span className="inline-flex items-center gap-0.5 text-xs text-amber-700"><Star className="h-3 w-3" />Lead</span> : null}
                 </span>
-                <span className="text-xs text-slate-500">{isOnSite(assignment) ? 'On site' : hasLeftSite(assignment) ? 'Left site' : assignment.status}</span>
+                <span className="text-xs text-slate-500">{assignment.status}</span>
               </li>
             ))}
           </ul>
@@ -218,7 +190,7 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
       <Card title="Updates & notes">
         {editable ? (
           <>
-            <div className="mb-2 grid grid-cols-3 gap-1 rounded-lg border border-slate-200 p-1" role="radiogroup" aria-label="Kind of update">
+            <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg border border-slate-200 p-1" role="radiogroup" aria-label="Kind of update">
               {UPDATE_KINDS.map((option) => (
                 <button
                   key={option.value}

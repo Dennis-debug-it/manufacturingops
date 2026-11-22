@@ -38,8 +38,7 @@ export function BulkActionBar({ selectedRows, onClearSelection }: BulkActionBarP
       selectedRows.map((row) => ({
         'WO Number': row.woNo,
         Title: row.title,
-        Client: row.client,
-        Site: row.site,
+        Asset: row.asset,
         Priority: row.priority,
         Status: row.status,
         'Assigned To': row.assignedTo,

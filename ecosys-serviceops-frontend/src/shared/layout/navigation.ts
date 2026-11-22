@@ -22,7 +22,7 @@ const floor: AppRole[] = [...office, 'technician']
 /**
  * The tenant sidebar: factory maintenance first, grouped so a person sees a handful of sections
  * rather than one long list. Screens kept from the service-company product (the generic work
- * order list, client and contract registers, meetings and action items, finance rate cards) stay
+ * order list, meetings and action items) stay
  * reachable by URL and from the screens that link to them, but are not in the sidebar.
  */
 export const tenantNavItems: NavItem[] = [
@@ -60,7 +60,7 @@ export const tenantNavItems: NavItem[] = [
 
   { group: 'Insights', label: 'Performance', to: '/maintenance/performance', roles: office, permission: 'work-orders.view', icon: TrendingUp },
   { group: 'Insights', label: 'Costs', to: '/maintenance/costs', roles: ['admin', 'manager', 'finance', 'viewer'], permission: 'reports.view', icon: Landmark },
-  { group: 'Insights', label: 'Labour rates', to: '/finance', roles: ['admin', 'manager', 'finance'], permission: 'finance.view', icon: Wallet },
+  { group: 'Insights', label: 'Exchange rates', to: '/finance/exchange-rates', roles: ['admin', 'manager', 'finance'], permission: 'finance.view', icon: Wallet },
   { group: 'Insights', label: 'Reports', to: '/reports', roles: ['admin', 'manager', 'finance', 'viewer', 'materials_controller'], permission: 'reports.view', icon: BarChart3 },
 
   { group: 'Team and admin', label: 'Maintenance team', to: '/maintenance/people', roles: office, permission: 'work-orders.view', icon: UserCog },

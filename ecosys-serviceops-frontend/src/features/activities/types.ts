@@ -130,14 +130,13 @@ export interface SaveActionItemPayload {
   entityId: string | null
 }
 
-export type CalendarSource = 'activities' | 'action-items' | 'work-orders' | 'maintenance' | 'contracts'
+export type CalendarSource = 'activities' | 'action-items' | 'work-orders' | 'maintenance'
 
 export const calendarSourceLabels: Record<CalendarSource, string> = {
   activities: 'Meetings & visits',
   'action-items': 'Action items',
   'work-orders': 'Work orders',
   maintenance: 'Maintenance due',
-  contracts: 'Contract dates',
 }
 
 export interface CalendarItem {

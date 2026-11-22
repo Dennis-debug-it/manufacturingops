@@ -231,7 +231,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<EscalationFired> EscalationFired => Set<EscalationFired>();
     public DbSet<SlaEscalation> SlaEscalations => Set<SlaEscalation>();
     public DbSet<SlaRecord> SlaRecords => Set<SlaRecord>();
-    public DbSet<EtaNotificationSettings> EtaNotificationSettings => Set<EtaNotificationSettings>();
     public DbSet<ClientPreferentialRate> ClientPreferentialRates => Set<ClientPreferentialRate>();
     public DbSet<FinanceApprovalRule> FinanceApprovalRules => Set<FinanceApprovalRule>();
     public DbSet<MaterialIssue> MaterialIssues => Set<MaterialIssue>();
@@ -1471,7 +1470,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.SlaResolutionBreached);
             entity.Property(x => x.SlaResponseBreachedAt);
             entity.Property(x => x.SlaResolutionBreachedAt);
-            entity.Property(x => x.TrackingToken).HasMaxLength(40);
             entity.Property(x => x.IsRepeatVisit).HasDefaultValue(false);
             entity.Property(x => x.RepeatVisitCount).HasDefaultValue(0);
             entity.Property(x => x.PlannedMaterialsJson);
@@ -1482,7 +1480,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasIndex(x => new { x.TenantId, x.DueDate });
             entity.HasIndex(x => new { x.TenantId, x.Status, x.CreatedAt });
             entity.HasIndex(x => new { x.TenantId, x.ScheduledStartAt }).HasFilter("\"ScheduledStartAt\" IS NOT NULL");
-            entity.HasIndex(x => x.TrackingToken).IsUnique().HasFilter("\"TrackingToken\" IS NOT NULL");
             entity.HasIndex(x => x.ParentWorkOrderId);
             entity.HasIndex(x => x.FollowUpOfWorkOrderId);
             entity.HasOne(x => x.Tenant)
@@ -1740,20 +1737,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
                 .WithMany()
                 .HasForeignKey(x => x.SlaRuleId)
                 .OnDelete(DeleteBehavior.SetNull);
-        });
-
-        modelBuilder.Entity<EtaNotificationSettings>(entity =>
-        {
-            entity.ToTable("eta_notification_settings");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.EventType).HasMaxLength(30).IsRequired();
-            entity.Property(x => x.SubjectTemplate).HasMaxLength(300).IsRequired();
-            entity.Property(x => x.BodyTemplate).HasMaxLength(4000).IsRequired();
-            entity.HasIndex(x => new { x.TenantId, x.EventType }).IsUnique();
-            entity.HasOne(x => x.Tenant)
-                .WithMany()
-                .HasForeignKey(x => x.TenantId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<MaterialItem>(entity =>
