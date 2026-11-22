@@ -22,18 +22,18 @@ public sealed class AttendanceClockTests
         var seed = await SeedAsync(db);
         var workflow = CreateWorkflow(db);
 
-        await workflow.RecordInTransitAsync(seed.TenantId, seed.WorkOrderId, seed.UserId, new(seed.TechnicianId, null, null, Day1, null));
+        await workflow.RecordInTransitAsync(seed.TenantId, seed.WorkOrderId, seed.UserId, new(seed.TechnicianId, Day1, null));
         var entry = await db.AttendanceEntries.SingleAsync();
         Assert.Equal(AttendanceRules.Travelling, entry.Status);
         Assert.Equal(Day1, entry.ClockInAt);
         Assert.Equal(seed.WorkOrderId, entry.CurrentWorkOrderId);
         Assert.Contains("on the way to WO-CLOCK-1", entry.Note);
 
-        await workflow.RecordArrivalAsync(seed.TenantId, seed.WorkOrderId, seed.UserId, new(seed.TechnicianId, null, null, Day1.AddMinutes(40), null));
+        await workflow.RecordArrivalAsync(seed.TenantId, seed.WorkOrderId, seed.UserId, new(seed.TechnicianId, Day1.AddMinutes(40), null));
         entry = await db.AttendanceEntries.SingleAsync();
         Assert.Equal(AttendanceRules.ClockedIn, entry.Status);
 
-        await workflow.RecordDepartureAsync(seed.TenantId, seed.WorkOrderId, seed.UserId, new(seed.TechnicianId, null, null, Day1.AddHours(8), null));
+        await workflow.RecordDepartureAsync(seed.TenantId, seed.WorkOrderId, seed.UserId, new(seed.TechnicianId, Day1.AddHours(8), null));
         entry = await db.AttendanceEntries.SingleAsync();
         Assert.Null(entry.ClockOutAt);
         Assert.Null(entry.CurrentWorkOrderId);
@@ -45,7 +45,7 @@ public sealed class AttendanceClockTests
         await using var db = CreateDbContext();
         var seed = await SeedAsync(db);
 
-        await CreateWorkflow(db).RecordArrivalAsync(seed.TenantId, seed.WorkOrderId, Guid.NewGuid(), new(seed.TechnicianId, null, null, Day1, null));
+        await CreateWorkflow(db).RecordArrivalAsync(seed.TenantId, seed.WorkOrderId, Guid.NewGuid(), new(seed.TechnicianId, Day1, null));
 
         Assert.Empty(await db.AttendanceEntries.ToListAsync());
     }
@@ -62,7 +62,7 @@ public sealed class AttendanceClockTests
         });
         await db.SaveChangesAsync();
 
-        await CreateWorkflow(db).RecordArrivalAsync(seed.TenantId, seed.WorkOrderId, seed.UserId, new(seed.TechnicianId, null, null, Day1.AddHours(3).AddMinutes(30), null));
+        await CreateWorkflow(db).RecordArrivalAsync(seed.TenantId, seed.WorkOrderId, seed.UserId, new(seed.TechnicianId, Day1.AddHours(3).AddMinutes(30), null));
 
         var entry = await db.AttendanceEntries.SingleAsync();
         Assert.Equal(AttendanceRules.ClockedIn, entry.Status);

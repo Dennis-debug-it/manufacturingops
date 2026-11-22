@@ -14,7 +14,6 @@ using System.Text.Json;
 namespace Ecosys.Infrastructure.Services;
 
 public sealed record WorkOrderCommentRequest(string Message);
-public sealed record WorkOrderLocationRequest(decimal? Latitude, decimal? Longitude);
 public sealed record WorkOrderCompletionRequest(string WorkDoneNotes, string? ReportSummary = null, string? AnswersJson = null);
 public sealed record WorkOrderStatusChangeRequest(string Status, string? Reason = null, string? Note = null);
 
@@ -25,8 +24,8 @@ public interface IWorkOrderLifecycleService
     Task<WorkOrder> AssignAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, Guid? technicianId, Guid? assignmentGroupId, CancellationToken cancellationToken = default);
     Task<WorkOrderEvent> AddCommentAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderCommentRequest request, CancellationToken cancellationToken = default);
     Task<WorkOrder> StartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default);
-    Task<WorkOrder> ArriveAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderLocationRequest request, CancellationToken cancellationToken = default);
-    Task<WorkOrder> DepartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderLocationRequest request, CancellationToken cancellationToken = default);
+    Task<WorkOrder> ArriveAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default);
+    Task<WorkOrder> DepartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default);
     Task<WorkOrder> ChangeStatusAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderStatusChangeRequest request, CancellationToken cancellationToken = default);
     Task<WorkOrder> CompleteAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderCompletionRequest request, CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<WorkOrderEvent>> GetEventsAsync(Guid tenantId, Guid workOrderId, CancellationToken cancellationToken = default);
@@ -161,14 +160,14 @@ internal sealed class WorkOrderLifecycleService(
         return workOrder;
     }
 
-    public async Task<WorkOrder> ArriveAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderLocationRequest request, CancellationToken cancellationToken = default)
+    public async Task<WorkOrder> ArriveAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default)
     {
         var workOrder = await LoadWorkOrderAsync(tenantId, workOrderId, cancellationToken);
         workOrder.ArrivalAt = OccurredAt.UtcNow;
 
         if (workOrder.AssignedTechnicianId.HasValue)
         {
-            await UpdateTechnicianTrackingAsync(tenantId, workOrder.AssignedTechnicianId.Value, workOrder.Id, request, true, cancellationToken);
+            await SetActiveWorkOrderAsync(tenantId, workOrder.AssignedTechnicianId.Value, workOrder.Id, cancellationToken);
         }
 
         await SaveEventAsync(
@@ -178,20 +177,18 @@ internal sealed class WorkOrderLifecycleService(
             "Arrival",
             NormalizeStatus(workOrder.Status),
             "Technician marked arrival on site.",
-            request.Latitude,
-            request.Longitude,
             cancellationToken: cancellationToken);
         return workOrder;
     }
 
-    public async Task<WorkOrder> DepartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, WorkOrderLocationRequest request, CancellationToken cancellationToken = default)
+    public async Task<WorkOrder> DepartAsync(Guid tenantId, Guid workOrderId, Guid actorUserId, CancellationToken cancellationToken = default)
     {
         var workOrder = await LoadWorkOrderAsync(tenantId, workOrderId, cancellationToken);
         workOrder.DepartureAt = OccurredAt.UtcNow;
 
         if (workOrder.AssignedTechnicianId.HasValue)
         {
-            await UpdateTechnicianTrackingAsync(tenantId, workOrder.AssignedTechnicianId.Value, null, request, false, cancellationToken);
+            await SetActiveWorkOrderAsync(tenantId, workOrder.AssignedTechnicianId.Value, null, cancellationToken);
         }
 
         await SaveEventAsync(
@@ -201,8 +198,6 @@ internal sealed class WorkOrderLifecycleService(
             "Departure",
             NormalizeStatus(workOrder.Status),
             "Technician departed from site.",
-            request.Latitude,
-            request.Longitude,
             cancellationToken: cancellationToken);
         return workOrder;
     }
@@ -1149,8 +1144,6 @@ internal sealed class WorkOrderLifecycleService(
             "StatusChanged",
             targetStatus,
             BuildStatusChangeMessage(currentStatus, targetStatus, reason, note),
-            latitude: null,
-            longitude: null,
             oldStatus: currentStatus,
             newStatus: targetStatus,
             reason: reason,
@@ -1239,8 +1232,6 @@ internal sealed class WorkOrderLifecycleService(
         string eventType,
         string status,
         string message,
-        decimal? latitude = null,
-        decimal? longitude = null,
         string? oldStatus = null,
         string? newStatus = null,
         string? reason = null,
@@ -1259,8 +1250,6 @@ internal sealed class WorkOrderLifecycleService(
             Reason        = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
             Note          = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
             Message       = message,
-            Latitude      = latitude,
-            Longitude     = longitude,
             OccurredAt    = OccurredAt.UtcNow
         });
 
@@ -1293,15 +1282,13 @@ internal sealed class WorkOrderLifecycleService(
         return message;
     }
 
-    private async Task UpdateTechnicianTrackingAsync(Guid tenantId, Guid technicianId, Guid? workOrderId, WorkOrderLocationRequest request, bool isArrival, CancellationToken cancellationToken)
+    private async Task SetActiveWorkOrderAsync(Guid tenantId, Guid technicianId, Guid? workOrderId, CancellationToken cancellationToken)
     {
         var technician = await dbContext.Technicians
             .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == technicianId, cancellationToken);
         if (technician is null) return;
 
-        if (request.Latitude.HasValue)  technician.LastKnownLatitude  = request.Latitude;
-        if (request.Longitude.HasValue) technician.LastKnownLongitude = request.Longitude;
-        technician.ActiveWorkOrderId = isArrival ? workOrderId : null;
+        technician.ActiveWorkOrderId = workOrderId;
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }

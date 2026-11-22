@@ -24,12 +24,12 @@ public sealed class WorkOrderVisitTests
         var (tenantId, workOrderId, technicianId) = await SeedAsync(db);
         var workflow = CreateWorkflow(db);
 
-        await workflow.RecordInTransitAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1, null));
-        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1.AddMinutes(45), null));
-        await workflow.RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1.AddHours(9), null));
-        await workflow.RecordInTransitAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day2, null));
-        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day2.AddMinutes(30), null));
-        await workflow.RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day2.AddHours(4), null));
+        await workflow.RecordInTransitAsync(tenantId, workOrderId, null, new(technicianId, Day1, null));
+        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, Day1.AddMinutes(45), null));
+        await workflow.RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, Day1.AddHours(9), null));
+        await workflow.RecordInTransitAsync(tenantId, workOrderId, null, new(technicianId, Day2, null));
+        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, Day2.AddMinutes(30), null));
+        await workflow.RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, Day2.AddHours(4), null));
 
         var visits = await db.WorkOrderVisits.OrderBy(x => x.TravelStartedAt).ToListAsync();
         Assert.Equal(2, visits.Count);
@@ -49,9 +49,9 @@ public sealed class WorkOrderVisitTests
         var (tenantId, workOrderId, technicianId) = await SeedAsync(db);
         var workflow = CreateWorkflow(db);
 
-        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1, null));
-        await workflow.RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1.AddHours(8), null));
-        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day2, null));
+        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, Day1, null));
+        await workflow.RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, Day1.AddHours(8), null));
+        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, Day2, null));
 
         var assignment = await db.WorkOrderTechnicianAssignments.SingleAsync();
         Assert.Equal(Day1, assignment.ArrivalAt);
@@ -59,7 +59,7 @@ public sealed class WorkOrderVisitTests
         // On site: the latest arrival is after the last departure, which is still yesterday's.
         Assert.True(assignment.LastArrivalAt > assignment.DepartureAt);
 
-        await workflow.RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day2.AddHours(6), null));
+        await workflow.RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, Day2.AddHours(6), null));
         Assert.True(assignment.DepartureAt > assignment.LastArrivalAt);
     }
 
@@ -69,12 +69,12 @@ public sealed class WorkOrderVisitTests
         await using var db = CreateDbContext();
         var (tenantId, workOrderId, technicianId) = await SeedAsync(db);
         var workflow = CreateWorkflow(db);
-        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1, null));
+        await workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, Day1, null));
 
         await Assert.ThrowsAsync<BusinessRuleException>(() =>
-            workflow.RecordInTransitAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1.AddHours(1), null)));
+            workflow.RecordInTransitAsync(tenantId, workOrderId, null, new(technicianId, Day1.AddHours(1), null)));
         await Assert.ThrowsAsync<BusinessRuleException>(() =>
-            workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1.AddHours(1), null)));
+            workflow.RecordArrivalAsync(tenantId, workOrderId, null, new(technicianId, Day1.AddHours(1), null)));
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public sealed class WorkOrderVisitTests
         var (tenantId, workOrderId, technicianId) = await SeedAsync(db);
 
         await Assert.ThrowsAsync<BusinessRuleException>(() =>
-            CreateWorkflow(db).RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1, null)));
+            CreateWorkflow(db).RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, Day1, null)));
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public sealed class WorkOrderVisitTests
         assignment.Status = "Arrived";
         await db.SaveChangesAsync();
 
-        await CreateWorkflow(db).RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, null, null, Day1.AddHours(2), null));
+        await CreateWorkflow(db).RecordDepartureAsync(tenantId, workOrderId, null, new(technicianId, Day1.AddHours(2), null));
 
         var visit = await db.WorkOrderVisits.SingleAsync();
         Assert.Equal(120, visit.OnSiteMinutes);

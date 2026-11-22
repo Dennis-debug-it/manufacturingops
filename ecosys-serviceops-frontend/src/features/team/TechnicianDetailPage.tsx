@@ -55,7 +55,6 @@ export function TechnicianDetailPage() {
             ['Branch', technician.branchName ?? '—'],
             ['Skill Category', technician.skillCategory ?? '—'],
             ['Assignment Group', technician.assignmentGroup ?? '—'],
-            ['Tracking Active', technician.isTrackingActive ? 'Yes' : 'No'],
           ].map(([label, value]) => (
             <div key={label} className="rounded-xl border border-slate-200 px-4 py-3">
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>

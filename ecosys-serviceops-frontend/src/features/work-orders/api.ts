@@ -281,31 +281,25 @@ export interface TechnicianResponseVariables {
   notes?: string | null
 }
 
-/** `MarkInTransitRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? InTransitAt, string? Notes)`. */
+/** `MarkInTransitRequest(Guid TechnicianId, DateTime? InTransitAt, string? Notes)`. */
 export interface MarkInTransitVariables {
   id: string
   technicianId: string
-  latitude?: number | null
-  longitude?: number | null
   inTransitAt?: string | null
   notes?: string | null
 }
 
-/** `ArrivalActionRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? ArrivedAt)`. */
+/** `ArrivalActionRequest(Guid TechnicianId, DateTime? ArrivedAt)`. */
 export interface RecordArrivalVariables {
   id: string
   technicianId: string
-  latitude?: number | null
-  longitude?: number | null
   arrivedAt?: string | null
 }
 
-/** `DepartureActionRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? DepartedAt)`. */
+/** `DepartureActionRequest(Guid TechnicianId, DateTime? DepartedAt)`. */
 export interface RecordDepartureVariables {
   id: string
   technicianId: string
-  latitude?: number | null
-  longitude?: number | null
   departedAt?: string | null
 }
 
@@ -370,11 +364,9 @@ export function useRecordTechnicianResponse() {
 export function useMarkTechnicianInTransit() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, technicianId, latitude, longitude, inTransitAt, notes }: MarkInTransitVariables) =>
+    mutationFn: ({ id, technicianId, inTransitAt, notes }: MarkInTransitVariables) =>
       api.post<WorkOrder>(endpoints.workOrders.inTransit(id), {
         technicianId,
-        latitude: latitude ?? null,
-        longitude: longitude ?? null,
         inTransitAt: inTransitAt ?? null,
         notes: notes ?? null,
       }),
@@ -385,11 +377,9 @@ export function useMarkTechnicianInTransit() {
 export function useRecordTechnicianArrival() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, technicianId, latitude, longitude, arrivedAt }: RecordArrivalVariables) =>
+    mutationFn: ({ id, technicianId, arrivedAt }: RecordArrivalVariables) =>
       api.post<WorkOrder>(endpoints.workOrders.arrival(id), {
         technicianId,
-        latitude: latitude ?? null,
-        longitude: longitude ?? null,
         arrivedAt: arrivedAt ?? null,
       }),
     onSuccess: (_data, variables) => invalidateDispatchState(queryClient, variables.id),
@@ -399,11 +389,9 @@ export function useRecordTechnicianArrival() {
 export function useRecordTechnicianDeparture() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, technicianId, latitude, longitude, departedAt }: RecordDepartureVariables) =>
+    mutationFn: ({ id, technicianId, departedAt }: RecordDepartureVariables) =>
       api.post<WorkOrder>(endpoints.workOrders.departure(id), {
         technicianId,
-        latitude: latitude ?? null,
-        longitude: longitude ?? null,
         departedAt: departedAt ?? null,
       }),
     onSuccess: (_data, variables) => invalidateDispatchState(queryClient, variables.id),

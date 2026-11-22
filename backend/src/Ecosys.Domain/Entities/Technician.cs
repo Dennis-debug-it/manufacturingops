@@ -16,10 +16,6 @@ public sealed class Technician : AuditableEntity, ITenantEntity
     public string? AvailabilityNote { get; set; }
     public DateTime? AvailabilityUntil { get; set; }
     public DateTime? AvailabilityUpdatedAt { get; set; }
-    public decimal? LastKnownLatitude { get; set; }
-    public decimal? LastKnownLongitude { get; set; }
-    public DateTime? LastLocationAt { get; set; }
-    public bool IsTrackingActive { get; set; }
     public Guid? ActiveWorkOrderId { get; set; }
     public bool IsActive { get; set; } = true;
 

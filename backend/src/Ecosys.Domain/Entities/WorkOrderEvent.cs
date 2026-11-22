@@ -14,8 +14,6 @@ public sealed class WorkOrderEvent : AuditableEntity, ITenantEntity
     public string? Reason { get; set; }
     public string? Note { get; set; }
     public string Message { get; set; } = string.Empty;
-    public decimal? Latitude { get; set; }
-    public decimal? Longitude { get; set; }
     public string? MetadataJson { get; set; }
     public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
 

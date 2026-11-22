@@ -271,8 +271,6 @@ public sealed class TeamManagementController(
                     load.ActiveWorkOrderCount,
                     load.PendingResponseCount,
                     load.OnSiteCount,
-                    technician?.IsTrackingActive ?? false,
-                    technician?.LastLocationAt,
                     readiness.Status,
                     readiness.Reasons);
             })
@@ -471,8 +469,6 @@ public sealed record TeamManagementProfileResponse(
     int ActiveWorkOrderCount,
     int PendingResponseCount,
     int OnSiteCount,
-    bool IsTrackingActive,
-    DateTime? LastLocationAt,
     string ReadinessStatus,
     IReadOnlyCollection<string> ReadinessReasons);
 

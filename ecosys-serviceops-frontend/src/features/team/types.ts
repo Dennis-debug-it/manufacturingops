@@ -60,10 +60,6 @@ export interface Technician {
   phone: string | null
   skillCategory: string | null
   assignmentGroup: string | null
-  lastKnownLatitude: number | null
-  lastKnownLongitude: number | null
-  lastLocationAt: string | null
-  isTrackingActive: boolean
   activeWorkOrderId: string | null
   isActive: boolean
   createdAt: string
@@ -112,8 +108,6 @@ export interface TeamManagementProfile {
   activeWorkOrderCount: number
   pendingResponseCount: number
   onSiteCount: number
-  isTrackingActive: boolean
-  lastLocationAt: string | null
   readinessStatus: 'Ready' | 'Limited' | 'Unavailable'
   readinessReasons: string[]
 }

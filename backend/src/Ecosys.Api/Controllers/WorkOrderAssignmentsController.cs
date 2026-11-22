@@ -96,7 +96,7 @@ public sealed class WorkOrderAssignmentsController(
     {
         userAccessService.EnsureTenantOperationalAccess();
         await EnsureAccessibleAsync(workOrderId, cancellationToken);
-        await assignmentWorkflowService.RecordArrivalAsync(TenantId, workOrderId, UserId, new TechnicianArrivalRequest(request.TechnicianId, request.Latitude, request.Longitude, request.ArrivedAt, null), cancellationToken);
+        await assignmentWorkflowService.RecordArrivalAsync(TenantId, workOrderId, UserId, new TechnicianArrivalRequest(request.TechnicianId, request.ArrivedAt, null), cancellationToken);
         return Ok(await LoadResponseAsync(workOrderId, cancellationToken));
     }
 
@@ -105,7 +105,7 @@ public sealed class WorkOrderAssignmentsController(
     {
         userAccessService.EnsureTenantOperationalAccess();
         await EnsureAccessibleAsync(workOrderId, cancellationToken);
-        await assignmentWorkflowService.RecordDepartureAsync(TenantId, workOrderId, UserId, new TechnicianDepartureRequest(request.TechnicianId, request.Latitude, request.Longitude, request.DepartedAt, null), cancellationToken);
+        await assignmentWorkflowService.RecordDepartureAsync(TenantId, workOrderId, UserId, new TechnicianDepartureRequest(request.TechnicianId, request.DepartedAt, null), cancellationToken);
         await SyncSiteVisitTimestampsAsync(workOrderId, cancellationToken);
         return Ok(await LoadResponseAsync(workOrderId, cancellationToken));
     }
@@ -299,8 +299,8 @@ public sealed record AssignGroupActionRequest(Guid? AssignmentGroupId, string? N
 public sealed record AssignTechniciansActionRequest(IReadOnlyCollection<Guid>? TechnicianIds, Guid? LeadTechnicianId, string? Notes);
 public sealed record ReassignActionRequest(Guid? AssignmentGroupId, IReadOnlyCollection<Guid>? TechnicianIds, Guid? LeadTechnicianId, string? Notes);
 public sealed record TechnicianResponseActionRequest(Guid TechnicianId, string Response, string? Notes);
-public sealed record ArrivalActionRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? ArrivedAt);
-public sealed record DepartureActionRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? DepartedAt);
+public sealed record ArrivalActionRequest(Guid TechnicianId, DateTime? ArrivedAt);
+public sealed record DepartureActionRequest(Guid TechnicianId, DateTime? DepartedAt);
 
 public sealed record WorkOrderAssignmentHistoryItem(
     Guid Id,

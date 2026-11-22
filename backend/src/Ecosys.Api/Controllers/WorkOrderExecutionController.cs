@@ -114,7 +114,7 @@ public sealed partial class WorkOrderExecutionController(
             TenantId,
             workOrderId,
             UserId,
-            new TechnicianInTransitRequest(request.TechnicianId, request.Latitude, request.Longitude, request.InTransitAt, request.Notes),
+            new TechnicianInTransitRequest(request.TechnicianId, request.InTransitAt, request.Notes),
             cancellationToken);
 
         var refreshed = await dbContext.WorkOrders
@@ -1497,7 +1497,7 @@ public sealed partial class WorkOrderExecutionController(
 
 public sealed record SaveWorkOrderExecutionNotesRequest(string? Findings, string? WorkDone, string? ProgressComment);
 public sealed record PauseWorkOrderRequest(string? HoldReason, string? Note);
-public sealed record MarkInTransitRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? InTransitAt, string? Notes);
+public sealed record MarkInTransitRequest(Guid TechnicianId, DateTime? InTransitAt, string? Notes);
 /// <param name="BatchOrSerial">Serial or batch number(s) of the units fitted, kept on the stock movement for traceability.</param>
 /// <param name="BoughtDirect">Bought straight from a supplier for this job: may take the branch below zero, and waits to be reconciled with the supplier's invoice.</param>
 /// <param name="SupplierName">Who it was bought from, as typed (or pick <paramref name="SupplierId"/>).</param>

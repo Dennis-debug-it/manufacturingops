@@ -13,9 +13,9 @@ public sealed record WorkOrderAssignmentUpdateRequest(
     string? Notes);
 
 public sealed record TechnicianDispatchResponseRequest(Guid TechnicianId, string Response, string? Notes);
-public sealed record TechnicianInTransitRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? DepartedForSiteAt, string? Notes);
-public sealed record TechnicianArrivalRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? ArrivedAt, string? Notes);
-public sealed record TechnicianDepartureRequest(Guid TechnicianId, decimal? Latitude, decimal? Longitude, DateTime? DepartedAt, string? Notes);
+public sealed record TechnicianInTransitRequest(Guid TechnicianId, DateTime? DepartedForSiteAt, string? Notes);
+public sealed record TechnicianArrivalRequest(Guid TechnicianId, DateTime? ArrivedAt, string? Notes);
+public sealed record TechnicianDepartureRequest(Guid TechnicianId, DateTime? DepartedAt, string? Notes);
 
 public interface IWorkOrderAssignmentWorkflowService
 {
@@ -286,9 +286,9 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         assignment.Status = "InTransit";
         assignment.AcceptedAt ??= travelStartedAt;
 
-        await UpdateTechnicianTrackingAsync(tenantId, request.TechnicianId, workOrderId, request.Latitude, request.Longitude, true, cancellationToken);
+        await SetActiveWorkOrderAsync(tenantId, request.TechnicianId, workOrderId, cancellationToken);
         await AddHistoryAsync(tenantId, workOrderId, "TechnicianInTransit", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
-        await AddEventAsync(tenantId, workOrderId, actorUserId, "InTransit", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} is in transit to site.", request.Latitude, request.Longitude, cancellationToken);
+        await AddEventAsync(tenantId, workOrderId, actorUserId, "InTransit", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} is in transit to site.", cancellationToken);
         await SyncOwnAttendanceAsync(tenantId, assignment.Technician, workOrderId, actorUserId, TripEvent.Travelling, travelStartedAt, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await RefreshAssignmentStatusAsync(tenantId, workOrderId, cancellationToken);
@@ -323,9 +323,9 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         // The first arrival is the response milestone (SLA, completion guard); later visits don't move it.
         assignment.ArrivalAt ??= arrivedAt;
         assignment.LastArrivalAt = arrivedAt;
-        await UpdateTechnicianTrackingAsync(tenantId, request.TechnicianId, workOrderId, request.Latitude, request.Longitude, true, cancellationToken);
+        await SetActiveWorkOrderAsync(tenantId, request.TechnicianId, workOrderId, cancellationToken);
         await AddHistoryAsync(tenantId, workOrderId, "TechnicianArrived", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
-        await AddEventAsync(tenantId, workOrderId, actorUserId, "Arrival", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} arrived on site.", request.Latitude, request.Longitude, cancellationToken);
+        await AddEventAsync(tenantId, workOrderId, actorUserId, "Arrival", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} arrived on site.", cancellationToken);
         await SyncOwnAttendanceAsync(tenantId, assignment.Technician, workOrderId, actorUserId, TripEvent.Arrived, arrivedAt, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
         await RefreshAssignmentStatusAsync(tenantId, workOrderId, cancellationToken);
@@ -356,9 +356,9 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         visit.DepartedAt = departedAt;
         visit.OnSiteMinutes = MinutesBetween(visit.ArrivedAt, departedAt);
         assignment.DepartureAt = departedAt;
-        await UpdateTechnicianTrackingAsync(tenantId, request.TechnicianId, null, request.Latitude, request.Longitude, false, cancellationToken);
+        await SetActiveWorkOrderAsync(tenantId, request.TechnicianId, null, cancellationToken);
         await AddHistoryAsync(tenantId, workOrderId, "TechnicianDeparted", null, null, request.TechnicianId, request.TechnicianId, actorUserId, request.Notes, cancellationToken);
-        await AddEventAsync(tenantId, workOrderId, actorUserId, "Departure", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} departed from site.", request.Latitude, request.Longitude, cancellationToken);
+        await AddEventAsync(tenantId, workOrderId, actorUserId, "Departure", "Accepted", $"{assignment.Technician?.FullName ?? "Technician"} departed from site.", cancellationToken);
         await SyncOwnAttendanceAsync(tenantId, assignment.Technician, workOrderId, actorUserId, TripEvent.Departed, departedAt, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -566,7 +566,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
         return Task.CompletedTask;
     }
 
-    private async Task AddEventAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, string eventType, string status, string message, decimal? latitude = null, decimal? longitude = null, CancellationToken cancellationToken = default)
+    private async Task AddEventAsync(Guid tenantId, Guid workOrderId, Guid? actorUserId, string eventType, string status, string message, CancellationToken cancellationToken = default)
     {
         dbContext.WorkOrderEvents.Add(new WorkOrderEvent
         {
@@ -576,15 +576,13 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             EventType = eventType,
             Status = status,
             Message = message,
-            Latitude = latitude,
-            Longitude = longitude,
             OccurredAt = OccurredAt.UtcNow
         });
 
         await auditLogService.LogAsync(tenantId, actorUserId, $"Work order {eventType}", nameof(WorkOrder), workOrderId.ToString(), message, cancellationToken);
     }
 
-    private async Task UpdateTechnicianTrackingAsync(Guid tenantId, Guid technicianId, Guid? activeWorkOrderId, decimal? latitude, decimal? longitude, bool isTrackingActive, CancellationToken cancellationToken)
+    private async Task SetActiveWorkOrderAsync(Guid tenantId, Guid technicianId, Guid? activeWorkOrderId, CancellationToken cancellationToken)
     {
         var technician = await dbContext.Technicians.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == technicianId, cancellationToken);
         if (technician is null)
@@ -592,11 +590,7 @@ internal sealed class WorkOrderAssignmentWorkflowService(
             return;
         }
 
-        technician.IsTrackingActive = isTrackingActive;
         technician.ActiveWorkOrderId = activeWorkOrderId;
-        technician.LastLocationAt = OccurredAt.UtcNow;
-        technician.LastKnownLatitude = latitude;
-        technician.LastKnownLongitude = longitude;
     }
 }
 

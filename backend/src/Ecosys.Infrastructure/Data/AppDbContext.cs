@@ -1343,8 +1343,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.AssignmentGroup).HasMaxLength(100);
             entity.Property(x => x.AvailabilityStatus).HasMaxLength(40).IsRequired().HasDefaultValue("Available");
             entity.Property(x => x.AvailabilityNote).HasMaxLength(500);
-            entity.Property(x => x.LastKnownLatitude).HasPrecision(9, 6);
-            entity.Property(x => x.LastKnownLongitude).HasPrecision(9, 6);
             entity.HasIndex(x => new { x.TenantId, x.Email }).IsUnique();
             entity.HasIndex(x => x.UserId).IsUnique();
             entity.HasOne(x => x.Tenant)
@@ -3251,8 +3249,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.Reason).HasMaxLength(250);
             entity.Property(x => x.Note).HasMaxLength(2000);
             entity.Property(x => x.Message).HasMaxLength(2000).IsRequired();
-            entity.Property(x => x.Latitude).HasPrecision(9, 6);
-            entity.Property(x => x.Longitude).HasPrecision(9, 6);
             entity.Property(x => x.MetadataJson);
             entity.HasIndex(x => new { x.TenantId, x.WorkOrderId, x.OccurredAt });
             entity.HasOne(x => x.Tenant)

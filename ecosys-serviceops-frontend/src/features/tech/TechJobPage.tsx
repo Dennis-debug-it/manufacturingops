@@ -16,7 +16,6 @@ import { TechOverview } from './TechOverview'
 import { TechParts } from './TechParts'
 import { TechPreviousVisit } from './TechPreviousVisit'
 import { TechPhotos } from './TechPhotos'
-import { currentPosition } from './location'
 
 type Section = 'overview' | 'photos' | 'parts' | 'complete'
 const HOLD_TYPES = [
@@ -128,11 +127,11 @@ export function TechJobPage() {
 
   // A technician's own trips also move their clock (the API clocks them in against the job), so
   // On My Way and I've Arrived double as clocking in; leaving site offers to end the day.
-  const onMyWay = () => mine && void run('On the way. The office can see you are travelling', async () => actions.inTransit(job, mine.technicianId, await currentPosition()))
-  const arrived = () => mine && void run('Arrival recorded', async () => actions.arrive(job, mine.technicianId, await currentPosition()))
+  const onMyWay = () => mine && void run('On the way. The office can see you are travelling', async () => actions.inTransit(job, mine.technicianId))
+  const arrived = () => mine && void run('Arrival recorded', async () => actions.arrive(job, mine.technicianId))
   const departed = () => mine && void (async () => {
     const wasClockedIn = Boolean(clock && clock.status !== 'NotClockedIn')
-    const left = await run('Departure recorded', async () => actions.depart(job, mine.technicianId, await currentPosition()))
+    const left = await run('Departure recorded', async () => actions.depart(job, mine.technicianId))
     if (left && wasClockedIn) setClockOutPrompt(true)
   })()
   const endDay = async () => {

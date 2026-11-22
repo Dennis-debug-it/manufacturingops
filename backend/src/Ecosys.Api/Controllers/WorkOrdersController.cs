@@ -836,7 +836,7 @@ public sealed class WorkOrdersController(
     }
 
     [HttpPost("{id:guid}/arrive")]
-    public async Task<ActionResult<WorkOrderResponse>> Arrive(Guid id, [FromBody] WorkOrderLocationRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<WorkOrderResponse>> Arrive(Guid id, CancellationToken cancellationToken)
     {
         userAccessService.EnsureTenantOperationalAccess();
         await EnsureAssignedExecutionAccessAsync(id, cancellationToken);
@@ -853,7 +853,7 @@ public sealed class WorkOrdersController(
             TenantId,
             workOrder.Id,
             UserId,
-            new Infrastructure.Services.TechnicianArrivalRequest(arrivalTechnicianId, request.Latitude, request.Longitude, null, null),
+            new Infrastructure.Services.TechnicianArrivalRequest(arrivalTechnicianId, null, null),
             cancellationToken);
         var persisted = await QueryWorkOrders(await branchAccessService.GetQueryScopeAsync(TenantId, workOrder.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == workOrder.Id, cancellationToken);
@@ -861,7 +861,7 @@ public sealed class WorkOrdersController(
     }
 
     [HttpPost("{id:guid}/depart")]
-    public async Task<ActionResult<WorkOrderResponse>> Depart(Guid id, [FromBody] WorkOrderLocationRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<WorkOrderResponse>> Depart(Guid id, CancellationToken cancellationToken)
     {
         userAccessService.EnsureTenantOperationalAccess();
         await EnsureAssignedExecutionAccessAsync(id, cancellationToken);
@@ -875,7 +875,7 @@ public sealed class WorkOrdersController(
             TenantId,
             workOrder.Id,
             UserId,
-            new Infrastructure.Services.TechnicianDepartureRequest(departureTechnicianId, request.Latitude, request.Longitude, null, null),
+            new Infrastructure.Services.TechnicianDepartureRequest(departureTechnicianId, null, null),
             cancellationToken);
         var persisted = await QueryWorkOrders(await branchAccessService.GetQueryScopeAsync(TenantId, workOrder.BranchId, cancellationToken))
             .SingleAsync(x => x.Id == workOrder.Id, cancellationToken);
@@ -905,8 +905,6 @@ public sealed class WorkOrdersController(
             x.NewStatus,
             x.Reason,
             x.Note,
-            x.Latitude,
-            x.Longitude,
             x.OccurredAt,
             x.MetadataJson)).ToList());
     }
@@ -1092,8 +1090,6 @@ public sealed class WorkOrdersController(
             workOrderEvent.NewStatus,
             workOrderEvent.Reason,
             workOrderEvent.Note,
-            workOrderEvent.Latitude,
-            workOrderEvent.Longitude,
             workOrderEvent.OccurredAt));
     }
 
@@ -2341,7 +2337,6 @@ public sealed record CompleteWorkOrderRequest(string WorkDoneNotes, DateTime? Co
 
 public sealed record AcknowledgeWorkOrderRequest(string AcknowledgedByName, string? Comments, DateTime? AcknowledgementDate);
 public sealed record AddWorkOrderCommentRequest(string Message);
-public sealed record WorkOrderLocationRequest(decimal? Latitude, decimal? Longitude);
 public sealed record PatchWorkOrderStatusRequest(string? Status, Guid? WorkflowStatusId);
 public sealed record BulkAssignWorkOrdersRequest(IReadOnlyCollection<Guid> WorkOrderIds, Guid? TechnicianId, string? Notes);
 public sealed record BulkCloseWorkOrdersRequest(IReadOnlyCollection<Guid> WorkOrderIds);
@@ -2538,8 +2533,6 @@ public sealed record WorkOrderEventResponse(
     string? NewStatus,
     string? Reason,
     string? Note,
-    decimal? Latitude,
-    decimal? Longitude,
     DateTime OccurredAt,
     string? MetadataJson = null);
 

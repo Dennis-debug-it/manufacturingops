@@ -12199,20 +12199,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("IsTrackingActive")
-                        .HasColumnType("boolean");
-
-                    b.Property<decimal?>("LastKnownLatitude")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)");
-
-                    b.Property<decimal?>("LastKnownLongitude")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)");
-
-                    b.Property<DateTime?>("LastLocationAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<decimal>("OvertimeMultiplier")
                         .ValueGeneratedOnAdd()
                         .HasPrecision(4, 2)
@@ -15971,14 +15957,6 @@ namespace Ecosys.Infrastructure.Migrations.AppDb
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
-
-                    b.Property<decimal?>("Latitude")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)");
-
-                    b.Property<decimal?>("Longitude")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)");
 
                     b.Property<string>("Message")
                         .IsRequired()
