@@ -371,8 +371,13 @@ Run this once, after pulling the new images and before `up -d`:
 
 ```bash
 docker compose run --rm --user root --entrypoint sh api \
-  -c 'chown -R app:app /app/storage/uploads /app/wwwroot/uploads/logos'
+  -c 'chown -R app:app /app/storage/uploads /app/wwwroot/uploads/logos /home/app/.aspnet/DataProtection-Keys'
 ```
+
+The last path holds the keys that encrypt saved secrets (SMTP password, tokens). If the API
+cannot write there it logs `KeyRingProvider` failures at startup and keeps the keys in memory
+only, so after the next restart every secret saved in Settings is unreadable and has to be
+entered again.
 
 Then verify with smoke check 7 above: upload an attachment and download it again. If uploads
 fail with a permission error, this step did not run or did not cover the right path.

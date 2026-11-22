@@ -33,16 +33,19 @@ ENV ASPNETCORE_ENVIRONMENT=Production \
 
 COPY --from=build /app/publish ./
 
-# Both of these paths are mount points for named volumes (see docker-compose.yml):
+# These paths are mount points for named volumes (see docker-compose.yml):
 #   /app/storage/uploads   attachments (Storage__LocalBasePath)
 #   /app/wwwroot/uploads   tenant branding logos, written by TenantController (EC-P2-12)
+#   /home/app/.aspnet/DataProtection-Keys   the keys that encrypt stored secrets (SMTP
+#                          password, tokens). If `app` cannot write here the keys live in
+#                          memory only and every restart makes those secrets unreadable.
 # Creating and chowning them at BUILD time is what makes running as non-root work:
 # Docker copies the image's content *and its ownership* into a named volume the first
 # time that volume is initialised, so the volume comes up owned by `app` rather than
 # root. Deployments whose volumes already exist need a one-time chown - see
 # "Upgrading an existing deployment" in docs/DEPLOYMENT.md.
-RUN mkdir -p /app/storage/uploads /app/wwwroot/uploads/logos \
-    && chown -R app:app /app/storage /app/wwwroot
+RUN mkdir -p /app/storage/uploads /app/wwwroot/uploads/logos /home/app/.aspnet/DataProtection-Keys \
+    && chown -R app:app /app/storage /app/wwwroot /home/app/.aspnet
 
 # EC-P1-06b: run as the image's non-root `app` user (uid 1654). Port 5000 is
 # unprivileged, so nothing in this container needs root.
