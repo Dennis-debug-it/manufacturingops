@@ -91,6 +91,8 @@ public sealed class PlatformSettingsTemplatesController(
             ShowLogo = source.ShowLogo,
             ShowTenantBranding = source.ShowTenantBranding,
             ShowPoweredByEcosys = source.ShowPoweredByEcosys,
+            AccentColor = source.AccentColor,
+            Layout = source.Layout,
             CreatedByUserId = tenantContext.GetRequiredUserId(),
             UpdatedByUserId = tenantContext.GetRequiredUserId()
         };
@@ -169,6 +171,46 @@ public sealed class PlatformSettingsTemplatesController(
             BuildHtmlPreview(row, header, body, footer, terms, signature)));
     }
 
+    /// <summary>
+    /// The PDF (or with ?format=png, an image of its first page) a template draws on a made-up document of its type:
+    /// the designer's live preview. Takes the template as
+    /// it stands in the designer, saved or not.
+    /// </summary>
+    [HttpPost("preview-pdf")]
+    public async Task<IActionResult> PreviewPdf([FromBody] UpsertPlatformSettingsTemplateRequest request, [FromServices] IWebHostEnvironment environment, CancellationToken cancellationToken, [FromQuery] string? format = null)
+    {
+        var type = PlatformDocumentTypes.All.FirstOrDefault(x => string.Equals(x, request.Type?.Trim(), StringComparison.OrdinalIgnoreCase))
+            ?? throw new BusinessRuleException("Choose a quotation, invoice or receipt template.");
+        var template = new PlatformDocumentTemplate
+        {
+            Name = request.Name ?? string.Empty,
+            Type = type,
+            Subject = NormalizeOptional(request.Subject),
+            HeaderHtml = NormalizeOptional(request.HeaderHtml),
+            BodyHtml = NormalizeOptional(request.BodyHtml),
+            FooterHtml = NormalizeOptional(request.FooterHtml),
+            TermsHtml = NormalizeOptional(request.TermsHtml),
+            SignatureHtml = NormalizeOptional(request.SignatureHtml),
+            PageSize = NormalizePageSize(request.PageSize),
+            Orientation = NormalizeOrientation(request.Orientation),
+            ShowLogo = request.ShowLogo,
+            ShowPoweredByEcosys = request.ShowPoweredByEcosys,
+            AccentColor = NormalizeAccent(request.AccentColor, PlatformDocumentTemplate.DefaultAccent),
+            Layout = PlatformDocumentLayouts.All.FirstOrDefault(x => string.Equals(x, request.Layout?.Trim(), StringComparison.OrdinalIgnoreCase)) ?? PlatformDocumentLayouts.Classic,
+        };
+        var issuer = await PlatformDocuments.IssuerAsync(dbContext, environment, cancellationToken);
+        var sample = PlatformDocumentPdf.Sample(type);
+        // ?format=png gives the first page as an image: every browser shows that inline, where some cannot show a PDF.
+        return string.Equals(format, "png", StringComparison.OrdinalIgnoreCase)
+            ? File(PlatformDocumentPdf.RenderFirstPageImage(template, sample, issuer), "image/png")
+            : File(PlatformDocumentPdf.Render(template, sample, issuer), "application/pdf");
+    }
+
+    /// <summary>The {{placeholders}} a document template's text may use.</summary>
+    [HttpGet("placeholders")]
+    public ActionResult<IReadOnlyCollection<PlatformTemplatePlaceholder>> Placeholders() =>
+        Ok(PlatformDocumentPdf.Placeholders.Select(x => new PlatformTemplatePlaceholder(x.Key, x.Meaning)).ToList());
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
@@ -216,6 +258,8 @@ public sealed class PlatformSettingsTemplatesController(
         row.ShowLogo = request.ShowLogo;
         row.ShowTenantBranding = request.ShowTenantBranding;
         row.ShowPoweredByEcosys = request.ShowPoweredByEcosys;
+        row.AccentColor = NormalizeAccent(request.AccentColor, row.AccentColor);
+        row.Layout = PlatformDocumentLayouts.All.FirstOrDefault(x => string.Equals(x, request.Layout?.Trim(), StringComparison.OrdinalIgnoreCase)) ?? row.Layout;
         row.UpdatedByUserId = tenantContext.GetRequiredUserId();
         if (isCreate)
         {
@@ -296,7 +340,9 @@ public sealed class PlatformSettingsTemplatesController(
             x.CreatedByUserId,
             x.UpdatedByUserId,
             x.CreatedAt,
-            x.UpdatedAt);
+            x.UpdatedAt,
+            x.AccentColor,
+            x.Layout);
 
     private static string BuildPreviewText(string? requestedPreview, string? bodyHtml)
     {
@@ -338,6 +384,16 @@ public sealed class PlatformSettingsTemplatesController(
     }
 
     private static string? NormalizeOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static readonly Regex HexColour = new("^#[0-9a-fA-F]{6}$", RegexOptions.Compiled);
+
+    private static string NormalizeAccent(string? value, string current)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.IsNullOrWhiteSpace(current) ? PlatformDocumentTemplate.DefaultAccent : current;
+        var trimmed = value.Trim();
+        if (!HexColour.IsMatch(trimmed)) throw new BusinessRuleException("The accent colour must be a hex colour such as #0f3d3e.");
+        return trimmed.ToLowerInvariant();
+    }
 
     private static Dictionary<string, string> BuildSampleValues() => new(StringComparer.OrdinalIgnoreCase)
     {
@@ -426,7 +482,9 @@ public sealed record UpsertPlatformSettingsTemplateRequest(
     bool ShowTenantBranding,
     bool ShowPoweredByEcosys,
     string? PageSize,
-    string? Orientation);
+    string? Orientation,
+    string? AccentColor = null,
+    string? Layout = null);
 
 public sealed record PlatformSettingsTemplateResponse(
     Guid Id,
@@ -449,7 +507,11 @@ public sealed record PlatformSettingsTemplateResponse(
     Guid? CreatedByUserId,
     Guid? UpdatedByUserId,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    string AccentColor,
+    string Layout);
+
+public sealed record PlatformTemplatePlaceholder(string Key, string Meaning);
 
 public sealed record PlatformTemplatePreviewRequest(Dictionary<string, string>? SampleData);
 

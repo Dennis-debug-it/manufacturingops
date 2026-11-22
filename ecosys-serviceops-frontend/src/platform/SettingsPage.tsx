@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { PageHeader } from '../shared/components/PageHeader'
 import { MiniSidebar } from './common'
 
@@ -11,12 +11,17 @@ const items = [
   { label: 'Modules', to: '/platform/settings/features' },
   { label: 'Announcements', to: '/platform/settings/announcements' },
   { label: 'Support', to: '/platform/settings/support' },
-  { label: 'Document Templates', to: '/platform/settings/email-templates' },
+  { label: 'Document Templates', to: '/platform/settings/templates' },
+  { label: 'Email Templates', to: '/platform/settings/email-templates' },
   { label: 'Finance & Tax', to: '/platform/settings/plans' },
   { label: 'Audit & Logs', to: '/platform/settings/audit' },
 ]
 
 export function SettingsPage() {
+  const { pathname } = useLocation()
+  // The document designer needs the width for its preview, so it opens without the settings menu.
+  if (/^\/platform\/settings\/templates\/[^/]+/.test(pathname)) return <Outlet />
+
   return (
     <div className="space-y-5">
       <PageHeader title="Platform Settings" subtitle="Platform-wide defaults, security, branding, and operational preferences." />

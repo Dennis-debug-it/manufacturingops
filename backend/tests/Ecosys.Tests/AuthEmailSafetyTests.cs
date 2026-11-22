@@ -753,6 +753,24 @@ public sealed partial class AuthEmailSafetyTests
     }
 
     [Fact]
+    public async Task PlatformInvoice_ChargesVatOnTaxableLinesOnly_AfterTheDiscount()
+    {
+        await using var dbContext = CreateDbContext();
+        var controller = CreatePlatformFinanceController(dbContext);
+
+        var result = await controller.CreateInvoice(new UpsertPlatformInvoiceRequest(
+            null, null, "Kapkoros Tea Factory", null, "KES", TaxRate: 16, DiscountRate: 10, "Draft", DateTime.UtcNow, null, null,
+            [new UpsertFinanceLineRequest("Subscription", 1, 100_000m, true), new UpsertFinanceLineRequest("Training", 1, 50_000m, false)]),
+            CancellationToken.None);
+
+        var invoice = Assert.IsType<PlatformInvoiceResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
+        Assert.Equal(150_000m, invoice.Subtotal);
+        Assert.Equal(15_000m, invoice.DiscountAmount);
+        Assert.Equal(14_400m, invoice.TaxAmount); // 16% of the subscription after its 10% discount; training carries none
+        Assert.Equal(149_400m, invoice.Total);
+    }
+
+    [Fact]
     public async Task Login_InvalidCredentials_ReturnsUnauthorizedException()
     {
         await using var dbContext = CreateDbContext();

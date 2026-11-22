@@ -1,36 +1,50 @@
-import { useMemo, useState, type ReactNode } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { ChevronDown, FileDown, Pencil, Plus, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '../shared/components/PageHeader'
 import { AsyncPanel } from '../shared/components/AsyncPanel'
 import { LastUpdated } from '../shared/components/LastUpdated'
-import { EmptyState } from '../shared/components/EmptyState'
 import { DataTable, type DataTableColumn } from '../shared/components/DataTable'
 import { FormDrawer } from '../shared/components/FormDrawer'
 import { ConfirmDialog } from '../shared/components/ConfirmDialog'
+import { StatusBadge } from '../shared/components/StatusBadge'
 import { formatDate } from '../shared/utils/dates'
 import { formatCurrency } from '../shared/utils/format'
+import { cn } from '../shared/utils/cn'
 import { api } from '../shared/api/apiClient'
 import { endpoints } from '../shared/api/endpoints'
 import { useFinanceDashboard, useFinanceExpenses, useFinanceInvoices, useFinancePayments, useFinanceQuotations } from './api'
-import { Field } from './common'
 import type { PlatformExpense, PlatformInvoice, PlatformPayment, PlatformQuotation } from './types'
+import { DocumentForm, ExpenseForm, KIND_LABEL, PaymentForm, TaxForm, useFinanceTaxes, type CreateKind, type PlatformTax } from './finance/forms'
+import { downloadFinancePdf, useDocumentTemplates } from './documents/api'
 
-type TabId = 'overview' | 'quotations' | 'invoices' | 'payments' | 'expenses' | 'reports' | 'tax' | 'templates'
+type TabId = 'overview' | 'quotations' | 'invoices' | 'payments' | 'expenses' | 'tax' | 'templates'
 
-const tabs: Array<{ id: TabId; label: string }> = [
+const tabs: Array<{ id: TabId; label: string; create?: CreateKind }> = [
   { id: 'overview', label: 'Overview' },
-  { id: 'quotations', label: 'Quotations' },
-  { id: 'invoices', label: 'Invoices' },
-  { id: 'payments', label: 'Payments' },
-  { id: 'expenses', label: 'Expenses' },
-  { id: 'reports', label: 'Reports' },
-  { id: 'tax', label: 'Tax Settings' },
-  { id: 'templates', label: 'Templates' },
+  { id: 'quotations', label: 'Quotations', create: 'quotation' },
+  { id: 'invoices', label: 'Invoices', create: 'invoice' },
+  { id: 'payments', label: 'Payments', create: 'payment' },
+  { id: 'expenses', label: 'Expenses', create: 'expense' },
+  { id: 'tax', label: 'Tax' },
+  { id: 'templates', label: 'Document templates' },
 ]
 
-type FinanceAction = 'send' | 'mark-paid' | 'void' | 'convert' | 'approve'
+type FinanceAction = 'send-quotation' | 'accept' | 'convert' | 'send-invoice' | 'mark-paid' | 'void' | 'approve'
+
+/** What the open drawer is: a new record of a kind, or an existing one to change. */
+type Editing =
+  | { kind: 'quotation'; record: PlatformQuotation | null }
+  | { kind: 'invoice'; record: PlatformInvoice | null }
+  | { kind: 'payment'; invoiceId: string | null }
+  | { kind: 'expense'; record: PlatformExpense | null }
+  | { kind: 'tax'; record: PlatformTax | null }
+
+interface PendingAction { action: FinanceAction; target: PlatformInvoice | PlatformQuotation | PlatformExpense }
+
+const actionButton = 'inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-50'
 
 export function FinancePage() {
   const queryClient = useQueryClient()
@@ -43,54 +57,47 @@ export function FinancePage() {
   const expenses = useFinanceExpenses()
   const [tab, setTab] = useState<TabId>('overview')
   const [search, setSearch] = useState('')
-  const [createKind, setCreateKind] = useState<'quotation' | 'invoice' | 'payment' | 'expense' | null>(null)
-  const [actionTarget, setActionTarget] = useState<PlatformInvoice | PlatformQuotation | PlatformExpense | null>(null)
-  const [action, setAction] = useState<FinanceAction | null>(null)
+  const [editing, setEditing] = useState<Editing | null>(null)
+  const [pending, setPending] = useState<PendingAction | null>(null)
+  const formId = 'platform-finance-form'
 
   const query = search.trim().toLowerCase()
-  const createFormId = 'platform-finance-create-form'
+  const match = (...values: Array<string | null | undefined>) => !query || values.some((x) => (x ?? '').toLowerCase().includes(query))
+  const filteredQuotations = useMemo(() => (quotations.data ?? []).filter((x) => match(x.quotationNumber, x.customerName, x.status)), [quotations.data, query]) // eslint-disable-line react-hooks/exhaustive-deps
+  const filteredInvoices = useMemo(() => (invoices.data ?? []).filter((x) => match(x.invoiceNumber, x.customerName, x.status)), [invoices.data, query]) // eslint-disable-line react-hooks/exhaustive-deps
+  const filteredPayments = useMemo(() => (payments.data ?? []).filter((x) => match(x.paymentNumber, x.method, x.reference)), [payments.data, query]) // eslint-disable-line react-hooks/exhaustive-deps
+  const filteredExpenses = useMemo(() => (expenses.data ?? []).filter((x) => match(x.category, x.vendor, x.description)), [expenses.data, query]) // eslint-disable-line react-hooks/exhaustive-deps
+  const invoiceNumber = (id: string | null) => (id ? invoices.data?.find((x) => x.id === id)?.invoiceNumber : undefined)
 
-  const filteredQuotations = useMemo(
-    () => (quotations.data ?? []).filter((row) => !query || row.quotationNumber.toLowerCase().includes(query) || row.customerName.toLowerCase().includes(query)),
-    [quotations.data, query],
-  )
-  const filteredInvoices = useMemo(
-    () => (invoices.data ?? []).filter((row) => !query || row.invoiceNumber.toLowerCase().includes(query) || row.customerName.toLowerCase().includes(query)),
-    [invoices.data, query],
-  )
-  const filteredPayments = useMemo(
-    () => (payments.data ?? []).filter((row) => !query || row.paymentNumber.toLowerCase().includes(query) || row.method.toLowerCase().includes(query)),
-    [payments.data, query],
-  )
-  const filteredExpenses = useMemo(
-    () => (expenses.data ?? []).filter((row) => !query || row.category.toLowerCase().includes(query) || (row.vendor ?? '').toLowerCase().includes(query)),
-    [expenses.data, query],
-  )
+  const startCreate = (kind: CreateKind) => {
+    if (kind === 'payment') setEditing({ kind, invoiceId: null })
+    else setEditing({ kind, record: null } as Editing)
+  }
+
+  const pdf = (kind: 'quotations' | 'invoices' | 'payments', id: string, name: string) =>
+    void downloadFinancePdf(kind, id, name).catch(() => toast.error('The PDF could not be made.'))
 
   const quotationColumns: DataTableColumn<PlatformQuotation>[] = [
-    { key: 'quotationNumber', header: 'Quotation', cell: (row) => row.quotationNumber },
+    { key: 'quotationNumber', header: 'Quotation', cell: (row) => <span className="font-mono text-xs">{row.quotationNumber}</span> },
     { key: 'customerName', header: 'Customer', cell: (row) => row.customerName },
     { key: 'total', header: 'Total', cell: (row) => formatCurrency(row.total, row.currency) },
-    { key: 'status', header: 'Status', cell: (row) => row.status },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     { key: 'validUntil', header: 'Valid until', cell: (row) => (row.validUntil ? formatDate(row.validUntil) : '—') },
     {
-      key: 'actions',
-      header: 'Actions',
-      cell: (row) => (
-        <div className="flex flex-wrap gap-2">
-          <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'send')}>
-            Send
-          </button>
-          <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'convert')}>
-            Convert to invoice
-          </button>
+      key: 'actions', header: '', cell: (row) => (
+        <div className="flex flex-wrap justify-end gap-1.5">
+          <button type="button" className={actionButton} onClick={() => pdf('quotations', row.id, row.quotationNumber)}><FileDown className="h-3.5 w-3.5" />PDF</button>
+          {row.status === 'Draft' ? <button type="button" className={actionButton} onClick={() => setEditing({ kind: 'quotation', record: row })}><Pencil className="h-3.5 w-3.5" />Edit</button> : null}
+          {row.status === 'Draft' ? <button type="button" className={actionButton} onClick={() => setPending({ action: 'send-quotation', target: row })}>Mark sent</button> : null}
+          {row.status === 'Sent' ? <button type="button" className={actionButton} onClick={() => setPending({ action: 'accept', target: row })}>Accepted</button> : null}
+          {row.status !== 'Converted' && row.status !== 'Rejected' ? <button type="button" className={actionButton} onClick={() => setPending({ action: 'convert', target: row })}>Make invoice</button> : null}
         </div>
       ),
     },
   ]
 
   const invoiceColumns: DataTableColumn<PlatformInvoice>[] = [
-    { key: 'invoiceNumber', header: 'Invoice', cell: (row) => row.invoiceNumber },
+    { key: 'invoiceNumber', header: 'Invoice', cell: (row) => <span className="font-mono text-xs">{row.invoiceNumber}</span> },
     { key: 'customerName', header: 'Customer', cell: (row) => row.customerName },
     {
       key: 'for', header: 'For', cell: (row) => (row.purpose ? (
@@ -101,484 +108,323 @@ export function FinancePage() {
       ) : '—'),
     },
     { key: 'total', header: 'Total', cell: (row) => formatCurrency(row.total, row.currency) },
-    { key: 'paid', header: 'Paid', cell: (row) => formatCurrency(row.amountPaid, row.currency) },
-    { key: 'balance', header: 'Balance', cell: (row) => formatCurrency(row.balance, row.currency) },
-    { key: 'status', header: 'Status', cell: (row) => row.status },
+    { key: 'balance', header: 'Owing', cell: (row) => formatCurrency(row.balance, row.currency) },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     { key: 'dueDate', header: 'Due', cell: (row) => (row.dueDate ? formatDate(row.dueDate) : '—') },
     {
-      key: 'actions',
-      header: 'Actions',
-      cell: (row) => (
-        <div className="flex flex-wrap gap-2">
-          {row.status === 'Draft' ? (
-            <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'send')}>
-              Send
-            </button>
-          ) : null}
-          {row.status !== 'Paid' && row.status !== 'Void' ? (
-            <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'mark-paid')}>
-              Mark paid
-            </button>
-          ) : null}
-          {row.status !== 'Void' && row.amountPaid === 0 ? (
-            <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'void')}>
-              Void
-            </button>
-          ) : null}
+      key: 'actions', header: '', cell: (row) => (
+        <div className="flex flex-wrap justify-end gap-1.5">
+          <button type="button" className={actionButton} onClick={() => pdf('invoices', row.id, row.invoiceNumber)}><FileDown className="h-3.5 w-3.5" />PDF</button>
+          {row.status === 'Draft' ? <button type="button" className={actionButton} onClick={() => setEditing({ kind: 'invoice', record: row })}><Pencil className="h-3.5 w-3.5" />Edit</button> : null}
+          {row.status === 'Draft' ? <button type="button" className={actionButton} onClick={() => setPending({ action: 'send-invoice', target: row })}>Send</button> : null}
+          {row.status !== 'Paid' && row.status !== 'Void' && row.status !== 'Draft' ? <button type="button" className={actionButton} onClick={() => setEditing({ kind: 'payment', invoiceId: row.id })}>Record payment</button> : null}
+          {row.status !== 'Paid' && row.status !== 'Void' ? <button type="button" className={actionButton} onClick={() => setPending({ action: 'mark-paid', target: row })}>Mark paid</button> : null}
+          {row.status !== 'Void' && row.amountPaid === 0 ? <button type="button" className={cn(actionButton, 'text-rose-700')} onClick={() => setPending({ action: 'void', target: row })}>Void</button> : null}
         </div>
       ),
     },
   ]
 
   const paymentColumns: DataTableColumn<PlatformPayment>[] = [
-    { key: 'paymentNumber', header: 'Payment', cell: (row) => row.paymentNumber },
+    { key: 'paymentNumber', header: 'Receipt', cell: (row) => <span className="font-mono text-xs">{row.paymentNumber}</span> },
+    { key: 'paidAt', header: 'Date', cell: (row) => formatDate(row.paidAt) },
     { key: 'amount', header: 'Amount', cell: (row) => formatCurrency(row.amount, row.currency) },
     { key: 'method', header: 'Method', cell: (row) => row.method },
-    { key: 'status', header: 'Status', cell: (row) => row.status },
-    { key: 'paidAt', header: 'Date', cell: (row) => formatDate(row.paidAt) },
     { key: 'reference', header: 'Reference', cell: (row) => row.reference ?? '—' },
+    { key: 'invoice', header: 'Invoice', cell: (row) => invoiceNumber(row.invoiceId) ?? '—' },
+    { key: 'actions', header: '', cell: (row) => <div className="flex justify-end"><button type="button" className={actionButton} onClick={() => pdf('payments', row.id, row.paymentNumber)}><FileDown className="h-3.5 w-3.5" />Receipt</button></div> },
   ]
 
   const expenseColumns: DataTableColumn<PlatformExpense>[] = [
     { key: 'expenseDate', header: 'Date', cell: (row) => formatDate(row.expenseDate) },
     { key: 'category', header: 'Category', cell: (row) => row.category },
-    { key: 'vendor', header: 'Vendor', cell: (row) => row.vendor ?? '—' },
+    { key: 'description', header: 'What for', cell: (row) => <span>{row.description}{row.vendor ? <span className="block text-xs text-slate-500">{row.vendor}</span> : null}</span> },
     { key: 'total', header: 'Total', cell: (row) => formatCurrency(row.totalAmount, row.currency) },
-    { key: 'status', header: 'Status', cell: (row) => row.status },
+    { key: 'status', header: 'Status', cell: (row) => <StatusBadge status={row.status} /> },
     {
-      key: 'actions',
-      header: 'Actions',
-      cell: (row) => (
-        <button type="button" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50" onClick={() => openAction(row, 'approve')}>
-          Approve
-        </button>
+      key: 'actions', header: '', cell: (row) => (
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {row.status !== 'Approved' ? <button type="button" className={actionButton} onClick={() => setEditing({ kind: 'expense', record: row })}><Pencil className="h-3.5 w-3.5" />Edit</button> : null}
+          {row.status === 'Draft' || row.status === 'Submitted' ? <button type="button" className={actionButton} onClick={() => setPending({ action: 'approve', target: row })}>Approve</button> : null}
+        </div>
       ),
     },
   ]
 
-  function openAction(row: PlatformInvoice | PlatformQuotation | PlatformExpense, nextAction: FinanceAction) {
-    setActionTarget(row)
-    setAction(nextAction)
-  }
-
   const confirmAction = async () => {
-    if (!actionTarget || !action) return
+    if (!pending) return
+    const { action, target } = pending
     try {
-      if ('quotationNumber' in actionTarget) {
-        if (action === 'send') await api.post(endpoints.platformFinance.quotationSend(actionTarget.id))
-        if (action === 'convert') await api.post(endpoints.platformFinance.quotationConvert(actionTarget.id))
-      } else if ('invoiceNumber' in actionTarget) {
-        if (action === 'send') await api.post(endpoints.platformFinance.invoiceSend(actionTarget.id))
-        if (action === 'mark-paid') await api.post(endpoints.platformFinance.invoiceMarkPaid(actionTarget.id), {})
-        if (action === 'void') await api.post(endpoints.platformFinance.invoiceVoid(actionTarget.id))
-      } else if ('expenseDate' in actionTarget) {
-        if (action === 'approve') await api.post(endpoints.platformFinance.expenseApprove(actionTarget.id))
-      }
-      toast.success(action === 'send' ? 'Sent' : action === 'mark-paid' ? 'Marked paid; receipt recorded' : action === 'void' ? 'Voided' : action === 'convert' ? 'Draft invoice created' : 'Done')
-      setActionTarget(null)
-      setAction(null)
+      if (action === 'send-quotation') await api.post(endpoints.platformFinance.quotationSend(target.id))
+      if (action === 'accept') await api.post(`${endpoints.platformFinance.quotation(target.id)}/approve`)
+      if (action === 'convert') await api.post(endpoints.platformFinance.quotationConvert(target.id))
+      if (action === 'send-invoice') await api.post(endpoints.platformFinance.invoiceSend(target.id))
+      if (action === 'mark-paid') await api.post(endpoints.platformFinance.invoiceMarkPaid(target.id), {})
+      if (action === 'void') await api.post(endpoints.platformFinance.invoiceVoid(target.id))
+      if (action === 'approve') await api.post(endpoints.platformFinance.expenseApprove(target.id))
+      toast.success(ACTION_DONE[action])
+      if (action === 'convert') setTab('invoices')
+      setPending(null)
       void refresh()
     } catch {
-      // handled by interceptor
+      // the interceptor shows the error
     }
   }
+
+  const current = tabs.find((x) => x.id === tab)
+  const drawerTitle = editing
+    ? editing.kind === 'payment' ? 'Record payment'
+      : editing.kind === 'tax' ? (editing.record ? `Edit ${editing.record.name}` : 'Add tax')
+        : editing.record ? `Edit ${editing.kind === 'quotation' ? (editing.record as PlatformQuotation).quotationNumber : editing.kind === 'invoice' ? (editing.record as PlatformInvoice).invoiceNumber : 'expense'}`
+          : KIND_LABEL[editing.kind]
+    : ''
+  const onSaved = () => { setEditing(null); void refresh() }
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Finance"
-        subtitle="Subscriptions, invoices, quotations, payments, expenses, and reporting."
+        subtitle="Quotations, invoices, payments and expenses for the platform. Subscription invoices raised from Pricing and renewals appear here too."
         secondaryActions={<LastUpdated at={dashboard.dataUpdatedAt} />}
-        primaryAction={(
-          <button
-            type="button"
-            className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"
-            onClick={() => setCreateKind('invoice')}
-          >
-            <Plus className="h-4 w-4" />
-            Create
-          </button>
-        )}
+        primaryAction={current?.create
+          ? <button type="button" className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => startCreate(current.create!)}><Plus className="h-4 w-4" />{KIND_LABEL[current.create]}</button>
+          : tab === 'tax' ? <button type="button" className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]" onClick={() => setEditing({ kind: 'tax', record: null })}><Plus className="h-4 w-4" />Add tax</button>
+            : tab === 'templates' ? undefined
+              : <CreateMenu onPick={startCreate} />}
       />
 
-      <div className="flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-2 shadow-sm">
+      <div className="flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-2 shadow-sm backdrop-blur-[var(--glass-blur-md)]" role="tablist">
         {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setTab(item.id)}
-            className={`rounded-lg px-3 py-2 text-sm font-medium ${tab === item.id ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}
-          >
+          <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} onClick={() => { setTab(item.id); setSearch('') }}
+            className={`rounded-lg px-3 py-2 text-sm font-medium ${tab === item.id ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`}>
             {item.label}
           </button>
         ))}
       </div>
 
-      <div className="flex items-center gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-        <Search className="h-4 w-4 text-slate-400" />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search records"
-          className="w-full border-0 bg-transparent p-0 text-sm outline-none placeholder:text-slate-400"
-        />
-      </div>
+      {current?.create ? (
+        <div className="flex items-center gap-2 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-3 shadow-sm">
+          <Search className="h-4 w-4 text-slate-400" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${current.label.toLowerCase()}`} aria-label={`Search ${current.label.toLowerCase()}`}
+            className="w-full border-0 bg-transparent p-0 text-sm outline-none placeholder:text-slate-400" />
+        </div>
+      ) : null}
 
       {tab === 'overview' ? (
         <AsyncPanel query={dashboard} loadingLabel="Loading finance overview" errorTitle="Overview unavailable" errorDescription="Finance overview could not be loaded.">
-          {() => (
-            <div className="space-y-5">
-              <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <Kpi label="Revenue" value={formatCurrency(dashboard.data?.totalRevenue ?? 0)} />
-                <Kpi label="Outstanding" value={formatCurrency(dashboard.data?.outstandingInvoices ?? 0)} />
-                <Kpi label="Overdue" value={formatCurrency(dashboard.data?.overdueInvoices ?? 0)} />
-                <Kpi label="Net position" value={formatCurrency(dashboard.data?.profitEstimate ?? 0)} />
-              </section>
-
-              <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                <Panel title="Recent invoices">
-                  <DataTable<PlatformInvoice>
-                    columns={invoiceColumns.slice(0, 4)}
-                    data={(dashboard.data?.recentInvoices ?? []).slice(0, 5)}
-                    emptyTitle="No invoices"
-                    emptyDescription="Invoices will appear here."
-                  />
-                </Panel>
-                <Panel title="Recent payments">
-                  <DataTable<PlatformPayment>
-                    columns={paymentColumns}
-                    data={(dashboard.data?.recentPayments ?? []).slice(0, 5)}
-                    emptyTitle="No payments"
-                    emptyDescription="Payments will appear here."
-                  />
-                </Panel>
-              </section>
-            </div>
-          )}
+          {() => {
+            const d = dashboard.data
+            const aging = d?.aging
+            return (
+              <div className="space-y-5">
+                <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <Kpi label="Received" value={formatCurrency(d?.totalRevenue ?? 0)} hint="All payments to date" />
+                  <Kpi label="Owing" value={formatCurrency(d?.outstandingInvoices ?? 0)} hint="Unpaid invoice balances" />
+                  <Kpi label="Overdue" value={formatCurrency(d?.overdueInvoices ?? 0)} hint="Past their due date" tone={(d?.overdueInvoices ?? 0) > 0 ? 'bad' : undefined} />
+                  <Kpi label="Expenses this month" value={formatCurrency(d?.expensesThisMonth ?? 0)} hint={`Quotations won: ${d?.quotationConversionRate ?? 0}%`} />
+                </section>
+                {aging ? (
+                  <Panel title="Money owed, by how late">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                      {([['Not yet due', aging.current], ['1–30 days', aging.days1To30], ['31–60 days', aging.days31To60], ['61–90 days', aging.days61To90], ['Over 90 days', aging.days90Plus]] as const).map(([label, value]) => (
+                        <div key={label} className="rounded-xl bg-slate-50 p-3">
+                          <div className="text-xs text-slate-500">{label}</div>
+                          <div className={cn('mt-1 font-semibold tabular-nums', label !== 'Not yet due' && value > 0 ? 'text-rose-700' : 'text-slate-900')}>{formatCurrency(value)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </Panel>
+                ) : null}
+                <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                  <Panel title="Recent invoices">
+                    <DataTable<PlatformInvoice> columns={invoiceColumns.filter((x) => ['invoiceNumber', 'customerName', 'total', 'status'].includes(x.key))} data={(d?.recentInvoices ?? []).slice(0, 5)} emptyTitle="No invoices" emptyDescription="Invoices will appear here." />
+                  </Panel>
+                  <Panel title="Recent payments">
+                    <DataTable<PlatformPayment> columns={paymentColumns.filter((x) => ['paymentNumber', 'paidAt', 'amount', 'method'].includes(x.key))} data={(d?.recentPayments ?? []).slice(0, 5)} emptyTitle="No payments" emptyDescription="Payments will appear here." />
+                  </Panel>
+                </section>
+              </div>
+            )
+          }}
         </AsyncPanel>
       ) : null}
 
       {tab === 'quotations' ? (
-        <Panel title="Quotations">
-          <AsyncPanel query={quotations} loadingLabel="Loading quotations" errorTitle="Quotations unavailable" errorDescription="Quotations could not be loaded.">
-            {() => <DataTable<PlatformQuotation> columns={quotationColumns} data={filteredQuotations} emptyTitle="No quotations" emptyDescription="Create a quotation to start the billing flow." />}
-          </AsyncPanel>
-        </Panel>
+        <AsyncPanel query={quotations} loadingLabel="Loading quotations" errorTitle="Quotations unavailable" errorDescription="Quotations could not be loaded.">
+          {() => <DataTable<PlatformQuotation> columns={quotationColumns} data={filteredQuotations} emptyTitle="No quotations" emptyDescription="Use New quotation for a one-off quotation. Factory subscription quotes are built in Pricing." />}
+        </AsyncPanel>
       ) : null}
       {tab === 'invoices' ? (
-        <Panel title="Invoices">
-          <AsyncPanel query={invoices} loadingLabel="Loading invoices" errorTitle="Invoices unavailable" errorDescription="Invoices could not be loaded.">
-            {() => <DataTable<PlatformInvoice> columns={invoiceColumns} data={filteredInvoices} emptyTitle="No invoices" emptyDescription="Create an invoice to start billing." />}
-          </AsyncPanel>
-        </Panel>
+        <AsyncPanel query={invoices} loadingLabel="Loading invoices" errorTitle="Invoices unavailable" errorDescription="Invoices could not be loaded.">
+          {() => <DataTable<PlatformInvoice> columns={invoiceColumns} data={filteredInvoices} emptyTitle="No invoices" emptyDescription="Use New invoice, or make one from a quotation." />}
+        </AsyncPanel>
       ) : null}
       {tab === 'payments' ? (
-        <Panel title="Payments">
-          <AsyncPanel query={payments} loadingLabel="Loading payments" errorTitle="Payments unavailable" errorDescription="Payments could not be loaded.">
-            {() => <DataTable<PlatformPayment> columns={paymentColumns} data={filteredPayments} emptyTitle="No payments" emptyDescription="Record payments as they are received." />}
-          </AsyncPanel>
-        </Panel>
+        <AsyncPanel query={payments} loadingLabel="Loading payments" errorTitle="Payments unavailable" errorDescription="Payments could not be loaded.">
+          {() => <DataTable<PlatformPayment> columns={paymentColumns} data={filteredPayments} emptyTitle="No payments" emptyDescription="Record payments as they come in; each gets a receipt." />}
+        </AsyncPanel>
       ) : null}
       {tab === 'expenses' ? (
-        <Panel title="Expenses">
-          <AsyncPanel query={expenses} loadingLabel="Loading expenses" errorTitle="Expenses unavailable" errorDescription="Expenses could not be loaded.">
-            {() => <DataTable<PlatformExpense> columns={expenseColumns} data={filteredExpenses} emptyTitle="No expenses" emptyDescription="Record platform expenses as they are incurred." />}
-          </AsyncPanel>
-        </Panel>
+        <AsyncPanel query={expenses} loadingLabel="Loading expenses" errorTitle="Expenses unavailable" errorDescription="Expenses could not be loaded.">
+          {() => <DataTable<PlatformExpense> columns={expenseColumns} data={filteredExpenses} emptyTitle="No expenses" emptyDescription="Record what the platform spends: hosting, software, salaries." />}
+        </AsyncPanel>
       ) : null}
-      {tab === 'reports' ? (
-            <Panel title="Reports">
-              <EmptyState
-                title="Reports summary"
-                description="Platform finance reports are exposed through the backend, but the command centre keeps this tab compact. Use the finance overview and reports route for platform-wide reporting."
-              />
-            </Panel>
-          ) : null}
-          {tab === 'tax' ? (
-            <Panel title="Tax settings">
-              <EmptyState
-                title="Tax settings"
-                description="Tax defaults are controlled from platform settings. Open platform settings to edit tax and numbering defaults."
-                actionLabel="Open settings"
-                onAction={() => window.location.assign('/platform/settings')}
-              />
-            </Panel>
-          ) : null}
-          {tab === 'templates' ? (
-            <Panel title="Document templates">
-              <EmptyState
-                title="Document templates"
-                description="Platform document templates are managed in platform settings."
-              />
-            </Panel>
-          ) : null}
+      {tab === 'tax' ? <TaxTab onEdit={(record) => setEditing({ kind: 'tax', record })} /> : null}
+      {tab === 'templates' ? <TemplatesTab /> : null}
 
       <FormDrawer
-        open={createKind !== null}
-        title={`Create ${createKind ?? 'record'}`}
-        onClose={() => setCreateKind(null)}
+        open={editing !== null}
+        title={drawerTitle}
+        onClose={() => setEditing(null)}
+        closeOnOverlayClick={false}
         footer={(
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              onClick={() => setCreateKind(null)}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              form={createFormId}
-              className="rounded-lg bg-[var(--app-primary)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--app-secondary)]"
-            >
-              Save
+            <button type="button" className="rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={() => setEditing(null)}>Cancel</button>
+            <button type="submit" form={formId} className="rounded-lg bg-[var(--app-primary)] px-4 py-2.5 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">
+              {editing?.kind === 'payment' ? 'Record payment' : editing?.kind === 'expense' && !editing.record ? 'Record expense' : editing && 'record' in editing && editing.record ? 'Save changes' : 'Save draft'}
             </button>
           </div>
         )}
       >
-        <CreateFinanceForm kind={createKind} formId={createFormId} onSaved={() => { setCreateKind(null); void refresh() }} />
+        {editing?.kind === 'quotation' || editing?.kind === 'invoice' ? <DocumentForm key={`${editing.kind}-${editing.record?.id ?? 'new'}`} kind={editing.kind} formId={formId} existing={editing.record} onSaved={onSaved} /> : null}
+        {editing?.kind === 'payment' ? <PaymentForm key={editing.invoiceId ?? 'none'} formId={formId} invoices={invoices.data ?? []} presetInvoiceId={editing.invoiceId} onSaved={onSaved} /> : null}
+        {editing?.kind === 'expense' ? <ExpenseForm key={editing.record?.id ?? 'new'} formId={formId} existing={editing.record} onSaved={onSaved} /> : null}
+        {editing?.kind === 'tax' ? <TaxForm key={editing.record?.id ?? 'new'} formId={formId} existing={editing.record} onSaved={onSaved} /> : null}
       </FormDrawer>
 
       <ConfirmDialog
-        open={actionTarget !== null && action !== null}
-        title={actionTitle(action)}
-        message={actionMessage(action, actionTarget)}
-        confirmLabel={actionTitle(action)}
-        onCancel={() => {
-          setActionTarget(null)
-          setAction(null)
-        }}
+        open={pending !== null}
+        title={pending ? ACTION_TITLE[pending.action] : ''}
+        message={pending ? actionMessage(pending) : ''}
+        confirmLabel={pending ? ACTION_TITLE[pending.action] : 'Confirm'}
+        onCancel={() => setPending(null)}
         onConfirm={() => void confirmAction()}
       />
     </div>
   )
 }
 
-function CreateFinanceForm({
-  kind,
-  formId,
-  onSaved,
-}: {
-  kind: 'quotation' | 'invoice' | 'payment' | 'expense' | null
-  formId: string
-  onSaved: () => void
-}) {
-  const [form, setForm] = useState({
-    tenantId: '',
-    customerName: '',
-    customerEmail: '',
-    currency: 'KES',
-    total: 0,
-    issueDate: new Date().toISOString().slice(0, 10),
-    dueDate: '',
-    notes: '',
-    amount: 0,
-    paidAt: new Date().toISOString().slice(0, 10),
-    method: 'M-Pesa',
-    category: '',
-    vendor: '',
-    taxAmount: 0,
-  })
-
-  const save = async () => {
-    if (!kind) return
-    try {
-      if (kind === 'quotation') {
-        await api.post(endpoints.platformFinance.quotations, {
-          tenantId: form.tenantId || null,
-          customerName: form.customerName,
-          customerEmail: form.customerEmail || null,
-          currency: form.currency,
-          taxRate: 0,
-          discountRate: 0,
-          status: 'Draft',
-          validUntil: form.dueDate || null,
-          notes: form.notes || null,
-          lines: [{ description: form.notes || 'Line item', quantity: 1, unitPrice: form.total, taxable: true }],
-        })
-      } else if (kind === 'invoice') {
-        await api.post(endpoints.platformFinance.invoices, {
-          tenantId: form.tenantId || null,
-          quotationId: null,
-          customerName: form.customerName,
-          customerEmail: form.customerEmail || null,
-          currency: form.currency,
-          taxRate: 0,
-          discountRate: 0,
-          status: 'Draft',
-          issueDate: new Date(form.issueDate).toISOString(),
-          dueDate: form.dueDate ? new Date(form.dueDate).toISOString() : null,
-          notes: form.notes || null,
-          lines: [{ description: form.notes || 'Line item', quantity: 1, unitPrice: form.total, taxable: true }],
-        })
-      } else if (kind === 'payment') {
-        await api.post(endpoints.platformFinance.payments, {
-          invoiceId: null,
-          tenantId: form.tenantId || null,
-          amount: form.amount,
-          currency: form.currency,
-          method: form.method,
-          status: 'Paid',
-          reference: null,
-          paidAt: new Date(form.paidAt).toISOString(),
-          notes: form.notes || null,
-        })
-      } else if (kind === 'expense') {
-        await api.post(endpoints.platformFinance.expenses, {
-          expenseDate: new Date(form.issueDate).toISOString(),
-          category: form.category || 'General',
-          vendor: form.vendor || null,
-          description: form.notes || 'Expense',
-          amount: form.total,
-          taxAmount: form.taxAmount,
-          currency: form.currency,
-          paymentMethod: form.method,
-          attachmentUrl: null,
-          status: 'Draft',
-          tenantId: form.tenantId || null,
-        })
-      }
-      toast.success('Record saved')
-      onSaved()
-    } catch {
-      // handled by interceptor
-    }
-  }
-
-  if (!kind) return null
-
+function CreateMenu({ onPick }: { onPick: (kind: CreateKind) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
   return (
-    <form
-      id={formId}
-      onSubmit={(event) => {
-        event.preventDefault()
-        void save()
-      }}
-      className="grid grid-cols-1 gap-4 md:grid-cols-2"
-    >
-      <Field label="Tenant ID / scope">
-        <input
-          value={form.tenantId}
-          onChange={(event) => setForm((current) => ({ ...current, tenantId: event.target.value }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-        />
-      </Field>
-      <Field label="Customer / vendor">
-        <input
-          value={kind === 'expense' ? form.vendor : form.customerName}
-          onChange={(event) => setForm((current) => (kind === 'expense' ? { ...current, vendor: event.target.value } : { ...current, customerName: event.target.value }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-        />
-      </Field>
-      <Field label="Email / description">
-        <input
-          value={kind === 'expense' ? form.notes : form.customerEmail}
-          onChange={(event) => setForm((current) => (kind === 'expense' ? { ...current, notes: event.target.value } : { ...current, customerEmail: event.target.value }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-        />
-      </Field>
-      <Field label="Currency">
-        <input
-          value={form.currency}
-          onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-        />
-      </Field>
-      <Field label="Date">
-        <input
-          type="date"
-          value={form.issueDate}
-          onChange={(event) => setForm((current) => ({ ...current, issueDate: event.target.value }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-        />
-      </Field>
-      <Field label="Due date">
-        <input
-          type="date"
-          value={form.dueDate}
-          onChange={(event) => setForm((current) => ({ ...current, dueDate: event.target.value }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-        />
-      </Field>
-      <Field label="Amount / total">
-        <input
-          type="number"
-          value={kind === 'payment' ? form.amount : form.total}
-          onChange={(event) => setForm((current) => (kind === 'payment' ? { ...current, amount: Number(event.target.value) || 0 } : { ...current, total: Number(event.target.value) || 0 }))}
-          className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-        />
-      </Field>
-      {kind === 'expense' ? (
-        <Field label="Tax amount">
-          <input
-            type="number"
-            value={form.taxAmount}
-            onChange={(event) => setForm((current) => ({ ...current, taxAmount: Number(event.target.value) || 0 }))}
-            className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-          />
-        </Field>
+    <div ref={ref} className="relative">
+      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((x) => !x)}
+        className="inline-flex h-11 items-center gap-2 rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white hover:bg-[var(--app-secondary)]">
+        <Plus className="h-4 w-4" />New<ChevronDown className="h-4 w-4" />
+      </button>
+      {open ? (
+        <div role="menu" className="absolute right-0 z-30 mt-2 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+          {(Object.keys(KIND_LABEL) as CreateKind[]).map((kind) => (
+            <button key={kind} type="button" role="menuitem" onClick={() => { setOpen(false); onPick(kind) }} className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">
+              {KIND_LABEL[kind]}
+            </button>
+          ))}
+        </div>
       ) : null}
-      {kind === 'payment' ? (
-        <Field label="Method">
-          <input
-            value={form.method}
-            onChange={(event) => setForm((current) => ({ ...current, method: event.target.value }))}
-            className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-          />
-        </Field>
-      ) : null}
-      {kind === 'expense' ? (
-        <Field label="Category">
-          <input
-            value={form.category}
-            onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-            className="h-11 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-[var(--app-primary)]"
-          />
-        </Field>
-      ) : null}
-      <Field label="Notes">
-        <textarea
-          value={form.notes}
-          onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-          className="min-h-[100px] w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)]"
-        />
-      </Field>
-    </form>
+    </div>
   )
 }
 
-function Kpi({ label, value }: { label: string; value: string | number }) {
+function TaxTab({ onEdit }: { onEdit: (tax: PlatformTax) => void }) {
+  const taxes = useFinanceTaxes()
+  const columns: DataTableColumn<PlatformTax>[] = [
+    { key: 'name', header: 'Tax', cell: (x) => <span className="font-medium">{x.name}{x.isDefault ? <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Default</span> : null}</span> },
+    { key: 'rate', header: 'Rate', cell: (x) => `${x.rate}%` },
+    { key: 'mode', header: 'Prices are', cell: (x) => (x.mode === 'Inclusive' ? 'Including tax' : 'Before tax') },
+    { key: 'actions', header: '', cell: (x) => <div className="flex justify-end"><button type="button" className={actionButton} onClick={() => onEdit(x)}><Pencil className="h-3.5 w-3.5" />Edit</button></div> },
+  ]
   return (
-    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
+    <Panel title="Tax rates">
+      <p className="mb-3 text-sm text-slate-600">The default rate is filled in on new quotations and invoices; you can change it on each.</p>
+      <AsyncPanel query={taxes} loadingLabel="Loading taxes" errorTitle="Taxes unavailable" errorDescription="Tax rates could not be loaded.">
+        {() => <DataTable<PlatformTax> columns={columns} data={taxes.data ?? []} emptyTitle="No tax rates" emptyDescription="Add VAT at 16% to have it filled in on new documents." />}
+      </AsyncPanel>
+    </Panel>
+  )
+}
+
+function TemplatesTab() {
+  const templates = useDocumentTemplates()
+  const rows = templates.data ?? []
+  return (
+    <Panel title="Document templates">
+      <p className="text-sm text-slate-600">Quotations, invoices and receipts are drawn with the default template of their type. Design them in the document designer.</p>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {(['Quotation', 'Invoice', 'Receipt'] as const).map((type) => {
+          const chosen = rows.find((x) => x.type.toLowerCase() === type.toLowerCase() && x.isDefault && x.isActive)
+          return (
+            <Link key={type} to={chosen ? `/platform/settings/templates/${chosen.id}` : `/platform/settings/templates/new?type=${type}`}
+              className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 hover:border-[var(--app-primary)]">
+              <span aria-hidden className="h-9 w-9 shrink-0 rounded-lg" style={{ background: chosen?.accentColor ?? '#e2e8f0' }} />
+              <span className="min-w-0">
+                <span className="block font-medium text-slate-900">{type}s</span>
+                <span className="block truncate text-xs text-slate-500">{chosen ? `${chosen.name} · ${chosen.layout}` : 'Standard look · design it'}</span>
+              </span>
+            </Link>
+          )
+        })}
+      </div>
+      <Link to="/platform/settings/templates" className="mt-3 inline-block text-sm font-medium text-[var(--app-primary)] hover:underline">All document templates</Link>
+    </Panel>
+  )
+}
+
+function Kpi({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'bad' | undefined }) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-4 shadow-sm backdrop-blur-[var(--glass-blur-md)]">
       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
+      <div className={cn('mt-2 text-2xl font-semibold tabular-nums', tone === 'bad' ? 'text-rose-700' : 'text-slate-900')}>{value}</div>
+      {hint ? <div className="mt-1 text-xs text-slate-500">{hint}</div> : null}
     </div>
   )
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
+    <section className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] p-4 shadow-sm backdrop-blur-[var(--glass-blur-md)]">
       <p className="text-base font-semibold text-slate-900">{title}</p>
-      <div className="mt-4">{children}</div>
+      <div className="mt-3">{children}</div>
     </section>
   )
 }
 
-const ACTION_TITLE: Record<FinanceAction, string> = { send: 'Send', 'mark-paid': 'Mark paid', void: 'Void', convert: 'Convert to invoice', approve: 'Approve' }
+const ACTION_TITLE: Record<FinanceAction, string> = {
+  'send-quotation': 'Mark as sent',
+  accept: 'Mark accepted',
+  convert: 'Make invoice',
+  'send-invoice': 'Send invoice',
+  'mark-paid': 'Mark paid',
+  void: 'Void invoice',
+  approve: 'Approve expense',
+}
 
-function actionTitle(action: FinanceAction | null) {
-  return action ? ACTION_TITLE[action] : 'Confirm'
+const ACTION_DONE: Record<FinanceAction, string> = {
+  'send-quotation': 'Quotation marked as sent',
+  accept: 'Quotation marked accepted',
+  convert: 'Draft invoice made from the quotation',
+  'send-invoice': 'Invoice sent',
+  'mark-paid': 'Marked paid; receipt recorded',
+  void: 'Invoice voided',
+  approve: 'Expense approved',
 }
 
 /** Says what the action does, in particular what reaches the customer and what happens to their subscription. */
-function actionMessage(action: FinanceAction | null, target: PlatformInvoice | PlatformQuotation | PlatformExpense | null) {
-  const number = target && 'invoiceNumber' in target ? target.invoiceNumber : target && 'quotationNumber' in target ? String(target.quotationNumber) : 'this'
+function actionMessage({ action, target }: PendingAction) {
+  const number = 'invoiceNumber' in target ? target.invoiceNumber : 'quotationNumber' in target ? target.quotationNumber : 'this expense'
   switch (action) {
-    case 'send': return `Email invoice ${number} to the customer and mark it sent?`
-    case 'mark-paid': return `Record the outstanding balance of ${number} as paid? A receipt is emailed, and the tenant's subscription is extended by the period the invoice covers.`
+    case 'send-quotation': return `Mark quotation ${number} as sent to the customer? Download its PDF to send it.`
+    case 'accept': return `Record that the customer accepted quotation ${number}?`
+    case 'convert': return `Make a draft invoice from quotation ${number}? Nothing is sent until you send the invoice.`
+    case 'send-invoice': return `Email invoice ${number} to ${'customerEmail' in target && target.customerEmail ? target.customerEmail : 'the customer'} and mark it sent?`
+    case 'mark-paid': return `Record the outstanding balance of ${number} as paid in full? A receipt is emailed, and the workspace's subscription is extended by the period the invoice covers. To record part of it, use Record payment.`
     case 'void': return `Void ${number}? It stays on record with nothing owing.`
-    case 'convert': return `Turn quotation ${number} into a draft invoice? It is emailed when you send it.`
     case 'approve': return 'Approve this expense?'
     default: return ''
   }

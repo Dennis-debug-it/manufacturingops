@@ -29,6 +29,8 @@ import { SupportSettingsPage } from './settings/SupportSettingsPage'
 import { HealthSettingsPage } from './settings/HealthSettingsPage'
 import { DemoWorkspacePage } from './DemoWorkspacePage'
 import { PricingPage } from './pricing/PricingPage'
+import { DocumentTemplatesPage } from './documents/DocumentTemplatesPage'
+import { DocumentDesigner } from './documents/DocumentDesigner'
 
 /**
  * The roles allowed to open each platform section, keyed by the section's nav `to` path.
@@ -107,7 +109,8 @@ export function PlatformApp() {
             <Route path="identity" element={<IdentitySettingsPage />} />
             <Route path="security" element={<SecuritySettingsPage />} />
             <Route path="audit" element={<AuditSettingsPage />} />
-            <Route path="templates" element={<EmailTemplatesSettingsPage />} />
+            <Route path="templates" element={<DocumentTemplatesPage />} />
+            <Route path="templates/:id" element={<DocumentDesigner />} />
             <Route path="announcements" element={<AnnouncementsSettingsPage />} />
             <Route path="support" element={<SupportSettingsPage />} />
             <Route path="health" element={<HealthSettingsPage />} />

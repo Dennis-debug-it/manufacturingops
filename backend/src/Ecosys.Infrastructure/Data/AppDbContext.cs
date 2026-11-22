@@ -3804,6 +3804,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.Property(x => x.SignatureHtml).HasMaxLength(8000);
             entity.Property(x => x.PageSize).HasMaxLength(20).IsRequired();
             entity.Property(x => x.Orientation).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.AccentColor).HasMaxLength(9).IsRequired().HasDefaultValue(PlatformDocumentTemplate.DefaultAccent);
+            entity.Property(x => x.Layout).HasMaxLength(20).IsRequired().HasDefaultValue(PlatformDocumentLayouts.Classic);
             entity.HasIndex(x => new { x.Type, x.IsDefault });
         });
 

@@ -235,6 +235,8 @@ export interface PlatformFinanceDashboard {
   recentPayments: PlatformPayment[]
   recentInvoices: PlatformInvoice[]
   overdueAccounts: PlatformInvoice[]
+  /** Unpaid balances by days past due. */
+  aging?: { current: number; days1To30: number; days31To60: number; days61To90: number; days90Plus: number }
 }
 
 export interface PlatformQuotationLine {
