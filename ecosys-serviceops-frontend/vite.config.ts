@@ -26,7 +26,7 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         background_color: '#F6F5EF',
-        theme_color: '#0F766E',
+        theme_color: '#15806A',
         // Chrome on Android only offers to install (and builds the home-screen app) from PNG icons
         // of at least 192px and 512px; an SVG-only manifest is not installable there. The PNGs are
         // rendered from logo-icon.svg; the maskable one keeps the mark inside the 80% safe zone.

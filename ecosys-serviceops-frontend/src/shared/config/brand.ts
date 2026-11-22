@@ -1,7 +1,8 @@
 export const brand = {
   appName: 'ECOSYS',
-  tagline: 'automate.rely.scale',
-  // Public asset paths (served from /public). The rosette + wordmark lockup.
+  tagline: 'Factory Maintenance',
+  // Public asset paths (served from /public). The gear-tile mark + wordmark lockup; the gear
+  // sets this product apart from Ecosys's other products.
   // `Dark` variants are light-coloured, for use on dark surfaces (e.g. the sidebar); `Mono`
   // variants are flat white, for single-colour placement on any coloured background.
   assets: {

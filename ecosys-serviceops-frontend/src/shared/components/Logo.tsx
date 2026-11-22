@@ -4,7 +4,7 @@ type LogoVariant = 'lockup' | 'mark'
 type LogoTone = 'light' | 'dark' | 'mono'
 
 export interface LogoProps {
-  /** `lockup` shows the rosette + wordmark; `mark` shows the rosette only. */
+  /** `lockup` shows the gear mark + wordmark; `mark` shows the gear tile only. */
   variant?: LogoVariant
   /** `light` for light surfaces, `dark` for dark surfaces, `mono` for single-colour. */
   tone?: LogoTone

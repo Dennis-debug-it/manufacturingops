@@ -10,7 +10,7 @@ export interface BrandWordmarkProps {
 
 // The lockup SVG bakes the tagline at a fixed proportion of the wordmark, so at typical UI
 // logo sizes (~36–48px tall) it scales down to a few px and becomes illegible. This renders
-// the rosette mark plus real HTML text instead, so the tagline stays legible at any icon size.
+// the gear mark plus real HTML text instead, so the tagline stays legible at any icon size.
 export function BrandWordmark({ tone = 'light', markClassName, className }: BrandWordmarkProps) {
   const isDark = tone === 'dark'
   return (
