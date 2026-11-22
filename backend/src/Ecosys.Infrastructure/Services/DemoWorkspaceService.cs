@@ -78,6 +78,9 @@ internal sealed partial class DemoWorkspaceService(
     IRunningCheckService runningCheckService,
     ISparesService sparesService,
     IFleetService fleetService,
+    IVisitorService visitorService,
+    IVisitorCardService visitorCardService,
+    IPatrolService patrolService,
     ILogger<DemoWorkspaceService> logger) : IDemoWorkspaceService
 {
     private static readonly Guid TenantId = DemoWorkspace.TenantId;
@@ -101,7 +104,16 @@ internal sealed partial class DemoWorkspaceService(
         new("planner", "Grace Wanjiru", AppRoles.Dispatcher, "Maintenance Planner", "Raising, planning and assigning jobs; the weekly window."),
         new("technician", "Kevin Langat", AppRoles.Technician, "Electrical Technician", "The technician app: today's jobs, running checks and scanning."),
         new("stores", "Joseph Mutai", AppRoles.MaterialsController, "Storekeeper", "Stores and spares: stock, reorders and issuing parts to jobs."),
+        new("security", "Ruth Chepkoech", AppRoles.Viewer, "Security Supervisor", "Site security: the gate desk, who is on site, the patrol board and security incidents."),
+        new("guard", "Moses Cheruiyot", AppRoles.Technician, "Security Guard", "The guard's phone: tonight's patrols, scanning checkpoints and reporting an incident."),
     ];
+
+    /// <summary>What each security login is granted on top of its role (gate and patrol rights are per-user grants).</summary>
+    internal static readonly Dictionary<string, string[]> LoginGrants = new(StringComparer.Ordinal)
+    {
+        ["security"] = [PermissionNames.VisitorsGate, PermissionNames.VisitorsManage, PermissionNames.SecurityPatrol, PermissionNames.SecurityManage],
+        ["guard"] = [PermissionNames.SecurityPatrol],
+    };
 
     public async Task<DemoWorkspaceStatus> GetStatusAsync(CancellationToken cancellationToken = default)
     {
@@ -287,6 +299,8 @@ internal sealed partial class DemoWorkspaceService(
         license.OfficeSeats = TenantLicense.DefaultOfficeSeats;
         license.FieldSeats = TenantLicense.DefaultFieldSeats;
         license.MaxBranchesOverride = 3;
+        // Both Factory Operations add-ons, so the demo can show Visitor Management and Security Patrol.
+        license.OperationsAddOns = ServiceOpsPlans.NormalizeOperationsAddOns(ServiceOpsPlans.OperationsAddOnModules);
         TenantLifecycleState.Sync(tenant, license, now);
     }
 

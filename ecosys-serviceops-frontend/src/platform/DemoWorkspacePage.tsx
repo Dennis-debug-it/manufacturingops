@@ -141,7 +141,7 @@ export function DemoWorkspacePage() {
 
       {!data.exists ? (
         <div className={cardClass}>
-          <p className="text-sm text-slate-700">The demo workspace has not been created yet. Creating it adds a tenant called <strong>{data.companyName}</strong>: a CTC tea factory with its sections and about 30 assets, four months of breakdowns and planned work (including repeat failures for the reliability screens), PM plans by calendar and running hours, running checks, statutory inspections, a store with spares, contractors, a sensor feed with a bearing drifting into its warning band, and four leaf collection vehicles. It takes about half a minute.</p>
+          <p className="text-sm text-slate-700">The demo workspace has not been created yet. Creating it adds a tenant called <strong>{data.companyName}</strong>: a CTC tea factory with its sections and about 30 assets, four months of breakdowns and planned work (including repeat failures for the reliability screens), PM plans by calendar and running hours, running checks, statutory inspections, a store with spares, contractors, a sensor feed with a bearing drifting into its warning band, four leaf collection vehicles, and site security: a month of visitors at the gate (two on site now, one blocked) and a week of night patrols with incidents. It takes up to a minute.</p>
         </div>
       ) : (
         <>

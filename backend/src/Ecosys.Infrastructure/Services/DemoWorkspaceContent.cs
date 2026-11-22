@@ -30,6 +30,9 @@ internal sealed partial class DemoWorkspaceService
     private IRunningCheckService RunningCheckServiceRef => runningCheckService;
     private ISparesService SparesServiceRef => sparesService;
     private IFleetService FleetServiceRef => fleetService;
+    private IVisitorService VisitorServiceRef => visitorService;
+    private IVisitorCardService VisitorCardServiceRef => visitorCardService;
+    private IPatrolService PatrolServiceRef => patrolService;
 
     private const string FactoryCode = "KPK";
     private const int HistoryDays = 120;
@@ -79,12 +82,23 @@ internal sealed partial class DemoWorkspaceService
 
             await AddJobHistoryAsync(ct);
             await AddOpenJobsAsync(ct);
+            await SaveBackdatedAsync(ct);
 
+            // Everything so far is saved. Stop tracking it: the security content makes hundreds of small saves (one
+            // per patrol scan), and each would otherwise re-check every row the demo has created.
+            Db.ChangeTracker.Clear();
+            await AddSecurityAsync(ct);
+            await SaveBackdatedAsync(ct);
+        }
+
+        private async Task SaveBackdatedAsync(CancellationToken ct)
+        {
             foreach (var (entity, createdAt) in _createdDates)
             {
                 entity.CreatedAt = createdAt;
             }
 
+            _createdDates.Clear();
             await Db.SaveChangesAsync(ct);
         }
 
@@ -155,7 +169,7 @@ internal sealed partial class DemoWorkspaceService
                     HasEmail = false,
                     Role = login.Role,
                     JobTitle = login.JobTitle,
-                    Department = "Maintenance",
+                    Department = LoginGrants.ContainsKey(login.Username) ? "Security" : "Maintenance",
                     IsActive = true,
                     HasAllBranchAccess = true,
                     MustChangePassword = false,
@@ -164,7 +178,24 @@ internal sealed partial class DemoWorkspaceService
                 user.PasswordHash = service.PasswordHasherRef.HashPassword(user, password);
                 Db.Users.Add(user);
                 _users[login.Username] = user;
+                foreach (var capability in LoginGrants.GetValueOrDefault(login.Username) ?? [])
+                {
+                    Db.UserPermissionOverrides.Add(new UserPermissionOverride { TenantId = _tenantId, UserId = user.Id, Capability = capability, IsAllowed = true });
+                }
             }
+
+            // The second night guard: patrols alternate between the two. Not a demo login, so its password is unusable.
+            var collins = new User
+            {
+                TenantId = _tenantId, DefaultBranchId = branch.Id, FullName = "Collins Rono", Username = "collins",
+                Email = $"collins.{DemoWorkspace.Slug}@{DemoWorkspace.NoEmailDomain}", HasEmail = false, Role = AppRoles.Technician,
+                JobTitle = "Security Guard", Department = "Security", IsActive = true, HasAllBranchAccess = true, MustChangePassword = false,
+                Permission = new UserPermission(),
+            };
+            collins.PasswordHash = service.PasswordHasherRef.HashPassword(collins, Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)));
+            Db.Users.Add(collins);
+            Db.UserPermissionOverrides.Add(new UserPermissionOverride { TenantId = _tenantId, UserId = collins.Id, Capability = PermissionNames.SecurityPatrol, IsAllowed = true });
+            _users["collins"] = collins;
 
             AddTechnician("kevin", _users["technician"].Id, "Kevin Langat", "Electrical", "+254 711 000 101");
             AddTechnician("peter", null, "Peter Rotich", "Mechanical", "+254 711 000 102");
@@ -504,6 +535,296 @@ internal sealed partial class DemoWorkspaceService
             }
 
             await Db.SaveChangesAsync(ct);
+        }
+
+        // ── Site security: visitors and patrols ─────────────────────────────
+
+        /// <summary>
+        /// The two Factory Operations add-ons, set up the way a customer would: the tea template's access zones and
+        /// patrol checkpoints, a box of visitor and contractor cards at the gate, a week of night rounds (the guard
+        /// app accepts scans up to a week old, so they go through the real scan checks), security incidents and shift
+        /// handovers, and a month of visits with today's visitors still on site. Factory time is UTC+3.
+        /// </summary>
+        private async Task AddSecurityAsync(CancellationToken ct)
+        {
+            await service.VisitorServiceRef.SeedZonesAsync(_tenantId, _factory.Id, ct);
+            await service.PatrolServiceRef.SeedCheckpointsAsync(_tenantId, _factory.Id, ct);
+            await service.VisitorCardServiceRef.AddBatchAsync(_tenantId, new NewCardBatch(_factory.Id, "V-", 1, 40, VisitorCardKinds.Visitor, "Blue"), ct);
+            await service.VisitorCardServiceRef.AddBatchAsync(_tenantId, new NewCardBatch(_factory.Id, "C-", 1, 15, VisitorCardKinds.Contractor, "Orange"), ct);
+
+            await AddVisitsAsync(ct);
+            await SaveBackdatedAsync(ct); // before the patrols, which stop tracking rows as they go
+            await AddPatrolsAsync(ct);
+        }
+
+        private static DateTime FactoryLocal(DateTime utc) => utc.AddHours(3);
+
+        private static DateTime FromFactoryLocal(DateTime local) => DateTime.SpecifyKind(local.AddHours(-3), DateTimeKind.Utc);
+
+        private async Task AddPatrolsAsync(CancellationToken ct)
+        {
+            var patrol = service.PatrolServiceRef;
+            var route = await Db.PatrolRoutes.AsNoTracking().Include(x => x.Checkpoints).ThenInclude(x => x.Checkpoint)
+                .SingleAsync(x => x.TenantId == _tenantId, ct);
+            var stops = route.Checkpoints.OrderBy(x => x.Sequence).Select(x => x.Checkpoint!).ToList();
+            PatrolActor Guard(string key) => new(_users[key].Id, _users[key].FullName);
+
+            // Six nights back (inside the guard app's one-week limit) through tomorrow night.
+            const int nights = 6;
+            await patrol.GenerateRunsAsync(_tenantId, _now.AddDays(-nights), TimeSpan.FromDays(nights) + TimeSpan.FromHours(36), ct);
+
+            var runs = await Db.PatrolRuns.Where(x => x.TenantId == _tenantId && x.DueFrom < _now).OrderBy(x => x.DueFrom).ToListAsync(ct);
+            var today = FactoryLocal(_now).Date;
+            var slotOfNight = new Dictionary<DateTime, int>();
+            foreach (var run in runs)
+            {
+                // A night starts at 18:00; the rounds after midnight belong to the night before.
+                var local = FactoryLocal(run.DueFrom);
+                var night = local.Hour < 12 ? local.Date.AddDays(-1) : local.Date;
+                var slot = slotOfNight[night] = slotOfNight.GetValueOrDefault(night, -1) + 1;
+                var nightsAgo = (today - night).Days;
+                var guard = Guard(night.DayOfYear % 2 == 0 ? "guard" : "collins");
+
+                // The stories a supervisor finds on the board: one missed round, one cut short, one out of order,
+                // and the perimeter fence found cut.
+                if (nightsAgo == 4 && slot == 3) continue;
+                var lastStop = nightsAgo == 2 && slot == 4 ? 6 : stops.Count - 1;
+                var order = Enumerable.Range(0, lastStop + 1).ToList();
+                if (nightsAgo == 3 && slot == 1)
+                {
+                    order.Insert(4, 5); // the guard skipped ahead to the boiler house, then went back
+                }
+
+                var at = run.DueFrom.AddMinutes(2 + _random.Next(0, 7));
+                foreach (var index in order)
+                {
+                    at = at.AddSeconds(120 + _random.Next(0, 90));
+                    if (at > _now.AddMinutes(-1)) break; // tonight's round in progress: only what has been walked so far
+                    var stop = stops[index];
+                    var fenceCut = nightsAgo == 1 && slot == 2 && stop.Name == "Perimeter fence";
+                    var answers = (stop.Questions ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Select(q => new ScanAnswer(q, !(fenceCut && q.StartsWith("Fence", StringComparison.Ordinal)))).ToList();
+                    await patrol.ScanAsync(_tenantId, new NewScan(
+                        Guid.NewGuid(), $"CHECKPOINT:{stop.TagToken}", at, run.Id, DeviceId: "Gate phone 1", Answers: answers,
+                        Note: fenceCut ? "Fence cut behind the firewood store, a gap of about one metre. Fresh footprints inside." : null), guard, ct);
+                }
+
+                Db.ChangeTracker.Clear(); // each scan is saved as it is made; keep the next round's saves small
+            }
+
+            // Close the rounds whose time is up: the missed and the cut-short ones become Missed and Partial.
+            await patrol.CloseOverdueAsync(_tenantId, _now, ct);
+
+            var supervisor = _users["security"];
+            var fence = await Db.Incidents.SingleAsync(x => x.TenantId == _tenantId && x.Category == IncidentCategories.Security, ct);
+            fence.Severity = "Moderate";
+            fence.ResponseStatus = SecurityResponseStatuses.Contained;
+            fence.Status = IncidentStatuses.Investigating;
+            fence.OwnerUserId = supervisor.Id;
+            fence.OwnerName = supervisor.FullName;
+            fence.ImmediateAction = "Gap closed with razor wire before dawn; the fencing contractor is booked to replace the panel.";
+
+            var fuelStore = stops.Single(x => x.Name == "Fuel and firewood store");
+            var theft = await patrol.ReportIncidentAsync(_tenantId, new NewSecurityIncident(
+                _factory.Id, SecurityIncidentKinds.AttemptedTheft, "Attempted theft of firewood from the fuel store",
+                "Two men were loading split firewood onto a handcart at the back of the fuel store. They ran towards the tea estate when the guard raised the alarm, leaving the cart and a cut padlock.",
+                "Moderate", FromFactoryLocal(today.AddDays(-3).AddHours(3).AddMinutes(40)), fuelStore.Id,
+                PersonsInvolved: "Two men, not employees.", ImmediateAction: "Alarm raised, store relocked with a new padlock, reported to Kapkoros police post."), Guard("collins"), ct);
+            theft.ResponseStatus = SecurityResponseStatuses.Contained;
+            theft.Status = IncidentStatuses.Investigating;
+            theft.OwnerUserId = supervisor.Id;
+            theft.OwnerName = supervisor.FullName;
+            theft.PoliceObNumber = $"OB 14/{today.AddDays(-2):dd/MM/yyyy}";
+            theft.ReportedToAuthority = true;
+
+            var vehicle = await patrol.ReportIncidentAsync(_tenantId, new NewSecurityIncident(
+                _factory.Id, SecurityIncidentKinds.SuspiciousVehicle, "Pickup parked with its lights off by the leaf shed gate",
+                "A white pickup stopped outside the green leaf shed gate and drove off towards Kipchimchim when the guard approached with a torch.",
+                "Minor", FromFactoryLocal(today.AddDays(-5).AddHours(2).AddMinutes(10)),
+                PersonsInvolved: "Two men in the cab; registration partly read as KDE 4.", ImmediateAction: "Gate house told by radio; description logged."), Guard("guard"), ct);
+            vehicle.ResponseStatus = SecurityResponseStatuses.Closed;
+            vehicle.Status = IncidentStatuses.Closed;
+            vehicle.OwnerUserId = supervisor.Id;
+            vehicle.OwnerName = supervisor.FullName;
+            vehicle.ClosedAt = FromFactoryLocal(today.AddDays(-5).AddHours(9));
+            vehicle.ClosedByName = supervisor.FullName;
+
+            // Morning handovers from the night guard to the day shift, acknowledged.
+            for (var daysAgo = 2; daysAgo >= 0; daysAgo--)
+            {
+                var handedAt = FromFactoryLocal(today.AddDays(-daysAgo).AddHours(6).AddMinutes(5));
+                if (handedAt > _now) continue;
+                var night = today.AddDays(-daysAgo - 1);
+                var (outgoing, incoming) = night.DayOfYear % 2 == 0 ? ("guard", "collins") : ("collins", "guard");
+                var handover = await patrol.HandOverAsync(_tenantId, new NewHandover(_factory.Id, "Night shift", _users[incoming].Id,
+                    daysAgo == 1 ? "Perimeter fence behind the firewood store patched with razor wire; keep an eye on it until the contractor replaces the panel." : "Quiet night, all rounds walked.",
+                    "Gate keys, 2 radios, torch, patrol phone (charged)."), Guard(outgoing), ct);
+                await patrol.AcknowledgeHandoverAsync(_tenantId, handover.Id, Guard(incoming), ct);
+                handover.HandedOverAt = handedAt;
+                handover.AcknowledgedAt = handedAt.AddMinutes(8);
+                _createdDates.Add((handover, handedAt));
+            }
+
+            foreach (var incident in new[] { fence, theft, vehicle })
+            {
+                _createdDates.Add((incident, incident.OccurredAt.AddMinutes(10)));
+            }
+
+            await Db.SaveChangesAsync(ct);
+        }
+
+        private async Task AddVisitsAsync(CancellationToken ct)
+        {
+            var visitors = service.VisitorServiceRef;
+            var zones = await Db.AccessZones.AsNoTracking().Where(x => x.TenantId == _tenantId).ToDictionaryAsync(x => x.Name, x => x.Id, ct);
+            var escortZones = await Db.AccessZones.AsNoTracking().Where(x => x.TenantId == _tenantId && x.RequiresEscort).Select(x => x.Name).ToListAsync(ct);
+            var gate = new VisitActor(_users["security"].Id, _users["security"].FullName, CanManage: true);
+            VisitActor Host(string key) => new(_users[key].Id, _users[key].FullName);
+            var today = FactoryLocal(_now).Date;
+            var nextCard = new Dictionary<string, int> { ["V-"] = 0, ["C-"] = 0 };
+            string Card(string prefix) => $"{prefix}{(nextCard[prefix] = nextCard[prefix] % 15 + 1):000}";
+
+            // A month of visits, oldest first so the visit numbers run in date order. People who come back keep their
+            // record (matched by ID number), and the gate gives the induction once and then sees it is current.
+            (int DaysAgo, double At, double Hours, string Purpose, string Host, string[] Zones, (string Name, string Company, string Id)[] People, string? Vehicle)[] history =
+            [
+                (29, 9.5, 2, VisitPurposes.Meeting, "manager", ["Reception and offices"], [("Nancy Wambui", "KTDA Kericho region", "23415678")], "KCR 118B"),
+                (27, 8.25, 7, VisitPurposes.ContractorWork, "planner", ["Processing hall", "Stores and workshop"], [("Hassan Omondi", "Precision Roller Works", "27788120"), ("Brian Otieno", "Precision Roller Works", "31120456")], "KCW 902M"),
+                (26, 10, 1.5, VisitPurposes.Delivery, "stores", ["Stores and workshop"], [("Peter Mwangi", "Davis & Shirtliff", "22987311")], "KBZ 771T"),
+                (24, 11, 3, VisitPurposes.Inspection, "admin", ["Boiler house"], [("Eng. Grace Atieno", "DOSHS Kericho", "20111987")], null),
+                (22, 9, 6, VisitPurposes.ContractorWork, "admin", ["Boiler house"], [("Daniel Kimutai", "Rift Valley Boiler Services", "25566001"), ("Kelvin Mutua", "Rift Valley Boiler Services", "33450912")], "KCK 455R"),
+                (20, 14, 1, VisitPurposes.Interview, "manager", ["Reception and offices"], [("Esther Chelangat", "", "35567120")], null),
+                (19, 7.5, 1, VisitPurposes.Delivery, "stores", ["Weighbridge"], [("Gideon Langat", "Kericho Fuelwood Suppliers", "29001342")], "KAX 310J"),
+                (17, 10.5, 4, VisitPurposes.Audit, "admin", ["Reception and offices", "Processing hall", "Packing and finished goods"], [("Mary Njoroge", "Rainforest Alliance", "21456789")], "KDB 640A"),
+                (15, 9, 2, VisitPurposes.Meeting, "manager", ["Reception and offices"], [("Nancy Wambui", "KTDA Kericho region", "23415678")], "KCR 118B"),
+                (13, 8, 8, VisitPurposes.ContractorWork, "planner", ["Stores and workshop"], [("Mercy Chepkemoi", "Kericho Electrical Contractors", "26678345")], "KCF 210D"),
+                (12, 7.5, 1, VisitPurposes.Delivery, "stores", ["Weighbridge"], [("Gideon Langat", "Kericho Fuelwood Suppliers", "29001342")], "KAX 310J"),
+                (10, 11, 1, VisitPurposes.Meeting, "admin", ["Reception and offices"], [("Samuel Rotich", "Equity Bank Kericho", "24456002")], null),
+                (8, 9.5, 5, VisitPurposes.ContractorWork, "planner", ["Processing hall"], [("Hassan Omondi", "Precision Roller Works", "27788120")], "KCW 902M"),
+                (6, 13, 1.5, VisitPurposes.Delivery, "stores", ["Stores and workshop"], [("Peter Mwangi", "Davis & Shirtliff", "22987311")], "KBZ 771T"),
+                (5, 7.5, 1, VisitPurposes.Delivery, "stores", ["Weighbridge"], [("Gideon Langat", "Kericho Fuelwood Suppliers", "29001342")], "KAX 310J"),
+                (3, 10, 2, VisitPurposes.Meeting, "manager", ["Reception and offices"], [("Paul Kiprono", "Ministry of Agriculture", "22001876"), ("Lucy Achieng", "Ministry of Agriculture", "30098712")], "GKB 412C"),
+                (2, 9, 3, VisitPurposes.Inspection, "admin", ["Reception and offices", "Fuel and firewood store"], [("Insp. John Kariuki", "Kapkoros Police Post", "19876543")], null),
+                (1, 15, 1, VisitPurposes.Interview, "manager", ["Reception and offices"], [("Collins Kiprop", "", "36678901")], null),
+            ];
+
+            foreach (var h in history)
+            {
+                var arrival = FromFactoryLocal(today.AddDays(-h.DaysAgo).AddHours(h.At));
+                await AddCompletedVisitAsync(h.Purpose, h.Host, h.Zones, h.People, h.Vehicle, arrival, arrival.AddHours(h.Hours));
+            }
+
+            // Caught leaving with made tea under the firewood: blocked at the gate from now on.
+            var banned = await Db.Visitors.SingleAsync(x => x.TenantId == _tenantId && x.FullName == "Gideon Langat", ct);
+            await visitors.SetBlockedAsync(_tenantId, banned.Id, true, $"Found with 6 kg of made tea hidden in the fuelwood lorry on {today.AddDays(-5):dd MMM}. Do not admit.", gate, ct);
+
+            // Today: a roller fitter at work in the processing hall with an escort, and the KTDA officer in a meeting.
+            var morning = FromFactoryLocal(today.AddHours(8));
+            var arrived = morning < _now.AddMinutes(-40) ? morning : _now.AddMinutes(-40);
+            await AddOnSiteVisitAsync(VisitPurposes.ContractorWork, "planner", ["Processing hall"],
+                [("Hassan Omondi", "Precision Roller Works", "27788120"), ("Brian Otieno", "Precision Roller Works", "31120456")], "KCW 902M", arrived, 9, "technician");
+            await AddOnSiteVisitAsync(VisitPurposes.Meeting, "manager", ["Reception and offices"],
+                [("Nancy Wambui", "KTDA Kericho region", "23415678")], "KCR 118B", arrived.AddMinutes(25), 3, null);
+
+            // Coming later: a fuel oil delivery this afternoon and a KEBS audit tomorrow, both approved; a sales visit
+            // the gate booked for the manager, still waiting for the manager to approve.
+            await visitors.CreateAsync(_tenantId, new NewVisit(_factory.Id, VisitPurposes.Delivery,
+                [new VisitorDetails("Joseph Kamau", "+254 720 551 230", null, "Vivo Energy", "National ID", "28890011")], _users["stores"].Id,
+                _now.AddHours(3), _now.AddHours(5), [zones["Fuel and firewood store"]], VehicleRegistration: "KCU 802Z", Notes: "18,000 L furnace oil for the boiler day tank."), Host("stores"), ct);
+            await visitors.CreateAsync(_tenantId, new NewVisit(_factory.Id, VisitPurposes.Audit,
+                [new VisitorDetails("Faith Mutheu", "+254 722 117 905", null, "Kenya Bureau of Standards", "National ID", "25113478"),
+                 new VisitorDetails("Ali Hussein", "+254 733 640 221", null, "Kenya Bureau of Standards", "National ID", "30772219")], _users["admin"].Id,
+                FromFactoryLocal(today.AddDays(1).AddHours(9)), FromFactoryLocal(today.AddDays(1).AddHours(15)),
+                [zones["Reception and offices"], zones["Processing hall"], zones["Packing and finished goods"]], Notes: "Annual product certification audit."), Host("admin"), ct);
+            await visitors.CreateAsync(_tenantId, new NewVisit(_factory.Id, VisitPurposes.Meeting,
+                [new VisitorDetails("Kevin Mbugua", "+254 711 902 334", null, "Bühler East Africa", "National ID", "29934410")], _users["manager"].Id,
+                FromFactoryLocal(today.AddDays(1).AddHours(11)), FromFactoryLocal(today.AddDays(1).AddHours(12)),
+                [zones["Reception and offices"]], Notes: "Wants to present a new colour sorter."), new VisitActor(_users["security"].Id, _users["security"].FullName), ct);
+
+            async Task<List<VisitAttendee>> CreateAndCheckInAsync(string purpose, string host, string[] zoneNames, (string Name, string Company, string Id)[] people,
+                string? registration, string? escort)
+            {
+                var visit = await visitors.CreateAsync(_tenantId, new NewVisit(_factory.Id, purpose,
+                    people.Select(p => new VisitorDetails(p.Name, "+254 7" + p.Id[..8], null, p.Company.Length == 0 ? null : p.Company, "National ID", p.Id)).ToList(),
+                    _users[host].Id, _now.AddMinutes(-5), _now.AddHours(4), zoneNames.Select(z => zones[z]).ToList(), VehicleRegistration: registration), Host(host), ct);
+                var attendees = await Db.VisitAttendees.Where(x => x.VisitId == visit.Id).ToListAsync(ct);
+                var needsEscort = zoneNames.Any(escortZones.Contains);
+                var cardPrefix = purpose == VisitPurposes.ContractorWork ? "C-" : "V-";
+                foreach (var attendee in attendees)
+                {
+                    await visitors.CheckInAsync(_tenantId, attendee.Id, new GateConfirmation(
+                        IdVerified: true, PpeConfirmed: true, RecordInduction: true, EscortUserId: needsEscort ? _users[escort ?? host].Id : null, CardCode: Card(cardPrefix)), gate, ct);
+                }
+
+                return attendees;
+            }
+
+            async Task AddCompletedVisitAsync(string purpose, string host, string[] zoneNames, (string Name, string Company, string Id)[] people,
+                string? registration, DateTime arrival, DateTime departure)
+            {
+                var attendees = await CreateAndCheckInAsync(purpose, host, zoneNames, people, registration, null);
+                foreach (var attendee in attendees)
+                {
+                    await visitors.CheckOutAsync(_tenantId, attendee.Id, gate, ct);
+                }
+
+                await BackdateVisitAsync(attendees, arrival, departure);
+            }
+
+            async Task AddOnSiteVisitAsync(string purpose, string host, string[] zoneNames, (string Name, string Company, string Id)[] people,
+                string? registration, DateTime arrival, double hours, string? escort)
+            {
+                var attendees = await CreateAndCheckInAsync(purpose, host, zoneNames, people, registration, escort);
+                await BackdateVisitAsync(attendees, arrival, null);
+                var visit = await Db.Visits.SingleAsync(x => x.Id == attendees[0].VisitId, ct);
+                // Still within their time whenever the demo is reset, so they show as on site rather than overstayed.
+                visit.ExpectedTo = arrival.AddHours(hours) > _now.AddHours(2) ? arrival.AddHours(hours) : _now.AddHours(2);
+            }
+
+            // The gate stamps everything "now"; move the visit, its people, cards and inductions to when it happened.
+            async Task BackdateVisitAsync(List<VisitAttendee> attendees, DateTime arrival, DateTime? departure)
+            {
+                var visit = await Db.Visits.SingleAsync(x => x.Id == attendees[0].VisitId, ct);
+                var booked = arrival.AddHours(-20);
+                visit.ExpectedFrom = arrival.AddMinutes(-15);
+                visit.ExpectedTo = (departure ?? arrival.AddHours(4)).AddMinutes(30);
+                visit.DecidedAt = booked;
+                visit.CompletedAt = departure;
+                _createdDates.Add((visit, booked));
+                var minute = 0;
+                foreach (var attendee in attendees)
+                {
+                    var inAt = arrival.AddMinutes(minute++);
+                    attendee.CheckedInAt = inAt;
+                    attendee.CardIssuedAt = attendee.CardId is null ? null : inAt;
+                    if (departure is { } outAt)
+                    {
+                        attendee.CheckedOutAt = outAt.AddMinutes(minute);
+                        attendee.CardReturnedAt = attendee.CardId is null ? null : outAt.AddMinutes(minute);
+                    }
+
+                    _createdDates.Add((attendee, booked));
+                    var visitor = await Db.Visitors.SingleAsync(x => x.Id == attendee.VisitorId, ct);
+                    visitor.LastVisitAt = inAt;
+                    foreach (var induction in await Db.TrainingRecords
+                        .Where(x => x.TenantId == _tenantId && x.PersonName == visitor.FullName && x.CompletedOn == _now.Date).ToListAsync(ct))
+                    {
+                        induction.CompletedOn = FactoryLocal(inAt).Date;
+                        induction.ExpiresOn = induction.CompletedOn.AddYears(1);
+                    }
+                }
+
+                // The vehicle came in with them and, for a finished visit, the gate logged it out when they left.
+                foreach (var movement in await Db.VehicleMovements.Where(x => x.VisitId == visit.Id).ToListAsync(ct))
+                {
+                    movement.EnteredAt = arrival;
+                    movement.ExitedAt = departure?.AddMinutes(minute);
+                    movement.ExitedByName = departure is null ? null : gate.Name;
+                    _createdDates.Add((movement, arrival));
+                }
+
+                await Db.SaveChangesAsync(ct);
+            }
         }
 
         // ── Jobs ─────────────────────────────────────────────────────────────

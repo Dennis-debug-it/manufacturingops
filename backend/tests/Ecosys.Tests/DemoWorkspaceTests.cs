@@ -64,6 +64,27 @@ public sealed class DemoWorkspaceTests
                 Assert.True(response.StatusCode == HttpStatusCode.OK, $"{path} returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
             }
 
+            // Site security, as the security supervisor (gate desk, patrol board, incidents) and as a guard.
+            using (var security = app.CreateClient())
+            {
+                await SignInAsync(security, "security", first.Password, DemoWorkspace.Slug);
+                foreach (var path in new[]
+                {
+                    "/api/security/board", "/api/security/incidents", "/api/security/handovers", "/api/visitors/board", "/api/visitors/visits", "/api/visitors/on-site",
+                })
+                {
+                    var response = await security.GetAsync(path);
+                    Assert.True(response.StatusCode == HttpStatusCode.OK, $"security {path} returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+                }
+            }
+
+            using (var guard = app.CreateClient())
+            {
+                await SignInAsync(guard, "guard", first.Password, DemoWorkspace.Slug);
+                var response = await guard.GetAsync("/api/security/guard");
+                Assert.True(response.StatusCode == HttpStatusCode.OK, $"guard /api/security/guard returned {(int)response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+            }
+
             // Opening it from the platform as the technician needs no password.
             var opened = await PostAsync<JsonElement>(platform, "/api/platform/demo-workspace/open", new { username = "technician" });
             Assert.Equal("Technician", opened.GetProperty("user").GetProperty("role").GetString(), ignoreCase: true);
@@ -122,6 +143,27 @@ public sealed class DemoWorkspaceTests
             Assert.False(user.HasEmail);
             Assert.EndsWith("@no-email.invalid", user.Email);
         });
+
+        // Site security: a week of night rounds with a missed one, a cut-short one and an out-of-order scan; the
+        // patrol finding plus two reported incidents; a month of visits with people on site now and one blocked.
+        Assert.Contains("security", license.OperationsAddOns);
+        Assert.Contains("visitors", license.OperationsAddOns);
+        var runs = await db.PatrolRuns.Where(x => x.TenantId == tenantId).ToListAsync();
+        Assert.True(runs.Count(x => x.Status == PatrolRunStatuses.Completed) >= 25, $"Expected a week of completed rounds, got {runs.Count(x => x.Status == PatrolRunStatuses.Completed)}.");
+        Assert.Contains(runs, x => x.Status == PatrolRunStatuses.Missed);
+        Assert.Contains(runs, x => x.Status == PatrolRunStatuses.Partial);
+        Assert.Contains(runs, x => x.DueFrom > DateTime.UtcNow);
+        Assert.Contains(await db.CheckpointScans.Where(x => x.TenantId == tenantId).Select(x => x.Validation).ToListAsync(), v => v == ScanValidations.OutOfSequence);
+        Assert.Equal(3, await db.Incidents.CountAsync(x => x.TenantId == tenantId && x.Category == IncidentCategories.Security));
+        var visits = await db.Visits.Where(x => x.TenantId == tenantId).ToListAsync();
+        Assert.True(visits.Count(x => x.Status == VisitStatuses.Completed) >= 15);
+        Assert.True(visits.Min(x => x.CreatedAt) < DateTime.UtcNow.AddDays(-25));
+        Assert.Single(visits, x => x.Status == VisitStatuses.PendingApproval);
+        Assert.Equal(3, await db.VisitAttendees.CountAsync(x => x.TenantId == tenantId && x.CheckedInAt != null && x.CheckedOutAt == null));
+        Assert.Single(await db.Visitors.Where(x => x.TenantId == tenantId && x.IsBlocked).ToListAsync());
+        // Only today's visitors' vehicles are still inside; the gate logged the others out.
+        Assert.Equal(2, await db.VehicleMovements.CountAsync(x => x.TenantId == tenantId && x.ExitedAt == null));
+        Assert.All(await db.Visits.Where(x => x.TenantId == tenantId && x.Status == VisitStatuses.OnSite).ToListAsync(), visit => Assert.True(visit.ExpectedTo > DateTime.UtcNow));
 
         // Assignment rows are the source of truth; the job column only mirrors them.
         var jobs = await db.WorkOrders.Where(x => x.TenantId == tenantId).ToListAsync();
