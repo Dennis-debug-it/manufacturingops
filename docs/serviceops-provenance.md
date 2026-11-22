@@ -26,4 +26,9 @@ Updated as each out-of-scope module is removed in Phase 0.
 
 | Module | Removed in commit | Notes |
 |---|---|---|
-| | | |
+| Technician location (GPS on arrival/departure, location prompt) | `58e574c` | Migration `RemoveTechnicianLocationTracking`. Patrol and fleet GPS kept. |
+| Clients, sites, contracts, client wizard, client/site imports | `2c949a3` | Screens and APIs gone; `Client`/`Site`/`Contract` tables and work-order `ClientId`/`SiteId` kept (factory jobs are `ClientId == null`). |
+| Rate cards, preferential rates | `2c949a3` | Exchange rates kept (spares purchasing). |
+| Client ETA emails, public job tracking page | `2c949a3` | Migration `RemoveServiceOpsLeftovers` drops `eta_notification_settings` and `work_orders.TrackingToken`. |
+| Technician travel steps (On My Way / Arrived / Departure), site visits | `2c949a3` | Arrival no longer required to complete. `work_order_visits` table kept for history. |
+| Work order map view, inventory Locations page, "Waiting on client" hold | `2c949a3` | |
