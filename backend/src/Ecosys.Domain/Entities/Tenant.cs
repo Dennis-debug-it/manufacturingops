@@ -59,8 +59,6 @@ public sealed class Tenant : AuditableEntity
     public ICollection<User> Users { get; set; } = new List<User>();
     public ICollection<UserBranchAssignment> UserBranchAssignments { get; set; } = new List<UserBranchAssignment>();
     public ICollection<UserSession> UserSessions { get; set; } = new List<UserSession>();
-    public ICollection<Client> Clients { get; set; } = new List<Client>();
-    public ICollection<OperationalSystem> Systems { get; set; } = new List<OperationalSystem>();
     public ICollection<Asset> Assets { get; set; } = new List<Asset>();
     public ICollection<Technician> Technicians { get; set; } = new List<Technician>();
     public ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
@@ -84,8 +82,6 @@ public sealed class Tenant : AuditableEntity
     public ICollection<EmailSetting> EmailSettings { get; set; } = new List<EmailSetting>();
     public ICollection<TenantNotificationSetting> TenantNotificationSettings { get; set; } = new List<TenantNotificationSetting>();
     public ICollection<TenantNotificationRecipient> TenantNotificationRecipients { get; set; } = new List<TenantNotificationRecipient>();
-    public ICollection<IntakeProtocol> IntakeProtocols { get; set; } = new List<IntakeProtocol>();
-    public ICollection<EmailIntakeSetting> EmailIntakeSettings { get; set; } = new List<EmailIntakeSetting>();
     public ICollection<MonitoringSetting> MonitoringSettings { get; set; } = new List<MonitoringSetting>();
     public ICollection<MonitoringWebhookIntegration> MonitoringWebhookIntegrations { get; set; } = new List<MonitoringWebhookIntegration>();
     public ICollection<NotificationSetting> NotificationSettings { get; set; } = new List<NotificationSetting>();
@@ -96,7 +92,6 @@ public sealed class Tenant : AuditableEntity
     public ICollection<WorkOrderPhotoEvidence> WorkOrderPhotoEvidence { get; set; } = new List<WorkOrderPhotoEvidence>();
     public ICollection<WorkOrderSignature> WorkOrderSignatures { get; set; } = new List<WorkOrderSignature>();
     public ICollection<WorkOrderMaterialUsage> WorkOrderMaterialUsages { get; set; } = new List<WorkOrderMaterialUsage>();
-    public ICollection<ClientPreferentialRate> ClientPreferentialRates { get; set; } = new List<ClientPreferentialRate>();
     public ICollection<FinanceApprovalRule> FinanceApprovalRules { get; set; } = new List<FinanceApprovalRule>();
     public ICollection<MaterialIssue> MaterialIssues { get; set; } = new List<MaterialIssue>();
 }

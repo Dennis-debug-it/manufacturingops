@@ -129,14 +129,6 @@ public sealed class SlaDefinitionsController(
         var definition = await LoadAsync(id, cancellationToken)
             ?? throw new NotFoundException("SLA definition was not found.");
 
-        var isInUse = await dbContext.Clients.AnyAsync(
-            x => x.TenantId == TenantId && x.SlaDefinitionId == id,
-            cancellationToken);
-
-        if (isInUse)
-        {
-            throw new BusinessRuleException("This SLA definition is assigned to one or more clients.");
-        }
 
         dbContext.SlaDefinitions.Remove(definition);
         await dbContext.SaveChangesAsync(cancellationToken);

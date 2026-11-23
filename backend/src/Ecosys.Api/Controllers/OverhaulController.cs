@@ -54,7 +54,7 @@ public sealed class OverhaulController(
         Guid factoryId;
         if (request.AssetId is { } assetId)
         {
-            var node = await dbContext.Assets.Where(x => x.TenantId == TenantId && x.Id == assetId && x.ClientId == null).Select(x => x.OrgNodeId).SingleOrDefaultAsync(cancellationToken)
+            var node = await dbContext.Assets.Where(x => x.TenantId == TenantId && x.Id == assetId).Select(x => x.OrgNodeId).SingleOrDefaultAsync(cancellationToken)
                 ?? throw new BusinessRuleException("The asset was not found.");
             factoryId = await windowService.FactoryOfAsync(TenantId, node, cancellationToken) ?? throw new BusinessRuleException("The asset is not in a factory.");
         }
@@ -83,7 +83,7 @@ public sealed class OverhaulController(
     {
         EnsureCanPlan();
         if (string.IsNullOrWhiteSpace(request.Reason)) throw new BusinessRuleException("Say why the job waits for the overhaul.");
-        var job = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.WorkOrderId && x.ClientId == null, cancellationToken)
+        var job = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == request.WorkOrderId, cancellationToken)
             ?? throw new NotFoundException("The job was not found.");
         if (JobDone.Contains(job.Status) || JobGone.Contains(job.Status)) throw new BusinessRuleException("The job is already finished.");
         var factoryId = job.OrgNodeId is { } node ? await windowService.FactoryOfAsync(TenantId, node, cancellationToken) : null;

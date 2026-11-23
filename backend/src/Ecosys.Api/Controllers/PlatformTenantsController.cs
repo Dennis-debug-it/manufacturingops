@@ -1092,7 +1092,6 @@ public sealed class PlatformTenantsController(
         var slug = TenantEmailIdentity.NormalizeSlug(string.IsNullOrWhiteSpace(requestedSlug) ? companyName : requestedSlug, string.IsNullOrWhiteSpace(requestedSlug));
         var address = TenantEmailIdentity.Address(slug);
         var exists = await dbContext.Tenants.AnyAsync(x => x.Slug.ToLower() == slug && x.Id != currentTenantId, cancellationToken)
-            || await dbContext.EmailIntakeSettings.AnyAsync(x => x.TenantId != currentTenantId && x.IntakeEmailAddress != null && x.IntakeEmailAddress.ToLower() == address, cancellationToken)
             || await dbContext.EmailSettings.AnyAsync(x => x.TenantId != currentTenantId &&
                 (x.ManagedEmailAddress == address || x.SenderAddress.ToLower() == address), cancellationToken);
         if (exists)

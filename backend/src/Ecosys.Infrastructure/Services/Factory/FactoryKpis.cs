@@ -77,7 +77,7 @@ internal sealed class FactoryKpiService(
             .Select(x => new { x.Id, x.Name, x.FactoryId, x.OrgNodeId }).ToListAsync(cancellationToken);
         var centreByNode = centres.Where(x => x.OrgNodeId != null).GroupBy(x => x.OrgNodeId!.Value).ToDictionary(g => g.Key, g => g.First());
 
-        var jobs = dbContext.WorkOrders.AsNoTracking().Where(x => x.TenantId == tenantId && x.ClientId == null && x.OrgNodeId != null);
+        var jobs = dbContext.WorkOrders.AsNoTracking().Where(x => x.TenantId == tenantId && x.OrgNodeId != null);
         if (nodes is not null) jobs = jobs.Where(x => nodes.Contains(x.OrgNodeId!.Value));
         var jobIds = jobs.Select(x => x.Id);
 
@@ -167,7 +167,7 @@ internal sealed class FactoryKpiService(
         var periodEnd = toUtc < now ? toUtc : now;
         var periodHours = Math.Max((decimal)(periodEnd - fromUtc).TotalHours, 1);
 
-        var jobs = dbContext.WorkOrders.AsNoTracking().Where(x => x.TenantId == tenantId && x.ClientId == null && x.OrgNodeId != null);
+        var jobs = dbContext.WorkOrders.AsNoTracking().Where(x => x.TenantId == tenantId && x.OrgNodeId != null);
         var assets = dbContext.Assets.AsNoTracking().Where(x => x.TenantId == tenantId && x.Status != "Inactive" && x.OrgNodeId != null);
         if (nodes is not null)
         {

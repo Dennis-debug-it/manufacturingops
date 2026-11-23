@@ -91,12 +91,6 @@ export interface MaterialIssue {
   workOrderNumber: string | null
   assetId: string | null
   assetName: string | null
-  clientId: string | null
-  clientName: string | null
-  siteId: string | null
-  siteName: string | null
-  systemId: string | null
-  systemName: string | null
   issuedToUserId: string | null
   issuedToUserName: string | null
   requestedByUserId: string

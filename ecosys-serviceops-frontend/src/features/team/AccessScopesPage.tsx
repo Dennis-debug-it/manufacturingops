@@ -79,7 +79,7 @@ export function AccessScopesPage() {
     <div className="space-y-4">
       <PageHeader
         title="Access Scopes"
-        subtitle="Where each granted capability applies — the whole organisation, a branch or region, a client or site, or only the user's own work."
+        subtitle="Where each granted capability applies — the whole organisation, a branch or region, or only the user's own work."
       />
       <TeamTabNav />
 

@@ -64,19 +64,6 @@ public sealed record WhatsAppOutboxItemResponse(
 
 public sealed record WhatsAppOutboxPageResponse(IReadOnlyList<WhatsAppOutboxItemResponse> Items, bool HasMore);
 
-/// <param name="ConsentMethod">InPerson, Phone or InWriting: how the contact agreed.</param>
-public sealed record RecordWhatsAppConsentRequest(string? PhoneNumber, bool ReceivesWhatsApp, string? ConsentMethod);
-
-public sealed record ContactWhatsAppResponse(
-    Guid ContactId,
-    string? Number,
-    bool ReceivesWhatsApp,
-    DateTime? ConsentAt,
-    string? ConsentMethod,
-    string? ConsentRecordedBy,
-    DateTime? VerifiedAt,
-    bool BlockedByStop);
-
 internal static class WhatsAppStatus
 {
     public static async Task<WhatsAppMyStatusResponse> BuildAsync(
@@ -88,7 +75,7 @@ internal static class WhatsAppStatus
         var blocked = number is not null && await db.WhatsAppOptOuts.AnyAsync(x => x.PhoneNumber == number, cancellationToken);
         var now = DateTime.UtcNow;
         var pending = await db.WhatsAppVerificationCodes.IgnoreQueryFilters()
-            .Where(x => x.TenantId == subject.TenantId && x.UserId == subject.UserId && x.ClientPortalUserId == subject.ClientPortalUserId
+            .Where(x => x.TenantId == subject.TenantId && x.UserId == subject.UserId
                 && x.ConsumedAt == null && x.ExpiresAt > now && x.AttemptCount < WhatsAppVerificationLimits.MaxAttempts)
             .OrderByDescending(x => x.CreatedAt)
             .Select(x => new { x.PhoneNumber, x.ExpiresAt })
@@ -262,85 +249,3 @@ public sealed class WhatsAppNotificationsController(
             keys);
     }
 }
-
-// ── Client contact consent (office) ──────────────────────────────────────────
-
-/// <summary>
-/// Office staff record that a client contact agreed to WhatsApp messages (design 4.2, R6): who recorded
-/// it, when, and how. Client messages go only to contacts marked here (or who opted in from the portal).
-/// </summary>
-[ApiController]
-[Authorize]
-[Route("api/clients/{clientId:guid}/portal-users/{contactId:guid}/whatsapp")]
-public sealed class ClientWhatsAppConsentController(
-    AppDbContext dbContext,
-    ITenantContext tenantContext,
-    IUserAccessService userAccessService,
-    IAuditLogService auditLogService) : TenantAwareControllerBase(tenantContext)
-{
-    [HttpGet]
-    public async Task<ActionResult<ContactWhatsAppResponse>> Get(Guid clientId, Guid contactId, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
-        return Ok(await MapAsync(await LoadAsync(clientId, contactId, cancellationToken), cancellationToken));
-    }
-
-    [HttpPut]
-    public async Task<ActionResult<ContactWhatsAppResponse>> Record(Guid clientId, Guid contactId, [FromBody] RecordWhatsAppConsentRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
-        var contact = await LoadAsync(clientId, contactId, cancellationToken);
-
-        if (request.ReceivesWhatsApp)
-        {
-            var country = await dbContext.Tenants.Where(x => x.Id == TenantId).Select(x => x.Country).SingleOrDefaultAsync(cancellationToken);
-            var number = WhatsAppPhoneNumbers.Normalize(request.PhoneNumber ?? contact.WhatsAppNumber ?? contact.Phone, country)
-                ?? throw new BusinessRuleException("Enter the contact's WhatsApp number, for example 0712 345 678 or +254 712 345 678.");
-            var method = WhatsAppConsentMethods.RecordedByStaff.FirstOrDefault(m => string.Equals(m, request.ConsentMethod?.Trim(), StringComparison.OrdinalIgnoreCase));
-            var keepsPortalConsent = method is null && contact.WhatsAppConsentMethod == WhatsAppConsentMethods.Portal && contact.WhatsAppNumber == number;
-            if (method is null && !keepsPortalConsent)
-                throw new BusinessRuleException("Say how the contact agreed: in person, by phone or in writing.");
-
-            if (!keepsPortalConsent)
-            {
-                contact.WhatsAppConsentAt = DateTime.UtcNow;
-                contact.WhatsAppConsentRecordedByUserId = UserId;
-                contact.WhatsAppConsentMethod = method;
-                if (contact.WhatsAppNumber != number)
-                    contact.WhatsAppVerifiedAt = null;
-            }
-            contact.WhatsAppNumber = number;
-            contact.ReceivesWhatsApp = true;
-        }
-        else
-        {
-            // Consent history stays; the contact just stops getting messages.
-            contact.ReceivesWhatsApp = false;
-        }
-        contact.UpdatedAt = DateTime.UtcNow;
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(TenantId, UserId, request.ReceivesWhatsApp ? "client.contact.whatsapp.consent" : "client.contact.whatsapp.off",
-            nameof(ClientPortalUser), contact.Id.ToString(),
-            request.ReceivesWhatsApp
-                ? $"Recorded WhatsApp consent for {contact.FullName} ({contact.WhatsAppConsentMethod})."
-                : $"Stopped WhatsApp messages to {contact.FullName}.", cancellationToken);
-        return Ok(await MapAsync(contact, cancellationToken));
-    }
-
-    private async Task<ClientPortalUser> LoadAsync(Guid clientId, Guid contactId, CancellationToken cancellationToken) =>
-        await dbContext.ClientPortalUsers.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.ClientId == clientId && x.Id == contactId, cancellationToken)
-        ?? throw new NotFoundException("Contact not found.");
-
-    private async Task<ContactWhatsAppResponse> MapAsync(ClientPortalUser contact, CancellationToken cancellationToken)
-    {
-        var recordedBy = contact.WhatsAppConsentRecordedByUserId is { } by
-            ? await dbContext.Users.Where(x => x.TenantId == TenantId && x.Id == by).Select(x => x.FullName).SingleOrDefaultAsync(cancellationToken)
-            : null;
-        var blocked = contact.WhatsAppNumber is not null && await dbContext.WhatsAppOptOuts.AnyAsync(x => x.PhoneNumber == contact.WhatsAppNumber, cancellationToken);
-        return new ContactWhatsAppResponse(contact.Id, contact.WhatsAppNumber, contact.ReceivesWhatsApp, contact.WhatsAppConsentAt,
-            contact.WhatsAppConsentMethod, recordedBy, contact.WhatsAppVerifiedAt, blocked);
-    }
-}
-
-// ── Portal contact's own opt-in ──────────────────────────────────────────────
-

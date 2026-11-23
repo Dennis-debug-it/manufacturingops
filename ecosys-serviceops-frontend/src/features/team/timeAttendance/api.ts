@@ -114,23 +114,10 @@ export interface TimesheetClockEntry {
   autoClockedOut: boolean
 }
 
-/** Time on one job on one day, from its site visits. */
-export interface TimesheetJobEntry {
-  date: string
-  workOrderId: string
-  workOrderNumber: string
-  title: string
-  visits: number
-  travelMinutes: number
-  onSiteMinutes: number
-  inProgress: boolean
-}
-
 export interface TimesheetDetail extends TimesheetListItem {
   dailyBreakdown: TimesheetDailyEntry[]
   auditTrail: TimesheetAuditEntry[]
   entries: TimesheetClockEntry[]
-  jobs: TimesheetJobEntry[]
 }
 
 export function useUpdateAttendanceEntry() {

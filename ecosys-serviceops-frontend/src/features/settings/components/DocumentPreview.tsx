@@ -64,11 +64,10 @@ const sampleLines = [
 ]
 
 const sampleReportSections: Record<string, string> = {
-  'service-details': 'Client: Nairobi Hospital · Site: Main Campus, Nairobi',
+  'service-details': 'Location: Main factory, Packing line · Asset: AHU-03 · Technician: James Otieno',
   problem: 'AHU-03 tripping on high static pressure alarm; airflow to Ward B reduced.',
   findings: 'Filters heavily loaded; belt tension low; pressure sensor within calibration.',
   'work-done': 'Replaced filter set, re-tensioned belt, verified static pressure at 320 Pa.',
-  equipment: 'AHU-03 (serviced) · AHU-04 · Chiller 1, with make, model, serial no. and location.',
   checklist: 'All checklist items passed (12 of 12).',
   materials: 'Air filter set (MERV 13) × 4 · Drive belt A-42 × 1',
   photos: '3 evidence photos attached.',

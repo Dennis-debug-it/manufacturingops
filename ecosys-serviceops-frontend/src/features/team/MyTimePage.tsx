@@ -11,7 +11,7 @@ import { getErrorStatus } from '../../shared/api/apiError'
 import { useApplyForLeave, useLeaveTypes, useMyLeave, useMyTimesheet } from './timeAttendance/api'
 import { savedMessage, useTechActions } from '../tech/offline/actions'
 import { useMyAttendanceView } from '../tech/offline/hooks'
-import { ClockSessions, JobBreakdown } from './timeAttendance/TimesheetSections'
+import { ClockSessions } from './timeAttendance/TimesheetSections'
 
 const fieldClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-[var(--app-primary)]'
 const labelClass = 'mb-1.5 block text-sm font-medium text-slate-700'
@@ -232,19 +232,14 @@ function TimesheetSection() {
   )
 }
 
-function WhereTimeWent({ jobLinkPrefix }: { jobLinkPrefix: string }) {
+function AutoClockedOutSessions() {
   const { data } = useMyTimesheet('week')
-  if (!data) return null
-  return (
-    <>
-      <JobBreakdown jobs={data.jobs ?? []} linkJobs={jobLinkPrefix} />
-      {(data.entries ?? []).some((entry) => entry.autoClockedOut) ? <ClockSessions entries={data.entries} canFix={false} /> : null}
-    </>
-  )
+  if (!data || !(data.entries ?? []).some((entry) => entry.autoClockedOut)) return null
+  return <ClockSessions entries={data.entries} canFix={false} />
 }
 
-/** The technician's own clock, hours (with time by job) and leave. */
-export function MyTimePage({ jobLinkPrefix = '/tech/jobs/' }: { jobLinkPrefix?: string }) {
+/** The technician's own clock, hours and leave. */
+export function MyTimePage() {
   const { data: status, error, isLoading } = useMyAttendanceView()
   // The server refuses the clock outright (a 4xx, not a dropped connection) for an account with no
   // technician profile. Clocking and hours are technician-only; leave is open to everyone.
@@ -275,7 +270,7 @@ export function MyTimePage({ jobLinkPrefix = '/tech/jobs/' }: { jobLinkPrefix?: 
       <PageHeader title="My Time & Leave" subtitle="Clock in, check your hours, and apply for leave." />
       <ClockCard />
       <TimesheetSection />
-      <WhereTimeWent jobLinkPrefix={jobLinkPrefix} />
+      <AutoClockedOutSessions />
       <LeaveSection />
     </div>
   )

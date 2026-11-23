@@ -49,23 +49,13 @@ export interface WorkOrderTechnicianAssignment {
   status: string
   assignedAt: string
   acceptedAt: string | null
-  /** First arrival on site (the response milestone). */
-  arrivalAt: string | null
-  /** Most recent departure. */
-  departureAt: string | null
   notes: string | null
-  /** Most recent arrival. On a multi-day job the technician arrives and leaves each day. */
-  lastArrivalAt?: string | null
 }
 
 export interface WorkOrder {
   id: string
   branchId: string | null
   branchName: string | null
-  clientId: string
-  clientName: string | null
-  siteId: string | null
-  siteName: string | null
   assetId: string | null
   assetName: string | null
   assignmentGroupId: string | null
@@ -86,8 +76,6 @@ export interface WorkOrder {
   dueDate: string | null
   createdAt: string
   workStartedAt: string | null
-  arrivalAt: string | null
-  departureAt: string | null
   completedAt: string | null
   workDoneNotes: string | null
   jobCardNotes: string | null
@@ -97,9 +85,6 @@ export interface WorkOrder {
   slaResolutionBreached: boolean
   slaResponseBreachedAt: string | null
   slaResolutionBreachedAt: string | null
-  acknowledgedByName: string | null
-  acknowledgementComments: string | null
-  acknowledgementDate: string | null
   isPreventiveMaintenance: boolean
   holdReason: string | null
   holdNote: string | null
@@ -234,7 +219,6 @@ export interface WorkOrderNote {
   id: string
   workOrderId: string
   content: string
-  isClientVisible: boolean
   createdByUserId: string
   createdByUserName: string | null
   createdAt: string
@@ -250,12 +234,11 @@ export interface RelatedWorkOrder {
 }
 
 export interface RelatedWorkOrders {
-  sameSite: RelatedWorkOrder[]
   sameAsset: RelatedWorkOrder[]
 }
 
 export interface WorkOrderDocument {
-  documentType: 'Quote' | 'ServiceReport' | 'Invoice' | 'MaterialRequest'
+  documentType: 'ServiceReport' | 'MaterialRequest'
   id: string
   number: string
   status: string
@@ -401,7 +384,6 @@ export interface WorkOrderServiceReportPreview {
   companyName: string
   workOrderNumber: string
   title: string
-  clientName: string | null
   siteLabel: string | null
   assetName: string | null
   assetDetails: string | null
@@ -418,17 +400,6 @@ export interface WorkOrderServiceReportPreview {
   photoGroups: WorkOrderReportPhotoGroup[]
   signatures: WorkOrderReportSignature[]
   showPoweredByEcosys: boolean
-  /** Equipment in service at the job's site; `onThisJob` marks the asset the job was raised against. */
-  siteEquipment: WorkOrderReportEquipment[]
-}
-
-export interface WorkOrderReportEquipment {
-  name: string
-  code: string | null
-  description: string | null
-  serialNumber: string | null
-  location: string | null
-  onThisJob: boolean
 }
 
 export interface WorkOrderExecutionBundle {

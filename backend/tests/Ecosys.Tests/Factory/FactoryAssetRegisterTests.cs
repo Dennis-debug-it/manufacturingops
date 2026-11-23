@@ -20,7 +20,6 @@ public sealed class FactoryAssetRegisterTests
 
         var dryer = await CreateAsync(assets, site.ChelalDrying, "Fluid bed dryer 1", "CHL-FBD-01", criticality: "a", lostPerHour: 450m);
 
-        Assert.Null(dryer.ClientId);
         Assert.Equal(site.ChelalDrying, dryer.OrgNodeId);
         Assert.Equal("Drying", dryer.OrgNodeName);
         Assert.Equal("A", dryer.Criticality);
@@ -211,7 +210,7 @@ public sealed class FactoryAssetRegisterTests
         Guid? parentAssetId = null,
         decimal? lostPerHour = null,
         string? operationalStatus = null) =>
-        new(null, null, null, null, null, name, code, null, null, null, null, null, null,
+        new(null, null, name, code, null, null, null, null, null, null,
             null, null, null, null, null, false, null, null, null, "Active", null,
             OrgNodeId: orgNodeId,
             ParentAssetId: parentAssetId,
@@ -238,7 +237,7 @@ public sealed class FactoryAssetRegisterTests
         string? criticality = null,
         bool topLevelOnly = false)
     {
-        var result = await controller.GetAll(null, null, null, null, null, null, null, null, null, CancellationToken.None,
+        var result = await controller.GetAll(null, null, null, null, null, null, CancellationToken.None,
             orgNodeId: orgNodeId, criticality: criticality, topLevelOnly: topLevelOnly);
         return Assert.IsAssignableFrom<IEnumerable<AssetResponse>>(Assert.IsType<OkObjectResult>(result).Value).ToList();
     }

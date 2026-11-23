@@ -15,10 +15,9 @@ import { activityTypeLabels, type ActionItem, type LinkedEntityType } from './ty
  * Meetings and action items for one record: a client page or a contract page
  * (R3). Labelled apart from the record's own tasks.
  */
-export function RecordActivitiesPanel({ entityType, entityId, clientId, readOnly = false, show = ['actions', 'meetings'] }: {
+export function RecordActivitiesPanel({ entityType, entityId, readOnly = false, show = ['actions', 'meetings'] }: {
   entityType: LinkedEntityType
   entityId: string
-  clientId?: string
   readOnly?: boolean
   show?: Array<'actions' | 'meetings'>
 }) {
@@ -86,7 +85,7 @@ export function RecordActivitiesPanel({ entityType, entityId, clientId, readOnly
       ) : null}
 
       {scheduling ? (
-        <ActivityDrawer open onClose={() => setScheduling(false)} defaults={{ entityType, entityId, ...(clientId ? { clientId } : {}) }} />
+        <ActivityDrawer open onClose={() => setScheduling(false)} defaults={{ entityType, entityId }} />
       ) : null}
       {editing ? (
         <ActionItemDrawer

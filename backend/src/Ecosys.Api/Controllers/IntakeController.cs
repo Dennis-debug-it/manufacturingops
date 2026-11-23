@@ -20,26 +20,13 @@ public sealed class IntakeController(
     IDocumentNumberingService documentNumberingService)
     : ControllerBase
 {
-    [HttpPost("email/webhook")]
-    public async Task<ActionResult<IntakeResponse>> EmailWebhook([FromBody] EmailIntakeRequest request, CancellationToken cancellationToken)
-    {
-        // Secret first, licence second. The other order is a pre-auth oracle: an unlicensed tenant
-        // answers differently from an unknown one, so a caller with no secret at all could probe
-        // which tenant ids exist and which features they hold.
-        await ValidateSecretAsync(request.TenantId, request.Secret, cancellationToken);
-        await EnsureTenantAcceptsIntakeAsync(request.TenantId, cancellationToken);
-        await licenseGuardService.EnsureFeatureEnabledAsync(request.TenantId, LicenseFeatures.EmailIngestion, cancellationToken);
-        var workOrder = await CreateWorkOrderAsync(request.TenantId, request.BranchId, request.ClientId, request.AssetId, request.Subject, request.Body, request.Priority, cancellationToken);
-        return Ok(new IntakeResponse(workOrder.Id, workOrder.WorkOrderNumber));
-    }
-
     [HttpPost("monitoring/webhook")]
     public async Task<ActionResult<IntakeResponse>> MonitoringWebhook([FromBody] MonitoringIntakeRequest request, CancellationToken cancellationToken)
     {
         await ValidateSecretAsync(request.TenantId, request.Secret, cancellationToken);
         await EnsureTenantAcceptsIntakeAsync(request.TenantId, cancellationToken);
         await licenseGuardService.EnsureFeatureEnabledAsync(request.TenantId, LicenseFeatures.MonitoringIntegration, cancellationToken);
-        var workOrder = await CreateWorkOrderAsync(request.TenantId, request.BranchId, request.ClientId, request.AssetId, request.Title, request.Description, request.Priority, cancellationToken);
+        var workOrder = await CreateWorkOrderAsync(request.TenantId, request.BranchId, request.AssetId, request.Title, request.Description, request.Priority, cancellationToken);
         return Ok(new IntakeResponse(workOrder.Id, workOrder.WorkOrderNumber));
     }
 
@@ -74,13 +61,9 @@ public sealed class IntakeController(
             return Accepted(new IntakeResponse(Guid.Empty, "IGNORED"));
         }
 
-        var clientId = request.ClientId ?? integration.DefaultClientId
-            ?? throw new BusinessRuleException("A default client must be configured before webhook alerts can create work orders.");
-
         var workOrder = await CreateWorkOrderAsync(
             integration.TenantId,
             request.BranchId ?? integration.DefaultBranchId,
-            clientId,
             request.AssetId ?? integration.DefaultAssetId,
             string.IsNullOrWhiteSpace(request.Title) ? $"{integration.Name} alert" : request.Title,
             request.Description,
@@ -132,15 +115,13 @@ public sealed class IntakeController(
     private static bool FixedTimeEquals(string expected, string actual) =>
         CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(expected), Encoding.UTF8.GetBytes(actual));
 
-    private async Task<Domain.Entities.WorkOrder> CreateWorkOrderAsync(Guid tenantId, Guid? branchId, Guid clientId, Guid? assetId, string title, string? description, string? priority, CancellationToken cancellationToken)
+    private async Task<Domain.Entities.WorkOrder> CreateWorkOrderAsync(Guid tenantId, Guid? branchId, Guid? assetId, string title, string? description, string? priority, CancellationToken cancellationToken)
     {
         await licenseGuardService.EnsureTenantCanMutateAsync(tenantId, cancellationToken);
-        await EnsureReferencesBelongToTenantAsync(tenantId, branchId, clientId, assetId, cancellationToken);
+        await EnsureReferencesBelongToTenantAsync(tenantId, branchId, assetId, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(title))
             throw new BusinessRuleException("A work order title is required.");
-        if (!await dbContext.Clients.AnyAsync(x => x.Id == clientId && x.TenantId == tenantId && x.IsActive, cancellationToken))
-            throw new BusinessRuleException("Client was not found for this tenant.");
         if (branchId.HasValue && !await dbContext.Branches.AnyAsync(
                 x => x.Id == branchId && x.TenantId == tenantId && x.IsActive, cancellationToken))
             throw new BusinessRuleException("Branch was not found for this tenant.");
@@ -149,8 +130,8 @@ public sealed class IntakeController(
         if (assetId.HasValue)
         {
             asset = await dbContext.Assets.SingleOrDefaultAsync(
-                x => x.Id == assetId && x.TenantId == tenantId && x.ClientId == clientId, cancellationToken)
-                ?? throw new BusinessRuleException("Asset was not found for this client and tenant.");
+                x => x.Id == assetId && x.TenantId == tenantId, cancellationToken)
+                ?? throw new BusinessRuleException("Asset was not found for this tenant.");
             if (branchId.HasValue && asset.BranchId != branchId)
                 throw new BusinessRuleException("Asset does not belong to the selected branch.");
             branchId ??= asset.BranchId;
@@ -163,9 +144,10 @@ public sealed class IntakeController(
         {
             TenantId = tenantId,
             BranchId = branchId,
-            ClientId = clientId,
             AssetId = assetId,
-            SiteId = asset?.SiteId,
+            // Alert jobs sit where the asset is, so they appear on the factory job list.
+            OrgNodeId = asset?.OrgNodeId,
+            RequestSource = "Monitoring",
             Title = title.Trim(),
             Description = description?.Trim(),
             Priority = string.IsNullOrWhiteSpace(priority) ? "Medium" : priority.Trim(),
@@ -182,17 +164,10 @@ public sealed class IntakeController(
     /// Every id on this controller arrives from the caller. The global tenant query filter is
     /// bypassed for an unauthenticated principal and the work order has no composite tenant foreign
     /// key, so without this check a holder of one tenant's webhook secret can attach another
-    /// tenant's client, asset or branch to a new work order — which every later
-    /// <c>.Include(x =&gt; x.Client)</c> then surfaces in the UI and in generated PDFs.
+    /// tenant's asset or branch to a new work order.
     /// </summary>
-    private async Task EnsureReferencesBelongToTenantAsync(Guid tenantId, Guid? branchId, Guid clientId, Guid? assetId, CancellationToken cancellationToken)
+    private async Task EnsureReferencesBelongToTenantAsync(Guid tenantId, Guid? branchId, Guid? assetId, CancellationToken cancellationToken)
     {
-        var clientBelongs = await dbContext.Clients.AnyAsync(x => x.Id == clientId && x.TenantId == tenantId, cancellationToken);
-        if (!clientBelongs)
-        {
-            throw new BusinessRuleException("Client was not found for this tenant.");
-        }
-
         if (assetId.HasValue)
         {
             var assetBelongs = await dbContext.Assets.AnyAsync(x => x.Id == assetId.Value && x.TenantId == tenantId, cancellationToken);
@@ -216,7 +191,6 @@ public sealed class IntakeController(
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(secret.Trim())));
 }
 
-public sealed record EmailIntakeRequest(Guid TenantId, Guid? BranchId, Guid ClientId, Guid? AssetId, string Subject, string? Body, string? Priority, string Secret);
-public sealed record MonitoringIntakeRequest(Guid TenantId, Guid? BranchId, Guid ClientId, Guid? AssetId, string Title, string? Description, string? Priority, string Secret);
-public sealed record MonitoringWebhookPayload(Guid? ClientId, Guid? AssetId, Guid? BranchId, string? Title, string? Description, string? Priority);
+public sealed record MonitoringIntakeRequest(Guid TenantId, Guid? BranchId, Guid? AssetId, string Title, string? Description, string? Priority, string Secret);
+public sealed record MonitoringWebhookPayload(Guid? AssetId, Guid? BranchId, string? Title, string? Description, string? Priority);
 public sealed record IntakeResponse(Guid WorkOrderId, string WorkOrderNumber);

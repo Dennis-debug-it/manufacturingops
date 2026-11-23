@@ -191,7 +191,6 @@ public sealed partial class AuthEmailSafetyTests
         await SeedLicensedTenantAsync(db, tenantId, limit: 2, activeUsers: 1);
         for (var i = 0; i < 5; i++)
         {
-            db.ClientPortalUsers.Add(new ClientPortalUser { TenantId = tenantId, ClientId = Guid.NewGuid(), FullName = $"Requester {i}", Email = $"requester{i}@customer.test", IsActive = true });
         }
         await db.SaveChangesAsync();
         var guard = new LicenseGuardService(db);

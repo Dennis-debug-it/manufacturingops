@@ -229,7 +229,6 @@ internal sealed class FactoryWorkOrderService(
         var workOrder = new WorkOrder
         {
             TenantId = tenantId,
-            ClientId = null,
             AssetId = asset?.Id,
             OrgNodeId = orgNodeId,
             ParentWorkOrderId = parent?.Id,
@@ -252,7 +251,6 @@ internal sealed class FactoryWorkOrderService(
             RequestSource = request.Source,
             RequestedByName = string.IsNullOrWhiteSpace(request.RequestedByName) ? actor.Name : request.RequestedByName.Trim(),
             FailureProblemCodeId = request.ProblemCodeId,
-            NotifyClient = false
         };
         dbContext.WorkOrders.Add(workOrder);
         // Response and repair targets are for faults; planned and statutory work runs to its due date.

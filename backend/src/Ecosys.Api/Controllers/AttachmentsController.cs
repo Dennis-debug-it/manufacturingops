@@ -27,13 +27,7 @@ public sealed class AttachmentsController(
         "ContractorInvoice",
         "StandardRequirement",
         "NonConformity",
-        "WasteDisposal",
-        "Site",
-        "Client",
-        "Contract",
-        "Project",
-        "ProjectDiaryEntry",
-        "SalesOpportunity"
+        "WasteDisposal"
     };
 
     private const long MaxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
@@ -175,9 +169,6 @@ public sealed class AttachmentsController(
             "StandardRequirement" => await dbContext.StandardRequirements.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
             "NonConformity" => await dbContext.NonConformities.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
             "WasteDisposal" => await dbContext.WasteDisposals.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
-            "Site" => await dbContext.Sites.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
-            "Client" => await dbContext.Clients.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
-            "Contract" => await dbContext.Contracts.AnyAsync(x => x.Id == entityId && x.TenantId == tenantId, cancellationToken),
             _ => false
         };
 

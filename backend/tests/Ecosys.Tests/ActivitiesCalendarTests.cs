@@ -13,7 +13,7 @@ namespace Ecosys.Tests;
 /// <summary>Release 3 step 3b: activities, minutes, action items, reminders, My calendar and the feed (design section 6).</summary>
 public sealed class ActivitiesCalendarTests
 {
-    private static readonly string[] Everyone = [PermissionNames.ActivitiesView];
+    private static readonly string[] Everyone = [PermissionNames.ActivitiesView, PermissionNames.CanViewWorkOrders];
 
     // ── Notifications ────────────────────────────────────────────────────────────
 
@@ -25,11 +25,11 @@ public sealed class ActivitiesCalendarTests
 
         var activity = await harness.Activities.ScheduleAsync(harness.Viewer(harness.Alice), Meeting(harness, attendees:
         [
-            new ActivityAttendeeInput(harness.Bob, null, null, null),
-            new ActivityAttendeeInput(null, null, "Duct & Co", "qs@duct.test"),
-            new ActivityAttendeeInput(null, null, "Site agent", "agent@outside.test"),
+            new ActivityAttendeeInput(harness.Bob, null, null),
+            new ActivityAttendeeInput(null, "Duct & Co", "qs@duct.test"),
+            new ActivityAttendeeInput(null, "Site agent", "agent@outside.test"),
             // The organiser is implied, so listing her again is ignored.
-            new ActivityAttendeeInput(harness.Alice, null, null, null),
+            new ActivityAttendeeInput(harness.Alice, null, null),
         ]));
 
         Assert.Equal(3, activity.Attendees.Count);
@@ -47,7 +47,7 @@ public sealed class ActivitiesCalendarTests
     {
         var harness = await Harness.CreateAsync();
         var alice = harness.Viewer(harness.Alice);
-        var command = Meeting(harness, attendees: [new ActivityAttendeeInput(harness.Bob, null, null, null)]);
+        var command = Meeting(harness, attendees: [new ActivityAttendeeInput(harness.Bob, null, null)]);
         var activity = await harness.Activities.ScheduleAsync(alice, command);
         harness.Clear();
 
@@ -56,7 +56,7 @@ public sealed class ActivitiesCalendarTests
         {
             StartsAt = command.StartsAt.AddHours(2),
             EndsAt = command.EndsAt.AddHours(2),
-            Attendees = [new ActivityAttendeeInput(harness.Bob, null, null, null), new ActivityAttendeeInput(harness.Carol, null, null, null)],
+            Attendees = [new ActivityAttendeeInput(harness.Bob, null, null), new ActivityAttendeeInput(harness.Carol, null, null)],
         });
         Assert.Equal(
             [(harness.Bob, ActivityNotificationKeys.Updated), (harness.Carol, ActivityNotificationKeys.Scheduled)],
@@ -64,7 +64,7 @@ public sealed class ActivitiesCalendarTests
         harness.Clear();
 
         // Bob taken off: he hears it is off his calendar. No time change, so Carol hears nothing.
-        var withoutBob = command with { StartsAt = command.StartsAt.AddHours(2), EndsAt = command.EndsAt.AddHours(2), Attendees = [new ActivityAttendeeInput(harness.Carol, null, null, null)] };
+        var withoutBob = command with { StartsAt = command.StartsAt.AddHours(2), EndsAt = command.EndsAt.AddHours(2), Attendees = [new ActivityAttendeeInput(harness.Carol, null, null)] };
         await harness.Activities.UpdateAsync(alice, activity.Id, withoutBob);
         Assert.Equal([(harness.Bob, ActivityNotificationKeys.Cancelled)], await harness.SentAsync());
         harness.Clear();
@@ -80,7 +80,7 @@ public sealed class ActivitiesCalendarTests
     {
         var harness = await Harness.CreateAsync();
         var activity = await harness.Activities.ScheduleAsync(harness.Viewer(harness.Alice),
-            Meeting(harness, attendees: [new ActivityAttendeeInput(harness.Bob, null, null, null)]));
+            Meeting(harness, attendees: [new ActivityAttendeeInput(harness.Bob, null, null)]));
 
         // An attendee sees it but can't change it; someone not on it can't see it at all.
         Assert.Equal(activity.Id, (await harness.Activities.LoadVisibleAsync(harness.Viewer(harness.Bob), activity.Id)).Id);
@@ -101,7 +101,7 @@ public sealed class ActivitiesCalendarTests
         var harness = await Harness.CreateAsync();
         var alice = harness.Viewer(harness.Alice);
         var activity = await harness.Activities.ScheduleAsync(alice, Meeting(harness, startsIn: TimeSpan.FromHours(-2),
-            attendees: [new ActivityAttendeeInput(harness.Bob, null, null, null), new ActivityAttendeeInput(null, null, "Architect", null)]));
+            attendees: [new ActivityAttendeeInput(harness.Bob, null, null), new ActivityAttendeeInput(null, "Architect", null)]));
         await Assert.ThrowsAsync<BusinessRuleException>(() => harness.Activities.SaveMinutesAsync(alice, activity.Id, "Too early"));
         var bobRow = activity.Attendees.Single(x => x.UserId == harness.Bob);
         await harness.Activities.MarkHeldAsync(alice, activity.Id, [bobRow.Id]);
@@ -137,26 +137,26 @@ public sealed class ActivitiesCalendarTests
     public async Task ActionItems_CarryTheLinkedRecord_AndNotifyTheirAssignee()
     {
         var harness = await Harness.CreateAsync();
-        var client = new Client { TenantId = harness.TenantId, ClientName = "Westlands Mall", IsActive = true };
-        harness.Db.Clients.Add(client);
+        var job = new WorkOrder { TenantId = harness.TenantId, WorkOrderNumber = "WO-DUCT-1", Title = "Resize the ducts", Status = "Open" };
+        harness.Db.WorkOrders.Add(job);
         await harness.Db.SaveChangesAsync();
         var alice = harness.Viewer(harness.Alice);
-        var activity = await harness.Activities.ScheduleAsync(alice, Meeting(harness) with { EntityType = "client", EntityId = client.Id });
+        var activity = await harness.Activities.ScheduleAsync(alice, Meeting(harness) with { EntityType = "workorder", EntityId = job.Id });
         harness.Clear();
 
         var fromMeeting = await harness.Activities.CreateActionItemAsync(alice,
             new SaveActionItemCommand("Send revised quote", harness.Bob, null, new DateOnly(2026, 11, 1), null, activity.Id, ActivityEntityTypes.WorkOrder, Guid.NewGuid()));
         var ownItem = await harness.Activities.CreateActionItemAsync(alice,
-            new SaveActionItemCommand("Call the landlord", harness.Alice, null, null, null, null, ActivityEntityTypes.Client, client.Id));
+            new SaveActionItemCommand("Order the duct fittings", harness.Alice, null, null, null, null, ActivityEntityTypes.WorkOrder, job.Id));
 
         // An item from a meeting takes the meeting's record, whatever the request said.
-        Assert.Equal((ActivityEntityTypes.Client, client.Id), (fromMeeting.EntityType, fromMeeting.EntityId));
-        Assert.Equal((ActivityEntityTypes.Client, client.Id), (ownItem.EntityType, ownItem.EntityId));
+        Assert.Equal((ActivityEntityTypes.WorkOrder, job.Id), (fromMeeting.EntityType, fromMeeting.EntityId));
+        Assert.Equal((ActivityEntityTypes.WorkOrder, job.Id), (ownItem.EntityType, ownItem.EntityId));
         // Bob is told; Alice assigning herself is not.
         Assert.Equal([(harness.Bob, ActivityNotificationKeys.ActionItemAssigned)], await harness.SentAsync());
 
-        var onClient = await harness.Activities.ListActionItemsAsync(harness.Viewer(harness.Carol), new ActionItemListQuery(false, "Client", client.Id, null, null));
-        Assert.Equal(2, onClient.Count);
+        var onJob = await harness.Activities.ListActionItemsAsync(harness.Viewer(harness.Carol), new ActionItemListQuery(false, "WorkOrder", job.Id, null, null));
+        Assert.Equal(2, onJob.Count);
         Assert.Equal([fromMeeting.Id], (await harness.Activities.ListActionItemsAsync(harness.Viewer(harness.Bob), new ActionItemListQuery(true, null, null, null, null))).Select(x => x.Id));
 
         // Carol, unrelated, can't edit Bob's item; Bob can close it.
@@ -165,7 +165,7 @@ public sealed class ActivitiesCalendarTests
         var done = await harness.Activities.UpdateActionItemAsync(harness.Viewer(harness.Bob), fromMeeting.Id,
             new SaveActionItemCommand("Send revised quote", harness.Bob, null, null, "Done", null, null, null));
         Assert.NotNull(done.CompletedAt);
-        Assert.Equal((ActivityEntityTypes.Client, client.Id), (done.EntityType, done.EntityId));
+        Assert.Equal((ActivityEntityTypes.WorkOrder, job.Id), (done.EntityType, done.EntityId));
     }
 
     // ── Calendar ───────────────────────────────────────────────────────────────────
@@ -184,7 +184,7 @@ public sealed class ActivitiesCalendarTests
         });
         harness.Db.ActionItems.Add(new ActionItem { TenantId = harness.TenantId, Title = "Confirm duct sizes", AssigneeUserId = harness.Bob, DueDate = day });
         await harness.Db.SaveChangesAsync();
-        await harness.Activities.ScheduleAsync(harness.Viewer(harness.Alice), Meeting(harness, attendees: [new ActivityAttendeeInput(harness.Bob, null, null, null)]));
+        await harness.Activities.ScheduleAsync(harness.Viewer(harness.Alice), Meeting(harness, attendees: [new ActivityAttendeeInput(harness.Bob, null, null)]));
         var from = DateTime.UtcNow.AddDays(-1);
         var to = DateTime.UtcNow.AddDays(10);
 
@@ -281,7 +281,7 @@ public sealed class ActivitiesCalendarTests
     {
         var harness = await Harness.CreateAsync();
         var alice = harness.Viewer(harness.Alice);
-        var command = Meeting(harness, startsIn: TimeSpan.FromMinutes(20), attendees: [new ActivityAttendeeInput(harness.Bob, null, null, null)]) with { ReminderMinutesBefore = 30 };
+        var command = Meeting(harness, startsIn: TimeSpan.FromMinutes(20), attendees: [new ActivityAttendeeInput(harness.Bob, null, null)]) with { ReminderMinutesBefore = 30 };
         var activity = await harness.Activities.ScheduleAsync(alice, command);
         await harness.Activities.ScheduleAsync(alice, Meeting(harness, startsIn: TimeSpan.FromHours(3)) with { ReminderMinutesBefore = 30 });
         harness.Db.ActionItems.Add(new ActionItem { TenantId = harness.TenantId, Title = "Confirm duct sizes", AssigneeUserId = harness.Bob, DueDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1) });
@@ -313,23 +313,23 @@ public sealed class ActivitiesCalendarTests
         {
             var harness = await Harness.CreateAsync(context => new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(connection).Options, context),
                 seedTenants: true, seedLicense: true);
-            var client = new Client { TenantId = harness.TenantId, ClientName = "Westlands Mall", IsActive = true };
-            harness.Db.Clients.Add(client);
+            var job = new WorkOrder { TenantId = harness.TenantId, WorkOrderNumber = "WO-DUCT-1", Title = "Resize the ducts", Status = "Open" };
+            harness.Db.WorkOrders.Add(job);
             await harness.Db.SaveChangesAsync();
             var alice = harness.Viewer(harness.Alice);
 
             var command = Meeting(harness, startsIn: TimeSpan.FromMinutes(20), attendees:
             [
-                new ActivityAttendeeInput(harness.Bob, null, null, null),
-                new ActivityAttendeeInput(null, null, "Duct & Co", "qs@duct.test"),
-                new ActivityAttendeeInput(null, null, null, "guest@outside.test"),
-            ]) with { EntityType = ActivityEntityTypes.Client, EntityId = client.Id, ReminderMinutesBefore = 30 };
+                new ActivityAttendeeInput(harness.Bob, null, null),
+                new ActivityAttendeeInput(null, "Duct & Co", "qs@duct.test"),
+                new ActivityAttendeeInput(null, null, "guest@outside.test"),
+            ]) with { EntityType = ActivityEntityTypes.WorkOrder, EntityId = job.Id, ReminderMinutesBefore = 30 };
             var activity = await harness.Activities.ScheduleAsync(alice, command);
-            await harness.Activities.UpdateAsync(alice, activity.Id, command with { Title = "Moved", Attendees = [new ActivityAttendeeInput(harness.Bob, null, null, null)] });
+            await harness.Activities.UpdateAsync(alice, activity.Id, command with { Title = "Moved", Attendees = [new ActivityAttendeeInput(harness.Bob, null, null)] });
             Assert.Single(await harness.Activities.ListAsync(harness.Viewer(harness.Bob), new ActivityListQuery(DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(1), null, null, null, true)));
-            Assert.Single(await harness.Activities.ListAsync(harness.Viewer(harness.Carol), new ActivityListQuery(null, null, "Client", client.Id, "Scheduled", false)));
+            Assert.Single(await harness.Activities.ListAsync(harness.Viewer(harness.Carol), new ActivityListQuery(null, null, "WorkOrder", job.Id, "Scheduled", false)));
             var item = await harness.Activities.CreateActionItemAsync(alice, new SaveActionItemCommand("Resize ducts", harness.Bob, null, DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1), null, activity.Id, null, null));
-            Assert.Equal(client.Id, item.EntityId);
+            Assert.Equal(job.Id, item.EntityId);
             Assert.Single(await harness.Activities.ListActionItemsAsync(harness.Viewer(harness.Bob), new ActionItemListQuery(true, null, null, null, "Open")));
 
             Assert.Equal(2, await harness.Reminders().RunAsync(DateTime.UtcNow));
@@ -345,7 +345,7 @@ public sealed class ActivitiesCalendarTests
             Assert.Contains($"UID:activity-{activity.Id}@ecosys", await harness.Feed.RenderAsync(link.Token, DateTime.UtcNow));
 
             await harness.Activities.CancelAsync(alice, activity.Id, null);
-            var held = await harness.Activities.ScheduleAsync(alice, Meeting(harness, startsIn: TimeSpan.FromHours(-1), attendees: [new ActivityAttendeeInput(harness.Bob, null, null, null)]));
+            var held = await harness.Activities.ScheduleAsync(alice, Meeting(harness, startsIn: TimeSpan.FromHours(-1), attendees: [new ActivityAttendeeInput(harness.Bob, null, null)]));
             await harness.Activities.MarkHeldAsync(alice, held.Id, held.Attendees.Select(x => x.Id).ToList());
             await harness.Activities.SaveMinutesAsync(alice, held.Id, "Agreed.");
             await harness.Activities.PublishMinutesAsync(alice, held.Id);

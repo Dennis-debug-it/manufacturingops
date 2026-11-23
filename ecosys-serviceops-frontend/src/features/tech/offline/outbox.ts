@@ -6,8 +6,8 @@ import { normalizeError } from '../../../shared/api/apiError'
  * The technician app's offline outbox. A job action taken without a connection (or while earlier
  * actions are still waiting) is stored here on the phone and sent, in order, once the connection is
  * back. Every entry carries its own id as the `Idempotency-Key`, so a replay the server already
- * applied isn't applied twice, and the time it happened as `X-Occurred-At`, so arrival, start,
- * completion and clock times are the field times rather than the sync time.
+ * applied isn't applied twice, and the time it happened as `X-Occurred-At`, so start, completion
+ * and clock times are the field times rather than the sync time.
  */
 
 export type OutboxKind =
@@ -38,7 +38,7 @@ export interface OutboxEntry {
   id: string
   userId: string
   kind: OutboxKind
-  /** What the technician did, as shown in the sync list ("Arrival on WO-0042"). */
+  /** What the technician did, as shown in the sync list ("Start on WO-0042"). */
   label: string
   /** The job it belongs to; null for clock actions. */
   workOrderId: string | null
@@ -100,10 +100,22 @@ export function getOutboxSnapshot() {
   return snapshot
 }
 
+/**
+ * Travel steps (on my way, arrived, departed) were removed; a phone can still hold one queued from
+ * before. Their endpoints are gone, so they are dropped instead of failing in the sync list forever.
+ */
+const RETIRED_KINDS: readonly string[] = ['in-transit', 'arrive', 'depart']
+
 /** Loads the signed-in technician's queued actions (each user only ever sees and sends their own). */
 export async function loadOutbox(userId: string | null) {
   currentUserId = userId
-  entries = userId ? (await (await db()).getAllFromIndex('outbox', 'byUser', userId)).sort(byCreated) : []
+  const stored = userId ? await (await db()).getAllFromIndex('outbox', 'byUser', userId) : []
+  const retired = stored.filter((x) => RETIRED_KINDS.includes(x.kind))
+  if (retired.length > 0) {
+    const database = await db()
+    await Promise.all(retired.map((x) => database.delete('outbox', x.id)))
+  }
+  entries = stored.filter((x) => !RETIRED_KINDS.includes(x.kind)).sort(byCreated)
   emit()
 }
 

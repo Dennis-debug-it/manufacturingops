@@ -25,7 +25,7 @@ import { ActionItemDrawer, ActionItemList } from './ActionItems'
 import { itemTimeLabel } from './logic'
 import { activityTypeLabels, type ActionItem, type ActivityDetail } from './types'
 
-const kindLabels = { Staff: 'Staff', Consultant: 'Consultant', ClientContact: 'Client contact', External: 'Guest' } as const
+const kindLabels = { Staff: 'Staff', External: 'Guest' } as const
 
 export function ActivityDetailPage() {
   const { id = '' } = useParams<{ id: string }>()

@@ -129,18 +129,9 @@ public sealed class WorkOrderLifecycleStateTests
             HasAllBranchAccess = true
         };
 
-        var client = new Client
-        {
-            TenantId = tenant.Id,
-            ClientName = "Acme Manufacturing",
-            Email = "client@acme.test",
-            IsActive = true
-        };
-
         var workOrder = new WorkOrder
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
             WorkOrderNumber = "WO-LIFECYCLE-001",
             Title = "Generator inspection",
             Priority = "High",
@@ -148,7 +139,7 @@ public sealed class WorkOrderLifecycleStateTests
             WorkStartedAt = DateTime.UtcNow.AddMinutes(-20)
         };
 
-        dbContext.AddRange(tenant, user, client, workOrder);
+        dbContext.AddRange(tenant, user, workOrder);
         await dbContext.SaveChangesAsync();
 
         return (tenant.Id, user.Id, workOrder.Id);
@@ -186,7 +177,8 @@ public sealed class WorkOrderLifecycleStateTests
         {
             TenantId = tenant.Id,
             PlanName = "Priority plan",
-            IsActive = true
+            IsActive = true,
+            IsDefault = true
         };
 
         var slaRule = new SlaRule
@@ -199,32 +191,21 @@ public sealed class WorkOrderLifecycleStateTests
             BusinessHoursOnly = false
         };
 
-        var client = new Client
-        {
-            TenantId = tenant.Id,
-            ClientName = "Acme Manufacturing",
-            Email = "client@acme.test",
-            IsActive = true,
-            SlaDefinitionId = slaDefinition.Id
-        };
-
         var workOrder = new WorkOrder
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
             WorkOrderNumber = "WO-SLA-001",
             Title = "Generator inspection",
             Priority = "High",
             Status = WorkOrderStatuses.OnHold,
             CreatedAt = createdAt,
             WorkStartedAt = createdAt.AddMinutes(5),
-            ArrivalAt = createdAt.AddMinutes(10),
             HoldReason = WorkOrderHoldReasons.PendingClient,
             HoldStartedAt = holdStartedAt
         };
 
         slaDefinition.Rules.Add(slaRule);
-        dbContext.AddRange(tenant, user, slaDefinition, client, workOrder);
+        dbContext.AddRange(tenant, user, slaDefinition, workOrder);
         await dbContext.SaveChangesAsync();
 
         var slaService = CreateSlaService(dbContext);

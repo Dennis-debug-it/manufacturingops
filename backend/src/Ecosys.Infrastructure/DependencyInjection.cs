@@ -58,7 +58,6 @@ public static class DependencyInjection
         services.AddScoped<IPreventiveMaintenancePlanService, PreventiveMaintenancePlanService>();
         services.AddScoped<IStarterPackService, StarterPackService>();
         services.AddScoped<IPmTemplateService, PmTemplateService>();
-        services.AddScoped<Reports.IClientTemplateInstaller, Reports.ClientTemplateInstaller>();
         services.AddScoped<IUserPermissionTemplateService, UserPermissionTemplateService>();
         services.AddScoped<IRolePermissionService, RolePermissionService>();
         services.AddScoped<IDynamicAccessService, DynamicAccessService>();
@@ -108,7 +107,6 @@ public static class DependencyInjection
         services.AddScoped<IStockLedgerService, StockLedgerService>();
         services.AddScoped<IUserSessionService, UserSessionService>();
         services.AddScoped<IPlatformBootstrapService, PlatformBootstrapService>();
-        services.AddScoped<ITestDataSeeder, TestDataSeeder>();
         services.AddScoped<ILicenseGuardService, LicenseGuardService>();
         services.AddScoped<ISecretEncryptionService, SecretEncryptionService>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
@@ -119,13 +117,10 @@ public static class DependencyInjection
         services.AddScoped<IEmailSubjectRuleService, EmailSubjectRuleService>();
         services.AddScoped<IEmailOutboxService, EmailOutboxService>();
         services.AddScoped<IEmailOutboxProcessor, EmailOutboxProcessor>();
-        services.AddScoped<IServiceReportDeliveryService, ServiceReportDeliveryService>();
         services.AddScoped<IUserCredentialDeliveryService, UserCredentialDeliveryService>();
         services.AddScoped<ITemporaryPasswordService, TemporaryPasswordService>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
         services.AddScoped<ISelfSignupService, SelfSignupService>();
-        services.AddScoped<IEmailIntakeMailbox, ImapEmailIntakeMailbox>();
-        services.AddScoped<IEmailIntakeService, EmailIntakeService>();
         services.AddScoped<ITenantSecurityPolicyService, TenantSecurityPolicyService>();
         services.AddScoped<ITenantTimeZoneService, TenantTimeZoneService>();
         services.AddScoped<IWorkOrderLifecycleService, WorkOrderLifecycleService>();
@@ -134,11 +129,6 @@ public static class DependencyInjection
         services.AddScoped<ISlaService, SlaService>();
         services.AddScoped<IWorkflowService, WorkflowService>();
         services.AddScoped<IEscalationRuleService, EscalationRuleService>();
-        services.AddScoped<IContractAccessService, ContractAccessService>();
-        services.AddScoped<IContractCoverageService, ContractCoverageService>();
-        services.AddScoped<IContractPricingService, ContractPricingService>();
-        services.AddScoped<IContractLifecycleService, ContractLifecycleService>();
-        services.AddScoped<IContractOperationalService, ContractOperationalService>();
         // One way to notify (Release 3 design 2.1). The Api replaces the no-op live notifier with
         // SignalR. Further channels register as INotificationChannel (WhatsApp, below).
         services.AddScoped<INotificationDispatcher, NotificationDispatcher>();
@@ -162,7 +152,6 @@ public static class DependencyInjection
         services.AddScoped<IWhatsAppOutboxProcessor, WhatsAppOutboxProcessor>();
         services.AddScoped<IWhatsAppVerificationService, WhatsAppVerificationService>();
         services.AddScoped<IWhatsAppWebhookProcessor, WhatsAppWebhookProcessor>();
-        services.AddScoped<IClientWhatsAppNotifier, ClientWhatsAppNotifier>();
         // Role dashboards (Release 3 design part 4).
         services.AddScoped<ITenantModuleResolver, LicenseTenantModuleResolver>();
         services.AddScoped<IDashboardSettingsService, DashboardSettingsService>();
@@ -198,12 +187,10 @@ public static class DependencyInjection
         services.AddSingleton<IPushNotificationQueue>(sp => sp.GetRequiredService<PushNotificationQueue>());
         services.AddHostedService<PushNotificationWorker>();
         services.AddSingleInstanceHostedService<EmailOutboxWorker>();
-        services.AddSingleInstanceHostedService<EmailIntakeWorker>();
         services.AddSingleInstanceHostedService<TrialLifecycleWorker>();
         services.AddSingleInstanceHostedService<PmSchedulerWorker>();
         services.AddSingleInstanceHostedService<MrrSnapshotWorker>();
         services.AddSingleInstanceHostedService<SlaEnforcementWorker>();
-        services.AddSingleInstanceHostedService<ContractReminderWorker>();
         services.AddSingleInstanceHostedService<ScheduledReportWorker>();
         services.AddSingleInstanceHostedService<ApprovalReminderWorker>();
         services.AddSingleInstanceHostedService<AttendanceAutoClockOutWorker>();

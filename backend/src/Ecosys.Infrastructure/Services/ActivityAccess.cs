@@ -59,11 +59,10 @@ internal sealed class AccessViewerFactory(
 }
 
 /// <summary>A record an activity or action item is linked to, as the viewer sees it.</summary>
-/// <summary>A record an activity links to. Clients and contracts have no screen of their own, so no Url.</summary>
-public sealed record LinkedRecord(string EntityType, Guid EntityId, string Label, string? Url);
+public sealed record LinkedRecord(string EntityType, Guid EntityId, string Label, string Url);
 
 /// <summary>
-/// Linked records (project, client, contract, work order): their labels, and whether a viewer may
+/// Linked records (work orders): their labels, and whether a viewer may
 /// open them. A record is open to a viewer only when the tenant has its module and the viewer has
 /// the permission its own screen needs, so a meeting never leaks a record its reader can't see.
 /// </summary>
@@ -90,11 +89,6 @@ internal sealed class LinkedRecordService(AppDbContext dbContext) : ILinkedRecor
         var tenantId = viewer.TenantId;
         switch (LinkedRecords.Normalize(entityType))
         {
-            case ActivityEntityTypes.Client:
-                return await dbContext.Clients.AnyAsync(x => x.TenantId == tenantId && x.Id == entityId, cancellationToken);
-            case ActivityEntityTypes.Contract:
-                return viewer.HasModule(ServiceOpsPlans.Maintenance)
-                    && await dbContext.Contracts.AnyAsync(x => x.TenantId == tenantId && x.Id == entityId, cancellationToken);
             case ActivityEntityTypes.WorkOrder:
                 return viewer.HasModule(ServiceOpsPlans.Operations) && viewer.Can(PermissionNames.CanViewWorkOrders)
                     && await dbContext.WorkOrders.AnyAsync(x => x.TenantId == tenantId && x.Id == entityId, cancellationToken);
@@ -112,16 +106,6 @@ internal sealed class LinkedRecordService(AppDbContext dbContext) : ILinkedRecor
         List<Guid> Ids(string type) => wanted.Where(x => x.Type == type).Select(x => x.Id).ToList();
         var result = new Dictionary<(string, Guid), LinkedRecord>();
 
-        var clientIds = Ids(ActivityEntityTypes.Client);
-        if (clientIds.Count > 0)
-            foreach (var x in await dbContext.Clients.Where(x => x.TenantId == tenantId && clientIds.Contains(x.Id))
-                         .Select(x => new { x.Id, x.ClientName }).ToListAsync(cancellationToken))
-                result[(ActivityEntityTypes.Client, x.Id)] = new(ActivityEntityTypes.Client, x.Id, x.ClientName, null);
-        var contractIds = Ids(ActivityEntityTypes.Contract);
-        if (contractIds.Count > 0)
-            foreach (var x in await dbContext.Contracts.Where(x => x.TenantId == tenantId && contractIds.Contains(x.Id))
-                         .Select(x => new { x.Id, x.ContractNumber, x.Name }).ToListAsync(cancellationToken))
-                result[(ActivityEntityTypes.Contract, x.Id)] = new(ActivityEntityTypes.Contract, x.Id, $"{x.ContractNumber} {x.Name}", null);
         var workOrderIds = Ids(ActivityEntityTypes.WorkOrder);
         if (workOrderIds.Count > 0)
             foreach (var x in await dbContext.WorkOrders.Where(x => x.TenantId == tenantId && workOrderIds.Contains(x.Id))

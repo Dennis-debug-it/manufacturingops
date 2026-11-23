@@ -84,7 +84,7 @@ interface Draft {
 
 /** Add or edit an action item. The assignee is told in their bell and by email. */
 export function ActionItemDrawer({ item, defaults, onClose }: { item?: ActionItem; defaults?: ActionItemDefaults; onClose: () => void }) {
-  const { data: people } = useActivityPeople(null)
+  const { data: people } = useActivityPeople()
   const save = useSaveActionItem()
   const [draft, setDraft] = useState<Draft>(() => ({
     title: item?.title ?? '',

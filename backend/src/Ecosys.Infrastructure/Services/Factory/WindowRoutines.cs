@@ -27,7 +27,7 @@ public static class WindowRoutines
         var templates = await EnsureTemplatesAsync(dbContext, tenantId, industry.WindowRoutines, cancellationToken);
         var subtree = await SubtreeAsync(dbContext, tenantId, factoryId, cancellationToken);
         var assets = await dbContext.Assets.AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.ClientId == null && x.OrgNodeId != null && subtree.Contains(x.OrgNodeId.Value)
+            .Where(x => x.TenantId == tenantId && x.OrgNodeId != null && subtree.Contains(x.OrgNodeId.Value)
                 && x.Status != "Inactive" && x.AssetCategory != null && x.AssetCategory.Code != null && x.ParentAssetId == null)
             .Select(x => new { x.Id, x.AssetCode, Code = x.AssetCategory!.Code! })
             .OrderBy(x => x.AssetCode)

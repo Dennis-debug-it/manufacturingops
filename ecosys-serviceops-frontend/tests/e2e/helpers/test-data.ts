@@ -22,14 +22,3 @@ export const E2E_SMTP_PASSWORD = process.env.E2E_SMTP_PASSWORD || ''
 export const E2E_SMTP_SENDER_EMAIL = process.env.E2E_SMTP_SENDER_EMAIL || ''
 export const E2E_EMAIL_TEST_RECIPIENT = process.env.E2E_EMAIL_TEST_RECIPIENT || ''
 export const E2E_SMTP_SECURE_MODE = process.env.E2E_SMTP_SECURE_MODE || 'Auto'
-
-export const SAMPLE_EMAIL_INTAKE = {
-  from: 'customer@example.com',
-  subject: 'Generator failure at Main Branch',
-  body: [
-    'Generator failed during mains outage.',
-    'Site: Main Branch',
-    'Priority: High',
-    'Asset: Generator',
-  ].join('\n'),
-}

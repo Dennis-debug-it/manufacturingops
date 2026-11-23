@@ -69,7 +69,7 @@ export function TechnicianDetailPage() {
       {profile ? (
         <>
           <SummarySection title="Availability & Readiness" description="Current workforce status.">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-xl border border-slate-200 px-4 py-3">
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Availability</div>
                 <div className="mt-2"><StatusBadge status={profile.availabilityStatus} /></div>
@@ -81,10 +81,6 @@ export function TechnicianDetailPage() {
               <div className="rounded-xl border border-slate-200 px-4 py-3">
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Active WOs</div>
                 <div className="mt-2 text-sm text-slate-900">{profile.activeWorkOrderCount}</div>
-              </div>
-              <div className="rounded-xl border border-slate-200 px-4 py-3">
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">On Site</div>
-                <div className="mt-2 text-sm text-slate-900">{profile.onSiteCount}</div>
               </div>
             </div>
             {profile.readinessReasons.length > 0 ? (

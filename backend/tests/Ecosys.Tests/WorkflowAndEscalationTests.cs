@@ -245,18 +245,10 @@ public sealed class WorkflowAndEscalationTests
         Guid? workflowStatusId,
         DateTime? createdAt = null)
     {
-        var client = new Client
-        {
-            TenantId = tenantId,
-            ClientName = "Acme Manufacturing",
-            Email = "client@acme.test",
-            IsActive = true,
-        };
 
         var workOrder = new WorkOrder
         {
             TenantId = tenantId,
-            ClientId = client.Id,
             WorkOrderNumber = $"WO-{Guid.NewGuid():N}".Substring(0, 12),
             Title = "Generator inspection",
             Priority = "Medium",
@@ -265,7 +257,7 @@ public sealed class WorkflowAndEscalationTests
             CreatedAt = createdAt ?? DateTime.UtcNow,
         };
 
-        dbContext.AddRange(client, workOrder);
+        dbContext.AddRange(workOrder);
         await dbContext.SaveChangesAsync();
 
         // The audit interceptor stamps CreatedAt = UtcNow on insert, so re-apply the

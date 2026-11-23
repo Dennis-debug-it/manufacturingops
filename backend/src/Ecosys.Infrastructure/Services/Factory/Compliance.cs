@@ -126,7 +126,7 @@ internal sealed class ComplianceService(
         }
 
         var assets = await dbContext.Assets.AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.ClientId == null && x.OrgNodeId != null && subtree.Contains(x.OrgNodeId.Value) && x.Status != "Inactive"
+            .Where(x => x.TenantId == tenantId && x.OrgNodeId != null && subtree.Contains(x.OrgNodeId.Value) && x.Status != "Inactive"
                 && x.AssetCategory != null && x.AssetCategory.Code != null)
             .Select(x => new { x.Id, x.OrgNodeId, x.AssetCode, x.AssetName, Code = x.AssetCategory!.Code! })
             .ToListAsync(cancellationToken);

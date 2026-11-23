@@ -142,10 +142,7 @@ export interface FactoryAsset {
 }
 
 export interface UpsertFactoryAssetPayload {
-  clientId: null
   branchId: null
-  siteId: null
-  systemId: null
   assetCategoryId: string | null
   assetName: string
   assetCode: string | null

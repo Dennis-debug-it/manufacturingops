@@ -70,7 +70,7 @@ public sealed class WhatsAppController(
             .ToListAsync(cancellationToken);
 
         return Ok(conversations.Select(x => new WhatsAppConversationListItemResponse(
-            x.Id, x.ContactName, x.ContactPhone, x.ClientId, x.LastMessagePreview, x.LastMessageAt, x.UnreadCount)).ToList());
+            x.Id, x.ContactName, x.ContactPhone, x.LastMessagePreview, x.LastMessageAt, x.UnreadCount)).ToList());
     }
 
     [HttpGet("conversations/{id:guid}")]
@@ -87,7 +87,7 @@ public sealed class WhatsAppController(
         }
 
         return Ok(new WhatsAppConversationDetailResponse(
-            conversation.Id, conversation.ContactName, conversation.ContactPhone, conversation.ClientId,
+            conversation.Id, conversation.ContactName, conversation.ContactPhone,
             conversation.Messages
                 .OrderBy(m => m.SentAt)
                 .Select(m => new WhatsAppTimelineMessageResponse(m.Id, m.Direction, m.Body, m.SentAt, m.Status, m.TemplateName))
@@ -108,7 +108,6 @@ public sealed class WhatsAppController(
             TenantId = TenantId,
             ContactName = string.IsNullOrWhiteSpace(request.ContactName) ? request.ContactPhone.Trim() : request.ContactName.Trim(),
             ContactPhone = request.ContactPhone.Trim(),
-            ClientId = request.ClientId,
             LastMessagePreview = "New conversation",
             LastMessageAt = DateTime.UtcNow,
         };
@@ -116,7 +115,7 @@ public sealed class WhatsAppController(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return Ok(new WhatsAppConversationListItemResponse(
-            conversation.Id, conversation.ContactName, conversation.ContactPhone, conversation.ClientId,
+            conversation.Id, conversation.ContactName, conversation.ContactPhone,
             conversation.LastMessagePreview, conversation.LastMessageAt, conversation.UnreadCount));
     }
 
@@ -223,17 +222,17 @@ public sealed record WhatsAppSettingsRequest(
     bool IsEnabled, bool AutoReplyEnabled, string? AutoReplyMessage);
 
 public sealed record WhatsAppConversationListItemResponse(
-    Guid Id, string ContactName, string ContactPhone, Guid? ClientId,
+    Guid Id, string ContactName, string ContactPhone,
     string LastMessagePreview, DateTime LastMessageAt, int UnreadCount);
 
 public sealed record WhatsAppTimelineMessageResponse(
     Guid Id, string Direction, string Body, DateTime SentAt, string Status, string? TemplateName);
 
 public sealed record WhatsAppConversationDetailResponse(
-    Guid Id, string ContactName, string ContactPhone, Guid? ClientId,
+    Guid Id, string ContactName, string ContactPhone,
     IReadOnlyList<WhatsAppTimelineMessageResponse> Messages);
 
-public sealed record CreateWhatsAppConversationRequest(string ContactName, string ContactPhone, Guid? ClientId = null);
+public sealed record CreateWhatsAppConversationRequest(string ContactName, string ContactPhone);
 
 public sealed record SendWhatsAppMessageRequest(string Body, string? TemplateName = null);
 

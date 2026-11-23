@@ -87,7 +87,6 @@ public sealed record WhatsAppQueueRequest(
     string? RecipientName,
     IReadOnlyDictionary<string, string?> Values,
     Guid? RecipientUserId = null,
-    Guid? RecipientPortalUserId = null,
     string? EntityType = null,
     Guid? EntityId = null,
     string? IdempotencyKey = null);
@@ -155,7 +154,6 @@ internal sealed class WhatsAppOutbox(AppDbContext dbContext, IOptions<WhatsAppOp
             ToPhone = phone,
             RecipientName = Clip(request.RecipientName, 200),
             RecipientUserId = request.RecipientUserId,
-            RecipientPortalUserId = request.RecipientPortalUserId,
             EntityType = request.EntityType,
             EntityId = request.EntityId,
             Status = overCap ? WhatsAppOutboxStatuses.Skipped : WhatsAppOutboxStatuses.Pending,

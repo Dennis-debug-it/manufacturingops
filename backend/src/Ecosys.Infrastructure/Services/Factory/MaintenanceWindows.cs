@@ -171,7 +171,7 @@ internal sealed class MaintenanceWindowService(
         var exclude = queued.Concat(onOverhaul).ToHashSet();
 
         var candidates = await dbContext.WorkOrders
-            .Where(x => x.TenantId == tenantId && x.ClientId == null && x.NeedsLineStop && x.OrgNodeId != null
+            .Where(x => x.TenantId == tenantId && x.NeedsLineStop && x.OrgNodeId != null
                 && x.Status != WorkOrderStatuses.Requested && !Finished.Contains(x.Status))
             .Select(x => new { x.Id, OrgNodeId = x.OrgNodeId!.Value })
             .ToListAsync(cancellationToken);
@@ -229,7 +229,7 @@ internal sealed class MaintenanceWindowService(
     public async Task AddJobAsync(MaintenanceWindow window, Guid workOrderId, CancellationToken cancellationToken = default)
     {
         EnsureEditable(window);
-        var job = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == window.TenantId && x.Id == workOrderId && x.ClientId == null, cancellationToken)
+        var job = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == window.TenantId && x.Id == workOrderId, cancellationToken)
             ?? throw new BusinessRuleException("The job was not found.");
         if (Finished.Contains(job.Status))
         {

@@ -150,7 +150,7 @@ public sealed class WorkOrderExecutionFlowTests
             WorkOrderId = fixture.WorkOrder.Id,
             SectionName = "Completion",
             SectionOrder = 2,
-            QuestionText = "Client signature",
+            QuestionText = "Technician signature",
             InputType = "signature",
             IsRequired = true,
             SortOrder = 1
@@ -161,14 +161,14 @@ public sealed class WorkOrderExecutionFlowTests
 
         var saveResult = await controller.CaptureSignature(
             fixture.WorkOrder.Id,
-            new CaptureWorkOrderSignatureRequest("Client", "Alice Njeri", "Facility Manager", ValidSignatureDataUrl, null),
+            new CaptureWorkOrderSignatureRequest("Technician", "Moses Otieno", "Technician", ValidSignatureDataUrl, null),
             CancellationToken.None);
 
         Assert.IsType<OkObjectResult>(saveResult.Result);
 
         var checklistItem = await dbContext.WorkOrderChecklistItems.SingleAsync(x => x.WorkOrderId == fixture.WorkOrder.Id && x.InputType == "signature");
         Assert.True(checklistItem.IsCompleted);
-        Assert.Equal("Alice Njeri", checklistItem.ResponseValue);
+        Assert.Equal("Moses Otieno", checklistItem.ResponseValue);
         Assert.NotNull(checklistItem.CompletedAt);
     }
 
@@ -288,7 +288,7 @@ public sealed class WorkOrderExecutionFlowTests
         Assert.Equal(fixture.WorkOrder.WorkOrderNumber, preview.WorkOrderNumber);
         Assert.Contains(preview.PhotoGroups, group => group.Category == "Before");
         Assert.Single(preview.Materials);
-        Assert.Equal(2, preview.Signatures.Count);
+        Assert.Single(preview.Signatures);
         var checklistSection = Assert.Single(preview.ChecklistSections);
         Assert.Equal("Electrical checks", checklistSection.SectionName);
         Assert.Contains(checklistSection.Items, item => item.Question == "Battery voltage" && item.ResponseValue == "12.8" && item.Unit == "V");
@@ -334,7 +334,7 @@ public sealed class WorkOrderExecutionFlowTests
 
         Assert.NotNull(pdfRenderer.LastReport);
         Assert.Contains(pdfRenderer.LastReport!.PhotoGroups, group => group.Photos.Any(photo => photo.Caption.Contains("Burnt contactor", StringComparison.OrdinalIgnoreCase)));
-        Assert.Equal(2, pdfRenderer.LastReport.Signatures.Count);
+        Assert.Single(pdfRenderer.LastReport.Signatures);
         Assert.Single(pdfRenderer.LastReport.Materials);
         Assert.Contains(pdfRenderer.LastReport.ChecklistSections, section => section.Items.Any(item => item.Question == "Battery voltage"));
     }
@@ -360,23 +360,12 @@ public sealed class WorkOrderExecutionFlowTests
         await using var dbContext = CreateDbContext();
         var fixture = await SeedFixtureAsync(dbContext);
 
-        dbContext.WorkOrderSignatures.AddRange(
-            new WorkOrderSignature
+        dbContext.WorkOrderSignatures.AddRange(new WorkOrderSignature
             {
                 TenantId = fixture.Tenant.Id,
                 WorkOrderId = fixture.WorkOrder.Id,
                 SignatureType = "Technician",
                 SignerName = "Moses Otieno",
-                SignatureDataUrl = ValidSignatureDataUrl,
-                CapturedByUserId = fixture.User.Id,
-                CapturedAt = DateTime.UtcNow
-            },
-            new WorkOrderSignature
-            {
-                TenantId = fixture.Tenant.Id,
-                WorkOrderId = fixture.WorkOrder.Id,
-                SignatureType = "Client",
-                SignerName = "Alice Njeri",
                 SignatureDataUrl = ValidSignatureDataUrl,
                 CapturedByUserId = fixture.User.Id,
                 CapturedAt = DateTime.UtcNow
@@ -448,13 +437,13 @@ public sealed class WorkOrderExecutionFlowTests
         // The original visit was done by someone else; the fixture technician is on the follow-up.
         var original = new WorkOrder
         {
-            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id, SiteId = fixture.Site.Id, AssetId = fixture.Asset.Id,
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, AssetId = fixture.Asset.Id,
             WorkOrderNumber = "WO-ORIG-9", Title = "Generator transfer fault", Priority = "High", Status = "Closed",
             WorkDoneNotes = "Reset the ATS; AVR needs replacing.",
         };
         var unrelatedFollowUp = new WorkOrder
         {
-            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id,
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id,
             WorkOrderNumber = "WO-OTHER-9", Title = "Someone else's follow-up", Priority = "Low", Status = "Open", FollowUpOfWorkOrderId = original.Id,
         };
         dbContext.WorkOrders.AddRange(original, unrelatedFollowUp);
@@ -481,7 +470,7 @@ public sealed class WorkOrderExecutionFlowTests
         // Same branch, someone else's job: branch scope alone would let the technician reach it.
         var otherJob = new WorkOrder
         {
-            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id,
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id,
             WorkOrderNumber = "WO-OTHER-1", Title = "Not mine", Priority = "Low", Status = "Open",
         };
         dbContext.WorkOrders.Add(otherJob);
@@ -529,11 +518,9 @@ public sealed class WorkOrderExecutionFlowTests
         };
         dbContext.Users.Add(colleagueUser);
         var colleague = colleagueUser.Id;
-        dbContext.PartsRequests.AddRange(
-            new PartsRequest { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderId = fixture.WorkOrder.Id, TechnicianId = fixture.User.Id, Status = "Pending" },
+        dbContext.PartsRequests.AddRange(new PartsRequest { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderId = fixture.WorkOrder.Id, TechnicianId = fixture.User.Id, Status = "Pending" },
             new PartsRequest { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderId = fixture.WorkOrder.Id, TechnicianId = colleague, Status = "Pending" });
-        dbContext.PartsReturns.AddRange(
-            new PartsReturn { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderId = fixture.WorkOrder.Id, ReturnNumber = "RET-1", RequestedByUserId = fixture.User.Id, RequestedAt = DateTime.UtcNow },
+        dbContext.PartsReturns.AddRange(new PartsReturn { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderId = fixture.WorkOrder.Id, ReturnNumber = "RET-1", RequestedByUserId = fixture.User.Id, RequestedAt = DateTime.UtcNow },
             new PartsReturn { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderId = fixture.WorkOrder.Id, ReturnNumber = "RET-2", RequestedByUserId = colleague, RequestedAt = DateTime.UtcNow });
         await dbContext.SaveChangesAsync();
 
@@ -571,28 +558,6 @@ public sealed class WorkOrderExecutionFlowTests
         Assert.Equal(3, (await dbContext.WorkOrderMaterialUsages.SingleAsync()).QuantityUsed);
         Assert.Empty(await dbContext.StockMovements.ToListAsync());
         await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Receive(created.Id, CancellationToken.None));
-    }
-
-    [Theory]
-    [InlineData(true, "Sent")]
-    [InlineData(false, "Approved")]
-    public async Task ApprovingAReport_SendsItOnlyWhenAutoSendIsOn(bool autoSend, string expectedStatus)
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedFixtureAsync(dbContext);
-        fixture.WorkOrder.Status = WorkOrderStatuses.Completed;
-        fixture.WorkOrder.CompletedAt = DateTime.UtcNow;
-        fixture.WorkOrder.ReportStatus = "Draft";
-        dbContext.TenantOperationsPolicies.Add(new TenantOperationsPolicy { TenantId = fixture.Tenant.Id, AutoSendServiceReportOnApproval = autoSend });
-        await dbContext.SaveChangesAsync();
-        var delivery = new FakeServiceReportDeliveryService();
-        var controller = CreateExecutionController(dbContext, fixture, reportDelivery: delivery);
-
-        var result = await controller.ApproveQueuedReport(fixture.WorkOrder.Id, CancellationToken.None);
-
-        var row = Assert.IsType<ReportQueueRow>(Assert.IsType<OkObjectResult>(result.Result).Value);
-        Assert.Equal(expectedStatus, row.ReportStatus);
-        Assert.Equal(autoSend ? 1 : 0, delivery.QueuedWorkOrderIds.Count);
     }
 
     [Fact]
@@ -635,32 +600,18 @@ public sealed class WorkOrderExecutionFlowTests
     }
 
     [Fact]
-    public async Task TheReport_ListsTheSitesEquipment_AndUsesTheTitleWhenThereIsNoDescription()
+    public async Task TheReport_UsesTheTitleWhenThereIsNoDescription()
     {
         await using var dbContext = CreateDbContext();
         var fixture = await SeedFixtureAsync(dbContext);
         fixture.WorkOrder.Description = null;
-        fixture.Asset.Manufacturer = "Perkins";
-        fixture.Asset.Model = "1103A";
-        fixture.Asset.SerialNumber = "PK-1103-77";
-        dbContext.Assets.AddRange(
-            new Asset { TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, SiteId = fixture.Site.Id, AssetName = "ATS Panel", AssetCode = "ATS-01", Status = "Active" },
-            new Asset { TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, SiteId = fixture.Site.Id, AssetName = "Old Pump", AssetCode = "PMP-09", Status = "Inactive" },
-            new Asset { TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, AssetName = "Elsewhere", AssetCode = "ELS-01", Status = "Active" });
         await dbContext.SaveChangesAsync();
         var pdfRenderer = new FakePdfRenderer();
         var controller = CreateExecutionController(dbContext, fixture, pdfRenderer: pdfRenderer);
 
         await controller.DownloadServiceReportPdf(fixture.WorkOrder.Id, CancellationToken.None);
 
-        var report = pdfRenderer.LastReport!;
-        Assert.Equal(fixture.WorkOrder.Title, report.ReportedProblem);
-        Assert.Equal(["ATS Panel", "Generator 02"], report.SiteEquipment!.Select(x => x.Name));
-        var generator = report.SiteEquipment!.Single(x => x.Name == "Generator 02");
-        Assert.True(generator.OnThisJob);
-        Assert.Equal("Perkins 1103A", generator.Description);
-        Assert.Equal("PK-1103-77", generator.SerialNumber);
-        Assert.False(report.SiteEquipment!.Single(x => x.Name == "ATS Panel").OnThisJob);
+        Assert.Equal(fixture.WorkOrder.Title, pdfRenderer.LastReport!.ReportedProblem);
     }
 
     [Fact]
@@ -741,29 +692,11 @@ public sealed class WorkOrderExecutionFlowTests
             HasAllBranchAccess = true
         };
 
-        var client = new Client
-        {
-            TenantId = tenant.Id,
-            ClientName = "Acme Manufacturing",
-            Email = "client@acme.test",
-            IsActive = true
-        };
 
-        var site = new Site
-        {
-            TenantId = tenant.Id,
-            ClientId = client.Id,
-            SiteCode = $"SITE-{Guid.NewGuid():N}".Substring(0, 10),
-            SiteName = "Main Plant",
-            SiteType = "Factory",
-            Status = "Active"
-        };
 
         var asset = new Asset
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             BranchId = branch.Id,
             AssetName = "Generator 02",
             AssetCode = $"GEN-{Guid.NewGuid():N}".Substring(0, 10),
@@ -805,8 +738,6 @@ public sealed class WorkOrderExecutionFlowTests
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             AssetId = asset.Id,
             AssignmentGroupId = assignmentGroup.Id,
             AssignmentType = "AssignmentGroup",
@@ -819,7 +750,7 @@ public sealed class WorkOrderExecutionFlowTests
             LeadTechnicianId = technician.Id
         };
 
-        dbContext.AddRange(tenant, branch, user, client, site, asset, technician, assignmentGroup, material, workOrder);
+        dbContext.AddRange(tenant, branch, user, asset, technician, assignmentGroup, material, workOrder);
         dbContext.WorkOrderChecklistItems.Add(new WorkOrderChecklistItem
         {
             TenantId = tenant.Id,
@@ -859,7 +790,7 @@ public sealed class WorkOrderExecutionFlowTests
         });
         await dbContext.SaveChangesAsync();
 
-        return new FixtureData(tenant, branch, user, client, site, asset, technician, assignmentGroup, material, workOrder);
+        return new FixtureData(tenant, branch, user, asset, technician, assignmentGroup, material, workOrder);
     }
 
     private static async Task SeedPhotoSignatureAndMaterialAsync(AppDbContext dbContext, FixtureData fixture, FakeFileStorageService fileStorage)
@@ -902,23 +833,12 @@ public sealed class WorkOrderExecutionFlowTests
             UsedByUserId = fixture.User.Id,
             UsedAt = DateTime.UtcNow
         });
-        dbContext.WorkOrderSignatures.AddRange(
-            new WorkOrderSignature
+        dbContext.WorkOrderSignatures.AddRange(new WorkOrderSignature
             {
                 TenantId = fixture.Tenant.Id,
                 WorkOrderId = fixture.WorkOrder.Id,
                 SignatureType = "Technician",
                 SignerName = "Moses Otieno",
-                SignatureDataUrl = ValidSignatureDataUrl,
-                CapturedByUserId = fixture.User.Id,
-                CapturedAt = DateTime.UtcNow
-            },
-            new WorkOrderSignature
-            {
-                TenantId = fixture.Tenant.Id,
-                WorkOrderId = fixture.WorkOrder.Id,
-                SignatureType = "Client",
-                SignerName = "Alice Njeri",
                 SignatureDataUrl = ValidSignatureDataUrl,
                 CapturedByUserId = fixture.User.Id,
                 CapturedAt = DateTime.UtcNow
@@ -931,7 +851,6 @@ public sealed class WorkOrderExecutionFlowTests
         FixtureData fixture,
         FakeFileStorageService? fileStorage = null,
         FakePdfRenderer? pdfRenderer = null,
-        FakeServiceReportDeliveryService? reportDelivery = null,
         bool technicianOnly = false,
         IStockLedgerService? ledger = null)
     {
@@ -947,8 +866,7 @@ public sealed class WorkOrderExecutionFlowTests
             new FakeWorkOrderLifecycleService(dbContext),
             pdfRenderer ?? new FakePdfRenderer(),
             new FakeDocumentNumberingService(),
-            new StubHttpClientFactory(),
-            reportDelivery ?? new FakeServiceReportDeliveryService());
+            new StubHttpClientFactory());
 
         controller.ControllerContext = CreateControllerContext(fixture.User);
         return controller;
@@ -1035,8 +953,6 @@ public sealed class WorkOrderExecutionFlowTests
         Tenant Tenant,
         Branch Branch,
         User User,
-        Client Client,
-        Site Site,
         Asset Asset,
         Technician Technician,
         AssignmentGroup AssignmentGroup,
@@ -1251,7 +1167,6 @@ public sealed class WorkOrderExecutionFlowTests
                 10,
                 10,
                 null,
-                false,
                 false,
                 null));
         public Task<LicenseUsageSnapshot> GetUsageAsync(Guid tenantId, CancellationToken cancellationToken = default) =>

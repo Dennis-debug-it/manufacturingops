@@ -64,8 +64,6 @@ public sealed class TenantLicense : AuditableEntity, ITenantEntity
 
     /// <summary>As <see cref="OfficeSeatPriceOverride"/>, for one field seat per month.</summary>
     public decimal? FieldSeatPriceOverride { get; set; }
-    /// <summary>No longer read: email intake is included with the Operations module. Kept so existing data loads.</summary>
-    public bool? EmailIngestionOverride { get; set; }
     public bool? MonitoringIntegrationOverride { get; set; }
 
     /// <summary>

@@ -25,8 +25,6 @@ export interface WorkOrderListFilters {
   workType?: string
   technicianId?: string
   assignmentGroupId?: string
-  clientId?: string
-  siteId?: string
   priority?: string
   slaStatus?: string
   unassigned?: boolean
@@ -74,33 +72,6 @@ export function useWorkOrderSla(id: string | undefined) {
   })
 }
 
-export interface CreateWorkOrderPayload {
-  clientId: string
-  branchId?: string | null
-  siteId?: string | null
-  systemId?: string | null
-  assetId?: string | null
-  assignmentGroupId?: string | null
-  assignmentType?: string | null
-  assignedTechnicianId?: string | null
-  assignedTechnicianIds?: string[] | null
-  leadTechnicianId?: string | null
-  assignmentNotes?: string | null
-  title: string
-  description?: string | null
-  priority: string
-  dueDate?: string | null
-  workType: string
-  isPreventiveMaintenance: boolean
-  pmTemplateId?: string | null
-  notifyClient?: boolean
-  clientContactEmail?: string | null
-  templateId?: string | null
-  parentWorkOrderId?: string | null
-  followUpOfWorkOrderId?: string | null
-  projectId?: string | null
-}
-
 export interface CompleteWorkOrderPayload {
   workDoneNotes: string
   completedAt?: string | null
@@ -117,14 +88,6 @@ function invalidateWorkOrders(queryClient: ReturnType<typeof useQueryClient>, id
   if (id) {
     void queryClient.invalidateQueries({ queryKey: ['work-orders', id] })
   }
-}
-
-export function useCreateWorkOrder() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: CreateWorkOrderPayload) => api.post<WorkOrder>(endpoints.workOrders.create, payload),
-    onSuccess: () => invalidateWorkOrders(queryClient),
-  })
 }
 
 export function useAssignWorkOrder(id: string) {
@@ -149,15 +112,6 @@ export function useCompleteWorkOrder(id: string) {
   return useMutation({
     mutationFn: (payload: CompleteWorkOrderPayload) =>
       api.post<WorkOrder>(endpoints.workOrders.complete(id), payload),
-    onSuccess: () => invalidateWorkOrders(queryClient, id),
-  })
-}
-
-export function useAcknowledgeWorkOrder(id: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: { acknowledgedByName: string; comments?: string | null }) =>
-      api.post<WorkOrder>(endpoints.workOrders.acknowledge(id), payload),
     onSuccess: () => invalidateWorkOrders(queryClient, id),
   })
 }
@@ -194,7 +148,7 @@ export function useWorkOrderNotes(id: string | undefined) {
 export function useAddWorkOrderNote(id: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (payload: { content: string; isClientVisible: boolean }) =>
+    mutationFn: (payload: { content: string }) =>
       api.post<WorkOrderNote>(endpoints.workOrders.notes(id), payload),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['work-orders', id, 'notes'] })
@@ -212,7 +166,7 @@ export function useRelatedWorkOrders(id: string | undefined) {
   })
 }
 
-// Linked documents (quote, service report, invoices, material requests)
+// Linked documents (service report, material requests)
 export function useWorkOrderDocuments(id: string | undefined) {
   return useQuery({
     queryKey: ['work-orders', id, 'documents'],
@@ -598,33 +552,12 @@ export function useDuplicateWorkOrder(id: string) {
   })
 }
 
-// Convert quote -> work order
-export function useCreateWorkOrderFromQuote() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (quoteId: string) => api.post<WorkOrder>(endpoints.workOrders.fromQuote, { quoteId }),
-    onSuccess: () => invalidateWorkOrders(queryClient),
-  })
-}
-
 // Sub-tasks / child work orders
 export function useWorkOrderChildren(id: string | undefined) {
   return useQuery({
     queryKey: ['work-orders', id, 'children'],
     queryFn: () => api.get<WorkOrder[]>(endpoints.workOrders.children(id ?? '')),
     enabled: Boolean(id),
-  })
-}
-
-export function useCreateSubtask(parentWorkOrderId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: CreateWorkOrderPayload) =>
-      api.post<WorkOrder>(endpoints.workOrders.create, { ...payload, parentWorkOrderId }),
-    onSuccess: () => {
-      invalidateWorkOrders(queryClient, parentWorkOrderId)
-      void queryClient.invalidateQueries({ queryKey: ['work-orders', parentWorkOrderId, 'children'] })
-    },
   })
 }
 

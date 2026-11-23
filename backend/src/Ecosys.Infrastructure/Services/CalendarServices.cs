@@ -133,7 +133,6 @@ internal sealed class CalendarService(AppDbContext dbContext, ILinkedRecordServi
                     .Select(x => new
                     {
                         x.Id, x.WorkOrderNumber, x.Title, x.Status, x.ScheduledStartAt, x.ScheduledEndAt, x.AssignedTechnicianId, x.LeadTechnicianId,
-                        SiteName = x.Site != null ? x.Site.SiteName : null,
                         Crew = x.TechnicianAssignments.Select(a => a.TechnicianId).ToList(),
                     })
                     .ToListAsync(cancellationToken);
@@ -143,7 +142,7 @@ internal sealed class CalendarService(AppDbContext dbContext, ILinkedRecordServi
                     foreach (var person in technicians.Where(t => assigned.Contains(t.Id)).Select(t => t.UserId).Distinct())
                         items.Add(new CalendarItem($"work-order-{workOrder.Id}", CalendarSources.WorkOrders, $"{workOrder.WorkOrderNumber} {workOrder.Title}",
                             workOrder.ScheduledStartAt!.Value, workOrder.ScheduledEndAt ?? workOrder.ScheduledStartAt.Value.AddHours(1), false,
-                            workOrder.SiteName, $"/work-orders/{workOrder.Id}", person, workOrder.Status));
+                            null, $"/work-orders/{workOrder.Id}", person, workOrder.Status));
                 }
             }
         }
@@ -152,10 +151,10 @@ internal sealed class CalendarService(AppDbContext dbContext, ILinkedRecordServi
         {
             var plans = await dbContext.PreventiveMaintenancePlans
                 .Where(x => x.TenantId == tenantId && x.Status == "Active" && x.NextPmDate != null && x.NextPmDate >= from && x.NextPmDate < to)
-                .Select(x => new { x.Id, x.NextPmDate, AssetName = x.Asset != null ? x.Asset.AssetName : null, SiteName = x.Site != null ? x.Site.SiteName : null })
+                .Select(x => new { x.Id, x.NextPmDate, AssetName = x.Asset != null ? x.Asset.AssetName : null })
                 .ToListAsync(cancellationToken);
             items.AddRange(plans.Select(x => Day($"pm-plan-{x.Id}-{x.NextPmDate:yyyyMMdd}", CalendarSources.Maintenance, $"PM due: {x.AssetName ?? "asset"}",
-                DateOnly.FromDateTime(x.NextPmDate!.Value), "/maintenance/calendar", viewer.UserId, x.SiteName)));
+                DateOnly.FromDateTime(x.NextPmDate!.Value), "/maintenance/calendar", viewer.UserId)));
         }
 
         return items.OrderBy(x => x.StartsAt).ThenBy(x => x.AllDay ? 0 : 1).ThenBy(x => x.Title).ToList();

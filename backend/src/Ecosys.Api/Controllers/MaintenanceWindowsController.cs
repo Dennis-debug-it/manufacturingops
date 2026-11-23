@@ -62,7 +62,7 @@ public sealed class MaintenanceWindowsController(
         var subtree = (await orgScopeService.GetSubtreeAsync(TenantId, window.FactoryId, cancellationToken)).ToList();
         var inWindow = await dbContext.MaintenanceWindowJobs.Where(x => x.WindowId == id).Select(x => x.WorkOrderId).ToListAsync(cancellationToken);
         string[] finished = [WorkOrderStatuses.Completed, WorkOrderStatuses.Verified, WorkOrderStatuses.Closed, WorkOrderStatuses.Cancelled, WorkOrderStatuses.Rejected, WorkOrderStatuses.Requested];
-        var query = dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.ClientId == null && x.OrgNodeId != null && subtree.Contains(x.OrgNodeId.Value)
+        var query = dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.OrgNodeId != null && subtree.Contains(x.OrgNodeId.Value)
             && !finished.Contains(x.Status) && !inWindow.Contains(x.Id));
         if (!string.IsNullOrWhiteSpace(search))
         {

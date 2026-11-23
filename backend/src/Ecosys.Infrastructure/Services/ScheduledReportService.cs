@@ -39,7 +39,6 @@ public sealed record CreateScheduledReportRequest(
     string TimeOfDay,
     string DateRangePreset,
     string? GroupBy,
-    string? ClientId,
     string Recipients,
     Guid? OrgNodeId = null);
 
@@ -122,7 +121,6 @@ public sealed class ScheduledReportService(
         report.TimeOfDay = req.TimeOfDay;
         report.DateRangePreset = req.DateRangePreset;
         report.GroupBy = req.GroupBy;
-        report.ClientId = req.ClientId;
         report.OrgNodeId = req.OrgNodeId;
         report.Recipients = req.Recipients.Trim();
         report.NextRunAt = await ComputeNextRunAtAsync(report);
@@ -408,7 +406,6 @@ public sealed class ScheduledReportService(
         TimeOfDay = req.TimeOfDay,
         DateRangePreset = req.DateRangePreset,
         GroupBy = req.GroupBy,
-        ClientId = req.ClientId,
         OrgNodeId = req.OrgNodeId,
         Recipients = req.Recipients.Trim(),
         IsActive = true

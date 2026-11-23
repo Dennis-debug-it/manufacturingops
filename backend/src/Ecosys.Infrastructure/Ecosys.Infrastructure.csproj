@@ -35,9 +35,4 @@
     <ProjectReference Include="..\Ecosys.Shared\Ecosys.Shared.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- The client's own Word template for the solar installation report (filled by SolarInstallationDocxRenderer). -->
-    <EmbeddedResource Include="Reports\Templates\*.docx" />
-  </ItemGroup>
-
 </Project>

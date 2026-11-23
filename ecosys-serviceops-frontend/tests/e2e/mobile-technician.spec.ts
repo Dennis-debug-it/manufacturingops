@@ -143,7 +143,7 @@ test.describe('mobile technician mode', () => {
     }
     await page.route(`${E2E_API_URL}/api/workorders/${state.workOrder.id}/notes`, async (route) => {
       if (route.request().method() === 'POST') sent.notes.push(route.request().postDataJSON() as Record<string, unknown>)
-      await reply(route, route.request().method() === 'POST' ? { id: 'note-1', workOrderId: state.workOrder.id, content: 'Client wants a quote', isClientVisible: false, createdByUserId: 'user-1', createdByUserName: 'Moses Otieno', createdAt: '2026-05-16T10:00:00Z' } : [])
+      await reply(route, route.request().method() === 'POST' ? { id: 'note-1', workOrderId: state.workOrder.id, content: 'Client wants a quote', createdByUserId: 'user-1', createdByUserName: 'Moses Otieno', createdAt: '2026-05-16T10:00:00Z' } : [])
     })
     await page.route(`${E2E_API_URL}/api/workorders/${state.workOrder.id}/photos/photo-9`, async (route) => {
       if (route.request().method() === 'PUT') {
@@ -159,7 +159,7 @@ test.describe('mobile technician mode', () => {
     await page.getByLabel('Note to office').fill('Client wants a quote')
     await page.getByRole('button', { name: 'Send note' }).click()
     await expect(page.getByText('Note sent to the office')).toBeVisible()
-    expect(sent.notes[0]).toEqual({ content: 'Client wants a quote', isClientVisible: false })
+    expect(sent.notes[0]).toEqual({ content: 'Client wants a quote' })
 
     await page.getByRole('link', { name: /Photos/ }).click()
     await page.getByRole('button', { name: 'Edit caption for panel.jpg' }).click()

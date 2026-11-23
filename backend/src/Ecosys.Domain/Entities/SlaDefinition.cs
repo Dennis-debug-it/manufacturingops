@@ -12,5 +12,4 @@ public sealed class SlaDefinition : AuditableEntity, ITenantEntity
 
     public Tenant? Tenant { get; set; }
     public ICollection<SlaRule> Rules { get; set; } = new List<SlaRule>();
-    public ICollection<Client> Clients { get; set; } = new List<Client>();
 }

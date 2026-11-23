@@ -191,8 +191,6 @@ public sealed class TeamManagementController(
                     {
                         assignment.TechnicianId,
                         assignment.Status,
-                        assignment.ArrivalAt,
-                        assignment.DepartureAt,
                         WorkOrderStatus = workOrder.Status
                     })
                 .ToListAsync(cancellationToken);
@@ -204,8 +202,7 @@ public sealed class TeamManagementController(
                 group => group.Key,
                 group => new AssignmentLoad(
                     group.Count(),
-                    group.Count(x => string.Equals(x.Status, "Pending", StringComparison.OrdinalIgnoreCase)),
-                    group.Count(x => x.ArrivalAt.HasValue && !x.DepartureAt.HasValue)));
+                    group.Count(x => string.Equals(x.Status, "Pending", StringComparison.OrdinalIgnoreCase))));
 
         var technicianByUserId = technicians
             .Where(x => x.UserId.HasValue)
@@ -270,7 +267,6 @@ public sealed class TeamManagementController(
                     certifications,
                     load.ActiveWorkOrderCount,
                     load.PendingResponseCount,
-                    load.OnSiteCount,
                     readiness.Status,
                     readiness.Reasons);
             })
@@ -438,9 +434,9 @@ public sealed class TeamManagementController(
         }
     }
 
-    private sealed record AssignmentLoad(int ActiveWorkOrderCount, int PendingResponseCount, int OnSiteCount)
+    private sealed record AssignmentLoad(int ActiveWorkOrderCount, int PendingResponseCount)
     {
-        public static AssignmentLoad Empty { get; } = new(0, 0, 0);
+        public static AssignmentLoad Empty { get; } = new(0, 0);
     }
 
     private sealed record TeamReadiness(string Status, IReadOnlyCollection<string> Reasons);
@@ -468,7 +464,6 @@ public sealed record TeamManagementProfileResponse(
     IReadOnlyCollection<TeamManagementCertificationAssignmentResponse> Certifications,
     int ActiveWorkOrderCount,
     int PendingResponseCount,
-    int OnSiteCount,
     string ReadinessStatus,
     IReadOnlyCollection<string> ReadinessReasons);
 

@@ -152,7 +152,6 @@ internal sealed class WorkOrderLifecycleService(
         }
 
         await TryQueueStartedEmailAsync(tenantId, workOrder, actorUserId, cancellationToken);
-        await TryQueueClientStartedEmailAsync(tenantId, workOrder, actorUserId, cancellationToken);
         return workOrder;
     }
 
@@ -166,14 +165,9 @@ internal sealed class WorkOrderLifecycleService(
         if (WorkOrderStatuses.IsHold(normalizedStatus))
         {
             await TryQueueHoldEmailAsync(tenantId, workOrder, cancellationToken);
-            await TryQueueClientOnHoldEmailAsync(tenantId, workOrder, request.Reason ?? request.Note, cancellationToken);
         }
 
-        if (string.Equals(normalizedStatus, WorkOrderStatuses.Closed, StringComparison.OrdinalIgnoreCase))
-        {
-            await TryQueueClosedEmailAsync(tenantId, workOrder, cancellationToken);
-        }
-        else if (string.Equals(normalizedStatus, WorkOrderStatuses.Cancelled, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(normalizedStatus, WorkOrderStatuses.Cancelled, StringComparison.OrdinalIgnoreCase))
         {
             await TryQueueCancelledEmailAsync(tenantId, workOrder, request.Reason ?? request.Note, cancellationToken);
         }
@@ -190,7 +184,6 @@ internal sealed class WorkOrderLifecycleService(
 
         await TransitionAsync(workOrder, actorUserId, targetStatus, derivedHoldReason, reason, cancellationToken);
         await TryQueueHoldEmailAsync(tenantId, workOrder, cancellationToken);
-        await TryQueueClientOnHoldEmailAsync(tenantId, workOrder, reason ?? derivedHoldReason, cancellationToken);
         await NotifySafeAsync(tenantId, workOrder.Id, cancellationToken);
         return workOrder;
     }
@@ -247,10 +240,6 @@ internal sealed class WorkOrderLifecycleService(
                     .Select(x => x.AssetName).SingleOrDefaultAsync(cancellationToken)
                 : null;
 
-            var clientName = workOrder.ClientId != Guid.Empty
-                ? await dbContext.Clients.Where(x => x.Id == workOrder.ClientId)
-                    .Select(x => x.ClientName).SingleOrDefaultAsync(cancellationToken)
-                : null;
 
             var template = await emailTemplateService.RenderTenantTemplateAsync(
                 tenantId,
@@ -260,7 +249,6 @@ internal sealed class WorkOrderLifecycleService(
                     ["WorkOrderNumber"] = workOrder.WorkOrderNumber,
                     ["HoldReason"] = workOrder.HoldReason ?? "Not specified",
                     ["HoldNote"] = string.IsNullOrWhiteSpace(workOrder.HoldNote) ? "None" : workOrder.HoldNote,
-                    ["ClientName"] = clientName ?? "N/A",
                     ["AssetName"] = assetName ?? "N/A"
                 },
                 cancellationToken);
@@ -298,10 +286,6 @@ internal sealed class WorkOrderLifecycleService(
             if (string.IsNullOrWhiteSpace(technician.Email))
                 return;
 
-            var clientName = workOrder.ClientId != Guid.Empty
-                ? await dbContext.Clients.Where(x => x.Id == workOrder.ClientId)
-                    .Select(x => x.ClientName).SingleOrDefaultAsync(cancellationToken)
-                : null;
 
             var assignedByName = actorUserId.HasValue
                 ? await dbContext.Users.Where(x => x.Id == actorUserId.Value)
@@ -315,7 +299,6 @@ internal sealed class WorkOrderLifecycleService(
                 {
                     ["WorkOrderNumber"] = workOrder.WorkOrderNumber,
                     ["AssignedTo"] = technician.FullName,
-                    ["ClientName"] = clientName ?? "N/A",
                     ["DueDate"] = workOrder.DueDate?.ToString("yyyy-MM-dd") ?? "Not set",
                     ["AssignedBy"] = assignedByName ?? "N/A"
                 },
@@ -399,54 +382,6 @@ internal sealed class WorkOrderLifecycleService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Failed to queue work-order.started email for work order {WorkOrderId}.", workOrder.Id);
-        }
-    }
-
-    private async Task TryQueueClosedEmailAsync(Guid tenantId, WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        try
-        {
-            if (workOrder.ClientId == Guid.Empty)
-                return;
-
-            var client = await dbContext.Clients
-                .Where(x => x.Id == workOrder.ClientId)
-                .Select(x => new { x.Email, x.ClientName })
-                .SingleOrDefaultAsync(cancellationToken);
-
-            if (client is null || string.IsNullOrWhiteSpace(client.Email))
-                return;
-
-            var template = await emailTemplateService.RenderTenantTemplateAsync(
-                tenantId,
-                "work-order.closed",
-                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["WorkOrderNumber"] = workOrder.WorkOrderNumber,
-                    ["ClientName"] = client.ClientName,
-                    ["CompletionSummary"] = string.IsNullOrWhiteSpace(workOrder.WorkDoneNotes)
-                        ? "Work completed successfully."
-                        : workOrder.WorkDoneNotes
-                },
-                cancellationToken);
-
-            if (!template.Enabled)
-                return;
-
-            var subject = await emailSubjectRuleService.BuildFinalSubjectAsync(
-                tenantId, "work-order.closed", template.Subject, cancellationToken: cancellationToken);
-
-            await emailOutboxService.QueueEmailAsync(
-                new QueueEmailRequest(
-                    tenantId, "work-order.closed", "work-order-closed",
-                    client.Email, client.ClientName,
-                    template.SenderNameOverride, null, null,
-                    subject, template.HtmlBody, template.TextBody, null),
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to queue work-order.closed email for work order {WorkOrderId}.", workOrder.Id);
         }
     }
 
@@ -623,7 +558,6 @@ internal sealed class WorkOrderLifecycleService(
         await dbContext.SaveChangesAsync(cancellationToken);
         await slaService.RefreshWorkOrderAsync(workOrder.Id, DateTime.UtcNow, cancellationToken);
         await TryQueueCompletionEmailAsync(tenantId, workOrder, cancellationToken);
-        await TryQueueClientCompletedEmailAsync(tenantId, workOrder, cancellationToken);
         await NotifySafeAsync(tenantId, workOrder.Id, cancellationToken);
         return workOrder;
     }
@@ -779,181 +713,6 @@ internal sealed class WorkOrderLifecycleService(
         }
     }
 
-    // ── Client notification emails ─────────────────────────────────────────────
-
-    private async Task TryQueueClientStartedEmailAsync(Guid tenantId, WorkOrder workOrder, Guid actorUserId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            if (!workOrder.NotifyClient) return;
-
-            var client = await dbContext.Clients
-                .Where(x => x.Id == workOrder.ClientId)
-                .Select(x => new { x.Email, x.ClientName })
-                .SingleOrDefaultAsync(cancellationToken);
-
-            var recipientEmail = workOrder.ClientContactEmail ?? client?.Email;
-            if (string.IsNullOrWhiteSpace(recipientEmail)) return;
-
-            var technicianName = await dbContext.Users
-                .Where(x => x.Id == actorUserId)
-                .Select(x => x.FullName)
-                .SingleOrDefaultAsync(cancellationToken);
-
-            var siteName = workOrder.SiteId.HasValue
-                ? await dbContext.Sites.Where(x => x.Id == workOrder.SiteId.Value)
-                    .Select(x => x.SiteName).SingleOrDefaultAsync(cancellationToken)
-                : null;
-
-            var template = await emailTemplateService.RenderTenantTemplateAsync(
-                tenantId,
-                "work-order.client.started",
-                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["WoNumber"]           = workOrder.WorkOrderNumber,
-                    ["Title"]              = workOrder.Title,
-                    ["TechnicianName"]     = technicianName ?? "Your assigned technician",
-                    ["EstimatedDuration"]  = workOrder.EstimatedDuration.HasValue
-                                               ? $"{workOrder.EstimatedDuration.Value} hours"
-                                               : "To be confirmed",
-                    ["SiteName"]           = siteName ?? "N/A",
-                    ["ClientName"]         = client?.ClientName ?? "Valued Client"
-                },
-                cancellationToken);
-
-            if (!template.Enabled) return;
-
-            var subject = await emailSubjectRuleService.BuildFinalSubjectAsync(
-                tenantId, "work-order.client.started", template.Subject, cancellationToken: cancellationToken);
-
-            await emailOutboxService.QueueEmailAsync(
-                new QueueEmailRequest(
-                    tenantId, "work-order.client.started", "work-order-client-started",
-                    recipientEmail, client?.ClientName,
-                    template.SenderNameOverride, null, null,
-                    subject, template.HtmlBody, template.TextBody, null),
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to queue work-order.client.started email for work order {WorkOrderId}.", workOrder.Id);
-        }
-    }
-
-    private async Task TryQueueClientOnHoldEmailAsync(Guid tenantId, WorkOrder workOrder, string? reason, CancellationToken cancellationToken)
-    {
-        try
-        {
-            if (!workOrder.NotifyClient) return;
-
-            var client = await dbContext.Clients
-                .Where(x => x.Id == workOrder.ClientId)
-                .Select(x => new { x.Email, x.ClientName, x.Phone })
-                .SingleOrDefaultAsync(cancellationToken);
-
-            var recipientEmail = workOrder.ClientContactEmail ?? client?.Email;
-            if (string.IsNullOrWhiteSpace(recipientEmail)) return;
-
-            var template = await emailTemplateService.RenderTenantTemplateAsync(
-                tenantId,
-                "work-order.client.on-hold",
-                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["WoNumber"]    = workOrder.WorkOrderNumber,
-                    ["Title"]       = workOrder.Title,
-                    ["HoldReason"]  = !string.IsNullOrWhiteSpace(reason) ? reason
-                                      : (!string.IsNullOrWhiteSpace(workOrder.HoldReason) ? workOrder.HoldReason : "Under review"),
-                    ["HoldNote"]    = string.IsNullOrWhiteSpace(workOrder.HoldNote)
-                                      ? "Our team will be in contact shortly."
-                                      : workOrder.HoldNote,
-                    ["ClientName"]  = client?.ClientName ?? "Valued Client",
-                    ["ContactInfo"] = client?.Phone ?? "your service provider"
-                },
-                cancellationToken);
-
-            if (!template.Enabled) return;
-
-            var subject = await emailSubjectRuleService.BuildFinalSubjectAsync(
-                tenantId, "work-order.client.on-hold", template.Subject, cancellationToken: cancellationToken);
-
-            await emailOutboxService.QueueEmailAsync(
-                new QueueEmailRequest(
-                    tenantId, "work-order.client.on-hold", "work-order-client-on-hold",
-                    recipientEmail, client?.ClientName,
-                    template.SenderNameOverride, null, null,
-                    subject, template.HtmlBody, template.TextBody, null),
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to queue work-order.client.on-hold email for work order {WorkOrderId}.", workOrder.Id);
-        }
-    }
-
-    private async Task TryQueueClientCompletedEmailAsync(Guid tenantId, WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        try
-        {
-            if (!workOrder.NotifyClient) return;
-
-            var client = await dbContext.Clients
-                .Where(x => x.Id == workOrder.ClientId)
-                .Select(x => new { x.Email, x.ClientName })
-                .SingleOrDefaultAsync(cancellationToken);
-
-            var recipientEmail = workOrder.ClientContactEmail ?? client?.Email;
-            if (string.IsNullOrWhiteSpace(recipientEmail)) return;
-
-            var technicianNames = await dbContext.WorkOrderTechnicianAssignments
-                .Where(x => x.TenantId == tenantId && x.WorkOrderId == workOrder.Id)
-                .Join(dbContext.Technicians, a => a.TechnicianId, t => t.Id, (_, t) => t.FullName)
-                .ToListAsync(cancellationToken);
-
-            if (technicianNames.Count == 0 && workOrder.AssignedTechnicianId.HasValue)
-            {
-                var name = await dbContext.Technicians
-                    .Where(x => x.Id == workOrder.AssignedTechnicianId.Value)
-                    .Select(x => x.FullName)
-                    .SingleOrDefaultAsync(cancellationToken);
-                if (name is not null) technicianNames.Add(name);
-            }
-
-            var template = await emailTemplateService.RenderTenantTemplateAsync(
-                tenantId,
-                "work-order.client.completed",
-                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["WoNumber"]         = workOrder.WorkOrderNumber,
-                    ["Title"]            = workOrder.Title,
-                    ["CompletionDate"]   = (workOrder.CompletedAt ?? DateTime.UtcNow).ToString("dd MMM yyyy"),
-                    ["TechnicianNames"]  = technicianNames.Count > 0
-                                           ? string.Join(", ", technicianNames)
-                                           : "Your assigned technician",
-                    ["Summary"]          = string.IsNullOrWhiteSpace(workOrder.WorkDoneNotes)
-                                           ? "Work completed successfully."
-                                           : workOrder.WorkDoneNotes,
-                    ["ClientName"]       = client?.ClientName ?? "Valued Client"
-                },
-                cancellationToken);
-
-            if (!template.Enabled) return;
-
-            var subject = await emailSubjectRuleService.BuildFinalSubjectAsync(
-                tenantId, "work-order.client.completed", template.Subject, cancellationToken: cancellationToken);
-
-            await emailOutboxService.QueueEmailAsync(
-                new QueueEmailRequest(
-                    tenantId, "work-order.client.completed", "work-order-client-completed",
-                    recipientEmail, client?.ClientName,
-                    template.SenderNameOverride, null, null,
-                    subject, template.HtmlBody, template.TextBody, null),
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Failed to queue work-order.client.completed email for work order {WorkOrderId}.", workOrder.Id);
-        }
-    }
 
     // ── Private helpers (state machine) ───────────────────────────────────────
 
@@ -1106,15 +865,6 @@ internal sealed class WorkOrderLifecycleService(
                 if (!string.Equals(assignment.Status, terminalTechnicianStatus, StringComparison.OrdinalIgnoreCase))
                 {
                     assignment.Status = terminalTechnicianStatus;
-                }
-
-                // A technician who arrived but never marked departure is off site once the job is
-                // finished; without this the departure timestamp stays null forever.
-                if (string.Equals(terminalTechnicianStatus, "Completed", StringComparison.OrdinalIgnoreCase)
-                    && assignment.ArrivalAt.HasValue
-                    && !assignment.DepartureAt.HasValue)
-                {
-                    assignment.DepartureAt = utcNow;
                 }
             }
         }

@@ -11,12 +11,12 @@ Tenant and settings:
 - GET/PUT /api/settings/* -> tenant settings screens
 
 Operational modules:
-- /api/workorders, /api/clients, /api/sites, /api/assets, /api/technicians, /api/branches
-- /api/contracts, /api/finance/*, /api/reports, /api/materials, /api/pm-*
+- /api/workorders, /api/assets, /api/technicians, /api/branches
+- /api/finance/*, /api/reports, /api/materials, /api/pm-*
 - /api/platform/* for platform dashboard, CRM, tenants, finance, users, audit, settings
 
 Frontend mapping:
-- tenant shell: dashboard, work orders, maintenance, clients, inventory, team, contracts, finance, reports, settings
+- tenant shell: dashboard, work orders, maintenance, inventory, team, finance, reports, settings
 - platform shell: platform dashboard, CRM, tenants, finance, users, audit, system settings
 
 TODO markers below are intentional for endpoints that exist in the domain spec but are not confirmed in the current backend snapshot.
@@ -56,7 +56,6 @@ export const endpoints = {
     checklist: (id: string) => `/api/workorders/${id}/checklist`,
     attachPmTemplate: (id: string) => `/api/workorders/${id}/attach-pm-template`,
     checklistItem: (workOrderId: string, itemId: string) => `/api/workorders/${workOrderId}/checklist/${itemId}`,
-    create: '/api/workorders',
     update: (id: string) => `/api/workorders/${id}`,
     assign: (id: string) => `/api/workorders/${id}/assign`,
     start: (id: string) => `/api/workorders/${id}/start`,
@@ -69,7 +68,6 @@ export const endpoints = {
     events: (id: string) => `/api/workorders/${id}/events`,
     comments: (id: string) => `/api/workorders/${id}/comments`,
     complete: (id: string) => `/api/workorders/${id}/complete`,
-    acknowledge: (id: string) => `/api/workorders/${id}/acknowledge`,
     jobCard: (id: string) => `/api/workorders/${id}/job-card`,
     // Assignment (WorkOrderAssignmentsController)
     assignGroup: (id: string) => `/api/workorders/${id}/assign-group`,
@@ -97,7 +95,6 @@ export const endpoints = {
     close: (id: string) => `/api/workorders/${id}/close`,
     cancel: (id: string) => `/api/workorders/${id}/cancel`,
     duplicate: (id: string) => `/api/workorders/${id}/duplicate`,
-    fromQuote: '/api/workorders/from-quote',
     children: (id: string) => `/api/workorders/${id}/children`,
     followUpSourceReport: (id: string) => `/api/workorders/${id}/follow-up-source/service-report`,
     followUpSourceReportPdf: (id: string) => `/api/workorders/${id}/follow-up-source/service-report/pdf`,
@@ -142,13 +139,6 @@ export const endpoints = {
   technicians: {
     list: '/api/technicians',
     detail: (id: string) => `/api/technicians/${id}`,
-  },
-  intakeRules: {
-    list: '/api/settings/intake-protocols',
-    detail: (id: string) => `/api/settings/intake-protocols/${id}`,
-    templates: '/api/settings/intake-protocols/templates',
-    addTemplate: (key: string) => `/api/settings/intake-protocols/templates/${key}`,
-    preview: '/api/settings/intake-protocols/preview',
   },
   assignmentGroups: {
     list: '/api/assignment-groups',
@@ -297,7 +287,6 @@ export const endpoints = {
   whatsAppNotifications: {
     settings: '/api/whatsapp-notifications/settings',
     outbox: '/api/whatsapp-notifications/outbox',
-    contactConsent: (clientId: string, contactId: string) => `/api/clients/${clientId}/portal-users/${contactId}/whatsapp`,
     platformTenant: (tenantId: string) => `/api/platform/whatsapp/tenants/${tenantId}`,
   },
   calendar: {
@@ -391,8 +380,6 @@ export const endpoints = {
     dashboardSummary: '/api/platform/dashboard/summary',
     tenants: '/api/platform/tenants',
     tenant: (id: string) => `/api/platform/tenants/${id}`,
-    clientTemplates: (tenantId: string) => `/api/platform/tenants/${tenantId}/client-templates`,
-    installClientTemplate: (tenantId: string, key: string) => `/api/platform/tenants/${tenantId}/client-templates/${encodeURIComponent(key)}/install`,
     tenantActivate: (id: string) => `/api/platform/tenants/${id}/activate`,
     tenantSuspend: (id: string) => `/api/platform/tenants/${id}/suspend`,
     tenantDeactivate: (id: string) => `/api/platform/tenants/${id}/deactivate`,

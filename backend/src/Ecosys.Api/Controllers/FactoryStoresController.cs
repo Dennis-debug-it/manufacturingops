@@ -1207,7 +1207,7 @@ public sealed class FactoryStoresController(
 
     private async Task<WorkOrder> LoadJobAsync(Guid id, CancellationToken cancellationToken)
     {
-        var job = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id && x.ClientId == null, cancellationToken) ?? throw new NotFoundException("Job was not found.");
+        var job = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken) ?? throw new NotFoundException("Job was not found.");
         if (job.OrgNodeId is { } node) await orgScopeService.EnsureCanAccessAsync(TenantId, UserId, node, cancellationToken);
         return job;
     }

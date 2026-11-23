@@ -83,7 +83,7 @@ export function FactoryAssetFormDrawer({ open, onClose, asset, defaultOrgNodeId,
       const saved = await save.mutateAsync({
         id: asset?.id,
         payload: {
-          clientId: null, branchId: null, siteId: null, systemId: null,
+          branchId: null,
           assetCategoryId: form.assetCategoryId || null,
           assetName: form.assetName.trim(),
           assetCode: form.assetCode.trim() || null,

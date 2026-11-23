@@ -88,7 +88,7 @@ public sealed class ScheduledReportValidationTests
         string reportType = "WorkOrderSummary",
         string frequency = "Monthly",
         string recipients = "finance@acme.test")
-        => new(name, reportType, frequency, 1, null, "08:00", "LastMonth", null, null, recipients);
+        => new(name, reportType, frequency, 1, null, "08:00", "LastMonth", null, recipients);
 
     private static Tenant MinimalTenant(out Guid id)
     {

@@ -38,9 +38,6 @@ public sealed class AssetsController(
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? branchId,
-        [FromQuery] Guid? clientId,
-        [FromQuery] Guid? siteId,
-        [FromQuery] Guid? systemId,
         [FromQuery] Guid? categoryId,
         [FromQuery] string? search,
         [FromQuery] string? status,
@@ -61,10 +58,7 @@ public sealed class AssetsController(
         var normalizedSearch = NormalizeSearch(search);
 
         var query = dbContext.Assets
-            .Include(x => x.Client)
             .Include(x => x.Branch)
-            .Include(x => x.Site)
-            .Include(x => x.System)
             .Include(x => x.AssetCategory)
             .Include(x => x.OrgNode)
             .Include(x => x.ParentAsset)
@@ -97,21 +91,6 @@ public sealed class AssetsController(
             query = query.Where(x => x.ParentAssetId == null);
         }
 
-        if (clientId.HasValue)
-        {
-            query = query.Where(x => x.ClientId == clientId.Value);
-        }
-
-        if (siteId.HasValue)
-        {
-            query = query.Where(x => x.SiteId == siteId.Value);
-        }
-
-        if (systemId.HasValue)
-        {
-            query = query.Where(x => x.SystemId == systemId.Value);
-        }
-
         if (categoryId.HasValue)
         {
             query = query.Where(x => x.AssetCategoryId == categoryId.Value);
@@ -135,8 +114,7 @@ public sealed class AssetsController(
                 || (x.SerialNumber != null && x.SerialNumber.ToLower().Contains(searchLower))
                 || (x.Manufacturer != null && x.Manufacturer.ToLower().Contains(searchLower))
                 || (x.Model != null && x.Model.ToLower().Contains(searchLower))
-                || (x.Location != null && x.Location.ToLower().Contains(searchLower))
-                || (x.Client != null && x.Client.ClientName.ToLower().Contains(searchLower)));
+                || (x.Location != null && x.Location.ToLower().Contains(searchLower)));
         }
 
         var ordered = query.OrderBy(x => x.AssetName);
@@ -147,11 +125,7 @@ public sealed class AssetsController(
             var candidates = await ordered
                 .Where(x => !x.WarrantyExpiryDate.HasValue || x.WarrantyExpiryDate.Value < today)
                 .ToListAsync(cancellationToken);
-            var contracts = await LoadSupportingContractsAsync(candidates.Select(x => x.ClientId), cancellationToken);
-            var unsupported = candidates
-                .Where(x => !IsCoveredByContract(x, contracts))
-                .Select(x => Map(x, hasContractCover: false))
-                .ToList();
+            var unsupported = candidates.Select(Map).ToList();
 
             return QueryablePagingExtensions.IsPagingRequested(page, pageSize)
                 ? Ok(unsupported.ToPagedResult(page, pageSize))
@@ -161,13 +135,11 @@ public sealed class AssetsController(
         if (QueryablePagingExtensions.IsPagingRequested(page, pageSize))
         {
             var paged = await ordered.ToPagedResultAsync(page, pageSize, cancellationToken);
-            var pageContracts = await LoadSupportingContractsAsync(paged.Items.Select(x => x.ClientId), cancellationToken);
-            return Ok(paged.Map(x => Map(x, IsCoveredByContract(x, pageContracts))));
+            return Ok(paged.Map(Map));
         }
 
         var assets = await ordered.ToListAsync(cancellationToken);
-        var allContracts = await LoadSupportingContractsAsync(assets.Select(x => x.ClientId), cancellationToken);
-        return Ok(assets.Select(x => Map(x, IsCoveredByContract(x, allContracts))).ToList());
+        return Ok(assets.Select(Map).ToList());
     }
 
     [HttpGet("{id:guid}")]
@@ -182,7 +154,7 @@ public sealed class AssetsController(
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Asset was not found.");
 
-        return Ok(await MapWithCoverageAsync(asset, cancellationToken));
+        return Ok(Map(asset));
     }
 
     /// <summary>
@@ -209,7 +181,7 @@ public sealed class AssetsController(
         }
 
         await RetireAsync(asset, request.DecommissionDate, reason, cancellationToken);
-        return Ok(await MapWithCoverageAsync(asset, cancellationToken));
+        return Ok(Map(asset));
     }
 
     /// <summary>
@@ -246,7 +218,7 @@ public sealed class AssetsController(
                 $"Automatic PM turned {(request.Enabled ? "on" : "off")} for asset '{asset.AssetName}'.", cancellationToken);
         }
 
-        return Ok(await MapWithCoverageAsync(asset, cancellationToken));
+        return Ok(Map(asset));
     }
 
     /// <summary>Retires several assets at once, e.g. everything the "out of support" view lists.</summary>
@@ -318,7 +290,7 @@ public sealed class AssetsController(
             $"Reactivated asset '{asset.AssetName}'.",
             cancellationToken);
 
-        return Ok(await MapWithCoverageAsync(asset, cancellationToken));
+        return Ok(Map(asset));
     }
 
     private const int MaxBulkRetire = 500;
@@ -361,10 +333,7 @@ public sealed class AssetsController(
 
     private IQueryable<Asset> LoadAssetForResponse() =>
         dbContext.Assets
-            .Include(x => x.Client)
             .Include(x => x.Branch)
-            .Include(x => x.Site)
-            .Include(x => x.System)
             .Include(x => x.AssetCategory)
             .Include(x => x.OrgNode)
             .Include(x => x.ParentAsset)
@@ -421,74 +390,12 @@ public sealed class AssetsController(
             ? await assetLifecycleService.EnsureLocationAsync(TenantId, UserId, locationId.Value, cancellationToken)
             : null;
 
-        if (!request.ClientId.HasValue && location is null)
+        if (location is null)
         {
             throw new BusinessRuleException("Choose where the asset is located (factory, section or sub-section).");
         }
 
-        if (location is null)
-        {
-            // A client asset (ServiceOps) is visible only to users who see the whole organisation.
-            var orgScope = await orgScopeService.GetScopeAsync(TenantId, UserId, cancellationToken);
-            if (!orgScope.IsUnrestricted)
-            {
-                throw new BusinessRuleException("Choose where the asset is located (factory, section or sub-section).");
-            }
-        }
-
         return (location, parent);
-    }
-
-    /// <summary>
-    /// Contracts that currently provide cover: in term (or within their grace period) and in a
-    /// lifecycle state that allows service. Mirrors the contract coverage service's eligibility
-    /// rules, without the work-order-type matching that only applies to a specific job.
-    /// </summary>
-    private async Task<List<Contract>> LoadSupportingContractsAsync(IEnumerable<Guid?> clientIds, CancellationToken cancellationToken)
-    {
-        var ids = clientIds.Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
-        if (ids.Count == 0)
-        {
-            return [];
-        }
-
-        var today = DateTime.UtcNow.Date;
-        var contracts = await dbContext.Contracts
-            .AsNoTracking()
-            .Include(x => x.Sites)
-            .Include(x => x.Assets)
-            .Include(x => x.AssetCategories)
-                .ThenInclude(x => x.AssetCategory)
-            .Where(x => x.TenantId == TenantId
-                && ids.Contains(x.ClientId)
-                && !x.IsArchived
-                && x.StartDate <= today.AddDays(1)
-                && (x.Status == ContractStatus.Active
-                    || x.Status == ContractStatus.ExpiringSoon
-                    || x.Status == ContractStatus.RenewalInProgress
-                    || x.Status == ContractStatus.Expired))
-            .ToListAsync(cancellationToken);
-
-        return contracts.Where(x => ContractAssetScope.IsInForce(x, today)).ToList();
-    }
-
-    private static bool IsCoveredByContract(Asset asset, IReadOnlyCollection<Contract> contracts) =>
-        FindCoveringContract(asset, contracts) is not null;
-
-    /// <summary>The contract covering this asset; see <see cref="ContractAssetScope.FindCovering"/>.</summary>
-    public static (Contract Contract, string Scope)? FindCoveringContract(Asset asset, IReadOnlyCollection<Contract> contracts) =>
-        ContractAssetScope.FindCovering(asset, contracts);
-
-    private async Task<AssetResponse> MapWithCoverageAsync(Asset asset, CancellationToken cancellationToken)
-    {
-        var contracts = await LoadSupportingContractsAsync([asset.ClientId], cancellationToken);
-        var cover = FindCoveringContract(asset, contracts);
-        return Map(asset, cover is not null) with
-        {
-            CoveredBy = cover is { } found
-                ? new AssetContractCoverResponse(found.Contract.Id, found.Contract.ContractNumber, found.Contract.Name, found.Contract.Status.ToString(), found.Contract.EndDate, found.Scope)
-                : null,
-        };
     }
 
     private static bool NormalizeSupportFilter(string? support)
@@ -512,7 +419,6 @@ public sealed class AssetsController(
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
         await licenseGuardService.EnsureTenantCanMutateAsync(TenantId, cancellationToken);
         Validate(request);
-        await EnsureClientPlacementAsync(request, cancellationToken);
         await EnsureCategoryRequestIsValidAsync(request.AssetCategoryId, request.CustomFieldValues, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.AssetCode))
         {
@@ -528,9 +434,6 @@ public sealed class AssetsController(
         {
             TenantId = TenantId,
             BranchId = branchId,
-            ClientId = request.ClientId,
-            SiteId = request.SiteId,
-            SystemId = request.SystemId,
             AssetCategoryId = request.AssetCategoryId,
             AssetName = request.AssetName.Trim(),
             AssetCode = string.IsNullOrWhiteSpace(request.AssetCode)
@@ -594,7 +497,6 @@ public sealed class AssetsController(
             $"Created asset '{asset.AssetName}'.",
             cancellationToken);
 
-        await dbContext.Entry(asset).Reference(x => x.Client).LoadAsync(cancellationToken);
         if (asset.OrgNodeId.HasValue)
         {
             await dbContext.Entry(asset).Reference(x => x.OrgNode).LoadAsync(cancellationToken);
@@ -607,21 +509,13 @@ public sealed class AssetsController(
         {
             await dbContext.Entry(asset).Reference(x => x.Branch).LoadAsync(cancellationToken);
         }
-        if (asset.SiteId.HasValue)
-        {
-            await dbContext.Entry(asset).Reference(x => x.Site).LoadAsync(cancellationToken);
-        }
-        if (asset.SystemId.HasValue)
-        {
-            await dbContext.Entry(asset).Reference(x => x.System).LoadAsync(cancellationToken);
-        }
         if (asset.AssetCategoryId.HasValue)
         {
             await dbContext.Entry(asset).Reference(x => x.AssetCategory).LoadAsync(cancellationToken);
         }
         await dbContext.Entry(asset).Collection(x => x.CustomFieldValues).Query().Include(x => x.FieldDefinition).LoadAsync(cancellationToken);
 
-        return CreatedAtAction(nameof(Get), new { id = asset.Id }, await MapWithCoverageAsync(asset, cancellationToken));
+        return CreatedAtAction(nameof(Get), new { id = asset.Id }, Map(asset));
     }
 
     [HttpPut("{id:guid}")]
@@ -630,17 +524,13 @@ public sealed class AssetsController(
         userAccessService.EnsureAdminOrPermission(PermissionNames.CanManageAssets);
         Validate(request);
         var asset = await (await ApplyOrgScopeAsync(dbContext.Assets
-            .Include(x => x.Client)
             .Include(x => x.Branch)
-            .Include(x => x.Site)
-            .Include(x => x.System)
             .Include(x => x.AssetCategory)
             .Include(x => x.CustomFieldValues)
             .Where(x => x.TenantId == TenantId && x.Id == id), cancellationToken))
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Asset was not found.");
 
-        await EnsureClientPlacementAsync(request, cancellationToken);
         await EnsureCategoryRequestIsValidAsync(request.AssetCategoryId, request.CustomFieldValues, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.AssetCode))
         {
@@ -698,9 +588,6 @@ public sealed class AssetsController(
         var branchId = await branchAccessService.ResolveBranchIdForWriteAsync(TenantId, request.BranchId ?? asset.BranchId, cancellationToken);
 
         asset.BranchId = branchId;
-        asset.ClientId = request.ClientId;
-        asset.SiteId = request.SiteId;
-        asset.SystemId = request.SystemId;
         asset.AssetCategoryId = request.AssetCategoryId;
         asset.AssetName = request.AssetName.Trim();
         asset.AssetCode = string.IsNullOrWhiteSpace(request.AssetCode) ? asset.AssetCode : request.AssetCode.Trim();
@@ -737,7 +624,6 @@ public sealed class AssetsController(
             $"Updated asset '{asset.AssetName}'.",
             cancellationToken);
 
-        await dbContext.Entry(asset).Reference(x => x.Client).LoadAsync(cancellationToken);
         if (asset.OrgNodeId.HasValue)
         {
             await dbContext.Entry(asset).Reference(x => x.OrgNode).LoadAsync(cancellationToken);
@@ -750,82 +636,13 @@ public sealed class AssetsController(
         {
             await dbContext.Entry(asset).Reference(x => x.Branch).LoadAsync(cancellationToken);
         }
-        if (asset.SiteId.HasValue)
-        {
-            await dbContext.Entry(asset).Reference(x => x.Site).LoadAsync(cancellationToken);
-        }
-        if (asset.SystemId.HasValue)
-        {
-            await dbContext.Entry(asset).Reference(x => x.System).LoadAsync(cancellationToken);
-        }
         if (asset.AssetCategoryId.HasValue)
         {
             await dbContext.Entry(asset).Reference(x => x.AssetCategory).LoadAsync(cancellationToken);
         }
         await dbContext.Entry(asset).Collection(x => x.CustomFieldValues).Query().Include(x => x.FieldDefinition).LoadAsync(cancellationToken);
 
-        return Ok(await MapWithCoverageAsync(asset, cancellationToken));
-    }
-
-    /// <summary>ServiceOps client placement (client, site, system). Factory assets have no client and no site or system.</summary>
-    private async Task EnsureClientPlacementAsync(UpsertAssetRequest request, CancellationToken cancellationToken)
-    {
-        if (request.ClientId is not { } clientId)
-        {
-            if (request.SiteId.HasValue || request.SystemId.HasValue)
-            {
-                throw new BusinessRuleException("Sites and systems belong to clients; factory assets use their factory location instead.");
-            }
-
-            return;
-        }
-
-        await EnsureClientExistsAsync(clientId, cancellationToken);
-        await EnsureSiteIsValidAsync(clientId, request.SiteId, cancellationToken);
-        await EnsureSystemIsValidAsync(clientId, request.SiteId, request.SystemId, cancellationToken);
-    }
-
-    private async Task EnsureSiteIsValidAsync(Guid clientId, Guid? siteId, CancellationToken cancellationToken)
-    {
-        if (!siteId.HasValue)
-        {
-            return;
-        }
-
-        var site = await dbContext.Sites
-            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == siteId.Value, cancellationToken)
-            ?? throw new BusinessRuleException("Site does not exist for this tenant.");
-
-        if (site.ClientId != clientId)
-        {
-            throw new BusinessRuleException("Site does not belong to the selected client.");
-        }
-
-        if (!string.Equals(site.Status, "Active", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new BusinessRuleException("Select an active site for this asset.");
-        }
-    }
-
-    private async Task EnsureSystemIsValidAsync(Guid clientId, Guid? siteId, Guid? systemId, CancellationToken cancellationToken)
-    {
-        if (!systemId.HasValue)
-        {
-            return;
-        }
-
-        var system = await dbContext.Systems.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == systemId.Value, cancellationToken)
-            ?? throw new BusinessRuleException("System does not exist for this tenant.");
-
-        if (system.ClientId != clientId)
-        {
-            throw new BusinessRuleException("System does not belong to the selected client.");
-        }
-
-        if (siteId.HasValue && system.SiteId != siteId.Value)
-        {
-            throw new BusinessRuleException("System does not belong to the selected site.");
-        }
+        return Ok(Map(asset));
     }
 
     [HttpDelete("{id:guid}")]
@@ -856,11 +673,6 @@ public sealed class AssetsController(
 
     private static void Validate(UpsertAssetRequest request)
     {
-        if (request.ClientId == Guid.Empty)
-        {
-            throw new BusinessRuleException("Client is invalid.");
-        }
-
         if (string.IsNullOrWhiteSpace(request.AssetName))
         {
             throw new BusinessRuleException("Asset name is required.");
@@ -936,7 +748,7 @@ public sealed class AssetsController(
     }
 
     private static string NormalizeOwnershipType(string? ownershipType) =>
-        string.IsNullOrWhiteSpace(ownershipType) ? "ClientOwned" : ownershipType.Trim();
+        string.IsNullOrWhiteSpace(ownershipType) ? "Owned" : ownershipType.Trim();
 
     private static string? NormalizePmFrequencyUnit(string? unit)
     {
@@ -1034,15 +846,6 @@ public sealed class AssetsController(
         return PmFrequencyLabelParser.TryParse(request.RecommendedPmFrequency, out var value, out var unit)
             ? (value, unit)
             : (null, null);
-    }
-
-    private async Task EnsureClientExistsAsync(Guid clientId, CancellationToken cancellationToken)
-    {
-        var clientExists = await dbContext.Clients.AnyAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == clientId, cancellationToken);
-        if (!clientExists)
-        {
-            throw new BusinessRuleException("Client does not exist for this tenant.");
-        }
     }
 
     /// <summary>
@@ -1157,7 +960,7 @@ public sealed class AssetsController(
         }
     }
 
-    private static string ResolveSupportStatus(Asset asset, bool hasContractCover)
+    private static string ResolveSupportStatus(Asset asset)
     {
         if (string.Equals(asset.Status, "Inactive", StringComparison.OrdinalIgnoreCase))
         {
@@ -1169,21 +972,14 @@ public sealed class AssetsController(
             return "Under Warranty";
         }
 
-        return hasContractCover ? "Under Contract" : "Out of Support";
+        return "Out of Support";
     }
 
-    private static AssetResponse Map(Asset asset, bool hasContractCover) =>
+    private static AssetResponse Map(Asset asset) =>
         new(
             asset.Id,
             asset.BranchId,
             asset.Branch?.Name,
-            asset.ClientId,
-            asset.Client?.ClientName,
-            asset.SiteId,
-            asset.Site?.SiteName,
-            asset.SystemId,
-            asset.System?.SystemName,
-            asset.System?.SystemType,
             asset.AssetCategoryId,
             asset.AssetCategory?.Name,
             asset.AssetName,
@@ -1211,8 +1007,7 @@ public sealed class AssetsController(
             asset.CreatedAt,
             asset.DecommissionDate,
             asset.DecommissionReason,
-            hasContractCover,
-            ResolveSupportStatus(asset, hasContractCover),
+            ResolveSupportStatus(asset),
             asset.CustomFieldValues
                 .OrderBy(x => x.FieldDefinition?.DisplayOrder ?? int.MaxValue)
                 .ThenBy(x => x.FieldDefinition?.FieldLabel)
@@ -1262,10 +1057,7 @@ public sealed class AssetsController(
 }
 
 public sealed record UpsertAssetRequest(
-    Guid? ClientId,
     Guid? BranchId,
-    Guid? SiteId,
-    Guid? SystemId,
     Guid? AssetCategoryId,
     [StringLength(200)] string AssetName,
     [StringLength(100)] string? AssetCode,
@@ -1301,13 +1093,6 @@ public sealed record AssetResponse(
     Guid Id,
     Guid? BranchId,
     string? BranchName,
-    Guid? ClientId,
-    string? ClientName,
-    Guid? SiteId,
-    string? SiteName,
-    Guid? SystemId,
-    string? SystemName,
-    string? SystemType,
     Guid? AssetCategoryId,
     string? AssetCategoryName,
     string AssetName,
@@ -1335,14 +1120,10 @@ public sealed record AssetResponse(
     DateTime CreatedAt,
     DateTime? DecommissionDate,
     string? DecommissionReason,
-    bool HasContractCover,
-    // "Under Warranty", "Under Contract", "Out of Support", or "Retired".
+    // "Under Warranty", "Out of Support", or "Retired".
     string SupportStatus,
     IReadOnlyCollection<AssetCustomFieldValueResponse> CustomFieldValues)
 {
-    /// <summary>The contract covering this asset (detail views only; lists leave it null).</summary>
-    public AssetContractCoverResponse? CoveredBy { get; init; }
-
     // Factory register
     public Guid? OrgNodeId { get; init; }
     public string? OrgNodeName { get; init; }
@@ -1359,9 +1140,6 @@ public sealed record AssetResponse(
     public string? ExternalId { get; init; }
     public string? ExternalSystem { get; init; }
 }
-
-/// <param name="Scope">How the contract reaches the asset: Asset (listed by name), Category, Site, or Client (all the client's assets).</param>
-public sealed record AssetContractCoverResponse(Guid ContractId, string ContractNumber, string ContractName, string Status, DateTime EndDate, string Scope);
 
 public sealed record SetAutoScheduleRequest(bool Enabled);
 

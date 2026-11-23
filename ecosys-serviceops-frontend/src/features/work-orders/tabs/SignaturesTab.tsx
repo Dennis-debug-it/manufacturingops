@@ -10,11 +10,6 @@ import { usePermission } from '../../../shared/hooks/usePermission'
 import { formatDateTime } from '../../../shared/utils/dates'
 import { useCaptureSignature, useDeleteSignature, useExecutionBundle } from '../api'
 
-const signatureTypes = [
-  { value: 'Technician', label: 'Technician Signature' },
-  { value: 'Client', label: 'Client Signature' },
-]
-
 export function SignaturesTab({ workOrderId }: { workOrderId: string }) {
   const canCapture = usePermission('work-orders.signatures.capture')
   const { data, isLoading, isError } = useExecutionBundle(workOrderId)
@@ -22,7 +17,6 @@ export function SignaturesTab({ workOrderId }: { workOrderId: string }) {
   const deleteSignature = useDeleteSignature(workOrderId)
 
   const [open, setOpen] = useState(false)
-  const [signatureType, setSignatureType] = useState('Technician')
   const [signerName, setSignerName] = useState('')
   const [signerRole, setSignerRole] = useState('')
   const [comment, setComment] = useState('')
@@ -43,7 +37,7 @@ export function SignaturesTab({ workOrderId }: { workOrderId: string }) {
       return
     }
     try {
-      await capture.mutateAsync({ signatureType, signerName: signerName.trim(), signerRole: signerRole.trim() || null, signatureDataUrl: dataUrl, comment: comment.trim() || null })
+      await capture.mutateAsync({ signatureType: 'Technician', signerName: signerName.trim(), signerRole: signerRole.trim() || null, signatureDataUrl: dataUrl, comment: comment.trim() || null })
       toast.success('Signature captured')
       closeDrawer()
     } catch {
@@ -133,14 +127,6 @@ export function SignaturesTab({ workOrderId }: { workOrderId: string }) {
         }
       >
         <div className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="signature-type">Type</label>
-            <select id="signature-type" value={signatureType} onChange={(event) => setSignatureType(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]">
-              {signatureTypes.map((type) => (
-                <option key={type.value} value={type.value}>{type.label}</option>
-              ))}
-            </select>
-          </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="signer-name">Signer Name</label>
             <input id="signer-name" value={signerName} onChange={(event) => setSignerName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />

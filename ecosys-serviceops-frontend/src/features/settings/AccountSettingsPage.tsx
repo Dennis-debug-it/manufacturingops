@@ -23,7 +23,6 @@ interface TenantLicenseSnapshot {
   officeSeats: number
   fieldSeats: number
   maxBranches: number | null
-  emailIngestion: boolean
   monitoringIntegration: boolean
   warningMessage: string | null
 }
@@ -86,7 +85,6 @@ export function AccountSettingsPage() {
       <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-900">Plan Features</h2>
         <div className="mt-3">
-          <FeatureRow label="Email Intake" enabled={data.emailIngestion} />
           <FeatureRow label="Monitoring Integration (Enterprise)" enabled={data.monitoringIntegration} />
         </div>
       </div>

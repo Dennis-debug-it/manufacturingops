@@ -198,7 +198,7 @@ export interface UserApprovalLimit {
  * unrecognised value simply never matches, silently narrowing access rather than erroring. Offering
  * a fixed list here is what keeps that from happening by typo.
  */
-export const SCOPE_TYPES = ['Organization', 'Branch', 'Client', 'Site'] as const
+export const SCOPE_TYPES = ['Organization', 'Branch'] as const
 
 const userAccessKey = (userId: string) => ['access', 'user', userId] as const
 

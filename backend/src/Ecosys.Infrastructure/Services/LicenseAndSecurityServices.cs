@@ -66,7 +66,6 @@ public static class BillingCycles
 
 public static class LicenseFeatures
 {
-    public const string EmailIngestion = "EmailIngestion";
     public const string MonitoringIntegration = "MonitoringIntegration";
     /// <summary>Any WhatsApp add-on (<see cref="TenantLicense.WhatsAppAddOn"/>), on any edition.</summary>
     public const string WhatsApp = "WhatsApp";
@@ -204,7 +203,6 @@ public sealed record TenantLicenseSnapshot(
     int OfficeSeats,
     int FieldSeats,
     int? MaxBranches,
-    bool EmailIngestion,
     bool MonitoringIntegration,
     string? WarningMessage)
 {
@@ -416,12 +414,8 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
     public async Task EnsureFeatureEnabledAsync(Guid tenantId, string featureName, CancellationToken cancellationToken = default)
     {
         var snapshot = await GetSnapshotAsync(tenantId, cancellationToken);
-        if (featureName is LicenseFeatures.EmailIngestion)
-            ServiceOpsPlans.EnsureModules(snapshot.Modules, [ServiceOpsPlans.Advanced]);
         var enabled = featureName switch
         {
-            // Included with the Advanced module (checked just above).
-            LicenseFeatures.EmailIngestion => true,
             LicenseFeatures.MonitoringIntegration => snapshot.MonitoringIntegration,
             LicenseFeatures.WhatsApp => snapshot.WhatsApp,
             _ => false
@@ -558,8 +552,6 @@ internal sealed class LicenseGuardService(AppDbContext dbContext) : ILicenseGuar
             tenantLicense.FieldSeats,
             // Enterprise has unlimited branches; every other edition has one unless the platform overrides it.
             tenantLicense.MaxBranchesOverride ?? (isEnterprise ? null : 1),
-            // Email intake comes with the Advanced module; there is no separate switch for it.
-            modules.Contains(ServiceOpsPlans.Advanced),
             tenantLicense.MonitoringIntegrationOverride ?? isEnterprise,
             warning) { Modules = modules, WhatsAppAddOn = tenantLicense.WhatsAppAddOn };
     }

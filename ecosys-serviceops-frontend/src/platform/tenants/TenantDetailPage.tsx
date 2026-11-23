@@ -40,7 +40,6 @@ import {
 import { SectionTitle, licenseStatusBadge, tenantStatusBadge, trialStatusBadge } from '../common'
 import { NewWorkspaceUserDrawer } from './NewWorkspaceUserDrawer'
 import { LicenseTermDialog } from './LicenseTermDialog'
-import { ClientTemplatesPanel } from './ClientTemplatesPanel'
 import { TenantWhatsAppPanel } from './TenantWhatsAppPanel'
 import { TenantOperationsModulesPanel } from './TenantOperationsModulesPanel'
 import { TenantFactoryPricingPanel } from '../pricing/TenantFactoryPricingPanel'
@@ -671,7 +670,6 @@ export function TenantDetailPage() {
       label: 'Templates',
       content: (
         <div className="space-y-5">
-        <ClientTemplatesPanel tenantId={tenant.tenantId} className={panelClass} />
         <section className={panelClass}>
           <SectionTitle title="Document designs" description="Which document types this tenant has customized via the Document Designer. Editing happens from within the tenant's own workspace." />
           <div className="mt-4">

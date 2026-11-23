@@ -11,7 +11,8 @@ namespace Ecosys.Api.Controllers;
 
 /// <summary>
 /// Service-report queue: completed work orders moving through the report lifecycle
-/// (AwaitingGeneration → Draft → UnderReview → Approved → Sent → Acknowledged).
+/// (AwaitingGeneration → Draft → UnderReview → Approved). Sent and Acknowledged are older
+/// states from when reports were emailed to clients.
 /// Absolute route templates are used so these actions escape the controller's
 /// {workOrderId}-scoped prefix.
 /// </summary>
@@ -42,8 +43,6 @@ public sealed partial class WorkOrderExecutionController
 
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
         var completed = await dbContext.WorkOrders
-            .Include(x => x.Client)
-            .Include(x => x.Site)
             .Include(x => x.Asset)
             .Include(x => x.AssignedTechnician)
             .Include(x => x.LeadTechnician)
@@ -61,8 +60,7 @@ public sealed partial class WorkOrderExecutionController
         var counts = new ReportQueueCounts(
             AwaitingGeneration: rows.Count(x => x.ReportStatus == ReportStatuses.AwaitingGeneration),
             UnderReview: rows.Count(x => x.ReportStatus == ReportStatuses.UnderReview),
-            ApprovedNotSent: rows.Count(x => x.ReportStatus == ReportStatuses.Approved),
-            SentNotAcknowledged: rows.Count(x => x.ReportStatus == ReportStatuses.Sent));
+            Approved: rows.Count(x => x.ReportStatus == ReportStatuses.Approved));
 
         if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "All", StringComparison.OrdinalIgnoreCase))
             rows = rows.Where(x => string.Equals(x.ReportStatus, status.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
@@ -98,32 +96,8 @@ public sealed partial class WorkOrderExecutionController
         workOrder.ReportApprovedAt = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
         await auditLogService.LogAsync(TenantId, UserId, "workorder.report.approved", nameof(WorkOrder), workOrder.Id.ToString(), $"Approved service report {workOrder.ReportNumber} for {workOrder.WorkOrderNumber}", cancellationToken);
-        await TryAutoSendApprovedReportAsync(workOrder, cancellationToken);
 
         return Ok(BuildQueueRow(workOrder));
-    }
-
-    /// <summary>
-    /// Settings → Operational Defaults can ask for approved reports to go straight to the client. A
-    /// report that cannot be sent (no client contact email, template disabled) simply stays Approved
-    /// for a manual send, and the reason is kept in the audit log.
-    /// </summary>
-    private async Task TryAutoSendApprovedReportAsync(WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        var autoSend = await dbContext.TenantOperationsPolicies
-            .Where(x => x.TenantId == TenantId)
-            .Select(x => x.AutoSendServiceReportOnApproval)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (!autoSend) return;
-
-        try
-        {
-            await SendReportAsync(workOrder, cancellationToken);
-        }
-        catch (BusinessRuleException ex)
-        {
-            await auditLogService.LogAsync(TenantId, UserId, "workorder.report.autosend-skipped", nameof(WorkOrder), workOrder.Id.ToString(), $"Service report {workOrder.ReportNumber} was approved but not sent automatically: {ex.Message}", cancellationToken);
-        }
     }
 
     // ── Editing the report's wording ─────────────────────────────────────────
@@ -198,8 +172,8 @@ public sealed partial class WorkOrderExecutionController
 
     private static string? ReportLockedReason(string status) => status switch
     {
-        ReportStatuses.Sent => "This report has already been sent to the client and can no longer be edited.",
-        ReportStatuses.Acknowledged => "This report has been acknowledged by the client and can no longer be edited.",
+        // Older states from when reports were emailed out; those reports stay as they were sent.
+        ReportStatuses.Sent or ReportStatuses.Acknowledged => "This report was sent out before and can no longer be edited.",
         _ => null
     };
 
@@ -219,15 +193,6 @@ public sealed partial class WorkOrderExecutionController
             editedBy);
     }
 
-    [HttpPost("/api/workorders/{id:guid}/report/send")]
-    public async Task<ActionResult<ReportQueueRow>> SendQueuedReport(Guid id, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdminOrPermission(PermissionNames.CanCompleteWorkOrders);
-        var workOrder = await LoadReportWorkOrderAsync(id, cancellationToken);
-        await SendReportAsync(workOrder, cancellationToken);
-        return Ok(BuildQueueRow(workOrder));
-    }
-
     // ── Batch transitions ────────────────────────────────────────────────────
 
     [HttpPost("/api/workorders/report/generate-batch")]
@@ -243,32 +208,6 @@ public sealed partial class WorkOrderExecutionController
             {
                 await EnsureReportGeneratedAsync(workOrder, cancellationToken);
                 processed++;
-            }
-        }
-        return Ok(new ReportBatchResult(processed, workOrders.Count));
-    }
-
-    [HttpPost("/api/workorders/report/send-batch")]
-    public async Task<ActionResult<ReportBatchResult>> SendBatch([FromBody] ReportBatchRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdminOrPermission(PermissionNames.CanCompleteWorkOrders);
-        var workOrders = await LoadReportWorkOrdersAsync(request.Ids, cancellationToken);
-
-        var processed = 0;
-        foreach (var workOrder in workOrders)
-        {
-            if (DeriveReportStatus(workOrder) == ReportStatuses.Approved)
-            {
-                // One client without a contact email must not block the rest of the batch; it stays
-                // Approved and shows up as not processed.
-                try
-                {
-                    await SendReportAsync(workOrder, cancellationToken);
-                    processed++;
-                }
-                catch (BusinessRuleException)
-                {
-                }
             }
         }
         return Ok(new ReportBatchResult(processed, workOrders.Count));
@@ -335,27 +274,9 @@ public sealed partial class WorkOrderExecutionController
         }
     }
 
-    private async Task SendReportAsync(WorkOrder workOrder, CancellationToken cancellationToken)
-    {
-        if (DeriveReportStatus(workOrder) != ReportStatuses.Approved)
-            throw new BusinessRuleException("Only approved reports can be sent.");
-
-        // "Sent" used to be a status flip only — nothing ever reached the client. Queue the PDF to the
-        // client's saved contact first, so a missing contact or disabled template leaves it Approved.
-        var (pdf, _) = await RenderServiceReportPdfAsync(workOrder.Id, cancellationToken);
-        var recipient = await serviceReportDeliveryService.QueueAsync(TenantId, workOrder.Id, pdf, UserId, cancellationToken);
-
-        workOrder.ReportStatus = ReportStatuses.Sent;
-        workOrder.ReportSentAt = DateTime.UtcNow;
-        await dbContext.SaveChangesAsync(cancellationToken);
-        await auditLogService.LogAsync(TenantId, UserId, "workorder.report.sent", nameof(WorkOrder), workOrder.Id.ToString(), $"Sent service report {workOrder.ReportNumber} for {workOrder.WorkOrderNumber} to {recipient}", cancellationToken);
-    }
-
-    /// <summary>Effective display status: acknowledgement wins, then stored status, else awaiting generation.</summary>
+    /// <summary>Effective display status: the stored status, else awaiting generation.</summary>
     private static string DeriveReportStatus(WorkOrder workOrder)
     {
-        if (!string.IsNullOrWhiteSpace(workOrder.AcknowledgedByName) || workOrder.ReportStatus == ReportStatuses.Acknowledged)
-            return ReportStatuses.Acknowledged;
         return string.IsNullOrWhiteSpace(workOrder.ReportStatus) ? ReportStatuses.AwaitingGeneration : workOrder.ReportStatus;
     }
 
@@ -377,8 +298,6 @@ public sealed partial class WorkOrderExecutionController
             WorkOrderId: workOrder.Id,
             SrNo: workOrder.ReportNumber,
             WoNo: workOrder.WorkOrderNumber,
-            Client: workOrder.Client?.ClientName ?? "—",
-            Site: workOrder.Site?.SiteName ?? "—",
             Asset: workOrder.Asset?.AssetName ?? "—",
             Technician: technician,
             CompletedAt: workOrder.CompletedAt,
@@ -390,8 +309,6 @@ public sealed partial class WorkOrderExecutionController
     {
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
         return await dbContext.WorkOrders
-            .Include(x => x.Client)
-            .Include(x => x.Site)
             .Include(x => x.Asset)
             .Include(x => x.AssignedTechnician)
             .Include(x => x.LeadTechnician)
@@ -409,8 +326,6 @@ public sealed partial class WorkOrderExecutionController
 
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
         return await dbContext.WorkOrders
-            .Include(x => x.Client)
-            .Include(x => x.Site)
             .Include(x => x.Asset)
             .Include(x => x.AssignedTechnician)
             .Include(x => x.LeadTechnician)
@@ -424,10 +339,10 @@ public sealed partial class WorkOrderExecutionController
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
 public sealed record ReportQueueRow(
-    Guid WorkOrderId, string? SrNo, string WoNo, string Client, string Site, string Asset,
+    Guid WorkOrderId, string? SrNo, string WoNo, string Asset,
     string Technician, DateTime? CompletedAt, string ReportStatus, int? DaysSinceCompletion);
 
-public sealed record ReportQueueCounts(int AwaitingGeneration, int UnderReview, int ApprovedNotSent, int SentNotAcknowledged);
+public sealed record ReportQueueCounts(int AwaitingGeneration, int UnderReview, int Approved);
 
 public sealed record ReportQueueResponse(
     IReadOnlyList<ReportQueueRow> Items, ReportQueueCounts Counts, int Total, int Page, int PageSize);

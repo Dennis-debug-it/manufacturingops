@@ -113,7 +113,7 @@ public static class ServiceOpsPlans
     };
     private static readonly HashSet<string> AdvancedControllers = new(StringComparer.OrdinalIgnoreCase)
     {
-        "ApprovalMatrix", "Intake", "IntakeProtocols", "ScheduledReports",
+        "ApprovalMatrix", "Intake", "ScheduledReports",
         "TimeAttendance", "Workflows"
     };
     private static readonly HashSet<string> WhatsAppBusinessControllers = new(StringComparer.OrdinalIgnoreCase)
@@ -157,7 +157,7 @@ public static class ServiceOpsPlans
     public static readonly IReadOnlySet<string> SharedControllers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "AccessControl", "ActionItems", "Activities", "AdvancedSettings", "Attachments", "AuditLogs", "Auth", "Branches", "Calendar", "CalendarFeed",
-        "Dev", "Integrations", "Notifications",
+        "Integrations", "Notifications",
         "OperatorFaultReport", "Sensors", "FleetPositions", "PushSubscriptions", "RoleDashboard", "RolePermissions", "StarterPacks", "Tenant", "TenantEmailDelivery", "TenantEmailDeliveryLogs",
         "TenantEmailTemplates", "TenantLicense", "UserNotificationPreferences", "Users",
         // Factory hierarchy and settings: the backbone every factory module hangs off.
@@ -166,7 +166,7 @@ public static class ServiceOpsPlans
         "AccessZones",
         // WhatsApp reminders (Release 3 design 6): every edition, gated by the WhatsApp add-on.
         // The two-way inbox (WhatsApp controller) needs the WhatsApp Business add-on.
-        "MyWhatsApp", "WhatsAppNotifications", "ClientWhatsAppConsent", "WhatsAppWebhook"
+        "MyWhatsApp", "WhatsAppNotifications", "WhatsAppWebhook"
     };
 
     /// <summary>Controllers whose module requirement is decided per route inside <see cref="RequiredModules"/>.</summary>
@@ -190,7 +190,7 @@ public static class ServiceOpsPlans
             var setting = route.Split('/')[3];
             if (setting is "operations-policy" or "assignment-groups") return [Operations];
             if (setting is "inventory") return [Inventory];
-            if (setting is "email-intake" or "time-attendance" or "credit-control") return [Advanced];
+            if (setting is "time-attendance" or "credit-control") return [Advanced];
             if (setting is "monitoring-webhooks" or "api-keys" or "webhooks") return [EnterpriseModule];
             if (setting is "whatsapp") return [WhatsAppBusiness];
             if (setting is "tax" or "finance") return [Finance];

@@ -69,9 +69,6 @@ public sealed class AssetCategoryAssetFlowTests
         var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
         var createResult = await assetsController.Create(
             new UpsertAssetRequest(
-                fixture.Client.Id,
-                null,
-                fixture.Site.Id,
                 null,
                 category.Id,
                 "Generator 500kVA",
@@ -95,7 +92,8 @@ public sealed class AssetCategoryAssetFlowTests
                 [
                     new UpsertAssetCustomFieldValueRequest(category.Fields.First().Id, "500"),
                     new UpsertAssetCustomFieldValueRequest(category.Fields.Last().Id, "Diesel")
-                ]),
+                ],
+                OrgNodeId: fixture.Factory.Id),
             CancellationToken.None);
 
         var created = Assert.IsType<CreatedAtActionResult>(createResult.Result);
@@ -138,12 +136,9 @@ public sealed class AssetCategoryAssetFlowTests
         dbContext.AssetCategories.AddRange(generator, hvac);
         await dbContext.SaveChangesAsync();
 
-        dbContext.Assets.AddRange(
-            new Asset
+        dbContext.Assets.AddRange(new Asset
             {
                 TenantId = fixture.Tenant.Id,
-                ClientId = fixture.Client.Id,
-                SiteId = fixture.Site.Id,
                 AssetCategoryId = generator.Id,
                 AssetName = "Generator 01",
                 AssetCode = "GEN-01",
@@ -153,8 +148,6 @@ public sealed class AssetCategoryAssetFlowTests
             new Asset
             {
                 TenantId = fixture.Tenant.Id,
-                ClientId = fixture.Client.Id,
-                SiteId = fixture.Site.Id,
                 AssetCategoryId = hvac.Id,
                 AssetName = "Chiller 01",
                 AssetCode = "HVC-01",
@@ -165,7 +158,7 @@ public sealed class AssetCategoryAssetFlowTests
 
         var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
 
-        var result = await assetsController.GetAll(null, null, null, null, generator.Id, null, "all", null, null, CancellationToken.None);
+        var result = await assetsController.GetAll(null, generator.Id, null, "all", null, null, CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
         var assets = Assert.IsAssignableFrom<IReadOnlyCollection<AssetResponse>>(ok.Value);
@@ -181,15 +174,16 @@ public sealed class AssetCategoryAssetFlowTests
         // value can already exist; that used to fail the insert on the unique (tenant, code) index.
         await using var dbContext = CreateDbContext();
         var fixture = await SeedFixtureAsync(dbContext);
-        dbContext.Assets.Add(new Asset { TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, AssetName = "Imported", AssetCode = "ast-000001", Status = "Active" });
+        dbContext.Assets.Add(new Asset { TenantId = fixture.Tenant.Id, AssetName = "Imported", AssetCode = "ast-000001", Status = "Active" });
         await dbContext.SaveChangesAsync();
 
         var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
         var createResult = await assetsController.Create(
             new UpsertAssetRequest(
-                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                null, null,
                 "Chiller", null, "HVAC", "Owned", null, null, null, null,
-                null, null, null, null, null, false, null, null, null, "Active", null),
+                null, null, null, null, null, false, null, null, null, "Active", null,
+                OrgNodeId: fixture.Factory.Id),
             CancellationToken.None);
 
         var payload = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
@@ -207,10 +201,11 @@ public sealed class AssetCategoryAssetFlowTests
         var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
         var createResult = await assetsController.Create(
             new UpsertAssetRequest(
-                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                null, null,
                 "Chiller", "CH-01", "HVAC", "Owned", null, null, null, null,
                 installed, null, null, 3, "months", false, lastPm, null, null, "Active", null,
-                WarrantyPeriodMonths: 24),
+                WarrantyPeriodMonths: 24,
+                OrgNodeId: fixture.Factory.Id),
             CancellationToken.None);
 
         var payload = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
@@ -233,9 +228,10 @@ public sealed class AssetCategoryAssetFlowTests
         var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
         var createResult = await assetsController.Create(
             new UpsertAssetRequest(
-                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                null, null,
                 "Old Chiller", "CH-OLD", null, null, null, null, null, null,
-                installed, null, null, 3, "months", true, null, null, null, "Active", null),
+                installed, null, null, 3, "months", true, null, null, null, "Active", null,
+                OrgNodeId: fixture.Factory.Id),
             CancellationToken.None);
 
         var payload = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
@@ -263,9 +259,10 @@ public sealed class AssetCategoryAssetFlowTests
         var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
         var createResult = await assetsController.Create(
             new UpsertAssetRequest(
-                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                null, null,
                 "Pump", $"PMP-{Guid.NewGuid():N}"[..12], null, null, null, null, null, null,
-                null, null, label, null, null, false, lastPm, null, null, "Active", null),
+                null, null, label, null, null, false, lastPm, null, null, "Active", null,
+                OrgNodeId: fixture.Factory.Id),
             CancellationToken.None);
 
         var payload = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
@@ -290,9 +287,10 @@ public sealed class AssetCategoryAssetFlowTests
         var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
         var created = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>((await assetsController.Create(
             new UpsertAssetRequest(
-                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                null, null,
                 "Old UPS", "UPS-OLD", null, null, null, null, null, null,
-                null, null, null, 6, "months", true, DateTime.UtcNow.Date.AddMonths(-1), null, null, "Active", null),
+                null, null, null, 6, "months", true, DateTime.UtcNow.Date.AddMonths(-1), null, null, "Active", null,
+                OrgNodeId: fixture.Factory.Id),
             CancellationToken.None)).Result).Value);
 
         var retireResult = await assetsController.Retire(created.Id, new RetireAssetRequest(null, "  End of life, replaced by UPS-NEW "), CancellationToken.None);
@@ -305,7 +303,7 @@ public sealed class AssetCategoryAssetFlowTests
 
         // Retired assets drop out of the default (active) list but can still be opened.
         var active = Assert.IsAssignableFrom<IReadOnlyCollection<AssetResponse>>(Assert.IsType<OkObjectResult>(
-            await assetsController.GetAll(null, null, null, null, null, null, null, null, null, CancellationToken.None)).Value);
+            await assetsController.GetAll(null, null, null, null, null, null, CancellationToken.None)).Value);
         Assert.DoesNotContain(active, x => x.Id == created.Id);
         Assert.IsType<OkObjectResult>((await assetsController.Get(created.Id, CancellationToken.None)).Result);
 
@@ -324,7 +322,7 @@ public sealed class AssetCategoryAssetFlowTests
     {
         await using var dbContext = CreateDbContext();
         var fixture = await SeedFixtureAsync(dbContext);
-        var asset = new Asset { TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, AssetName = "Pump", AssetCode = "P-1", Status = "Active" };
+        var asset = new Asset { TenantId = fixture.Tenant.Id, AssetName = "Pump", AssetCode = "P-1", Status = "Active" };
         dbContext.Assets.Add(asset);
         await dbContext.SaveChangesAsync();
 
@@ -334,47 +332,31 @@ public sealed class AssetCategoryAssetFlowTests
     }
 
     [Fact]
-    public async Task Assets_OutOfSupportFilter_ExcludesWarrantyAndContractCover_AndBulkRetireWorks()
+    public async Task Assets_OutOfSupportFilter_ExcludesWarrantyCover_AndBulkRetireWorks()
     {
         await using var dbContext = CreateDbContext();
         var fixture = await SeedFixtureAsync(dbContext);
         var today = DateTime.UtcNow.Date;
         Asset NewAsset(string code, DateTime? warrantyExpiry) => new()
         {
-            TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, SiteId = fixture.Site.Id,
+            TenantId = fixture.Tenant.Id,
             AssetName = code, AssetCode = code, Status = "Active", WarrantyExpiryDate = warrantyExpiry
         };
         var underWarranty = NewAsset("A-WARRANTY", today.AddMonths(6));
-        var underContract = NewAsset("A-CONTRACT", today.AddMonths(-6));
         var unsupported = NewAsset("A-NONE", null);
         var expiredWarranty = NewAsset("A-EXPIRED", today.AddDays(-1));
-        dbContext.Assets.AddRange(underWarranty, underContract, unsupported, expiredWarranty);
+        dbContext.Assets.AddRange(underWarranty, unsupported, expiredWarranty);
 
-        var contract = new Contract
-        {
-            TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, ContractNumber = "CT-1", Name = "Support",
-            Status = ContractStatus.Active, StartDate = today.AddMonths(-1), EndDate = today.AddMonths(11)
-        };
-        contract.Assets.Add(new ContractAsset { TenantId = fixture.Tenant.Id, ContractId = contract.Id, AssetId = underContract.Id });
-        // An expired contract (past grace) gives no cover.
-        var oldContract = new Contract
-        {
-            TenantId = fixture.Tenant.Id, ClientId = fixture.Client.Id, ContractNumber = "CT-0", Name = "Old",
-            Status = ContractStatus.Expired, StartDate = today.AddYears(-2), EndDate = today.AddYears(-1)
-        };
-        oldContract.Assets.Add(new ContractAsset { TenantId = fixture.Tenant.Id, ContractId = oldContract.Id, AssetId = unsupported.Id });
-        dbContext.Contracts.AddRange(contract, oldContract);
         await dbContext.SaveChangesAsync();
 
         var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
         var outOfSupport = Assert.IsAssignableFrom<IReadOnlyCollection<AssetResponse>>(Assert.IsType<OkObjectResult>(
-            await assetsController.GetAll(null, null, null, null, null, null, null, null, null, CancellationToken.None, "out")).Value);
+            await assetsController.GetAll(null, null, null, null, null, null, CancellationToken.None, "out")).Value);
         Assert.Equal(new[] { "A-EXPIRED", "A-NONE" }, outOfSupport.Select(x => x.AssetCode).OrderBy(x => x).ToArray());
         Assert.All(outOfSupport, x => Assert.Equal("Out of Support", x.SupportStatus));
 
         var all = Assert.IsAssignableFrom<IReadOnlyCollection<AssetResponse>>(Assert.IsType<OkObjectResult>(
-            await assetsController.GetAll(null, null, null, null, null, null, null, null, null, CancellationToken.None)).Value);
-        Assert.Equal("Under Contract", all.Single(x => x.AssetCode == "A-CONTRACT").SupportStatus);
+            await assetsController.GetAll(null, null, null, null, null, null, CancellationToken.None)).Value);
         Assert.Equal("Under Warranty", all.Single(x => x.AssetCode == "A-WARRANTY").SupportStatus);
 
         var bulk = Assert.IsType<BulkRetireAssetsResponse>(Assert.IsType<OkObjectResult>((await assetsController.RetireMany(
@@ -394,9 +376,10 @@ public sealed class AssetCategoryAssetFlowTests
         var assetsController = CreateAssetsController(dbContext, fixture.Tenant.Id, fixture.User.Id);
         var createResult = await assetsController.Create(
             new UpsertAssetRequest(
-                fixture.Client.Id, null, fixture.Site.Id, null, null,
+                null, null,
                 "Pump", "PMP-01", null, null, null, null, null, null,
-                DateTime.UtcNow.Date, null, null, null, null, false, null, null, null, "Active", null),
+                DateTime.UtcNow.Date, null, null, null, null, false, null, null, null, "Active", null,
+                OrgNodeId: fixture.Factory.Id),
             CancellationToken.None);
 
         var payload = Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(createResult.Result).Value);
@@ -471,27 +454,12 @@ public sealed class AssetCategoryAssetFlowTests
             HasAllBranchAccess = true
         };
 
-        var client = new Client
-        {
-            TenantId = tenant.Id,
-            ClientName = "Acme Manufacturing",
-            Email = "client@acme.test",
-            IsActive = true
-        };
 
-        var site = new Site
-        {
-            TenantId = tenant.Id,
-            ClientId = client.Id,
-            SiteCode = $"SITE-{Guid.NewGuid():N}".Substring(0, 10),
-            SiteName = "Main Plant",
-            SiteType = "Factory",
-            Status = "Active"
-        };
 
-        dbContext.AddRange(tenant, user, client, site);
+        var factory = new OrgNode { TenantId = tenant.Id, Level = OrgNodeLevels.Factory, Name = "Main factory", Code = "MAIN" };
+        dbContext.AddRange(tenant, user, factory);
         await dbContext.SaveChangesAsync();
-        return new FixtureData(tenant, user, client, site);
+        return new FixtureData(tenant, user, factory);
     }
 
     private static AssetCategoriesController CreateAssetCategoriesController(AppDbContext dbContext, Guid tenantId, Guid userId) =>
@@ -520,7 +488,7 @@ public sealed class AssetCategoryAssetFlowTests
             new Ecosys.Infrastructure.Services.Factory.AssetClassService(dbContext));
     }
 
-    private sealed record FixtureData(Tenant Tenant, User User, Client Client, Site Site);
+    private sealed record FixtureData(Tenant Tenant, User User, OrgNode Factory);
 
     private sealed class FakeTenantContext(Guid tenantId, Guid userId) : ITenantContext
     {

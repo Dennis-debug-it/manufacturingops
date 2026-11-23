@@ -55,12 +55,6 @@ public sealed class TechnicianJobsControllerTests
         Assert.Equal(fixture.AssignedWorkOrder.Id, job.Id);
         Assert.Equal("WO-TECH-001", job.WorkOrderNumber);
         Assert.Equal(WorkOrderTypes.CorrectiveMaintenance, job.WorkType);
-        Assert.Equal("CNT-TECH-001", job.ContractNumber);
-        Assert.Equal("Covered", job.CoverageStatus);
-        Assert.Equal("Included", job.BillingModel);
-        Assert.Null(job.EstimatedCharge);
-        Assert.Null(job.FinalCharge);
-        Assert.Null(job.RateCardName);
     }
 
     [Fact]
@@ -122,13 +116,6 @@ public sealed class TechnicianJobsControllerTests
             HasAllBranchAccess = false
         };
 
-        var client = new Client
-        {
-            TenantId = tenant.Id,
-            ClientName = "Acme Facilities",
-            Email = "client@acme.test",
-            IsActive = true
-        };
 
         var technician = new Technician
         {
@@ -150,7 +137,6 @@ public sealed class TechnicianJobsControllerTests
         var assignedWorkOrder = new WorkOrder
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
             WorkOrderNumber = "WO-TECH-001",
             Title = "Assigned job",
             Priority = "High",
@@ -158,31 +144,12 @@ public sealed class TechnicianJobsControllerTests
             WorkType = WorkOrderTypes.CorrectiveMaintenance,
             AssignedTechnicianId = technician.Id,
             LeadTechnicianId = technician.Id,
-            AssignmentType = "IndividualTechnician",
-            CoverageStatus = "Covered",
-            BillingModel = "Included",
-            PricingNotes = "Follow shutdown procedure.",
-            Contract = new Contract
-            {
-                TenantId = tenant.Id,
-                ClientId = client.Id,
-                ContractNumber = "CNT-TECH-001",
-                Name = "Technician visibility contract",
-                ContractType = Ecosys.Domain.Enums.ContractType.ComprehensiveMaintenance,
-                Status = Ecosys.Domain.Enums.ContractStatus.Active,
-                StartDate = DateTime.UtcNow.Date.AddDays(-30),
-                EndDate = DateTime.UtcNow.Date.AddDays(30),
-                BillingModel = Ecosys.Domain.Enums.BillingModel.Included,
-                Currency = "KES",
-                RenewalNoticeDays = 30,
-                RenewalRisk = Ecosys.Domain.Enums.RenewalRisk.Medium
-            }
+            AssignmentType = "IndividualTechnician"
         };
 
         var otherWorkOrder = new WorkOrder
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
             WorkOrderNumber = "WO-TECH-002",
             Title = "Another job",
             Priority = "Medium",
@@ -193,9 +160,8 @@ public sealed class TechnicianJobsControllerTests
             AssignmentType = "IndividualTechnician"
         };
 
-        dbContext.AddRange(tenant, user, client, technician, otherTechnician, assignedWorkOrder, otherWorkOrder);
-        dbContext.WorkOrderTechnicianAssignments.AddRange(
-            new WorkOrderTechnicianAssignment
+        dbContext.AddRange(tenant, user, technician, otherTechnician, assignedWorkOrder, otherWorkOrder);
+        dbContext.WorkOrderTechnicianAssignments.AddRange(new WorkOrderTechnicianAssignment
             {
                 TenantId = tenant.Id,
                 WorkOrderId = assignedWorkOrder.Id,

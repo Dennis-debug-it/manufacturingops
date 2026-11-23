@@ -202,7 +202,6 @@ export function ReportsPage() {
                 { key: 'totalJobs', header: 'Total Jobs', cell: (row) => row.totalJobs },
                 { key: 'completed', header: 'Completed', cell: (row) => row.completed },
                 { key: 'onTimeRate', header: 'On-Time Rate', cell: (row) => formatPercent(row.onTimeRate) },
-                { key: 'avgTimeOnSiteHours', header: 'Avg Time on Site (hrs)', cell: (row) => row.avgTimeOnSiteHours },
               ]}
               data={(technicianReport?.technicians ?? []).map((row) => ({ ...row, id: row.technicianId ?? row.name }))}
               emptyTitle="No data"

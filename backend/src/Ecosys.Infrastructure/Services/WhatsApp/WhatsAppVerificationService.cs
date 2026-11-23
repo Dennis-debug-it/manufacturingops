@@ -7,11 +7,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ecosys.Infrastructure.Services;
 
-/// <summary>Whose number is being confirmed: a tenant user (staff) or a client portal contact.</summary>
-public sealed record WhatsAppSubject(Guid TenantId, Guid? UserId, Guid? ClientPortalUserId)
+/// <summary>Whose number is being confirmed: a tenant user.</summary>
+public sealed record WhatsAppSubject(Guid TenantId, Guid? UserId)
 {
-    public static WhatsAppSubject ForUser(Guid tenantId, Guid userId) => new(tenantId, userId, null);
-    public static WhatsAppSubject ForPortalUser(Guid tenantId, Guid portalUserId) => new(tenantId, null, portalUserId);
+    public static WhatsAppSubject ForUser(Guid tenantId, Guid userId) => new(tenantId, userId);
 }
 
 public sealed record WhatsAppVerificationStarted(string PhoneNumber, DateTime ExpiresAt);
@@ -66,7 +65,6 @@ internal sealed class WhatsAppVerificationService(
         {
             TenantId = subject.TenantId,
             UserId = subject.UserId,
-            ClientPortalUserId = subject.ClientPortalUserId,
             PhoneNumber = normalized,
             ExpiresAt = now + Lifetime,
             CreatedAt = now,
@@ -78,7 +76,7 @@ internal sealed class WhatsAppVerificationService(
         var queued = await outbox.QueueAsync(new WhatsAppQueueRequest(
             subject.TenantId, WhatsAppTemplateCatalogue.VerificationKey, normalized, null,
             new Dictionary<string, string?> { ["Code"] = code },
-            RecipientUserId: subject.UserId, RecipientPortalUserId: subject.ClientPortalUserId,
+            RecipientUserId: subject.UserId,
             EntityType: nameof(WhatsAppVerificationCode), EntityId: row.Id), cancellationToken);
         if (queued.Outcome == WhatsAppQueueOutcome.OverCap)
             throw new BusinessRuleException("This workspace has used its WhatsApp messages for the month. Try again next month.");
@@ -117,16 +115,6 @@ internal sealed class WhatsAppVerificationService(
             user.WhatsAppOptedInAt = now;
             user.WhatsAppOptedOutAt = null;
             await EnableAllowedStaffKeysAsync(subject.TenantId, userId, cancellationToken);
-        }
-        else if (subject.ClientPortalUserId is { } portalUserId)
-        {
-            var contact = await dbContext.ClientPortalUsers.IgnoreQueryFilters().SingleAsync(x => x.TenantId == subject.TenantId && x.Id == portalUserId, cancellationToken);
-            contact.WhatsAppNumber = row.PhoneNumber;
-            contact.WhatsAppVerifiedAt = now;
-            contact.WhatsAppConsentAt = now;
-            contact.WhatsAppConsentMethod = WhatsAppConsentMethods.Portal;
-            contact.WhatsAppConsentRecordedByUserId = null;
-            contact.ReceivesWhatsApp = true;
         }
 
         var optOut = await dbContext.WhatsAppOptOuts.SingleOrDefaultAsync(x => x.PhoneNumber == row.PhoneNumber, cancellationToken);
@@ -176,7 +164,7 @@ internal sealed class WhatsAppVerificationService(
 
     private IQueryable<WhatsAppVerificationCode> Codes(WhatsAppSubject subject) =>
         dbContext.WhatsAppVerificationCodes.IgnoreQueryFilters()
-            .Where(x => x.TenantId == subject.TenantId && x.UserId == subject.UserId && x.ClientPortalUserId == subject.ClientPortalUserId);
+            .Where(x => x.TenantId == subject.TenantId && x.UserId == subject.UserId);
 
     internal static string Hash(Guid id, string code) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{id:N}:{code}")));

@@ -39,8 +39,7 @@ export function WorkTab({ workOrder }: { workOrder: WorkOrder }) {
   const workDone = bundle?.notes.workDone?.trim() || workOrder.workDoneNotes?.trim()
   const photoCount = bundle?.photos.length ?? 0
   const openParts = (partsRequests ?? []).filter((request) => OPEN_PARTS_STATUSES.has(request.status)).length
-  const clientSigned = (bundle?.signatures ?? []).some((signature) => signature.signatureType === 'Client')
-  const signatureCount = bundle?.signatures.length ?? 0
+  const techSigned = (bundle?.signatures ?? []).some((signature) => signature.signatureType === 'Technician')
 
   const steps: Step[] = [
     {
@@ -74,9 +73,9 @@ export function WorkTab({ workOrder }: { workOrder: WorkOrder }) {
     },
     {
       id: 'signatures',
-      label: 'Client signature',
-      done: clientSigned,
-      summary: clientSigned ? 'Signed' : signatureCount > 0 ? `${signatureCount} signature${signatureCount === 1 ? '' : 's'}, no client` : 'Not signed',
+      label: 'Technician signature',
+      done: techSigned,
+      summary: techSigned ? 'Signed' : 'Not signed',
       content: <SignaturesTab workOrderId={workOrder.id} />,
     },
   ]

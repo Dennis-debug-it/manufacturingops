@@ -46,7 +46,6 @@ public sealed class TemplateAndPmAccessTests
         Assert.IsType<OkObjectResult>((await controller.GetDue(null, CancellationToken.None)).Result);
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.Create(new UpsertPreventiveMaintenancePlanRequest(Guid.NewGuid(), Guid.NewGuid(), 1, null, true, null, null, "Active"), CancellationToken.None));
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.Update(Guid.NewGuid(), new UpsertPreventiveMaintenancePlanRequest(Guid.NewGuid(), Guid.NewGuid(), 1, null, true, null, null, "Active"), CancellationToken.None));
-        await Assert.ThrowsAsync<ForbiddenException>(() => controller.GenerateWorkOrder(Guid.NewGuid(), CancellationToken.None));
     }
 
     [Fact]
@@ -82,11 +81,9 @@ public sealed class TemplateAndPmAccessTests
         await using var dbContext = CreateDbContext();
         var tenant = CreateTenant();
         var user = CreateUser(tenant.Id, "Planner", "Maintenance Planner", AppRoles.User);
-        var client = new Client { TenantId = tenant.Id, ClientName = "Acme Client", IsActive = true };
         var asset = new Asset
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
             AssetName = "Generator 01",
             AssetCode = "GEN-001",
             Status = "Active"
@@ -99,7 +96,7 @@ public sealed class TemplateAndPmAccessTests
             IsActive = true
         };
 
-        dbContext.AddRange(tenant, user, client, asset, template);
+        dbContext.AddRange(tenant, user, asset, template);
         await dbContext.SaveChangesAsync();
 
         var tenantContext = new FakeTenantContext(
@@ -207,7 +204,7 @@ public sealed class TemplateAndPmAccessTests
             new NoOpWorkflowService());
 
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetAll(
-                branchId: null, clientId: null, siteId: null, status: null, priority: null,
+                branchId: null, status: null, priority: null,
                 workType: null, assignmentGroupId: null, technicianId: null, unassigned: null,
                 assignmentStatus: null, slaStatus: null, search: null, fromDate: null, toDate: null,
                 page: null, pageSize: null, cancellationToken: CancellationToken.None));
@@ -219,7 +216,6 @@ public sealed class TemplateAndPmAccessTests
         await using var dbContext = CreateDbContext();
         var tenant = CreateTenant();
         var user = CreateUser(tenant.Id, "Operations Supervisor", "Technician", AppRoles.User);
-        var client = new Client { TenantId = tenant.Id, ClientName = "Acme Client", IsActive = true };
         var technician = new Technician
         {
             TenantId = tenant.Id,
@@ -231,7 +227,6 @@ public sealed class TemplateAndPmAccessTests
         var workOrder = new WorkOrder
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
             WorkOrderNumber = "WO-MGMT-001",
             Title = "Restore generator",
             Priority = "High",
@@ -241,7 +236,7 @@ public sealed class TemplateAndPmAccessTests
             AssignmentType = "IndividualTechnician"
         };
 
-        dbContext.AddRange(tenant, user, client, technician, workOrder);
+        dbContext.AddRange(tenant, user, technician, workOrder);
         dbContext.WorkOrderTechnicianAssignments.Add(new WorkOrderTechnicianAssignment
         {
             TenantId = tenant.Id,
@@ -281,7 +276,7 @@ public sealed class TemplateAndPmAccessTests
             new NoOpWorkflowService());
 
         var listResult = await controller.GetAll(
-                branchId: null, clientId: null, siteId: null, status: null, priority: null,
+                branchId: null, status: null, priority: null,
                 workType: null, assignmentGroupId: null, technicianId: null, unassigned: null,
                 assignmentStatus: null, slaStatus: null, search: null, fromDate: null, toDate: null,
                 page: null, pageSize: null, cancellationToken: CancellationToken.None);
@@ -306,13 +301,11 @@ public sealed class TemplateAndPmAccessTests
         await using var dbContext = CreateDbContext();
         var tenant = CreateTenant();
         var user = CreateUser(tenant.Id, "Field Technician", "Technician", AppRoles.User);
-        var client = new Client { TenantId = tenant.Id, ClientName = "Acme Client", IsActive = true };
         var technician = new Technician { TenantId = tenant.Id, UserId = user.Id, FullName = user.FullName, Email = user.Email, IsActive = true };
         var otherTechnician = new Technician { TenantId = tenant.Id, FullName = "Other Tech", Email = $"other-{Guid.NewGuid():N}@test.local", IsActive = true };
         var workOrder = new WorkOrder
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
             WorkOrderNumber = "WO-ACCESS-001",
             Title = "Unassigned execution",
             Priority = "High",
@@ -322,7 +315,7 @@ public sealed class TemplateAndPmAccessTests
             AssignmentType = "IndividualTechnician"
         };
 
-        dbContext.AddRange(tenant, user, client, technician, otherTechnician, workOrder);
+        dbContext.AddRange(tenant, user, technician, otherTechnician, workOrder);
         dbContext.WorkOrderTechnicianAssignments.Add(new WorkOrderTechnicianAssignment
         {
             TenantId = tenant.Id,
@@ -353,8 +346,7 @@ public sealed class TemplateAndPmAccessTests
             new NoOpWorkOrderLifecycleService(),
             new NoOpPdfRenderer(),
             new NoOpDocumentNumberingService(),
-            new StubHttpClientFactory(),
-            new FakeServiceReportDeliveryService());
+            new StubHttpClientFactory());
 
         await Assert.ThrowsAsync<ForbiddenException>(() => controller.GetExecutionBundle(workOrder.Id, CancellationToken.None));
     }

@@ -7,10 +7,6 @@ public sealed class Asset : AuditableEntity, ITenantEntity
     public Guid TenantId { get; set; }
     public Guid? BranchId { get; set; }
 
-    /// <summary>Owning client, kept only for ServiceOps modules still being pruned. Factory assets have none.</summary>
-    public Guid? ClientId { get; set; }
-    public Guid? SiteId { get; set; }
-    public Guid? SystemId { get; set; }
     public Guid? AssetCategoryId { get; set; }
 
     /// <summary>Where the asset sits in the factory hierarchy (factory, section or sub-section).</summary>
@@ -18,7 +14,7 @@ public sealed class Asset : AuditableEntity, ITenantEntity
     public string AssetName { get; set; } = string.Empty;
     public string AssetCode { get; set; } = string.Empty;
     public string? AssetType { get; set; }
-    public string OwnershipType { get; set; } = "ClientOwned";
+    public string OwnershipType { get; set; } = "Owned";
     public string? SerialNumber { get; set; }
     public string? Manufacturer { get; set; }
     public string? Model { get; set; }
@@ -77,14 +73,10 @@ public sealed class Asset : AuditableEntity, ITenantEntity
 
     public Tenant? Tenant { get; set; }
     public Branch? Branch { get; set; }
-    public Client? Client { get; set; }
-    public Site? Site { get; set; }
-    public OperationalSystem? System { get; set; }
     public AssetCategory? AssetCategory { get; set; }
     public OrgNode? OrgNode { get; set; }
     public AssignmentGroup? DefaultAssignmentGroup { get; set; }
     public ICollection<AssetCustomFieldValue> CustomFieldValues { get; set; } = new List<AssetCustomFieldValue>();
-    public ICollection<ContractAsset> ContractAssets { get; set; } = new List<ContractAsset>();
     public ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();
     public ICollection<PreventiveMaintenancePlan> PreventiveMaintenancePlans { get; set; } = new List<PreventiveMaintenancePlan>();
 }

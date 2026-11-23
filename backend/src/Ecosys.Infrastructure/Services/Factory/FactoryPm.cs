@@ -226,7 +226,7 @@ internal sealed class FactoryPmService(
 
         var asset = await dbContext.Assets.SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == request.AssetId, cancellationToken)
             ?? throw new BusinessRuleException("The asset was not found.");
-        if (asset.OrgNodeId is null || asset.ClientId is not null)
+        if (asset.OrgNodeId is null)
         {
             throw new BusinessRuleException("Factory PM plans are for factory assets.");
         }
@@ -316,7 +316,7 @@ internal sealed class FactoryPmService(
         plan.IsRoute = routeIds.Count > 0;
         if (plan.IsRoute)
         {
-            var found = await dbContext.Assets.Where(x => x.TenantId == tenantId && routeIds.Contains(x.Id) && x.ClientId == null).Select(x => x.Id).ToListAsync(cancellationToken);
+            var found = await dbContext.Assets.Where(x => x.TenantId == tenantId && routeIds.Contains(x.Id)).Select(x => x.Id).ToListAsync(cancellationToken);
             if (found.Count != routeIds.Count)
             {
                 throw new BusinessRuleException("Some route assets were not found.");
@@ -370,7 +370,7 @@ internal sealed class FactoryPmService(
 
     private async Task<HashSet<Guid>> OpenPlanIdsAsync(Guid tenantId, CancellationToken cancellationToken) =>
         (await dbContext.WorkOrders
-            .Where(x => x.TenantId == tenantId && x.PreventiveMaintenancePlanId != null && x.ClientId == null && !Finished.Contains(x.Status))
+            .Where(x => x.TenantId == tenantId && x.PreventiveMaintenancePlanId != null && !Finished.Contains(x.Status))
             .Select(x => x.PreventiveMaintenancePlanId!.Value)
             .ToListAsync(cancellationToken)).ToHashSet();
 

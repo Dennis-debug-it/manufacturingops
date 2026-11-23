@@ -30,7 +30,6 @@ public sealed class WhatsAppConversation : AuditableEntity, ITenantEntity
     public Guid TenantId { get; set; }
     public string ContactName { get; set; } = string.Empty;
     public string ContactPhone { get; set; } = string.Empty;
-    public Guid? ClientId { get; set; }
     public string LastMessagePreview { get; set; } = string.Empty;
     public DateTime LastMessageAt { get; set; } = DateTime.UtcNow;
     public int UnreadCount { get; set; }
@@ -83,7 +82,6 @@ public sealed class WhatsAppOutboxMessage : AuditableEntity, ITenantEntity
     public string ToPhone { get; set; } = string.Empty;
     public string? RecipientName { get; set; }
     public Guid? RecipientUserId { get; set; }
-    public Guid? RecipientPortalUserId { get; set; }
     public string? EntityType { get; set; }
     public Guid? EntityId { get; set; }
     /// <summary>Pending | Sending | Sent | Delivered | Read | Failed | Skipped.</summary>
@@ -121,9 +119,8 @@ public sealed class WhatsAppOptOut : AuditableEntity
 public sealed class WhatsAppVerificationCode : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
-    /// <summary>Staff (or any tenant user) confirming their own number. Exactly one of this and <see cref="ClientPortalUserId"/>.</summary>
+    /// <summary>The tenant user confirming their own number.</summary>
     public Guid? UserId { get; set; }
-    public Guid? ClientPortalUserId { get; set; }
     public string PhoneNumber { get; set; } = string.Empty;
     public string CodeHash { get; set; } = string.Empty;
     public DateTime ExpiresAt { get; set; }

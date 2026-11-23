@@ -530,7 +530,7 @@ public sealed class SafetyController(
 
     private async Task<WorkOrder> LoadJobAsync(Guid id, CancellationToken cancellationToken)
     {
-        var job = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id && x.ClientId == null, cancellationToken)
+        var job = await dbContext.WorkOrders.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("The job was not found.");
         if (job.OrgNodeId is { } node) await orgScopeService.EnsureCanAccessAsync(TenantId, UserId, node, cancellationToken);
         return job;
@@ -538,7 +538,7 @@ public sealed class SafetyController(
 
     private async Task<Asset> LoadAssetAsync(Guid id, CancellationToken cancellationToken)
     {
-        var asset = await dbContext.Assets.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id && x.ClientId == null, cancellationToken)
+        var asset = await dbContext.Assets.SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == id, cancellationToken)
             ?? throw new NotFoundException("The asset was not found.");
         if (asset.OrgNodeId is { } node) await orgScopeService.EnsureCanAccessAsync(TenantId, UserId, node, cancellationToken);
         return asset;

@@ -9,7 +9,7 @@ import type { OutboxEntry } from './outbox'
 
 /**
  * What the technician sees while actions are waiting to sync: the last server copy with their
- * queued actions applied on top, so the job moves on (accepted → on site → in progress → done) the
+ * queued actions applied on top, so the job moves on (accepted → in progress → done) the
  * moment they tap, signal or not. Pure functions; the server copy replaces this once synced.
  */
 

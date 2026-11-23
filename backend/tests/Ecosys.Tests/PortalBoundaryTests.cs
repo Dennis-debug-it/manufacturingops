@@ -41,7 +41,6 @@ public sealed class PortalBoundaryTests
     /// </summary>
     public static readonly string[] LeakedRoutes =
     [
-        "/api/clients/{clientId}/sites/{siteId}/systems",
         "/api/asset-templates",
         "/api/assignment-groups",
         "/api/settings/assignment-groups",
@@ -290,7 +289,7 @@ public sealed class PortalBoundaryTests
         await using var dbContext = CreateDbContext($"ecosys-portal-boundary-{Guid.NewGuid():N}");
 
         var thrown = await Record.ExceptionAsync(() =>
-            dbContext.Clients.Where(x => x.TenantId == guard.TenantId).ToListAsync());
+            dbContext.Assets.Where(x => x.TenantId == guard.TenantId).ToListAsync());
 
         Assert.NotNull(thrown);
 
@@ -466,38 +465,6 @@ public sealed class PortalBoundaryTests
 
         return new AppDbContext(options, tenantContext);
     }
-
-    private static async Task<PortalFixture> SeedAsync(string databaseName)
-    {
-        await using var dbContext = CreateDbContext(databaseName);
-
-        var tenantId = Guid.NewGuid();
-
-        var ownClient = new Client
-        {
-            TenantId = tenantId,
-            ClientName = "Own Client",
-            Email = "own@customer.test",
-            IsActive = true
-        };
-
-        var rivalClient = new Client
-        {
-            TenantId = tenantId,
-            ClientName = "CONFIDENTIAL RIVAL CO",
-            Email = "ceo@rival.test",
-            ContactPerson = "Rival CEO",
-            ContactPhone = "+254700000000",
-            IsActive = true
-        };
-
-        dbContext.Clients.AddRange(ownClient, rivalClient);
-        await dbContext.SaveChangesAsync();
-
-        return new PortalFixture(tenantId, ownClient.Id, rivalClient.Id);
-    }
-
-    private sealed record PortalFixture(Guid TenantId, Guid OwnClientId, Guid RivalClientId);
 
     private sealed class NoOpAuditLogService : IAuditLogService
     {

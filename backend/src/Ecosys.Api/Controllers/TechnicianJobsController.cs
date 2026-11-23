@@ -120,12 +120,8 @@ public sealed class TechnicianJobsController(
     private IQueryable<WorkOrder> QueryWorkOrders(BranchQueryScope scope) =>
         dbContext.WorkOrders
             .AsNoTracking()
-            .Include(x => x.Client)
-            .Include(x => x.Site)
             .Include(x => x.Asset)
             .ThenInclude(x => x!.AssetCategory)
-            .Include(x => x.Contract)
-            .Include(x => x.System)
             .Include(x => x.AssignedTechnician)
             .Include(x => x.LeadTechnician)
             .Include(x => x.AssignmentGroup)
@@ -272,20 +268,13 @@ public sealed class TechnicianJobsController(
                 x.Status,
                 x.AssignedAt,
                 x.AcceptedAt,
-                x.ArrivalAt,
-                x.DepartureAt,
-                x.Notes,
-                x.LastArrivalAt ?? x.ArrivalAt))
+                x.Notes))
             .ToList();
 
         return new WorkOrderResponse(
             workOrder.Id,
             workOrder.BranchId,
             workOrder.Branch?.Name,
-            workOrder.ClientId,
-            workOrder.Client?.ClientName,
-            workOrder.SiteId,
-            workOrder.Site?.SiteName,
             workOrder.AssetId,
             workOrder.Asset?.AssetName,
             workOrder.AssignmentGroupId,
@@ -306,8 +295,6 @@ public sealed class TechnicianJobsController(
             workOrder.DueDate,
             workOrder.CreatedAt,
             workOrder.WorkStartedAt,
-            workOrder.ArrivalAt,
-            workOrder.DepartureAt,
             workOrder.CompletedAt,
             workOrder.WorkDoneNotes,
             workOrder.JobCardNotes,
@@ -317,9 +304,6 @@ public sealed class TechnicianJobsController(
             workOrder.SlaResolutionBreached,
             workOrder.SlaResponseBreachedAt,
             workOrder.SlaResolutionBreachedAt,
-            workOrder.AcknowledgedByName,
-            workOrder.AcknowledgementComments,
-            workOrder.AcknowledgementDate,
             workOrder.IsPreventiveMaintenance,
             holdDetails.Reason,
             holdDetails.Note,
@@ -331,8 +315,6 @@ public sealed class TechnicianJobsController(
             workOrder.PmTemplateId,
             workOrder.PmTemplateNameSnapshot ?? workOrder.PmTemplate?.Name,
             workOrder.PreventiveMaintenancePlanId,
-            workOrder.SystemId,
-            workOrder.System?.SystemName,
             workOrder.ChecklistItems
                 .OrderBy(x => x.SectionOrder)
                 .ThenBy(x => x.SectionName ?? string.Empty)
@@ -366,26 +348,7 @@ public sealed class TechnicianJobsController(
             workOrder.PmTemplateVersionSnapshot,
             workOrder.ScheduledStartAt,
             workOrder.ScheduledEndAt,
-            ContractId: workOrder.ContractId,
-            ContractNumber: workOrder.Contract?.ContractNumber,
-            ContractStatus: workOrder.Contract?.Status.ToString(),
-            CoverageStatus: workOrder.CoverageStatus,
-            BillingModel: workOrder.BillingModel,
-            ContractEndDate: workOrder.Contract?.EndDate,
-            ContractRenewalRisk: workOrder.Contract?.RenewalRisk.ToString(),
-            PricingNotes: workOrder.PricingNotes,
             AppliedSlaSource: workOrder.AppliedSlaSource,
-            // Field details a technician needs on site (pricing fields stay with the office view).
-            ClientContactPerson: workOrder.Client?.ContactPerson,
-            ClientContactPhone: workOrder.Client?.ContactPhone,
-            SiteCode: workOrder.Site?.SiteCode,
-            SiteContactPerson: workOrder.Site?.ContactPerson,
-            SiteContactPhone: workOrder.Site?.ContactPhone,
-            SiteOperatingHours: workOrder.Site?.OperatingHours,
-            SiteAccessNotes: workOrder.Site?.AccessNotes,
-            SiteLocation: WorkOrdersController.BuildSiteLocation(workOrder.Site),
-            SiteLatitude: workOrder.Site?.Latitude,
-            SiteLongitude: workOrder.Site?.Longitude,
             AssetCode: workOrder.Asset?.AssetCode,
             AssetType: workOrder.Asset?.AssetType,
             AssetCategoryName: workOrder.Asset?.AssetCategory?.Name,

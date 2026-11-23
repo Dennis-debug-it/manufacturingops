@@ -4,7 +4,7 @@ import { jobPhase, myAssignmentOf } from './jobState'
 
 const assignment = (overrides: Partial<WorkOrderTechnicianAssignment> = {}): WorkOrderTechnicianAssignment => ({
   id: 'a1', technicianId: 't1', technicianName: 'Ann', isLead: false, status: 'Pending',
-  assignedAt: '2026-10-08T08:00:00Z', acceptedAt: null, arrivalAt: null, departureAt: null, notes: null, ...overrides,
+  assignedAt: '2026-10-08T08:00:00Z', acceptedAt: null, notes: null, ...overrides,
 })
 const job = (status: string, assignments: WorkOrderTechnicianAssignment[]) => ({ status, technicianAssignments: assignments }) as unknown as WorkOrder
 

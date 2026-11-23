@@ -26,7 +26,6 @@ public sealed class TenantIsolationTests
 
         await using var dbContext = CreateDbContext(databaseName, tenantContext);
 
-        Assert.Equal(new[] { fixture.TenantAClientId }, await dbContext.Clients.Select(x => x.Id).ToArrayAsync());
         Assert.Equal(new[] { fixture.TenantAAssetId }, await dbContext.Assets.Select(x => x.Id).ToArrayAsync());
         Assert.Equal(new[] { fixture.TenantAWorkOrderId }, await dbContext.WorkOrders.Select(x => x.Id).ToArrayAsync());
         Assert.Equal(new[] { fixture.TenantATemplateId }, await dbContext.PmTemplates.Select(x => x.Id).ToArrayAsync());
@@ -194,7 +193,6 @@ public sealed class TenantIsolationTests
             null,
             null,
             null,
-            null,
             CancellationToken.None);
 
         var reportOk = Assert.IsType<OkObjectResult>(reportResult);
@@ -207,12 +205,11 @@ public sealed class TenantIsolationTests
         Assert.Equal(1, summary.OpenWorkOrders);
         Assert.Equal(0, summary.ClosedWorkOrders);
         Assert.Equal(1, summary.Assets);
-        Assert.Equal(1, summary.Clients);
         Assert.Equal(0, summary.MaterialsLowStock);
     }
 
     [Fact]
-    public async Task Intake_RejectsForeignClientAssetAndBranchBeforeCreatingWork()
+    public async Task Intake_RejectsForeignAssetAndBranchBeforeCreatingWork()
     {
         var databaseName = $"ecosys-intake-isolation-{Guid.NewGuid():N}";
         var fixture = await SeedFixtureAsync(databaseName);
@@ -227,11 +224,10 @@ public sealed class TenantIsolationTests
         var controller = new IntakeController(dbContext, new NoOpLicenseGuardService(), new NoOpDocumentNumberingService());
         foreach (var request in new[]
         {
-            new EmailIntakeRequest(fixture.TenantAId, null, fixture.TenantBClientId, null, "Test", null, null, "local-test-secret"),
-            new EmailIntakeRequest(fixture.TenantAId, null, fixture.TenantAClientId, fixture.TenantBAssetId, "Test", null, null, "local-test-secret"),
-            new EmailIntakeRequest(fixture.TenantAId, Guid.NewGuid(), fixture.TenantAClientId, null, "Test", null, null, "local-test-secret")
+            new MonitoringIntakeRequest(fixture.TenantAId, null, fixture.TenantBAssetId, "Test", null, null, "local-test-secret"),
+            new MonitoringIntakeRequest(fixture.TenantAId, Guid.NewGuid(), null, "Test", null, null, "local-test-secret")
         })
-            await Assert.ThrowsAsync<BusinessRuleException>(() => controller.EmailWebhook(request, CancellationToken.None));
+            await Assert.ThrowsAsync<BusinessRuleException>(() => controller.MonitoringWebhook(request, CancellationToken.None));
         Assert.Equal(count, await dbContext.WorkOrders.CountAsync());
     }
 
@@ -247,7 +243,6 @@ public sealed class TenantIsolationTests
             dbContext.WorkOrders.Add(new WorkOrder
             {
                 TenantId = fixture.TenantAId,
-                ClientId = fixture.TenantAClientId,
                 WorkOrderNumber = $"TERMINAL-{status}",
                 Title = status,
                 Status = status,
@@ -313,28 +308,8 @@ public sealed class TenantIsolationTests
         var tenantBAdmin = CreateUser(tenantB.Id, "Bob Admin", $"bob-{Guid.NewGuid():N}@tenant-b.test", AppRoles.Admin, hasAllBranchAccess: true);
         var tenantBManagedUser = CreateUser(tenantB.Id, "Analyst B", $"analyst-{Guid.NewGuid():N}@tenant-b.test", AppRoles.User, hasAllBranchAccess: true);
 
-        var clientA = new Client { TenantId = tenantA.Id, ClientName = "Client A", Email = "client-a@test.local", IsActive = true };
-        var clientB = new Client { TenantId = tenantB.Id, ClientName = "Client B", Email = "client-b@test.local", IsActive = true };
 
-        var siteA = new Site
-        {
-            TenantId = tenantA.Id,
-            ClientId = clientA.Id,
-            SiteCode = "SITE-A",
-            SiteName = "Site A",
-            SiteType = "Factory",
-            Status = "Active"
-        };
 
-        var siteB = new Site
-        {
-            TenantId = tenantB.Id,
-            ClientId = clientB.Id,
-            SiteCode = "SITE-B",
-            SiteName = "Site B",
-            SiteType = "Factory",
-            Status = "Active"
-        };
 
         var categoryA = new AssetCategory
         {
@@ -383,8 +358,6 @@ public sealed class TenantIsolationTests
         var assetA = new Asset
         {
             TenantId = tenantA.Id,
-            ClientId = clientA.Id,
-            SiteId = siteA.Id,
             AssetCategoryId = categoryA.Id,
             AssetName = "Generator A",
             AssetCode = "GEN-A",
@@ -397,8 +370,6 @@ public sealed class TenantIsolationTests
         var assetB = new Asset
         {
             TenantId = tenantB.Id,
-            ClientId = clientB.Id,
-            SiteId = siteB.Id,
             AssetCategoryId = categoryB.Id,
             AssetName = "Generator B",
             AssetCode = "GEN-B",
@@ -436,8 +407,6 @@ public sealed class TenantIsolationTests
         var workOrderA = new WorkOrder
         {
             TenantId = tenantA.Id,
-            ClientId = clientA.Id,
-            SiteId = siteA.Id,
             AssetId = assetA.Id,
             WorkOrderNumber = "WO-A-001",
             Title = "Repair generator A",
@@ -450,8 +419,6 @@ public sealed class TenantIsolationTests
         var workOrderB = new WorkOrder
         {
             TenantId = tenantB.Id,
-            ClientId = clientB.Id,
-            SiteId = siteB.Id,
             AssetId = assetB.Id,
             WorkOrderNumber = "WO-B-001",
             Title = "Repair generator B",
@@ -519,17 +486,12 @@ public sealed class TenantIsolationTests
             ]
         };
 
-        dbContext.AddRange(
-            tenantA,
+        dbContext.AddRange(tenantA,
             tenantB,
             tenantAAdmin,
             tenantAManagedUser,
             tenantBAdmin,
             tenantBManagedUser,
-            clientA,
-            clientB,
-            siteA,
-            siteB,
             categoryA,
             categoryB,
             assetA,
@@ -553,10 +515,6 @@ public sealed class TenantIsolationTests
             tenantAAdmin.Id,
             tenantAManagedUser.Id,
             tenantBManagedUser.Id,
-            clientA.Id,
-            clientB.Id,
-            siteA.Id,
-            siteB.Id,
             assetA.Id,
             assetB.Id,
             workOrderA.Id,
@@ -637,10 +595,6 @@ public sealed class TenantIsolationTests
         Guid TenantAAdminId,
         Guid TenantAManagedUserId,
         Guid TenantBManagedUserId,
-        Guid TenantAClientId,
-        Guid TenantBClientId,
-        Guid TenantASiteId,
-        Guid TenantBSiteId,
         Guid TenantAAssetId,
         Guid TenantBAssetId,
         Guid TenantAWorkOrderId,

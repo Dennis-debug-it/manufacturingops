@@ -2,8 +2,8 @@ export type ActivityType = 'Meeting' | 'SiteVisit' | 'Inspection' | 'Call'
 export type ActivityStatus = 'Scheduled' | 'Held' | 'Cancelled'
 export type AttendeeResponse = 'Pending' | 'Accepted' | 'Declined'
 export type ActionItemStatus = 'Open' | 'Done' | 'Cancelled'
-export type LinkedEntityType = 'Client' | 'Contract' | 'WorkOrder'
-export type AttendeeKind = 'Staff' | 'Consultant' | 'ClientContact' | 'External'
+export type LinkedEntityType = 'WorkOrder'
+export type AttendeeKind = 'Staff' | 'External'
 
 export const activityTypeLabels: Record<ActivityType, string> = {
   Meeting: 'Meeting',
@@ -40,8 +40,6 @@ export interface ActivityAttendee {
   id: string
   kind: AttendeeKind
   userId: string | null
-  consultantId: string | null
-  clientContactId: string | null
   name: string
   email: string | null
   response: AttendeeResponse | null
@@ -92,14 +90,10 @@ export interface PersonOption {
 
 export interface ActivityPeople {
   users: PersonOption[]
-  consultants: PersonOption[]
-  clientContacts: PersonOption[]
 }
 
 export interface AttendeePayload {
   userId: string | null
-  consultantId: string | null
-  clientContactId: string | null
   externalName: string | null
   externalEmail: string | null
 }

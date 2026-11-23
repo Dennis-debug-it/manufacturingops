@@ -282,7 +282,6 @@ public sealed class TemplateWorkflowTests
         var workOrder = new WorkOrder
         {
             TenantId = tenantId,
-            ClientId = Guid.NewGuid(),
             WorkOrderNumber = "WO-TPL-001",
             Title = "PM",
             Priority = "Medium",

@@ -7,7 +7,6 @@ public sealed class WorkOrderNote : AuditableEntity, ITenantEntity
     public Guid TenantId { get; set; }
     public Guid WorkOrderId { get; set; }
     public string Content { get; set; } = string.Empty;
-    public bool IsClientVisible { get; set; }
     public Guid CreatedByUserId { get; set; }
 
     public Tenant? Tenant { get; set; }

@@ -107,7 +107,6 @@ export interface TeamManagementProfile {
   certifications: TeamManagementCertificationAssignment[]
   activeWorkOrderCount: number
   pendingResponseCount: number
-  onSiteCount: number
   readinessStatus: 'Ready' | 'Limited' | 'Unavailable'
   readinessReasons: string[]
 }

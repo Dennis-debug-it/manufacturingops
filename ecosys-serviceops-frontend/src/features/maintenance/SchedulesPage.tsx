@@ -7,11 +7,10 @@ import { StatusBadge } from '../../shared/components/StatusBadge'
 import { useDebounce } from '../../shared/hooks/useDebounce'
 import { formatDate } from '../../shared/utils/dates'
 import { usePmPlans } from './api'
-import { PM_CONTRACT_LAPSED, type PmPlan } from './types'
+import type { PmPlan } from './types'
 import { MaintenanceTabNav } from './components/MaintenanceTabNav'
 
 function coverageBadge(plan: PmPlan) {
-  if (plan.status === PM_CONTRACT_LAPSED) return 'Contract Lapsed'
   if (plan.status !== 'Active') return 'Inactive'
   if (!plan.nextPmDate) return 'Unscheduled'
   const days = Math.floor((new Date(plan.nextPmDate).getTime() - Date.now()) / 86_400_000)

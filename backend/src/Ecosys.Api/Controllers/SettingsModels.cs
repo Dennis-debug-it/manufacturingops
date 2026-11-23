@@ -43,106 +43,10 @@ public sealed record CompanySettingsResponse(
     /// without an email address, since a username alone doesn't say which tenant to look in.</summary>
     string WorkspaceCode);
 
-public sealed record EmailIntakeSettingsRequest(
-    bool IsEnabled,
-    string? IntakeEmailAddress,
-    string MailboxProvider,
-    string Host,
-    int Port,
-    bool UseSsl,
-    string? Username,
-    string? Password,
-    Guid? DefaultClientId,
-    Guid? DefaultBranchId,
-    Guid? DefaultAssignmentGroupId,
-    string DefaultPriority,
-    bool CreateWorkOrderFromUnknownSender,
-    string? SubjectParsingRules,
-    string? AllowedSenderDomains,
-    bool? AutoReplyEnabled = null);
-
-public sealed record EmailIntakeSettingsResponse(
-    Guid Id,
-    Guid TenantId,
-    bool IsEnabled,
-    string? IntakeEmailAddress,
-    string MailboxProvider,
-    string Host,
-    int Port,
-    bool UseSsl,
-    string? Username,
-    bool HasPassword,
-    Guid? DefaultClientId,
-    Guid? DefaultBranchId,
-    Guid? DefaultAssignmentGroupId,
-    string DefaultPriority,
-    bool CreateWorkOrderFromUnknownSender,
-    string? SubjectParsingRules,
-    string? AllowedSenderDomains,
-    DateTime? LastCheckedAt,
-    bool IsConnectionHealthy,
-    string? LastError,
-    bool AutoReplyEnabled = true,
-    /// <summary>True once the mailbox has been read at least once (intake handles emails arriving after that).</summary>
-    bool IsReading = false);
-
-/// <summary>Blank fields fall back to the saved settings, so a saved mailbox can be re-tested.</summary>
-public sealed record EmailIntakeTestRequest(string? Host, int Port, bool? UseSsl = null, string? Username = null, string? Password = null);
-
-public sealed record EmailIntakeTestResponse(bool Success, DateTime? LastCheckedAt, string? LastError);
-
-public sealed record EmailIntakeMessageResponse(
-    Guid Id,
-    DateTime ReceivedAt,
-    string FromAddress,
-    string? FromName,
-    string Subject,
-    string Outcome,
-    string? Detail,
-    Guid? WorkOrderId,
-    string? WorkOrderNumber,
-    bool AutoReplySent);
-
-public sealed record EmailIntakeCheckResponse(int Handled, DateTime? LastCheckedAt, bool IsConnectionHealthy, string? LastError);
-
-public sealed record UpsertIntakeProtocolRequest(
-    string Name,
-    string SourceType,
-    bool IsActive,
-    string? Description,
-    string CriteriaJson,
-    string ActionsJson,
-    string SourceConfigJson);
-
-public sealed record IntakeProtocolResponse(
-    Guid Id,
-    Guid TenantId,
-    string Name,
-    string SourceType,
-    bool IsActive,
-    string? Description,
-    string CriteriaJson,
-    string ActionsJson,
-    string SourceConfigJson,
-    DateTime CreatedAt,
-    DateTime? UpdatedAt,
-    DateTime? LastTriggeredAt,
-    string? LastTriggerStatus,
-    string? LastError);
-
-public sealed record IntakeRuleTemplateResponse(string Key, string Name, string Description, string CriteriaJson, string ActionsJson);
-
-public sealed record IntakeRulePreviewRequest(string? Subject, string? Body, string? FromAddress, string? FromName);
-
-public sealed record IntakeRulePreviewResponse(Guid? RuleId, string? RuleName, string Result, string? Title, string? Priority, string? WorkOrderType);
-
-public sealed record IntakeProtocolTestResponse(bool Success, DateTime? LastTriggeredAt, string? LastTriggerStatus, string? LastError);
-
 public sealed record UpsertMonitoringWebhookIntegrationRequest(
     string Name,
     string ToolType,
     bool IsActive,
-    Guid? DefaultClientId,
     Guid? DefaultAssetId,
     Guid? DefaultBranchId,
     Guid? DefaultAssignmentGroupId,
@@ -157,7 +61,6 @@ public sealed record MonitoringWebhookIntegrationResponse(
     string ToolType,
     string EndpointSlug,
     bool IsActive,
-    Guid? DefaultClientId,
     Guid? DefaultAssetId,
     Guid? DefaultBranchId,
     Guid? DefaultAssignmentGroupId,

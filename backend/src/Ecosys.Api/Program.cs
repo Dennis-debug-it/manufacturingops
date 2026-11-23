@@ -437,12 +437,6 @@ using (var scope = app.Services.CreateScope())
         var starterPackService = scope.ServiceProvider.GetRequiredService<IStarterPackService>();
         await platformBootstrapService.EnsurePlatformAdminAsync();
         await starterPackService.EnsureSystemStarterPacksSeededAsync();
-
-        if (app.Environment.IsDevelopment())
-        {
-            var testDataSeeder = scope.ServiceProvider.GetRequiredService<ITestDataSeeder>();
-            await testDataSeeder.SeedAsync();
-        }
     }
     catch (Exception ex)
     {

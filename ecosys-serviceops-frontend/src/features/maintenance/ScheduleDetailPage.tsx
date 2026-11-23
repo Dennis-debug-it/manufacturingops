@@ -14,7 +14,6 @@ import { formatDate } from '../../shared/utils/dates'
 import { useWorkOrders } from '../work-orders/api'
 import { useGenerateWorkOrderNow, usePmPlans, useSetPmAutoSchedule } from './api'
 import { OnOffSwitch } from '../../shared/components/OnOffSwitch'
-import { PM_CONTRACT_LAPSED } from './types'
 
 type HistoryOutcome = 'Completed On Time' | 'Completed Late' | 'Missed' | 'In Progress'
 
@@ -74,10 +73,9 @@ export function ScheduleDetailPage() {
       <PageHeader
         title={plan.assetName ?? 'PM Schedule'}
         breadcrumbs={[{ label: 'PM Schedules', to: '/maintenance/schedules' }, { label: plan.assetName ?? 'Schedule' }]}
-        secondaryActions={<StatusBadge status={plan.status === PM_CONTRACT_LAPSED ? 'Contract Lapsed' : plan.status} />}
+        secondaryActions={<StatusBadge status={plan.status} />}
         primaryAction={
-          // While on hold the panel below offers a chargeable visit instead.
-          canTrigger && plan.status !== PM_CONTRACT_LAPSED ? (
+          canTrigger ? (
             <button type="button" onClick={triggerGenerate} disabled={generateNow.isPending} className="inline-flex h-11 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
               {generateNow.isPending ? 'Generating…' : 'Generate Work Order Now'}
             </button>

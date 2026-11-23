@@ -193,11 +193,10 @@ public sealed class ReportTemplateConfig : IJsonOnDeserialized
         new("problem",          "Problem Reported",      true, 1),
         new("findings",         "Findings",              true, 2),
         new("work-done",        "Work Done",             true, 3),
-        new("equipment",        "Equipment on Site",     true, 4),
-        new("checklist",        "Checklist Responses",   true, 5),
-        new("materials",        "Materials Used",        true, 6),
-        new("photos",           "Photo Evidence",        true, 7),
-        new("signatures",       "Signatures / Sign-off", true, 8),
+        new("checklist",        "Checklist Responses",   true, 4),
+        new("materials",        "Materials Used",        true, 5),
+        new("photos",           "Photo Evidence",        true, 6),
+        new("signatures",       "Signatures / Sign-off", true, 7),
     ];
 
     /// <summary>

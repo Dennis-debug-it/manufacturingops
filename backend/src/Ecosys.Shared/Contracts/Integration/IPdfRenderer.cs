@@ -204,7 +204,6 @@ public sealed record WorkOrderReportPdfModel(
     string? CompanyAddress,     // Shown in report footer
     string WorkOrderNumber,
     string Title,
-    string? ClientName,
     string? SiteLabel,
     string? AssetName,
     string? AssetDetails,
@@ -221,9 +220,7 @@ public sealed record WorkOrderReportPdfModel(
     IReadOnlyCollection<WorkOrderReportPdfPhotoGroup> PhotoGroups,
     IReadOnlyCollection<WorkOrderReportPdfSignature> Signatures,
     /// <summary>Tenant report template config; null = use defaults.</summary>
-    ReportTemplateConfig? TemplateConfig = null,
-    /// <summary>The active equipment registered at the job's site; empty when the job has no site.</summary>
-    IReadOnlyCollection<WorkOrderReportPdfEquipment>? SiteEquipment = null);
+    ReportTemplateConfig? TemplateConfig = null);
 
 public sealed record PurchaseOrderPdfModel(
     string OrderNumber,
@@ -257,8 +254,6 @@ public sealed record PurchaseOrderPdfModel(
 public sealed record WorkOrderReportPdfTimestamp(string Label, string? Value);
 public sealed record WorkOrderReportPdfChecklistSection(string SectionName, IReadOnlyCollection<WorkOrderReportPdfChecklistItem> Items);
 public sealed record WorkOrderReportPdfChecklistItem(string Question, string InputType, string? ResponseValue, string? Unit, string? Remarks, bool IsRequired, bool IsCompleted, bool EvidenceRequired, string? EvidenceUrl);
-/// <summary>One piece of equipment at the site. <paramref name="OnThisJob"/> marks the asset the job was raised against.</summary>
-public sealed record WorkOrderReportPdfEquipment(string Name, string? Code, string? Description, string? SerialNumber, string? Location, bool OnThisJob);
 public sealed record WorkOrderReportPdfMaterial(string Name, decimal QuantityUsed, string UnitOfMeasure, decimal? UnitCost, bool Chargeable, string? Notes);
 public sealed record WorkOrderReportPdfPhotoGroup(string Category, IReadOnlyCollection<WorkOrderReportPdfPhoto> Photos);
 public sealed record WorkOrderReportPdfPhoto(string Caption, string? PublicUrl, byte[]? ImageBytes);

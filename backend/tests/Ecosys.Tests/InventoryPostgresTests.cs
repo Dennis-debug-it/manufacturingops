@@ -84,7 +84,7 @@ public sealed class InventoryPostgresTests
             await counts.Cancel(blind.Id, default);
 
             var issues = new MaterialIssuesController(db, new TestTenant(tenantId, userId), new AllowAll(), branches, numbers, ledger, new NoAudit());
-            await issues.Create(new(branch.Id, null, null, null, null, null, null, "Counter issue", [new(part.Id, 1, null, null)]), default);
+            await issues.Create(new(branch.Id, null, null, null, "Counter issue", [new(part.Id, 1, null, null)]), default);
             var queue = new InventoryRequestsController(db, new TestTenant(tenantId, userId), new AllowAll(), branches);
             Assert.Equal(InventoryRequestStages.Issued, Assert.Single(Value(await queue.List(null, default))).Stage);
 

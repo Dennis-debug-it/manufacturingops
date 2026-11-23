@@ -23,7 +23,7 @@ namespace Ecosys.Tests;
 public sealed class NullNavigationReportingTests
 {
     [Fact]
-    public async Task PmCompliance_WhenPlanAssetHasNoCategoryOrClient_ReturnsOkInsteadOfThrowing()
+    public async Task PmCompliance_WhenPlanAssetHasNoCategory_ReturnsOkInsteadOfThrowing()
     {
         await using var dbContext = CreateDbContext();
         var (tenant, admin) = await SeedTenantAsync(dbContext);
@@ -35,21 +35,12 @@ public sealed class NullNavigationReportingTests
         // the relationship is required and `.Include(x => x.Client)` compiles to an INNER JOIN — an
         // asset pointing at a client row that does not exist is not "a null navigation", it is a
         // corrupt row, and EF silently filters it out of the result entirely.
-        var client = new Client
-        {
-            TenantId = tenant.Id,
-            ClientName = "Acme Hospital",
-            IsActive = true
-        };
-        dbContext.Clients.Add(client);
         await dbContext.SaveChangesAsync();
 
         var asset = new Asset
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
             AssetCategoryId = null,
-            SiteId = null,
             AssetName = "Unregistered chiller",
             AssetCode = "AST-ORPHAN-1"
         };
@@ -60,7 +51,6 @@ public sealed class NullNavigationReportingTests
         {
             TenantId = tenant.Id,
             AssetId = asset.Id,
-            SiteId = null,
             Frequency = "Monthly",
             FrequencyUnit = "Monthly",
             Status = "Active",
@@ -74,8 +64,6 @@ public sealed class NullNavigationReportingTests
             DateTime.SpecifyKind(DateTime.UtcNow.AddDays(-30), DateTimeKind.Utc),
             DateTime.SpecifyKind(DateTime.UtcNow.AddDays(1), DateTimeKind.Utc),
             null,
-            null,
-            null,
             CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
@@ -83,12 +71,11 @@ public sealed class NullNavigationReportingTests
         Assert.Equal(1, ReadProperty<int>(ok.Value!, "ActivePlans"));
         Assert.Equal(1, ReadProperty<int>(ok.Value!, "Overdue"));
 
-        // The overdue projection walks Asset?.AssetCategory and Asset?.Site, both null here. The
+        // The overdue projection walks Asset?.AssetCategory, null here. The
         // report must still render the row rather than throwing on the way through.
         var overdue = Assert.IsAssignableFrom<System.Collections.IEnumerable>(ReadProperty<object>(ok.Value!, "OverduePlans"));
         var rows = overdue.Cast<object>().ToList();
         var row = Assert.Single(rows);
-        Assert.Equal("Acme Hospital", ReadProperty<string?>(row, "ClientName"));
         Assert.Equal("Unregistered chiller", ReadProperty<string?>(row, "AssetName"));
     }
 

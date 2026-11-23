@@ -10,7 +10,7 @@ import { StatusBadge } from '../../../shared/components/StatusBadge'
 import { usePermission } from '../../../shared/hooks/usePermission'
 import { cn } from '../../../shared/utils/cn'
 import { formatCurrency } from '../../../shared/utils/format'
-import { useAcknowledgeWorkOrder, useExecutionBundle, useGenerateServiceReport, useReportContent, useServiceReport, useServiceReportLayout, useUpdatePhoto } from '../api'
+import { useExecutionBundle, useGenerateServiceReport, useReportContent, useServiceReport, useServiceReportLayout, useUpdatePhoto } from '../api'
 import { ReportEditNote, ReportEditor } from '../components/ReportEditor'
 import type { WorkOrder, WorkOrderPhoto } from '../types'
 
@@ -62,7 +62,6 @@ function ReportPhotos({ workOrderId, photos, canEdit }: { workOrderId: string; p
 }
 
 function reportStatus(workOrder: WorkOrder): string {
-  if (workOrder.acknowledgedByName) return 'Acknowledged'
   if (workOrder.status === 'Completed') return 'Ready for Review'
   if (['Closed', 'Cancelled'].includes(workOrder.status)) return workOrder.status
   return 'Draft'
@@ -73,7 +72,6 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
   const { data: report, isLoading, isError } = useServiceReport(workOrder.id)
   const { data: layout } = useServiceReportLayout(workOrder.id)
   const generate = useGenerateServiceReport(workOrder.id)
-  const acknowledge = useAcknowledgeWorkOrder(workOrder.id)
   const canEdit = usePermission('work-orders.complete')
   const { data: content } = useReportContent(workOrder.id)
   const { data: bundle } = useExecutionBundle(workOrder.id)
@@ -81,9 +79,6 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
   const editable = canEdit && Boolean(content) && !content?.lockedReason
 
   const [downloading, setDownloading] = useState<'pdf' | 'docx' | null>(null)
-  const [ackOpen, setAckOpen] = useState(false)
-  const [ackName, setAckName] = useState('')
-  const [ackComment, setAckComment] = useState('')
 
   const regenerate = async () => {
     try {
@@ -109,22 +104,6 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
       toast.error(format === 'pdf' ? 'Could not download the PDF' : 'Could not download the Word document')
     } finally {
       setDownloading(null)
-    }
-  }
-
-  const submitAcknowledge = async () => {
-    if (!ackName.trim()) {
-      toast.error('Acknowledged-by name is required')
-      return
-    }
-    try {
-      await acknowledge.mutateAsync({ acknowledgedByName: ackName.trim(), comments: ackComment.trim() || null })
-      toast.success('Work order acknowledged')
-      setAckOpen(false)
-      setAckName('')
-      setAckComment('')
-    } catch {
-      // interceptor surfaces the error toast
     }
   }
 
@@ -168,34 +147,11 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
             <Download className="h-4 w-4" />
             {downloading === 'pdf' ? 'Preparing…' : 'Download PDF'}
           </button>
-          {workOrder.status === 'Completed' && !workOrder.acknowledgedByName ? (
-            <button type="button" onClick={() => setAckOpen((value) => !value)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50">
-              Acknowledge
-            </button>
-          ) : null}
         </div>
       </div>
 
       {content ? <ReportEditNote content={content} /> : null}
       {editing && content ? <ReportEditor workOrderId={workOrder.id} content={content} onClose={() => setEditing(false)} /> : null}
-
-      {ackOpen ? (
-        <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="ack-name">Acknowledged By</label>
-              <input id="ack-name" value={ackName} onChange={(event) => setAckName(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700" htmlFor="ack-comment">Comments</label>
-              <input id="ack-comment" value={ackComment} onChange={(event) => setAckComment(event.target.value)} className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]" />
-            </div>
-          </div>
-          <button type="button" onClick={submitAcknowledge} disabled={acknowledge.isPending} className="mt-3 inline-flex h-10 items-center justify-center rounded-lg bg-[var(--app-primary)] px-4 text-sm font-medium text-white transition hover:bg-[var(--app-secondary)] disabled:opacity-60">
-            {acknowledge.isPending ? 'Saving…' : 'Confirm Acknowledgement'}
-          </button>
-        </div>
-      ) : null}
 
       <Section title="Company & Job Details" defaultOpen>
         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
@@ -206,51 +162,12 @@ export function ReportTab({ workOrder }: { workOrder: WorkOrder }) {
         </dl>
       </Section>
 
-      <Section title="Client & Site">
-        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-          <div><dt className="text-xs uppercase text-slate-500">Client</dt><dd className="text-slate-900">{report.clientName ?? '—'}</dd></div>
-          <div><dt className="text-xs uppercase text-slate-500">Site</dt><dd className="text-slate-900">{report.siteLabel ?? '—'}</dd></div>
-        </dl>
-      </Section>
-
       <Section title="Asset">
         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+          <div><dt className="text-xs uppercase text-slate-500">Location</dt><dd className="text-slate-900">{report.siteLabel ?? '—'}</dd></div>
           <div><dt className="text-xs uppercase text-slate-500">Asset</dt><dd className="text-slate-900">{report.assetName ?? '—'}</dd></div>
           <div><dt className="text-xs uppercase text-slate-500">Details</dt><dd className="text-slate-900">{report.assetDetails ?? '—'}</dd></div>
         </dl>
-      </Section>
-
-      <Section title={`Equipment on Site (${report.siteEquipment?.length ?? 0})`}>
-        {!report.siteEquipment?.length ? (
-          <p className="text-sm text-slate-500">No equipment is registered at this site.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase text-slate-500">
-                  <th className="py-2 pr-3 font-medium">Equipment</th>
-                  <th className="py-2 pr-3 font-medium">Make / model</th>
-                  <th className="py-2 pr-3 font-medium">Serial no.</th>
-                  <th className="py-2 font-medium">Location</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.siteEquipment.map((item, index) => (
-                  <tr key={`${item.code ?? item.name}-${index}`} className={item.onThisJob ? 'border-t border-slate-100 bg-slate-50' : 'border-t border-slate-100'}>
-                    <td className="py-2 pr-3 text-slate-900">
-                      <span className="font-medium">{item.name}</span>
-                      {item.onThisJob ? <span className="ml-2 text-xs text-slate-500">serviced on this job</span> : null}
-                      {item.code ? <span className="block text-xs text-slate-500">{item.code}</span> : null}
-                    </td>
-                    <td className="py-2 pr-3 text-slate-700">{item.description ?? '—'}</td>
-                    <td className="py-2 pr-3 text-slate-700">{item.serialNumber ?? '—'}</td>
-                    <td className="py-2 text-slate-700">{item.location ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </Section>
 
       <Section title="Technician Team & Timestamps">

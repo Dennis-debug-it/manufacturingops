@@ -37,8 +37,7 @@ public sealed class InventoryReorganisationTests
     private async Task<(MaterialItem Filter, MaterialItem Belt, MaterialItem Untouched)> Seed(AppDbContext db)
     {
         db.Users.Add(new User { Id = userId, TenantId = tenantId, FullName = "Storekeeper", Email = "store@tenant.test", Role = AppRoles.Admin, PasswordHash = string.Empty, IsActive = true });
-        db.Branches.AddRange(
-            new Branch { Id = branchId, TenantId = tenantId, Name = "Nairobi", Code = "NBO", IsActive = true },
+        db.Branches.AddRange(new Branch { Id = branchId, TenantId = tenantId, Name = "Nairobi", Code = "NBO", IsActive = true },
             new Branch { Id = otherBranchId, TenantId = tenantId, Name = "Mombasa", Code = "MBA", IsActive = true });
         var filter = new MaterialItem { TenantId = tenantId, ItemCode = "F", ItemName = "Filter", UnitOfMeasure = "each", UnitCost = 10, ReorderLevel = 0 };
         var belt = new MaterialItem { TenantId = tenantId, ItemCode = "B", ItemName = "Belt", UnitOfMeasure = "each", UnitCost = 50 };

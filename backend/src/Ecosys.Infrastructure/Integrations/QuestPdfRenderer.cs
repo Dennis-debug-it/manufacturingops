@@ -88,8 +88,7 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
                 case "service-details":
                     column.Item().Element(x => RenderSection(x, borderColor, title, new[]
                     {
-                        ("Client", report.ClientName),
-                        ("Site / Location", report.SiteLabel),
+                        ("Location", report.SiteLabel),
                         ("Asset", report.AssetName),
                         ("Asset details", report.AssetDetails),
                         ("Technician / Team", report.TechnicianTeam),
@@ -107,11 +106,8 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
                 case "work-done":
                     column.Item().Element(x => RenderParagraphSection(x, borderColor, title, report.WorkDone));
                     break;
-                case "equipment":
-                    if (report.SiteEquipment is { Count: > 0 } equipment)
-                        column.Item().Element(x => RenderEquipmentSection(x, borderColor, title, equipment));
-                    break;
-                // "timestamps" (the visit timeline) is no longer printed; designs saved with it skip it.
+                // "timestamps" (the visit timeline) and "equipment" (a client site's equipment) are no
+                // longer printed; designs saved with them skip them.
                 case "checklist":
                     if (report.ChecklistSections.Count > 0)
                         column.Item().Element(x => RenderChecklistSection(x, borderColor, title, report.ChecklistSections));
@@ -391,58 +387,6 @@ internal sealed class QuestPdfRenderer : IPdfRenderer
                     column.Item().PaddingLeft(8).Text(material.Notes).FontSize(9).FontColor(Colors.Grey.Darken1);
                 }
             }
-        });
-    }
-
-    /// <summary>The equipment registered at the site, as a table; the unit this job was raised against is marked.</summary>
-    private static void RenderEquipmentSection(IContainer container, string borderColor, string title, IReadOnlyCollection<WorkOrderReportPdfEquipment> equipment)
-    {
-        container.Column(column =>
-        {
-            column.Spacing(6);
-            column.Item().Element(x => SectionHeading(x, borderColor, title));
-            column.Item().Table(table =>
-            {
-                table.ColumnsDefinition(cols =>
-                {
-                    cols.ConstantColumn(22);   // #
-                    cols.RelativeColumn(3);    // Equipment
-                    cols.RelativeColumn(3);    // Make / model
-                    cols.RelativeColumn(2);    // Serial no.
-                    cols.RelativeColumn(2);    // Location
-                });
-
-                IContainer HeaderCell(IContainer c) => c.BorderBottom(1).BorderColor(borderColor).PaddingVertical(4).PaddingHorizontal(3);
-                table.Header(h =>
-                {
-                    foreach (var label in new[] { "#", "Equipment", "Make / model", "Serial no.", "Location" })
-                        h.Cell().Element(HeaderCell).Text(label).FontSize(8).SemiBold().FontColor(Colors.Grey.Darken2);
-                });
-
-                var i = 0;
-                foreach (var item in equipment)
-                {
-                    var bg = item.OnThisJob ? Colors.Grey.Lighten4 : Colors.White;
-                    IContainer DataCell(IContainer c) =>
-                        c.Background(bg).BorderBottom(1).BorderColor(Colors.Grey.Lighten3).PaddingVertical(4).PaddingHorizontal(3);
-
-                    table.Cell().Element(DataCell).Text($"{++i}").FontSize(8).FontColor(Colors.Grey.Darken1);
-                    table.Cell().Element(DataCell).Column(col =>
-                    {
-                        col.Item().Text(text =>
-                        {
-                            text.Span(item.Name).FontSize(9).SemiBold();
-                            if (item.OnThisJob)
-                                text.Span("  (serviced on this job)").FontSize(7).FontColor(Colors.Grey.Darken1);
-                        });
-                        if (!string.IsNullOrWhiteSpace(item.Code))
-                            col.Item().Text(item.Code).FontSize(7).FontColor(Colors.Grey.Darken1);
-                    });
-                    table.Cell().Element(DataCell).Text(item.Description ?? "—").FontSize(8);
-                    table.Cell().Element(DataCell).Text(item.SerialNumber ?? "—").FontSize(8);
-                    table.Cell().Element(DataCell).Text(item.Location ?? "—").FontSize(8);
-                }
-            });
         });
     }
 

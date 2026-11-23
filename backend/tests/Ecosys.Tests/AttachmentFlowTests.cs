@@ -200,29 +200,11 @@ public sealed class AttachmentFlowTests
             HasAllBranchAccess = true
         };
 
-        var client = new Client
-        {
-            TenantId = tenant.Id,
-            ClientName = "Acme Manufacturing",
-            Email = "client@acme.test",
-            IsActive = true
-        };
 
-        var site = new Site
-        {
-            TenantId = tenant.Id,
-            ClientId = client.Id,
-            SiteCode = $"SITE-{Guid.NewGuid():N}".Substring(0, 10),
-            SiteName = "Main Plant",
-            SiteType = "Factory",
-            Status = "Active"
-        };
 
         var asset = new Asset
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             AssetCode = $"ASSET-{Guid.NewGuid():N}".Substring(0, 10),
             AssetName = "Generator 01",
             AssetType = "Generator",
@@ -232,8 +214,6 @@ public sealed class AttachmentFlowTests
         var workOrder = new WorkOrder
         {
             TenantId = tenant.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             AssetId = asset.Id,
             WorkOrderNumber = $"WO-{Guid.NewGuid():N}".Substring(0, 10),
             Title = "Generator fault",
@@ -243,9 +223,9 @@ public sealed class AttachmentFlowTests
             IsPreventiveMaintenance = false
         };
 
-        dbContext.AddRange(tenant, user, client, site, asset, workOrder);
+        dbContext.AddRange(tenant, user, asset, workOrder);
         await dbContext.SaveChangesAsync();
-        return new FixtureData(tenant, user, client, site, asset, workOrder);
+        return new FixtureData(tenant, user, asset, workOrder);
     }
 
     private static AttachmentsController CreateController(
@@ -276,8 +256,6 @@ public sealed class AttachmentFlowTests
     private sealed record FixtureData(
         Tenant Tenant,
         User User,
-        Client Client,
-        Site Site,
         Asset Asset,
         WorkOrder WorkOrder);
 

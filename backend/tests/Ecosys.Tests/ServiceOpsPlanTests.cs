@@ -58,12 +58,10 @@ public sealed class ServiceOpsPlanTests
     [InlineData("essentials", "Materials", "/api/materials", false)]
     [InlineData("essentials", "PurchaseOrders", "/api/purchase-orders", false)]
     [InlineData("essentials", "ApprovalMatrix", "/api/approvals/pending", false)]
-    [InlineData("essentials", "Settings", "/api/settings/email-intake", false)]
     [InlineData("essentials", "AdvancedSettings", "/api/settings/inventory", false)]
     [InlineData("professional", "PreventiveMaintenance", "/api/preventive-maintenance", true)]
     [InlineData("professional", "Materials", "/api/materials", true)]
     [InlineData("professional", "ApprovalMatrix", "/api/approvals/pending", true)]
-    [InlineData("professional", "Settings", "/api/settings/email-intake", true)]
     // Enterprise adds API keys, webhooks and monitoring.
     [InlineData("professional", "Integrations", "/api/settings/api-keys", false)]
     [InlineData("professional", "Settings", "/api/settings/monitoring-webhooks", false)]

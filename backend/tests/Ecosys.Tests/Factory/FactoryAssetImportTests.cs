@@ -88,7 +88,6 @@ public sealed class FactoryAssetImportTests
 
         var dryer = await db.Assets.SingleAsync(x => x.AssetCode == "FBD-01");
         var fan = await db.Assets.SingleAsync(x => x.AssetCode == "FBD-01-FAN");
-        Assert.Null(dryer.ClientId);
         Assert.Equal("A", dryer.Criticality); // from the class
         Assert.Equal(new DateTime(2018, 6, 1), dryer.InstallationDate);
         Assert.Equal(dryer.Id, fan.ParentAssetId);

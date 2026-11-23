@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
-import { AlertTriangle, ArrowRightLeft, Eye, Lock, MessageSquare, Send, UserCog } from 'lucide-react'
+import { AlertTriangle, ArrowRightLeft, MessageSquare, Send, UserCog } from 'lucide-react'
 import { EmptyState } from '../../../shared/components/EmptyState'
 import { Spinner } from '../../../shared/components/Spinner'
 import { cn } from '../../../shared/utils/cn'
@@ -19,7 +19,6 @@ interface FeedItem {
   title: string
   body: string | null
   /** Notes only: who can see it. */
-  visibility?: 'internal' | 'client'
   escalation?: boolean
 }
 
@@ -52,8 +51,7 @@ function fromEvent(event: WorkOrderEvent): FeedItem {
     at: event.occurredAt,
     actor: event.actorUserName ?? 'System',
     title: event.eventType === 'Comment' ? 'Update' : humanize(event.eventType),
-    // An emailed reply's text is in its note (the message is just "Email from … : subject").
-    body: [event.message, statusChange, event.reason, event.eventType === 'EmailReceived' ? event.note : null].filter(Boolean).join(' · ') || null,
+    body: [event.message, statusChange, event.reason].filter(Boolean).join(' · ') || null,
     escalation: event.eventType === 'Escalation',
   }
 }
@@ -66,7 +64,6 @@ function fromNote(note: WorkOrderNote): FeedItem {
     actor: note.createdByUserName ?? 'Unknown user',
     title: 'Note',
     body: note.content,
-    visibility: note.isClientVisible ? 'client' : 'internal',
   }
 }
 
@@ -83,7 +80,6 @@ export function ActivityTab({ workOrderId }: { workOrderId: string }) {
   const addNote = useAddWorkOrderNote(workOrderId)
   const [filter, setFilter] = useState<Filter>('all')
   const [content, setContent] = useState('')
-  const [isClientVisible, setIsClientVisible] = useState(false)
 
   const items = useMemo(() => {
     const merged = [
@@ -99,10 +95,9 @@ export function ActivityTab({ workOrderId }: { workOrderId: string }) {
   const submit = async () => {
     if (!content.trim()) return
     try {
-      await addNote.mutateAsync({ content: content.trim(), isClientVisible })
-      toast.success(isClientVisible ? 'Client-visible note posted' : 'Internal note posted')
+      await addNote.mutateAsync({ content: content.trim() })
+      toast.success('Note posted')
       setContent('')
-      setIsClientVisible(false)
     } catch {
       // interceptor surfaces the error toast
     }
@@ -120,27 +115,7 @@ export function ActivityTab({ workOrderId }: { workOrderId: string }) {
           placeholder="Post an update or note…"
           className="w-full resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-[var(--app-primary)]"
         />
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex rounded-lg border border-slate-200 p-0.5" role="radiogroup" aria-label="Note visibility">
-            {[
-              { value: false, label: 'Internal', icon: Lock },
-              { value: true, label: 'Client-visible', icon: Eye },
-            ].map(({ value, label, icon: Icon }) => (
-              <button
-                key={label}
-                type="button"
-                role="radio"
-                aria-checked={isClientVisible === value}
-                onClick={() => setIsClientVisible(value)}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition',
-                  isClientVisible === value ? (value ? 'bg-sky-600 text-white' : 'bg-[var(--app-primary)] text-white') : 'text-slate-600 hover:bg-slate-50',
-                )}
-              >
-                <Icon className="h-3.5 w-3.5" />{label}
-              </button>
-            ))}
-          </div>
+        <div className="mt-2 flex justify-end">
           <button
             type="button"
             onClick={submit}
@@ -190,12 +165,6 @@ export function ActivityTab({ workOrderId }: { workOrderId: string }) {
                   <span className="text-sm text-slate-900">
                     <span className="font-medium">{item.actor}</span>
                     <span className="text-slate-500"> · {item.title}</span>
-                    {item.visibility ? (
-                      <span className={cn('ml-2 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium', item.visibility === 'client' ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-600')}>
-                        {item.visibility === 'client' ? <Eye className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
-                        {item.visibility === 'client' ? 'Client-visible' : 'Internal'}
-                      </span>
-                    ) : null}
                   </span>
                   <time className="text-xs text-slate-500" dateTime={item.at} title={formatDateTime(item.at)}>{formatRelative(item.at)}</time>
                 </div>

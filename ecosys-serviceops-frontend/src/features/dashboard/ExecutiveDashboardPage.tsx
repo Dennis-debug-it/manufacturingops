@@ -180,12 +180,11 @@ export function ExecutiveDashboardPage() {
             </section>
 
             <section className="space-y-4 rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
-              <SectionHeader title="Technician Utilisation" description="Active load and on-site status (all-time snapshot)." />
+              <SectionHeader title="Technician Utilisation" description="Active load per technician (all-time snapshot)." />
               <DataTable
                 columns={[
                   { key: 'technicianName', header: 'Technician', cell: (row) => row.technicianName },
                   { key: 'activeWorkOrders', header: 'Active WOs', cell: (row) => formatNumber(row.activeWorkOrders) },
-                  { key: 'onSiteCount', header: 'On Site', cell: (row) => formatNumber(row.onSiteCount) },
                 ]}
                 data={summary.technicianWorkload.map((row) => ({ id: row.technicianName, ...row }))}
                 emptyTitle="No technician activity"

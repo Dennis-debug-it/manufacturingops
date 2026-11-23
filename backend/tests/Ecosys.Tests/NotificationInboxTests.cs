@@ -125,10 +125,9 @@ public sealed class NotificationInboxTests
         {
             TenantId = harness.TenantId, UserId = harness.Bob, NotificationKey = AssignmentNotifications.Key, PushEnabled = pushEnabled,
         });
-        var client = new Client { TenantId = harness.TenantId, ClientName = "Acme", IsActive = true };
         var technician = new Technician { TenantId = harness.TenantId, UserId = harness.Bob, FullName = "Bob", IsActive = true };
-        var workOrder = new WorkOrder { TenantId = harness.TenantId, ClientId = client.Id, WorkOrderNumber = "WO-7", Title = "Generator", Priority = "Medium", Status = "New" };
-        harness.Db.AddRange(client, technician, workOrder);
+        var workOrder = new WorkOrder { TenantId = harness.TenantId, WorkOrderNumber = "WO-7", Title = "Generator", Priority = "Medium", Status = "New" };
+        harness.Db.AddRange(technician, workOrder);
         harness.Db.EscalationRules.Add(new EscalationRule
         {
             TenantId = harness.TenantId, Name = "To Bob", IsActive = true, TriggerCondition = EscalationConditions.UnassignedAfterMins,

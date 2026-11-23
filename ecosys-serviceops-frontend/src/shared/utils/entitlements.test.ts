@@ -13,7 +13,7 @@ describe('edition entitlements', () => {
   })
 
   it('keeps inventory and the advanced tools in Professional', () => {
-    for (const path of ['/inventory/stock', '/inventory/purchase-orders', '/approvals', '/settings/email-intake']) {
+    for (const path of ['/inventory/stock', '/inventory/purchase-orders', '/approvals', '/settings/workflows']) {
       expect(canAccessModulePath(path, essentials)).toBe(false)
       expect(canAccessModulePath(path, professional)).toBe(true)
     }

@@ -8,7 +8,6 @@ export interface WhatsAppConversationListItem {
   id: string
   contactName: string
   contactPhone: string
-  clientId: string | null
   lastMessagePreview: string
   lastMessageAt: string
   unreadCount: number
@@ -25,7 +24,6 @@ export function useWhatsAppConversations() {
 export interface CreateWhatsAppConversationPayload {
   contactName: string
   contactPhone: string
-  clientId?: string | undefined
 }
 
 export function useCreateWhatsAppConversation() {
@@ -50,7 +48,6 @@ export interface WhatsAppConversationDetail {
   id: string
   contactName: string
   contactPhone: string
-  clientId: string | null
   messages: WhatsAppTimelineMessage[]
 }
 

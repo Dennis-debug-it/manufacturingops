@@ -116,7 +116,6 @@ public sealed class ScheduledReportsController(
         dto.TimeOfDay ?? "08:00",
         dto.DateRangePreset ?? "LastMonth",
         dto.GroupBy,
-        dto.ClientId,
         dto.Recipients,
         dto.OrgNodeId);
 
@@ -130,7 +129,6 @@ public sealed class ScheduledReportsController(
         r.TimeOfDay,
         r.DateRangePreset,
         r.GroupBy,
-        r.ClientId,
         r.Recipients,
         r.IsActive,
         r.LastRunAt,
@@ -144,14 +142,13 @@ public sealed class ScheduledReportsController(
 
 public sealed record ScheduledReportInputDto(
     [Required, MaxLength(200)] string Name,
-    [Required, AllowedValues("Revenue", "Aging", "ClientStatement", "WorkOrderSummary", "Invoices", "FactoryKpis")] string ReportType,
+    [Required, AllowedValues("WorkOrderSummary", "FactoryKpis")] string ReportType,
     [Required, AllowedValues("Daily", "Weekly", "Monthly", "Quarterly")] string Frequency,
     [Range(1, 28)] int? DayOfMonth,
     [AllowedValues("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday", null)] string? DayOfWeek,
     string? TimeOfDay,
     [AllowedValues("LastWeek", "LastMonth", "LastQuarter", "LastYear", "YTD", null)] string? DateRangePreset,
     string? GroupBy,
-    string? ClientId,
     [Required] string Recipients,
     Guid? OrgNodeId = null);
 
@@ -165,7 +162,6 @@ public sealed record ScheduledReportDto(
     string TimeOfDay,
     string DateRangePreset,
     string? GroupBy,
-    string? ClientId,
     string Recipients,
     bool IsActive,
     DateTime? LastRunAt,

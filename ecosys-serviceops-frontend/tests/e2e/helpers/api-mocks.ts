@@ -55,16 +55,3 @@ export async function mockTenantEmailTestSuccess(page: Page) {
     )
   })
 }
-
-export async function mockEmailIntakeSimulationSuccess(page: Page) {
-  await page.route('**/api/settings/intake-protocols/*/test', async (route) => {
-    await route.fulfill(
-      json({
-        success: true,
-        lastTriggeredAt: new Date().toISOString(),
-        lastTriggerStatus: 'Parsed subject: Generator failure at Main Branch | Sender: customer@example.com | Priority: High',
-        lastError: null,
-      }),
-    )
-  })
-}

@@ -45,7 +45,7 @@ function LogoUploader() {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4">
       <h2 className="text-sm font-semibold text-slate-900">Company Logo</h2>
-      <p className="mt-1 text-sm text-slate-500">Shown on documents, emails, the client portal and the sign-in screen. PNG, JPG or WebP.</p>
+      <p className="mt-1 text-sm text-slate-500">Shown on documents, emails and the sign-in screen. PNG, JPG or WebP.</p>
       <div className="mt-4 flex flex-wrap items-center gap-4">
         <div className="flex h-20 w-40 items-center justify-center overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-50">
           {logoUrl ? <img src={logoUrl} alt="Company logo" className="max-h-full max-w-full object-contain" /> : <span className="text-xs text-slate-400">No logo yet</span>}

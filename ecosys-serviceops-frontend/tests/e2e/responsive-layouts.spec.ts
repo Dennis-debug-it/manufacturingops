@@ -57,9 +57,6 @@ test.describe('Responsive layout hardening', () => {
 
       await openTenantNav(page, /^settings$/i)
       await expect(page).toHaveURL(/\/settings\/company-profile/)
-      await page.locator('a[href="/settings/email-intake"]:visible').first().click()
-      await expect(page).toHaveURL(/\/settings\/email-intake/)
-      await expect(page.getByTestId('email-intake-page')).toBeVisible()
       await assertNoHorizontalOverflow(page)
     })
 

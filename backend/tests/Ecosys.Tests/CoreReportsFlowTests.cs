@@ -21,7 +21,6 @@ public sealed class CoreReportsFlowTests
         var result = await controller.WorkOrderPerformance(
             fixture.RangeStart,
             fixture.RangeEnd,
-            fixture.Client.Id,
             fixture.Branch.Id,
             null,
             null,
@@ -39,7 +38,6 @@ public sealed class CoreReportsFlowTests
         var export = await controller.WorkOrderPerformanceExport(
             fixture.RangeStart,
             fixture.RangeEnd,
-            fixture.Client.Id,
             fixture.Branch.Id,
             null,
             null,
@@ -47,7 +45,7 @@ public sealed class CoreReportsFlowTests
 
         var file = Assert.IsType<FileContentResult>(export);
         var csv = Encoding.UTF8.GetString(file.FileContents);
-        Assert.Contains("WO Number,Title,Client,Priority,Status", csv, StringComparison.Ordinal);
+        Assert.Contains("WO Number,Title,Priority,Status", csv, StringComparison.Ordinal);
         Assert.Contains("WO-REP-001", csv, StringComparison.Ordinal);
     }
 
@@ -97,8 +95,6 @@ public sealed class CoreReportsFlowTests
         var result = await controller.AssetReliability(
             fixture.RangeStart,
             fixture.RangeEnd,
-            fixture.Client.Id,
-            fixture.Site.Id,
             fixture.AssetCategory.Id,
             CancellationToken.None);
 
@@ -108,21 +104,18 @@ public sealed class CoreReportsFlowTests
         Assert.Single(assets);
         var first = ReadAnonymousObject(assets[0]);
         Assert.Equal("Generator 01", ReadString(first["AssetName"]));
-        Assert.Equal("Nairobi HQ", ReadString(first["SiteName"]));
         Assert.Equal(3, ReadInt(first["CorrectiveWos"]));
         Assert.True(ReadBool(first["IsRecurringFault"]));
 
         var export = await controller.AssetReliabilityExport(
             fixture.RangeStart,
             fixture.RangeEnd,
-            fixture.Client.Id,
-            fixture.Site.Id,
             fixture.AssetCategory.Id,
             CancellationToken.None);
 
         var file = Assert.IsType<FileContentResult>(export);
         var csv = Encoding.UTF8.GetString(file.FileContents);
-        Assert.Contains("Asset Code,Asset Name,Category,Client,Status", csv, StringComparison.Ordinal);
+        Assert.Contains("Asset Code,Asset Name,Category,Status", csv, StringComparison.Ordinal);
         Assert.Contains("GEN-01", csv, StringComparison.Ordinal);
     }
 
@@ -136,8 +129,6 @@ public sealed class CoreReportsFlowTests
         var result = await controller.PmCompliance(
             fixture.RangeStart,
             fixture.RangeEnd,
-            fixture.Client.Id,
-            fixture.Site.Id,
             fixture.AssetCategory.Id,
             CancellationToken.None);
 
@@ -152,14 +143,12 @@ public sealed class CoreReportsFlowTests
         var export = await controller.PmComplianceExport(
             fixture.RangeStart,
             fixture.RangeEnd,
-            fixture.Client.Id,
-            fixture.Site.Id,
             fixture.AssetCategory.Id,
             CancellationToken.None);
 
         var file = Assert.IsType<FileContentResult>(export);
         var csv = Encoding.UTF8.GetString(file.FileContents);
-        Assert.Contains("Asset,Asset Code,Client,Next PM Date,Days Overdue", csv, StringComparison.Ordinal);
+        Assert.Contains("Asset,Asset Code,Next PM Date,Days Overdue", csv, StringComparison.Ordinal);
         Assert.Contains("Generator 01", csv, StringComparison.Ordinal);
     }
 
@@ -215,33 +204,8 @@ public sealed class CoreReportsFlowTests
             IsActive = true
         };
 
-        var client = new Client
-        {
-            TenantId = tenant.Id,
-            ClientName = "Acme Facilities",
-            Email = "client@acme.test",
-            IsActive = true
-        };
 
-        var site = new Site
-        {
-            TenantId = tenant.Id,
-            ClientId = client.Id,
-            SiteCode = "SITE-001",
-            SiteName = "Nairobi HQ",
-            SiteType = "Office",
-            Status = "Active"
-        };
 
-        var siteTwo = new Site
-        {
-            TenantId = tenant.Id,
-            ClientId = client.Id,
-            SiteCode = "SITE-002",
-            SiteName = "Mombasa Depot",
-            SiteType = "Depot",
-            Status = "Active"
-        };
 
         var assetCategory = new AssetCategory
         {
@@ -267,8 +231,6 @@ public sealed class CoreReportsFlowTests
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             AssetCategoryId = assetCategory.Id,
             AssetName = "Generator 01",
             AssetCode = "GEN-01",
@@ -283,8 +245,6 @@ public sealed class CoreReportsFlowTests
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
-            SiteId = siteTwo.Id,
             AssetCategoryId = assetCategoryTwo.Id,
             AssetName = "UPS 01",
             AssetCode = "UPS-01",
@@ -316,8 +276,6 @@ public sealed class CoreReportsFlowTests
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             AssetId = asset.Id,
             AssignedTechnicianId = technicianA.Id,
             WorkOrderNumber = "WO-REP-001",
@@ -326,17 +284,13 @@ public sealed class CoreReportsFlowTests
             Status = "Completed",
             CreatedAt = now.AddDays(-10),
             DueDate = now.AddDays(-8),
-            CompletedAt = now.AddDays(-9),
-            ArrivalAt = now.AddDays(-10).AddHours(2),
-            DepartureAt = now.AddDays(-10).AddHours(5)
+            CompletedAt = now.AddDays(-9)
         };
 
         var wo2 = new WorkOrder
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             AssetId = asset.Id,
             AssignedTechnicianId = technicianA.Id,
             WorkOrderNumber = "WO-REP-002",
@@ -345,17 +299,13 @@ public sealed class CoreReportsFlowTests
             Status = "Completed",
             CreatedAt = now.AddDays(-7),
             DueDate = now.AddDays(-5),
-            CompletedAt = now.AddDays(-4),
-            ArrivalAt = now.AddDays(-7).AddHours(1),
-            DepartureAt = now.AddDays(-7).AddHours(4)
+            CompletedAt = now.AddDays(-4)
         };
 
         var wo3 = new WorkOrder
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             AssetId = asset.Id,
             AssignedTechnicianId = technicianB.Id,
             WorkOrderNumber = "WO-REP-003",
@@ -370,8 +320,6 @@ public sealed class CoreReportsFlowTests
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             AssetId = assetTwo.Id,
             WorkOrderNumber = "WO-REP-004",
             Title = "Generator inspection",
@@ -384,8 +332,6 @@ public sealed class CoreReportsFlowTests
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             AssetId = asset.Id,
             WorkOrderNumber = "WO-PM-001",
             Title = "PM - Generator 01",
@@ -401,8 +347,6 @@ public sealed class CoreReportsFlowTests
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
-            SiteId = site.Id,
             AssetId = assetTwo.Id,
             WorkOrderNumber = "WO-PM-002",
             Title = "PM - Generator 02",
@@ -418,7 +362,6 @@ public sealed class CoreReportsFlowTests
             TenantId = tenant.Id,
             BranchId = branch.Id,
             AssetId = asset.Id,
-            SiteId = site.Id,
             Frequency = "Monthly",
             FrequencyUnit = "Monthly",
             FrequencyInterval = 1,
@@ -433,7 +376,6 @@ public sealed class CoreReportsFlowTests
             TenantId = tenant.Id,
             BranchId = branch.Id,
             AssetId = assetTwo.Id,
-            SiteId = site.Id,
             Frequency = "Monthly",
             FrequencyUnit = "Monthly",
             FrequencyInterval = 1,
@@ -443,13 +385,9 @@ public sealed class CoreReportsFlowTests
             NextPmDate = now.AddDays(3)
         };
 
-        dbContext.AddRange(
-            tenant,
+        dbContext.AddRange(tenant,
             admin,
             branch,
-            client,
-            site,
-            siteTwo,
             assetCategory,
             assetCategoryTwo,
             asset,
@@ -466,7 +404,7 @@ public sealed class CoreReportsFlowTests
             planUpcoming);
 
         await dbContext.SaveChangesAsync();
-        return new FixtureData(tenant, admin, branch, client, site, assetCategory, technicianA, rangeStart, rangeEnd);
+        return new FixtureData(tenant, admin, branch, assetCategory, technicianA, rangeStart, rangeEnd);
     }
 
     private static IDictionary<string, object?> ReadAnonymousObject(object? value) =>
@@ -488,8 +426,6 @@ public sealed class CoreReportsFlowTests
         Tenant Tenant,
         User Admin,
         Branch Branch,
-        Client Client,
-        Site Site,
         AssetCategory AssetCategory,
         Technician TechnicianA,
         DateTime RangeStart,

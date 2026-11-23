@@ -85,7 +85,7 @@ public sealed class AssetClassTests
 
     private static async Task<AssetResponse> CreateAsync(AssetsController controller, Guid orgNodeId, Guid categoryId, string name, string code, string? criticality)
     {
-        var request = new UpsertAssetRequest(null, null, null, null, categoryId, name, code, null, null, null, null, null, null,
+        var request = new UpsertAssetRequest(null, categoryId, name, code, null, null, null, null, null, null,
             null, null, null, null, null, false, null, null, null, "Active", null, OrgNodeId: orgNodeId, Criticality: criticality);
         var result = await controller.Create(request, CancellationToken.None);
         return Assert.IsType<AssetResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);

@@ -23,8 +23,7 @@ public sealed class AttendanceClockTests
         var defaultTenant = Guid.NewGuid();
         var strictTenant = Guid.NewGuid();
         var offTenant = Guid.NewGuid();
-        db.TimeAttendanceSettings.AddRange(
-            new TimeAttendanceSetting { TenantId = strictTenant, AutoClockOutAfterHours = 8 },
+        db.TimeAttendanceSettings.AddRange(new TimeAttendanceSetting { TenantId = strictTenant, AutoClockOutAfterHours = 8 },
             new TimeAttendanceSetting { TenantId = offTenant, AutoClockOutAfterHours = 0 });
         var forgotten = Open(defaultTenant, now.AddHours(-26), onBreakSince: now.AddHours(-16));
         var recent = Open(defaultTenant, now.AddHours(-2));

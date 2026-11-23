@@ -7,7 +7,6 @@ public sealed class PreventiveMaintenancePlan : AuditableEntity, ITenantEntity
     public Guid TenantId { get; set; }
     public Guid? BranchId { get; set; }
     public Guid AssetId { get; set; }
-    public Guid? SiteId { get; set; }
     public Guid? PmTemplateId { get; set; }
     public Guid? DefaultAssignmentGroupId { get; set; }
 
@@ -31,19 +30,6 @@ public sealed class PreventiveMaintenancePlan : AuditableEntity, ITenantEntity
     public Guid? LastPmWorkOrderId { get; set; }
 
     public string Status { get; set; } = "Active";
-
-    /// <summary>
-    /// The client agreed to keep these visits going without a contract (paid per visit), so a
-    /// lapsed contract doesn't put the schedule on hold.
-    /// </summary>
-    public bool ContinueWithoutContract { get; set; }
-
-    /// <summary>Why the schedule is on hold (status ContractLapsed), and since when.</summary>
-    public string? HoldReason { get; set; }
-    public DateTime? HeldAt { get; set; }
-
-    /// <summary>The contract whose lapse put the schedule on hold.</summary>
-    public Guid? LapsedContractId { get; set; }
 
     // ── Factory PM (scope Phase 3). A factory plan has an OrgNodeId; ServiceOps plans don't. ──
 
@@ -80,7 +66,6 @@ public sealed class PreventiveMaintenancePlan : AuditableEntity, ITenantEntity
     public Tenant? Tenant { get; set; }
     public Branch? Branch { get; set; }
     public Asset? Asset { get; set; }
-    public Site? Site { get; set; }
     public PmTemplate? PmTemplate { get; set; }
     public AssignmentGroup? DefaultAssignmentGroup { get; set; }
     public ICollection<WorkOrder> WorkOrders { get; set; } = new List<WorkOrder>();

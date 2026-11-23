@@ -19,7 +19,7 @@ export type ServiceOpsModule =
 const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
   ['maintenance', ['/maintenance', '/assets', '/systems', '/settings/pm-templates', '/settings/running-checks', '/settings/asset-categories', '/settings/escalation-rules', '/settings/sla-policies']],
   ['inventory', ['/inventory', '/settings/inventory']],
-  ['advanced', ['/approvals', '/team/time-attendance', '/settings/time-attendance', '/settings/email-intake', '/settings/workflows', '/settings/approval-matrices', '/settings/approval-matrix']],
+  ['advanced', ['/approvals', '/team/time-attendance', '/settings/time-attendance', '/settings/workflows', '/settings/approval-matrices', '/settings/approval-matrix']],
   ['enterprise_tools', ['/settings/integrations', '/settings/monitoring-intake', '/settings/monitoring']],
   ['whatsapp_business', ['/whatsapp', '/settings/whatsapp']],
   ['visitors', ['/visitors']],

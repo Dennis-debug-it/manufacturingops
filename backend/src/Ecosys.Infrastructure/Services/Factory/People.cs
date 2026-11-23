@@ -125,11 +125,11 @@ internal sealed class PeopleService(AppDbContext dbContext, INotificationDispatc
             .Where(x => x.TechnicianId != null && ids.Contains(x.TechnicianId.Value) && x.StartedAt >= fromUtc && x.StartedAt < toUtc)
             .Select(x => new { TechnicianId = x.TechnicianId!.Value, x.DurationMinutes, x.IsOvertime, x.LabourCost }).ToListAsync(cancellationToken);
         var completed = await dbContext.WorkOrders.AsNoTracking()
-            .Where(x => x.TenantId == tenantId && x.ClientId == null && x.LeadTechnicianId != null && ids.Contains(x.LeadTechnicianId.Value)
+            .Where(x => x.TenantId == tenantId && x.LeadTechnicianId != null && ids.Contains(x.LeadTechnicianId.Value)
                 && x.CompletedAt >= fromUtc && x.CompletedAt < toUtc && Done.Contains(x.Status))
             .GroupBy(x => x.LeadTechnicianId!.Value).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Count, cancellationToken);
         var open = await dbContext.WorkOrderTechnicianAssignments.AsNoTracking()
-            .Where(x => ids.Contains(x.TechnicianId) && x.WorkOrder!.ClientId == null && !Finished.Contains(x.WorkOrder.Status))
+            .Where(x => ids.Contains(x.TechnicianId) && !Finished.Contains(x.WorkOrder.Status))
             .Select(x => new { x.TechnicianId, Hours = x.WorkOrder!.EstimatedLabourHours }).ToListAsync(cancellationToken);
         var leave = await dbContext.LeaveRequests.AsNoTracking()
             .Where(x => x.TenantId == tenantId && x.Status == "Approved" && x.StartDate <= to && x.EndDate >= from)

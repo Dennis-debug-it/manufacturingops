@@ -47,7 +47,7 @@ public sealed class FactoryWorkOrdersController(
         CancellationToken cancellationToken)
     {
         EnsureCanView();
-        var query = await ScopedAsync(dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.ClientId == null && x.OrgNodeId != null), cancellationToken);
+        var query = await ScopedAsync(dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.OrgNodeId != null), cancellationToken);
 
         query = (view ?? "open").Trim().ToLowerInvariant() switch
         {
@@ -450,7 +450,7 @@ public sealed class FactoryWorkOrdersController(
     private async Task<WorkOrder> LoadAsync(Guid id, CancellationToken cancellationToken)
     {
         EnsureTenantOperationalAccess();
-        var query = await ScopedAsync(dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.Id == id && x.ClientId == null), cancellationToken);
+        var query = await ScopedAsync(dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.Id == id), cancellationToken);
         return await query
             .Include(x => x.Asset)
             .Include(x => x.OrgNode)

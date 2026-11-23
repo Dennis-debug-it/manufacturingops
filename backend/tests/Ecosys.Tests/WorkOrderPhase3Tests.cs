@@ -153,89 +153,6 @@ public sealed class WorkOrderPhase3Tests
     }
 
     [Fact]
-    public async Task Create_NewInstallationFromInstalledSolarTemplate_AttachesTheChecklist()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedControllerFixtureAsync(dbContext);
-        fixture.Tenant.Slug = Ecosys.Infrastructure.Reports.SolarInstallationTemplate.WorkspaceSlug;
-        await dbContext.SaveChangesAsync();
-        var installed = await new Ecosys.Infrastructure.Reports.ClientTemplateInstaller(dbContext, new PmTemplateService(dbContext))
-            .InstallAsync(fixture.Tenant.Id, Ecosys.Infrastructure.Reports.SolarInstallationTemplate.LayoutKey, CancellationToken.None);
-        var jobTemplate = await dbContext.WorkOrderTemplates.SingleAsync(x => x.TenantId == fixture.Tenant.Id && x.ChecklistTemplateId == installed.TemplateId);
-
-        var controller = new WorkOrdersController(
-            dbContext,
-            new FakeTenantContext(fixture.Tenant.Id, fixture.Actor.Id, fixture.Actor.Email),
-            new NoOpDocumentNumberingService(),
-            new AuditLogService(dbContext, new HttpContextAccessor()),
-            new NoOpUserAccessService(),
-            new NoOpBranchAccessService(),
-            new NoOpLicenseGuardService(),
-            new NoOpWorkOrderLifecycleService(),
-            new NoOpAssignmentWorkflowService(),
-            new PmWorkOrderChecklistService(dbContext, new AuditLogService(dbContext, new HttpContextAccessor())),
-            new NoOpSlaService(),
-            new NoOpWorkflowService());
-        controller.ControllerContext = CreateWorkOrdersController(dbContext, fixture).ControllerContext;
-
-        // What the New Work Order form sends after picking the "Solar PV Installation" template.
-        var result = await controller.Create(
-            new CreateWorkOrderRequest(
-                fixture.Client.Id, null, null, null, null, null, null, null, null, null, null,
-                "11 kWp hybrid install", null, WorkOrderPriorities.Medium, null,
-                WorkOrderTypes.NewInstallation, false, null, TemplateId: jobTemplate.Id),
-            CancellationToken.None);
-
-        var created = Assert.IsType<WorkOrderResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
-        dbContext.ChangeTracker.Clear();
-        var persisted = await dbContext.WorkOrders.Include(x => x.ChecklistItems).SingleAsync(x => x.Id == created.Id);
-        Assert.Equal(installed.TemplateId, persisted.PmTemplateId);
-        Assert.Equal(Ecosys.Infrastructure.Reports.SolarInstallationTemplate.Fields.Count, persisted.ChecklistItems.Count);
-    }
-
-    [Fact]
-    public async Task Create_WithTechnician_AssignsOnCreation()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedControllerFixtureAsync(dbContext);
-        var technician = new Technician { TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, FullName = "John Kamau", Email = "john@acme.test", IsActive = true };
-        dbContext.Technicians.Add(technician);
-        await dbContext.SaveChangesAsync();
-        var controller = CreateWorkOrdersController(dbContext, fixture, CreateAssignmentWorkflowService(dbContext));
-
-        // Exactly what the New Work Order form sends when a technician is picked.
-        var result = await controller.Create(
-            new CreateWorkOrderRequest(
-                fixture.Client.Id,
-                null,
-                null,
-                null,
-                fixture.Asset.Id,
-                null,
-                WorkOrderAssignmentTypes.IndividualTechnician,
-                technician.Id,
-                null,
-                null,
-                null,
-                "Generator triage",
-                null,
-                WorkOrderPriorities.Medium,
-                null,
-                WorkOrderTypes.CorrectiveMaintenance,
-                false,
-                null),
-            CancellationToken.None);
-
-        var created = Assert.IsType<WorkOrderResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
-        dbContext.ChangeTracker.Clear();
-        var persisted = await dbContext.WorkOrders.Include(x => x.TechnicianAssignments).SingleAsync(x => x.Id == created.Id);
-        Assert.Equal(technician.Id, persisted.AssignedTechnicianId);
-        Assert.Single(persisted.TechnicianAssignments);
-        Assert.Equal(WorkOrderStatuses.Assigned, persisted.Status);
-        Assert.Equal(WorkOrderAssignmentTypes.IndividualTechnician, persisted.AssignmentType);
-    }
-
-    [Fact]
     public async Task Reassign_TechniciansWithoutTeam_AssignsThem()
     {
         await using var dbContext = CreateDbContext();
@@ -262,119 +179,6 @@ public sealed class WorkOrderPhase3Tests
     }
 
     [Fact]
-    public async Task Create_RejectsInvalidPriority()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedControllerFixtureAsync(dbContext);
-        var controller = CreateWorkOrdersController(dbContext, fixture);
-
-        var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(
-            new CreateWorkOrderRequest(
-                fixture.Client.Id,
-                fixture.Branch.Id,
-                null,
-                null,
-                fixture.Asset.Id,
-                null,
-                WorkOrderAssignmentTypes.Unassigned,
-                null,
-                null,
-                null,
-                null,
-                "Generator triage",
-                "Validate invalid priority handling.",
-                "Urgent",
-                null,
-                WorkOrderTypes.CorrectiveMaintenance,
-                false,
-                null),
-            CancellationToken.None));
-
-        Assert.Contains("Priority", error.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task Create_RejectsInvalidWorkType()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedControllerFixtureAsync(dbContext);
-        var controller = CreateWorkOrdersController(dbContext, fixture);
-
-        var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(
-            new CreateWorkOrderRequest(
-                fixture.Client.Id,
-                fixture.Branch.Id,
-                null,
-                null,
-                fixture.Asset.Id,
-                null,
-                WorkOrderAssignmentTypes.Unassigned,
-                null,
-                null,
-                null,
-                null,
-                "Generator triage",
-                "Validate invalid work type handling.",
-                WorkOrderPriorities.Medium,
-                null,
-                "ServiceRequest",
-                false,
-                null),
-            CancellationToken.None));
-
-        Assert.Contains("work type", error.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task Update_RejectsInvalidStatus()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedControllerFixtureAsync(dbContext);
-        var controller = CreateWorkOrdersController(dbContext, fixture);
-        var workOrder = new WorkOrder
-        {
-            TenantId = fixture.Tenant.Id,
-            BranchId = fixture.Branch.Id,
-            ClientId = fixture.Client.Id,
-            AssetId = fixture.Asset.Id,
-            AssignmentType = WorkOrderAssignmentTypes.Unassigned,
-            WorkOrderNumber = "WO-STATUS-001",
-            Title = "Generator triage",
-            Priority = WorkOrderPriorities.Medium,
-            Status = WorkOrderStatuses.Open,
-            WorkType = WorkOrderTypes.CorrectiveMaintenance
-        };
-
-        dbContext.WorkOrders.Add(workOrder);
-        await dbContext.SaveChangesAsync();
-
-        var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Update(
-            workOrder.Id,
-            new UpdateWorkOrderRequest(
-                fixture.Client.Id,
-                fixture.Branch.Id,
-                null,
-                null,
-                fixture.Asset.Id,
-                null,
-                WorkOrderAssignmentTypes.Unassigned,
-                null,
-                null,
-                null,
-                null,
-                workOrder.Title,
-                workOrder.Description,
-                workOrder.Priority,
-                "Dormant",
-                null,
-                workOrder.WorkType,
-                null),
-            CancellationToken.None));
-
-        Assert.Contains("status", error.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
     public async Task Get_LoadsLegacyAssignedTechnicianIds_WhenRelationalAssignmentsAreMissing()
     {
         await using var dbContext = CreateDbContext();
@@ -384,7 +188,6 @@ public sealed class WorkOrderPhase3Tests
         {
             TenantId = fixture.Tenant.Id,
             BranchId = fixture.Branch.Id,
-            ClientId = fixture.Client.Id,
             AssetId = fixture.Asset.Id,
             AssignmentType = WorkOrderAssignmentTypes.MultipleTechnicians,
             WorkOrderNumber = "WO-LEGACY-001",
@@ -414,7 +217,7 @@ public sealed class WorkOrderPhase3Tests
         var now = DateTime.UtcNow;
         WorkOrder Job(string number, string status, DateTime? closedAt = null, DateTime? updatedAt = null) => new()
         {
-            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id, WorkOrderNumber = number, Title = number,
+            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, WorkOrderNumber = number, Title = number,
             Status = status, Priority = WorkOrderPriorities.Medium, WorkType = WorkOrderTypes.CorrectiveMaintenance,
             ClosedAt = closedAt, UpdatedAt = updatedAt, CreatedAt = now.AddDays(-200),
         };
@@ -430,7 +233,7 @@ public sealed class WorkOrderPhase3Tests
 
         async Task<string[]> NumbersAsync(string? view, string? status = null)
         {
-            var result = await controller.GetAll(null, null, null, status, null, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None, view: view);
+            var result = await controller.GetAll(null, status, null, null, null, null, null, null, null, null, null, null, null, null, CancellationToken.None, view: view);
             var rows = Assert.IsAssignableFrom<IEnumerable<WorkOrderResponse>>(Assert.IsType<OkObjectResult>(result).Value);
             return rows.Select(x => x.WorkOrderNumber).Order().ToArray();
         }
@@ -456,13 +259,11 @@ public sealed class WorkOrderPhase3Tests
         var tenant = CreateTenant();
         var branch = CreateBranch(tenant.Id);
         var actor = CreateUser(tenant.Id, "admin");
-        var client = CreateClient(tenant.Id);
-        var asset = CreateAsset(tenant.Id, branch.Id, client.Id);
+        var asset = CreateAsset(tenant.Id, branch.Id);
         var workOrder = new WorkOrder
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
             AssetId = asset.Id,
             AssignmentType = WorkOrderAssignmentTypes.Unassigned,
             WorkOrderNumber = "WO-WORKFLOW-001",
@@ -497,9 +298,9 @@ public sealed class WorkOrderPhase3Tests
             AddedAt = DateTime.UtcNow
         };
 
-        dbContext.AddRange(tenant, branch, actor, client, asset, workOrder, assignmentGroup, technicianOne, technicianTwo, memberOne, memberTwo);
+        dbContext.AddRange(tenant, branch, actor, asset, workOrder, assignmentGroup, technicianOne, technicianTwo, memberOne, memberTwo);
         await dbContext.SaveChangesAsync();
-        return new WorkflowFixture(tenant, branch, actor, client, asset, workOrder, assignmentGroup, technicianOne, technicianTwo);
+        return new WorkflowFixture(tenant, branch, actor, asset, workOrder, assignmentGroup, technicianOne, technicianTwo);
     }
 
     private static async Task<ControllerFixture> SeedControllerFixtureAsync(AppDbContext dbContext)
@@ -507,12 +308,11 @@ public sealed class WorkOrderPhase3Tests
         var tenant = CreateTenant();
         var branch = CreateBranch(tenant.Id);
         var actor = CreateUser(tenant.Id, "ops");
-        var client = CreateClient(tenant.Id);
-        var asset = CreateAsset(tenant.Id, branch.Id, client.Id);
+        var asset = CreateAsset(tenant.Id, branch.Id);
 
-        dbContext.AddRange(tenant, branch, actor, client, asset);
+        dbContext.AddRange(tenant, branch, actor, asset);
         await dbContext.SaveChangesAsync();
-        return new ControllerFixture(tenant, branch, actor, client, asset);
+        return new ControllerFixture(tenant, branch, actor, asset);
     }
 
     private static Tenant CreateTenant() =>
@@ -550,21 +350,11 @@ public sealed class WorkOrderPhase3Tests
             HasAllBranchAccess = true
         };
 
-    private static Client CreateClient(Guid tenantId) =>
-        new()
-        {
-            TenantId = tenantId,
-            ClientName = "Acme Manufacturing",
-            Email = "client@acme.test",
-            IsActive = true
-        };
-
-    private static Asset CreateAsset(Guid tenantId, Guid branchId, Guid clientId) =>
+    private static Asset CreateAsset(Guid tenantId, Guid branchId) =>
         new()
         {
             TenantId = tenantId,
             BranchId = branchId,
-            ClientId = clientId,
             AssetName = "Generator 01",
             AssetCode = $"GEN-{Guid.NewGuid():N}"[..10],
             Status = "Active"
@@ -638,14 +428,13 @@ public sealed class WorkOrderPhase3Tests
         Tenant Tenant,
         Branch Branch,
         User Actor,
-        Client Client,
         Asset Asset,
         WorkOrder WorkOrder,
         AssignmentGroup AssignmentGroup,
         Technician TechnicianOne,
         Technician TechnicianTwo);
 
-    private sealed record ControllerFixture(Tenant Tenant, Branch Branch, User Actor, Client Client, Asset Asset);
+    private sealed record ControllerFixture(Tenant Tenant, Branch Branch, User Actor, Asset Asset);
 
     private sealed class FakeTenantContext(Guid tenantId, Guid userId, string email) : ITenantContext
     {
@@ -714,7 +503,6 @@ public sealed class WorkOrderPhase3Tests
         public Task ApplyDefinitionAsync(WorkOrder workOrder, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<bool> RefreshWorkOrderAsync(Guid workOrderId, DateTime nowUtc, CancellationToken cancellationToken = default) => Task.FromResult(false);
     }
-
 
     private sealed class NoOpUserAccessService : IUserAccessService
     {

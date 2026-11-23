@@ -173,7 +173,7 @@ internal sealed class OperatorReportService(
         var since = DateTime.UtcNow - MergeWindow;
         string[] done = [WorkOrderStatuses.Completed, WorkOrderStatuses.Verified, WorkOrderStatuses.Closed, WorkOrderStatuses.Cancelled, WorkOrderStatuses.Rejected];
         return dbContext.WorkOrders
-            .Where(x => x.TenantId == tenantId && x.AssetId == assetId && x.ClientId == null && !done.Contains(x.Status)
+            .Where(x => x.TenantId == tenantId && x.AssetId == assetId && !done.Contains(x.Status)
                 && (x.IsBreakdown || x.RequestSource == FactoryRequestSources.Operator) && x.CreatedAt >= since)
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);

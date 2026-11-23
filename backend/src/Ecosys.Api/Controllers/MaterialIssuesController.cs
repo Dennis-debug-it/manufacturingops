@@ -61,9 +61,6 @@ public sealed class MaterialIssuesController(
             BranchId = branchId,
             WorkOrderId = request.WorkOrderId,
             AssetId = request.AssetId,
-            ClientId = request.ClientId,
-            SiteId = request.SiteId,
-            SystemId = request.SystemId,
             IssuedToUserId = request.IssuedToUserId,
             IssueNumber = await documentNumberingService.GenerateAsync(TenantId, branchId, "MaterialIssue", cancellationToken),
             IssueStatus = "draft",
@@ -354,9 +351,6 @@ public sealed class MaterialIssuesController(
             .Include(x => x.Branch)
             .Include(x => x.WorkOrder)
             .Include(x => x.Asset)
-            .Include(x => x.Client)
-            .Include(x => x.Site)
-            .Include(x => x.System)
             .Include(x => x.RequestedByUser)
             .Include(x => x.IssuedByUser)
             .Include(x => x.ApprovedByUser)
@@ -375,12 +369,6 @@ public sealed class MaterialIssuesController(
             issue.WorkOrder?.WorkOrderNumber,
             issue.AssetId,
             issue.Asset?.AssetName,
-            issue.ClientId,
-            issue.Client?.ClientName,
-            issue.SiteId,
-            issue.Site?.SiteName,
-            issue.SystemId,
-            issue.System?.SystemName,
             issue.IssuedToUserId,
             issue.IssuedToUser?.FullName,
             issue.RequestedByUserId,
@@ -425,9 +413,6 @@ public sealed record CreateMaterialIssueRequest(
     Guid? BranchId,
     Guid? WorkOrderId,
     Guid? AssetId,
-    Guid? ClientId,
-    Guid? SiteId,
-    Guid? SystemId,
     Guid? IssuedToUserId,
     string? Notes,
     IReadOnlyCollection<CreateMaterialIssueLineRequest> Lines,
@@ -450,12 +435,6 @@ public sealed record MaterialIssueResponse(
     string? WorkOrderNumber,
     Guid? AssetId,
     string? AssetName,
-    Guid? ClientId,
-    string? ClientName,
-    Guid? SiteId,
-    string? SiteName,
-    Guid? SystemId,
-    string? SystemName,
     Guid? IssuedToUserId,
     string? IssuedToUserName,
     Guid RequestedByUserId,

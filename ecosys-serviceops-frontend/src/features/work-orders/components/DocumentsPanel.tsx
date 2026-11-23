@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Download, ExternalLink, FileText, Package, Receipt } from 'lucide-react'
+import { Download, ExternalLink, FileText, Package } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { apiClient } from '../../../shared/api/apiClient'
 import { Spinner } from '../../../shared/components/Spinner'
@@ -10,9 +10,7 @@ import type { WorkOrderDocument } from '../types'
 import { useEntitlements } from '../../../shared/hooks/useEntitlements'
 
 const documentMeta: Record<WorkOrderDocument['documentType'], { label: string; icon: typeof FileText; openTo: (doc: WorkOrderDocument, workOrderId: string) => string }> = {
-  Quote: { label: 'Quote', icon: FileText, openTo: (doc) => `/finance/quotes/${doc.id}` },
   ServiceReport: { label: 'Service Report', icon: FileText, openTo: (_doc, workOrderId) => `/work-orders/${workOrderId}?tab=report` },
-  Invoice: { label: 'Invoice', icon: Receipt, openTo: (doc) => `/finance/invoices/${doc.id}` },
   MaterialRequest: { label: 'Material Request', icon: Package, openTo: () => '/inventory/requests' },
 }
 

@@ -239,8 +239,7 @@ public sealed partial class AuthEmailSafetyTests
         var tenantId = Guid.NewGuid();
         await SeedTenantAsync(db, tenantId, "Shrinking Co", "ops@shrinking.test");
         await SeedActiveLicenseAsync(db, tenantId, DateTime.UtcNow.AddDays(60));
-        db.Users.AddRange(
-            new User { TenantId = tenantId, FullName = "One", Email = "one@shrinking.test", Role = AppRoles.Admin, IsActive = true },
+        db.Users.AddRange(new User { TenantId = tenantId, FullName = "One", Email = "one@shrinking.test", Role = AppRoles.Admin, IsActive = true },
             new User { TenantId = tenantId, FullName = "Two", Email = "two@shrinking.test", Role = AppRoles.Dispatcher, IsActive = true },
             new User { TenantId = tenantId, FullName = "Three", Email = "three@shrinking.test", Role = AppRoles.Technician, IsActive = true },
             new User { TenantId = tenantId, FullName = "Four", Email = "four@shrinking.test", Role = AppRoles.Technician, IsActive = true });

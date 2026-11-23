@@ -51,11 +51,11 @@ export function useActivity(id: string) {
   })
 }
 
-export function useActivityPeople(clientId: string | null, enabled = true) {
+export function useActivityPeople(enabled = true) {
   return useQuery({
     enabled,
-    queryKey: [...activitiesKey, 'people', clientId ?? ''],
-    queryFn: () => api.get<ActivityPeople>(endpoints.activities.people, { clientId }),
+    queryKey: [...activitiesKey, 'people'],
+    queryFn: () => api.get<ActivityPeople>(endpoints.activities.people),
     staleTime: 60_000,
   })
 }

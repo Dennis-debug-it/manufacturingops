@@ -123,7 +123,7 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
         toast.success(savedMessage('Update saved', await actions.saveNotes(job, { progressComment: content })))
       } else {
         // Office notes go straight to the server (they aren't part of the offline outbox).
-        await addNote.mutateAsync({ content, isClientVisible: false })
+        await addNote.mutateAsync({ content })
         toast.success('Note sent to the office')
       }
       setUpdate('')
@@ -135,7 +135,7 @@ export function TechOverview({ job, editable }: { job: WorkOrder; editable: bool
 
   const history = [
     ...(bundle?.progressUpdates ?? []).map((entry) => ({ id: `p-${entry.id}`, text: entry.message, who: entry.actorUserName, at: entry.occurredAt, tag: null as string | null })),
-    ...(notes ?? []).map((note) => ({ id: `n-${note.id}`, text: note.content, who: note.createdByUserName, at: note.createdAt, tag: note.isClientVisible ? 'Client note' : 'Office note' })),
+    ...(notes ?? []).map((note) => ({ id: `n-${note.id}`, text: note.content, who: note.createdByUserName, at: note.createdAt, tag: 'Office note' })),
   ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8)
 
   return (

@@ -139,30 +139,30 @@ internal sealed class RoleDashboardQueries(
         var visits = await today.CountAsync(ct);
         var rows = await dbContext.WorkOrderTechnicianAssignments.AsNoTracking()
             .Where(x => x.TenantId == viewer.TenantId && today.Contains(x.WorkOrderId))
-            .Select(x => new { x.TechnicianId, Name = x.Technician != null ? x.Technician.FullName : "Technician", Arrived = x.ArrivalAt != null })
+            .Select(x => new { x.TechnicianId, Name = x.Technician != null ? x.Technician.FullName : "Technician", Accepted = x.Status == "Accepted" })
             .ToListAsync(ct);
         var byTechnician = rows.GroupBy(x => new { x.TechnicianId, x.Name })
-            .Select(g => new { g.Key.TechnicianId, g.Key.Name, Visits = g.Count(), Arrived = g.Count(x => x.Arrived) })
+            .Select(g => new { g.Key.TechnicianId, g.Key.Name, Visits = g.Count(), Accepted = g.Count(x => x.Accepted) })
             .OrderByDescending(x => x.Visits).ThenBy(x => x.Name)
             .ToList();
         return new Result(
-            [Count("Visits today", visits, "/dispatch/board"), Count("Technicians out", byTechnician.Count, "/dispatch/board")],
-            [.. byTechnician.Take(ListLimit).Select(x => new DashboardListItem(x.Name, $"{x.Arrived} of {x.Visits} arrived", x.Visits, "number", null, $"/dispatch/route/{x.TechnicianId}"))]);
+            [Count("Jobs today", visits, "/work-orders?state=open"), Count("Technicians assigned", byTechnician.Count, "/work-orders?state=open")],
+            [.. byTechnician.Take(ListLimit).Select(x => new DashboardListItem(x.Name, $"{x.Accepted} of {x.Visits} accepted", x.Visits, "number", null, $"/work-orders?state=open&technicianId={x.TechnicianId}"))]);
     }
 
     private async Task<Result> WorkloadAsync(DashboardQueryViewer viewer, CancellationToken ct)
     {
         var rows = await OpenAssignments(viewer)
-            .Select(x => new { x.TechnicianId, Name = x.Technician != null ? x.Technician.FullName : "Technician", x.Status, OnSite = x.ArrivalAt != null && x.DepartureAt == null })
+            .Select(x => new { x.TechnicianId, Name = x.Technician != null ? x.Technician.FullName : "Technician", x.Status })
             .ToListAsync(ct);
         var byTechnician = rows.GroupBy(x => new { x.TechnicianId, x.Name })
-            .Select(g => new { g.Key.TechnicianId, g.Key.Name, Active = g.Count(), Pending = g.Count(x => x.Status == "Pending"), OnSite = g.Count(x => x.OnSite) })
+            .Select(g => new { g.Key.TechnicianId, g.Key.Name, Active = g.Count(), Pending = g.Count(x => x.Status == "Pending") })
             .OrderByDescending(x => x.Active).ThenBy(x => x.Name)
             .ToList();
         return new Result(
-            [Count("Assigned jobs", rows.Count, "/work-orders?state=open"), Count("Awaiting response", rows.Count(x => x.Status == "Pending"), "/dispatch/board", "warning")],
+            [Count("Assigned jobs", rows.Count, "/work-orders?state=open"), Count("Awaiting response", rows.Count(x => x.Status == "Pending"), "/work-orders?state=open", "warning")],
             [.. byTechnician.Take(ListLimit).Select(x => new DashboardListItem(x.Name,
-                x.Pending > 0 ? $"{x.Pending} awaiting response" : x.OnSite > 0 ? "On site" : null,
+                x.Pending > 0 ? $"{x.Pending} awaiting response" : null,
                 x.Active, "number", null, $"/work-orders?state=open&technicianId={x.TechnicianId}"))]);
     }
 

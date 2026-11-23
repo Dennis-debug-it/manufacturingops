@@ -6,6 +6,7 @@ export type ReportStatus =
   | 'Draft'
   | 'UnderReview'
   | 'Approved'
+  /** Older states from when reports were emailed out; existing reports can still carry them. */
   | 'Sent'
   | 'Acknowledged'
 
@@ -13,8 +14,6 @@ export interface ReportQueueRow {
   workOrderId: string
   srNo: string | null
   woNo: string
-  client: string
-  site: string
   asset: string
   technician: string
   completedAt: string | null
@@ -25,8 +24,7 @@ export interface ReportQueueRow {
 export interface ReportQueueCounts {
   awaitingGeneration: number
   underReview: number
-  approvedNotSent: number
-  sentNotAcknowledged: number
+  approved: number
 }
 
 export interface ReportQueueResponse {
@@ -69,14 +67,6 @@ export function useApproveQueuedReport() {
   })
 }
 
-export function useSendQueuedReport() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (workOrderId: string) => api.post<ReportQueueRow>(`/api/workorders/${workOrderId}/report/send`, {}),
-    onSuccess: () => void invalidateQueue(queryClient),
-  })
-}
-
 export interface ReportBatchResult {
   processed: number
   matched: number
@@ -86,14 +76,6 @@ export function useGenerateReportBatch() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (ids: string[]) => api.post<ReportBatchResult>('/api/workorders/report/generate-batch', { ids }),
-    onSuccess: () => void invalidateQueue(queryClient),
-  })
-}
-
-export function useSendReportBatch() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (ids: string[]) => api.post<ReportBatchResult>('/api/workorders/report/send-batch', { ids }),
     onSuccess: () => void invalidateQueue(queryClient),
   })
 }

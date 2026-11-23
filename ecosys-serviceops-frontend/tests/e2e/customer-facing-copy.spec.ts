@@ -49,7 +49,6 @@ test.describe('Customer-facing copy audit', () => {
       '/preventive-maintenance',
       '/reports',
       '/settings/company-profile',
-      '/settings/email-intake',
     ]
 
     for (const route of routes) {

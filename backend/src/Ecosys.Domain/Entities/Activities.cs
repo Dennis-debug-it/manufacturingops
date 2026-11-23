@@ -42,11 +42,9 @@ public static class ActionItemStatuses
 /// <summary>The records an activity or action item can be linked to.</summary>
 public static class ActivityEntityTypes
 {
-    public const string Client = "Client";
-    public const string Contract = "Contract";
     public const string WorkOrder = "WorkOrder";
 
-    public static readonly string[] All = [Client, Contract, WorkOrder];
+    public static readonly string[] All = [WorkOrder];
 }
 
 /// <summary>
@@ -84,9 +82,8 @@ public sealed class Activity : AuditableEntity, ITenantEntity
 }
 
 /// <summary>
-/// Someone invited to an activity. Exactly one of <see cref="UserId"/> (staff), <see cref="ConsultantId"/>,
-/// <see cref="ClientContactId"/> (a client portal contact) or <see cref="ExternalEmail"/>/<see cref="ExternalName"/>
-/// is set. Only staff are notified (R4); the rest are recorded on the meeting.
+/// Someone invited to an activity. Exactly one of <see cref="UserId"/> (staff), <see cref="ConsultantId"/>
+/// or <see cref="ExternalEmail"/>/<see cref="ExternalName"/> is set. Only staff are notified (R4); the rest are recorded on the meeting.
 /// </summary>
 public sealed class ActivityAttendee : ITenantEntity
 {
@@ -94,7 +91,6 @@ public sealed class ActivityAttendee : ITenantEntity
     public Guid TenantId { get; set; }
     public Guid ActivityId { get; set; }
     public Guid? UserId { get; set; }
-    public Guid? ClientContactId { get; set; }
     public string? ExternalName { get; set; }
     public string? ExternalEmail { get; set; }
     /// <summary>Staff only.</summary>
@@ -104,7 +100,6 @@ public sealed class ActivityAttendee : ITenantEntity
 
     public Activity? Activity { get; set; }
     public User? User { get; set; }
-    public ClientPortalUser? ClientContact { get; set; }
 }
 
 /// <summary>A correction to published minutes. Published minutes are never edited.</summary>

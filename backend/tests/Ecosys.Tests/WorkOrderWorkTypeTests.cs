@@ -15,86 +15,6 @@ namespace Ecosys.Tests;
 public sealed class WorkOrderWorkTypeTests
 {
     [Fact]
-    public async Task Create_ManualWorkOrder_PersistsSelectedWorkType()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedManualCreateFixtureAsync(dbContext);
-        var controller = CreateWorkOrdersController(dbContext, fixture);
-
-        var result = await controller.Create(
-            new CreateWorkOrderRequest(
-                fixture.Client.Id,
-                fixture.Branch.Id,
-                null,
-                null,
-                fixture.Asset.Id,
-                null,
-                "Unassigned",
-                null,
-                null,
-                null,
-                null,
-                "Install generator controller",
-                "Commission the new controller and capture baseline readings.",
-                "High",
-                DateTime.UtcNow.Date.AddDays(2),
-                WorkOrderTypes.NewInstallation,
-                false,
-                null),
-            CancellationToken.None);
-
-        var created = Assert.IsType<CreatedAtActionResult>(result.Result);
-        var response = Assert.IsType<WorkOrderResponse>(created.Value);
-
-        Assert.Equal(WorkOrderTypes.NewInstallation, response.WorkType);
-        Assert.False(response.IsPreventiveMaintenance);
-
-        var persisted = await dbContext.WorkOrders.SingleAsync(x => x.Id == response.Id);
-        Assert.Equal(WorkOrderTypes.NewInstallation, persisted.WorkType);
-        Assert.False(persisted.IsPreventiveMaintenance);
-    }
-
-    [Theory]
-    [InlineData(WorkOrderStatuses.Completed)]
-    [InlineData(WorkOrderStatuses.Closed)]
-    public async Task Create_FollowUpOfFinishedJob_LinksBothWays(string originalStatus)
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedManualCreateFixtureAsync(dbContext);
-        var original = await SeedOriginalAsync(dbContext, fixture, originalStatus);
-        var controller = CreateWorkOrdersController(dbContext, fixture);
-
-        var result = await controller.Create(FollowUpRequest(fixture, fixture.Client.Id, original.Id), CancellationToken.None);
-
-        var followUp = Assert.IsType<WorkOrderResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
-        Assert.Equal(original.Id, followUp.FollowUpOfWorkOrderId);
-        Assert.Equal("WO-ORIG-1", followUp.FollowUpOfWorkOrderNumber);
-        Assert.Null(followUp.ParentWorkOrderId);
-
-        var originalView = Assert.IsType<WorkOrderResponse>(Assert.IsType<OkObjectResult>((await controller.Get(original.Id, CancellationToken.None)).Result).Value);
-        Assert.Equal(followUp.Id, Assert.Single(originalView.FollowUps!).Id);
-        // A follow-up never changes the original job.
-        Assert.Equal(originalStatus, originalView.Status);
-    }
-
-    [Fact]
-    public async Task Create_FollowUp_RefusesOpenOriginalOrOtherClient()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedManualCreateFixtureAsync(dbContext);
-        var open = await SeedOriginalAsync(dbContext, fixture, WorkOrderStatuses.InProgress);
-        var done = await SeedOriginalAsync(dbContext, fixture, WorkOrderStatuses.Completed, "WO-ORIG-2");
-        var otherClient = new Client { TenantId = fixture.Tenant.Id, ClientName = "Other", Email = "other@acme.test", IsActive = true };
-        dbContext.Clients.Add(otherClient);
-        await dbContext.SaveChangesAsync();
-        var controller = CreateWorkOrdersController(dbContext, fixture);
-
-        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(FollowUpRequest(fixture, fixture.Client.Id, open.Id), CancellationToken.None));
-        await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(FollowUpRequest(fixture, otherClient.Id, done.Id), CancellationToken.None));
-        Assert.Equal(2, await dbContext.WorkOrders.CountAsync());
-    }
-
-    [Fact]
     public void FollowUpChecklist_DetectsTickedFollowUpQuestion()
     {
         static WorkOrderChecklistItem Item(string question, string? answer) => new() { QuestionText = question, ResponseValue = answer };
@@ -106,94 +26,6 @@ public sealed class WorkOrderWorkTypeTests
         Assert.False(FollowUpChecklist.IsRequested([Item("Area left clean", "Yes")]));
     }
 
-    private static async Task<WorkOrder> SeedOriginalAsync(AppDbContext dbContext, ManualFixture fixture, string status, string number = "WO-ORIG-1")
-    {
-        var original = new WorkOrder
-        {
-            TenantId = fixture.Tenant.Id, BranchId = fixture.Branch.Id, ClientId = fixture.Client.Id, AssetId = fixture.Asset.Id,
-            WorkOrderNumber = number, Title = "Generator fault", Priority = "High", Status = status,
-            WorkType = WorkOrderTypes.CorrectiveMaintenance, CompletedAt = DateTime.UtcNow.AddDays(-1),
-        };
-        dbContext.WorkOrders.Add(original);
-        await dbContext.SaveChangesAsync();
-        return original;
-    }
-
-    private static CreateWorkOrderRequest FollowUpRequest(ManualFixture fixture, Guid clientId, Guid originalId) =>
-        new(clientId, fixture.Branch.Id, null, null, null, null, "Unassigned", null, null, null, null,
-            "Follow-up: Generator fault", "Return to replace the AVR.", "High", null,
-            WorkOrderTypes.CorrectiveMaintenance, false, null, FollowUpOfWorkOrderId: originalId);
-
-    [Fact]
-    public async Task Create_ManualWorkOrder_RejectsMissingWorkType()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedManualCreateFixtureAsync(dbContext);
-        var controller = CreateWorkOrdersController(dbContext, fixture);
-
-        var error = await Assert.ThrowsAsync<BusinessRuleException>(() => controller.Create(
-            new CreateWorkOrderRequest(
-                fixture.Client.Id,
-                fixture.Branch.Id,
-                null,
-                null,
-                null,
-                null,
-                "Unassigned",
-                null,
-                null,
-                null,
-                null,
-                "Missing work type",
-                "This request should be rejected.",
-                "Medium",
-                null,
-                null,
-                false,
-                null),
-            CancellationToken.None));
-
-        Assert.Contains("Work type", error.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public async Task GenerateWorkOrder_FromPmPlan_SetsPreventiveMaintenanceWorkType()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedPmFixtureAsync(dbContext);
-        var controller = CreatePreventiveMaintenanceController(dbContext, fixture);
-
-        var result = await controller.GenerateWorkOrder(fixture.Plan.Id, CancellationToken.None);
-
-        var ok = Assert.IsType<OkObjectResult>(result.Result);
-        var response = Assert.IsType<WorkOrderResponse>(ok.Value);
-
-        Assert.Equal(WorkOrderTypes.PreventiveMaintenance, response.WorkType);
-        Assert.True(response.IsPreventiveMaintenance);
-
-        var persisted = await dbContext.WorkOrders.SingleAsync(x => x.Id == response.Id);
-        Assert.Equal(WorkOrderTypes.PreventiveMaintenance, persisted.WorkType);
-        Assert.True(persisted.IsPreventiveMaintenance);
-    }
-
-    [Fact]
-    public async Task GenerateWorkOrder_Twice_IsBlockedWhileFirstIsOpen()
-    {
-        await using var dbContext = CreateDbContext();
-        var fixture = await SeedPmFixtureAsync(dbContext);
-        var controller = CreatePreventiveMaintenanceController(dbContext, fixture);
-
-        // First generation succeeds.
-        await controller.GenerateWorkOrder(fixture.Plan.Id, CancellationToken.None);
-
-        // Second generation is rejected (F6-01) — an open PM work order already exists.
-        await Assert.ThrowsAsync<Shared.Errors.BusinessRuleException>(
-            () => controller.GenerateWorkOrder(fixture.Plan.Id, CancellationToken.None));
-
-        var count = await dbContext.WorkOrders.CountAsync(x => x.PreventiveMaintenancePlanId == fixture.Plan.Id);
-        Assert.Equal(1, count);
-    }
-
     [Fact]
     public async Task Get_WorkOrderDetail_IncludesWorkType()
     {
@@ -203,7 +35,6 @@ public sealed class WorkOrderWorkTypeTests
         {
             TenantId = fixture.Tenant.Id,
             BranchId = fixture.Branch.Id,
-            ClientId = fixture.Client.Id,
             AssetId = fixture.Asset.Id,
             AssignmentType = "Unassigned",
             WorkOrderNumber = "WO-TYPE-001",
@@ -244,26 +75,18 @@ public sealed class WorkOrderWorkTypeTests
             IsActive = true
         };
         var user = CreateUser(tenant.Id);
-        var client = new Client
-        {
-            TenantId = tenant.Id,
-            ClientName = "Acme Facilities",
-            Email = "client@acme.test",
-            IsActive = true
-        };
         var asset = new Asset
         {
             TenantId = tenant.Id,
             BranchId = branch.Id,
-            ClientId = client.Id,
             AssetName = "Generator 01",
             AssetCode = $"GEN-{Guid.NewGuid():N}".Substring(0, 10),
             Status = "Active"
         };
 
-        dbContext.AddRange(tenant, branch, user, client, asset);
+        dbContext.AddRange(tenant, branch, user, asset);
         await dbContext.SaveChangesAsync();
-        return new ManualFixture(tenant, branch, user, client, asset);
+        return new ManualFixture(tenant, branch, user, asset);
     }
 
     private static async Task<PmFixture> SeedPmFixtureAsync(AppDbContext dbContext)
@@ -290,7 +113,7 @@ public sealed class WorkOrderWorkTypeTests
 
         dbContext.AddRange(template, plan);
         await dbContext.SaveChangesAsync();
-        return new PmFixture(manualFixture.Tenant, manualFixture.Branch, manualFixture.User, manualFixture.Client, manualFixture.Asset, template, plan);
+        return new PmFixture(manualFixture.Tenant, manualFixture.Branch, manualFixture.User, manualFixture.Asset, template, plan);
     }
 
     private static WorkOrdersController CreateWorkOrdersController(AppDbContext dbContext, ManualFixture fixture) =>
@@ -348,8 +171,8 @@ public sealed class WorkOrderWorkTypeTests
             HasAllBranchAccess = true
         };
 
-    private sealed record ManualFixture(Tenant Tenant, Branch Branch, User User, Client Client, Asset Asset);
-    private sealed record PmFixture(Tenant Tenant, Branch Branch, User User, Client Client, Asset Asset, PmTemplate Template, PreventiveMaintenancePlan Plan);
+    private sealed record ManualFixture(Tenant Tenant, Branch Branch, User User, Asset Asset);
+    private sealed record PmFixture(Tenant Tenant, Branch Branch, User User, Asset Asset, PmTemplate Template, PreventiveMaintenancePlan Plan);
 
     private sealed class FakeTenantContext(Guid tenantId, Guid userId, string email) : ITenantContext
     {

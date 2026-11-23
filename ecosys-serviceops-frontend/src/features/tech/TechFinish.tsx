@@ -28,12 +28,8 @@ export function TechFinish({ workOrderId, workOrderNumber, editable, reportedPro
   const { data: bundle } = useTechBundle(workOrderId)
   const actions = useTechActions()
   const signatures = bundle?.signatures ?? []
-  const clientSigned = signatures.some((signature) => signature.signatureType === 'Client')
   const techSigned = signatures.some((signature) => signature.signatureType === 'Technician')
 
-  const [signer, setSigner] = useState<'Client' | 'Technician'>('Client')
-  const [clientName, setClientName] = useState('')
-  const [clientRole, setClientRole] = useState('')
   const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [padKey, setPadKey] = useState(0)
   const [downloading, setDownloading] = useState(false)
@@ -49,20 +45,19 @@ export function TechFinish({ workOrderId, workOrderNumber, editable, reportedPro
     }
   }
 
-  const name = signer === 'Client' ? clientName.trim() : user?.fullName ?? 'Technician'
+  const name = user?.fullName ?? 'Technician'
   const saveSignature = async () => {
     if (!dataUrl || !name) return
     try {
       const result = await actions.captureSignature({ id: workOrderId, workOrderNumber }, {
-        signatureType: signer,
+        signatureType: 'Technician',
         signerName: name,
-        signerRole: signer === 'Client' ? clientRole.trim() || null : 'Technician',
+        signerRole: 'Technician',
         signatureDataUrl: dataUrl,
       })
-      toast.success(savedMessage(signer === 'Client' ? 'Client sign-off saved' : 'Your signature saved', result))
+      toast.success(savedMessage('Your signature saved', result))
       setDataUrl(null)
       setPadKey((key) => key + 1)
-      if (signer === 'Client' && !techSigned) setSigner('Technician')
     } catch {
       // interceptor surfaces the error toast
     }
@@ -104,42 +99,14 @@ export function TechFinish({ workOrderId, workOrderNumber, editable, reportedPro
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-900">Sign-off</h2>
-        <ul className="space-y-1 text-sm">
-          {[
-            { label: 'Client signature', done: clientSigned },
-            { label: 'Your signature', done: techSigned },
-          ].map((item) => (
-            <li key={item.label} className={cn('flex items-center gap-2', item.done ? 'text-emerald-700' : 'text-slate-500')}>
-              {item.done ? <CheckCircle2 className="h-4 w-4" /> : <span className="h-4 w-4 rounded-full border border-slate-300" />}
-              {item.label}
-            </li>
-          ))}
-        </ul>
+        <p className={cn('flex items-center gap-2 text-sm', techSigned ? 'text-emerald-700' : 'text-slate-500')}>
+          {techSigned ? <CheckCircle2 className="h-4 w-4" /> : <span className="h-4 w-4 rounded-full border border-slate-300" />}
+          Your signature
+        </p>
 
         {editable ? (
           <>
-            <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 p-1" role="radiogroup" aria-label="Who is signing">
-              {(['Client', 'Technician'] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  role="radio"
-                  aria-checked={signer === option}
-                  onClick={() => { setSigner(option); setDataUrl(null); setPadKey((key) => key + 1) }}
-                  className={cn('h-9 rounded-md text-sm font-medium', signer === option ? 'bg-[var(--app-primary)] text-white' : 'text-slate-600')}
-                >
-                  {option === 'Client' ? 'Client' : 'Me'}
-                </button>
-              ))}
-            </div>
-            {signer === 'Client' ? (
-              <div className="grid grid-cols-2 gap-2">
-                <input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Client name" aria-label="Client name" className={cn(inputClass, 'h-10')} />
-                <input value={clientRole} onChange={(event) => setClientRole(event.target.value)} placeholder="Role" aria-label="Client role" className={cn(inputClass, 'h-10')} />
-              </div>
-            ) : (
-              <p className="text-sm text-slate-600">Signing as <span className="font-medium text-slate-900">{name}</span></p>
-            )}
+            <p className="text-sm text-slate-600">Signing as <span className="font-medium text-slate-900">{name}</span></p>
             <div className="overflow-hidden rounded-lg border border-slate-300 bg-white">
               <SignaturePad key={padKey} onChange={setDataUrl} />
             </div>
@@ -167,7 +134,7 @@ export function TechFinish({ workOrderId, workOrderNumber, editable, reportedPro
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-900">Service report</h2>
-        <p className="mt-1 text-xs text-slate-500">Problem, findings, work done, equipment on site, checklist, materials, photos and signatures as the client will see them.</p>
+        <p className="mt-1 text-xs text-slate-500">Problem, findings, work done, checklist, materials, photos and signatures as they appear on the report.</p>
         <button type="button" onClick={() => void download()} disabled={downloading} className="mt-3 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white text-sm font-medium text-slate-800 disabled:opacity-60">
           <FileDown className="h-4 w-4" />{downloading ? 'Preparing PDF…' : 'Download service report (PDF)'}
         </button>

@@ -143,15 +143,13 @@ internal static class SampleDocumentBuilder
         var signatures = new List<WorkOrderReportPdfSignature>
         {
             new("Technician", "James Otieno", "Senior Technician", "Work completed and tested.", now.ToString("dd MMM yyyy HH:mm"), null),
-            new("Client", "Dr. A. Mwangi", "Facilities Manager", "Confirmed operational.", now.ToString("dd MMM yyyy HH:mm"), null),
         };
 
         return new WorkOrderReportPdfModel(
             company, tenant.LogoUrl, null,
             tenant.PrimaryColor, tenant.SecondaryColor, config.ShowPoweredByEcosys,
             phone, tenant.Email, address,
-            "WO-000078", "AHU-03 high static pressure alarm",
-            "Nairobi Hospital", "Main Campus — Ward B", "AHU-03", "Rooftop air handling unit, 5,000 CFM",
+            "WO-000078", "AHU-03 high static pressure alarm", "Main Campus — Ward B", "AHU-03", "Rooftop air handling unit, 5,000 CFM",
             "HVAC Response Team", "Quarterly PPM Checklist", 3,
             "AHU-03 tripping on high static pressure; airflow to Ward B reduced.",
             "Filters heavily loaded; drive belt tension low; pressure sensor within calibration.",
@@ -165,13 +163,7 @@ internal static class SampleDocumentBuilder
             checklist, materials,
             new List<WorkOrderReportPdfPhotoGroup>(),
             signatures,
-            config,
-            new List<WorkOrderReportPdfEquipment>
-            {
-                new("AHU-03", "AST-0103", "Carrier 39HQ", "CA39-77120", "Roof, Block B", true),
-                new("AHU-04", "AST-0104", "Carrier 39HQ", "CA39-77121", "Roof, Block B", false),
-                new("Chiller 1", "AST-0110", "Trane CGAM 080", "U18K40213", "Plant room", false),
-            });
+            config);
     }
 
     private static string? ComposeBankDetails(ReportTemplateConfig config)

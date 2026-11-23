@@ -214,8 +214,7 @@ public sealed class WhatsAppNotificationTests
         var dispatcher = new NotificationDispatcher(harness.Db, null!, null!, null!, new NullInboxNotifier(), [channel], NullLogger<NotificationDispatcher>.Instance);
         NotificationRequest Request(string key) => new(harness.TenantId, key, [harness.Alice], "Checks missed", "Not done", null, "RunningCheck", Guid.NewGuid(),
             new Dictionary<string, string?> { ["Place"] = "Westlands Mall", ["Shift"] = "2026-10-21" }, Channels: NotificationChannels.WhatsApp);
-        harness.Db.UserNotificationPreferences.AddRange(
-            new UserNotificationPreference { TenantId = harness.TenantId, UserId = harness.Alice, NotificationKey = "factory-check.missed", WhatsAppEnabled = true },
+        harness.Db.UserNotificationPreferences.AddRange(new UserNotificationPreference { TenantId = harness.TenantId, UserId = harness.Alice, NotificationKey = "factory-check.missed", WhatsAppEnabled = true },
             new UserNotificationPreference { TenantId = harness.TenantId, UserId = harness.Alice, NotificationKey = "action-item.due", WhatsAppEnabled = true });
         await harness.Db.SaveChangesAsync();
 
@@ -246,52 +245,6 @@ public sealed class WhatsAppNotificationTests
         await harness.MyWhatsApp(harness.Alice).OptOut(CancellationToken.None);
         await dispatcher.NotifyAsync(Request("factory-check.missed"));
         Assert.Equal(1, await harness.CountRowsAsync());
-    }
-
-    [Fact]
-    public async Task Clients_OnlyMarkedContactsWithConsent_ForAllowedKeys()
-    {
-        var harness = await Harness.CreateAsync();
-        var client = new Client { TenantId = harness.TenantId, ClientName = "Westlands Mall Ltd" };
-        var marked = new ClientPortalUser { TenantId = harness.TenantId, ClientId = client.Id, FullName = "Grace", Email = "grace@client.test" };
-        var unmarked = new ClientPortalUser { TenantId = harness.TenantId, ClientId = client.Id, FullName = "Hassan", Email = "hassan@client.test", Phone = "0722 000 111" };
-        harness.Db.AddRange(client, marked, unmarked);
-        await harness.Db.SaveChangesAsync();
-        var notifier = new ClientWhatsAppNotifier(harness.Db, harness.Outbox(), NullLogger<ClientWhatsAppNotifier>.Instance);
-        var values = new Dictionary<string, string?> { ["TechnicianName"] = "Bob", ["WorkOrderNumber"] = "WO-7", ["TrackingLink"] = "https://x/track/abc" };
-
-        // Nobody has agreed yet.
-        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.TechnicianOnTheWay, values, "WorkOrder", Guid.NewGuid());
-        Assert.Equal(0, await harness.CountRowsAsync());
-
-        // Recording consent needs a method.
-        var consent = harness.Consent(harness.Bob);
-        await Assert.ThrowsAsync<BusinessRuleException>(() => consent.Record(client.Id, marked.Id, new RecordWhatsAppConsentRequest("0733 444 555", true, null), CancellationToken.None));
-        var recorded = Ok(await consent.Record(client.Id, marked.Id, new RecordWhatsAppConsentRequest("0733 444 555", true, "phone"), CancellationToken.None));
-        Assert.Equal(("+254733444555", "Phone", "Bob"), (recorded.Number, recorded.ConsentMethod, recorded.ConsentRecordedBy));
-
-        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.TechnicianOnTheWay, values, "WorkOrder", Guid.NewGuid());
-        var row = await harness.Db.WhatsAppOutboxMessages.SingleAsync();
-        Assert.Equal((marked.Id, "technician_on_the_way", "+254733444555"), (row.RecipientPortalUserId!.Value, row.TemplateName, row.ToPhone));
-
-        // work-order-completed isn't allowed by default, and another tenant's client id finds nobody.
-        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.WorkOrderCompleted, values, "WorkOrder", Guid.NewGuid());
-        await notifier.NotifyClientAsync(harness.OtherTenantId, client.Id, ClientWhatsAppKeys.TechnicianOnTheWay, values, "WorkOrder", Guid.NewGuid());
-        Assert.Equal(1, await harness.CountRowsAsync());
-
-        // Once allowed, a completion goes once per contact however often the hook runs.
-        await harness.Settings().SaveSettings(new SaveWhatsAppTenantSettingsRequest([ClientWhatsAppKeys.WorkOrderCompleted]), CancellationToken.None);
-        var jobId = Guid.NewGuid();
-        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.WorkOrderCompleted, values, "WorkOrder", jobId, onceScope: jobId.ToString("N"));
-        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.WorkOrderCompleted, values, "WorkOrder", jobId, onceScope: jobId.ToString("N"));
-        Assert.Equal(2, await harness.CountRowsAsync());
-
-        // Turned off: no more messages, but consent history stays.
-        var off = Ok(await consent.Record(client.Id, marked.Id, new RecordWhatsAppConsentRequest(null, false, null), CancellationToken.None));
-        Assert.False(off.ReceivesWhatsApp);
-        Assert.NotNull(off.ConsentAt);
-        await notifier.NotifyClientAsync(harness.TenantId, client.Id, ClientWhatsAppKeys.WorkOrderCompleted, values, "WorkOrder", Guid.NewGuid());
-        Assert.Equal(2, await harness.CountRowsAsync());
     }
 
     [Fact]
@@ -488,27 +441,6 @@ public sealed class WhatsAppNotificationTests
     }
 
     [Fact]
-    public async Task Verification_PortalContactOptsInThemselves()
-    {
-        var harness = await Harness.CreateAsync();
-        var client = new Client { TenantId = harness.TenantId, ClientName = "Westlands Mall Ltd" };
-        var contact = new ClientPortalUser { TenantId = harness.TenantId, ClientId = client.Id, FullName = "Grace", Email = "grace@client.test" };
-        harness.Db.AddRange(client, contact);
-        await harness.Db.SaveChangesAsync();
-        var subject = WhatsAppSubject.ForPortalUser(harness.TenantId, contact.Id);
-
-        await harness.Verification().StartAsync(subject, "+254 733 444 555");
-        await harness.ProcessAsync();
-        await harness.Verification().VerifyAsync(subject, harness.Sender.Sent.Single().Parameters[0]);
-
-        var saved = await harness.NewContext().ClientPortalUsers.IgnoreQueryFilters().SingleAsync(x => x.Id == contact.Id);
-        Assert.True(saved.ReceivesWhatsApp);
-        Assert.Equal((WhatsAppConsentMethods.Portal, "+254733444555"), (saved.WhatsAppConsentMethod, saved.WhatsAppNumber));
-        Assert.NotNull(saved.WhatsAppConsentAt);
-        Assert.Null(saved.WhatsAppConsentRecordedByUserId);
-    }
-
-    [Fact]
     public async Task Verification_RefusedWhenTheWorkspaceHasNoWhatsApp()
     {
         var harness = await Harness.CreateAsync();
@@ -526,7 +458,6 @@ public sealed class WhatsAppNotificationTests
     [Theory]
     [InlineData("MyWhatsApp")]
     [InlineData("WhatsAppNotifications")]
-    [InlineData("ClientWhatsAppConsent")]
     [InlineData("WhatsAppWebhook")]
     public void Controllers_AreSharedAcrossPlans(string controller)
     {
@@ -627,8 +558,7 @@ public sealed class WhatsAppNotificationTests
             {
                 if (seedTenants)
                     seed.Tenants.AddRange(TestTenant(harness.TenantId, "Acme Builders"), TestTenant(harness.OtherTenantId, "Other Co"));
-                seed.TenantLicenses.AddRange(
-                    new TenantLicense { TenantId = harness.TenantId, LicensePlanId = ProfessionalPlanId, Status = "Active", IsPerpetual = true, WhatsAppAddOn = ServiceOpsPlans.WhatsAppNotificationsAddOn },
+                seed.TenantLicenses.AddRange(new TenantLicense { TenantId = harness.TenantId, LicensePlanId = ProfessionalPlanId, Status = "Active", IsPerpetual = true, WhatsAppAddOn = ServiceOpsPlans.WhatsAppNotificationsAddOn },
                     new TenantLicense { TenantId = harness.OtherTenantId, LicensePlanId = ProfessionalPlanId, Status = "Active", IsPerpetual = true, WhatsAppAddOn = ServiceOpsPlans.WhatsAppNotificationsAddOn });
                 await seed.SaveChangesAsync();
             }
@@ -748,9 +678,6 @@ public sealed class WhatsAppNotificationTests
             var db = TenantDb(Alice);
             return new WhatsAppNotificationsController(db, Context(Alice), new AllowAllAccess(), new NoOpAuditLogService(), Outbox(db), Resolver(), Options);
         }
-
-        public ClientWhatsAppConsentController Consent(Guid userId) =>
-            new(TenantDb(userId), Context(userId), new AllowAllAccess(), new NoOpAuditLogService());
     }
 
     private static Tenant TestTenant(Guid id, string name) => new()

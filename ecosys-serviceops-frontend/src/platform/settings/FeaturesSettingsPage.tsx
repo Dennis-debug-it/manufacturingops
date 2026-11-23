@@ -12,7 +12,7 @@ const modules: ReadonlyArray<[string, string]> = [
   ['finance', 'Rate cards, preferential and exchange rates'],
   ['maintenance', 'Preventive maintenance, assets, condition monitoring, reliability, leaf fleet, contracts, SLA'],
   ['inventory', 'Materials, purchase orders, stock, tools'],
-  ['advanced', 'Workflows, intake, time & attendance, approvals'],
+  ['advanced', 'Workflows, time & attendance, approvals'],
   ['enterprise_tools', 'Multiple branches, API & webhooks, monitoring'],
 ]
 

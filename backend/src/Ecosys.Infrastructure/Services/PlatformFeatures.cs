@@ -13,9 +13,6 @@ public sealed class PlatformFeatureOptions
     /// <summary>WhatsApp reminders, opt-ins, the WhatsApp inbox and WhatsApp on sales deals.</summary>
     public bool WhatsApp { get; set; } = true;
 
-    /// <summary>The intake mailbox (emails become work orders, sales leads, or replies on deals) and the email webhook.</summary>
-    public bool EmailIntake { get; set; } = true;
-
     /// <summary>
     /// The routes a switched-off feature refuses, or null. Only changes are refused; Meta's webhook keeps
     /// working so a STOP reply is still honoured.
@@ -25,11 +22,9 @@ public sealed class PlatformFeatureOptions
         if (HttpMethods.IsReadOnly(method))
             return null;
         var p = path.ToLowerInvariant();
-        if (!EmailIntake && (p.StartsWith("/api/settings/email-intake") || p.StartsWith("/api/intake/email")))
-            return "Email intake is switched off.";
         if (!WhatsApp && !p.StartsWith("/api/whatsapp/webhook")
-            && (p.StartsWith("/api/whatsapp") || p.StartsWith("/api/me/whatsapp") || p.StartsWith("/api/portal/profile/whatsapp")
-                || p.StartsWith("/api/platform/whatsapp") || (p.StartsWith("/api/clients/") && p.EndsWith("/whatsapp"))))
+            && (p.StartsWith("/api/whatsapp") || p.StartsWith("/api/me/whatsapp")
+                || p.StartsWith("/api/platform/whatsapp")))
             return "WhatsApp is switched off.";
         return null;
     }

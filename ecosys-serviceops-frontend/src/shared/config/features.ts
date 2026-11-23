@@ -6,12 +6,6 @@
 
 /**
  * WhatsApp everywhere: the inbox and its settings, WhatsApp reminders and their settings, opt-in cards,
- * the WhatsApp channel in notification preferences, WhatsApp on client contacts and on sales deals.
+ * and the WhatsApp channel in notification preferences.
  */
 export const WHATSAPP_ENABLED = false
-
-/**
- * Email intake: the intake mailbox settings (emails become work orders), the sales lead address and
- * replies coming back onto deals, and the Email intake help guide.
- */
-export const EMAIL_INTAKE_ENABLED = false

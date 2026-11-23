@@ -41,7 +41,7 @@ export function CalendarPage() {
   const effectiveMode: CalendarMode = team ? 'week' : mode
   const range = useMemo(() => calendarRange(effectiveMode, cursor), [effectiveMode, cursor])
   const { data, isLoading } = useCalendar(range.from, range.to, team ?? [])
-  const { data: people } = useActivityPeople(null, Boolean(data?.canViewTeam))
+  const { data: people } = useActivityPeople(Boolean(data?.canViewTeam))
   const items = useMemo(() => (data?.items ?? []).filter((x) => !hidden.includes(x.source)), [data, hidden])
   const byDay = useMemo(() => groupByDay(items), [items])
 

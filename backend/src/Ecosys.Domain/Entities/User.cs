@@ -59,11 +59,6 @@ public sealed class User : AuditableEntity, ITenantEntity
     public ICollection<UserPermissionOverride> PermissionOverrides { get; set; } = new List<UserPermissionOverride>();
     public ICollection<AccessScope> AccessScopes { get; set; } = new List<AccessScope>();
     public ICollection<PermissionThreshold> PermissionThresholds { get; set; } = new List<PermissionThreshold>();
-    public ICollection<Contract> RenewalOwnedContracts { get; set; } = new List<Contract>();
-    public ICollection<Contract> AccountManagedContracts { get; set; } = new List<Contract>();
-    public ICollection<Contract> InternallyApprovedContracts { get; set; } = new List<Contract>();
-    public ICollection<ContractRenewal> ContractRenewalsOwned { get; set; } = new List<ContractRenewal>();
-    public ICollection<ClientPreferentialRate> ApprovedPreferentialRates { get; set; } = new List<ClientPreferentialRate>();
     public ICollection<MaterialIssue> MaterialIssuesRequested { get; set; } = new List<MaterialIssue>();
     public ICollection<MaterialIssue> MaterialIssuesApproved { get; set; } = new List<MaterialIssue>();
     public ICollection<MaterialIssue> MaterialIssuesIssued { get; set; } = new List<MaterialIssue>();

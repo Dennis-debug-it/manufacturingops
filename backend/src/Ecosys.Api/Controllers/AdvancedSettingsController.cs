@@ -190,9 +190,6 @@ public sealed class AdvancedSettingsController(
         }
 
         policy.RequireTechnicianSignature = request.RequireTechnicianSignature;
-        policy.RequireClientSignature = request.RequireClientSignature;
-        policy.AllowRemoteCompletion = request.AllowRemoteCompletion;
-        policy.AutoSendServiceReportOnApproval = request.AutoSendServiceReportOnApproval;
 
         await dbContext.SaveChangesAsync(cancellationToken);
         return Ok(policy);
@@ -653,5 +650,5 @@ public sealed record AssignmentGroupResponse(Guid Id, Guid? BranchId, string? Br
 public sealed record TenantSecurityPolicyRequest(int MinPasswordLength, bool RequireUppercase, bool RequireLowercase, bool RequireDigit, bool RequireSpecialCharacter, int PasswordRotationDays, int SessionTimeoutMinutes, bool RequireMfa);
 public sealed record NotificationSettingsRequest(bool EmailAlertsEnabled, bool SmsAlertsEnabled, bool WorkOrderAssignmentAlerts, bool LicenseExpiryAlerts, bool DailyDigestEnabled);
 public sealed record MonitoringSettingsRequest(string ProviderName, string? EndpointLabel, string? WebhookSecret, Guid? DefaultBranchId, string DefaultPriority, bool AutoCreateWorkOrders, bool IsEnabled);
-public sealed record TenantOperationsPolicyRequest(bool RequireTechnicianSignature, bool RequireClientSignature, bool AllowRemoteCompletion, bool AutoSendServiceReportOnApproval = false);
+public sealed record TenantOperationsPolicyRequest(bool RequireTechnicianSignature);
 

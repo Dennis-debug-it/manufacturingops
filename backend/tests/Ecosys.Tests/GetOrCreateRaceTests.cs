@@ -34,20 +34,20 @@ public sealed class GetOrCreateRaceTests
 
             await using var loser = new AppDbContext(options);
             var result = await loser.GetOrCreateAsync(
-                loser.EmailIntakeSettings.Where(x => x.TenantId == tenant.Id),
+                loser.MonitoringSettings.Where(x => x.TenantId == tenant.Id),
                 async () =>
                 {
                     // The other request wins the race between our lookup and our insert.
                     await using var winner = new AppDbContext(options);
-                    winner.EmailIntakeSettings.Add(NewSettings(tenant.Id, "winner"));
+                    winner.MonitoringSettings.Add(NewSettings(tenant.Id, "winner"));
                     await winner.SaveChangesAsync();
                     return NewSettings(tenant.Id, "loser");
                 },
                 CancellationToken.None);
 
-            Assert.Equal("winner", result.Host);
+            Assert.Equal("winner", result.ProviderName);
             await using var check = new AppDbContext(options);
-            Assert.Equal(1, await check.EmailIntakeSettings.CountAsync(x => x.TenantId == tenant.Id));
+            Assert.Equal(1, await check.MonitoringSettings.CountAsync(x => x.TenantId == tenant.Id));
         }
         finally
         {
@@ -56,12 +56,10 @@ public sealed class GetOrCreateRaceTests
         }
     }
 
-    private static EmailIntakeSetting NewSettings(Guid tenantId, string host) => new()
+    private static MonitoringSetting NewSettings(Guid tenantId, string provider) => new()
     {
         TenantId = tenantId,
-        MailboxProvider = "IMAP",
-        Host = host,
-        Port = 993,
+        ProviderName = provider,
         DefaultPriority = "Medium",
     };
 }

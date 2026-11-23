@@ -99,7 +99,7 @@ export function TechJobsPage() {
                   </div>
                   <p className="truncate text-sm font-semibold text-slate-900">{job.title}</p>
                   <p className="flex items-center gap-1 truncate text-xs text-slate-500">
-                    <MapPin className="h-3 w-3 shrink-0" />{[job.clientName, job.siteName].filter(Boolean).join(' · ') || 'No site'}
+                    <MapPin className="h-3 w-3 shrink-0" />{[job.assetName, job.branchName].filter(Boolean).join(' · ') || 'No asset'}
                   </p>
                   <div className="flex flex-wrap items-center gap-2 pt-0.5">
                     <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset', PHASE_TONE[phase])}>{PHASE_LABEL[phase]}</span>

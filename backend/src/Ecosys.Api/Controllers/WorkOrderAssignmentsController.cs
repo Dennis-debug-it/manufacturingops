@@ -91,54 +91,6 @@ public sealed class WorkOrderAssignmentsController(
         return Ok(await LoadResponseAsync(workOrderId, cancellationToken));
     }
 
-    /// <summary>
-    /// Rolls the per-technician arrival/departure stamps up onto the work-order header.
-    /// <para>
-    /// EC-013: recording a departure only wrote <c>work_order_technician_assignments.DepartureAt</c>.
-    /// The arrival path happens to refresh the header as a side effect of its assignment-status
-    /// refresh; the departure path has no such refresh, so <c>work_orders.DepartureAt</c> — which the
-    /// detail DTO exposes as <c>departureAt</c> — stayed null forever.
-    /// </para>
-    /// <para>
-    /// Multi-technician convention (identical to the workflow service's own legacy-field sync):
-    /// the header arrival is the <b>earliest</b> technician arrival ("the crew got on site") and the
-    /// header departure is the <b>latest</b> technician departure ("the crew left site"). Both are
-    /// recomputed from the assignment rows, so the roll-up is idempotent and self-correcting.
-    /// </para>
-    /// </summary>
-    private async Task SyncSiteVisitTimestampsAsync(Guid workOrderId, CancellationToken cancellationToken)
-    {
-        var workOrder = await dbContext.WorkOrders
-            .SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == workOrderId, cancellationToken);
-        if (workOrder is null)
-        {
-            return;
-        }
-
-        var stamps = await dbContext.WorkOrderTechnicianAssignments
-            .Where(x => x.TenantId == TenantId && x.WorkOrderId == workOrderId)
-            .Select(x => new { x.ArrivalAt, x.DepartureAt })
-            .ToListAsync(cancellationToken);
-
-        // Min/Max over Nullable<DateTime> ignore nulls and yield null for an empty set. Only write
-        // when there is a stamp to write, so this never clears a header value recorded by another
-        // path (e.g. the lifecycle service, which stamps arrival without a technician row).
-        var earliestArrival = stamps.Min(x => x.ArrivalAt);
-        var latestDeparture = stamps.Max(x => x.DepartureAt);
-
-        if (earliestArrival.HasValue)
-        {
-            workOrder.ArrivalAt = earliestArrival;
-        }
-
-        if (latestDeparture.HasValue)
-        {
-            workOrder.DepartureAt = latestDeparture;
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
-    }
-
     private async Task EnsureAccessibleAsync(Guid workOrderId, CancellationToken cancellationToken)
     {
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
@@ -157,7 +109,6 @@ public sealed class WorkOrderAssignmentsController(
     {
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
         var workOrder = await dbContext.WorkOrders
-            .Include(x => x.Client)
             .Include(x => x.Asset)
             .Include(x => x.AssignedTechnician)
             .Include(x => x.LeadTechnician)
@@ -168,7 +119,6 @@ public sealed class WorkOrderAssignmentsController(
             .Include(x => x.Events)
             .Include(x => x.TechnicianAssignments)
             .ThenInclude(x => x.Technician)
-            .Include(x => x.Site)
             .Where(x => x.TenantId == TenantId && x.Id == workOrderId)
             .WhereAccessible(scope, x => x.BranchId)
             .SingleAsync(cancellationToken);
@@ -182,10 +132,6 @@ public sealed class WorkOrderAssignmentsController(
             workOrder.Id,
             workOrder.BranchId,
             workOrder.Branch?.Name,
-            workOrder.ClientId,
-            workOrder.Client?.ClientName,
-            workOrder.SiteId,
-            workOrder.Site?.SiteName,
             workOrder.AssetId,
             workOrder.Asset?.AssetName,
             workOrder.AssignmentGroupId,
@@ -206,8 +152,6 @@ public sealed class WorkOrderAssignmentsController(
             workOrder.DueDate,
             workOrder.CreatedAt,
             workOrder.WorkStartedAt,
-            workOrder.ArrivalAt,
-            workOrder.DepartureAt,
             workOrder.CompletedAt,
             workOrder.WorkDoneNotes,
             workOrder.JobCardNotes,
@@ -217,9 +161,6 @@ public sealed class WorkOrderAssignmentsController(
             workOrder.SlaResolutionBreached,
             workOrder.SlaResponseBreachedAt,
             workOrder.SlaResolutionBreachedAt,
-            workOrder.AcknowledgedByName,
-            workOrder.AcknowledgementComments,
-            workOrder.AcknowledgementDate,
             workOrder.IsPreventiveMaintenance,
             holdDetails.Reason,
             holdDetails.Note,

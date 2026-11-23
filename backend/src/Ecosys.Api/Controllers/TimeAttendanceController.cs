@@ -674,44 +674,10 @@ $"{technician.FullName} clocked in", cancellationToken);
         .ToList();
 
         var status = overtime > 0 || entries.Any(AttendanceRules.IsAutoClockedOut) ? "Flagged" : "Pending";
-        var jobs = await BuildJobBreakdownAsync(technician.Id, start, end, cancellationToken);
         return new TimesheetDetailResponse(
             technician.Id, technician.Id, technician.FullName, label,
             Math.Round(total, 2), Math.Round(overtime, 2), Math.Round(leaveHours, 2), status,
-            daily, audit, entries.Select(MapClockEntry).ToList(), jobs);
-    }
-
-    /// <summary>
-    /// Where the clocked time went: each day's site visits grouped by job. A trip belongs to the day it
-    /// started; a visit still on site counts up to now.
-    /// </summary>
-    private async Task<IReadOnlyList<TimesheetJobEntryResponse>> BuildJobBreakdownAsync(
-        Guid technicianId, DateOnly start, DateOnly end, CancellationToken cancellationToken)
-    {
-        var from = start.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var to = end.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var visits = await dbContext.WorkOrderVisits
-            .Include(x => x.WorkOrder)
-            .Where(x => x.TenantId == TenantId && x.TechnicianId == technicianId
-                && (x.TravelStartedAt ?? x.ArrivedAt) >= from && (x.TravelStartedAt ?? x.ArrivedAt) < to)
-            .ToListAsync(cancellationToken);
-
-        var now = DateTime.UtcNow;
-        return visits
-            .GroupBy(x => new { Date = DateOnly.FromDateTime((x.TravelStartedAt ?? x.ArrivedAt)!.Value), x.WorkOrderId })
-            .Select(g =>
-            {
-                var workOrder = g.First().WorkOrder;
-                var travel = g.Sum(v => v.ArrivedAt is null && v.TravelStartedAt is not null ? Minutes(v.TravelStartedAt.Value, now) : v.TravelMinutes);
-                var onSite = g.Sum(v => v.ArrivedAt is not null && v.DepartedAt is null ? Minutes(v.ArrivedAt.Value, now) : v.OnSiteMinutes);
-                return new TimesheetJobEntryResponse(
-                    g.Key.Date.ToString("yyyy-MM-dd"), g.Key.WorkOrderId, workOrder?.WorkOrderNumber ?? "", workOrder?.Title ?? "",
-                    g.Count(), travel, onSite, g.Any(v => v.DepartedAt is null));
-            })
-            .OrderBy(x => x.Date).ThenBy(x => x.WorkOrderNumber)
-            .ToList();
-
-        static int Minutes(DateTime from, DateTime to) => to > from ? (int)Math.Round((to - from).TotalMinutes) : 0;
+            daily, audit, entries.Select(MapClockEntry).ToList());
     }
 
     private static TimesheetClockEntryResponse MapClockEntry(AttendanceEntry entry) => new(
@@ -867,16 +833,11 @@ public sealed record TimesheetDetailResponse(
     double TotalHours, double OvertimeHours, double LeaveHours, string Status,
     IReadOnlyList<TimesheetDailyEntryResponse> DailyBreakdown,
     IReadOnlyList<TimesheetAuditEntryResponse> AuditTrail,
-    IReadOnlyList<TimesheetClockEntryResponse> Entries,
-    IReadOnlyList<TimesheetJobEntryResponse> Jobs);
+    IReadOnlyList<TimesheetClockEntryResponse> Entries);
 
 /// <summary>One clock session; <c>AutoClockedOut</c> marks hours the office still has to confirm.</summary>
 public sealed record TimesheetClockEntryResponse(
     Guid Id, string Date, DateTime ClockInAt, DateTime? ClockOutAt, int BreakMinutes, double TotalHours, string? Note, bool AutoClockedOut);
-
-/// <summary>Time on one job on one day, from its site visits.</summary>
-public sealed record TimesheetJobEntryResponse(
-    string Date, Guid WorkOrderId, string WorkOrderNumber, string Title, int Visits, int TravelMinutes, int OnSiteMinutes, bool InProgress);
 
 public sealed record UpdateAttendanceEntryRequest(DateTime ClockInAt, DateTime ClockOutAt, int BreakMinutes, string? Note = null);
 

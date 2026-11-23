@@ -270,8 +270,7 @@ public sealed partial class AuthEmailSafetyTests
         await SeedTenantAsync(db, tenantId, "Seat Co", "ops@seat.test");
         await SeedActiveLicenseAsync(db, tenantId, DateTime.UtcNow.AddDays(100));
         (await db.TenantLicenses.SingleAsync(x => x.TenantId == tenantId)).OfficeSeats = 3;
-        db.Users.AddRange(
-            new User { TenantId = tenantId, FullName = "Active", Email = "a@seat.test", Role = AppRoles.Admin, IsActive = true },
+        db.Users.AddRange(new User { TenantId = tenantId, FullName = "Active", Email = "a@seat.test", Role = AppRoles.Admin, IsActive = true },
             new User { TenantId = tenantId, FullName = "Pending", Email = "p@seat.test", Role = AppRoles.Dispatcher, IsActive = true, MustChangePassword = true },
             new User { TenantId = tenantId, FullName = "Gone", Email = "g@seat.test", Role = AppRoles.Dispatcher, IsActive = false },
             new User { TenantId = tenantId, FullName = "Free", Email = "v@seat.test", Role = AppRoles.Viewer, IsActive = true });

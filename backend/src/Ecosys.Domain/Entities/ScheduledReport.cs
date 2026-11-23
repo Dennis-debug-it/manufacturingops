@@ -6,10 +6,10 @@ public sealed class ScheduledReport : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
 
-    /// <summary>Human-readable name, e.g. "Monthly Revenue Report".</summary>
+    /// <summary>Human-readable name, e.g. "Monthly maintenance report".</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Revenue | Aging | ClientStatement | WorkOrderSummary | Invoices</summary>
+    /// <summary>WorkOrderSummary | FactoryKpis</summary>
     public string ReportType { get; set; } = string.Empty;
 
     /// <summary>Daily | Weekly | Monthly | Quarterly</summary>
@@ -29,9 +29,6 @@ public sealed class ScheduledReport : AuditableEntity, ITenantEntity
 
     /// <summary>For Revenue: client | workType | month</summary>
     public string? GroupBy { get; set; }
-
-    /// <summary>For ClientStatement: specific client ID, or null for all clients.</summary>
-    public string? ClientId { get; set; }
 
     /// <summary>Factory reports: the group, factory or section reported on; null for everything.</summary>
     public Guid? OrgNodeId { get; set; }

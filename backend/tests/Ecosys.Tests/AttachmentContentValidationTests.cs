@@ -184,8 +184,6 @@ public sealed class AttachmentContentValidationTests
         var workOrder = new WorkOrder
         {
             TenantId = tenantId,
-            ClientId = Guid.NewGuid(),
-            SiteId = Guid.NewGuid(),
             WorkOrderNumber = $"WO-{Guid.NewGuid():N}"[..10],
             Title = "Generator fault",
             Priority = "High",

@@ -171,14 +171,6 @@ export function WhatsAppRemindersSettingsPage() {
         disabled={save.isPending || !data.featureEnabled}
         onToggle={(key, on) => void toggle(key, on)}
       />
-      <KeyList
-        title="Client updates"
-        description="Sent to client contacts who agreed to WhatsApp messages."
-        items={data.keys.filter((k) => k.audience === 'Client')}
-        allowed={allowed}
-        disabled={save.isPending || !data.featureEnabled}
-        onToggle={(key, on) => void toggle(key, on)}
-      />
 
       <OutboxLog />
     </div>

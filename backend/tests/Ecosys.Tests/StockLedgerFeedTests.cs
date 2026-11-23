@@ -22,8 +22,7 @@ public sealed class StockLedgerFeedTests
     private async Task<MaterialItem> Seed(AppDbContext db)
     {
         var part = new MaterialItem { TenantId = tenantId, ItemCode = "FLT-1", ItemName = "Air filter", UnitOfMeasure = "each", UnitCost = 10 };
-        db.Branches.AddRange(
-            new Branch { Id = mainBranch, TenantId = tenantId, Name = "Main", Code = "M" },
+        db.Branches.AddRange(new Branch { Id = mainBranch, TenantId = tenantId, Name = "Main", Code = "M" },
             new Branch { Id = otherBranch, TenantId = tenantId, Name = "Other", Code = "O" });
         db.Users.Add(new User { Id = userId, TenantId = tenantId, FullName = "Storekeeper", Email = "store@tenant.test", Role = AppRoles.Admin, PasswordHash = string.Empty, IsActive = true });
         db.MaterialItems.Add(part);

@@ -28,7 +28,6 @@ public sealed class AssetCategory : AuditableEntity
     public SystemTemplatePack? TemplatePack { get; set; }
     public ICollection<AssetCategoryField> Fields { get; set; } = new List<AssetCategoryField>();
     public ICollection<Asset> Assets { get; set; } = new List<Asset>();
-    public ICollection<ContractAssetCategory> ContractAssetCategories { get; set; } = new List<ContractAssetCategory>();
 }
 
 public sealed class AssetCategoryField : AuditableEntity

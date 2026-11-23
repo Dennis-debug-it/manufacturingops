@@ -120,7 +120,7 @@ public sealed class FactoryCostsController(
     public async Task<ActionResult<JobCosts>> Job(Guid workOrderId, CancellationToken cancellationToken)
     {
         EnsureCanView();
-        var job = await Db.WorkOrders.AsNoTracking().SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == workOrderId && x.ClientId == null, cancellationToken)
+        var job = await Db.WorkOrders.AsNoTracking().SingleOrDefaultAsync(x => x.TenantId == TenantId && x.Id == workOrderId, cancellationToken)
             ?? throw new NotFoundException("Job was not found.");
         var (nodes, _) = await ScopeAsync(job.OrgNodeId, cancellationToken);
         var lines = (await kpiService.CostLinesAsync(TenantId, nodes, DateTime.SpecifyKind(DateTime.MinValue, DateTimeKind.Utc), DateTime.UtcNow.AddDays(1), cancellationToken))
@@ -398,7 +398,7 @@ public sealed class FactoryKpisController(
         await scheduledReportService.CreateAsync(TenantId, new CreateScheduledReportRequest(
             string.IsNullOrWhiteSpace(request.Name) ? "Maintenance board report" : request.Name.Trim(), ScheduledReportService.FactoryKpiReportType,
             request.Frequency ?? "Monthly", request.DayOfMonth ?? (request.Frequency is null or "Monthly" or "Quarterly" ? 1 : null), request.DayOfWeek, request.TimeOfDay ?? "07:00",
-            request.DateRangePreset ?? "LastMonth", null, null, request.Recipients, request.OrgNodeId), cancellationToken);
+            request.DateRangePreset ?? "LastMonth", null, request.Recipients, request.OrgNodeId), cancellationToken);
         return await Schedules(cancellationToken);
     }
 

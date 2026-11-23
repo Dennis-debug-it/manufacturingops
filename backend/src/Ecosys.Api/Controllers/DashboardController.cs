@@ -91,35 +91,6 @@ public sealed class DashboardController(
             x => (x.Status ?? string.Empty) != "Inactive",
             cancellationToken);
 
-        var clientCount = await dbContext.Clients
-            .AsNoTracking()
-            .CountAsync(x => x.TenantId == tenantId && x.IsActive && !x.IsProspect, cancellationToken);
-
-        var today = DateTime.UtcNow.Date;
-        var contracts = dbContext.Contracts
-            .AsNoTracking()
-            .Where(x => x.TenantId == tenantId && !x.IsArchived);
-
-        var contractsExpiringIn90Days = await contracts.CountAsync(
-            x => x.EndDate.Date >= today && x.EndDate.Date <= today.AddDays(90),
-            cancellationToken);
-
-        var contractsExpiringIn30Days = await contracts.CountAsync(
-            x => x.EndDate.Date >= today && x.EndDate.Date <= today.AddDays(30),
-            cancellationToken);
-
-        var criticalRenewalRiskContracts = await contracts.CountAsync(
-            x => x.RenewalRisk == Domain.Enums.RenewalRisk.Critical,
-            cancellationToken);
-
-        var expiredContracts = await contracts.CountAsync(
-            x => x.Status == Domain.Enums.ContractStatus.Expired || x.EndDate.Date < today,
-            cancellationToken);
-
-        var renewalInProgressContracts = await contracts.CountAsync(
-            x => x.Status == Domain.Enums.ContractStatus.RenewalInProgress,
-            cancellationToken);
-
         var materialsLowStock = scope.HasConfiguredBranches
             ? await dbContext.BranchMaterialStocks
                 .AsNoTracking()
@@ -158,7 +129,6 @@ public sealed class DashboardController(
         var awaitingAcceptance = accessibleWorkOrderIds.Count(id =>
             accessibleTechnicianAssignments.Any(assignment => assignment.WorkOrderId == id)
             && !accessibleTechnicianAssignments.Any(assignment => assignment.WorkOrderId == id && assignment.Status != "Pending"));
-        var techniciansOnSite = accessibleTechnicianAssignments.Count(x => x.ArrivalAt.HasValue && !x.DepartureAt.HasValue);
 
         // Call .AsEnumerable() explicitly to guarantee LINQ-to-Objects evaluation.
         // accessibleAssignments and accessibleTechnicianAssignments are already List<T>
@@ -178,8 +148,7 @@ public sealed class DashboardController(
             .Select(group => new DashboardTechnicianWorkloadDto(
                 group.Key,
                 group.Count(),
-                group.Count(x => x.Status == "Pending"),
-                group.Count(x => x.ArrivalAt.HasValue && !x.DepartureAt.HasValue)))
+                group.Count(x => x.Status == "Pending")))
             .OrderByDescending(x => x.ActiveWorkOrders)
             .ThenBy(x => x.TechnicianName)
             .ToList();
@@ -189,18 +158,11 @@ public sealed class DashboardController(
             closedWorkOrders,
             overdueWorkOrders,
             assetCount,
-            clientCount,
             materialsLowStock,
             unassignedWorkOrders,
             assignedToGroup,
             assignedToTechnicians,
             awaitingAcceptance,
-            techniciansOnSite,
-            contractsExpiringIn90Days,
-            contractsExpiringIn30Days,
-            criticalRenewalRiskContracts,
-            expiredContracts,
-            renewalInProgressContracts,
             workOrdersByGroup,
             technicianWorkload);
     }
@@ -217,23 +179,16 @@ public sealed record DashboardSummaryDto(
     int ClosedWorkOrders,
     int OverdueWorkOrders,
     int Assets,
-    int Clients,
     int MaterialsLowStock,
     int UnassignedWorkOrders,
     int AssignedToGroup,
     int AssignedToTechnicians,
     int AwaitingAcceptance,
-    int TechniciansOnSite,
-    int ContractsExpiringIn90Days,
-    int ContractsExpiringIn30Days,
-    int CriticalRenewalRiskContracts,
-    int ExpiredContracts,
-    int RenewalInProgressContracts,
     IReadOnlyCollection<DashboardGroupMetricDto> WorkOrdersByGroup,
     IReadOnlyCollection<DashboardTechnicianWorkloadDto> TechnicianWorkload)
 {
-    public static DashboardSummaryDto Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, [], []);
+    public static DashboardSummaryDto Empty { get; } = new(0, 0, 0, 0, 0, 0, 0, 0, 0, [], []);
 }
 
 public sealed record DashboardGroupMetricDto(string GroupName, int Count);
-public sealed record DashboardTechnicianWorkloadDto(string TechnicianName, int ActiveWorkOrders, int PendingResponses, int OnSiteCount);
+public sealed record DashboardTechnicianWorkloadDto(string TechnicianName, int ActiveWorkOrders, int PendingResponses);

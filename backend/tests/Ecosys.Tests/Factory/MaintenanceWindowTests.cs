@@ -142,8 +142,7 @@ public sealed class MaintenanceWindowTests
         var fan = new AssetCategory { TenantId = site.TenantId, Name = "Withering fan", Code = "TEA-WFN" };
         db.AssetCategories.AddRange(fbd, fan);
         site.Dryer.AssetCategoryId = fbd.Id;
-        db.Assets.AddRange(
-            new Asset { TenantId = site.TenantId, AssetName = "Withering fan 1", AssetCode = "WF-01", OrgNodeId = site.Drying, AssetCategoryId = fan.Id },
+        db.Assets.AddRange(new Asset { TenantId = site.TenantId, AssetName = "Withering fan 1", AssetCode = "WF-01", OrgNodeId = site.Drying, AssetCategoryId = fan.Id },
             new Asset { TenantId = site.TenantId, AssetName = "Withering fan 2", AssetCode = "WF-02", OrgNodeId = site.Drying, AssetCategoryId = fan.Id });
         await db.SaveChangesAsync();
 

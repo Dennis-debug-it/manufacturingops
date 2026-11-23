@@ -24,8 +24,7 @@ public sealed class EmailSettingsResolverTenantScopeTests
 
         await using (var setup = new AppDbContext(options))
         {
-            setup.EmailSettings.AddRange(
-                new EmailSetting
+            setup.EmailSettings.AddRange(new EmailSetting
                 {
                     TenantId = PlatformConstants.RootTenantId,
                     Host = "smtp.platform.test",

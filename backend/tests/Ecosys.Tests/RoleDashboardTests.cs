@@ -301,7 +301,7 @@ public sealed class RoleDashboardTests
         // A write this process never saw (another instance, a bulk update) leaves the cache as it was.
         await using (var elsewhere = harness.UnwatchedDb())
         {
-            elsewhere.WorkOrders.Add(new WorkOrder { TenantId = harness.TenantId, ClientId = harness.ClientId, WorkOrderNumber = "WO-2", Title = "Leak", Priority = "Low", Status = "Open" });
+            elsewhere.WorkOrders.Add(new WorkOrder { TenantId = harness.TenantId, WorkOrderNumber = "WO-2", Title = "Leak", Priority = "Low", Status = "Open" });
             await elsewhere.SaveChangesAsync();
         }
         Assert.Equal(1m, (await admin.GetWidgetAsync(DashboardWidgetCatalog.WorkOrdersOpenOverdue, null, false)).Stats[0].Value);
@@ -330,7 +330,7 @@ public sealed class RoleDashboardTests
     [Fact]
     public void Catalogue_EveryWidgetReadsAKnownArea()
     {
-        string[] known = [DashboardDataAreas.WorkOrders, DashboardDataAreas.Maintenance, DashboardDataAreas.Contracts,
+        string[] known = [DashboardDataAreas.WorkOrders, DashboardDataAreas.Maintenance,
             DashboardDataAreas.Materials, DashboardDataAreas.Activities];
         Assert.All(DashboardWidgetCatalog.All, widget => Assert.NotEmpty(widget.Areas));
         Assert.All(DashboardWidgetCatalog.All.SelectMany(x => x.Areas), area => Assert.Contains(area, known));
@@ -381,22 +381,21 @@ public sealed class RoleDashboardTests
         var version = harness.Singletons.Versions.Get(harness.TenantId, DashboardDataAreas.WorkOrders);
         await WaitForBroadcastsAsync(harness.Singletons.Notifier, x => x.TenantId == harness.TenantId, 1);
 
-        // A client, an audit row and a layout are no dashboard area: nothing is bumped or announced.
-        harness.Db.Clients.Single(x => x.Id == harness.ClientId).ClientName = "Acme Mall Ltd";
+        // An audit row and a layout are no dashboard area: nothing is bumped or announced.
         harness.Db.AuditLogs.Add(new AuditLog { TenantId = harness.TenantId, Action = "test", EntityName = "Test", EntityId = "1" });
         harness.Db.UserDashboardLayouts.Add(new UserDashboardLayout { TenantId = harness.TenantId, UserId = harness.AdminId, LayoutJson = "{}" });
         await harness.Db.SaveChangesAsync();
         await Task.Delay(100);
         Assert.Single(harness.Singletons.Notifier.Snapshot());
 
-        // A contract is another area: only its own widgets recompute.
-        harness.Db.Contracts.Add(new Contract { TenantId = harness.TenantId, ClientId = harness.ClientId, ContractNumber = "C-1", Name = "Mall HVAC", EndDate = DateTime.UtcNow.AddDays(10) });
+        // A material is another area: only its own widgets recompute.
+        harness.Db.MaterialItems.Add(new MaterialItem { TenantId = harness.TenantId, ItemCode = "P-1", ItemName = "Bearing", UnitOfMeasure = "pcs" });
         await harness.Db.SaveChangesAsync();
 
         Assert.Same(before, await admin.GetWidgetAsync(DashboardWidgetCatalog.WorkOrdersOpenOverdue, null, false));
         Assert.Equal(version, harness.Singletons.Versions.Get(harness.TenantId, DashboardDataAreas.WorkOrders));
-        Assert.Equal(1, harness.Singletons.Versions.Get(harness.TenantId, DashboardDataAreas.Contracts));
-        Assert.Equal(0, harness.Singletons.Versions.Get(harness.TenantId, DashboardDataAreas.Materials));
+        Assert.Equal(1, harness.Singletons.Versions.Get(harness.TenantId, DashboardDataAreas.Materials));
+        Assert.Equal(0, harness.Singletons.Versions.Get(harness.TenantId, DashboardDataAreas.Maintenance));
     }
 
     [Fact]
@@ -410,7 +409,7 @@ public sealed class RoleDashboardTests
         broadcaster.Notify(busy, [DashboardDataAreas.WorkOrders]);
         await WaitForBroadcastsAsync(notifier, x => x.TenantId == busy, 1);
         broadcaster.Notify(busy, [DashboardDataAreas.Activities]);
-        broadcaster.Notify(busy, [DashboardDataAreas.Contracts, DashboardDataAreas.Activities]);
+        broadcaster.Notify(busy, [DashboardDataAreas.Maintenance, DashboardDataAreas.Activities]);
         broadcaster.Notify(quiet, [DashboardDataAreas.Materials]);
 
         // The other tenant isn't held back by the busy one's window.
@@ -421,7 +420,7 @@ public sealed class RoleDashboardTests
         // The changes inside the window go out together when it ends.
         var busySent = await WaitForBroadcastsAsync(notifier, x => x.TenantId == busy, 2);
         Assert.Equal([DashboardDataAreas.WorkOrders], busySent[0].Areas);
-        Assert.Equal([DashboardDataAreas.Activities, DashboardDataAreas.Contracts], busySent[1].Areas);
+        Assert.Equal([DashboardDataAreas.Activities, DashboardDataAreas.Maintenance], busySent[1].Areas);
     }
 
     [Fact]
@@ -598,7 +597,6 @@ public sealed class RoleDashboardTests
         public Guid ManagerId { get; private set; }
         public Guid DispatcherId { get; private set; }
         public Guid ViewerId { get; private set; }
-        public Guid ClientId { get; private set; }
         public IReadOnlyCollection<string> Modules { get; private set; } = AllModules;
 
         public static Task<Harness> CreateAsync(string[]? modules = null, DashboardSingletons? singletons = null)
@@ -630,10 +628,6 @@ public sealed class RoleDashboardTests
             harness.ManagerId = await harness.AddUserAsync("Mo Manager", AppRoles.Manager);
             harness.DispatcherId = await harness.AddUserAsync("Dee Dispatcher", AppRoles.Dispatcher);
             harness.ViewerId = await harness.AddUserAsync("Vic Viewer", AppRoles.Viewer);
-            var client = new Client { TenantId = harness.TenantId, ClientName = "Acme Mall", IsActive = true };
-            harness.Db.Clients.Add(client);
-            await harness.Db.SaveChangesAsync();
-            harness.ClientId = client.Id;
             return harness;
         }
 
@@ -670,7 +664,7 @@ public sealed class RoleDashboardTests
         {
             var workOrder = new WorkOrder
             {
-                TenantId = TenantId, BranchId = branchId, ClientId = ClientId, WorkOrderNumber = number, Title = "Chiller trip",
+                TenantId = TenantId, BranchId = branchId, WorkOrderNumber = number, Title = "Chiller trip",
                 Priority = "High", Status = "Open", DueDate = overdue ? DateTime.UtcNow.AddDays(-2) : DateTime.UtcNow.AddDays(2),
             };
             Db.WorkOrders.Add(workOrder);
@@ -687,7 +681,7 @@ public sealed class RoleDashboardTests
             Db.Technicians.Add(technician);
             Db.WorkOrderTechnicianAssignments.Add(new WorkOrderTechnicianAssignment
             {
-                TenantId = TenantId, WorkOrderId = overdue.Id, TechnicianId = technician.Id, Status = "Accepted", ArrivalAt = DateTime.UtcNow.AddMinutes(-20),
+                TenantId = TenantId, WorkOrderId = overdue.Id, TechnicianId = technician.Id, Status = "Accepted",
             });
             AddWorkOrder(null, "WO-101");
             Db.MaterialItems.Add(new MaterialItem { TenantId = TenantId, ItemCode = "FLT-1", ItemName = "Filter", UnitOfMeasure = "pc", QuantityOnHand = 1, ReorderLevel = 5, IsActive = true });

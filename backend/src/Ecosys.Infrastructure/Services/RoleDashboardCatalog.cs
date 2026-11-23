@@ -76,7 +76,7 @@ public static class DashboardWidgetCatalog
             Ops, ViewWorkOrders, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, WorkOrderData),
         new(WorkOrdersUnassigned, "Unassigned work orders", "Open work orders with no technician and no assignment group.",
             Ops, Dispatch, DashboardWidgetSizes.Small, DashboardWidgetScope.Branch, WorkOrderData),
-        new(DispatchTodaysVisits, "Today's visits by technician", "Visits scheduled to start today, per technician.",
+        new(DispatchTodaysVisits, "Today's jobs by technician", "Work orders scheduled to start today, per technician.",
             Ops, Dispatch, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch, WorkOrderData),
         new(TechniciansWorkload, "Technician workload", "Open work orders per technician, with responses still pending.",
             Ops, Dispatch, DashboardWidgetSizes.Wide, DashboardWidgetScope.Branch, WorkOrderData),

@@ -114,12 +114,6 @@ internal static class PdfTemplateHelper
         RegistrationNumber: tenant?.RegistrationNumber,
         LogoBytes: TryLoadLogoBytes(tenant?.LogoUrl, environment));
 
-    public static PdfContactDetails ClientContact(Client? client) => new(
-        ContactPerson: client?.ContactPerson,
-        Phone: client?.ContactPhone ?? client?.Phone,
-        Email: client?.Email,
-        Address: client?.Location);
-
     /// <summary>
     /// Loads the tenant logo for embedding. Supports base64 data URLs and logos uploaded through tenant
     /// settings (served from wwwroot/uploads/logos), which are read from disk rather than fetched over

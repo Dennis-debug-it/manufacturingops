@@ -108,8 +108,8 @@ function SupportTools() {
   })
 
   const reindex = () => run('reindex', async () => {
-    const res = await api.post<{ counts: { workOrders: number; clients: number; invoices: number } }>(`/api/platform/support/tenants/${tenantId}/reindex`, {})
-    return `Reindexed — ${res.counts.workOrders} work orders, ${res.counts.clients} clients, ${res.counts.invoices} invoices.`
+    const res = await api.post<{ counts: { workOrders: number; assets: number; users: number } }>(`/api/platform/support/tenants/${tenantId}/reindex`, {})
+    return `Reindexed — ${res.counts.workOrders} work orders, ${res.counts.assets} assets, ${res.counts.users} users.`
   })
 
   const exportData = async () => {

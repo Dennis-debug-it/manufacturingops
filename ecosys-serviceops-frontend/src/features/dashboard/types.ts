@@ -7,7 +7,6 @@ export interface DashboardTechnicianWorkload {
   technicianName: string
   activeWorkOrders: number
   pendingResponses: number
-  onSiteCount: number
 }
 
 export interface DashboardSummary {
@@ -21,7 +20,6 @@ export interface DashboardSummary {
   assignedToGroup: number
   assignedToTechnicians: number
   awaitingAcceptance: number
-  techniciansOnSite: number
   contractsExpiringIn90Days: number
   contractsExpiringIn30Days: number
   criticalRenewalRiskContracts: number

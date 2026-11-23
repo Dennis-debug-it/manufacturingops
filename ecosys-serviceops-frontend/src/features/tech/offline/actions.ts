@@ -56,7 +56,7 @@ export function useTechActions() {
           method: 'POST', url: endpoints.workOrders.photos(job.id), file: { blob: file, name: file.name, fields: details },
         }),
       captureSignature: (job: Job, signature: { signatureType: string; signerName: string; signerRole?: string | null; signatureDataUrl: string; comment?: string | null }) =>
-        onJob(job, 'signature', `${signature.signatureType === 'Client' ? 'Client' : 'Your'} signature`, {
+        onJob(job, 'signature', 'Your signature', {
           method: 'POST', url: endpoints.workOrders.signatures(job.id), body: signature,
         }),
       /**

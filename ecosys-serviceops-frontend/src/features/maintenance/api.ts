@@ -76,19 +76,6 @@ export function useSetPmAutoSchedule(id: string) {
 }
 
 /** Keep the schedule raising (chargeable) visits after the asset's contract lapses, or go back to holding. */
-export function useContinueWithoutContract(id: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (enabled: boolean) =>
-      enabled
-        ? api.post<PmPlan>(`/api/preventive-maintenance/${id}/continue-without-contract`)
-        : api.delete<PmPlan>(`/api/preventive-maintenance/${id}/continue-without-contract`),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['pm-plans'] })
-    },
-  })
-}
-
 // PM Templates
 export function usePmTemplates() {
   return useQuery({
@@ -179,18 +166,10 @@ export function useDeletePmTemplate() {
 }
 
 // PM Compliance report
-export interface PmComplianceByClient {
-  clientId: string
-  due: number
-  completed: number
-  complianceRate: number
-}
-
 export interface PmOverduePlan {
   id: string
   assetName: string | null
   assetCode: string | null
-  clientName: string | null
   nextPmDate: string | null
   daysOverdue: number
 }
@@ -202,11 +181,10 @@ export interface PmComplianceReport {
   completedOnTime: number
   overdue: number
   complianceRate: number
-  byClient: PmComplianceByClient[]
   overduePlans: PmOverduePlan[]
 }
 
-export function usePmComplianceReport(params: { from?: string; to?: string; clientId?: string }) {
+export function usePmComplianceReport(params: { from?: string; to?: string }) {
   return useQuery({
     queryKey: ['reports', 'pm-compliance', params],
     queryFn: () => api.get<PmComplianceReport>(endpoints.reports.pmCompliance, params),

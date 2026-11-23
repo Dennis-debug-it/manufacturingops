@@ -169,7 +169,7 @@ public sealed class ComplianceController(
         var orgNodeId = request.OrgNodeId;
         if (request.AssetId is { } assetId)
         {
-            orgNodeId = await dbContext.Assets.Where(x => x.TenantId == TenantId && x.Id == assetId && x.ClientId == null).Select(x => x.OrgNodeId).SingleOrDefaultAsync(cancellationToken)
+            orgNodeId = await dbContext.Assets.Where(x => x.TenantId == TenantId && x.Id == assetId).Select(x => x.OrgNodeId).SingleOrDefaultAsync(cancellationToken)
                 ?? throw new BusinessRuleException("The asset was not found.");
         }
 

@@ -28,8 +28,7 @@ public sealed partial class WorkOrderExecutionController(
     IWorkOrderLifecycleService workOrderLifecycleService,
     IPdfRenderer pdfRenderer,
     IDocumentNumberingService documentNumberingService,
-    IHttpClientFactory httpClientFactory,
-    IServiceReportDeliveryService serviceReportDeliveryService) : TenantAwareControllerBase(tenantContext)
+    IHttpClientFactory httpClientFactory) : TenantAwareControllerBase(tenantContext)
 {
     private const string ProgressUpdateEventType = "ProgressUpdate";
 
@@ -45,7 +44,7 @@ public sealed partial class WorkOrderExecutionController(
 
     private static readonly HashSet<string> AllowedSignatureTypes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Technician", "Client"
+        "Technician"
     };
 
     private const long MaxPhotoSizeBytes = 5 * 1024 * 1024;
@@ -443,7 +442,7 @@ public sealed partial class WorkOrderExecutionController(
 
         if (!AllowedSignatureTypes.Contains(request.SignatureType))
         {
-            throw new BusinessRuleException("Signature type must be Technician or Client.");
+            throw new BusinessRuleException("Only the technician signature is captured on a job.");
         }
 
         if (string.IsNullOrWhiteSpace(request.SignerName))
@@ -497,17 +496,6 @@ public sealed partial class WorkOrderExecutionController(
 
         foreach (var checklistItem in matchingChecklistItems)
         {
-            var needsClientSignature = checklistItem.QuestionText.Contains("client", StringComparison.OrdinalIgnoreCase);
-            var needsTechnicianSignature = checklistItem.QuestionText.Contains("technician", StringComparison.OrdinalIgnoreCase);
-            var signatureMatches = request.SignatureType.Equals("Client", StringComparison.OrdinalIgnoreCase)
-                ? !needsTechnicianSignature
-                : !needsClientSignature;
-
-            if (!signatureMatches)
-            {
-                continue;
-            }
-
             checklistItem.IsCompleted = true;
             checklistItem.CompletedByUserId = UserId;
             checklistItem.CompletedAt = OccurredAt.UtcNow;
@@ -723,12 +711,10 @@ public sealed partial class WorkOrderExecutionController(
     {
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, null, cancellationToken);
         var query = dbContext.WorkOrders
-            .Include(x => x.Client)
-            .Include(x => x.Site)
             .Include(x => x.Asset)
             .ThenInclude(x => x!.AssetCategory)
-            .Include(x => x.System)
             .Include(x => x.Branch)
+            .Include(x => x.OrgNode)
             .Include(x => x.AssignmentGroup)
             .Include(x => x.AssignedTechnician)
             .Include(x => x.LeadTechnician)
@@ -769,11 +755,8 @@ public sealed partial class WorkOrderExecutionController(
         await workOrderLifecycleService.ChangeStatusAsync(TenantId, workOrderId, UserId, request, cancellationToken);
 
         var refreshed = await dbContext.WorkOrders
-            .Include(x => x.Client)
             .Include(x => x.Asset)
             .ThenInclude(x => x!.AssetCategory)
-            .Include(x => x.Site)
-            .Include(x => x.System)
             .Include(x => x.AssignedTechnician)
             .Include(x => x.LeadTechnician)
             .Include(x => x.AssignmentGroup)
@@ -871,7 +854,6 @@ public sealed partial class WorkOrderExecutionController(
             pdfModel.CompanyName,
             pdfModel.WorkOrderNumber,
             pdfModel.Title,
-            pdfModel.ClientName,
             pdfModel.SiteLabel,
             pdfModel.AssetName,
             pdfModel.AssetDetails,
@@ -900,8 +882,14 @@ public sealed partial class WorkOrderExecutionController(
                 x.Category,
                 x.Photos.Select(p => new WorkOrderReportPhotoResponse(p.Caption, p.PublicUrl)).ToList())).ToList(),
             pdfModel.Signatures.Select(x => new WorkOrderReportSignatureResponse(x.SignatureType, x.SignerName, x.SignerRole, x.Comment, x.CapturedAtLabel)).ToList(),
-            pdfModel.ShowPoweredByEcosys,
-            (pdfModel.SiteEquipment ?? []).Select(x => new WorkOrderReportEquipmentResponse(x.Name, x.Code, x.Description, x.SerialNumber, x.Location, x.OnThisJob)).ToList());
+            pdfModel.ShowPoweredByEcosys);
+    }
+
+    /// <summary>The service report PDF for download and the bulk zip.</summary>
+    private async Task<(byte[] Pdf, string FileName)> RenderServiceReportPdfAsync(Guid workOrderId, CancellationToken cancellationToken, bool skipTechnicianScope = false)
+    {
+        var model = await BuildPdfModelAsync(workOrderId, cancellationToken, skipTechnicianScope);
+        return (pdfRenderer.RenderWorkOrderReportPdf(model), $"{model.WorkOrderNumber}-service-report.pdf");
     }
 
     private async Task<WorkOrderReportPdfModel> BuildPdfModelAsync(Guid workOrderId, CancellationToken cancellationToken, bool skipTechnicianScope = false)
@@ -973,10 +961,9 @@ public sealed partial class WorkOrderExecutionController(
                 workOrder.Asset.Model
             }.Where(x => !string.IsNullOrWhiteSpace(x)));
 
-        var siteLabel = workOrder.Site?.SiteName
+        var siteLabel = workOrder.OrgNode?.Name
             ?? workOrder.Branch?.Name
-            ?? workOrder.Asset?.Location
-            ?? workOrder.Client?.Location;
+            ?? workOrder.Asset?.Location;
 
         var checklistSections = workOrder.ChecklistItems
             .OrderBy(x => x.SectionOrder)
@@ -1000,26 +987,6 @@ public sealed partial class WorkOrderExecutionController(
                     item.AttachmentId.HasValue ? $"/api/attachments/{item.AttachmentId}/download" : null)).ToList()))
             .ToList();
 
-        // Everything still in service at the site, so the client sees the equipment the visit covered.
-        var siteEquipment = (workOrder.SiteId ?? workOrder.Asset?.SiteId) is { } siteId
-            ? (await dbContext.Assets
-                .AsNoTracking()
-                .Where(x => x.TenantId == TenantId && x.SiteId == siteId && x.Status != "Inactive")
-                .OrderBy(x => x.AssetName)
-                .ThenBy(x => x.AssetCode)
-                .ToListAsync(cancellationToken))
-                .Select(asset => new WorkOrderReportPdfEquipment(
-                    asset.AssetName,
-                    string.IsNullOrWhiteSpace(asset.AssetCode) ? null : asset.AssetCode,
-                    NullIfEmpty(string.Join(" ", new[] { asset.Manufacturer, asset.Model }.Where(x => !string.IsNullOrWhiteSpace(x))))
-                        ?? NullIfEmpty(asset.AssetType),
-                    NullIfEmpty(asset.SerialNumber),
-                    NullIfEmpty(string.Join(", ", new[] { asset.BuildingBlock, asset.FloorLevel, asset.RoomArea }.Where(x => !string.IsNullOrWhiteSpace(x))))
-                        ?? NullIfEmpty(asset.Location),
-                    asset.Id == workOrder.AssetId))
-                .ToList()
-            : [];
-
         // Fetch logo bytes so the renderer can embed the image without making outbound HTTP calls
         var logoBytes = await TryFetchLogoBytesAsync(tenant.LogoUrl, cancellationToken);
 
@@ -1035,7 +1002,6 @@ public sealed partial class WorkOrderExecutionController(
             tenant.Address,
             workOrder.WorkOrderNumber,
             workOrder.Title,
-            workOrder.Client?.ClientName,
             siteLabel,
             workOrder.Asset?.AssetName,
             assetDetails,
@@ -1051,10 +1017,8 @@ public sealed partial class WorkOrderExecutionController(
             new List<WorkOrderReportPdfTimestamp>
             {
                 new("Created", Stamp(workOrder.CreatedAt)),
-                new("Arrived", workOrder.ArrivalAt is { } arrivalAt ? Stamp(arrivalAt) : null),
                 new("Started", workOrder.WorkStartedAt is { } workStartedAt ? Stamp(workStartedAt) : null),
-                new("Completed", workOrder.CompletedAt is { } completedAt ? Stamp(completedAt) : null),
-                new("Departed", workOrder.DepartureAt is { } departureAt ? Stamp(departureAt) : null)
+                new("Completed", workOrder.CompletedAt is { } completedAt ? Stamp(completedAt) : null)
             },
             checklistSections,
             materialUsages.Select(x => new WorkOrderReportPdfMaterial(
@@ -1066,8 +1030,7 @@ public sealed partial class WorkOrderExecutionController(
                 x.Notes)).ToList(),
             groupedPhotos,
             signatureModels,
-            templateConfig,
-            siteEquipment);
+            templateConfig);
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
@@ -1197,10 +1160,7 @@ public sealed partial class WorkOrderExecutionController(
                 x.Status,
                 x.AssignedAt,
                 x.AcceptedAt,
-                x.ArrivalAt,
-                x.DepartureAt,
-                x.Notes,
-                x.LastArrivalAt ?? x.ArrivalAt))
+                x.Notes))
             .ToList();
         var availableTransitions = WorkOrderStatusTransitions
             .GetAllowedTargets(workOrder.Status, CanUseAdminOnlyLifecycleTransitions())
@@ -1210,10 +1170,6 @@ public sealed partial class WorkOrderExecutionController(
             workOrder.Id,
             workOrder.BranchId,
             workOrder.Branch?.Name,
-            workOrder.ClientId,
-            workOrder.Client?.ClientName,
-            workOrder.SiteId,
-            workOrder.Site?.SiteName,
             workOrder.AssetId,
             workOrder.Asset?.AssetName,
             workOrder.AssignmentGroupId,
@@ -1234,8 +1190,6 @@ public sealed partial class WorkOrderExecutionController(
             workOrder.DueDate,
             workOrder.CreatedAt,
             workOrder.WorkStartedAt,
-            workOrder.ArrivalAt,
-            workOrder.DepartureAt,
             workOrder.CompletedAt,
             workOrder.WorkDoneNotes,
             workOrder.JobCardNotes,
@@ -1245,9 +1199,6 @@ public sealed partial class WorkOrderExecutionController(
             workOrder.SlaResolutionBreached,
             workOrder.SlaResponseBreachedAt,
             workOrder.SlaResolutionBreachedAt,
-            workOrder.AcknowledgedByName,
-            workOrder.AcknowledgementComments,
-            workOrder.AcknowledgementDate,
             workOrder.IsPreventiveMaintenance,
             holdDetails.Reason,
             holdDetails.Note,
@@ -1266,8 +1217,6 @@ public sealed partial class WorkOrderExecutionController(
             workOrder.PmTemplateId,
             workOrder.PmTemplateNameSnapshot ?? workOrder.PmTemplate?.Name,
             workOrder.PreventiveMaintenancePlanId,
-            workOrder.SystemId,
-            workOrder.System?.SystemName,
             workOrder.ChecklistItems
                 .OrderBy(x => x.SectionOrder)
                 .ThenBy(x => x.SectionName ?? string.Empty)
@@ -1301,21 +1250,6 @@ public sealed partial class WorkOrderExecutionController(
             workOrder.PmTemplateVersionSnapshot,
             workOrder.ScheduledStartAt,
             workOrder.ScheduledEndAt,
-            workOrder.NotifyClient,
-            workOrder.ClientContactEmail,
-            "NotBillable",
-            false,
-            workOrder.Client?.ContactPerson,
-            workOrder.Client?.ContactPhone,
-            workOrder.Client?.SlaPlan,
-            workOrder.Site?.SiteCode,
-            workOrder.Site?.ContactPerson,
-            workOrder.Site?.ContactPhone,
-            workOrder.Site?.OperatingHours,
-            workOrder.Site?.AccessNotes,
-            BuildSiteLocation(workOrder.Site),
-            workOrder.Site?.Latitude,
-            workOrder.Site?.Longitude,
             workOrder.EstimatedLabourHours,
             workOrder.Asset?.AssetCode,
             workOrder.Asset?.AssetType,
@@ -1340,21 +1274,6 @@ public sealed partial class WorkOrderExecutionController(
         || tenantContext.HasRole(AppRoles.PlatformOwner)
         || tenantContext.HasRole(AppRoles.PlatformSuperAdmin)
         || tenantContext.HasRole(AppRoles.SuperAdmin);
-
-    private static string? BuildSiteLocation(Site? site)
-    {
-        if (site is null)
-        {
-            return null;
-        }
-
-        var parts = new[] { site.StreetAddress, site.TownCity, site.County, site.Country }
-            .Where(part => !string.IsNullOrWhiteSpace(part))
-            .Select(part => part!.Trim())
-            .ToList();
-
-        return parts.Count == 0 ? null : string.Join(", ", parts);
-    }
 
     private static string? ResolveAssetWarrantyStatus(Asset? asset)
     {
@@ -1491,7 +1410,6 @@ public sealed record WorkOrderServiceReportPreviewResponse(
     string CompanyName,
     string WorkOrderNumber,
     string Title,
-    string? ClientName,
     string? SiteLabel,
     string? AssetName,
     string? AssetDetails,
@@ -1507,9 +1425,7 @@ public sealed record WorkOrderServiceReportPreviewResponse(
     IReadOnlyCollection<WorkOrderReportMaterialResponse> Materials,
     IReadOnlyCollection<WorkOrderReportPhotoGroupResponse> PhotoGroups,
     IReadOnlyCollection<WorkOrderReportSignatureResponse> Signatures,
-    bool ShowPoweredByEcosys,
-    IReadOnlyCollection<WorkOrderReportEquipmentResponse> SiteEquipment);
-public sealed record WorkOrderReportEquipmentResponse(string Name, string? Code, string? Description, string? SerialNumber, string? Location, bool OnThisJob);
+    bool ShowPoweredByEcosys);
 public sealed record WorkOrderReportTimestampResponse(string Label, string? Value);
 public sealed record WorkOrderReportChecklistSectionResponse(string SectionName, IReadOnlyCollection<WorkOrderReportChecklistItemResponse> Items);
 public sealed record WorkOrderReportChecklistItemResponse(string Question, string InputType, string? ResponseValue, string? Unit, string? Remarks, bool IsRequired, bool IsCompleted, bool EvidenceRequired, string? EvidenceUrl);

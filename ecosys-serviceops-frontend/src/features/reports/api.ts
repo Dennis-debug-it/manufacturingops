@@ -18,7 +18,7 @@ export interface WorkOrderPerformanceReport {
   byDay: Array<{ date: string; count: number }>
 }
 
-export function useWorkOrderPerformance(params: { from?: string; to?: string; clientId?: string; branchId?: string; status?: string; priority?: string }) {
+export function useWorkOrderPerformance(params: { from?: string; to?: string; branchId?: string; status?: string; priority?: string }) {
   return useQuery({
     queryKey: ['reports', 'work-order-performance', params],
     queryFn: () => api.get<WorkOrderPerformanceReport>(endpoints.reports.workOrderPerformance, params),
@@ -33,7 +33,6 @@ export interface TechnicianProductivityRow {
   completed: number
   onTimeCount: number
   onTimeRate: number
-  avgTimeOnSiteHours: number
   pmJobs: number
   correctiveJobs: number
 }
@@ -57,8 +56,6 @@ export interface AssetReliabilityRow {
   assetCode: string
   status: string
   categoryName: string | null
-  clientName: string | null
-  siteName: string | null
   lastPmDate: string | null
   nextPmDate: string | null
   warrantyExpiryDate: string | null
@@ -75,7 +72,7 @@ export interface AssetReliabilityReport {
   recurringFaultCount: number
 }
 
-export function useAssetReliability(params: { from?: string; to?: string; clientId?: string; siteId?: string; categoryId?: string }) {
+export function useAssetReliability(params: { from?: string; to?: string; categoryId?: string }) {
   return useQuery({
     queryKey: ['reports', 'asset-reliability', params],
     queryFn: () => api.get<AssetReliabilityReport>(endpoints.reports.assetReliability, params),

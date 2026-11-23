@@ -77,7 +77,7 @@ public sealed class InventorySettingsTests
         var controller = new MaterialIssuesController(db, new FakeTenantContext(tenantId, userId), new NoOpUserAccessService(),
             new NoOpBranchAccessService(), new NoOpDocumentNumberingService(), new StockLedgerService(db), new NoOpAuditLogService());
 
-        var result = await controller.Create(new(null, null, null, null, null, null, null, null, [new(part.Id, 100, null, null)]), default);
+        var result = await controller.Create(new(null, null, null, null, null, [new(part.Id, 100, null, null)]), default);
 
         var issue = Assert.IsType<MaterialIssueResponse>(Assert.IsType<CreatedAtActionResult>(result.Result).Value);
         Assert.Equal(expectedStatus, issue.IssueStatus);

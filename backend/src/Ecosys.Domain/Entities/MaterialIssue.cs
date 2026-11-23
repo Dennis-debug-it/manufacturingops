@@ -8,9 +8,6 @@ public sealed class MaterialIssue : AuditableEntity, ITenantEntity
     public Guid? BranchId { get; set; }
     public Guid? WorkOrderId { get; set; }
     public Guid? AssetId { get; set; }
-    public Guid? ClientId { get; set; }
-    public Guid? SiteId { get; set; }
-    public Guid? SystemId { get; set; }
     public Guid? IssuedToUserId { get; set; }
     public string IssueNumber { get; set; } = string.Empty;
     public string IssueStatus { get; set; } = "Draft";
@@ -30,9 +27,6 @@ public sealed class MaterialIssue : AuditableEntity, ITenantEntity
     public Branch? Branch { get; set; }
     public WorkOrder? WorkOrder { get; set; }
     public Asset? Asset { get; set; }
-    public Client? Client { get; set; }
-    public Site? Site { get; set; }
-    public OperationalSystem? System { get; set; }
     public User? RequestedByUser { get; set; }
     public User? IssuedByUser { get; set; }
     public User? ApprovedByUser { get; set; }

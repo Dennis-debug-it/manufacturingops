@@ -31,7 +31,7 @@ public sealed class FactoryDashboardController(
         var nodes = await NodesAsync(orgNodeId, cancellationToken);
         var settings = await factorySettingsService.GetOrCreateAsync(TenantId, cancellationToken);
 
-        var jobs = dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.ClientId == null && x.OrgNodeId != null);
+        var jobs = dbContext.WorkOrders.Where(x => x.TenantId == TenantId && x.OrgNodeId != null);
         var assets = dbContext.Assets.Where(x => x.TenantId == TenantId && x.Status != "Inactive" && x.OrgNodeId != null);
         var runs = dbContext.CheckRuns.Where(x => x.TenantId == TenantId);
         if (nodes is not null)

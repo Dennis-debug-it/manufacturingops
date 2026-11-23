@@ -320,8 +320,6 @@ internal sealed class WorkOrderAssignmentWorkflowService(
                 : technicianAssignments.Count == 1
                     ? WorkOrderAssignmentTypes.IndividualTechnician
                     : WorkOrderAssignmentTypes.Unassigned;
-        workOrder.ArrivalAt = technicianAssignments.Where(x => x.ArrivalAt.HasValue).Select(x => x.ArrivalAt).OrderBy(x => x).FirstOrDefault();
-        workOrder.DepartureAt = technicianAssignments.Where(x => x.DepartureAt.HasValue).Select(x => x.DepartureAt).OrderByDescending(x => x).FirstOrDefault();
 
         var hasAssignments = assignmentGroupId.HasValue || technicianAssignments.Count > 0;
         var normalizedStatus = WorkOrderStatuses.Normalize(workOrder.Status);

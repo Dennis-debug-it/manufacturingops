@@ -94,93 +94,6 @@ public sealed class SettingsController(
         return Ok(await MapCompanyAsync(tenant, cancellationToken));
     }
 
-    [HttpGet("email-intake")]
-    public async Task<ActionResult<EmailIntakeSettingsResponse>> GetEmailIntake(CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
-        return Ok(MapEmailIntake(settings));
-    }
-
-    [HttpPut("email-intake")]
-    public async Task<ActionResult<EmailIntakeSettingsResponse>> UpdateEmailIntake([FromBody] EmailIntakeSettingsRequest request, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        ValidateEmailIntakeRequest(request);
-
-        var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
-        await ApplyEmailIntakeSettingsAsync(settings, request, cancellationToken);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        await AuditSettingsChangeAsync("Email intake updated", nameof(EmailIntakeSetting), settings.Id, cancellationToken);
-        return Ok(MapEmailIntake(settings));
-    }
-
-    /// <summary>Signs in to the mailbox and opens the inbox, so "it works" means intake can really read it.</summary>
-    [HttpPost("email-intake/test-connection")]
-    public async Task<ActionResult<EmailIntakeTestResponse>> TestEmailIntakeConnection(
-        [FromBody] EmailIntakeTestRequest request,
-        [FromServices] IEmailIntakeMailbox mailbox,
-        CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
-        var host = string.IsNullOrWhiteSpace(request.Host) ? settings.Host : request.Host.Trim();
-        var port = request.Port > 0 ? request.Port : settings.Port;
-        var username = string.IsNullOrWhiteSpace(request.Username) ? settings.Username : request.Username.Trim();
-        var password = string.IsNullOrEmpty(request.Password) ? secretEncryptionService.Decrypt(settings.EncryptedPassword) : request.Password;
-
-        if (string.IsNullOrWhiteSpace(host) || port <= 0 || string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
-        {
-            throw new BusinessRuleException("Mail server, port, username and password are required to test the mailbox.");
-        }
-
-        try
-        {
-            await mailbox.VerifyAsync(new EmailIntakeMailboxSettings(host, port, request.UseSsl ?? settings.UseSsl, username, password), cancellationToken);
-            settings.LastCheckedAt = DateTime.UtcNow;
-            settings.IsConnectionHealthy = true;
-            settings.LastError = null;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return Ok(new EmailIntakeTestResponse(true, settings.LastCheckedAt, null));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            settings.LastCheckedAt = DateTime.UtcNow;
-            settings.IsConnectionHealthy = false;
-            settings.LastError = ex.Message.Length > 2000 ? ex.Message[..2000] : ex.Message;
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return Ok(new EmailIntakeTestResponse(false, settings.LastCheckedAt, settings.LastError));
-        }
-    }
-
-    /// <summary>Reads the mailbox now instead of waiting for the next minute.</summary>
-    [HttpPost("email-intake/check-now")]
-    public async Task<ActionResult<EmailIntakeCheckResponse>> CheckEmailIntakeNow([FromServices] IEmailIntakeService intake, CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        var handled = await intake.PollTenantAsync(TenantId, cancellationToken);
-        dbContext.ChangeTracker.Clear();
-        var settings = await GetOrCreateEmailIntakeSettingAsync(cancellationToken);
-        return Ok(new EmailIntakeCheckResponse(handled, settings.LastCheckedAt, settings.IsConnectionHealthy, settings.LastError));
-    }
-
-    /// <summary>The latest emails intake read and what happened to each.</summary>
-    [HttpGet("email-intake/messages")]
-    public async Task<ActionResult<IReadOnlyCollection<EmailIntakeMessageResponse>>> GetEmailIntakeMessages(CancellationToken cancellationToken)
-    {
-        userAccessService.EnsureAdmin();
-        var items = await dbContext.EmailIntakeMessages.AsNoTracking()
-            .Where(x => x.TenantId == TenantId)
-            .OrderByDescending(x => x.CreatedAt)
-            .Take(50)
-            .Select(x => new EmailIntakeMessageResponse(
-                x.Id, x.ReceivedAt, x.FromAddress, x.FromName, x.Subject, x.Outcome, x.Detail,
-                x.WorkOrderId, x.WorkOrder != null ? x.WorkOrder.WorkOrderNumber : null, x.AutoReplySent))
-            .ToListAsync(cancellationToken);
-        return Ok(items);
-    }
-
     [HttpGet("monitoring-webhooks")]
     public async Task<ActionResult<IReadOnlyCollection<MonitoringWebhookIntegrationResponse>>> GetMonitoringWebhooks(CancellationToken cancellationToken)
     {
@@ -464,73 +377,11 @@ public sealed class SettingsController(
         await dbContext.Tenants.SingleOrDefaultAsync(x => x.Id == TenantId, cancellationToken)
         ?? throw new NotFoundException("Tenant settings were not found.");
 
-    private Task<EmailIntakeSetting> GetOrCreateEmailIntakeSettingAsync(CancellationToken cancellationToken) =>
-        dbContext.GetOrCreateAsync(
-            dbContext.EmailIntakeSettings.Where(x => x.TenantId == TenantId),
-            () => new EmailIntakeSetting
-            {
-                TenantId = TenantId,
-                MailboxProvider = "IMAP",
-                Host = string.Empty,
-                Port = 993,
-                UseSsl = true,
-                DefaultPriority = "Medium",
-                CreateWorkOrderFromUnknownSender = false
-            },
-            cancellationToken);
-
-    private static void ValidateEmailIntakeRequest(EmailIntakeSettingsRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.MailboxProvider))
-        {
-            throw new BusinessRuleException("Mailbox provider is required.");
-        }
-
-        if (request.IsEnabled && (string.IsNullOrWhiteSpace(request.Host) || request.Port <= 0))
-        {
-            throw new BusinessRuleException("Host and port are required when email intake is enabled.");
-        }
-    }
-
-    private async Task ApplyEmailIntakeSettingsAsync(EmailIntakeSetting settings, EmailIntakeSettingsRequest request, CancellationToken cancellationToken)
-    {
-        // A different mailbox starts reading afresh from its newest email.
-        if (!string.Equals(settings.Host, NormalizeOptional(request.Host) ?? string.Empty, StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(settings.Username, NormalizeOptional(request.Username), StringComparison.OrdinalIgnoreCase))
-        {
-            settings.ImapUidValidity = null;
-            settings.ImapLastUid = null;
-        }
-
-        settings.IsEnabled = request.IsEnabled;
-        settings.IntakeEmailAddress = NormalizeOptional(request.IntakeEmailAddress);
-        settings.MailboxProvider = request.MailboxProvider.Trim();
-        settings.Host = NormalizeOptional(request.Host) ?? string.Empty;
-        settings.Port = request.Port;
-        settings.UseSsl = request.UseSsl;
-        settings.Username = NormalizeOptional(request.Username);
-        settings.DefaultClientId = await ValidateClientIdAsync(request.DefaultClientId, cancellationToken);
-        settings.DefaultBranchId = await ValidateBranchIdAsync(request.DefaultBranchId, cancellationToken);
-        settings.DefaultAssignmentGroupId = await ValidateAssignmentGroupIdAsync(request.DefaultAssignmentGroupId, cancellationToken);
-        settings.DefaultPriority = string.IsNullOrWhiteSpace(request.DefaultPriority) ? "Medium" : request.DefaultPriority.Trim();
-        settings.CreateWorkOrderFromUnknownSender = request.CreateWorkOrderFromUnknownSender;
-        settings.SubjectParsingRules = NormalizeOptional(request.SubjectParsingRules);
-        settings.AllowedSenderDomains = NormalizeOptional(request.AllowedSenderDomains);
-        settings.AutoReplyEnabled = request.AutoReplyEnabled ?? settings.AutoReplyEnabled;
-
-        var encryptedPassword = secretEncryptionService.Encrypt(request.Password);
-        if (!string.IsNullOrWhiteSpace(encryptedPassword))
-        {
-            settings.EncryptedPassword = encryptedPassword;
-        }
-    }
-
     private async Task ApplyMonitoringWebhookAsync(MonitoringWebhookIntegration item, UpsertMonitoringWebhookIntegrationRequest request, CancellationToken cancellationToken)
     {
         item.Name = request.Name.Trim();
         item.ToolType = request.ToolType.Trim();
         item.IsActive = request.IsActive;
-        item.DefaultClientId = await ValidateClientIdAsync(request.DefaultClientId, cancellationToken);
         item.DefaultAssetId = await ValidateAssetIdAsync(request.DefaultAssetId, cancellationToken);
         item.DefaultBranchId = await ValidateBranchIdAsync(request.DefaultBranchId, cancellationToken);
         item.DefaultAssignmentGroupId = await ValidateAssignmentGroupIdAsync(request.DefaultAssignmentGroupId, cancellationToken);
@@ -545,22 +396,6 @@ public sealed class SettingsController(
         {
             throw new BusinessRuleException("Name and tool type are required.");
         }
-    }
-
-    private async Task<Guid?> ValidateClientIdAsync(Guid? clientId, CancellationToken cancellationToken)
-    {
-        if (!clientId.HasValue)
-        {
-            return null;
-        }
-
-        var exists = await dbContext.Clients.AnyAsync(x => x.TenantId == TenantId && x.IsActive && x.Id == clientId.Value, cancellationToken);
-        if (!exists)
-        {
-            throw new BusinessRuleException("Default client was not found for this tenant.");
-        }
-
-        return clientId.Value;
     }
 
     private async Task<Guid?> ValidateAssetIdAsync(Guid? assetId, CancellationToken cancellationToken)
@@ -752,31 +587,6 @@ public sealed class SettingsController(
             tenant.ShowPoweredByEcosys,
             tenant.Slug);
 
-    private static EmailIntakeSettingsResponse MapEmailIntake(EmailIntakeSetting settings) =>
-        new(
-            settings.Id,
-            settings.TenantId,
-            settings.IsEnabled,
-            settings.IntakeEmailAddress,
-            settings.MailboxProvider,
-            settings.Host,
-            settings.Port,
-            settings.UseSsl,
-            settings.Username,
-            !string.IsNullOrWhiteSpace(settings.EncryptedPassword),
-            settings.DefaultClientId,
-            settings.DefaultBranchId,
-            settings.DefaultAssignmentGroupId,
-            settings.DefaultPriority,
-            settings.CreateWorkOrderFromUnknownSender,
-            settings.SubjectParsingRules,
-            settings.AllowedSenderDomains,
-            settings.LastCheckedAt,
-            settings.IsConnectionHealthy,
-            settings.LastError,
-            settings.AutoReplyEnabled,
-            settings.ImapLastUid.HasValue);
-
     private static MonitoringWebhookIntegrationResponse MapMonitoringWebhook(MonitoringWebhookIntegration item, string? generatedSecret = null) =>
         new(
             item.Id,
@@ -785,7 +595,6 @@ public sealed class SettingsController(
             item.ToolType,
             item.EndpointSlug,
             item.IsActive,
-            item.DefaultClientId,
             item.DefaultAssetId,
             item.DefaultBranchId,
             item.DefaultAssignmentGroupId,

@@ -25,7 +25,7 @@ internal sealed class SlaService(
 
     public async Task ApplyDefinitionAsync(WorkOrder workOrder, CancellationToken cancellationToken = default)
     {
-        var rule = await ResolveRuleAsync(workOrder.TenantId, workOrder.ClientId ?? Guid.Empty, workOrder.Priority, cancellationToken);
+        var rule = await ResolveRuleAsync(workOrder.TenantId, workOrder.Priority, cancellationToken);
 
         if (rule is null)
         {
@@ -41,25 +41,12 @@ internal sealed class SlaService(
         workOrder.SlaResolutionBreachedAt = null;
     }
 
-    private async Task<SlaRule?> ResolveRuleAsync(Guid tenantId, Guid clientId, string priority, CancellationToken cancellationToken)
+    private async Task<SlaRule?> ResolveRuleAsync(Guid tenantId, string priority, CancellationToken cancellationToken)
     {
-        var client = await dbContext.Clients
-            .Include(x => x.SlaDefinition)
-            .ThenInclude(x => x!.Rules)
+        var definition = await dbContext.SlaDefinitions
+            .Include(x => x.Rules)
             .ThenInclude(x => x.Escalations)
-            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.Id == clientId, cancellationToken);
-
-        var definition = client?.SlaDefinitionId is not null && client.SlaDefinition is { IsActive: true }
-            ? client.SlaDefinition
-            : null;
-
-        if (definition is null)
-        {
-            definition = await dbContext.SlaDefinitions
-                .Include(x => x.Rules)
-                .ThenInclude(x => x.Escalations)
-                .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.IsDefault && x.IsActive, cancellationToken);
-        }
+            .SingleOrDefaultAsync(x => x.TenantId == tenantId && x.IsDefault && x.IsActive, cancellationToken);
 
         return definition?.Rules.FirstOrDefault(x => MatchesPriority(x.Priority, priority));
     }
@@ -67,7 +54,6 @@ internal sealed class SlaService(
     public async Task<bool> RefreshWorkOrderAsync(Guid workOrderId, DateTime utcNow, CancellationToken cancellationToken = default)
     {
         var workOrder = await dbContext.WorkOrders
-            .Include(x => x.Client)
             .Include(x => x.Assignments)
             .Include(x => x.TechnicianAssignments)
             .SingleOrDefaultAsync(x => x.Id == workOrderId, cancellationToken);
@@ -154,7 +140,7 @@ internal sealed class SlaService(
         var recordChanged = false;
         if (record is null)
         {
-            var rule = await ResolveRuleAsync(workOrder.TenantId, workOrder.ClientId ?? Guid.Empty, workOrder.Priority, cancellationToken);
+            var rule = await ResolveRuleAsync(workOrder.TenantId, workOrder.Priority, cancellationToken);
             record = new SlaRecord { TenantId = workOrder.TenantId, WorkOrderId = workOrder.Id, SlaRuleId = rule?.Id };
             dbContext.SlaRecords.Add(record);
             record.SlaRule = rule;

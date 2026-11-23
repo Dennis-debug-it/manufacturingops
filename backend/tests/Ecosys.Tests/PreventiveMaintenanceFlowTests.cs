@@ -19,7 +19,7 @@ public sealed class PreventiveMaintenanceFlowTests
         parent.Status = WorkOrderStatuses.Completed;
         var subtask = new WorkOrder
         {
-            TenantId = fixture.TenantId, ClientId = parent.ClientId, ParentWorkOrderId = parent.Id,
+            TenantId = fixture.TenantId, ParentWorkOrderId = parent.Id,
             WorkOrderNumber = "WO-SUB-1", Title = "Replace filter", Priority = "Low", Status = WorkOrderStatuses.Assigned,
         };
         dbContext.WorkOrders.Add(subtask);
@@ -173,7 +173,6 @@ public sealed class PreventiveMaintenanceFlowTests
         var asset = new Asset
         {
             TenantId = tenant.Id,
-            ClientId = Guid.NewGuid(),
             AssetName = "Generator 01",
             AssetCode = $"GEN-{Guid.NewGuid():N}".Substring(0, 10),
             Status = "Active",
@@ -196,7 +195,6 @@ public sealed class PreventiveMaintenanceFlowTests
         var workOrder = new WorkOrder
         {
             TenantId = tenant.Id,
-            ClientId = asset.ClientId!.Value,
             AssetId = asset.Id,
             WorkOrderNumber = "WO-PM-001",
             Title = "PM - Generator 01",
@@ -206,7 +204,6 @@ public sealed class PreventiveMaintenanceFlowTests
             IsPreventiveMaintenance = true,
             PreventiveMaintenancePlanId = plan.Id,
             WorkStartedAt = new DateTime(2026, 5, 15, 8, 30, 0, DateTimeKind.Utc),
-            ArrivalAt = new DateTime(2026, 5, 15, 8, 45, 0, DateTimeKind.Utc),
             CreatedAt = new DateTime(2026, 5, 14, 8, 0, 0, DateTimeKind.Utc)
         };
 

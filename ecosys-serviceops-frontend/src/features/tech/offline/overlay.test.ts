@@ -8,13 +8,11 @@ const job = {
   id: 'wo-1',
   workOrderNumber: 'WO-1',
   status: 'Assigned',
-  arrivalAt: null,
-  departureAt: null,
   workStartedAt: null,
   completedAt: null,
   workDoneNotes: null,
   holdReason: null,
-  technicianAssignments: [{ id: 'a1', technicianId: 'tech-1', technicianName: 'Moses', isLead: true, status: 'Pending', assignedAt: '2026-10-08T07:00:00Z', acceptedAt: null, arrivalAt: null, departureAt: null, notes: null }],
+  technicianAssignments: [{ id: 'a1', technicianId: 'tech-1', technicianName: 'Moses', isLead: true, status: 'Pending', assignedAt: '2026-10-08T07:00:00Z', acceptedAt: null, notes: null }],
   checklistItems: [{ id: 'c1', questionText: 'Follow-up required', responseValue: null, remarks: null, isCompleted: false, completedAt: null }],
 } as unknown as WorkOrder
 

@@ -98,13 +98,6 @@ public sealed class PlatformSupportToolsController(
         var tenant = await LoadTenantAsync(tenantId, cancellationToken);
         var counts = await ComputeCountsAsync(tenantId, cancellationToken);
 
-        var clients = await dbContext.Clients.AsNoTracking()
-            .Where(x => x.TenantId == tenantId)
-            .OrderBy(x => x.ClientName)
-            .Select(x => new { x.Id, x.ClientName, x.Email, x.Phone })
-            .Take(1000)
-            .ToListAsync(cancellationToken);
-
         var workOrders = await dbContext.WorkOrders.AsNoTracking()
             .Where(x => x.TenantId == tenantId)
             .OrderByDescending(x => x.CreatedAt)
@@ -117,7 +110,6 @@ public sealed class PlatformSupportToolsController(
             exportedAt = DateTime.UtcNow,
             tenant = new { tenant.Id, tenant.Name, tenant.CompanyName, tenant.Email, tenant.Country, tenant.IsActive },
             counts,
-            clients,
             workOrders,
         };
 
@@ -129,10 +121,7 @@ public sealed class PlatformSupportToolsController(
 
     private async Task<TenantRecordCounts> ComputeCountsAsync(Guid tenantId, CancellationToken cancellationToken) => new(
         await dbContext.WorkOrders.CountAsync(x => x.TenantId == tenantId, cancellationToken),
-        await dbContext.Clients.CountAsync(x => x.TenantId == tenantId, cancellationToken),
         await dbContext.Assets.CountAsync(x => x.TenantId == tenantId, cancellationToken),
-        0,
-        await dbContext.Contracts.CountAsync(x => x.TenantId == tenantId, cancellationToken),
         await dbContext.Users.CountAsync(x => x.TenantId == tenantId, cancellationToken));
 
     private async Task<Tenant> LoadTenantAsync(Guid tenantId, CancellationToken cancellationToken) =>
@@ -144,5 +133,5 @@ public sealed class PlatformSupportToolsController(
 
 public sealed record SupportActionResult(bool Success, string Message);
 public sealed record ResetNumberingRequest([Required] string DocumentType, long? NextNumber, string? Reason = null);
-public sealed record TenantRecordCounts(int WorkOrders, int Clients, int Assets, int Invoices, int Contracts, int Users);
+public sealed record TenantRecordCounts(int WorkOrders, int Assets, int Users);
 public sealed record TenantReindexResult(bool Success, DateTime RecomputedAt, TenantRecordCounts Counts);

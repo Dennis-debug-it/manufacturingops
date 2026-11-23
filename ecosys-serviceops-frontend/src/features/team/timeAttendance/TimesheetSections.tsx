@@ -1,56 +1,12 @@
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { AlertTriangle, Briefcase } from 'lucide-react'
-import { Link } from 'react-router-dom'
-import { formatDate, formatDateTime } from '../../../shared/utils/dates'
+import { AlertTriangle } from 'lucide-react'
+import { formatDateTime } from '../../../shared/utils/dates'
 import { cn } from '../../../shared/utils/cn'
-import { useUpdateAttendanceEntry, type TimesheetClockEntry, type TimesheetJobEntry } from './api'
+import { useUpdateAttendanceEntry, type TimesheetClockEntry } from './api'
 
 const cardClass = 'rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm'
 const fieldClass = 'h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)]'
-
-export function formatMinutes(minutes: number) {
-  const hours = Math.floor(minutes / 60)
-  const rest = minutes % 60
-  return hours > 0 ? `${hours}h ${String(rest).padStart(2, '0')}m` : `${rest}m`
-}
-
-/** Where the clocked hours went: each day's site visits, grouped by job. */
-export function JobBreakdown({ jobs, linkJobs }: { jobs: TimesheetJobEntry[]; linkJobs: string | null }) {
-  const days = [...new Set(jobs.map((job) => job.date))]
-  return (
-    <section className={cardClass} aria-label="Time by job">
-      <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900"><Briefcase className="h-4 w-4 text-slate-500" />Time by job</h2>
-      {jobs.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500">No site visits recorded in this period.</p>
-      ) : (
-        <div className="mt-3 space-y-3">
-          {days.map((day) => (
-            <div key={day}>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{formatDate(day)}</p>
-              <ul className="mt-1 divide-y divide-slate-100">
-                {jobs.filter((job) => job.date === day).map((job) => (
-                  <li key={`${job.date}-${job.workOrderId}`} className="flex items-start justify-between gap-3 py-2 text-sm">
-                    <div className="min-w-0">
-                      {linkJobs ? (
-                        <Link to={`${linkJobs}${job.workOrderId}`} className="font-medium text-slate-900 underline decoration-slate-300 underline-offset-4">{job.workOrderNumber}</Link>
-                      ) : <span className="font-medium text-slate-900">{job.workOrderNumber}</span>}
-                      <p className="truncate text-xs text-slate-500">{job.title}{job.visits > 1 ? ` · ${job.visits} visits` : ''}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="font-medium text-slate-900">{formatMinutes(job.onSiteMinutes)} on site{job.inProgress ? ' so far' : ''}</p>
-                      <p className="text-xs text-slate-500">{formatMinutes(job.travelMinutes)} travel</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  )
-}
 
 /** `datetime-local` works in the browser's time zone; the API speaks UTC. */
 function toLocalInput(iso: string) {

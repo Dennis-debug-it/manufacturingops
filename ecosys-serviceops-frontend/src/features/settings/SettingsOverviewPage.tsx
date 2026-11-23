@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom'
 import {
-  Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock, Inbox,
+  Building2, Palette, FileText, Mail, Hash, ClipboardList, Boxes, Clock,
   Radio, MessageCircle, ShieldCheck, Bell, Plug, LineChart,
   UserCircle, ScrollText, GitBranch, Timer, Workflow, AlertTriangle, Rocket, LayoutDashboard,
 } from 'lucide-react'
 import { PageHeader } from '../../shared/components/PageHeader'
 import { useEntitlements } from '../../shared/hooks/useEntitlements'
-import { EMAIL_INTAKE_ENABLED, WHATSAPP_ENABLED } from '../../shared/config/features'
+import { WHATSAPP_ENABLED } from '../../shared/config/features'
 
 interface SettingsGroup {
   title: string
@@ -27,7 +27,6 @@ const groups: SettingsGroup[] = [
     title: 'Email',
     items: [
       { to: '/settings/email', label: 'Email', description: 'Who your emails come from and where replies go.', icon: Mail },
-      ...(EMAIL_INTAKE_ENABLED ? [{ to: '/settings/email-intake', label: 'Email Intake & Parsing', description: 'Auto-create work orders from incoming email.', icon: Inbox }] : []),
       { to: '/settings/email-templates', label: 'Email Templates', description: 'Transactional email content.', icon: Mail },
       { to: '/settings/email/delivery-logs', label: 'Delivery Logs', description: 'Queued, sent, failed, and retried email deliveries.', icon: ScrollText },
     ],

@@ -74,7 +74,7 @@ export function useWhatsAppOptInMutations(source: WhatsAppOptInApi) {
 export interface WhatsAppKeySetting {
   key: string
   label: string
-  audience: 'Staff' | 'Client'
+  audience: 'Staff'
   templateName: string
   allowed: boolean
   isDefault: boolean
@@ -139,40 +139,3 @@ export function useWhatsAppOutbox(status: string) {
   })
 }
 
-// ── Client contact consent (office) ──────────────────────────────────────────
-
-export interface ContactWhatsApp {
-  contactId: string
-  number: string | null
-  receivesWhatsApp: boolean
-  consentAt: string | null
-  consentMethod: string | null
-  consentRecordedBy: string | null
-  verifiedAt: string | null
-  blockedByStop: boolean
-}
-
-export interface RecordContactWhatsAppPayload {
-  phoneNumber: string | null
-  receivesWhatsApp: boolean
-  consentMethod: string | null
-}
-
-export function useContactWhatsApp(clientId: string, contactId: string, enabled: boolean) {
-  return useQuery({
-    queryKey: ['clients', clientId, 'portal-contacts', contactId, 'whatsapp'],
-    queryFn: () => api.get<ContactWhatsApp>(endpoints.whatsAppNotifications.contactConsent(clientId, contactId)),
-    enabled,
-  })
-}
-
-export function useRecordContactWhatsApp(clientId: string, contactId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (payload: RecordContactWhatsAppPayload) => api.put<ContactWhatsApp>(endpoints.whatsAppNotifications.contactConsent(clientId, contactId), payload),
-    onSuccess: (data) => {
-      queryClient.setQueryData(['clients', clientId, 'portal-contacts', contactId, 'whatsapp'], data)
-      void queryClient.invalidateQueries({ queryKey: ['clients', clientId, 'portal-contacts'] })
-    },
-  })
-}

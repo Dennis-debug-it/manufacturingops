@@ -37,10 +37,9 @@ export function RelatedWorkOrdersPanel({ workOrderId }: { workOrderId: string })
     return <Spinner label="Loading related work orders" />
   }
 
-  const sameSite = data?.sameSite ?? []
   const sameAsset = data?.sameAsset ?? []
 
-  if (sameSite.length === 0 && sameAsset.length === 0) {
+  if (sameAsset.length === 0) {
     return null
   }
 
@@ -52,11 +51,6 @@ export function RelatedWorkOrdersPanel({ workOrderId }: { workOrderId: string })
       </div>
 
       <div className="mt-3">
-        <h4 className="text-xs font-medium text-slate-700">Same Site</h4>
-        <RelatedList items={sameSite} />
-      </div>
-
-      <div className="mt-4">
         <h4 className="text-xs font-medium text-slate-700">Same Asset</h4>
         <RelatedList items={sameAsset} />
       </div>

@@ -17,7 +17,6 @@ public static class DashboardDataAreas
 {
     public const string WorkOrders = "work-orders";
     public const string Maintenance = "maintenance";
-    public const string Contracts = "contracts";
     public const string Materials = "materials";
     public const string Activities = "activities";
 
@@ -31,7 +30,6 @@ public static class DashboardDataAreas
         [typeof(WorkOrderTechnicianAssignment)] = WorkOrders,
         [typeof(Technician)] = WorkOrders,
         [typeof(PreventiveMaintenancePlan)] = Maintenance,
-        [typeof(Contract)] = Contracts,
         [typeof(MaterialItem)] = Materials,
         [typeof(BranchMaterialStock)] = Materials,
         [typeof(MaterialIssue)] = Materials,

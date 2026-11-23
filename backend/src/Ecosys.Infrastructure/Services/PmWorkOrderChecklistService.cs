@@ -265,17 +265,7 @@ internal sealed class PmWorkOrderChecklistService(
 
         if (string.Equals(item.InputType, "signature", StringComparison.OrdinalIgnoreCase))
         {
-            if (item.QuestionText.Contains("client", StringComparison.OrdinalIgnoreCase))
-            {
-                return signatureTypes.Contains("Client", StringComparer.OrdinalIgnoreCase);
-            }
-
-            if (item.QuestionText.Contains("technician", StringComparison.OrdinalIgnoreCase))
-            {
-                return signatureTypes.Contains("Technician", StringComparer.OrdinalIgnoreCase);
-            }
-
-            return signatureTypes.Count > 0;
+            return signatureTypes.Contains("Technician", StringComparer.OrdinalIgnoreCase);
         }
 
         return !string.IsNullOrWhiteSpace(item.ResponseValue);

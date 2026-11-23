@@ -6,13 +6,8 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
 {
     public Guid TenantId { get; set; }
     public Guid? BranchId { get; set; }
-    public Guid? ClientId { get; set; }
-    public Guid? SiteId { get; set; }
-    public Guid? SystemId { get; set; }
     public Guid? AssetId { get; set; }
     public Guid? AssignmentGroupId { get; set; }
-    public Guid? ContractId { get; set; }
-    public Guid? RateCardId { get; set; }
     public string AssignmentType { get; set; } = "IndividualTechnician";
     public string WorkOrderNumber { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
@@ -31,8 +26,6 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public DateTime? ScheduledStartAt { get; set; }
     public DateTime? ScheduledEndAt { get; set; }
     public DateTime? WorkStartedAt { get; set; }
-    public DateTime? ArrivalAt { get; set; }
-    public DateTime? DepartureAt { get; set; }
     public string? HoldReason { get; set; }
     public string? HoldNote { get; set; }
     public DateTime? HoldStartedAt { get; set; }
@@ -42,9 +35,6 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public Guid? ClosedByUserId { get; set; }
     public string? WorkDoneNotes { get; set; }
     public string? JobCardNotes { get; set; }
-    public string? AcknowledgedByName { get; set; }
-    public string? AcknowledgementComments { get; set; }
-    public DateTime? AcknowledgementDate { get; set; }
     // Service report lifecycle (report queue): null status = awaiting generation once the WO is completed.
     public string? ReportStatus { get; set; } // Draft | UnderReview | Approved | Sent | Acknowledged
     public string? ReportNumber { get; set; } // SR No
@@ -83,21 +73,8 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public bool SlaResolutionBreached { get; set; }
     public DateTime? SlaResponseBreachedAt { get; set; }
     public DateTime? SlaResolutionBreachedAt { get; set; }
-    public string? BillingModel { get; set; }
-    public string? CoverageStatus { get; set; }
-    public string? PricingStatus { get; set; }
-    public string? AppliedRateSource { get; set; }
     public decimal? EstimatedLabourHours { get; set; }
-    public decimal? EstimatedMaterialCost { get; set; }
-    public decimal? EstimatedCharge { get; set; }
-    public decimal? FinalCharge { get; set; }
-    public string? PricingNotes { get; set; }
-    public string? ContractSnapshotJson { get; set; }
     public string? SlaSnapshotJson { get; set; }
-    public string? PricingSnapshotJson { get; set; }
-    // Client notifications
-    public bool NotifyClient { get; set; } = true;
-    public string? ClientContactEmail { get; set; }
 
     // Repeat visit detection
     public bool IsRepeatVisit { get; set; }
@@ -146,13 +123,8 @@ public sealed class WorkOrder : AuditableEntity, ITenantEntity
     public Tenant? Tenant { get; set; }
     public WorkflowStatus? WorkflowStatus { get; set; }
     public Branch? Branch { get; set; }
-    public Client? Client { get; set; }
-    public Site? Site { get; set; }
-    public OperationalSystem? System { get; set; }
     public Asset? Asset { get; set; }
     public AssignmentGroup? AssignmentGroup { get; set; }
-    public Contract? Contract { get; set; }
-    public ContractRateCard? RateCard { get; set; }
     public Technician? AssignedTechnician { get; set; }
     public Technician? LeadTechnician { get; set; }
     public User? ClosedByUser { get; set; }

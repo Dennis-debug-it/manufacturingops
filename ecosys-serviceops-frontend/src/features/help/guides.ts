@@ -6,7 +6,6 @@ import {
   ClipboardList,
   Clock,
   FileText,
-  Inbox,
   Package,
   Rocket,
   Settings2,
@@ -16,7 +15,6 @@ import {
   Wrench,
 } from 'lucide-react'
 import type { AppRole } from '../../shared/types/auth'
-import { EMAIL_INTAKE_ENABLED } from '../../shared/config/features'
 
 export interface GuideSection {
   title: string
@@ -54,11 +52,10 @@ const gettingStarted: Guide = {
     {
       title: 'First steps',
       steps: [
-        'Go to Settings → Company Profile and fill in your legal name, address and contact details. They appear on quotes, invoices and service reports.',
+        'Go to Settings → Company Profile and fill in your legal name, address and contact details. They appear on service reports and other documents.',
         'Go to Settings → Branding to upload your logo and set your colours.',
-        'Go to Settings → Email to set the sender name and where client replies should go.',
+        'Go to Settings → Email to set the sender name and where replies should go.',
         'Go to Users & Access → Invite User to add your team, choosing each person’s role.',
-        'Open Getting Started (Settings → Getting Started) for quick buttons: Add Customer, Create Work Order, Create Invoice and Invite Team.',
       ],
     },
     {
@@ -70,9 +67,9 @@ const gettingStarted: Guide = {
     {
       title: 'Before your first job',
       steps: [
-        'Add your clients and their sites (Clients → New Client).',
+        'Set up your factories and their sections under Settings → Organisation.',
         'Register the equipment you maintain under Assets, choosing a category so its datasheet fields appear.',
-        'Check Settings → Numbering Rules if you want your own prefixes for work orders, invoices and reports.',
+        'Check Settings → Numbering Rules if you want your own prefixes for work orders and reports.',
       ],
     },
   ],
@@ -142,17 +139,16 @@ const serviceReports: Guide = {
       steps: [
         'Open the work order and go to the Report tab.',
         'Click Edit report to change the Problem reported, Findings and Work done wording. The technician’s own notes are kept; Use original puts a section back.',
-        'Under Photos, untick In report for photos you don’t want the client to see.',
+        'Under Photos, untick In report for photos you don’t want on the report.',
         'Click Download PDF to check how it looks.',
       ],
-      tip: 'Editing an approved report sends it back for approval. Once a report is sent or acknowledged it is locked.',
+      tip: 'Editing an approved report sends it back for approval.',
     },
     {
-      title: 'Approve and send',
+      title: 'Approve',
       steps: [
-        'Reports waiting for review are listed under Work Orders → Report Queue. Filter the list, then Generate, Approve, Send, open the PDF or Download ZIP for several at once.',
-        'Approve the report, then send it: it is emailed to the client’s contact as a PDF.',
-        'Settings → Operational Defaults can send approved reports automatically.',
+        'Reports waiting for review are listed under Work Orders → Report Queue. Filter the list, then Generate, Approve, open the PDF or Download ZIP for several at once.',
+        'Approve the report once it reads right; editing it afterwards sends it back for approval.',
       ],
     },
     {
@@ -247,7 +243,7 @@ const maintenanceTemplates: Guide = {
 const assets: Guide = {
   id: 'assets',
   title: 'Assets & asset categories',
-  summary: 'Register client equipment with datasheet details, and define what each kind of equipment records.',
+  summary: 'Register factory equipment with datasheet details, and define what each kind of equipment records.',
   icon: Boxes,
   path: '/assets',
   pathLabel: 'Assets',
@@ -256,7 +252,7 @@ const assets: Guide = {
       title: 'Add an asset',
       steps: [
         'Go to Assets and click New Asset.',
-        'Choose the client and site.',
+        'Choose where the asset is located.',
         'Pick a Category: its datasheet fields appear (for a diesel generator: make, model, serial number, kVA, fuel type…). Fields marked * are required.',
         'Fill in the name, code (left blank, one is generated), location, warranty and PM frequency, then click Create Asset.',
       ],
@@ -269,45 +265,6 @@ const assets: Guide = {
         'Click Add category, or pick an existing one.',
         'Click Add field to add a datasheet field: label, type (text, number, date, dropdown, long text), unit, and whether it’s required.',
         'Use Switch off to retire a field without losing values already recorded.',
-      ],
-    },
-  ],
-}
-
-const emailIntake: Guide = {
-  id: 'email',
-  title: 'Email & email intake',
-  summary: 'Who your emails come from, turning client emails into work orders, rules and auto-replies.',
-  icon: Inbox,
-  adminOnly: true,
-  path: '/settings/email-intake',
-  pathLabel: 'Email Intake',
-  sections: [
-    {
-      title: 'Your workspace email',
-      steps: [
-        'Settings → Email: set the sender name and the addresses replies should go to (general, finance, operations).',
-        'To send from your own mail server, tick “Send from our own mail server (advanced)”, enter the SMTP details, save, and send a test email.',
-        'Change the wording of any email under Settings → Email Templates.',
-      ],
-    },
-    {
-      title: 'Turn emails into work orders',
-      steps: [
-        'Settings → Email Intake: tick “Turn emails into work orders”.',
-        'Enter the service email address and the IMAP details of that mailbox (server, username, password or app password), then click Test connection and Save Changes.',
-        'The mailbox is read every minute. An email from a known client contact becomes a work order; a reply quoting a work order number is added to that job.',
-        'Choose whether emails from unknown senders are logged under a default client, optionally only from certain domains.',
-        'Recent emails shows what became of each one.',
-      ],
-      tip: 'Auto-replies (request received, added to job, not recognised) can be switched on or off on the same page.',
-    },
-    {
-      title: 'Intake rules',
-      steps: [
-        'On the Email Intake page, add a ready-made rule (urgent = Critical, generator faults, AC not cooling, water leaks, ignore newsletters…) or click New rule.',
-        'Set conditions on the subject, body or sender, and choose what happens: set the priority, work type, team or title, accept a sender for a client, or ignore the email.',
-        'Rules are tried top to bottom and the first match wins. Paste an email under the rules and click Test this email to see which rule applies.',
       ],
     },
   ],
@@ -360,7 +317,7 @@ const maintenance: Guide = {
       title: 'Create a PM schedule',
       steps: [
         'Go to PM Schedules and click New Schedule.',
-        'Asset & Coverage: choose the client, site and asset(s).',
+        'Choose the asset(s) the schedule covers.',
         'Template & Schedule: pick the PM template (the checklist) and the frequency: Monthly, Quarterly, Semi-Annual or Annual, and the start date.',
         'Assignment & WO Settings: choose whether work orders are created automatically (Auto-Schedule) and how far ahead.',
         'Click Create Schedule.',
@@ -505,18 +462,18 @@ const timeAttendance: Guide = {
 const reports: Guide = {
   id: 'reports',
   title: 'Reports and dashboards',
-  summary: 'How the business is doing: work orders, SLAs, maintenance, money, technicians and client satisfaction.',
+  summary: 'How maintenance is going: work orders, SLAs, preventive maintenance and technicians.',
   icon: BarChart3,
   path: '/reports',
   pathLabel: 'Reports',
   sections: [
     {
       title: 'Reports',
-      text: 'Reports has tabs for Work Order, SLA, PM Compliance, Finance, Technician Performance and CSAT (client satisfaction). Pick a date range and filters; Export CSV downloads the figures.',
+      text: 'Reports has tabs for Work Order, SLA, PM Compliance and Technician Performance. Pick a date range and filters; Export CSV downloads the figures.',
     },
     {
       title: 'Executive view',
-      text: 'The Executive View link on the Dashboard shows the headline numbers for operations and finance on one page.',
+      text: 'The Executive View link on the Dashboard shows the headline numbers on one page.',
     },
   ],
 }
@@ -553,7 +510,7 @@ const settings: Guide = {
       title: 'What’s where',
       steps: [
         'Company Profile, Branding and Document Templates: how you appear on documents.',
-        'Email, Email Intake, Email Templates and Delivery Logs: email in and out.',
+        'Email, Email Templates and Delivery Logs: the email the workspace sends.',
         'Numbering Rules, Operational Defaults, PM Templates, Work Order Templates, Asset Categories, SLA Policies, Status Workflows and Escalation Rules: how work runs.',
         'Approval Matrix: who signs off purchase orders.',
         'Sensors, Integrations and Monitoring Intake: data coming in from machines and other systems.',
@@ -576,7 +533,6 @@ export const guides: Guide[] = [
   reports,
   technicianApp,
   maintenanceTemplates,
-  ...(EMAIL_INTAKE_ENABLED ? [emailIntake] : []),
   usersAccess,
   settings,
 ]

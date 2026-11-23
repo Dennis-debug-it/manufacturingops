@@ -889,8 +889,7 @@ public sealed partial class AuthEmailSafetyTests
         var user = await SeedTenantUserAsync(dbContext, tenantId, "change.me@tenant.test", mustChangePassword: true);
         var originalHash = user.PasswordHash;
         var currentSessionId = Guid.NewGuid();
-        dbContext.UserSessions.AddRange(
-            new UserSession
+        dbContext.UserSessions.AddRange(new UserSession
             {
                 Id = currentSessionId,
                 TenantId = tenantId,

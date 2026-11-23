@@ -10,7 +10,6 @@ public sealed class MonitoringWebhookIntegration : AuditableEntity, ITenantEntit
     public string EndpointSlug { get; set; } = string.Empty;
     public string SecretHash { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
-    public Guid? DefaultClientId { get; set; }
     public Guid? DefaultAssetId { get; set; }
     public Guid? DefaultBranchId { get; set; }
     public Guid? DefaultAssignmentGroupId { get; set; }
@@ -22,7 +21,6 @@ public sealed class MonitoringWebhookIntegration : AuditableEntity, ITenantEntit
     public string? LastError { get; set; }
 
     public Tenant? Tenant { get; set; }
-    public Client? DefaultClient { get; set; }
     public Asset? DefaultAsset { get; set; }
     public Branch? DefaultBranch { get; set; }
     public AssignmentGroup? DefaultAssignmentGroup { get; set; }

@@ -28,7 +28,7 @@ import { useTechnicians } from './api'
 import { usePermission } from '../../shared/hooks/usePermission'
 import { TeamTabNav } from './components/TeamTabNav'
 import { TimeAttendanceTabNav } from './components/TimeAttendanceTabNav'
-import { ClockSessions, JobBreakdown } from './timeAttendance/TimesheetSections'
+import { ClockSessions } from './timeAttendance/TimesheetSections'
 
 
 export function LiveAttendancePage() {
@@ -164,10 +164,7 @@ export function TimesheetDetailPage() {
               </tbody>
             </table>
           </div>
-          <div className="grid gap-4 xl:grid-cols-2">
-            <JobBreakdown jobs={data.jobs ?? []} linkJobs="/work-orders/" />
-            <ClockSessions entries={data.entries ?? []} canFix={canManageTime} />
-          </div>
+          <ClockSessions entries={data.entries ?? []} canFix={canManageTime} />
           <div className="rounded-[var(--radius-card)] border border-[var(--glass-border)] bg-[var(--glass-white)] backdrop-blur-[var(--glass-blur-md)] p-4 shadow-sm">
             <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Audit Trail</h2>
             <ul className="mt-4 space-y-3">

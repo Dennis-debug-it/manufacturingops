@@ -119,47 +119,6 @@ public sealed class SecurityHardeningTests
         Assert.Equal("existing.owner@ecosys.test", refreshedUser.Email);
     }
 
-    [Fact]
-    public async Task DevSeed_ReturnsNotFoundOutsideDevelopment()
-    {
-        await using var dbContext = CreateDbContext();
-        var tenant = new Domain.Entities.Tenant
-        {
-            Name = "Acme",
-            Slug = $"acme-{Guid.NewGuid():N}".Substring(0, 12),
-            CompanyName = "Acme Facilities",
-            Email = "ops@acme.test",
-            Country = "Kenya",
-            Status = "Active",
-            LicenseStatus = "Active"
-        };
-        var user = new Domain.Entities.User
-        {
-            TenantId = tenant.Id,
-            FullName = "Alice Admin",
-            Email = $"alice-{Guid.NewGuid():N}@acme.test",
-            PasswordHash = "hash",
-            Role = AppRoles.Admin,
-            IsActive = true,
-            HasAllBranchAccess = true
-        };
-        dbContext.AddRange(tenant, user);
-        await dbContext.SaveChangesAsync();
-
-        var controller = new DevController(
-            dbContext,
-            new FakeTenantContext(tenant.Id, user.Id),
-            new FakeWebHostEnvironment("Production"),
-            new NoOpDocumentNumberingService(),
-            new NoOpPreventiveMaintenancePlanService(),
-            new NoOpStockLedgerService(),
-            new NoOpUserAccessService());
-
-        var result = await controller.Seed(CancellationToken.None);
-
-        Assert.IsType<NotFoundResult>(result.Result);
-    }
-
     private static AppDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

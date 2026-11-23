@@ -22,7 +22,7 @@ public sealed class ReportsController(
     [HttpGet("work-order-performance")]
     public async Task<IActionResult> WorkOrderPerformance(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
-        [FromQuery] Guid? clientId, [FromQuery] Guid? branchId,
+        [FromQuery] Guid? branchId,
         [FromQuery] string? status, [FromQuery] string? priority,
         CancellationToken ct)
     {
@@ -36,7 +36,6 @@ public sealed class ReportsController(
             x.CreatedAt >= start &&
             x.CreatedAt <= end);
 
-        if (clientId.HasValue) query = query.Where(x => x.ClientId == clientId.Value);
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
         if (!string.IsNullOrWhiteSpace(priority)) query = query.Where(x => x.Priority == priority);
         if (scope.RequestedBranchId.HasValue)
@@ -52,8 +51,6 @@ public sealed class ReportsController(
                 x.CompletedAt,
                 x.DueDate,
                 x.IsPreventiveMaintenance,
-                x.ArrivalAt,
-                x.DepartureAt,
                 IsFollowUp = x.FollowUpOfWorkOrderId != null
             })
             .ToListAsync(ct);
@@ -101,7 +98,7 @@ public sealed class ReportsController(
     [HttpGet("work-order-performance/export")]
     public async Task<IActionResult> WorkOrderPerformanceExport(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
-        [FromQuery] Guid? clientId, [FromQuery] Guid? branchId,
+        [FromQuery] Guid? branchId,
         [FromQuery] string? status, [FromQuery] string? priority,
         CancellationToken ct)
     {
@@ -111,12 +108,10 @@ public sealed class ReportsController(
         var scope = await branchAccessService.GetQueryScopeAsync(TenantId, branchId, ct);
 
         var query = dbContext.WorkOrders
-            .Include(x => x.Client)
             .Include(x => x.AssignedTechnician)
             .Include(x => x.FollowUpOfWorkOrder)
             .Where(x => x.TenantId == TenantId && x.CreatedAt >= start && x.CreatedAt <= end);
 
-        if (clientId.HasValue) query = query.Where(x => x.ClientId == clientId.Value);
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
         if (!string.IsNullOrWhiteSpace(priority)) query = query.Where(x => x.Priority == priority);
         if (scope.RequestedBranchId.HasValue)
@@ -125,11 +120,11 @@ public sealed class ReportsController(
         var wos = await query.OrderBy(x => x.CreatedAt).ToListAsync(ct);
 
         var csv = new StringBuilder();
-        csv.AppendLine("WO Number,Title,Client,Priority,Status,Created At,Due Date,Completed At,On Time,PM,Follow-up Of");
+        csv.AppendLine("WO Number,Title,Priority,Status,Created At,Due Date,Completed At,On Time,PM,Follow-up Of");
         foreach (var wo in wos)
         {
             var onTime = wo.CompletedAt.HasValue && wo.DueDate.HasValue ? (wo.CompletedAt <= wo.DueDate ? "Yes" : "No") : "";
-            csv.AppendLine($"\"{Csv.Escape(wo.WorkOrderNumber)}\",\"{Csv.Escape(wo.Title)}\",\"{Csv.Escape(wo.Client?.ClientName)}\",{wo.Priority},{wo.Status},{wo.CreatedAt:yyyy-MM-dd},{wo.DueDate?.ToString("yyyy-MM-dd")},{wo.CompletedAt?.ToString("yyyy-MM-dd")},{onTime},{(wo.IsPreventiveMaintenance ? "Yes" : "No")},\"{Csv.Escape(wo.FollowUpOfWorkOrder?.WorkOrderNumber)}\"");
+            csv.AppendLine($"\"{Csv.Escape(wo.WorkOrderNumber)}\",\"{Csv.Escape(wo.Title)}\",{wo.Priority},{wo.Status},{wo.CreatedAt:yyyy-MM-dd},{wo.DueDate?.ToString("yyyy-MM-dd")},{wo.CompletedAt?.ToString("yyyy-MM-dd")},{onTime},{(wo.IsPreventiveMaintenance ? "Yes" : "No")},\"{Csv.Escape(wo.FollowUpOfWorkOrder?.WorkOrderNumber)}\"");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"wo-performance-{start:yyyyMMdd}-{end:yyyyMMdd}.csv");
@@ -162,11 +157,6 @@ public sealed class ReportsController(
             {
                 var completed = g.Where(x => x.Status == "Completed").ToList();
                 var onTime = completed.Count(x => x.DueDate.HasValue && x.CompletedAt <= x.DueDate);
-                var timeOnSite = completed
-                    .Where(x => x.ArrivalAt.HasValue && x.DepartureAt.HasValue)
-                    .Select(x => (x.DepartureAt!.Value - x.ArrivalAt!.Value).TotalHours)
-                    .DefaultIfEmpty(0)
-                    .Average();
 
                 return new
                 {
@@ -176,7 +166,6 @@ public sealed class ReportsController(
                     Completed = completed.Count,
                     OnTimeCount = onTime,
                     OnTimeRate = completed.Count > 0 ? Math.Round((double)onTime / completed.Count * 100, 1) : 0,
-                    AvgTimeOnSiteHours = Math.Round(timeOnSite, 2),
                     PmJobs = g.Count(x => x.IsPreventiveMaintenance),
                     CorrectiveJobs = g.Count(x => !x.IsPreventiveMaintenance)
                 };
@@ -197,11 +186,11 @@ public sealed class ReportsController(
         var data = result?.Value as dynamic;
 
         var csv = new StringBuilder();
-        csv.AppendLine("Technician,Total Jobs,Completed,On Time Rate %,Avg Time on Site (hrs),PM Jobs,Corrective Jobs");
+        csv.AppendLine("Technician,Total Jobs,Completed,On Time Rate %,PM Jobs,Corrective Jobs");
         if (data?.Technicians is IEnumerable<dynamic> techs)
         {
             foreach (var t in techs)
-                csv.AppendLine($"\"{Csv.Escape((object?)t.Name)}\",{t.TotalJobs},{t.Completed},{t.OnTimeRate},{t.AvgTimeOnSiteHours},{t.PmJobs},{t.CorrectiveJobs}");
+                csv.AppendLine($"\"{Csv.Escape((object?)t.Name)}\",{t.TotalJobs},{t.Completed},{t.OnTimeRate},{t.PmJobs},{t.CorrectiveJobs}");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "technician-productivity.csv");
@@ -210,7 +199,6 @@ public sealed class ReportsController(
     [HttpGet("asset-reliability")]
     public async Task<IActionResult> AssetReliability(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
-        [FromQuery] Guid? clientId, [FromQuery] Guid? siteId,
         [FromQuery] Guid? categoryId,
         CancellationToken ct)
     {
@@ -219,14 +207,10 @@ public sealed class ReportsController(
         var (start, end) = NormalizeDateRange(from, to);
 
         var assetsQuery = dbContext.Assets.Where(x => x.TenantId == TenantId);
-        if (clientId.HasValue) assetsQuery = assetsQuery.Where(x => x.ClientId == clientId.Value);
-        if (siteId.HasValue) assetsQuery = assetsQuery.Where(x => x.SiteId == siteId.Value);
         if (categoryId.HasValue) assetsQuery = assetsQuery.Where(x => x.AssetCategoryId == categoryId.Value);
 
         var assets = await assetsQuery
             .Include(x => x.AssetCategory)
-            .Include(x => x.Client)
-            .Include(x => x.Site)
             .ToListAsync(ct);
 
         var assetIds = assets.Select(a => a.Id).ToList();
@@ -257,8 +241,6 @@ public sealed class ReportsController(
                 a.AssetCode,
                 a.Status,
                 CategoryName = a.AssetCategory?.Name,
-                ClientName = a.Client?.ClientName,
-                SiteName = a.Site?.SiteName,
                 a.LastPmDate,
                 a.NextPmDate,
                 a.WarrantyExpiryDate,
@@ -285,19 +267,18 @@ public sealed class ReportsController(
     [HttpGet("asset-reliability/export")]
     public async Task<IActionResult> AssetReliabilityExport(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
-        [FromQuery] Guid? clientId, [FromQuery] Guid? siteId,
         [FromQuery] Guid? categoryId,
         CancellationToken ct)
     {
-        var result = await AssetReliability(from, to, clientId, siteId, categoryId, ct) as OkObjectResult;
+        var result = await AssetReliability(from, to, categoryId, ct) as OkObjectResult;
         var data = result?.Value as dynamic;
 
         var csv = new StringBuilder();
-        csv.AppendLine("Asset Code,Asset Name,Category,Client,Status,Last PM,Next PM,Warranty Status,Corrective WOs,Follow-up WOs,PM Compliance %,Recurring Fault");
+        csv.AppendLine("Asset Code,Asset Name,Category,Status,Last PM,Next PM,Warranty Status,Corrective WOs,Follow-up WOs,PM Compliance %,Recurring Fault");
         if (data?.Assets is IEnumerable<dynamic> items)
         {
             foreach (var a in items)
-                csv.AppendLine($"\"{Csv.Escape((object?)a.AssetCode)}\",\"{Csv.Escape((object?)a.AssetName)}\",\"{Csv.Escape((object?)a.CategoryName)}\",\"{Csv.Escape((object?)a.ClientName)}\",{a.Status},{a.LastPmDate:yyyy-MM-dd},{a.NextPmDate:yyyy-MM-dd},{a.WarrantyStatus},{a.CorrectiveWos},{a.FollowUpWos},{a.PmCompliance},{(a.IsRecurringFault ? "Yes" : "No")}");
+                csv.AppendLine($"\"{Csv.Escape((object?)a.AssetCode)}\",\"{Csv.Escape((object?)a.AssetName)}\",\"{Csv.Escape((object?)a.CategoryName)}\",{a.Status},{a.LastPmDate:yyyy-MM-dd},{a.NextPmDate:yyyy-MM-dd},{a.WarrantyStatus},{a.CorrectiveWos},{a.FollowUpWos},{a.PmCompliance},{(a.IsRecurringFault ? "Yes" : "No")}");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "asset-reliability.csv");
@@ -306,7 +287,6 @@ public sealed class ReportsController(
     [HttpGet("pm-compliance")]
     public async Task<IActionResult> PmCompliance(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
-        [FromQuery] Guid? clientId, [FromQuery] Guid? siteId,
         [FromQuery] Guid? categoryId,
         CancellationToken ct)
     {
@@ -316,15 +296,9 @@ public sealed class ReportsController(
 
         var plansQuery = dbContext.PreventiveMaintenancePlans
             .Include(x => x.Asset)
-                .ThenInclude(a => a!.Client)
-            .Include(x => x.Asset)
                 .ThenInclude(a => a!.AssetCategory)
             .Where(x => x.TenantId == TenantId && x.Status == "Active");
 
-        if (clientId.HasValue)
-            plansQuery = plansQuery.Where(x => x.Asset != null && x.Asset.ClientId == clientId.Value);
-        if (siteId.HasValue)
-            plansQuery = plansQuery.Where(x => x.SiteId == siteId.Value || (x.Asset != null && x.Asset.SiteId == siteId.Value));
         if (categoryId.HasValue)
             plansQuery = plansQuery.Where(x => x.Asset != null && x.Asset.AssetCategoryId == categoryId.Value);
 
@@ -334,10 +308,6 @@ public sealed class ReportsController(
         var pmWosQuery = dbContext.WorkOrders
             .Where(x => x.TenantId == TenantId && x.IsPreventiveMaintenance && x.DueDate >= start && x.DueDate <= end);
 
-        if (clientId.HasValue)
-            pmWosQuery = pmWosQuery.Where(x => x.ClientId == clientId.Value);
-        if (siteId.HasValue)
-            pmWosQuery = pmWosQuery.Where(x => x.SiteId == siteId.Value);
         if (categoryId.HasValue)
             pmWosQuery = pmWosQuery.Where(x => x.AssetId.HasValue && scopedAssetIds.Contains(x.AssetId.Value));
 
@@ -347,17 +317,6 @@ public sealed class ReportsController(
         var completedOnTime = pmWos.Count(x => x.Status == "Completed" && x.DueDate.HasValue && x.CompletedAt <= x.DueDate);
         var overduePlans = plans.Where(p => p.NextPmDate.HasValue && p.NextPmDate < DateTime.UtcNow).ToList();
 
-        var complianceByClient = pmWos
-            .GroupBy(x => x.ClientId)
-            .Select(g => new
-            {
-                ClientId = g.Key,
-                Due = g.Count(),
-                Completed = g.Count(x => x.Status == "Completed"),
-                ComplianceRate = g.Count() > 0 ? Math.Round((double)g.Count(x => x.Status == "Completed") / g.Count() * 100, 1) : 100.0
-            })
-            .ToList();
-
         return Ok(new
         {
             DateRange = new { From = start, To = end },
@@ -366,13 +325,11 @@ public sealed class ReportsController(
             CompletedOnTime = completedOnTime,
             Overdue = overduePlans.Count,
             ComplianceRate = pmWos.Count > 0 ? Math.Round((double)completedOnTime / pmWos.Count * 100, 1) : 100.0,
-            ByClient = complianceByClient,
             OverduePlans = overduePlans.Select(p => new
             {
                 p.Id,
                 AssetName = p.Asset?.AssetName,
                 AssetCode = p.Asset?.AssetCode,
-                ClientName = p.Asset?.Client?.ClientName,
                 NextPmDate = p.NextPmDate,
                 DaysOverdue = p.NextPmDate.HasValue ? (int)(DateTime.UtcNow - p.NextPmDate.Value).TotalDays : 0
             }).OrderByDescending(x => x.DaysOverdue)
@@ -382,19 +339,18 @@ public sealed class ReportsController(
     [HttpGet("pm-compliance/export")]
     public async Task<IActionResult> PmComplianceExport(
         [FromQuery] DateTime? from, [FromQuery] DateTime? to,
-        [FromQuery] Guid? clientId, [FromQuery] Guid? siteId,
         [FromQuery] Guid? categoryId,
         CancellationToken ct)
     {
-        var result = await PmCompliance(from, to, clientId, siteId, categoryId, ct) as OkObjectResult;
+        var result = await PmCompliance(from, to, categoryId, ct) as OkObjectResult;
         var data = result?.Value as dynamic;
 
         var csv = new StringBuilder();
-        csv.AppendLine("Asset,Asset Code,Client,Next PM Date,Days Overdue");
+        csv.AppendLine("Asset,Asset Code,Next PM Date,Days Overdue");
         if (data?.OverduePlans is IEnumerable<dynamic> items)
         {
             foreach (var p in items)
-                csv.AppendLine($"\"{Csv.Escape((object?)p.AssetName)}\",\"{Csv.Escape((object?)p.AssetCode)}\",\"{Csv.Escape((object?)p.ClientName)}\",{p.NextPmDate:yyyy-MM-dd},{p.DaysOverdue}");
+                csv.AppendLine($"\"{Csv.Escape((object?)p.AssetName)}\",\"{Csv.Escape((object?)p.AssetCode)}\",{p.NextPmDate:yyyy-MM-dd},{p.DaysOverdue}");
         }
 
         return File(Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "pm-compliance.csv");

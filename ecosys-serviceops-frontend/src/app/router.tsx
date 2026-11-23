@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo } from 'react'
-import { EMAIL_INTAKE_ENABLED, WHATSAPP_ENABLED } from '../shared/config/features'
+import { WHATSAPP_ENABLED } from '../shared/config/features'
 import {
   Navigate,
   Outlet,
@@ -119,7 +119,6 @@ import { EmailTemplatesSettingsPage as SettingsEmailTemplatesPageReal } from '..
 import { AuditLogsSettingsPage as SettingsAuditLogsPageReal } from '../features/settings/AuditLogsSettingsPage'
 import { AccountSettingsPage as SettingsAccountPageReal } from '../features/settings/AccountSettingsPage'
 import { DocumentTemplatesSettingsPage as SettingsTemplatesPageReal } from '../features/settings/DocumentTemplatesSettingsPage'
-import { EmailIntakeSettingsPage as SettingsEmailIntakePageReal } from '../features/settings/EmailIntakeSettingsPage'
 import { MonitoringIntakeSettingsPage as SettingsMonitoringIntakePageReal } from '../features/settings/MonitoringIntakeSettingsPage'
 import { SettingsOverviewPage as SettingsOverviewPageReal } from '../features/settings/SettingsOverviewPage'
 import { TimeAttendanceSettingsPage as SettingsTimeAttendancePageReal } from '../features/settings/TimeAttendanceSettingsPage'
@@ -180,7 +179,6 @@ const SettingsNumberingPage = SettingsNumberingPageReal
 const SettingsPmTemplatesPage = SettingsPmTemplatesPageReal
 const SettingsInventoryPage = SettingsInventoryPageReal
 const SettingsTimeAttendancePage = SettingsTimeAttendancePageReal
-const SettingsEmailIntakePage = SettingsEmailIntakePageReal
 const SettingsMonitoringIntakePage = SettingsMonitoringIntakePageReal
 const SettingsWhatsAppPage = SettingsWhatsAppPageReal
 const SettingsNotificationsPage = SettingsNotificationsPageReal
@@ -368,7 +366,6 @@ export function AppRouter() {
       ['/settings/pm-templates/:id', SettingsPmTemplatesPage],
       ['/settings/inventory', SettingsInventoryPage],
       ['/settings/time-attendance', SettingsTimeAttendancePage],
-      ['/settings/email-intake', SettingsEmailIntakePage],
       ['/settings/monitoring', SettingsMonitoringIntakePage],
       ['/settings/whatsapp', SettingsWhatsAppPage],
       ['/settings/whatsapp-reminders', WhatsAppRemindersSettingsPage],
@@ -444,8 +441,7 @@ export function AppRouter() {
 
         <Route element={<ProtectedRoute allowedRoles={tenantRoles}><TenantShellRoute /></ProtectedRoute>}>
           {/* Features switched off in shared/config/features.ts have no routes. */}
-          {tenantRouteComponents.filter(([path]) => (WHATSAPP_ENABLED || !(path.startsWith('/whatsapp') || path.startsWith('/settings/whatsapp')))
-            && (EMAIL_INTAKE_ENABLED || path !== '/settings/email-intake')).map(([path, Component]) => (
+          {tenantRouteComponents.filter(([path]) => WHATSAPP_ENABLED || !(path.startsWith('/whatsapp') || path.startsWith('/settings/whatsapp'))).map(([path, Component]) => (
             <Route key={path} path={path} element={<Component />} />
           ))}
         </Route>

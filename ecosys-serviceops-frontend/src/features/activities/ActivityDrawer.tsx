@@ -12,8 +12,6 @@ import { activityTypeLabels, type ActivityDetail, type ActivityType, type Attend
 export interface ActivityDrawerDefaults {
   entityType?: LinkedEntityType
   entityId?: string
-  /** The linked record's client, so its portal contacts can be invited. */
-  clientId?: string
   date?: string
   title?: string
 }
@@ -31,8 +29,6 @@ interface Draft extends ActivityTimesDraft {
   reminder: string
   organizerUserId: string
   userIds: string[]
-  consultantIds: string[]
-  contactIds: string[]
   externals: External[]
 }
 
@@ -56,8 +52,6 @@ function draftFrom(activity: ActivityDetail | undefined, defaults: ActivityDrawe
       reminder: activity.reminderMinutesBefore?.toString() ?? '',
       organizerUserId: summary.organizerUserId,
       userIds: activity.attendees.filter((x) => x.userId).map((x) => x.userId!),
-      consultantIds: activity.attendees.filter((x) => x.consultantId).map((x) => x.consultantId!),
-      contactIds: activity.attendees.filter((x) => x.clientContactId).map((x) => x.clientContactId!),
       externals: activity.attendees.filter((x) => x.kind === 'External').map((x) => ({ name: x.name === x.email ? '' : x.name, email: x.email ?? '' })),
     }
   }
@@ -65,7 +59,7 @@ function draftFrom(activity: ActivityDetail | undefined, defaults: ActivityDrawe
   return {
     date, endDate: date, startTime: '09:00', endTime: '10:00', allDay: false,
     type: 'Meeting', title: defaults?.title ?? '', location: '', agenda: '', reminder: '30', organizerUserId: userId,
-    userIds: [], consultantIds: [], contactIds: [], externals: [],
+    userIds: [], externals: [],
   }
 }
 
@@ -84,8 +78,7 @@ export function ActivityDrawer({ open, onClose, activity, defaults, onSaved }: {
   const linked = activity?.summary.linkedRecord
   const entityType = linked?.entityType ?? defaults?.entityType ?? null
   const entityId = linked?.entityId ?? defaults?.entityId ?? null
-  const clientId = defaults?.clientId ?? (entityType === 'Client' ? entityId : null)
-  const { data: people } = useActivityPeople(clientId, open)
+  const { data: people } = useActivityPeople(open)
   const save = useSaveActivity()
 
   const staff = useMemo(() => {
@@ -95,17 +88,15 @@ export function ActivityDrawer({ open, onClose, activity, defaults, onSaved }: {
 
   if (!open) return null
 
-  const toggle = (list: 'userIds' | 'consultantIds' | 'contactIds', id: string) =>
-    setDraft((d) => ({ ...d, [list]: d[list].includes(id) ? d[list].filter((x) => x !== id) : [...d[list], id] }))
+  const toggleUser = (id: string) =>
+    setDraft((d) => ({ ...d, userIds: d.userIds.includes(id) ? d.userIds.filter((x) => x !== id) : [...d.userIds, id] }))
 
   const submit = async () => {
     if (!draft.title.trim()) return
     const attendees: AttendeePayload[] = [
-      ...draft.userIds.map((id) => ({ userId: id, consultantId: null, clientContactId: null, externalName: null, externalEmail: null })),
-      ...draft.consultantIds.map((id) => ({ userId: null, consultantId: id, clientContactId: null, externalName: null, externalEmail: null })),
-      ...draft.contactIds.map((id) => ({ userId: null, consultantId: null, clientContactId: id, externalName: null, externalEmail: null })),
+      ...draft.userIds.map((id) => ({ userId: id, externalName: null, externalEmail: null })),
       ...draft.externals.filter((x) => x.name.trim() || x.email.trim())
-        .map((x) => ({ userId: null, consultantId: null, clientContactId: null, externalName: textOrNull(x.name), externalEmail: textOrNull(x.email) })),
+        .map((x) => ({ userId: null, externalName: textOrNull(x.name), externalEmail: textOrNull(x.email) })),
     ]
     try {
       const saved = await save.mutateAsync({
@@ -218,42 +209,13 @@ export function ActivityDrawer({ open, onClose, activity, defaults, onSaved }: {
           <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
             {staff.length === 0 ? <p className="px-1 text-sm text-slate-500">No one matches.</p> : staff.map((x) => (
               <label key={x.id} className="flex min-w-0 items-center gap-2 rounded px-1 py-1 text-sm hover:bg-slate-50">
-                <input type="checkbox" checked={draft.userIds.includes(x.id)} onChange={() => toggle('userIds', x.id)} className="h-4 w-4 shrink-0 rounded border-slate-300" />
+                <input type="checkbox" checked={draft.userIds.includes(x.id)} onChange={() => toggleUser(x.id)} className="h-4 w-4 shrink-0 rounded border-slate-300" />
                 <span className="truncate text-slate-900">{x.name}</span>
                 {x.detail ? <span className="truncate text-xs text-slate-500">{x.detail}</span> : null}
               </label>
             ))}
           </div>
         </fieldset>
-
-        {(people?.consultants.length ?? 0) > 0 ? (
-          <fieldset className="space-y-1">
-            <legend className={labelClass}>Consultants</legend>
-            <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2">
-              {people!.consultants.map((x) => (
-                <label key={x.id} className="flex min-w-0 items-center gap-2 px-1 py-1 text-sm">
-                  <input type="checkbox" checked={draft.consultantIds.includes(x.id)} onChange={() => toggle('consultantIds', x.id)} className="h-4 w-4 shrink-0 rounded border-slate-300" />
-                  <span className="truncate">{x.name}</span>
-                  {x.detail ? <span className="truncate text-xs text-slate-500">{x.detail}</span> : null}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        ) : null}
-
-        {(people?.clientContacts.length ?? 0) > 0 ? (
-          <fieldset className="space-y-1">
-            <legend className={labelClass}>Client contacts</legend>
-            <div className="space-y-1 rounded-lg border border-slate-200 p-2">
-              {people!.clientContacts.map((x) => (
-                <label key={x.id} className="flex min-w-0 items-center gap-2 px-1 py-1 text-sm">
-                  <input type="checkbox" checked={draft.contactIds.includes(x.id)} onChange={() => toggle('contactIds', x.id)} className="h-4 w-4 shrink-0 rounded border-slate-300" />
-                  <span className="truncate">{x.name}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        ) : null}
 
         <fieldset className="space-y-2">
           <legend className={labelClass}>Other people</legend>

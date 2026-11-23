@@ -72,7 +72,7 @@ public sealed class OverdueWorkOrderEmailTests
         await using var db = CreateDbContext();
         var (tenant, workOrder) = await SeedAsync(db);
         workOrder.Status = WorkOrderStatuses.Closed;
-        db.WorkOrders.Add(new WorkOrder { TenantId = tenant.Id, ClientId = workOrder.ClientId, WorkOrderNumber = "WO-000002", Title = "Due tomorrow", Status = WorkOrderStatuses.Open, Priority = "Medium", WorkType = "CorrectiveMaintenance", DueDate = Now.AddDays(1) });
+        db.WorkOrders.Add(new WorkOrder { TenantId = tenant.Id, WorkOrderNumber = "WO-000002", Title = "Due tomorrow", Status = WorkOrderStatuses.Open, Priority = "Medium", WorkType = "CorrectiveMaintenance", DueDate = Now.AddDays(1) });
         AddAdmin(db, tenant, "Amina Otieno", "amina@acme.test");
         await db.SaveChangesAsync();
         using var services = CreateServices(db);
@@ -84,14 +84,13 @@ public sealed class OverdueWorkOrderEmailTests
     private static async Task<(Tenant Tenant, WorkOrder WorkOrder)> SeedAsync(AppDbContext db)
     {
         var tenant = new Tenant { Name = "Acme", Slug = $"acme-{Guid.NewGuid():N}"[..12], CompanyName = "Acme Facilities", Email = "ops@acme.test", Country = "Kenya", Status = "Active", LicenseStatus = "Active", IsActive = true };
-        var client = new Client { TenantId = tenant.Id, ClientName = "Nairobi West Hospital", IsActive = true };
-        var asset = new Asset { TenantId = tenant.Id, ClientId = client.Id, AssetName = "Generator 01", AssetCode = "GEN-01", Status = "Active" };
+        var asset = new Asset { TenantId = tenant.Id, AssetName = "Generator 01", AssetCode = "GEN-01", Status = "Active" };
         var workOrder = new WorkOrder
         {
-            TenantId = tenant.Id, ClientId = client.Id, AssetId = asset.Id, WorkOrderNumber = "WO-000001", Title = "Generator failed load test",
+            TenantId = tenant.Id, AssetId = asset.Id, WorkOrderNumber = "WO-000001", Title = "Generator failed load test",
             Status = WorkOrderStatuses.Open, Priority = "High", WorkType = "CorrectiveMaintenance", DueDate = Now.AddDays(-2),
         };
-        db.AddRange(tenant, client, asset, workOrder);
+        db.AddRange(tenant, asset, workOrder);
         await db.SaveChangesAsync();
         return (tenant, workOrder);
     }

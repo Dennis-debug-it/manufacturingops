@@ -177,8 +177,7 @@ public sealed class RunningCheckTests
         var elsewhere = new Asset { TenantId = tenant.Id, AssetName = "Momul dryer", AssetCode = "MML-FBD", OrgNodeId = other.Id, AssetCategoryId = dryerClass.Id };
         db.OrgNodes.AddRange(factory, drying, other);
         db.Assets.AddRange(dryer1, dryer2, elsewhere);
-        db.Meters.AddRange(
-            new Meter { TenantId = tenant.Id, AssetId = dryer1.Id, Name = "Run hours", MeterType = MeterTypes.RunHours, Unit = "h", IsPrimary = true },
+        db.Meters.AddRange(new Meter { TenantId = tenant.Id, AssetId = dryer1.Id, Name = "Run hours", MeterType = MeterTypes.RunHours, Unit = "h", IsPrimary = true },
             new Meter { TenantId = tenant.Id, AssetId = dryer1.Id, Name = "Inlet temperature", MeterType = MeterTypes.Temperature, Unit = "°C", IsCumulative = false });
         await db.SaveChangesAsync();
         await new FailureCodeService(db).EnsureSeededAsync(tenant.Id);

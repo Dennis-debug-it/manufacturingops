@@ -62,9 +62,7 @@ internal sealed class PreventiveMaintenancePlanService(AppDbContext dbContext) :
         existingAutoPlan.BranchId = asset.BranchId;
         existingAutoPlan.LastPmDate = asset.LastPmDate;
         existingAutoPlan.NextPmDate = asset.NextPmDate;
-        // A plan on hold for a lapsed contract stays on hold; the scheduler resumes it when cover returns.
-        if (existingAutoPlan.Status != PmContractGuard.HeldStatus)
-            existingAutoPlan.Status = "Active";
+        existingAutoPlan.Status = "Active";
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }

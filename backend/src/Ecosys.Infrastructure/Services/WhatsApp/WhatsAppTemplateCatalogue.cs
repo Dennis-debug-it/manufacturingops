@@ -3,16 +3,8 @@ namespace Ecosys.Infrastructure.Services;
 public static class WhatsAppAudiences
 {
     public const string Staff = "Staff";
-    public const string Client = "Client";
-    /// <summary>The one-time code that confirms a number; sent to staff or client contacts.</summary>
+    /// <summary>The one-time code that confirms a number; sent to staff.</summary>
     public const string Verification = "Verification";
-}
-
-/// <summary>Keys for client-facing WhatsApp messages (design 4.2, R6). Not dispatcher keys: no bell, no preferences.</summary>
-public static class ClientWhatsAppKeys
-{
-    public const string TechnicianOnTheWay = "technician-on-the-way";
-    public const string WorkOrderCompleted = "work-order-completed";
 }
 
 /// <param name="Name">The template name submitted to Meta.</param>
@@ -39,14 +31,13 @@ public sealed record WhatsAppTemplateDefinition(
 /// The templates Ecosys submits and maintains for the shared number (design 4.2), keyed by notification
 /// key. Keyed by string so keys from other steps (e.g. <c>activity.reminder</c>) map here without a
 /// compile-time dependency: a key only sends once its <see cref="NotificationKeyDescriptor"/> entry lists
-/// <see cref="NotificationChannels.WhatsApp"/> (staff) or a client hook queues it.
+/// <see cref="NotificationChannels.WhatsApp"/> (staff) queues it.
 /// </summary>
 public static class WhatsAppTemplateCatalogue
 {
     public const string VerificationKey = "whatsapp.verification";
     public const string TenantNameParameter = "TenantName";
 
-    private const string ClientFooter = "Sent by Ecosys for the business named above. Reply STOP to stop these messages.";
     private const string StaffFooter = "Ecosys reminders. Reply STOP to stop.";
 
     private static readonly IReadOnlyList<WhatsAppTemplateDefinition> All =
@@ -71,14 +62,6 @@ public static class WhatsAppTemplateCatalogue
             ["WorkOrderNumber", "WorkOrderTitle", "Priority"],
             "*{{1}}*: work order {{2}} \"{{3}}\" ({{4}} priority) has been assigned to you. Open the Ecosys technician app for details.", StaffFooter),
 
-        // ── Clients (R6) ─────────────────────────────────────────────────────
-        new(ClientWhatsAppKeys.TechnicianOnTheWay, "technician_on_the_way", WhatsAppAudiences.Client, "Technician on the way", "UTILITY",
-            ["TechnicianName", "WorkOrderNumber", "TrackingLink"],
-            "*{{1}}*: {{2}} is on the way for job {{3}}. Track the visit here: {{4}}", ClientFooter),
-        new(ClientWhatsAppKeys.WorkOrderCompleted, "work_order_completed", WhatsAppAudiences.Client, "Job completed", "UTILITY",
-            ["WorkOrderNumber", "TechnicianName", "TrackingLink"],
-            "*{{1}}*: job {{2}} has been completed by {{3}}. Details: {{4}}", ClientFooter),
-
         // ── Number confirmation ──────────────────────────────────────────────
         // Meta's authentication templates have fixed text and a copy-code button; the code fills both.
         new(VerificationKey, "ecosys_verification_code", WhatsAppAudiences.Verification, "Number confirmation code", "AUTHENTICATION",
@@ -88,7 +71,7 @@ public static class WhatsAppTemplateCatalogue
 
     /// <summary>What a tenant allows when it has never saved its WhatsApp settings (design 4.2).</summary>
     public static readonly IReadOnlyList<string> DefaultAllowedKeys =
-        ["factory-check.missed", "work-order.assigned", "activity.reminder", ClientWhatsAppKeys.TechnicianOnTheWay];
+        ["factory-check.missed", "work-order.assigned", "activity.reminder"];
 
     public static IReadOnlyList<WhatsAppTemplateDefinition> List() => All;
 
