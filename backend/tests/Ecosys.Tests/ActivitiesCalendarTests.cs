@@ -474,10 +474,6 @@ public sealed class ActivitiesCalendarTests
             return [0x25, 0x50, 0x44, 0x46];
         }
         public byte[] RenderWorkOrderReportPdf(WorkOrderReportPdfModel report) => throw new NotSupportedException();
-        public byte[] RenderInvoicePdf(InvoicePdfModel model) => throw new NotSupportedException();
-        public byte[] RenderQuotationPdf(QuotationPdfModel model) => throw new NotSupportedException();
-        public byte[] RenderReceiptPdf(ReceiptPdfModel model) => throw new NotSupportedException();
-        public byte[] RenderClientStatementPdf(ClientStatementPdfModel model) => throw new NotSupportedException();
         public byte[] RenderPurchaseOrderPdf(PurchaseOrderPdfModel model) => throw new NotSupportedException();
     }
 

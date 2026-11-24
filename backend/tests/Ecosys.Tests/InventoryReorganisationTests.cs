@@ -342,10 +342,6 @@ public sealed class InventoryReorganisationTests
         }
         public byte[] RenderWorkOrderReportPdf(string title, IReadOnlyCollection<string> sections) => throw new NotSupportedException();
         public byte[] RenderWorkOrderReportPdf(WorkOrderReportPdfModel report) => throw new NotSupportedException();
-        public byte[] RenderInvoicePdf(InvoicePdfModel model) => throw new NotSupportedException();
-        public byte[] RenderQuotationPdf(QuotationPdfModel model) => throw new NotSupportedException();
-        public byte[] RenderReceiptPdf(ReceiptPdfModel model) => throw new NotSupportedException();
-        public byte[] RenderClientStatementPdf(ClientStatementPdfModel model) => throw new NotSupportedException();
     }
 
     [Fact]

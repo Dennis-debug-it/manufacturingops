@@ -4,79 +4,8 @@ public interface IPdfRenderer
 {
     byte[] RenderWorkOrderReportPdf(string title, IReadOnlyCollection<string> sections);
     byte[] RenderWorkOrderReportPdf(WorkOrderReportPdfModel report);
-    byte[] RenderInvoicePdf(InvoicePdfModel model);
-    byte[] RenderQuotationPdf(QuotationPdfModel model);
-    byte[] RenderReceiptPdf(ReceiptPdfModel model);
-    byte[] RenderClientStatementPdf(ClientStatementPdfModel model);
     byte[] RenderPurchaseOrderPdf(PurchaseOrderPdfModel model);
 }
-
-public sealed record QuotationPdfModel(
-    string QuoteNumber,
-    string Status,
-    DateTime QuoteDate,
-    DateTime ValidUntil,
-    string? Subject,
-    string ClientName,
-    string? Notes,
-    IReadOnlyList<InvoiceLinePdfModel> Lines,
-    decimal Subtotal,
-    decimal TaxAmount,
-    decimal TotalAmount,
-    string Currency,
-    string CompanyName,
-    string? CompanyAddress,
-    string? CompanyPhone,
-    string PrimaryColor,
-    string FontFamily = "Helvetica",
-    string? FooterText = null,
-    string? WatermarkText = null,
-    string? BankDetails = null,
-    string? PaymentInstructions = null,
-    string? TermsText = null,
-    ReportTemplateConfig? TemplateConfig = null,
-    PdfCompanyDetails? Company = null,
-    PdfContactDetails? ClientContact = null,
-    string? SiteLabel = null
-);
-
-public sealed record InvoicePdfModel(
-    string InvoiceNumber,
-    string Status,
-    DateTime InvoiceDate,
-    DateTime DueDate,
-    string ClientName,
-    string? ClientAddress,
-    string? ClientEmail,
-    string? Notes,
-    IReadOnlyList<InvoiceLinePdfModel> Lines,
-    decimal Subtotal,
-    decimal TaxAmount,
-    decimal TotalAmount,
-    decimal AmountPaid,
-    decimal Balance,
-    string Currency,
-    string CompanyName,
-    string? CompanyAddress,
-    string? CompanyPhone,
-    string? LogoUrl,
-    string PrimaryColor,
-    string FontFamily = "Helvetica",
-    string? FooterText = null,
-    string? WatermarkText = null,
-    string? BankDetails = null,
-    string? PaymentInstructions = null,
-    string? TermsText = null,
-    ReportTemplateConfig? TemplateConfig = null,
-    PdfCompanyDetails? Company = null,
-    PdfContactDetails? ClientContact = null,
-    string? CreditTermsLabel = null,
-    IReadOnlyList<string>? WorkOrderRefs = null,
-    IReadOnlyList<PdfPaymentRow>? Payments = null,
-    decimal? DepositAmount = null,
-    bool DepositPaid = false,
-    bool IsProforma = false
-);
 
 /// <summary>
 /// Seller identity printed in the header of finance documents (tax registration, contact, logo).
@@ -101,15 +30,6 @@ public sealed record PdfContactDetails(
     string? Address = null
 );
 
-/// <summary>A payment applied to a document, listed in its payment history.</summary>
-public sealed record PdfPaymentRow(
-    string PaymentNumber,
-    DateTime PaymentDate,
-    string Method,
-    string? Reference,
-    decimal Amount
-);
-
 public sealed record InvoiceLinePdfModel(
     string Description,
     string ItemType,
@@ -119,77 +39,6 @@ public sealed record InvoiceLinePdfModel(
     decimal LineTotal,
     decimal TaxRate,
     decimal GrandTotal
-);
-
-public sealed record ReceiptPdfModel(
-    string ReceiptNumber,
-    string InvoiceNumber,
-    string ClientName,
-    DateTime PaymentDate,
-    decimal Amount,
-    string Currency,
-    string Method,
-    string? Reference,
-    string CompanyName,
-    string? LogoUrl,
-    string PrimaryColor,
-    string FontFamily = "Helvetica",
-    string? FooterText = null,
-    string? WatermarkText = null,
-    ReportTemplateConfig? TemplateConfig = null,
-    PdfCompanyDetails? Company = null,
-    PdfContactDetails? ClientContact = null,
-    string? CompanyAddress = null,
-    string? CompanyPhone = null,
-    DateTime? InvoiceDate = null,
-    decimal? InvoiceTotal = null,
-    decimal? InvoiceBalanceAfter = null,
-    string? Notes = null
-);
-
-public sealed record ClientStatementPdfModel(
-    string ClientName,
-    string? ClientEmail,
-    string? ClientAddress,
-    DateTime StatementDate,
-    DateTime PeriodFrom,
-    DateTime PeriodTo,
-    decimal OpeningBalance,
-    decimal TotalInvoiced,
-    decimal TotalPaid,
-    decimal ClosingBalance,
-    IReadOnlyList<StatementInvoiceRow> Invoices,
-    IReadOnlyList<StatementPaymentRow> Payments,
-    string CompanyName,
-    string? CompanyAddress,
-    string? CompanyPhone,
-    string? LogoUrl,
-    string PrimaryColor,
-    string FontFamily = "Helvetica",
-    string? FooterText = null,
-    string? WatermarkText = null,
-    ReportTemplateConfig? TemplateConfig = null,
-    PdfCompanyDetails? Company = null,
-    PdfContactDetails? ClientContact = null,
-    string? Currency = null
-);
-
-public sealed record StatementInvoiceRow(
-    string InvoiceNumber,
-    DateTime InvoiceDate,
-    DateTime DueDate,
-    decimal Amount,
-    decimal Paid,
-    decimal Balance,
-    string Status,
-    bool IsOverdue
-);
-
-public sealed record StatementPaymentRow(
-    string PaymentRef,
-    DateTime PaymentDate,
-    string Method,
-    decimal Amount
 );
 
 public sealed record WorkOrderReportPdfModel(

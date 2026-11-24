@@ -89,10 +89,6 @@ interface DocumentDesignsResponse {
 }
 
 const docTypeList: Array<{ id: DocType; label: string }> = [
-  { id: 'invoice', label: 'Invoice' },
-  { id: 'quotation', label: 'Quotation' },
-  { id: 'receipt', label: 'Receipt' },
-  { id: 'statement', label: 'Statement' },
   { id: 'service-report', label: 'Service Report' },
   { id: 'purchase-order', label: 'Purchase Order' },
 ]
@@ -102,7 +98,6 @@ const toggles: Array<{ key: keyof ReportTemplateConfig; label: string }> = [
   { key: 'showCompanyName', label: 'Show Company Name' },
   { key: 'showCompanyContact', label: 'Show Company Contact Info' },
   { key: 'showTaxBreakdown', label: 'Show Tax Breakdown' },
-  { key: 'showBankDetails', label: 'Show Bank Details' },
   { key: 'showSignatureBlock', label: 'Show Signature Block' },
   { key: 'showTerms', label: 'Show Terms & Conditions' },
   { key: 'showStampArea', label: 'Reserve Stamp/Seal Area' },
@@ -112,21 +107,9 @@ const textFields: Array<{ key: keyof ReportTemplateConfig; label: string; area?:
   { key: 'footerText', label: 'Footer Message' },
   { key: 'defaultFooterNote', label: 'Default Footer Note', area: true },
   { key: 'defaultTermsText', label: 'Default Terms Text', area: true },
-  { key: 'quoteTerms', label: 'Quote Terms', area: true },
-  { key: 'invoiceTerms', label: 'Invoice Payment Terms', area: true },
   { key: 'warrantyNote', label: 'Warranty Note', area: true },
-  { key: 'latePaymentNote', label: 'Late Payment Note', area: true },
   { key: 'serviceReportDisclaimer', label: 'Service Report Disclaimer', area: true },
   { key: 'footerLegalText', label: 'Footer Legal Text', area: true },
-]
-
-const bankFields: Array<{ key: keyof ReportTemplateConfig; label: string }> = [
-  { key: 'bankName', label: 'Bank Name' },
-  { key: 'accountName', label: 'Account Name' },
-  { key: 'accountNumber', label: 'Account Number' },
-  { key: 'branch', label: 'Branch' },
-  { key: 'swift', label: 'SWIFT / BIC' },
-  { key: 'paybill', label: 'Paybill / Till Number' },
 ]
 
 const inputClass = 'h-11 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50'
@@ -141,7 +124,7 @@ export function DocumentTemplatesSettingsPage() {
     staleTime: 30_000,
   })
 
-  const [selectedType, setSelectedType] = useState<DocType>('invoice')
+  const [selectedType, setSelectedType] = useState<DocType>('service-report')
   const [config, setConfig] = useState<ReportTemplateConfig | null>(null)
   const [dirty, setDirty] = useState(false)
   const [resetConfirm, setResetConfirm] = useState('')
@@ -516,21 +499,6 @@ export function DocumentTemplatesSettingsPage() {
                   )}
                 </div>
               ))}
-            </div>
-          </Collapsible>
-
-          <Collapsible title="Payment / Bank Details">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {bankFields.map((field) => (
-                <div key={field.key}>
-                  <label className={labelClass}>{field.label}</label>
-                  <input value={(config[field.key] as string) ?? ''} disabled={!canManage} onChange={(e) => set(field.key, (e.target.value || null) as never)} className={inputClass} />
-                </div>
-              ))}
-              <div className="sm:col-span-2">
-                <label className={labelClass}>Payment Instructions</label>
-                <textarea value={config.paymentInstructions ?? ''} disabled={!canManage} onChange={(e) => set('paymentInstructions', e.target.value || null)} rows={2} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[var(--app-primary)] disabled:bg-slate-50" />
-              </div>
             </div>
           </Collapsible>
         </div>

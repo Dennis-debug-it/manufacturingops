@@ -525,7 +525,7 @@ public sealed class AdvancedSettingsController(
     // ── Per-document-type design system ─────────────────────────────────────────
 
     private static readonly string[] DocumentTypeSlugs =
-        ["invoice", "quotation", "receipt", "statement", "service-report", "purchase-order"];
+        ["service-report", "purchase-order"];
 
     [HttpGet("document-designs")]
     public async Task<ActionResult<DocumentDesignsResponse>> GetDocumentDesigns(CancellationToken cancellationToken)

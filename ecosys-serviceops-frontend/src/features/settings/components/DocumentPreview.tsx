@@ -46,13 +46,9 @@ export interface DocumentPreviewConfig {
   defaultCurrency: string
 }
 
-export type DocType = 'invoice' | 'quotation' | 'receipt' | 'statement' | 'service-report' | 'purchase-order'
+export type DocType = 'service-report' | 'purchase-order'
 
 const docTypes: Array<{ id: DocType; label: string }> = [
-  { id: 'invoice', label: 'Invoice' },
-  { id: 'quotation', label: 'Quotation' },
-  { id: 'receipt', label: 'Receipt' },
-  { id: 'statement', label: 'Statement' },
   { id: 'service-report', label: 'Service Report' },
   { id: 'purchase-order', label: 'Purchase Order' },
 ]
@@ -93,7 +89,7 @@ interface DocumentPreviewProps {
 /** In-browser mock of the rendered PDFs, driven live by the template config. */
 export function DocumentPreview({ config, docType: controlledDocType, onDocTypeChange }: DocumentPreviewProps) {
   const { tenant, user } = useAuth()
-  const [internalDocType, setInternalDocType] = useState<DocType>('invoice')
+  const [internalDocType, setInternalDocType] = useState<DocType>('service-report')
   const docType = controlledDocType ?? internalDocType
   const setDocType = (next: DocType) => (onDocTypeChange ? onDocTypeChange(next) : setInternalDocType(next))
   const showSwitcher = controlledDocType === undefined
@@ -112,13 +108,6 @@ export function DocumentPreview({ config, docType: controlledDocType, onDocTypeC
   const cur = (config.defaultCurrency || getActiveCurrency()).toUpperCase()
   const currency = config.currencyDisplay === 'Symbol' ? currencySymbols[cur] ?? cur : cur
 
-  const bankLines = [
-    config.bankName ? `Bank: ${config.bankName}` : null,
-    config.accountName ? `Account Name: ${config.accountName}` : null,
-    config.accountNumber ? `Account No: ${config.accountNumber}` : null,
-    config.paybill ? `Paybill: ${config.paybill}` : null,
-  ].filter(Boolean) as string[]
-
   const logoBlock = config.showLogo ? (
     <div
       className="flex items-center justify-center rounded bg-slate-200 text-[9px] font-semibold text-slate-500"
@@ -129,10 +118,6 @@ export function DocumentPreview({ config, docType: controlledDocType, onDocTypeC
   ) : null
 
   const docTitles: Record<DocType, { title: string; number: string }> = {
-    invoice: { title: 'INVOICE', number: 'INV-000123' },
-    quotation: { title: 'QUOTATION', number: 'QT-000045' },
-    receipt: { title: 'PAYMENT RECEIPT', number: 'REC-000012' },
-    statement: { title: 'STATEMENT OF ACCOUNT', number: 'As at 09 Jul 2026' },
     'service-report': { title: 'SERVICE REPORT', number: 'WO-000078' },
     'purchase-order': { title: 'PURCHASE ORDER', number: 'PO-000078' },
   }
@@ -165,14 +150,6 @@ export function DocumentPreview({ config, docType: controlledDocType, onDocTypeC
 
   const introBlock = config.introText ? (
     <div className="text-[10px] text-slate-600">{config.introText}</div>
-  ) : null
-
-  const bankBlock = config.showBankDetails && (bankLines.length > 0 || config.paymentInstructions) ? (
-    <div className="rounded border border-slate-200 p-2 text-[10px]">
-      <div className="font-semibold" style={{ color: primary }}>Payment Details</div>
-      {bankLines.map((line) => <div key={line} className="text-slate-600">{line}</div>)}
-      {config.paymentInstructions ? <div className="mt-0.5 text-slate-500">{config.paymentInstructions}</div> : null}
-    </div>
   ) : null
 
   const termsBlock = (terms: string | null) =>
@@ -259,46 +236,6 @@ export function DocumentPreview({ config, docType: controlledDocType, onDocTypeC
     </div>
   )
 
-  const partyStrip = (leftLabel: string, rightRows: Array<[string, string, boolean?]>) => (
-    <div className={`grid grid-cols-2 ${compact ? 'gap-2' : 'gap-3'} text-[10px]`}>
-      <div className="rounded border border-slate-200 p-2">
-        <div className="font-semibold text-slate-400">{leftLabel}</div>
-        <div className="mt-0.5 font-semibold text-slate-800">Nairobi Hospital</div>
-        <div className="text-slate-500">accounts@client.co.ke</div>
-      </div>
-      <div className="rounded border border-slate-200 p-2 text-slate-600">
-        {rightRows.map(([label, value, highlight]) => (
-          <div key={label} className="flex justify-between">
-            <span className="text-slate-400">{label}</span>
-            <span className={highlight ? 'font-semibold' : ''} style={highlight ? { color: primary } : undefined}>{value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-
-  const invoiceBody = (
-    <>
-      {partyStrip('BILL TO', [['Invoice Date', '08 Jul 2026'], ['Due Date', '07 Aug 2026'], ['Currency', cur]])}
-      {linesTable()}
-      {totals('Balance Due')}
-      {bankBlock}
-      {termsBlock(config.invoiceTerms || config.defaultTermsText)}
-      {signatureBlock}
-    </>
-  )
-
-  const quotationBody = (
-    <>
-      {partyStrip('PREPARED FOR', [['Quote Date', '08 Jul 2026'], ['Valid Until', '07 Aug 2026', true], ['Currency', cur]])}
-      {linesTable()}
-      {totals('Total')}
-      {bankBlock}
-      {termsBlock(config.quoteTerms || config.defaultTermsText)}
-      {signatureBlock}
-    </>
-  )
-
   const purchaseOrderBody = (
     <>
       <div className={`grid grid-cols-2 ${compact ? 'gap-2' : 'gap-3'} text-[10px]`}>
@@ -317,75 +254,6 @@ export function DocumentPreview({ config, docType: controlledDocType, onDocTypeC
       {totals('Total')}
       {termsBlock(config.defaultTermsText)}
       {signatureBlock}
-    </>
-  )
-
-  const receiptBody = (
-    <>
-      <div className="rounded border border-slate-200 p-3 text-[10px]">
-        {[
-          ['Receipt No.', 'REC-000012'],
-          ['Invoice Ref.', 'INV-000123'],
-          ['Client', 'Nairobi Hospital'],
-          ['Payment Date', '09 Jul 2026'],
-          ['Method', 'MPesa'],
-          ['Reference', 'QX12ABC34'],
-        ].map(([label, value]) => (
-          <div key={label} className="flex justify-between border-b border-slate-100 py-1 last:border-b-0">
-            <span className="font-semibold text-slate-400">{label}</span>
-            <span className="text-slate-700">{value}</span>
-          </div>
-        ))}
-      </div>
-      <div className="py-2 text-center">
-        <div className="text-[10px] text-slate-500">Amount Received</div>
-        <div className="text-2xl font-bold" style={{ color: primary }}>{currency} 42,572.00</div>
-        <div className="mt-1 text-[10px] italic text-slate-400">Thank you for your payment!</div>
-      </div>
-    </>
-  )
-
-  const statementBody = (
-    <>
-      <div className={`grid grid-cols-2 ${compact ? 'gap-2' : 'gap-3'} text-[10px]`}>
-        <div className="rounded border border-slate-200 p-2">
-          <div className="font-semibold text-slate-400">CLIENT</div>
-          <div className="mt-0.5 font-semibold text-slate-800">Nairobi Hospital</div>
-          <div className="text-slate-500">accounts@client.co.ke</div>
-        </div>
-        <div className="rounded border border-slate-200 p-2 text-slate-600">
-          <div className="flex justify-between"><span className="text-slate-400">Period</span><span>09 Jan – 09 Jul 2026</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">Total Invoiced</span><span>{currency} 128,400.00</span></div>
-          <div className="flex justify-between"><span className="text-slate-400">Total Paid</span><span>{currency} 85,828.00</span></div>
-        </div>
-      </div>
-      <div className="flex items-center justify-between rounded border p-2 text-[11px] font-bold" style={{ borderColor: primary, color: primary, backgroundColor: `${primary}14` }}>
-        <span>BALANCE DUE</span>
-        <span>{currency} 42,572.00</span>
-      </div>
-      <table className="w-full text-[10px]">
-        <thead>
-          <tr style={{ backgroundColor: primary }}>
-            <th className="p-1.5 text-left font-semibold text-white">Date</th>
-            <th className="p-1.5 text-left font-semibold text-white">Invoice</th>
-            <th className="p-1.5 text-right font-semibold text-white">Amount</th>
-            <th className="p-1.5 text-right font-semibold text-white">Balance</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[
-            ['08 Jun 26', 'INV-000119', '85,828.00', '0.00'],
-            ['08 Jul 26', 'INV-000123', '42,572.00', '42,572.00'],
-          ].map(([date, number, amount, balance], index) => (
-            <tr key={number} className={index % 2 === 1 ? 'bg-slate-50' : ''}>
-              <td className="border-b border-slate-100 p-1.5 text-slate-700">{date}</td>
-              <td className="border-b border-slate-100 p-1.5 font-medium text-slate-800">{number}</td>
-              <td className="border-b border-slate-100 p-1.5 text-right text-slate-700">{amount}</td>
-              <td className="border-b border-slate-100 p-1.5 text-right font-medium text-slate-900">{balance}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </>
   )
 
@@ -413,10 +281,6 @@ export function DocumentPreview({ config, docType: controlledDocType, onDocTypeC
   )
 
   const bodies: Record<DocType, ReactNode> = {
-    invoice: invoiceBody,
-    quotation: quotationBody,
-    receipt: receiptBody,
-    statement: statementBody,
     'service-report': serviceReportBody,
     'purchase-order': purchaseOrderBody,
   }

@@ -21,8 +21,6 @@ internal static class SampleDocumentBuilder
             Email = companyDetails?.Email ?? "accounts@yourcompany.co.ke",
             TaxPin = companyDetails?.TaxPin ?? "P051234567X",
         };
-        var clientContact = new PdfContactDetails("Jane Wanjiku, Finance", "+254 711 000 111",
-            "accounts@nairobihospital.co.ke", "Argwings Kodhek Rd, Nairobi");
         var company = string.IsNullOrWhiteSpace(tenant.CompanyName) ? "Your Company Ltd" : tenant.CompanyName;
         var address = string.Join(", ", new[] { tenant.Address, tenant.City, tenant.Country }
             .Where(x => !string.IsNullOrWhiteSpace(x)));
@@ -33,7 +31,6 @@ internal static class SampleDocumentBuilder
         var currency = config.DefaultCurrency;
         var footer = config.FooterText ?? config.DefaultFooterNote;
         var watermark = config.WatermarkText;
-        var bankDetails = ComposeBankDetails(config);
 
         var lines = new List<InvoiceLinePdfModel>
         {
@@ -49,59 +46,6 @@ internal static class SampleDocumentBuilder
 
         return documentTypeSlug switch
         {
-            "invoice" => renderer.RenderInvoicePdf(new InvoicePdfModel(
-                "INV-000123", "Sent", now, now.AddDays(30),
-                "Nairobi Hospital", address, "accounts@nairobihospital.co.ke",
-                "Thank you for your continued partnership.",
-                lines, subtotal, tax, total, 0m, total, currency,
-                company, address, phone, tenant.LogoUrl, primary,
-                FontFamily: font, FooterText: footer, WatermarkText: watermark,
-                BankDetails: bankDetails, PaymentInstructions: config.PaymentInstructions,
-                TermsText: config.ShowTerms ? config.InvoiceTerms ?? config.DefaultTermsText : null,
-                TemplateConfig: config,
-                Company: details, ClientContact: clientContact,
-                CreditTermsLabel: "Net 30", WorkOrderRefs: ["WO-000078"])),
-
-            "quotation" => renderer.RenderQuotationPdf(new QuotationPdfModel(
-                "QT-000045", "Sent", now, now.AddDays(30),
-                "HVAC service package — Ward B", "Nairobi Hospital",
-                "Prices valid for 30 days from the quote date.",
-                lines, subtotal, tax, total, currency,
-                company, address, phone, primary,
-                FontFamily: font, FooterText: footer, WatermarkText: watermark,
-                BankDetails: bankDetails, PaymentInstructions: config.PaymentInstructions,
-                TermsText: config.ShowTerms ? config.QuoteTerms ?? config.DefaultTermsText : null,
-                TemplateConfig: config,
-                Company: details, ClientContact: clientContact, SiteLabel: "Main Campus — Ward B")),
-
-            "receipt" => renderer.RenderReceiptPdf(new ReceiptPdfModel(
-                "REC-000012", "INV-000123", "Nairobi Hospital", now,
-                total, currency, "MPesa", "QX12ABC34",
-                company, tenant.LogoUrl, primary,
-                FontFamily: font, FooterText: footer, WatermarkText: watermark,
-                TemplateConfig: config,
-                Company: details, ClientContact: clientContact,
-                CompanyAddress: address, CompanyPhone: phone,
-                InvoiceDate: now, InvoiceTotal: total, InvoiceBalanceAfter: 0m)),
-
-            "statement" => renderer.RenderClientStatementPdf(new ClientStatementPdfModel(
-                "Nairobi Hospital", "accounts@nairobihospital.co.ke", address,
-                now, now.AddMonths(-6), now,
-                0m, 128400m, 85828m, 42572m,
-                new List<StatementInvoiceRow>
-                {
-                    new("INV-000119", now.AddDays(-40), now.AddDays(-10), 85828m, 85828m, 0m, "Paid", false),
-                    new("INV-000123", now.AddDays(-5), now.AddDays(25), 42572m, 0m, 42572m, "Sent", false),
-                },
-                new List<StatementPaymentRow>
-                {
-                    new("REC-000011", now.AddDays(-8), "MPesa", 85828m),
-                },
-                company, address, phone, tenant.LogoUrl, primary,
-                FontFamily: font, FooterText: footer, WatermarkText: watermark,
-                TemplateConfig: config,
-                Company: details, ClientContact: clientContact, Currency: currency)),
-
             "purchase-order" => renderer.RenderPurchaseOrderPdf(new PurchaseOrderPdfModel(
                 "PO-000078", "Approved", now, now.AddDays(14),
                 "Coastline HVAC Supplies Ltd", "Mombasa Rd, Nairobi", "sales@coastlinehvac.co.ke",
@@ -164,24 +108,5 @@ internal static class SampleDocumentBuilder
             new List<WorkOrderReportPdfPhotoGroup>(),
             signatures,
             config);
-    }
-
-    private static string? ComposeBankDetails(ReportTemplateConfig config)
-    {
-        if (!config.ShowBankDetails)
-            return null;
-
-        var parts = new[]
-        {
-            string.IsNullOrWhiteSpace(config.BankName) ? null : $"Bank: {config.BankName}",
-            string.IsNullOrWhiteSpace(config.AccountName) ? null : $"Account Name: {config.AccountName}",
-            string.IsNullOrWhiteSpace(config.AccountNumber) ? null : $"Account No: {config.AccountNumber}",
-            string.IsNullOrWhiteSpace(config.Branch) ? null : $"Branch: {config.Branch}",
-            string.IsNullOrWhiteSpace(config.Swift) ? null : $"SWIFT: {config.Swift}",
-            string.IsNullOrWhiteSpace(config.Paybill) ? null : $"Paybill: {config.Paybill}",
-        }.Where(x => x is not null);
-
-        var details = string.Join("\n", parts);
-        return string.IsNullOrWhiteSpace(details) ? "Bank: Sample Bank\nAccount No: 0000000000" : details;
     }
 }
