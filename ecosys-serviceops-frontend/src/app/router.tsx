@@ -96,6 +96,7 @@ const SecurityPage = lazy(async () => ({ default: (await import('../features/sec
 const PatrolGuardPage = lazy(async () => ({ default: (await import('../features/security/PatrolGuardPage')).PatrolGuardPage }))
 const TechPatrolPage = lazy(async () => ({ default: (await import('../features/security/PatrolGuardPage')).TechPatrolPage }))
 const VisitorsPage = lazy(async () => ({ default: (await import('../features/visitors/VisitorsPage')).VisitorsPage }))
+const WoodFuelPage = lazy(async () => ({ default: (await import('../features/woodfuel/WoodFuelPage')).WoodFuelPage }))
 const FleetPage = lazy(async () => ({ default: (await import('../features/factory/fleet/FleetPage')).FleetPage }))
 const ConditionPage = lazy(async () => ({ default: (await import('../features/factory/condition/ConditionPage')).ConditionPage }))
 const PerformancePage = lazy(async () => ({ default: (await import('../features/factory/performance/PerformancePage')).PerformancePage }))
@@ -280,6 +281,7 @@ export function AppRouter() {
       ['/maintenance/condition', ConditionPage],
       ['/maintenance/fleet', FleetPage],
       ['/visitors', VisitorsPage],
+      ['/wood-fuel', WoodFuelPage],
       ['/security', SecurityPage],
       ['/patrol', PatrolGuardPage],
       ['/maintenance/reliability', ReliabilityPage],

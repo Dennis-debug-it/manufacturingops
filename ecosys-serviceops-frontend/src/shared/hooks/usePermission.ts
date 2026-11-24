@@ -193,6 +193,9 @@ const capabilityActions = new Set([
   'visitors.manage',
   'security.patrol',
   'security.manage',
+  'woodfuel.receive',
+  'woodfuel.issue',
+  'woodfuel.manage',
 ])
 
 /** The same check as usePermission, for code that isn't a component (e.g. route access rules). */

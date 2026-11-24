@@ -2,7 +2,8 @@
  * Ecosys modules. An edition is a fixed list of them (the backend's ServiceOpsPlans.EditionModules):
  * Essentials = operations, finance and maintenance; Professional adds inventory and advanced;
  * Enterprise adds enterprise_tools. The WhatsApp Business add-on adds whatsapp_business on any edition,
- * and the Factory Operations add-ons add visitors (Visitor Management) and security (Security Patrol).
+ * and the Factory Operations add-ons add visitors (Visitor Management), security (Security Patrol) and
+ * woodfuel (Wood Fuel).
  */
 export type ServiceOpsModule =
   | 'operations'
@@ -14,6 +15,7 @@ export type ServiceOpsModule =
   | 'whatsapp_business'
   | 'visitors'
   | 'security'
+  | 'woodfuel'
 
 // Checked in order, so a more specific prefix (/finance/expenses) wins over a broader one (/finance).
 const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
@@ -24,6 +26,7 @@ const modulePaths: ReadonlyArray<[ServiceOpsModule, readonly string[]]> = [
   ['whatsapp_business', ['/whatsapp', '/settings/whatsapp']],
   ['visitors', ['/visitors']],
   ['security', ['/security', '/patrol', '/tech/patrol']],
+  ['woodfuel', ['/wood-fuel']],
   ['operations', ['/dashboard', '/work-orders', '/reports', '/team/technicians', '/team/skills', '/team/groups', '/settings/wo-templates', '/settings/executive-dashboard']],
   ['finance', ['/finance']],
 ]

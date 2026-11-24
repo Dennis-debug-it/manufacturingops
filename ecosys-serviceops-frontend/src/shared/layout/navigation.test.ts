@@ -23,7 +23,8 @@ describe('tenant navigation', () => {
 
   it('keeps each role to a short list', () => {
     expect(forRole('technician').length).toBeLessThanOrEqual(14)
-    expect(forRole('materials_controller').length).toBeLessThanOrEqual(8)
+    // Nine: the Wood fuel item is there for the yard clerk, and shows only with the add-on and its permission.
+    expect(forRole('materials_controller').length).toBeLessThanOrEqual(9)
     expect(forRole('finance').length).toBeLessThanOrEqual(6)
     // Even the admin sees sections, not one long list.
     const adminGroups = new Set(forRole('admin').map((item) => item.group))

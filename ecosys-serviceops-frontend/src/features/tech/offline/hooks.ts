@@ -25,6 +25,7 @@ export function refreshAfterSync(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: ['picker', 'materials'] })
   void queryClient.invalidateQueries({ queryKey: ['visitors'] })
   void queryClient.invalidateQueries({ queryKey: ['security'] })
+  void queryClient.invalidateQueries({ queryKey: ['wood-fuel'] })
 }
 
 export function useTechJobsView() {

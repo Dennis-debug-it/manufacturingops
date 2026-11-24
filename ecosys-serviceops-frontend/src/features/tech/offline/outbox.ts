@@ -26,6 +26,10 @@ export type OutboxKind =
   | 'patrol-scan'
   /** The photo taken at a checkpoint, sent after its scan. */
   | 'patrol-photo'
+  /** Wood received at the yard, weighed or measured and tested, possibly with no signal. */
+  | 'wood-delivery'
+  /** Wood fed to a boiler or dryer. */
+  | 'wood-issue'
 
 export interface OutboxFile {
   blob: Blob

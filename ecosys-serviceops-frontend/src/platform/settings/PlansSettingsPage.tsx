@@ -24,6 +24,7 @@ const moduleLabels: Record<string, string> = {
   enterprise_tools: 'Branches, API & monitoring',
   visitors: 'Visitor Management',
   security: 'Security Patrol',
+  woodfuel: 'Wood Fuel',
 }
 
 function NumberField({ label, value, onChange, min = 0 }: { label: string; value: number; onChange: (value: number) => void; min?: number }) {

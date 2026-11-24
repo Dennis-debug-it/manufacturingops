@@ -74,6 +74,8 @@ export function isOfflineQueryKey(key: QueryKey): boolean {
   if (scope === 'visitors') return second === 'gate-index'
   // The guard's patrols, routes and checkpoints, so a patrol works with no signal.
   if (scope === 'security') return second === 'guard'
+  // The wood yard's lists (factories, suppliers, kinds of wood, stacks, boilers), so a delivery can be entered with no signal.
+  if (scope === 'wood-fuel') return second === 'lookups'
   if (scope === 'factory') return ['scan-index', 'org-nodes', 'checks-due', 'check-run', 'job', 'jobs', 'failure-codes', 'windows', 'window', 'window-pack'].includes(String(second))
   return false
 }

@@ -49,3 +49,7 @@ Stack: .NET 10 + PostgreSQL + React PWA.
   - **Security Patrol** (built): checkpoints (QR, NFC, GPS), routes and schedules, the offline guard
     app, verified scans, missed-patrol alerts, security incidents, panic button, shift handover,
     supervisor board and reports.
+  - **Wood Fuel** (built): deliveries weighed, measured in stacked cubic metres or counted in loads
+    and tested for moisture; accepted, rejected or paid less for wet wood; the wood yard's stacks and
+    ledger; wood fed to boilers (added to the boiler's fuel meter); counts; days of cover; wood per kg
+    of made tea and its cost; works offline for the yard clerk ([design](docs/wood-fuel-spec.md)).

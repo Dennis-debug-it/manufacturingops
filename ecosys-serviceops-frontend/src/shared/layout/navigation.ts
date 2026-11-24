@@ -1,6 +1,6 @@
 import type { AppRole } from '../types/auth'
 import { WHATSAPP_ENABLED } from '../config/features'
-import { Calculator, LayoutDashboard, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck, Repeat, Truck, DoorOpen, Shield, Footprints } from 'lucide-react'
+import { Calculator, LayoutDashboard, Wrench, Users, Building2, Package, FileText, Wallet, BarChart3, Settings2, ShieldCheck, MessageCircle, CheckSquare, CalendarClock, Activity, LifeBuoy, CalendarDays, Boxes, ScanLine, Factory, ClipboardCheck, Gauge, CalendarRange, HardHat, FileCheck2, UserCog, ShieldAlert, Warehouse, HardHat as ContractorIcon, TrendingUp, Landmark, BadgeCheck, Repeat, Truck, DoorOpen, Shield, Footprints, Flame } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -52,6 +52,8 @@ export const tenantNavItems: NavItem[] = [
 
   { group: 'Stores', label: 'Stores and spares', to: '/maintenance/stores', roles: [...floor, 'materials_controller'], permission: 'materials.view', icon: Warehouse },
   { group: 'Stores', label: 'Purchasing', to: '/inventory/purchase-orders', roles: ['admin', 'manager', 'materials_controller'], permission: 'materials.view', icon: Package },
+  // Wood Fuel add-on: the yard clerk and boiler house work from it; managers see the whole board.
+  { group: 'Stores', label: 'Wood fuel', to: '/wood-fuel', roles: [...office, 'materials_controller'], permission: 'woodfuel.receive', icon: Flame },
   { group: 'Stores', label: 'Contractors', to: '/maintenance/contractors', roles: office, permission: 'work-orders.view', icon: ContractorIcon },
 
   { group: 'Compliance', label: 'Statutory', to: '/maintenance/statutory', roles: office, permission: 'work-orders.view', icon: FileCheck2 },

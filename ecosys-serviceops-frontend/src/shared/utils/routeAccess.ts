@@ -37,6 +37,7 @@ const rules: RouteRule[] = [
   { prefix: '/whatsapp', allow: (can) => can('whatsapp.view') },
   { prefix: '/security', allow: (can) => can('security.manage') },
   { prefix: '/patrol', allow: (can) => can('security.patrol') },
+  { prefix: '/wood-fuel', allow: (can) => can('woodfuel.receive') || can('woodfuel.issue') || can('woodfuel.manage') },
   { prefix: '/calendar', allow: (can) => can('activities.view') },
   { prefix: '/activities', allow: (can) => can('activities.view') },
   { prefix: '/action-items', allow: (can) => can('activities.view') },

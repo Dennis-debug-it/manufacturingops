@@ -303,7 +303,6 @@ export async function mockAuthSession(page: Page, options: MockAuthOptions) {
         assignedToGroup: 0,
         assignedToTechnicians: 0,
         awaitingAcceptance: 0,
-        techniciansOnSite: 0,
         workOrdersByGroup: [],
         technicianWorkload: [],
       })

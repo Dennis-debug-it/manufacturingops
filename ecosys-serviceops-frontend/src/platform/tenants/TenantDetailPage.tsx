@@ -59,6 +59,7 @@ const moduleLabels: Record<string, string> = {
   enterprise_tools: 'Branches, API & monitoring',
   visitors: 'Visitor Management',
   security: 'Security Patrol',
+  woodfuel: 'Wood Fuel',
   whatsapp_business: 'WhatsApp inbox',
 }
 

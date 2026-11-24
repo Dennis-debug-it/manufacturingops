@@ -317,6 +317,48 @@ part that makes the manager's case for the add-on, but it needs made-tea data (d
 
 ---
 
+## 14b. Build status (Nov 24, 2026)
+
+W1–W3 and the core of W4 are built and tested: 18 backend tests, 9 unit tests on the screen's arithmetic,
+and 4 browser tests against the real screens (including a delivery saved with the network off).
+
+Built as specified:
+
+- Module `woodfuel`, an add-on taken with any edition; permissions `woodfuel.receive`, `woodfuel.issue`
+  and `woodfuel.manage` (managers get all three by default).
+- Deliveries on all three measure bases, chosen per delivery. Moisture samples, the average, and both
+  moisture rules (*Deduct kg* and *Price bands*), with every number in the factory's settings.
+- The yard ledger, stacks with a seasoning date, issues to boilers and dryers, counts that post the
+  difference, days of cover, and the yard board with a period reconciliation.
+- Each issue adds a reading to the asset's wood meter (a `Fuel` meter in kg, created on first use). An
+  entry dated before the meter's latest reading is kept without a meter reading, so a phone's queued
+  entry is never lost.
+- Daily made tea entered by hand; wood per kg of made tea and its cost.
+- Suppliers (only the last four of a national ID kept), price agreements (most specific wins), a CSV of
+  deliveries for finance. No supplier statements, as decided.
+- Receiving and feeding work with no signal through the existing outbox.
+
+Built differently from this spec:
+
+- An issue with no stack named can only take wood that was received without a stack, so no stack's wood
+  can leave "unstacked" and push that balance below zero.
+- A stack's seasoning clock restarts when wood is added to it; its status is changed by hand, and the
+  yard board shows *Ready (dry enough)* once the date has passed.
+- Counting is open to yard clerks as well as managers, because the difference is posted at once.
+
+Not built yet:
+
+- Low-cover, rejected-load, wet-wood and unexplained-loss **alerts**. The yard board shows low cover; no
+  notification is sent.
+- Wood per unit on the factory KPI page and the group dashboard (the figures are on the yard board).
+- The sourcing report for auditors and photos on a delivery.
+- Linking a delivery to the gate's vehicle log and holding the truck until its second weighing; the link
+  field exists but no screen sets it.
+- The tea pack additions (wood yard section, fire patrol checkpoints, boiler fuel feed check).
+- Own-woodlot harvest and replanting records; a CSV import for made tea.
+- A PostgreSQL translation test for the new queries (it needs the database the other `*_AllTranslate`
+  tests use).
+
 ## 15. Recommendation
 
 Build **W1–W3** with a pilot tea factory signed up, and let its decisions 1–4 shape the defaults. Treat
