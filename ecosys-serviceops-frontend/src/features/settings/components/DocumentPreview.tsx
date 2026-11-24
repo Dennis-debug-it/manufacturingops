@@ -22,7 +22,6 @@ export interface DocumentPreviewConfig {
   showCompanyContact: boolean
   showLogo: boolean
   showTaxBreakdown: boolean
-  showBankDetails: boolean
   showSignatureBlock: boolean
   showTerms: boolean
   showStampArea: boolean
@@ -32,17 +31,10 @@ export interface DocumentPreviewConfig {
   currencyDisplay?: string
   signatureFields?: string[]
   pageDensity: string
-  invoiceTerms: string | null
-  quoteTerms?: string | null
   serviceReportDisclaimer?: string | null
   sections?: Array<{ id: string; label: string; enabled: boolean; order: number }>
   defaultTermsText: string | null
   defaultFooterNote: string | null
-  bankName: string | null
-  accountName: string | null
-  accountNumber: string | null
-  paybill: string | null
-  paymentInstructions: string | null
   defaultCurrency: string
 }
 

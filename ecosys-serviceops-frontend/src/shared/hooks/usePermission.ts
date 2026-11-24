@@ -12,7 +12,7 @@ import type { AppRole, AuthUser, PermissionSet } from '../types/auth'
  *    `PermissionNames.*` checks the backend controllers enforce, so the button
  *    visibility matches what the server will actually allow.
  * 2. For coarser, module/nav-level actions with no backend-computed equivalent
- *    (e.g. `dashboard.view`, `clients.view`), fall back to the static
+ *    (e.g. `dashboard.view`, `assets.view`), fall back to the static
  *    `rolePermissions` role -> action-string map.
  * 3. Every new action string introduced anywhere in the app MUST be added to one
  *    of the two maps in the same change — do not call `usePermission('some.new.string')`
@@ -25,8 +25,7 @@ const rolePermissions: Record<AppRole, string[]> = {
     'dashboard.view',
     'work-orders.view',
     'work-orders.edit',
-    'clients.view',
-    'clients.edit',
+    'assets.view',
     'inventory.view',
     'inventory.edit',
     'team.view',
@@ -34,9 +33,6 @@ const rolePermissions: Record<AppRole, string[]> = {
     'finance.view',
     'reports.view',
     'settings.view',
-    'contracts.view',
-    'contracts.manage',
-    'contracts.approve',
     'maintenance.view',
     'maintenance.manage',
     'maintenance.trigger',
@@ -47,8 +43,7 @@ const rolePermissions: Record<AppRole, string[]> = {
     'dashboard.view',
     'work-orders.view',
     'work-orders.edit',
-    'clients.view',
-    'clients.edit',
+    'assets.view',
     'inventory.view',
     'inventory.edit',
     'maintenance.view',
@@ -77,23 +72,20 @@ const rolePermissions: Record<AppRole, string[]> = {
   ],
   finance: [
     'dashboard.view',
-    'clients.view',
-    'clients.edit',
+    'assets.view',
     'finance.view',
     'reports.view',
-    'contracts.view',
   ],
   viewer: [
     'dashboard.view',
     'work-orders.view',
-    'clients.view',
+    'assets.view',
     'inventory.view',
     'team.view',
     'finance.view',
     'reports.view',
     'settings.view',
     'maintenance.view',
-    'contracts.view',
     'whatsapp.view',
   ],
   super_admin: ['*'],

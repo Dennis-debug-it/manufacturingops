@@ -50,9 +50,6 @@ public sealed class ReportTemplateConfig : IJsonOnDeserialized
     /// <summary>Whether to show a tax breakdown section in the document preview and rendered output.</summary>
     public bool ShowTaxBreakdown { get; set; } = true;
 
-    /// <summary>Whether bank details should be shown in the document preview and rendered output.</summary>
-    public bool ShowBankDetails { get; set; }
-
     /// <summary>Whether a signature block should be shown in the document preview and rendered output.</summary>
     public bool ShowSignatureBlock { get; set; }
 
@@ -71,46 +68,13 @@ public sealed class ReportTemplateConfig : IJsonOnDeserialized
     /// <summary>Controls spacing density in the generated document preview.</summary>
     public string PageDensity { get; set; } = "Comfortable";
 
-    /// <summary>Default quote terms text displayed in the document preview.</summary>
-    public string? QuoteTerms { get; set; }
-
-    /// <summary>Default invoice payment terms text displayed in the document preview.</summary>
-    public string? InvoiceTerms { get; set; }
-
-    /// <summary>Warranty note displayed in customer-facing document previews.</summary>
-    public string? WarrantyNote { get; set; }
-
-    /// <summary>Late payment note displayed in customer-facing document previews.</summary>
-    public string? LatePaymentNote { get; set; }
-
     /// <summary>Service report disclaimer displayed in customer-facing document previews.</summary>
     public string? ServiceReportDisclaimer { get; set; }
 
     /// <summary>Footer legal text displayed in customer-facing document previews.</summary>
     public string? FooterLegalText { get; set; }
 
-    /// <summary>Bank name shown in customer-facing document previews.</summary>
-    public string? BankName { get; set; }
-
-    /// <summary>Bank account name shown in customer-facing document previews.</summary>
-    public string? AccountName { get; set; }
-
-    /// <summary>Bank account number shown in customer-facing document previews.</summary>
-    public string? AccountNumber { get; set; }
-
-    /// <summary>Bank branch shown in customer-facing document previews.</summary>
-    public string? Branch { get; set; }
-
-    /// <summary>SWIFT/BIC shown in customer-facing document previews.</summary>
-    public string? Swift { get; set; }
-
-    /// <summary>Paybill or till number shown in customer-facing document previews.</summary>
-    public string? Paybill { get; set; }
-
-    /// <summary>Free-form payment instructions displayed in customer-facing document previews.</summary>
-    public string? PaymentInstructions { get; set; }
-
-    /// <summary>Default currency shown in the payment preview block.</summary>
+    /// <summary>Default currency for document amounts.</summary>
     public string DefaultCurrency { get; set; } = "KES";
 
     // ── Branding & typography ───────────────────────────────────────────────

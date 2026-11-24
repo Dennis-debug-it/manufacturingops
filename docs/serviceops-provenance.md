@@ -34,6 +34,6 @@ Updated as each out-of-scope module is removed in Phase 0.
 | Work order map view, inventory Locations page, "Waiting on client" hold | `2c949a3` | |
 | Client, site, system and contract tables and columns | `61fd40e` | Migration `RemoveClientsSitesContracts`. Work orders, assets, PM plans and material issues no longer carry client/site/system ids. |
 | Email intake (mailbox, intake rules, licence feature) | `61fd40e` | Monitoring webhooks kept. |
-| Invoice, quotation, receipt and statement PDF designs | `2f01fc2` | Document Templates keeps Service Report and Purchase Order only. |
+| Invoice, quotation, receipt and statement PDF designs | `2f01fc2` | Document Templates keeps Service Report and Purchase Order only. Migration `RemoveFinanceDocumentTemplateFields` strips the bank, payment, quote/invoice terms fields and the four designs from saved templates. |
 | Client sign-off, report acknowledgement and emailing reports to clients, client-visible notes, client contacts on meetings | `61fd40e` | Only the technician signs a job; reports go Draft → Under Review → Approved. |
 | Site visits, arrival/departure stamps, timesheet travel breakdown | `61fd40e` | `work_order_visits` and the arrival/departure columns dropped. |

@@ -471,19 +471,8 @@ public sealed class AdvancedSettingsController(
         request.HeaderStyle = string.IsNullOrWhiteSpace(request.HeaderStyle) ? "Logo left, company details right" : request.HeaderStyle.Trim();
         request.FooterStyle = string.IsNullOrWhiteSpace(request.FooterStyle) ? "Contact footer" : request.FooterStyle.Trim();
         request.FontFamily = string.IsNullOrWhiteSpace(request.FontFamily) ? "Helvetica" : request.FontFamily.Trim();
-        request.QuoteTerms = string.IsNullOrWhiteSpace(request.QuoteTerms) ? null : request.QuoteTerms.Trim();
-        request.InvoiceTerms = string.IsNullOrWhiteSpace(request.InvoiceTerms) ? null : request.InvoiceTerms.Trim();
-        request.WarrantyNote = string.IsNullOrWhiteSpace(request.WarrantyNote) ? null : request.WarrantyNote.Trim();
-        request.LatePaymentNote = string.IsNullOrWhiteSpace(request.LatePaymentNote) ? null : request.LatePaymentNote.Trim();
         request.ServiceReportDisclaimer = string.IsNullOrWhiteSpace(request.ServiceReportDisclaimer) ? null : request.ServiceReportDisclaimer.Trim();
         request.FooterLegalText = string.IsNullOrWhiteSpace(request.FooterLegalText) ? null : request.FooterLegalText.Trim();
-        request.BankName = string.IsNullOrWhiteSpace(request.BankName) ? null : request.BankName.Trim();
-        request.AccountName = string.IsNullOrWhiteSpace(request.AccountName) ? null : request.AccountName.Trim();
-        request.AccountNumber = string.IsNullOrWhiteSpace(request.AccountNumber) ? null : request.AccountNumber.Trim();
-        request.Branch = string.IsNullOrWhiteSpace(request.Branch) ? null : request.Branch.Trim();
-        request.Swift = string.IsNullOrWhiteSpace(request.Swift) ? null : request.Swift.Trim();
-        request.Paybill = string.IsNullOrWhiteSpace(request.Paybill) ? null : request.Paybill.Trim();
-        request.PaymentInstructions = string.IsNullOrWhiteSpace(request.PaymentInstructions) ? null : request.PaymentInstructions.Trim();
         request.DefaultCurrency = string.IsNullOrWhiteSpace(request.DefaultCurrency) ? "KES" : request.DefaultCurrency.Trim().ToUpperInvariant();
         request.ShowStampArea = request.ShowStampArea;
 

@@ -34,26 +34,14 @@ interface ReportTemplateConfig {
   showCompanyContact: boolean
   showLogo: boolean
   showTaxBreakdown: boolean
-  showBankDetails: boolean
   showSignatureBlock: boolean
   showTerms: boolean
   defaultFooterNote: string | null
   defaultTermsText: string | null
   showStampArea: boolean
   pageDensity: string
-  quoteTerms: string | null
-  invoiceTerms: string | null
-  warrantyNote: string | null
-  latePaymentNote: string | null
   serviceReportDisclaimer: string | null
   footerLegalText: string | null
-  bankName: string | null
-  accountName: string | null
-  accountNumber: string | null
-  branch: string | null
-  swift: string | null
-  paybill: string | null
-  paymentInstructions: string | null
   defaultCurrency: string
   // Design-system fields
   logoWidth: number
@@ -107,7 +95,6 @@ const textFields: Array<{ key: keyof ReportTemplateConfig; label: string; area?:
   { key: 'footerText', label: 'Footer Message' },
   { key: 'defaultFooterNote', label: 'Default Footer Note', area: true },
   { key: 'defaultTermsText', label: 'Default Terms Text', area: true },
-  { key: 'warrantyNote', label: 'Warranty Note', area: true },
   { key: 'serviceReportDisclaimer', label: 'Service Report Disclaimer', area: true },
   { key: 'footerLegalText', label: 'Footer Legal Text', area: true },
 ]
