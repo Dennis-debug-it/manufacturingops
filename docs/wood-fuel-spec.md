@@ -283,7 +283,7 @@ Other packs can add their own fuel words later (bagasse for sugar, husks for oth
 | W1 | Module key and gating, permissions, settings, species, suppliers, price agreements, migrations, tests | 1.5–2 weeks |
 | W2 | Deliveries: three measure bases, moisture samples, decision and deduction, delivery slip, gate link, offline clerk page | 3 weeks |
 | W3 | Stacks and ledger, issues to boilers (with the Fuel meter reading), counts and variance, days-of-cover alert | 3 weeks |
-| W4 | Production days, KPIs and group tiles, reports, supplier statements and CSV export, sourcing report | 2–3 weeks |
+| W4 | Production days, KPIs and group tiles, reports, delivery CSV export for finance, sourcing report | 2 weeks |
 | W5 | Tea pack additions, demo workspace data, browser tests, help guide | 1 week |
 
 Rough, for one engineer. **W1–W3 is a usable pilot** (receive, stock, burn): about 8 weeks. W4 is the
@@ -303,6 +303,19 @@ part that makes the manager's case for the add-on, but it needs made-tea data (d
 | 6 | Own woodlot, bought wood, or both? Briquettes, husks, furnace oil or coal as well? | Own woodlot as a supplier type; whether "wood fuel" must become "boiler fuel" |
 | 7 | Priced how: per factory per year, or per seat? | Fits the price book; compare with Security Patrol |
 | 8 | Which certifications ask for fuelwood sourcing records? | The sourcing report's columns |
+
+## 14a. Pilot answers (Nov 24) and what they change
+
+| # | Answer | Effect on the build |
+|---|---|---|
+| 1 | Factories buy all three ways: weighbridge tonne, stacked m³ and per load. Some have a wood weighbridge, some don't | All three measure bases are built from the start. The basis is chosen **per delivery**, with the factory's setting as the default |
+| 2 | Base moisture and reject limit unknown | Settings hold the numbers, with starting defaults a manager can change (base 25 %, reject above 45 %) **(confirm)**. Nothing is hard-coded |
+| 3 | Deduct kg or price bands: unknown | **Both** rules are built. A factory's setting picks one: *Deduct kg* or *Price bands*. Default is *Deduct kg* |
+| 4 | Daily made tea is typed in by hand | `ProductionDay` has a simple daily entry screen (made tea kg, green leaf kg). A CSV import can follow |
+| 5 | Ecosys only records deliveries for finance | **No supplier statements.** Each delivery carries its amount payable, and a CSV export lists deliveries for finance. Statements stay out of scope |
+| 6 | Some factories burn briquettes | *Briquettes* and *Other biomass* are fuel forms from the start. Wood and briquettes are tracked in kg and reported together and by form. Own woodlot stays as a supplier type |
+
+---
 
 ## 15. Recommendation
 

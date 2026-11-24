@@ -35,6 +35,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
     public DbSet<VisitAttendee> VisitAttendees => Set<VisitAttendee>();
     public DbSet<VisitZone> VisitZones => Set<VisitZone>();
     public DbSet<VehicleMovement> VehicleMovements => Set<VehicleMovement>();
+    public DbSet<WoodFuelSettings> WoodFuelSettings => Set<WoodFuelSettings>();
+    public DbSet<FuelSpecies> FuelSpecies => Set<FuelSpecies>();
+    public DbSet<FuelSupplier> FuelSuppliers => Set<FuelSupplier>();
+    public DbSet<FuelPriceAgreement> FuelPriceAgreements => Set<FuelPriceAgreement>();
+    public DbSet<WoodStack> WoodStacks => Set<WoodStack>();
+    public DbSet<WoodDelivery> WoodDeliveries => Set<WoodDelivery>();
+    public DbSet<WoodMoistureSample> WoodMoistureSamples => Set<WoodMoistureSample>();
+    public DbSet<WoodStockMovement> WoodStockMovements => Set<WoodStockMovement>();
+    public DbSet<WoodIssue> WoodIssues => Set<WoodIssue>();
+    public DbSet<WoodStockCount> WoodStockCounts => Set<WoodStockCount>();
+    public DbSet<ProductionDay> ProductionDays => Set<ProductionDay>();
     public DbSet<VisitorCard> VisitorCards => Set<VisitorCard>();
     public DbSet<VisitorPass> VisitorPasses => Set<VisitorPass>();
     public DbSet<VisitorPassZone> VisitorPassZones => Set<VisitorPassZone>();
@@ -1088,6 +1099,184 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, ITenant
             entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(x => x.Visit).WithMany().HasForeignKey(x => x.VisitId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ── Wood fuel ────────────────────────────────────────────────────────
+        modelBuilder.Entity<WoodFuelSettings>(entity =>
+        {
+            entity.ToTable("wood_fuel_settings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DefaultMeasureBasis).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.MoistureRule).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.BaseMoisturePct).HasPrecision(5, 2);
+            entity.Property(x => x.RejectMoisturePct).HasPrecision(5, 2);
+            entity.Property(x => x.DeductionPctPerPoint).HasPrecision(5, 2);
+            entity.Property(x => x.PriceBandsJson).HasMaxLength(2000);
+            entity.Property(x => x.DefaultKgPerLoad).HasPrecision(12, 1);
+            entity.Property(x => x.TargetKgPerUnit).HasPrecision(8, 3);
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId }).IsUnique();
+            entity.HasOne(x => x.Tenant).WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FuelSpecies>(entity =>
+        {
+            entity.ToTable("fuel_species");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.KgPerStackedM3).HasPrecision(10, 1);
+            entity.Property(x => x.EnergyMjPerKg).HasPrecision(6, 2);
+            entity.HasIndex(x => new { x.TenantId, x.Name }).IsUnique();
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FuelSupplier>(entity =>
+        {
+            entity.ToTable("fuel_suppliers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Type).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Phone).HasMaxLength(30);
+            entity.Property(x => x.PaymentDetails).HasMaxLength(300);
+            entity.Property(x => x.KraPin).HasMaxLength(20);
+            entity.Property(x => x.IdLast4).HasMaxLength(4);
+            entity.Property(x => x.SourceArea).HasMaxLength(200);
+            entity.Property(x => x.PermitNumber).HasMaxLength(60);
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.Name });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FuelPriceAgreement>(entity =>
+        {
+            entity.ToTable("fuel_price_agreements");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FuelForm).HasMaxLength(20);
+            entity.Property(x => x.PricePerTonne).HasPrecision(14, 2);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.HasIndex(x => new { x.TenantId, x.SupplierId, x.ValidFrom });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Species).WithMany().HasForeignKey(x => x.SpeciesId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<WoodStack>(entity =>
+        {
+            entity.ToTable("wood_stacks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.Code }).IsUnique();
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Species).WithMany().HasForeignKey(x => x.SpeciesId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<WoodDelivery>(entity =>
+        {
+            entity.ToTable("wood_deliveries");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DeliveryNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.FuelForm).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.SourceArea).HasMaxLength(200);
+            entity.Property(x => x.TransportPermit).HasMaxLength(60);
+            entity.Property(x => x.SupplierNoteNumber).HasMaxLength(60);
+            entity.Property(x => x.VehicleRegistration).HasMaxLength(20);
+            entity.Property(x => x.DriverName).HasMaxLength(200);
+            entity.Property(x => x.MeasureBasis).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.GrossKg).HasPrecision(12, 1);
+            entity.Property(x => x.TareKg).HasPrecision(12, 1);
+            entity.Property(x => x.StackedM3).HasPrecision(10, 2);
+            entity.Property(x => x.Loads).HasPrecision(8, 2);
+            entity.Property(x => x.KgPerLoad).HasPrecision(12, 1);
+            entity.Property(x => x.NetKg).HasPrecision(12, 1);
+            entity.Property(x => x.AverageMoisturePct).HasPrecision(5, 2);
+            entity.Property(x => x.Decision).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.DecisionReason).HasMaxLength(300);
+            entity.Property(x => x.RejectedKg).HasPrecision(12, 1);
+            entity.Property(x => x.DeductedKg).HasPrecision(12, 1);
+            entity.Property(x => x.PayableKg).HasPrecision(12, 1);
+            entity.Property(x => x.PricePerTonne).HasPrecision(14, 2);
+            entity.Property(x => x.PricePercent).HasPrecision(5, 2);
+            entity.Property(x => x.AmountPayable).HasPrecision(14, 2);
+            entity.Property(x => x.ReceivedByName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(1000);
+            entity.HasIndex(x => new { x.TenantId, x.DeliveryNumber }).IsUnique();
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.ReceivedAt });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Factory).WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Supplier).WithMany().HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Species).WithMany().HasForeignKey(x => x.SpeciesId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Stack).WithMany().HasForeignKey(x => x.StackId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<WoodMoistureSample>(entity =>
+        {
+            entity.ToTable("wood_moisture_samples");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ValuePct).HasPrecision(5, 2);
+            entity.HasIndex(x => new { x.TenantId, x.DeliveryId });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Delivery).WithMany(x => x.MoistureSamples).HasForeignKey(x => x.DeliveryId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<WoodStockMovement>(entity =>
+        {
+            entity.ToTable("wood_stock_movements");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.KgChange).HasPrecision(12, 1);
+            entity.Property(x => x.Reason).HasMaxLength(100);
+            entity.Property(x => x.ByName).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.OccurredAt });
+            entity.HasIndex(x => new { x.TenantId, x.StackId });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Stack).WithMany().HasForeignKey(x => x.StackId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<WoodIssue>(entity =>
+        {
+            entity.ToTable("wood_issues");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Shift).HasMaxLength(30);
+            entity.Property(x => x.Kg).HasPrecision(12, 1);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.Property(x => x.IssuedByName).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.IssuedAt });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Asset).WithMany().HasForeignKey(x => x.AssetId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Stack).WithMany().HasForeignKey(x => x.StackId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<WoodStockCount>(entity =>
+        {
+            entity.ToTable("wood_stock_counts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.LedgerKg).HasPrecision(12, 1);
+            entity.Property(x => x.CountedKg).HasPrecision(12, 1);
+            entity.Property(x => x.VarianceKg).HasPrecision(12, 1);
+            entity.Property(x => x.Method).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.Property(x => x.CountedByName).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.StackId, x.CountedAt });
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Stack).WithMany().HasForeignKey(x => x.StackId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ProductionDay>(entity =>
+        {
+            entity.ToTable("production_days");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Date).HasColumnType("date");
+            entity.Property(x => x.MadeTeaKg).HasPrecision(12, 1);
+            entity.Property(x => x.GreenLeafKg).HasPrecision(12, 1);
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.Property(x => x.EnteredByName).HasMaxLength(200).IsRequired();
+            entity.HasIndex(x => new { x.TenantId, x.FactoryId, x.Date }).IsUnique();
+            entity.HasOne<Tenant>().WithMany().HasForeignKey(x => x.TenantId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<OrgNode>().WithMany().HasForeignKey(x => x.FactoryId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<VisitorPass>(entity =>

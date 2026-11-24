@@ -37,6 +37,12 @@ public static class PermissionNames
     public const string SecurityPatrol = "security.patrol";
     /// <summary>Set up checkpoints, routes and schedules; watch the patrol board; manage security incidents.</summary>
     public const string SecurityManage = "security.manage";
+    /// <summary>Wood yard clerk: receive deliveries, weigh and test them, count stacks.</summary>
+    public const string WoodFuelReceive = "woodfuel.receive";
+    /// <summary>Boiler house: record the wood fed to each boiler or dryer.</summary>
+    public const string WoodFuelIssue = "woodfuel.issue";
+    /// <summary>Set up suppliers, prices and rules; post stock adjustments; enter daily production; see every wood fuel report.</summary>
+    public const string WoodFuelManage = "woodfuel.manage";
 
     /// <summary>
     /// Capabilities with no column in the legacy role/user permission tables. Their baseline comes
@@ -51,7 +57,10 @@ public static class PermissionNames
         VisitorsGate,
         VisitorsManage,
         SecurityPatrol,
-        SecurityManage
+        SecurityManage,
+        WoodFuelReceive,
+        WoodFuelIssue,
+        WoodFuelManage
     ];
 
     public static readonly string[] All =
@@ -83,6 +92,9 @@ public static class PermissionNames
         VisitorsGate,
         VisitorsManage,
         SecurityPatrol,
-        SecurityManage
+        SecurityManage,
+        WoodFuelReceive,
+        WoodFuelIssue,
+        WoodFuelManage
     ];
 }

@@ -34,12 +34,13 @@ public static class ServiceOpsPlans
     // Factory Operations add-ons (TenantLicense.OperationsAddOns), taken with any edition.
     public const string Visitors = "visitors";
     public const string Security = "security";
-    public static readonly IReadOnlyList<string> OperationsAddOnModules = [Visitors, Security];
+    public const string WoodFuel = "woodfuel";
+    public static readonly IReadOnlyList<string> OperationsAddOnModules = [Visitors, Security, WoodFuel];
 
     public static readonly IReadOnlyList<string> Editions = [Essentials, Professional, Enterprise];
 
     /// <summary>Every module a sales pipeline can be tied to.</summary>
-    public static readonly IReadOnlyList<string> AllModules = [Operations, Finance, Maintenance, Inventory, Advanced, EnterpriseModule, Visitors, Security];
+    public static readonly IReadOnlyList<string> AllModules = [Operations, Finance, Maintenance, Inventory, Advanced, EnterpriseModule, Visitors, Security, WoodFuel];
 
     public static bool IsEdition(string? code) => code is Essentials or Professional or Enterprise;
 
@@ -130,6 +131,11 @@ public static class ServiceOpsPlans
         "Patrol", "PatrolSetup"
     };
 
+    private static readonly HashSet<string> WoodFuelControllers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "WoodFuel"
+    };
+
     private static readonly HashSet<string> FinanceControllers = new(StringComparer.OrdinalIgnoreCase)
     {
         "ExchangeRates", "TenantFinance"
@@ -146,6 +152,7 @@ public static class ServiceOpsPlans
         (WhatsAppBusiness, WhatsAppBusinessControllers),
         (Visitors, VisitorsControllers),
         (Security, SecurityControllers),
+        (WoodFuel, WoodFuelControllers),
     ];
 
     /// <summary>

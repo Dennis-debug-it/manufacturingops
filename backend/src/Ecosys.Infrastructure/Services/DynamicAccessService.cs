@@ -67,7 +67,7 @@ internal sealed class DynamicAccessService(AppDbContext dbContext, IRolePermissi
 /// </summary>
 internal static class CapabilityRoleDefaults
 {
-    public static IReadOnlyList<string> For(string? role) => [.. ActivityDefaults(role), .. VisitorDefaults(role)];
+    public static IReadOnlyList<string> For(string? role) => [.. ActivityDefaults(role), .. VisitorDefaults(role), .. WoodFuelDefaults(role)];
 
     /// <summary>
     /// Managers run Visitor Management by default. Gate officers and security staff are given
@@ -77,6 +77,12 @@ internal static class CapabilityRoleDefaults
     private static IReadOnlyList<string> VisitorDefaults(string? role) =>
         string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)
             ? [PermissionNames.VisitorsGate, PermissionNames.VisitorsManage, PermissionNames.SecurityPatrol, PermissionNames.SecurityManage]
+            : [];
+
+    /// <summary>Managers run wood fuel by default; clerks and boiler attendants are given receive or issue through a group or a grant.</summary>
+    private static IReadOnlyList<string> WoodFuelDefaults(string? role) =>
+        string.Equals(role, AppRoles.Manager, StringComparison.OrdinalIgnoreCase)
+            ? [PermissionNames.WoodFuelReceive, PermissionNames.WoodFuelIssue, PermissionNames.WoodFuelManage]
             : [];
 
     /// <summary>
